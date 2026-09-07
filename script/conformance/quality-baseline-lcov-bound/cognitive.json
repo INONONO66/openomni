@@ -1,0 +1,101 @@
+[
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 108,
+    "endLine": 252,
+    "symbol": "FunctionDeclaration:compactUnbracketed",
+    "value": 26,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/executor-attempts.ts",
+    "line": 21,
+    "endLine": 108,
+    "symbol": "FunctionExpression:runAttempts",
+    "value": 36,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/session-history.ts",
+    "line": 6,
+    "endLine": 142,
+    "symbol": "FunctionDeclaration:sessionHistory",
+    "value": 26,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/session-record.ts",
+    "line": 289,
+    "endLine": 344,
+    "symbol": "FunctionDeclaration:sessionRunnerResultFromValue",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/ledger/test/storage/alarm-control.test.ts",
+    "line": 10,
+    "endLine": 87,
+    "symbol": "ArrowFunction:<anonymous@576>",
+    "value": 32,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/machines/src/fs.ts",
+    "line": 184,
+    "endLine": 272,
+    "symbol": "FunctionDeclaration:walk",
+    "value": 48,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/policy/src/message-match.ts",
+    "line": 28,
+    "endLine": 79,
+    "symbol": "FunctionDeclaration:matchesMessage",
+    "value": 23,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/check-census.ts",
+    "line": 2048,
+    "endLine": 2075,
+    "symbol": "MethodDeclaration:flowAsyncStorage",
+    "value": 22,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 217,
+    "endLine": 260,
+    "symbol": "FunctionDeclaration:parseLcovSummary",
+    "value": 33,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/ci-plan.ts",
+    "line": 20,
+    "endLine": 69,
+    "symbol": "FunctionDeclaration:planChanges",
+    "value": 22,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 26,
+    "endLine": 118,
+    "symbol": "FunctionDeclaration:main",
+    "value": 25,
+    "count": 1
+  }
+]

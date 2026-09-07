@@ -1,0 +1,8002 @@
+[
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 44,
+    "symbol": "implicitAny:ParenthesizedExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 46,
+    "symbol": "implicitAny:SpreadElement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 47,
+    "symbol": "implicitAny:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 44,
+    "symbol": "implicitAny:args",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:controller",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 38,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 25,
+    "symbol": "implicitAny:sleeping",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 13,
+    "symbol": "implicitAny:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 82,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 78,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/retry.test.ts",
+    "line": 13,
+    "symbol": "unknown:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:_input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 15,
+    "symbol": "implicitAny:agent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 15,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 72,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 65,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 72,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 72,
+    "symbol": "unknown:ParenthesizedExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 29,
+    "symbol": "unknown:_input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 15,
+    "symbol": "unknown:agent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 58,
+    "symbol": "unknown:configured",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 74,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 30,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 29,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 15,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 75,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 91,
+    "symbol": "implicitAny:unsubscribeRetry",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 88,
+    "symbol": "implicitAny:unsubscribeTurn",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 75,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 77,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 103,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 50,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 17,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 22,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 21,
+    "symbol": "unknown:parts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 50,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 50,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 100,
+    "symbol": "unknown:running",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 16,
+    "symbol": "unknown:stepSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 91,
+    "symbol": "unknown:unsubscribeRetry",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 88,
+    "symbol": "unknown:unsubscribeTurn",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 61,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 61,
+    "symbol": "implicitAny:_input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 19,
+    "symbol": "implicitAny:fromModelsDevModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:getModels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 20,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:mockLlm",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 15,
+    "symbol": "implicitAny:mockRunFn",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 20,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 61,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 91,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 61,
+    "symbol": "unknown:_input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 155,
+    "symbol": "unknown:agent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 54,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 37,
+    "symbol": "unknown:collectingSink",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 29,
+    "symbol": "unknown:defaultInput",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 19,
+    "symbol": "unknown:fromModelsDevModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 18,
+    "symbol": "unknown:getModels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 20,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 49,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 18,
+    "symbol": "unknown:mockLlm",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 15,
+    "symbol": "unknown:mockRunFn",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 49,
+    "symbol": "unknown:onMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 54,
+    "symbol": "unknown:onToolCall",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 50,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 20,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 94,
+    "symbol": "unknown:sink",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 39,
+    "symbol": "unknown:toolCalls",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 155,
+    "symbol": "unknown:toolExecutor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 36,
+    "symbol": "implicitAny:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 19,
+    "symbol": "implicitAny:fromModelsDevModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:getModels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 20,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:mockLlm",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 20,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 15,
+    "symbol": "implicitAny:seenTransport",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 45,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 36,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 19,
+    "symbol": "unknown:fromModelsDevModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 18,
+    "symbol": "unknown:getModels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 20,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 18,
+    "symbol": "unknown:mockLlm",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 20,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/core/transport.test.ts",
+    "line": 15,
+    "symbol": "unknown:seenTransport",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 123,
+    "symbol": "implicitAny:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 123,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 45,
+    "symbol": "implicitAny:controller",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 38,
+    "symbol": "implicitAny:executor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 231,
+    "symbol": "implicitAny:expireApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 90,
+    "symbol": "implicitAny:f",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:overrides",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 73,
+    "symbol": "implicitAny:running",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 167,
+    "symbol": "implicitAny:settled",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 73,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 123,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 145,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 123,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 123,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 94,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 215,
+    "symbol": "unknown:ParenthesizedExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 123,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 260,
+    "symbol": "unknown:TypeError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 231,
+    "symbol": "unknown:expireApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 90,
+    "symbol": "unknown:f",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 282,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 30,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 145,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 104,
+    "symbol": "unknown:results",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 48,
+    "symbol": "unknown:running",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/bounded.ts",
+    "line": 7,
+    "symbol": "unknown:bounded",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/bus-event.ts",
+    "line": 7,
+    "symbol": "implicitAny:captureBusEvents",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/bus-event.ts",
+    "line": 8,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/bus-event.ts",
+    "line": 7,
+    "symbol": "unknown:captureBusEvents",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/bus-event.ts",
+    "line": 19,
+    "symbol": "unknown:done",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/bus-event.ts",
+    "line": 8,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/compiled-policy.ts",
+    "line": 77,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/compiled-policy.ts",
+    "line": 77,
+    "symbol": "implicitAny:executor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/compiled-policy.ts",
+    "line": 77,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/compiled-policy.ts",
+    "line": 77,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/compiled-policy.ts",
+    "line": 77,
+    "symbol": "unknown:executor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/compiled-policy.ts",
+    "line": 77,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 17,
+    "symbol": "implicitAny:MockLlmFn",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 5,
+    "symbol": "implicitAny:MockLlmInput",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 97,
+    "symbol": "implicitAny:createMockLlmConfig",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 17,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 96,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 8,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 17,
+    "symbol": "unknown:MockLlmFn",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 5,
+    "symbol": "unknown:MockLlmInput",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 32,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 97,
+    "symbol": "unknown:createMockLlmConfig",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 19,
+    "symbol": "unknown:createStopOutcome",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 17,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 6,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 23,
+    "symbol": "unknown:providerFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 96,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/mock-llm.ts",
+    "line": 8,
+    "symbol": "unknown:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 5,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 5,
+    "symbol": "implicitAny:modelFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 5,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 5,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 10,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 5,
+    "symbol": "unknown:modelFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 10,
+    "symbol": "unknown:onMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 8,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/model-fixture.ts",
+    "line": 5,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/helpers/request-ledger.ts",
+    "line": 136,
+    "symbol": "unknown:bounded",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/request-ledger.ts",
+    "line": 97,
+    "symbol": "unknown:commit",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/request-ledger.ts",
+    "line": 35,
+    "symbol": "unknown:requestLedger",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/run-input.ts",
+    "line": 14,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/run-input.ts",
+    "line": 13,
+    "symbol": "unknown:runInput",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 9,
+    "symbol": "implicitAny:config",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 14,
+    "symbol": "implicitAny:createTestAgent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 18,
+    "symbol": "implicitAny:executor",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 36,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 9,
+    "symbol": "implicitAny:runTestAgent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 25,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 9,
+    "symbol": "unknown:config",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 14,
+    "symbol": "unknown:createTestAgent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 9,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 16,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/helpers/test-agent.ts",
+    "line": 9,
+    "symbol": "unknown:runTestAgent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 48,
+    "symbol": "implicitAny:BinaryExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 26,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 42
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 74,
+    "symbol": "implicitAny:runId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 74,
+    "symbol": "implicitAny:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 82,
+    "symbol": "implicitAny:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 46,
+    "symbol": "implicitAny:warn",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 48,
+    "symbol": "unknown:BinaryExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 114,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 26,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 42
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 74,
+    "symbol": "unknown:runId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 74,
+    "symbol": "unknown:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 8,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 53,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/bus.test.ts",
+    "line": 46,
+    "symbol": "unknown:warn",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 80,
+    "symbol": "implicitAny:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 81,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 94,
+    "symbol": "implicitAny:BinaryExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 81,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 147,
+    "symbol": "implicitAny:OtherEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 6,
+    "symbol": "implicitAny:TestEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:component",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:msg",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 147,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 92,
+    "symbol": "implicitAny:warn",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 80,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 94,
+    "symbol": "unknown:BinaryExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 54,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 147,
+    "symbol": "unknown:OtherEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 6,
+    "symbol": "unknown:TestEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 8,
+    "symbol": "unknown:component",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 77,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 8,
+    "symbol": "unknown:msg",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 77,
+    "symbol": "unknown:onError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 70,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 77,
+    "symbol": "unknown:scoped",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 147,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/observation/scope.test.ts",
+    "line": 92,
+    "symbol": "unknown:warn",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/request-count-admission.test.ts",
+    "line": 80,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/request-count-admission.test.ts",
+    "line": 80,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/request-count-admission.test.ts",
+    "line": 77,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/request-count-admission.test.ts",
+    "line": 89,
+    "symbol": "unknown:SessionCommitError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 324,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 34,
+    "symbol": "implicitAny:boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 117,
+    "symbol": "implicitAny:chatRunner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 76,
+    "symbol": "implicitAny:config",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 33,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 35,
+    "symbol": "implicitAny:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 118,
+    "symbol": "implicitAny:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 343,
+    "symbol": "implicitAny:ready",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 332,
+    "symbol": "implicitAny:reported",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 156,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 76,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 102,
+    "symbol": "implicitAny:runDurably",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 124,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 59,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 279,
+    "symbol": "implicitAny:sleep",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 338,
+    "symbol": "implicitAny:unreported",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 345,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 324,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 267,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 345,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 34,
+    "symbol": "unknown:boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 331,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 117,
+    "symbol": "unknown:chatRunner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 76,
+    "symbol": "unknown:config",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 286,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 33,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 35,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 118,
+    "symbol": "unknown:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 315,
+    "symbol": "unknown:preparedConfig",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 343,
+    "symbol": "unknown:ready",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 336,
+    "symbol": "unknown:reportError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 332,
+    "symbol": "unknown:reported",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 129,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 76,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 102,
+    "symbol": "unknown:runDurably",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 124,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 279,
+    "symbol": "unknown:sleep",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 338,
+    "symbol": "unknown:unreported",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 283,
+    "symbol": "unknown:{ actions }",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 243,
+    "symbol": "unknown:{ actions, inboxIds }",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 727,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1142,
+    "symbol": "implicitAny:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1142,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1142,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1285,
+    "symbol": "implicitAny:clearIntervalSpy",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 665,
+    "symbol": "implicitAny:delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 620,
+    "symbol": "implicitAny:drained",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 615,
+    "symbol": "implicitAny:entered",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 59,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1164,
+    "symbol": "implicitAny:firstEntered",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 638,
+    "symbol": "implicitAny:firstInput",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 621,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 30
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 671,
+    "symbol": "implicitAny:inputs",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1387,
+    "symbol": "implicitAny:item",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1186,
+    "symbol": "implicitAny:next",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1181,
+    "symbol": "implicitAny:pinned",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 59,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 778,
+    "symbol": "implicitAny:ready",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 120,
+    "symbol": "implicitAny:residentOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1359,
+    "symbol": "implicitAny:resumed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1379,
+    "symbol": "implicitAny:resumedInput",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 120,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 93
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 795,
+    "symbol": "implicitAny:runnerSignal",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1165,
+    "symbol": "implicitAny:secondEntered",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1284,
+    "symbol": "implicitAny:setIntervalSpy",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 70,
+    "symbol": "implicitAny:subscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1513,
+    "symbol": "implicitAny:sweeping",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 807,
+    "symbol": "implicitAny:terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 642,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 727,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 642,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 22
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 642,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 31
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 110,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1142,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1156,
+    "symbol": "unknown:SessionCommitError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1285,
+    "symbol": "unknown:clearIntervalSpy",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 167,
+    "symbol": "unknown:commitOpenTurn",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 620,
+    "symbol": "unknown:drained",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 615,
+    "symbol": "unknown:entered",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 59,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 637,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1164,
+    "symbol": "unknown:firstEntered",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 638,
+    "symbol": "unknown:firstInput",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1180,
+    "symbol": "unknown:firstTurn",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 621,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 30
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 671,
+    "symbol": "unknown:inputs",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1186,
+    "symbol": "unknown:next",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1181,
+    "symbol": "unknown:pinned",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 59,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 120,
+    "symbol": "unknown:residentOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 237,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 39
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1359,
+    "symbol": "unknown:resumed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1379,
+    "symbol": "unknown:resumedInput",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 120,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 92
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 794,
+    "symbol": "unknown:running",
+    "gate": "type",
+    "value": 1,
+    "count": 25
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 639,
+    "symbol": "unknown:second",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1165,
+    "symbol": "unknown:secondEntered",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1185,
+    "symbol": "unknown:secondTurn",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 140,
+    "symbol": "unknown:seedPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1284,
+    "symbol": "unknown:setIntervalSpy",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 70,
+    "symbol": "unknown:subscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1513,
+    "symbol": "unknown:sweeping",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 640,
+    "symbol": "unknown:third",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 44,
+    "symbol": "unknown:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1302,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 135,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 33,
+    "symbol": "unknown:assistant",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 93,
+    "symbol": "unknown:current",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 34,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 115,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 92,
+    "symbol": "unknown:previous",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 112,
+    "symbol": "unknown:projected",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-history.test.ts",
+    "line": 113,
+    "symbol": "unknown:tools",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/session-outbound.test.ts",
+    "line": 54,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-outbound.test.ts",
+    "line": 20,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-outbound.test.ts",
+    "line": 35,
+    "symbol": "unknown:dispatchOutbound",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 162,
+    "symbol": "implicitAny:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 162,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 68,
+    "symbol": "implicitAny:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 67,
+    "symbol": "implicitAny:handle",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 51,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 67,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 149,
+    "symbol": "implicitAny:settled",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 71,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 44,
+    "symbol": "implicitAny:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 16,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 114,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 114,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 20,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 68,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 16,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 67,
+    "symbol": "unknown:handle",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 50,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 51,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 16,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 67,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 107,
+    "symbol": "unknown:running",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 149,
+    "symbol": "unknown:settled",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 44,
+    "symbol": "unknown:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 50,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-port.test.ts",
+    "line": 19,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-request-port.test.ts",
+    "line": 124,
+    "symbol": "unknown:append",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 195,
+    "symbol": "implicitAny:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 195,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 25,
+    "symbol": "implicitAny:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 33,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 34,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 59,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 186,
+    "symbol": "implicitAny:settled",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 33,
+    "symbol": "implicitAny:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 34,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 108,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 174,
+    "symbol": "unknown:commit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 109,
+    "symbol": "unknown:crashed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 83,
+    "symbol": "unknown:currentRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 25,
+    "symbol": "unknown:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 53,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 33,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 34,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 132,
+    "symbol": "unknown:recovered",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 58,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 33,
+    "symbol": "unknown:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 117,
+    "symbol": "unknown:transition",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 34,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request.test.ts",
+    "line": 289,
+    "symbol": "unknown:_",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-request.test.ts",
+    "line": 289,
+    "symbol": "unknown:recent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 172,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 42,
+    "symbol": "implicitAny:_request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 75,
+    "symbol": "implicitAny:captured",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 32,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:inputs",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 32,
+    "symbol": "implicitAny:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 173,
+    "symbol": "implicitAny:recovered",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 42,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 31,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 172,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 74,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 76,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 42,
+    "symbol": "unknown:_request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 48,
+    "symbol": "unknown:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 75,
+    "symbol": "unknown:captured",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 71,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 32,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 29,
+    "symbol": "unknown:inputs",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 32,
+    "symbol": "unknown:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 173,
+    "symbol": "unknown:recovered",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 42,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 31,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 43,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 43,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 45,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:createDispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 20,
+    "symbol": "implicitAny:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 83,
+    "symbol": "implicitAny:dispatch",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 72,
+    "symbol": "implicitAny:execution",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 108,
+    "symbol": "implicitAny:failed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 31,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 71,
+    "symbol": "implicitAny:query",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 101,
+    "symbol": "implicitAny:refused",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 43,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 43,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 155,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 45,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 16,
+    "symbol": "unknown:createDispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 20,
+    "symbol": "unknown:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 16,
+    "symbol": "unknown:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 83,
+    "symbol": "unknown:dispatch",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 16,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 72,
+    "symbol": "unknown:execution",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 108,
+    "symbol": "unknown:failed",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 30,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 31,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 71,
+    "symbol": "unknown:query",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 101,
+    "symbol": "unknown:refused",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/tool-dispatcher.test.ts",
+    "line": 30,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 54,
+    "symbol": "implicitAny:deniedDispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 24,
+    "symbol": "implicitAny:echoTool",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 98,
+    "symbol": "implicitAny:inner",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 136,
+    "symbol": "implicitAny:orphan",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 100,
+    "symbol": "implicitAny:outer",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 52,
+    "symbol": "unknown:deniedDispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 24,
+    "symbol": "unknown:echoTool",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 98,
+    "symbol": "unknown:inner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 29,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 136,
+    "symbol": "unknown:orphan",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 99,
+    "symbol": "unknown:outer",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 30,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/test/tool-executor-denial.test.ts",
+    "line": 29,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 23,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 64,
+    "symbol": "unknown:ExecutorContextError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 39,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 25
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 130,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 23,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 18,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/test/turn-dispatcher-coverage.test.ts",
+    "line": 18,
+    "symbol": "unknown:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 5,
+    "symbol": "unknown:evaluateChannelPermission",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 5,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 12,
+    "symbol": "unknown:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 54,
+    "symbol": "unknown:onDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 50,
+    "symbol": "unknown:recordDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 14,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 6,
+    "symbol": "implicitAny:GitHubAuthState",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 41,
+    "symbol": "implicitAny:authenticateGitHubWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 24,
+    "symbol": "implicitAny:evaluateGitHubHmac",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 41,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 7,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 10,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 24,
+    "symbol": "implicitAny:state",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 56,
+    "symbol": "unknown:authenticateGitHubWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 44,
+    "symbol": "unknown:onDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 23,
+    "symbol": "implicitAny:GitHubAuthResult",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 17,
+    "symbol": "implicitAny:WebSocketAuthResult",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 20,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 5,
+    "symbol": "unknown:ChannelAuthnDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 15,
+    "symbol": "unknown:ChannelAuthnDecisionObserver",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 15,
+    "symbol": "unknown:decision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 12,
+    "symbol": "unknown:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 9,
+    "symbol": "implicitAny:WebSocketAuthState",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 90,
+    "symbol": "implicitAny:authenticateWebSocketUpgrade",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 42,
+    "symbol": "implicitAny:evaluateWebSocketToken",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 90,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 19,
+    "symbol": "implicitAny:readSubprotocolAuth",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 20,
+    "symbol": "implicitAny:req",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 10,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 16,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 42,
+    "symbol": "implicitAny:state",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 55,
+    "symbol": "implicitAny:subprotocolAuth",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 112,
+    "symbol": "unknown:authenticateWebSocketUpgrade",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 62,
+    "symbol": "unknown:evaluateWebSocketToken",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 94,
+    "symbol": "unknown:onDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/channel-authn.ts",
+    "line": 19,
+    "symbol": "implicitAny:authenticateGitHubWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/channel-authn.ts",
+    "line": 18,
+    "symbol": "implicitAny:authenticateWebSocketUpgrade",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/channel-authn.ts",
+    "line": 1,
+    "symbol": "unknown:ChannelAuthnDecisionObserver",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/channel-authn.ts",
+    "line": 11,
+    "symbol": "unknown:decisionOption",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/channel-authn.ts",
+    "line": 11,
+    "symbol": "unknown:onDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/index.ts",
+    "line": 2,
+    "symbol": "implicitAny:ChannelProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/index.ts",
+    "line": 3,
+    "symbol": "implicitAny:ChannelProviders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/index.ts",
+    "line": 2,
+    "symbol": "unknown:ChannelProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/index.ts",
+    "line": 3,
+    "symbol": "unknown:ChannelProviders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 93,
+    "symbol": "implicitAny:ChannelProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 103,
+    "symbol": "implicitAny:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 81,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 110,
+    "symbol": "implicitAny:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 81,
+    "symbol": "implicitAny:webhookHandler",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 93,
+    "symbol": "unknown:ChannelProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 103,
+    "symbol": "unknown:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/contract.ts",
+    "line": 110,
+    "symbol": "unknown:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 12,
+    "symbol": "implicitAny:CreatedMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 14,
+    "symbol": "implicitAny:DmChannelSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 16,
+    "symbol": "implicitAny:GatewayUrlSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 9,
+    "symbol": "implicitAny:RetryAfterSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 70,
+    "symbol": "implicitAny:api",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 61,
+    "symbol": "implicitAny:gateway",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 90,
+    "symbol": "implicitAny:hint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 12,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 105,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 50,
+    "symbol": "implicitAny:res",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 9,
+    "symbol": "implicitAny:retry_after",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 74,
+    "symbol": "implicitAny:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 16,
+    "symbol": "implicitAny:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 12,
+    "symbol": "unknown:CreatedMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 14,
+    "symbol": "unknown:DmChannelSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 16,
+    "symbol": "unknown:GatewayUrlSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 9,
+    "symbol": "unknown:RetryAfterSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 70,
+    "symbol": "unknown:api",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 42,
+    "symbol": "unknown:createDmChannel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 56,
+    "symbol": "unknown:fetchGatewayUrl",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 61,
+    "symbol": "unknown:gateway",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 90,
+    "symbol": "unknown:hint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 12,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 105,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 9,
+    "symbol": "unknown:retry_after",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 74,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/client.ts",
+    "line": 16,
+    "symbol": "unknown:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 7,
+    "symbol": "implicitAny:DiscordApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 6,
+    "symbol": "implicitAny:DiscordGatewayFetchError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 11,
+    "symbol": "implicitAny:DiscordHandlerMissingError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 4,
+    "symbol": "implicitAny:MessageData",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 9,
+    "symbol": "implicitAny:rejected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 7,
+    "symbol": "unknown:DiscordApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 6,
+    "symbol": "unknown:DiscordGatewayFetchError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 11,
+    "symbol": "unknown:DiscordHandlerMissingError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 4,
+    "symbol": "unknown:MessageData",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/error.ts",
+    "line": 9,
+    "symbol": "unknown:rejected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 162,
+    "symbol": "implicitAny:d",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 118,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 128,
+    "symbol": "implicitAny:frame",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 236,
+    "symbol": "implicitAny:handleDispatch",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 199,
+    "symbol": "implicitAny:handlePayload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 166,
+    "symbol": "implicitAny:hello",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 234,
+    "symbol": "implicitAny:ready",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 118,
+    "symbol": "implicitAny:wireSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 275,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 268,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 128,
+    "symbol": "unknown:frame",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 236,
+    "symbol": "unknown:handleDispatch",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 199,
+    "symbol": "unknown:handlePayload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 166,
+    "symbol": "unknown:hello",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 234,
+    "symbol": "unknown:ready",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 138,
+    "symbol": "unknown:wireSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 17,
+    "symbol": "implicitAny:DiscordProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 21,
+    "symbol": "implicitAny:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 22,
+    "symbol": "implicitAny:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 21,
+    "symbol": "implicitAny:token",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 17,
+    "symbol": "unknown:DiscordProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 21,
+    "symbol": "unknown:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 22,
+    "symbol": "unknown:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 21,
+    "symbol": "unknown:token",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 107,
+    "symbol": "implicitAny:DiscordApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 39,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 108,
+    "symbol": "implicitAny:RetryExhaustedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 127,
+    "symbol": "implicitAny:err",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 144,
+    "symbol": "implicitAny:handleIncoming",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 127,
+    "symbol": "implicitAny:handleMessageCreate",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 51,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 83,
+    "symbol": "implicitAny:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 107,
+    "symbol": "unknown:DiscordApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 39,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 108,
+    "symbol": "unknown:RetryExhaustedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 106,
+    "symbol": "unknown:deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 106,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 144,
+    "symbol": "unknown:handleIncoming",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 129,
+    "symbol": "unknown:handleMessageCreate",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 51,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 74,
+    "symbol": "unknown:start",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/surface.ts",
+    "line": 83,
+    "symbol": "unknown:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 44,
+    "symbol": "implicitAny:DiscordMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 28,
+    "symbol": "implicitAny:DiscordMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 21,
+    "symbol": "implicitAny:DiscordUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 53,
+    "symbol": "implicitAny:GatewayFrame",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 47,
+    "symbol": "implicitAny:GatewayFrameSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 55,
+    "symbol": "implicitAny:HelloDataSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 57,
+    "symbol": "implicitAny:ReadyDataSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 32,
+    "symbol": "implicitAny:author",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 24,
+    "symbol": "implicitAny:bot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 30,
+    "symbol": "implicitAny:channel_id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 33,
+    "symbol": "implicitAny:content",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 31,
+    "symbol": "implicitAny:guild_id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 55,
+    "symbol": "implicitAny:heartbeat_interval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 22,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 34,
+    "symbol": "implicitAny:mentions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 37,
+    "symbol": "implicitAny:message_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 35,
+    "symbol": "implicitAny:message_reference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 48,
+    "symbol": "implicitAny:op",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 59,
+    "symbol": "implicitAny:resume_gateway_url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 49,
+    "symbol": "implicitAny:s",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 58,
+    "symbol": "implicitAny:session_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 50,
+    "symbol": "implicitAny:t",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 60,
+    "symbol": "implicitAny:user",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 23,
+    "symbol": "implicitAny:username",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 44,
+    "symbol": "unknown:DiscordMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 28,
+    "symbol": "unknown:DiscordMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 21,
+    "symbol": "unknown:DiscordUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 53,
+    "symbol": "unknown:GatewayFrame",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 47,
+    "symbol": "unknown:GatewayFrameSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 55,
+    "symbol": "unknown:HelloDataSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 57,
+    "symbol": "unknown:ReadyDataSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 32,
+    "symbol": "unknown:author",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 24,
+    "symbol": "unknown:bot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 30,
+    "symbol": "unknown:channel_id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 33,
+    "symbol": "unknown:content",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 31,
+    "symbol": "unknown:guild_id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 55,
+    "symbol": "unknown:heartbeat_interval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 22,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 34,
+    "symbol": "unknown:mentions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 37,
+    "symbol": "unknown:message_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 35,
+    "symbol": "unknown:message_reference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 48,
+    "symbol": "unknown:op",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 59,
+    "symbol": "unknown:resume_gateway_url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 49,
+    "symbol": "unknown:s",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 58,
+    "symbol": "unknown:session_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 50,
+    "symbol": "unknown:t",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 60,
+    "symbol": "unknown:user",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/types.ts",
+    "line": 23,
+    "symbol": "unknown:username",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 8,
+    "symbol": "implicitAny:CommentsPageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 8,
+    "symbol": "implicitAny:body",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 83,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 120,
+    "symbol": "implicitAny:listing",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 27,
+    "symbol": "implicitAny:postComment",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 58,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 83,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 8,
+    "symbol": "unknown:CommentsPageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 8,
+    "symbol": "unknown:body",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 117,
+    "symbol": "unknown:hasComment",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 83,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 120,
+    "symbol": "unknown:listing",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 27,
+    "symbol": "unknown:postComment",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/client.ts",
+    "line": 83,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 15,
+    "symbol": "implicitAny:GitHubProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 28,
+    "symbol": "implicitAny:botUsername",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 46,
+    "symbol": "implicitAny:create",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 24,
+    "symbol": "implicitAny:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 46,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 26,
+    "symbol": "implicitAny:secret",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 31,
+    "symbol": "implicitAny:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 27,
+    "symbol": "implicitAny:token",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 46,
+    "symbol": "implicitAny:webhookHandler",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 15,
+    "symbol": "unknown:GitHubProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 28,
+    "symbol": "unknown:botUsername",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 24,
+    "symbol": "unknown:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 26,
+    "symbol": "unknown:secret",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 31,
+    "symbol": "unknown:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 27,
+    "symbol": "unknown:token",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 26,
+    "symbol": "implicitAny:EventActionSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 79,
+    "symbol": "implicitAny:WebhookPreparation",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 26,
+    "symbol": "implicitAny:action",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 146,
+    "symbol": "implicitAny:auth",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 113,
+    "symbol": "implicitAny:deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 231,
+    "symbol": "implicitAny:dispatchWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 142,
+    "symbol": "implicitAny:handleWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 193,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 29,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 153,
+    "symbol": "implicitAny:preparation",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 159,
+    "symbol": "implicitAny:prepareWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 170,
+    "symbol": "implicitAny:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 142,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 79,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 130,
+    "symbol": "implicitAny:start",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 243,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 26,
+    "symbol": "unknown:EventActionSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 26,
+    "symbol": "unknown:action",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 149,
+    "symbol": "unknown:auth",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 113,
+    "symbol": "unknown:deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 235,
+    "symbol": "unknown:dispatchWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 234,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 112,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 22,
+    "symbol": "unknown:onDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 29,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 172,
+    "symbol": "unknown:prepareWebhook",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 170,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/surface.ts",
+    "line": 130,
+    "symbol": "unknown:start",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 43,
+    "symbol": "implicitAny:GitHubIssuePayload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 5,
+    "symbol": "implicitAny:GitHubIssueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 16,
+    "symbol": "implicitAny:GitHubRepositorySchema",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 41,
+    "symbol": "implicitAny:GitHubUser",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 3,
+    "symbol": "implicitAny:GitHubUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 27,
+    "symbol": "implicitAny:GitHubWebhookPayloadSchemas",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 29,
+    "symbol": "implicitAny:action",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 9,
+    "symbol": "implicitAny:body",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 31,
+    "symbol": "implicitAny:comment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 17,
+    "symbol": "implicitAny:full_name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 31,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 30,
+    "symbol": "implicitAny:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 28,
+    "symbol": "implicitAny:issue_comment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 34,
+    "symbol": "implicitAny:issues",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 12,
+    "symbol": "implicitAny:labels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 3,
+    "symbol": "implicitAny:login",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 12,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 6,
+    "symbol": "implicitAny:number",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 18,
+    "symbol": "implicitAny:owner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 11,
+    "symbol": "implicitAny:pull_request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 32,
+    "symbol": "implicitAny:repository",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 7,
+    "symbol": "implicitAny:title",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 3,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 13,
+    "symbol": "implicitAny:user",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 43,
+    "symbol": "unknown:GitHubIssuePayload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 5,
+    "symbol": "unknown:GitHubIssueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 16,
+    "symbol": "unknown:GitHubRepositorySchema",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 41,
+    "symbol": "unknown:GitHubUser",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 3,
+    "symbol": "unknown:GitHubUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 27,
+    "symbol": "unknown:GitHubWebhookPayloadSchemas",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 29,
+    "symbol": "unknown:action",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 9,
+    "symbol": "unknown:body",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 31,
+    "symbol": "unknown:comment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 17,
+    "symbol": "unknown:full_name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 31,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 30,
+    "symbol": "unknown:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 28,
+    "symbol": "unknown:issue_comment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 34,
+    "symbol": "unknown:issues",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 12,
+    "symbol": "unknown:labels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 3,
+    "symbol": "unknown:login",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 12,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 6,
+    "symbol": "unknown:number",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 18,
+    "symbol": "unknown:owner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 11,
+    "symbol": "unknown:pull_request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 32,
+    "symbol": "unknown:repository",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 7,
+    "symbol": "unknown:title",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 3,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 13,
+    "symbol": "unknown:user",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 15,
+    "symbol": "implicitAny:ChannelProviders",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 17,
+    "symbol": "implicitAny:DiscordProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 18,
+    "symbol": "implicitAny:GitHubProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 19,
+    "symbol": "implicitAny:SlackProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 16,
+    "symbol": "implicitAny:TelegramProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 17,
+    "symbol": "implicitAny:discord",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 18,
+    "symbol": "implicitAny:github",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 19,
+    "symbol": "implicitAny:slack",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 16,
+    "symbol": "implicitAny:telegram",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 15,
+    "symbol": "unknown:ChannelProviders",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 17,
+    "symbol": "unknown:DiscordProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 18,
+    "symbol": "unknown:GitHubProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 19,
+    "symbol": "unknown:SlackProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 16,
+    "symbol": "unknown:TelegramProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 17,
+    "symbol": "unknown:discord",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 18,
+    "symbol": "unknown:github",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 19,
+    "symbol": "unknown:slack",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/registry.ts",
+    "line": 16,
+    "symbol": "unknown:telegram",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 14,
+    "symbol": "implicitAny:DmChannelSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 9,
+    "symbol": "implicitAny:EnvelopeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 12,
+    "symbol": "implicitAny:IdentitySchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 13,
+    "symbol": "implicitAny:PostedTsSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 11,
+    "symbol": "implicitAny:SocketUrlSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 86,
+    "symbol": "implicitAny:api",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 14,
+    "symbol": "implicitAny:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 33,
+    "symbol": "implicitAny:data",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 112,
+    "symbol": "implicitAny:envelope",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 9,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 14,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 9,
+    "symbol": "implicitAny:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 122,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 93,
+    "symbol": "implicitAny:res",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 34,
+    "symbol": "implicitAny:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 91,
+    "symbol": "implicitAny:shape",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 12,
+    "symbol": "implicitAny:team_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 13,
+    "symbol": "implicitAny:ts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 11,
+    "symbol": "implicitAny:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 12,
+    "symbol": "implicitAny:user_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 14,
+    "symbol": "unknown:DmChannelSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 9,
+    "symbol": "unknown:EnvelopeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 12,
+    "symbol": "unknown:IdentitySchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 13,
+    "symbol": "unknown:PostedTsSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 11,
+    "symbol": "unknown:SocketUrlSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 86,
+    "symbol": "unknown:api",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 14,
+    "symbol": "unknown:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 33,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 112,
+    "symbol": "unknown:envelope",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 9,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 14,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 9,
+    "symbol": "unknown:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 122,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 111,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 34,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 91,
+    "symbol": "unknown:shape",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 12,
+    "symbol": "unknown:team_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 13,
+    "symbol": "unknown:ts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 11,
+    "symbol": "unknown:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/client.ts",
+    "line": 12,
+    "symbol": "unknown:user_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 4,
+    "symbol": "implicitAny:MessageData",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 6,
+    "symbol": "implicitAny:SlackApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 11,
+    "symbol": "implicitAny:SlackEndpointKeyError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 10,
+    "symbol": "implicitAny:SlackHandlerMissingError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 8,
+    "symbol": "implicitAny:rejected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 4,
+    "symbol": "unknown:MessageData",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 6,
+    "symbol": "unknown:SlackApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 11,
+    "symbol": "unknown:SlackEndpointKeyError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 10,
+    "symbol": "unknown:SlackHandlerMissingError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 8,
+    "symbol": "unknown:rejected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 22,
+    "symbol": "implicitAny:SlackProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 29,
+    "symbol": "implicitAny:appToken",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 28,
+    "symbol": "implicitAny:botToken",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 26,
+    "symbol": "implicitAny:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 32,
+    "symbol": "implicitAny:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 22,
+    "symbol": "unknown:SlackProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 29,
+    "symbol": "unknown:appToken",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 28,
+    "symbol": "unknown:botToken",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 26,
+    "symbol": "unknown:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 32,
+    "symbol": "unknown:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 65,
+    "symbol": "implicitAny:envelope",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 64,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 116,
+    "symbol": "implicitAny:handleEnvelope",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 64,
+    "symbol": "implicitAny:openSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 93,
+    "symbol": "implicitAny:parseEnvelope",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 137,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 99,
+    "symbol": "unknown:envelope",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 131,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 116,
+    "symbol": "unknown:handleEnvelope",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 81,
+    "symbol": "unknown:openSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 103,
+    "symbol": "implicitAny:RetryExhaustedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 102,
+    "symbol": "implicitAny:SlackApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 127,
+    "symbol": "implicitAny:err",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 127,
+    "symbol": "implicitAny:handleMessageEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 57,
+    "symbol": "implicitAny:start",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 68,
+    "symbol": "implicitAny:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 103,
+    "symbol": "unknown:RetryExhaustedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 102,
+    "symbol": "unknown:SlackApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 88,
+    "symbol": "unknown:deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 101,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 129,
+    "symbol": "unknown:handleMessageEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 44,
+    "symbol": "unknown:start",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/surface.ts",
+    "line": 68,
+    "symbol": "unknown:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 23,
+    "symbol": "implicitAny:SlackMessageEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 8,
+    "symbol": "implicitAny:SlackMessageEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 43,
+    "symbol": "implicitAny:SocketEnvelope",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 31,
+    "symbol": "implicitAny:SocketEnvelopeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 17,
+    "symbol": "implicitAny:bot_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 12,
+    "symbol": "implicitAny:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 14,
+    "symbol": "implicitAny:channel_type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 33,
+    "symbol": "implicitAny:envelope_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 37,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 34,
+    "symbol": "implicitAny:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 40,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 11,
+    "symbol": "implicitAny:subtype",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 36,
+    "symbol": "implicitAny:team_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 18,
+    "symbol": "implicitAny:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 20,
+    "symbol": "implicitAny:thread_ts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 19,
+    "symbol": "implicitAny:ts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 9,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 15,
+    "symbol": "implicitAny:user",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 23,
+    "symbol": "unknown:SlackMessageEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 8,
+    "symbol": "unknown:SlackMessageEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 43,
+    "symbol": "unknown:SocketEnvelope",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 31,
+    "symbol": "unknown:SocketEnvelopeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 17,
+    "symbol": "unknown:bot_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 12,
+    "symbol": "unknown:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 14,
+    "symbol": "unknown:channel_type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 33,
+    "symbol": "unknown:envelope_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 37,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 34,
+    "symbol": "unknown:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 40,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 11,
+    "symbol": "unknown:subtype",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 36,
+    "symbol": "unknown:team_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 18,
+    "symbol": "unknown:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 20,
+    "symbol": "unknown:thread_ts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 19,
+    "symbol": "unknown:ts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 9,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/slack/types.ts",
+    "line": 15,
+    "symbol": "unknown:user",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 17,
+    "symbol": "implicitAny:EnvelopeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 13,
+    "symbol": "implicitAny:RetryAfterSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 20,
+    "symbol": "implicitAny:SentMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 99,
+    "symbol": "implicitAny:TelegramUpdateSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 88,
+    "symbol": "implicitAny:TelegramUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 105,
+    "symbol": "implicitAny:api",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 17,
+    "symbol": "implicitAny:description",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 141,
+    "symbol": "implicitAny:envelope",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 91,
+    "symbol": "implicitAny:getUpdates",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 125,
+    "symbol": "implicitAny:hint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 21,
+    "symbol": "implicitAny:message_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 17,
+    "symbol": "implicitAny:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 14,
+    "symbol": "implicitAny:parameters",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 113,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 151,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 14,
+    "symbol": "implicitAny:retry_after",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 108,
+    "symbol": "implicitAny:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 62,
+    "symbol": "implicitAny:sendMarkdown",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 94,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 17,
+    "symbol": "unknown:EnvelopeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 24,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 13,
+    "symbol": "unknown:RetryAfterSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 20,
+    "symbol": "unknown:SentMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 24,
+    "symbol": "unknown:TelegramApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 99,
+    "symbol": "unknown:TelegramUpdateSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 88,
+    "symbol": "unknown:TelegramUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 105,
+    "symbol": "unknown:api",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 17,
+    "symbol": "unknown:description",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 141,
+    "symbol": "unknown:envelope",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 60,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 99,
+    "symbol": "unknown:getUpdates",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 125,
+    "symbol": "unknown:hint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 21,
+    "symbol": "unknown:message_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 17,
+    "symbol": "unknown:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 14,
+    "symbol": "unknown:parameters",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 140,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 151,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 14,
+    "symbol": "unknown:retry_after",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 108,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 62,
+    "symbol": "unknown:sendMarkdown",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 15,
+    "symbol": "implicitAny:PropertyDeclaration",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 12,
+    "symbol": "implicitAny:TelegramPoller",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 15,
+    "symbol": "implicitAny:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 62,
+    "symbol": "implicitAny:poll",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 15,
+    "symbol": "implicitAny:pollController",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 34,
+    "symbol": "implicitAny:pollOnce",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 38,
+    "symbol": "implicitAny:updates",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 60,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 62,
+    "symbol": "unknown:poll",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 12,
+    "symbol": "implicitAny:TelegramProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 19,
+    "symbol": "implicitAny:create",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 16,
+    "symbol": "implicitAny:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 17,
+    "symbol": "implicitAny:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 20,
+    "symbol": "implicitAny:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 16,
+    "symbol": "implicitAny:token",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 12,
+    "symbol": "unknown:TelegramProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 16,
+    "symbol": "unknown:credentials",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 17,
+    "symbol": "unknown:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 16,
+    "symbol": "unknown:token",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 22,
+    "symbol": "implicitAny:PropertyDeclaration",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 116,
+    "symbol": "implicitAny:RetryExhaustedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 15,
+    "symbol": "implicitAny:TelegramAdapter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 22,
+    "symbol": "implicitAny:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 131,
+    "symbol": "implicitAny:handleMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 22,
+    "symbol": "implicitAny:poller",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 43,
+    "symbol": "implicitAny:start",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 93,
+    "symbol": "implicitAny:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 116,
+    "symbol": "unknown:RetryExhaustedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 115,
+    "symbol": "unknown:TelegramApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 114,
+    "symbol": "unknown:deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 72,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 114,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 131,
+    "symbol": "unknown:handleMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 43,
+    "symbol": "unknown:start",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/surface.ts",
+    "line": 93,
+    "symbol": "unknown:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 10,
+    "symbol": "implicitAny:TelegramChatSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 18,
+    "symbol": "implicitAny:TelegramEntitySchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 36,
+    "symbol": "implicitAny:TelegramMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 54,
+    "symbol": "implicitAny:TelegramUpdate",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 48,
+    "symbol": "implicitAny:TelegramUpdateSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 53,
+    "symbol": "implicitAny:TelegramUser",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 3,
+    "symbol": "implicitAny:TelegramUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 28,
+    "symbol": "implicitAny:chat",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 41,
+    "symbol": "implicitAny:date",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 31,
+    "symbol": "implicitAny:entities",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 6,
+    "symbol": "implicitAny:first_name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 27,
+    "symbol": "implicitAny:from",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 4,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 5,
+    "symbol": "implicitAny:is_bot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 21,
+    "symbol": "implicitAny:length",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 50,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 38,
+    "symbol": "implicitAny:message_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 20,
+    "symbol": "implicitAny:offset",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 44,
+    "symbol": "implicitAny:reply_to_message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 42,
+    "symbol": "implicitAny:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 13,
+    "symbol": "implicitAny:title",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 12,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 49,
+    "symbol": "implicitAny:update_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 22,
+    "symbol": "implicitAny:user",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 7,
+    "symbol": "implicitAny:username",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 10,
+    "symbol": "unknown:TelegramChatSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 18,
+    "symbol": "unknown:TelegramEntitySchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 36,
+    "symbol": "unknown:TelegramMessageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 54,
+    "symbol": "unknown:TelegramUpdate",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 48,
+    "symbol": "unknown:TelegramUpdateSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 53,
+    "symbol": "unknown:TelegramUser",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 3,
+    "symbol": "unknown:TelegramUserSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 28,
+    "symbol": "unknown:chat",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 41,
+    "symbol": "unknown:date",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 31,
+    "symbol": "unknown:entities",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 6,
+    "symbol": "unknown:first_name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 27,
+    "symbol": "unknown:from",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 4,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 5,
+    "symbol": "unknown:is_bot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 21,
+    "symbol": "unknown:length",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 50,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 38,
+    "symbol": "unknown:message_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 20,
+    "symbol": "unknown:offset",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 44,
+    "symbol": "unknown:reply_to_message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/types.ts",
+    "line": 42,
+    "symbol": "unknown:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  }
+]

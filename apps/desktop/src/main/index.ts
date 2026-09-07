@@ -10,7 +10,11 @@ import { resolveGatewayEndpoint } from "./gateway-endpoint";
  * variable changed under the process, and re-reading per request would make the
  * endpoint a moving fact that no log line could pin down.
  */
-const gateway = resolveGatewayEndpoint(process.env);
+const gateway = resolveGatewayEndpoint({
+  OPENOMNI_WS_URL: process.env.OPENOMNI_WS_URL,
+  OPENOMNI_WS_PORT: process.env.OPENOMNI_WS_PORT,
+  OPENOMNI_WS_TOKEN: process.env.OPENOMNI_WS_TOKEN,
+});
 
 function createWindow(): void {
   const window = new BrowserWindow({

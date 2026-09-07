@@ -12,12 +12,18 @@
     ".": {
       "entry": [
         "package.json",
-        "script/**/*.ts",
+        "script/**/*.{ts,mjs}",
         "biome.json",
         "lefthook.yml",
         "commitlint.config.*"
       ],
-      "project": ["script/**/*.ts", "*.json", "*.jsonc", "*.yml", "*.yaml"]
+      "project": [
+        "script/**/*.{ts,mjs}",
+        "*.json",
+        "*.jsonc",
+        "*.yml",
+        "*.yaml"
+      ]
     },
     "apps/desktop": {
       "entry": [
@@ -31,7 +37,7 @@
       "ignoreDependencies": ["tailwindcss"]
     },
     "apps/openomni": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/fixtures/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/agent": {

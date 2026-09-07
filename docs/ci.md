@@ -37,11 +37,73 @@ outputs. Workspace tests run in separate jobs with their own files, ports, and
 process environments. Tests do not wait for unrelated lint or typecheck jobs.
 Machine integration uses Python 3.12.
 
-Every coverage lane produces fresh LCOV and runs the ratchet for that lane.
+Every workspace and the script lane produces fresh LCOV and runs the ratchet for that lane. #945 adds the first measured floors for machines, UI, and desktop; it does not invent old coverage evidence for those lanes.
 Missing executable source records, malformed counts, empty instrumentation,
 and an unknown lane fail. A selected PR does not borrow old reports from
-unselected workspaces. Full runs select every lane. Noncoverage lanes remain
-explicit in topology; they are tested without inventing a coverage baseline.
+unselected workspaces. Full runs select every lane. Topology remains the owner
+of lane membership and test commands.
+
+The #945 quality job seals one immutable native receipt per selected coverage
+lane, then verifies source hashes, run identity, and line-record membership
+before running type, publisher, export, store, metrics, and clone collectors.
+`d945-lcov-crap-upper-bound@1` uses only uniquely mapped, wholly executed source
+lines; ambiguous line hits never become statement hits. These counters are a
+lower bound on proven statement coverage, so the unchanged CRAP formula yields
+an explicitly labeled upper bound. Missing or ambiguous proof remains a finding,
+not fabricated coverage. Static metrics and clones cover the whole owned inventory;
+coverage/CRAP are checked only for selected lanes, and every changed source must
+have a selected coverage lane. No stale report is borrowed for an unselected lane.
+Full mutation runs in the explicit `quality-mutation` scheduled/manual workflow,
+not in PR admission. It retains failed/incomplete process evidence and fails
+closed until a complete campaign and reviewed baseline exist; a missing baseline
+is not a zero-survivor claim. A PR pilot is never reported as zero survivors.
+
+Python quality tools are installed from
+`script/conformance/quality-python-requirements.txt` under Python 3.12.12.
+
+Ownership is handwritten `.ts`, `.tsx`, and `.py` under `packages/*/src|test`,
+`apps/*/src|test`, and `script/`. Handwritten declarations remain type inputs;
+`dist`, dependency trees and generated directories never contribute findings.
+Configuration, historical SQL and embedded-driver identities remain recorded as
+resolver/schema inputs. Product censuses exclude test, fixture, benchmark and
+diagnostic-tool roots as product consumers; the tools themselves still participate
+in the other quality gates. SQLite-maintained `sqlite_sequence` is intrinsic,
+not an owned table requiring an invented application writer.
+
+Quality baseline fragments are exact measured multiplicities by gate, source and
+symbol. Both the index and fragments are compared with the Git base: editing a
+fragment cannot make growth legal. The initial admission baseline must equal a
+complete measurement, without spare allowances; it records debt rather than
+claiming convergence. Once the baseline exists in the Git base, added files must
+contain no findings and changed lines (including intersecting function ranges)
+must contain no findings. Missing or incomplete measurements always fail.
+
+### Initial measured admission baseline (#945)
+
+The baseline covers 908 owned source files. It was re-measured after the
+merge of `main` (#969/#994/#996/#997 landed between the first measurement and
+admission) with the same pinned tooling: Bun 1.4.1, Python 3.12.12; its source
+inventory hash is
+`207f0b8f6a8165ff7210c74dd9b19e344e962121e98edfa3e594ce97442a4c6a`.
+The fragments preserve exact measured values and multiplicities, not padding.
+
+| Per-PR finding class | Measured findings |
+| --- | ---: |
+| Type census | 43,363 |
+| Publisher / export / store | 39 / 372 / 5 |
+| Cyclomatic / cognitive / Halstead | 16 / 11 / 0 |
+| CRAP upper bound | 1,280 |
+| Production clone occurrences | 74 (36 clusters) |
+| Test clone occurrences | 560 (272 clusters) |
+| Unproven original statements | 54,335 |
+
+The script line floor increases from 34.11% to **55.71%** (7,519 of 13,497
+owned lines). First measured Linux floors are machines 90.49%, UI 92.93%, and
+desktop 92.96%. The existing line ratchet retains its 0.5 percentage-point
+platform tolerance; the finding ratchet does not grant a growth tolerance.
+These are admission baselines, not achievement of the final zero/100% targets.
+Full mutation has no fabricated baseline or zero-survivor claim: the scheduled
+lane requires a complete campaign and reviewed measurement before admission.
 
 The recursive script lane runs conformance and tool tests once. There are no
 extra duplicate conformance/topology/tsconfig test steps.
