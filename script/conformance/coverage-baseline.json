@@ -1,4 +1,9 @@
 {
+  "apps/desktop": {
+    "linesFound": 1494,
+    "linesHit": 1393,
+    "pct": 93.24
+  },
   "apps/openomni": {
     "linesFound": 5983,
     "linesHit": 5561,
@@ -29,6 +34,11 @@
     "linesHit": 1966,
     "pct": 97.23
   },
+  "packages/machines": {
+    "linesFound": 815,
+    "linesHit": 791,
+    "pct": 97.06
+  },
   "packages/placement": {
     "linesFound": 44,
     "linesHit": 44,
@@ -43,6 +53,11 @@
     "linesFound": 6222,
     "linesHit": 6062,
     "pct": 97.43
+  },
+  "packages/ui": {
+    "linesFound": 1422,
+    "linesHit": 1346,
+    "pct": 94.66
   },
   "script": {
     "linesFound": 3810,

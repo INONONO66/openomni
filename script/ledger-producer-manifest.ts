@@ -49,6 +49,7 @@
 //     backfills executed by the migration runner).
 
 import { Glob } from "bun";
+import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import ts from "typescript";
 
@@ -322,4 +323,51 @@ export async function scanLedgerProducers(rootDir: string): Promise<LedgerProduc
     if (matchesMigrationTableWriteSql(content)) migrationSqlWriters.push(file);
   }
   return { appendCallSites, ledgerTableWriters, frozenTableWriters, migrationSqlWriters };
+}
+
+/** Live schema is supplied by the real lifecycle, never reconstructed from historical CREATEs. */
+export function liveCensusTables(db: Database): { name: string; sql: string }[] {
+  return db.query<{ name: string; sql: string }, []>(
+    "SELECT name, sql FROM sqlite_schema WHERE type = 'table' AND sql IS NOT NULL ORDER BY name",
+  ).all();
+}
+
+/** Exact producer ownership metadata; registration and archive access confer no consumer credit. */
+export function ledgerCensusRole(definition: { path: string; symbol: string }): "migration" | "archive" | "product" {
+  // These are identities of the existing lifecycle/disposition entry points,
+  // not filename exclusions: unrelated operations in the same file stay product.
+  if (definition.path === "packages/ledger/src/storage/migration-runner.ts" && ["applyOrdered", "applyMigration"].includes(definition.symbol)) return "migration";
+  if (definition.path === "packages/ledger/src/storage/u967-preflight.ts" && definition.symbol === "preflight967") return "archive";
+  if (definition.path === "packages/ledger/src/storage/u967-projection.ts" && definition.symbol === "inspect967Projections") return "archive";
+  if (definition.path === "packages/ledger/src/storage/sqlite-schema-lifecycle.ts" && definition.symbol === "preflightSqliteDatabase") return "archive";
+  return "product";
+}
+
+/** Inventory-fed historical lineage only. Never promotes historical CREATEs
+ * into live stores; the live database remains the authority for existence. */
+export function ledgerCensusSchemaOrigins(sources: readonly { path: string; sql: string }[]): { family: string; path: string; line: number; dropped: boolean }[] {
+  const origins = new Map<string, { family: string; path: string; line: number; dropped: boolean }>();
+  for (const source of [...sources].sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)))) {
+    for (const match of source.sql.matchAll(/\b(CREATE|DROP)\s+TABLE\s+(?:(?:IF NOT EXISTS|IF EXISTS)\s+)?["`[]?([\w]+)["`\]]?/gi)) {
+      const family = match[2]; if (!family) continue;
+      const dropped = match[1]?.toUpperCase() === "DROP";
+      const prior = origins.get(family);
+      if (prior) prior.dropped = dropped;
+      else origins.set(family, { family, path: source.path, line: source.sql.slice(0, match.index).split("\n").length, dropped });
+    }
+  }
+  return [...origins.values()];
+}
+
+/** Existing schema comparison builds only a disposable in-memory DDL model.
+ * Its generated statements are schema-tool inputs, not product row consumers. */
+export function ledgerCensusSchemaCompiler(definition: { path: string; symbol: string }): boolean {
+  return definition.path === "script/check-ledger-schema-drift.ts" && definition.symbol === "main";
+}
+
+export function ledgerCensusOwner(table: string): readonly string[] {
+  if (table === "ledger_event" || table === "ledger_head")
+    return LEDGER_PRODUCER_MANIFEST.appendCore;
+  return LEDGER_PRODUCER_MANIFEST.frozenTableWriters
+    .filter((entry) => entry.table === table).map((entry) => entry.adapter);
 }

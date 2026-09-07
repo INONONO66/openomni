@@ -554,6 +554,11 @@ function selfTest(): void {
 async function main(): Promise<void> {
   const rawArgs = process.argv.slice(2);
   const args = new Set(rawArgs);
+  if (args.has("--inventory")) {
+    const { qualityCoverageMain } = await import("./check-quality-coverage");
+    process.exitCode = await qualityCoverageMain();
+    return;
+  }
   let selectedLane: string | undefined;
   for (let index = 0; index < rawArgs.length; index++) {
     const arg = rawArgs[index];

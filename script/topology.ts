@@ -134,10 +134,8 @@ export const TOPOLOGY = [
     packageName: "@openomni/machines",
     allowedDeps: ["@openomni/protocol", "@openomni/ipc"],
     testLane: true,
-    // Deliberate: machines has no approved baseline. CI still runs its tests,
-    // while the ratchet verifies that this explicit non-coverage lane remains
-    // absent from both reports and baseline until Owner-approved growth.
-    coverageLane: false,
+    // #945 adds the first measured, shrink-only coverage floor.
+    coverageLane: true,
     knipWorkspace: true,
     tsconfigVerify: true,
   },
@@ -189,9 +187,8 @@ export const TOPOLOGY = [
     // composition — all of it data-blind. See DESIGN.md 10.
     allowedDeps: [],
     testLane: true,
-    // Deliberate: the surface's claim is visual and is reviewed through the
-    // showcase shots; there is no approved line-coverage baseline yet.
-    coverageLane: false,
+    // Visual review remains separate from the measured #945 source floor.
+    coverageLane: true,
     knipWorkspace: true,
     tsconfigVerify: true,
   },
@@ -204,8 +201,8 @@ export const TOPOLOGY = [
     // composes primitives, and names no color of its own.
     allowedDeps: ["@openomni/protocol", "@openomni/ui"],
     testLane: true,
-    // Deliberate: Electron scaffold has no approved coverage baseline yet.
-    coverageLane: false,
+    // #945 adds the first measured source floor for the desktop lane.
+    coverageLane: true,
     knipWorkspace: true,
     tsconfigVerify: true,
   },

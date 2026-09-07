@@ -1,0 +1,4 @@
+coverage==7.10.7
+radon==6.0.1
+cognitive-complexity==1.3.0
+basedpyright==1.39.10

@@ -137,6 +137,15 @@ bun test --timeout 15000
 # After the coverage-producing package test commands used by CI:
 bun run script/check-coverage-ratchet.ts
 
+# #945 measurement entry points (native source/coverage receipts are mandatory):
+bun run script/quality-inventory.ts > quality-inventory.json
+bun run script/check-types-census.ts --inventory quality-inventory.json
+bun run script/check-quality-python.ts
+# After sealing coverage receipts as described in docs/ci.md:
+bun run script/quality-measure.ts --base origin/main --baseline script/conformance/quality-baseline-lcov-bound.json --plan quality-plan.json --run "$QUALITY_RUN" --coverage-directory quality-receipts
+# Scheduled/manual full mutation, never a claim inferred from a PR pilot:
+bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json
+
 # Reproduce one CI lane, including its fresh coverage gate:
 bun run ci test --lane agent
 bun run ci test --lane scripts
@@ -150,6 +159,16 @@ bun run --cwd apps/desktop dev
 
 Coverage baselines are updated after coverage-producing test runs with `bun run script/check-coverage-ratchet.ts --update`. Dead-export shrinkage uses `bun run script/check-dead-exports.ts --update`.
 
+`quality-measure.ts` invokes the named publisher, export, and store outcomes of
+`check-census.ts`, the type census, and the frozen analyzers behind
+`check-quality-metrics.ts` and `check-quality-coverage.ts`. Their strict original
+coverage-receipt API remains available for exact statement-counter verification.
+`quality-ratchet.ts` rejects baseline growth against the Git base and any finding
+on added/modified source lines (or anywhere in a newly added file). Baseline
+fragments contain measured multiplicities, not exemptions; there is no update or
+soft mode for this ratchet. Full mutation uses `run-quality-mutations.ts` and
+requires a complete campaign receipt, including restoration and cleanup proof.
+
 ## NOTES
 
 - `apps/openomni` is the kernel composition root. `apps/desktop` owns Electron and AI SDK chat state and imports `packages/ui`; its dependency band permits `protocol` and `ui`, not kernel implementation packages. It speaks to the daemon over the gateway's WebSocket rather than importing it: main resolves `OPENOMNI_WS_URL`, else `ws://127.0.0.1:<OPENOMNI_WS_PORT or 3000>/ws`, and `OPENOMNI_WS_TOKEN`, with the port default and the `/ws` path copied as literals from `apps/openomni/src/config.ts` and `apps/openomni/src/index.ts` and the source named at each — the dependency the console must not take is the reason the copy exists.
@@ -157,4 +176,4 @@ Coverage baselines are updated after coverage-producing test runs with `bun run 
 - `packages/agent` coordinates generic session handles through `SessionHandleStore`; `packages/ledger` owns the durable facts, while product-specific session identity, routing, and lifecycle policy remain in `apps/openomni`.
 - Shipped-state claims, including Stakes, effective authority, and connector consumers, belong only in `docs/implementation-status.md`; other docs define target contracts or historical context and defer to it.
 - CI lives in `.github/workflows/ci.yml`; its Ultracite check is `bunx ultracite check --formatter-enabled=false .` (formatting disabled). Full formatting checks use `bunx ultracite check .`; the pinned baseline has existing formatter failures, recorded in `docs/SLOP.md`.
-- The dead-export ratchet, event-pairing and ledger-producer drift tests are wired, but they are not #945's complete production-only publisher/export/store census or final quality gate. E4 is required, not parked; #950 alone parks sandbox/egress hardening outside #930.
+- #945 is a campaign ratchet, not a zero-quality closure claim. Named publisher/export/store measurements and type, complexity, clone, coverage, and scheduled mutation gates are separate from final zero at #973. E4 is required, not parked; #950 alone parks sandbox/egress hardening outside #930.

@@ -36,11 +36,42 @@ outputs. Workspace tests run in separate jobs with their own files, ports, and
 process environments. Tests do not wait for unrelated lint or typecheck jobs.
 Machine integration uses Python 3.12.
 
-Every coverage lane produces fresh LCOV and runs the ratchet for that lane.
+Every workspace and the script lane produces fresh LCOV and runs the ratchet for that lane. #945 adds the first measured floors for machines, UI, and desktop; it does not invent old coverage evidence for those lanes.
 Missing executable source records, malformed counts, empty instrumentation,
 and an unknown lane fail. A selected PR does not borrow old reports from
-unselected workspaces. Full runs select every lane. Noncoverage lanes remain
-explicit in topology; they are tested without inventing a coverage baseline.
+unselected workspaces. Full runs select every lane. Topology remains the owner
+of lane membership and test commands.
+
+The #945 quality job seals one immutable native receipt per selected coverage
+lane, then verifies source hashes, run identity, and line-record membership
+before running type, publisher, export, store, metrics, and clone collectors.
+`d945-lcov-crap-upper-bound@1` uses only uniquely mapped, wholly executed source
+lines; ambiguous line hits never become statement hits. These counters are a
+lower bound on proven statement coverage, so the unchanged CRAP formula yields
+an explicitly labeled upper bound. Missing or ambiguous proof remains a finding,
+not fabricated coverage. Static metrics and clones cover the whole owned inventory;
+coverage/CRAP are checked only for selected lanes, and every changed source must
+have a selected coverage lane. No stale report is borrowed for an unselected lane.
+Full mutation is scheduled/manual final-convergence
+work; a PR pilot is never reported as zero survivors.
+
+Python quality tools are installed from
+`script/conformance/quality-python-requirements.txt` under Python 3.12.12.
+
+Ownership is handwritten `.ts`, `.tsx`, and `.py` under `packages/*/src|test`,
+`apps/*/src|test`, and `script/`. Handwritten declarations remain type inputs;
+`dist`, dependency trees and generated directories never contribute findings.
+Configuration, historical SQL and embedded-driver identities remain recorded as
+resolver/schema inputs. Product censuses exclude test, fixture, benchmark and
+diagnostic-tool roots as product consumers; the tools themselves still participate
+in the other quality gates. SQLite-maintained `sqlite_sequence` is intrinsic,
+not an owned table requiring an invented application writer.
+
+Quality baseline fragments are exact measured multiplicities by gate, source and
+symbol. Both the index and fragments are compared with the Git base: editing a
+fragment cannot make growth legal. Added files must contain no findings; changed
+lines (and intersecting function ranges) must contain no findings. A complete
+measurement is required before a baseline can be recorded; there is no soft mode.
 
 The recursive script lane runs conformance and tool tests once. There are no
 extra duplicate conformance/topology/tsconfig test steps.

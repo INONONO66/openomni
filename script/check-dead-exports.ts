@@ -168,6 +168,40 @@ export async function runKnip(
   }
 }
 
+/** Strict census transport. Knip remains the export owner; no baseline is read. */
+export function runProductionKnip(options: {
+  readonly root: string;
+  readonly executable: string;
+  readonly config: string;
+}): { ok: true; stdout: string } | { ok: false; code: string; message: string } {
+  const version = Bun.spawnSync([process.execPath, options.executable, "--version"], {
+    cwd: options.root, timeout: 30_000,
+  });
+  if (version.exitCode !== 0 || version.stdout.toString().trim() !== "6.31.0")
+    return { ok: false, code: "tool_version", message: "census requires knip 6.31.0" };
+  const result = Bun.spawnSync([
+    process.execPath, options.executable, "--config", options.config,
+    "--reporter", "json", "--no-exit-code", "--include-entry-exports",
+    "--include", "files,exports,nsExports,types,nsTypes,enumMembers,namespaceMembers,unresolved",
+    "--no-progress",
+  ], { cwd: options.root, timeout: 120_000 });
+  if (result.exitCode !== 0)
+    return { ok: false, code: "knip_failure", message: result.stderr.toString().slice(0, 2000) };
+  return { ok: true, stdout: result.stdout.toString() };
+}
+
+/** Join Knip's public surface with the shared invocation graph. Knip's lexical
+ * use is not production consumption (registration/internal use may keep an
+ * export in its graph). This owner emits the missing-consumer policy finding;
+ * unresolved graph edges remain separate analyzer errors in the caller. */
+export function productionConsumerFindings(rows: readonly {
+  readonly definition: { readonly path: string; readonly line: number; readonly symbol: string };
+  readonly consumers: readonly object[];
+}[]): { path: string; line: number; symbol: string; class: "export" }[] {
+  return rows.filter((row) => row.consumers.length === 0)
+    .map((row) => ({ ...row.definition, class: "export" }));
+}
+
 function readBaseline(): DeadExportBaseline {
   // Tolerate a missing key: `--update` always writes the `grandfathered`
   // array (empty or not), but a hand-minimized `{}` baseline is still valid.
