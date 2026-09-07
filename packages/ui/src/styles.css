@@ -187,6 +187,9 @@
   --spacing-gutter: 16px;
   --spacing-section: 24px;
   --spacing-control-sm: 24px;
+  /* The strip's step: between `sm` and `md`, a 28px box around a 16px glyph.
+     Measured from the reference console's strip controls (`IconButton size=medium`). */
+  --spacing-control-base: 28px;
   --spacing-control-md: 32px;
   --spacing-inset: 8px;
   /* The reading measure, and the transcript's ONE column.
@@ -263,19 +266,46 @@
   --ease-frame: var(--motion-fast-ease);
 
   /* ---- Shell geometry ---------------------------------------------------- */
+  /* The tab strip's height (reference: `desktopTabsHeight: 42`) and the one
+     tab's inside it (`desktopTabHeight: 26`). `--shell-top` reads the strip's
+     token once the renderer declares a strip. */
+  --spacing-shell-strip: 42px;
+  --spacing-tab-height: 26px;
+
+  /* Where the traffic lights end on darwin, measured from the reference console's
+     main process: origin x 17 + the 52px cluster + a 12px margin = 81. The strip's
+     darwin inset is that safe zone plus the 8px the collapsed cluster pads itself
+     with, so the toggle's box starts at x=89 — a 20px gap after the lights. */
+  --spacing-traffic-safe: 81px;
+  --spacing-strip-inset-darwin: calc(var(--spacing-traffic-safe) + 8px);
+
   /* The tab strip's controls zone while the sidebar is COLLAPSED, when it has
      to hold the window controls plus the sidebar toggle and the history trio
-     without clipping. Stated as a sum so it can be re-measured, not guessed:
+     without clipping. Stated as a sum of tokens so it can be re-measured, not
+     guessed:
 
-       darwin  76 (traffic lights inset) + 24 toggle + 12 gap
-               + 24 history + 4 + 24 back + 4 + 24 forward + 12 right pad = 204
-       other   8 left pad + 24 toggle + 12 gap
-               + 24 history + 4 + 24 back + 4 + 24 forward + 8 right pad = 132
-               (the reference measures 108 here, without a history control.)
+       darwin  89 inset + 28 toggle + 4 gap
+               + 28 history + 4 + 28 back + 4 + 28 forward + 12 right pad = 225
+       other   8 left pad + 28 toggle + 4 gap
+               + 28 history + 4 + 28 back + 4 + 28 forward + 8 right pad = 140
 
      The open width is not a token: it is the runtime `--sidebar-width`. */
-  --spacing-tab-controls-collapsed: 204px;
-  --spacing-tab-controls-collapsed-generic: 132px;
+  --spacing-tab-controls-collapsed: calc(
+    var(--spacing-strip-inset-darwin) +
+    4 *
+    var(--spacing-control-base) +
+    3 *
+    4px +
+    12px
+  );
+  --spacing-tab-controls-collapsed-generic: calc(
+    8px +
+    4 *
+    var(--spacing-control-base) +
+    3 *
+    4px +
+    8px
+  );
 }
 
 /* ---- Layer scale ----------------------------------------------------------
@@ -297,7 +327,9 @@
 }
 
 :root[data-tab-strip] {
-  --shell-top: 2.5rem;
+  /* The strip's own height. The main process centres the traffic lights in it
+     (`trafficLightPosition.y` = 15 for a 12px light in 42). */
+  --shell-top: var(--spacing-shell-strip);
 }
 
 /* Dark is the shipped default. Light re-points the same semantic tokens, so no
@@ -462,6 +494,26 @@ body {
     color, background-color, border-color, opacity, transform;
   transition-duration: var(--motion-fast-duration);
   transition-timing-function: var(--motion-fast-ease);
+}
+
+/* The strip's history trio while the controls zone changes width.
+
+   The reference derives the trio's opacity from the width motion itself,
+   `clamp(1 - 3p, 0, 1)`: gone in the first third of the travel. CSS has no
+   handle on a transition's progress, so the same shape is stated against the
+   SAME `--duration-base` / `--ease-frame` the zone's width runs on: the trio
+   is re-keyed on every open/collapse, enters at opacity 0 (`@starting-style`),
+   holds for the first third, and fades in over the remaining two. A
+   transition, not a keyframe: this motion answers the toggle, and the
+   keyframe budget is reserved for the marks that move without the reader. */
+@utility strip-trio-arrive {
+  transition-property: opacity;
+  transition-duration: calc(var(--duration-base) * 2 / 3);
+  transition-delay: calc(var(--duration-base) / 3);
+  transition-timing-function: var(--ease-frame);
+  @starting-style {
+    opacity: 0;
+  }
 }
 
 /* Focus-first: one ring, identical on every interactive primitive.
