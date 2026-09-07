@@ -1,25 +1,25 @@
-import type { AnyToolDefinition, Tool } from "@openomni/protocol";
-import { monitorTool } from "../monitor";
-import type { LedgerSession } from "@openomni/protocol";
+import { eraseTool, toolSpec } from "@openomni/agent";
 import type { MachineHost } from "@openomni/machines";
+import type { AnyToolDefinition, LedgerSession, Tool } from "@openomni/protocol";
+import type { composeCodemode } from "../../composition/codemode";
+import { createBashTool } from "../bash";
+import { createCompletionTool, type LlmPort } from "../completion";
+import { createEditTool } from "../edit";
+import { createEvalTool } from "../eval";
+import { createFindTool } from "../find";
+import { createGrepTool } from "../grep";
+import { createLsTool } from "../ls";
+import { monitorTool } from "../monitor";
+import { createProvisionTool, type ProvisionPort } from "../provision";
+import { createReadTool } from "../read";
 import { createSendMessageTool, type MessagePort } from "../send-message";
+import { createWriteTool } from "../write";
 
 export interface CatalogOrigin {
   readonly role: LedgerSession.Role;
   readonly depth: number;
   readonly sessionId: string;
 }
-import { createLlmTool, type LlmPort } from "../completion";
-import { createRunCodeTool } from "../eval";
-import type { composeCodemode } from "../../composition/codemode";
-import { createProvisionTool, type ProvisionPort } from "../provision";
-import { eraseTool, toolSpec } from "@openomni/agent";
-import { createReadTool } from "../read";
-import { createWriteTool } from "../write";
-import { createEditTool } from "../edit";
-import { createListTool } from "../ls";
-import { createSearchTool } from "../grep";
-import { createBashTool } from "../bash";
 
 export interface CatalogPorts {
   readonly messages?: MessagePort;
@@ -27,7 +27,26 @@ export interface CatalogPorts {
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
   readonly llm?: LlmPort;
   readonly provisioning?: ProvisionPort;
+  /** The session runtime clock; deadlines are computed against it, never wall time. */
+  readonly clock?: () => number;
 }
+
+/** The sealed catalog (KERNEL §3.4): the eleven model-door tools, in this order. */
+export const MODEL_TOOL_NAMES = [
+  "read",
+  "write",
+  "edit",
+  "ls",
+  "find",
+  "grep",
+  "bash",
+  "eval",
+  "monitor",
+  "send_message",
+  "provision",
+] as const;
+/** The one cell-only tool. */
+export const CELL_TOOL_NAMES = ["completion"] as const;
 
 /**
  * The static catalog: every tool is constructed regardless of which ports the
@@ -42,17 +61,16 @@ export function createTools(
     eraseTool(createReadTool(ports)),
     eraseTool(createWriteTool(ports)),
     eraseTool(createEditTool(ports)),
-    eraseTool(createListTool(ports)),
-    eraseTool(createSearchTool(ports)),
+    eraseTool(createLsTool(ports)),
+    eraseTool(createFindTool(ports)),
+    eraseTool(createGrepTool(ports)),
     eraseTool(createBashTool(ports)),
-  ];
-  tools.push(
+    eraseTool(createEvalTool(ports.cells?.cell)),
     eraseTool(monitorTool),
-    eraseTool(createSendMessageTool(ports.messages)),
+    eraseTool(createSendMessageTool(ports.messages, ports.clock)),
     eraseTool(createProvisionTool(ports.provisioning)),
-    eraseTool(createRunCodeTool(ports.cells?.cell)),
-    eraseTool(createLlmTool(ports.llm)),
-  );
+    eraseTool(createCompletionTool(ports.llm)),
+  ];
   const visible = tools.filter(
     (tool) =>
       tool.visibility.model.includes(origin.role) || tool.visibility.cell.includes(origin.role),

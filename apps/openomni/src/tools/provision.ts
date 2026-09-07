@@ -5,7 +5,7 @@ import type { Actor, PolicyRow, Provisioning } from "@openomni/protocol";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "@openomni/agent";
 import {
-  ENDPOINT_MERGE_INPUT,
+  CONTACT_MERGE_INPUT,
   CONTACT_PROMOTE_INPUT,
   ContactResult,
   contactDomainRevisions,
@@ -374,7 +374,7 @@ const ProvisionOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_add"), args: PERSON_DECLARE_INPUT }).strict(),
   z.object({ op: z.literal("contact_remove"), args: PERSON_REMOVE_INPUT }).strict(),
   z.object({ op: z.literal("contact_promote"), args: CONTACT_PROMOTE_INPUT }).strict(),
-  z.object({ op: z.literal("endpoint_merge"), args: ENDPOINT_MERGE_INPUT }).strict(),
+  z.object({ op: z.literal("contact_merge"), args: CONTACT_MERGE_INPUT }).strict(),
   z.object({ op: z.literal("channel_add"), args: CHANNEL_DECLARE_INPUT }).strict(),
   z.object({ op: z.literal("channel_enable"), args: INSTANCE_INPUT }).strict(),
   z.object({ op: z.literal("channel_disable"), args: INSTANCE_INPUT }).strict(),
@@ -462,12 +462,12 @@ export function createProvisionTool(port: ProvisionPort | undefined) {
       name: "provision",
       category: "mutation",
       description:
-        "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|endpoint_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and endpoint_merge suspend for Owner consent.",
+        "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|contact_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and contact_merge suspend for Owner consent.",
       input: ProvisionInput,
       output: ProvisionOutput,
       visibility: { model: ["resident"], cell: ["resident"] },
       execute: async ({ operation }, context) => {
-        if (operation.op === "contact_promote" || operation.op === "endpoint_merge")
+        if (operation.op === "contact_promote" || operation.op === "contact_merge")
           return mutateContact(operation, context.domainRevisions);
         const run = executors();
         switch (operation.op) {
@@ -506,7 +506,7 @@ export function createProvisionTool(port: ProvisionPort | undefined) {
         if (value.op === "contact_remove") return `person ${value.id} removed`;
         if (value.op === "contact_promote")
           return `contact ${value.id} registered (tier ${value.trustTier})`;
-        if (value.op === "endpoint_merge")
+        if (value.op === "contact_merge")
           return `endpoint ${value.id} merged into ${value.actorId}`;
         if (
           value.op === "channel_add" ||
@@ -518,7 +518,7 @@ export function createProvisionTool(port: ProvisionPort | undefined) {
       },
     },
     ({ operation }) => {
-      if (operation.op === "contact_promote" || operation.op === "endpoint_merge")
+      if (operation.op === "contact_promote" || operation.op === "contact_merge")
         return { required: false, domainRevisions: contactDomainRevisions(operation) };
       if (operation.op !== "contact_add" || port === undefined)
         return { required: false, domainRevisions: {} };
@@ -543,7 +543,7 @@ export function createProvisionTool(port: ProvisionPort | undefined) {
  */
 export const PROVISION_POLICY_ROWS: readonly Omit<PolicyRow.Row, "generation">[] = [
   "contact_promote",
-  "endpoint_merge",
+  "contact_merge",
 ].map((operation) => ({
   name: `provision-${operation.replace("_", "-")}-consent`,
   kind: "tool",

@@ -246,7 +246,7 @@ function toolResults(sessionId: string) {
     .filter(
       (action) =>
         action.kind === "tool" &&
-        z.object({ op: z.string() }).parse(action.intent.value).op !== "sendMessage",
+        z.object({ op: z.string() }).parse(action.intent.value).op !== "send_message",
     )
     .flatMap((action) => {
       const parsed = result.safeParse(action.effect.value);
@@ -410,7 +410,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
     try {
       const persisted = db
         .query<{ effect: string }, []>(
-          "SELECT effect FROM action WHERE kind = 'tool' AND json_extract(intent, '$.op') != 'sendMessage' ORDER BY ordinal",
+          "SELECT effect FROM action WHERE kind = 'tool' AND json_extract(intent, '$.op') != 'send_message' ORDER BY ordinal",
         )
         .all();
       const decoded = persisted.flatMap((row) => {

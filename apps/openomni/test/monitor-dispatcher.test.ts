@@ -34,8 +34,8 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
       description: "path",
       source: { kind: "path", path: "/tmp/target", event: "modify", timeout_ms: 20 },
     },
-    { op: "rearm", alarmId: "watch" },
-    { op: "cancel", alarmId: "watch" },
+    { op: "rearm", id: "watch" },
+    { op: "cancel", id: "watch" },
   ])
     expect(monitorTool.input.safeParse({ operation: input }).success).toBe(true);
   for (const input of [
@@ -55,7 +55,7 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
       description: "path",
       source: { kind: "path", path: "relative", event: "create", persistent: true },
     },
-    { op: "cancel", alarmId: "watch", source: { kind: "command", command: "echo wrong" } },
+    { op: "cancel", id: "watch", source: { kind: "command", command: "echo wrong" } },
     { op: "rearm" },
   ])
     expect(monitorTool.input.safeParse({ operation: input }).success).toBe(false);
@@ -69,7 +69,7 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   ).toMatchObject({ errorKind: "unregistered_tool" });
   await expect(
     dispatcher.execute(
-      { id: "context", tool: "monitor", input: { operation: { op: "cancel", alarmId: "watch" } } },
+      { id: "context", tool: "monitor", input: { operation: { op: "cancel", id: "watch" } } },
       context,
     ),
   ).rejects.toThrow(ExecutorContextError);
@@ -87,24 +87,24 @@ test("monitor controls enforce session identity and throw on refused transitions
         signal: new AbortController().signal,
       };
       expect(
-        await monitorTool.execute({ operation: { op: "rearm", alarmId: "control" } }, context),
+        await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
       ).toMatchObject({
         id: "control",
         epoch: 2,
       });
       await expect(
         monitorTool.execute(
-          { operation: { op: "cancel", alarmId: "control" } },
+          { operation: { op: "cancel", id: "control" } },
           { ...context, sessionId: "foreign" },
         ),
       ).rejects.toThrow(ToolRefused);
       expect(
-        await monitorTool.execute({ operation: { op: "cancel", alarmId: "control" } }, context),
+        await monitorTool.execute({ operation: { op: "cancel", id: "control" } }, context),
       ).toMatchObject({
         status: "cancelled",
       });
       await expect(
-        monitorTool.execute({ operation: { op: "rearm", alarmId: "control" } }, context),
+        monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
       ).rejects.toThrow(ToolRefused);
     } finally {
       await fixture.close();

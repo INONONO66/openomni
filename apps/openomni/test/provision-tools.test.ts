@@ -165,14 +165,14 @@ describe("original Person invocation consent", () => {
     };
     const declare = (domainRevisions: Record<string, number>) =>
       tool.execute(
-        { operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } } },
+        { operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } } },
         { ...context, domainRevisions },
       );
     await expect(declare({ [MANAGER_MANIFEST.id]: 0 })).rejects.toThrow("domain revision changed");
     expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
     expect(supervisor.calls).toEqual([]);
     expect(await declare({ [MANAGER_MANIFEST.id]: -1 })).toMatchObject({
-      op: "person_declare",
+      op: "contact_add",
       result: { kind: "declared", id: MANAGER_MANIFEST.id, revision: 0 },
     });
     expect(supervisor.calls).toEqual(["materialize"]);

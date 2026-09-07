@@ -215,7 +215,7 @@ describe("policy row compiler enforcement", () => {
     });
     const cases = [
       ["turn", "post", "continue", "continuation", 8],
-      ["tool", "pre", "sendMessage", "fanout", 8],
+      ["tool", "pre", "send_message", "fanout", 8],
       ["turn", "post", "exact_repeat", "exact_repeat", 3],
       ["turn", "post", "toolless_stall", "toolless_stall", 3],
       ["turn", "post", "blocked_recurrence", "blocked_recurrence", 3],

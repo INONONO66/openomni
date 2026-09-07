@@ -1,13 +1,25 @@
 [
   {
     "name": "read",
-    "description": "Read a local path or machineId:/absolute/path. UTF-8 text by default; base64 preserves binary bytes.",
+    "description": "Read a local path or machineId:/absolute/path. UTF-8 text by default with an optional line window (offset, limit); base64 preserves binary bytes.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
           "minLength": 1
+        },
+        "offset": {
+          "description": "First line to return, 1-based.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "description": "Maximum number of lines.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         },
         "encoding": {
           "default": "utf8",
@@ -47,7 +59,7 @@
   },
   {
     "name": "edit",
-    "description": "Replace exactly one literal UTF-8 occurrence in a local or machineId:/absolute/path file. Refuses absent or ambiguous matches. Read/write composition is not atomic against external writers.",
+    "description": "Apply one or more exact literal UTF-8 replacements to a local or machineId:/absolute/path file. Each oldText must match exactly once in the original and edits must not overlap. Read/write composition is not atomic against external writers.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -55,29 +67,45 @@
           "type": "string",
           "minLength": 1
         },
-        "oldText": {
-          "type": "string",
-          "minLength": 1
-        },
-        "newText": {
-          "type": "string"
+        "edits": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "oldText": {
+                "type": "string",
+                "minLength": 1
+              },
+              "newText": {
+                "type": "string"
+              }
+            },
+            "required": ["oldText", "newText"],
+            "additionalProperties": false
+          }
         }
       },
-      "required": ["path", "oldText", "newText"],
+      "required": ["path", "edits"],
       "additionalProperties": false
     },
     "safe": false,
     "sequential": true
   },
   {
-    "name": "list",
-    "description": "List immediate directory entries at a local path or machineId:/absolute/path, without following symlinks.",
+    "name": "ls",
+    "description": "List immediate directory entries at a local path or machineId:/absolute/path, without following symlinks. limit caps the entries returned.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
           "minLength": 1
+        },
+        "limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": ["path"],
@@ -86,45 +114,139 @@
     "safe": true
   },
   {
-    "name": "search",
-    "description": "Search UTF-8 file content for literal text at a local path or machineId:/absolute/path. Directories recurse in name order without following symlinks; binary files refuse. Returns matching lines, not regex or glob matches.",
+    "name": "find",
+    "description": "Find files and directories whose path relative to the search root matches a glob (e.g. **/*.ts). path defaults to the current directory; machineId:/absolute/path searches a machine. Symlinks are not followed.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "path": {
-          "type": "string",
-          "minLength": 1
-        },
         "pattern": {
           "type": "string",
           "minLength": 1
+        },
+        "path": {
+          "default": ".",
+          "type": "string",
+          "minLength": 1
+        },
+        "limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       },
-      "required": ["path", "pattern"],
+      "required": ["pattern"],
+      "additionalProperties": false
+    },
+    "safe": true
+  },
+  {
+    "name": "grep",
+    "description": "Search UTF-8 file content with a regular expression (literal=true for plain text) at a local path or machineId:/absolute/path. Directories recurse in name order without following symlinks; glob filters file names; context adds surrounding lines; binary files refuse.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "default": ".",
+          "type": "string",
+          "minLength": 1
+        },
+        "glob": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ignoreCase": {
+          "default": false,
+          "type": "boolean"
+        },
+        "literal": {
+          "default": false,
+          "type": "boolean"
+        },
+        "context": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["pattern"],
       "additionalProperties": false
     },
     "safe": true
   },
   {
     "name": "bash",
-    "description": "Run a shell command locally, or on the named machine. Local cwd is the host process cwd; remote cwd is /. Use cd in cmd to change directory. Remote / must be an offered export. No persistent cwd state.",
+    "description": "Run a shell command locally, or on the named machine. Local cwd is the host process cwd; remote cwd is /. Use cd in command to change directory. Remote / must be an offered export. No persistent cwd state.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cmd": {
+        "command": {
           "type": "string",
           "minLength": 1
+        },
+        "timeout": {
+          "description": "Seconds before the local command is killed. Remote commands are bounded by the daemon.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         },
         "machine": {
           "type": "string",
           "minLength": 1
         }
       },
-      "required": ["cmd"],
+      "required": ["command"],
       "additionalProperties": false
     },
     "safe": false,
     "sequential": true
+  },
+  {
+    "name": "eval",
+    "description": "Run Python in this session's persistent cell: state survives between calls; machine handles, parallel, completion, and tool.<name>() proxies are in scope. operation.op=run.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "run"
+                },
+                "code": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "timeout": {
+                  "default": 15,
+                  "description": "Seconds before the cell is stopped.",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["op", "code"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["operation"],
+      "additionalProperties": false
+    },
+    "safe": false
   },
   {
     "name": "monitor",
@@ -215,12 +337,12 @@
                   "type": "string",
                   "const": "rearm"
                 },
-                "alarmId": {
+                "id": {
                   "type": "string",
                   "minLength": 1
                 }
               },
-              "required": ["op", "alarmId"],
+              "required": ["op", "id"],
               "additionalProperties": false
             },
             {
@@ -230,12 +352,12 @@
                   "type": "string",
                   "const": "cancel"
                 },
-                "alarmId": {
+                "id": {
                   "type": "string",
                   "minLength": 1
                 }
               },
-              "required": ["op", "alarmId"],
+              "required": ["op", "id"],
               "additionalProperties": false
             }
           ]
@@ -248,8 +370,8 @@
     "sequential": true
   },
   {
-    "name": "sendMessage",
-    "description": "Send a message, interrupt, or resume to a session; create a child session; or contact an actor. Returns a handle without waiting for a reply.",
+    "name": "send_message",
+    "description": "Send one letter to a session, a new child session, or a contact. Returns a handle without waiting for a reply; the reply arrives in your inbox.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -298,42 +420,46 @@
               "properties": {
                 "kind": {
                   "type": "string",
-                  "const": "actor"
+                  "const": "contact"
                 },
-                "actorId": {
+                "id": {
                   "type": "string",
                   "minLength": 1
                 }
               },
-              "required": ["kind", "actorId"],
+              "required": ["kind", "id"],
               "additionalProperties": false
             }
           ]
         },
-        "type": {
-          "type": "string",
-          "enum": ["message", "interrupt", "resume"]
-        },
-        "content": {
+        "message": {
           "type": "string"
         },
-        "replyTo": {
+        "kind": {
+          "default": "prompt",
+          "description": "prompt is the default letter; interrupt and resume steer a running session.",
+          "type": "string",
+          "enum": ["prompt", "interrupt", "resume"]
+        },
+        "reply_to": {
           "type": "string",
           "minLength": 1
         },
-        "deadline": {
-          "type": "number",
-          "minimum": 0
+        "deadline_ms": {
+          "description": "Milliseconds from now after which no reply counts as unknown.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       },
-      "required": ["to", "type", "content"],
+      "required": ["to", "message"],
       "additionalProperties": false
     },
     "safe": false
   },
   {
     "name": "provision",
-    "description": "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|endpoint_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and endpoint_merge suspend for Owner consent.",
+    "description": "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|contact_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and contact_merge suspend for Owner consent.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -468,7 +594,7 @@
               "properties": {
                 "op": {
                   "type": "string",
-                  "const": "endpoint_merge"
+                  "const": "contact_merge"
                 },
                 "args": {
                   "type": "object",
@@ -641,43 +767,18 @@
     "safe": false
   },
   {
-    "name": "run_code",
-    "description": "Run Python with persistent tenant state, machine handles, parallel, llm, and host tool proxies.",
+    "name": "completion",
+    "description": "Ask a sub-model one one-shot, stateless question and return its text.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "code": {
+        "prompt": {
           "type": "string",
-          "minLength": 1
-        },
-        "timeoutMs": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
+          "minLength": 1,
+          "description": "One complete instruction for a stateless sub-model call."
         }
       },
-      "required": ["code", "timeoutMs"],
-      "additionalProperties": false
-    },
-    "safe": false
-  },
-  {
-    "name": "llm",
-    "description": "Ask a sub-model one or more one-shot, stateless questions. Results preserve prompt order.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "prompts": {
-          "minItems": 1,
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "One or more complete instructions for stateless sub-model calls."
-        }
-      },
-      "required": ["prompts"],
+      "required": ["prompt"],
       "additionalProperties": false
     },
     "safe": false

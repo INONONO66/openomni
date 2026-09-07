@@ -50,8 +50,8 @@ const source = z
   });
 const operation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("create"), description: z.string().min(1), source }).strict(),
-  z.object({ op: z.literal("rearm"), alarmId: z.string().min(1) }).strict(),
-  z.object({ op: z.literal("cancel"), alarmId: z.string().min(1) }).strict(),
+  z.object({ op: z.literal("rearm"), id: z.string().min(1) }).strict(),
+  z.object({ op: z.literal("cancel"), id: z.string().min(1) }).strict(),
 ]);
 // Like provision: an object root preserves the framework's model ABI.
 const input = z.object({ operation }).strict();
@@ -71,7 +71,7 @@ export const monitorTool = defineTool({
     context.signal.throwIfAborted();
     const at = Date.now();
     if (args.op !== "create") {
-      const row = alarms[args.op](args.alarmId, context.sessionId, at);
+      const row = alarms[args.op](args.id, context.sessionId, at);
       if (row === undefined) throw new ToolRefused("monitor", "alarm control refused");
       return row;
     }

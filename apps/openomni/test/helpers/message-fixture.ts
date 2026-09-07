@@ -19,7 +19,7 @@ import {
   prepareMessage,
 } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
-import { createSendMessageTool } from "../../src/tools/send-message";
+import { createSendMessageTool, type SendMessageInput } from "../../src/tools/send-message";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
 
 export function messageFixture(
@@ -65,8 +65,8 @@ export function messageFixture(
       id: sessionId,
       role,
       runner: async (input) => {
-        const payload = Gateway.SendMessage.parse(
-          JSON.parse(input.messages.at(-1)?.text ?? "null"),
+        const payload = toolInput(
+          Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null")),
         );
         const executor = createExecutor({
           identity: {
@@ -83,11 +83,12 @@ export function messageFixture(
           clock: () => 100,
           entropy: () => crypto.randomUUID(),
         });
-        const dispatcher = createDispatcher([eraseTool(createSendMessageTool(gateway))], {
-          executor,
-        });
+        const dispatcher = createDispatcher(
+          [eraseTool(createSendMessageTool(gateway, runtime.clock))],
+          { executor },
+        );
         result = await dispatcher.execute(
-          { id: crypto.randomUUID(), tool: "sendMessage", input: payload },
+          { id: crypto.randomUUID(), tool: "send_message", input: payload },
           { sessionId, turnId: input.turnId },
         );
         return { kind: "result", text: result.output ?? "" };
@@ -107,5 +108,19 @@ export function messageFixture(
       if (result === undefined) throw new Error("fixture tool did not execute");
       return result;
     },
+  };
+}
+
+/**
+ * Fixtures speak the gateway contract; the tool speaks the model vocabulary
+ * (§3.5). Deadlines are absolute against the fixture clock of 100.
+ */
+function toolInput(send: Gateway.SendMessage): SendMessageInput {
+  return {
+    to: send.to.kind === "actor" ? { kind: "contact", id: send.to.actorId } : send.to,
+    message: send.content,
+    kind: send.type === "message" ? "prompt" : send.type,
+    ...(send.replyTo === undefined ? {} : { reply_to: send.replyTo }),
+    ...(send.deadline === undefined ? {} : { deadline_ms: send.deadline - 100 }),
   };
 }

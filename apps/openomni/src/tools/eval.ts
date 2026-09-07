@@ -5,14 +5,26 @@ import { z } from "zod";
 
 type Cell = ReturnType<typeof createCodemode>["cell"];
 
-function describe(result: Machine.CellResult, timeoutMs: number): string {
+const operation = z.discriminatedUnion("op", [
+  z
+    .object({
+      op: z.literal("run"),
+      code: z.string().min(1),
+      timeout: z.number().int().positive().default(15).describe("Seconds before the cell is stopped."),
+    })
+    .strict(),
+]);
+// Like monitor and provision: an object root keeps the op union out of the wire root.
+const Input = z.object({ operation }).strict();
+
+function describe(result: Machine.CellResult, timeout: number): string {
   switch (result.status) {
     case "completed":
       return result.value ?? result.output.stdout;
     case "raised":
       return `the cell raised: ${result.error}${result.output.stderr === "" ? "" : `\n${result.output.stderr}`}`;
     case "timed_out":
-      return `the cell did not finish within ${timeoutMs}ms`;
+      return `the cell did not finish within ${timeout}s`;
     case "cancelled":
       return "the cell was cancelled";
     case "refused":
@@ -20,19 +32,20 @@ function describe(result: Machine.CellResult, timeoutMs: number): string {
   }
 }
 
-export function createRunCodeTool(cell: Cell | undefined) {
+/** The catalog is static: without a composed codemode the tool exists and refuses. */
+export function createEvalTool(cell: Cell | undefined) {
   return defineTool({
-    name: "run_code",
+    name: "eval",
     category: "execution",
     description:
-      "Run Python with persistent tenant state, machine handles, parallel, llm, and host tool proxies.",
-    input: z.object({ code: z.string().min(1), timeoutMs: z.number().int().positive() }).strict(),
+      "Run Python in this session's persistent cell: state survives between calls; machine handles, parallel, completion, and tool.<name>() proxies are in scope. operation.op=run.",
+    input: Input,
     output: Machine.CellResult,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-    execute: ({ code, timeoutMs }, ctx) => {
-      if (cell === undefined) throw new ToolRefused("run_code", "codemode is not composed");
-      return cell.run(code, ctx.sessionId, { timeoutMs, signal: ctx.signal });
+    execute: ({ operation: { code, timeout } }, ctx) => {
+      if (cell === undefined) throw new ToolRefused("eval", "codemode is not composed");
+      return cell.run(code, ctx.sessionId, { timeoutMs: timeout * 1000, signal: ctx.signal });
     },
-    render: (args, value) => describe(value, args.timeoutMs),
+    render: (args, value) => describe(value, args.operation.timeout),
   });
 }

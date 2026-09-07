@@ -12,45 +12,43 @@ import { defineTool, ToolRefused } from "@openomni/agent";
 export type LlmPort = (prompt: string) => Promise<string>;
 
 /** The per-cell call budget: how many sub-model calls one executor may serve. */
-export const MAX_LLM_CALLS = 32;
+export const MAX_COMPLETION_CALLS = 32;
 
 const Input = z
   .object({
-    prompts: z
-      .array(z.string().min(1))
-      .min(1)
-      .describe("One or more complete instructions for stateless sub-model calls."),
+    prompt: z.string().min(1).describe("One complete instruction for a stateless sub-model call."),
   })
   .strict();
 
-export const LLM_TOOL_NAME = "llm";
+export const COMPLETION_TOOL_NAME = "completion";
 
-function executeLlm(llm: LlmPort | undefined) {
+function executeCompletion(llm: LlmPort | undefined) {
   let calls = 0;
-  return async ({ prompts }: z.output<typeof Input>): Promise<string[]> => {
-    if (llm === undefined) throw new ToolRefused(LLM_TOOL_NAME, "sub-model port is not composed");
-    if (calls + prompts.length > MAX_LLM_CALLS) {
+  return async ({ prompt }: z.output<typeof Input>): Promise<string> => {
+    if (llm === undefined)
+      throw new ToolRefused(COMPLETION_TOOL_NAME, "sub-model port is not composed");
+    if (calls >= MAX_COMPLETION_CALLS) {
       throw new ToolRefused(
-        LLM_TOOL_NAME,
-        `the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
+        COMPLETION_TOOL_NAME,
+        `the per-cell budget of ${MAX_COMPLETION_CALLS} sub-model calls is spent`,
       );
     }
-    calls += prompts.length;
-    return Promise.all(prompts.map((prompt) => llm(prompt)));
+    calls += 1;
+    return llm(prompt);
   };
 }
 
-export function createLlmTool(llm: LlmPort | undefined) {
+/** Cell-only: batching is the cell's `parallel()`, so the input is one prompt. */
+export function createCompletionTool(llm: LlmPort | undefined) {
   return defineTool({
-    name: LLM_TOOL_NAME,
+    name: COMPLETION_TOOL_NAME,
     category: "execution",
-    description:
-      "Ask a sub-model one or more one-shot, stateless questions. Results preserve prompt order.",
+    description: "Ask a sub-model one one-shot, stateless question and return its text.",
     input: Input,
-    output: z.array(z.string()),
+    output: z.string(),
     visibility: { model: [], cell: ["resident", "worker"] },
-    execute: executeLlm(llm),
-    render: (_args, value) => JSON.stringify(value),
+    execute: executeCompletion(llm),
+    render: (_args, value) => value,
   });
 }
 
@@ -66,7 +64,7 @@ export interface LlmIo {
 }
 
 /**
- * The llm tool's one-shot sub-model call: a single user message, no tools,
+ * The completion tool's one-shot sub-model call: a single user message, no tools,
  * one step, its own synthesized trace — a nested run must never borrow the
  * turn's run identity. Auth is the configured key, exactly as the Resident
  * and the worker loop authenticate.
@@ -160,9 +158,9 @@ export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): P
   return value.text;
 }
 
-export function createLlmToolPort(model: ResolvedTextCall["model"], io: LlmIo = {}): LlmPort {
+export function createCompletionPort(model: ResolvedTextCall["model"], io: LlmIo = {}): LlmPort {
   return async (prompt) => {
-    const sessionId = "llm-tool";
+    const sessionId = "completion";
     const messageId = crypto.randomUUID();
     const request: Message.WithParts = {
       info: {
@@ -170,7 +168,7 @@ export function createLlmToolPort(model: ResolvedTextCall["model"], io: LlmIo = 
         sessionID: sessionId,
         role: "user",
         time: { created: Date.now() },
-        agent: "llm-tool",
+        agent: "completion",
         model: { providerID: model.provider, modelID: model.id },
       },
       parts: [

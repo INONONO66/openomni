@@ -48,7 +48,7 @@ export function filesystem(path: string, ports: FilePorts) {
     async list() {
       if (remote !== undefined) {
         const value = await remote.fs.list(locus.path);
-        if (value.truncated) throw new ToolRefused("list", "directory exceeds daemon entry limit");
+        if (value.truncated) throw new ToolRefused("ls", "directory exceeds daemon entry limit");
         return value.entries.map(({ name, kind }) => ({ name, kind }));
       }
       const entries = await readdir(locus.path, { withFileTypes: true });
@@ -77,6 +77,35 @@ export function filesystem(path: string, ports: FilePorts) {
             : "other";
     },
   };
+}
+
+export type Endpoint = ReturnType<typeof filesystem>;
+
+/**
+ * Depth-first walk in name order without following symlinks. `visit` returns
+ * false to stop early; regular files and directories are the only entries seen.
+ */
+export async function walk(
+  path: string,
+  ports: FilePorts,
+  signal: AbortSignal,
+  visit: (path: string, endpoint: Endpoint, kind: "file" | "dir") => Promise<boolean>,
+): Promise<void> {
+  const step = async (current: string): Promise<boolean> => {
+    signal.throwIfAborted();
+    const endpoint = filesystem(current, ports);
+    const kind = await endpoint.kind();
+    if (kind !== "file" && kind !== "dir")
+      throw new ToolRefused("walk", "expected a regular file or directory");
+    if (!(await visit(current, endpoint, kind))) return false;
+    if (kind === "file") return true;
+    for (const entry of await endpoint.list()) {
+      if (entry.kind !== "file" && entry.kind !== "dir") continue;
+      if (!(await step(childPath(endpoint.locus, entry.name)))) return false;
+    }
+    return true;
+  };
+  await step(path);
 }
 
 export function childPath(locus: Locus, name: string): string {

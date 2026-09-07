@@ -456,7 +456,7 @@ function evaluateSnapshot(
   const obligations: CompiledObligation[] = [];
   let value = clonePlain(input.value);
   const missingMessageContext =
-    input.kind === "message" && input.op === "sendMessage" && input.message === undefined;
+    input.kind === "message" && input.op === "send_message" && input.message === undefined;
   let verdict: EffectiveRowVerdict = missingMessageContext ? "deny" : "allow";
   let reason: string | undefined = missingMessageContext ? "message_context_missing" : undefined;
 
@@ -671,7 +671,7 @@ export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
     "fanout-cap",
     "tool",
     "pre",
-    { op: "sendMessage" },
+    { op: "send_message" },
     { type: "obligation", name: "budget_clamp", metric: "fanout", limit: 8 },
     900,
   ),

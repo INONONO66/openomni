@@ -109,12 +109,11 @@ test("a child session terminal commits exactly one parent reply with the origina
         if (!commissioned) {
           const output = requestToolStep(input, sink, {
             id: "commission",
-            tool: "sendMessage",
+            tool: "send_message",
             input: {
               to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
-              type: "message",
-              content: "child request",
-              replyTo: "original-binding",
+              message: "child request",
+              reply_to: "original-binding",
             },
           });
           if (output === undefined) return { type: "stop" };

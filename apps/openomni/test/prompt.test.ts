@@ -22,9 +22,9 @@ describe("buildAgentPrompt", () => {
   test("the resident prompt steers code-mode usage", () => {
     const prompt = buildAgentPrompt(RESIDENT_PRESET);
 
-    expect(prompt).toContain("one run_code cell");
+    expect(prompt).toContain("one eval cell");
     expect(prompt).toContain("parallel(thunks)");
-    expect(prompt).toContain("llm(prompt)");
+    expect(prompt).toContain("completion(prompt)");
   });
 
   test("omits unavailable optional sections without a trailing separator", () => {

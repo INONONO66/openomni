@@ -75,7 +75,7 @@ async function withBridge(
 }
 
 describe("code-mode tool bridge", () => {
-  test("a cell reaches host tools repeatedly within one run_code", async () => {
+  test("a cell reaches host tools repeatedly within one eval", async () => {
     await withBridge(async ({ host, calls }) => {
       // The whole point of code mode: two tool calls, one round trip.
       const result = await host.get("m-1").runCode({
@@ -124,30 +124,34 @@ describe("code-mode tool bridge", () => {
     expect(arrivals).toBe(2);
   });
 
-  test("llm calls the canonical batched tool and returns its value unchanged", async () => {
+  test("completion calls the cell-only tool with one prompt and returns its value unchanged", async () => {
     await withBridge(
       async ({ host, calls }) => {
         const result = await host.get("m-1").runCode({
-          cellId: "llm-sugar",
-          code: "llm(['summarize this'])",
+          cellId: "completion-sugar",
+          code: "completion('summarize this')",
           timeoutMs: 15_000,
         });
 
-        expect(result).toMatchObject({ status: "completed", value: "['summary']" });
+        expect(result).toMatchObject({ status: "completed", value: "'summary'" });
         expect(calls).toEqual([
-          { cellId: "llm-sugar", name: "llm", arguments: { prompts: ["summarize this"] } },
+          {
+            cellId: "completion-sugar",
+            name: "completion",
+            arguments: { prompt: "summarize this" },
+          },
         ]);
       },
-      () => Promise.resolve({ status: "completed", value: ["summary"] }),
+      () => Promise.resolve({ status: "completed", value: "summary" }),
     );
   });
 
-  test("llm returns llm results in prompt order", async () => {
+  test("parallel batches completion calls and returns results in input order", async () => {
     await withBridge(
       async ({ host, calls }) => {
         const result = await host.get("m-1").runCode({
-          cellId: "llm-batched",
-          code: "llm(['first', 'second'])",
+          cellId: "completion-parallel",
+          code: "parallel([lambda: completion('first'), lambda: completion('second')])",
           timeoutMs: 15_000,
         });
 
@@ -155,19 +159,11 @@ describe("code-mode tool bridge", () => {
           status: "completed",
           value: "['summary:first', 'summary:second']",
         });
-        expect(calls).toEqual([
-          {
-            cellId: "llm-batched",
-            name: "llm",
-            arguments: { prompts: ["first", "second"] },
-          },
-        ]);
+        // Threads race to the door; the cell still returns results in input order.
+        expect(calls.map((call) => call.arguments.prompt).sort()).toEqual(["first", "second"]);
       },
-      () =>
-        Promise.resolve({
-          status: "completed",
-          value: ["summary:first", "summary:second"],
-        }),
+      (call) =>
+        Promise.resolve({ status: "completed", value: `summary:${String(call.arguments.prompt)}` }),
     );
   });
 

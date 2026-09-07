@@ -43,7 +43,7 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import { createLlmToolPort } from "./tools/completion";
+import { createCompletionPort } from "./tools/completion";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
@@ -239,7 +239,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     }
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
-    const llmPort = createLlmToolPort(
+    const llmPort = createCompletionPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       options.llm ?? {},
     );

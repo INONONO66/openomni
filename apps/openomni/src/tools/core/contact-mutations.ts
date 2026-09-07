@@ -4,19 +4,19 @@ import { canonicalDigest, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 
 export const CONTACT_PROMOTE_INPUT = z.object({ actorId: z.string().min(1) }).strict();
-export const ENDPOINT_MERGE_INPUT = z
+export const CONTACT_MERGE_INPUT = z
   .object({ endpointId: z.string().min(1), toActorId: z.string().min(1) })
   .strict();
 
 export const ContactOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_promote"), args: CONTACT_PROMOTE_INPUT }).strict(),
-  z.object({ op: z.literal("endpoint_merge"), args: ENDPOINT_MERGE_INPUT }).strict(),
+  z.object({ op: z.literal("contact_merge"), args: CONTACT_MERGE_INPUT }).strict(),
 ]);
 type ContactOperation = z.output<typeof ContactOperation>;
 
 export const ContactResult = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_promote"), id: z.string(), trustTier: z.string() }).strict(),
-  z.object({ op: z.literal("endpoint_merge"), id: z.string(), actorId: z.string() }).strict(),
+  z.object({ op: z.literal("contact_merge"), id: z.string(), actorId: z.string() }).strict(),
 ]);
 
 const digestKey = (kind: string, id: string, row: unknown) =>

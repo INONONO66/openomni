@@ -75,13 +75,12 @@ for (const kind of ["result", "error", "interrupted"] as const) {
           if (!commissioned) {
             const output = requestToolStep(input, sink, {
               id: "commission",
-              tool: "sendMessage",
+              tool: "send_message",
               input: {
                 to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
-                type: "message",
-                content: "work",
-                deadline: 1000,
-                replyTo: "ORIGINAL",
+                message: "work",
+                deadline_ms: 900,
+                reply_to: "ORIGINAL",
               },
             });
             if (output === undefined) return { type: "stop" };

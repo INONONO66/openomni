@@ -247,10 +247,15 @@ test("tag ambiguity and an unbound machine port are typed, never arbitrary selec
   await runner.close();
 });
 
-test("injected llm preserves input order and tenant state never crosses interpreters", async () => {
+test("injected completion batches through parallel and tenant state never crosses interpreters", async () => {
   await pair(
     async ({ mode }) => {
-      expect(await mode.cell.run("x = 41\nllm(['first', 'second'])", "one")).toMatchObject({
+      expect(
+        await mode.cell.run(
+          "x = 41\nparallel([lambda: completion('first'), lambda: completion('second')])",
+          "one",
+        ),
+      ).toMatchObject({
         status: "completed",
         value: "['answer:first', 'answer:second']",
       });
@@ -260,6 +265,6 @@ test("injected llm preserves input order and tenant state never crosses interpre
       });
       expect(await mode.cell.run("x", "two")).toMatchObject({ status: "raised" });
     },
-    { llm: async (prompts) => prompts.map((prompt) => `answer:${prompt}`) },
+    { completion: async (prompt) => `answer:${prompt}` },
   );
 });

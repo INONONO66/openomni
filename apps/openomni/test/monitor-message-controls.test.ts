@@ -83,7 +83,7 @@ for (const status of ["armed", "fired"] as const) {
           const inbox = SessionHandleStore.inboxRows("sender");
           await expect(
             monitorTool.execute(
-              { operation: { op, alarmId: alarm.id } },
+              { operation: { op, id: alarm.id } },
               {
                 sessionId: "sender",
                 turnId: "turn",

@@ -39,7 +39,7 @@ test("an endpoint changed at body entry cannot spend consent for its old binding
   const running = protectedDispatch(
     createProvisionTool(provisionPort()),
     {
-      operation: { op: "endpoint_merge", args: { endpointId: "endpoint", toActorId: "target" } },
+      operation: { op: "contact_merge", args: { endpointId: "endpoint", toActorId: "target" } },
     },
     observations,
   );

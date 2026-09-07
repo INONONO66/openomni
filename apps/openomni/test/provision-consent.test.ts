@@ -9,7 +9,7 @@ import { provisionPort } from "./helpers/provision-port";
 
 const PROMOTE = { op: "contact_promote", args: { actorId: "contact:mallory" } } as const;
 const MERGE = {
-  op: "endpoint_merge",
+  op: "contact_merge",
   args: { endpointId: "ep:mallory", toActorId: "actor:alice" },
 } as const;
 const provision = () => eraseTool(createProvisionTool(provisionPort()));
@@ -32,8 +32,8 @@ it("consent is a require_approval policy row on the two contact authority ops, n
       { type: "require_approval", reason: "provision.contact_promote requires Owner consent" },
     ],
     [
-      { op: "provision", operation: "endpoint_merge" },
-      { type: "require_approval", reason: "provision.endpoint_merge requires Owner consent" },
+      { op: "provision", operation: "contact_merge" },
+      { type: "require_approval", reason: "provision.contact_merge requires Owner consent" },
     ],
   ]);
   expect(PROVISION_POLICY_ROWS.every((row) => row.kind === "tool" && row.phase === "pre")).toBe(
@@ -118,8 +118,8 @@ for (const [name, operation] of [
   ],
 ] as const) {
   it(`consent to merge ${name} is refused by the act itself, never applied`, async () => {
-    const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
-      operation: { op: "endpoint_merge", ...operation },
+    const f = protectedDispatch(provision(), {
+      operation: { op: "contact_merge", args: operation },
     });
     try {
       const result = await f.answer();

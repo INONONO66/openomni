@@ -146,12 +146,11 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
         if (!commissioned) {
           const output = requestToolStep(input, sink, {
             id: "process-send",
-            tool: "sendMessage",
+            tool: "send_message",
             input: {
               to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
-              type: "message",
-              content: "run process",
-              replyTo: "process-binding",
+              message: "run process",
+              reply_to: "process-binding",
             },
           });
           if (output === undefined) return { type: "stop" };

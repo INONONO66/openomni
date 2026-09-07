@@ -105,8 +105,9 @@ async function fixture(
     read: ["read"],
     write: ["write"],
     edit: ["read", "write"],
-    list: ["list"],
-    search: ["stat", "read"],
+    ls: ["list"],
+    find: ["stat", "list"],
+    grep: ["stat", "read"],
     bash: ["exec"],
   };
   async function observe<T extends { isError?: boolean }>(
@@ -165,20 +166,48 @@ for (const remote of [false, true]) {
         });
         expect((await model("read", { path: file })).output).toBe("alpha\nbeta\n");
         expect(
-          (await cell("edit", { path: file, oldText: "beta", newText: "gamma" })).output,
+          (await cell("edit", { path: file, edits: [{ oldText: "beta", newText: "gamma" }] }))
+            .output,
         ).toEqual({ bytesWritten: 12 });
         expect(await readFile(join(root, "file"), "utf8")).toBe("alpha\ngamma\n");
-        expect((await cell("list", { path: path(".") })).output).toEqual([
-          { name: "file", kind: "file" },
-        ]);
+        expect((await cell("ls", { path: path(".") })).output).toEqual({
+          entries: [{ name: "file", kind: "file" }],
+          truncated: false,
+        });
         await mkdir(join(root, "nested"));
         await writeFile(join(root, "nested", "file"), "gamma in nested\n");
         await symlink(root, join(root, "loop"));
-        expect((await cell("search", { path: path("."), pattern: "gamma" })).output).toEqual([
-          { path: file, line: 2, text: "gamma" },
-          { path: path("nested/file"), line: 1, text: "gamma in nested" },
-        ]);
-        expect((await cell("search", { path: file, pattern: "a.*" })).output).toEqual([]);
+        expect((await cell("find", { path: path("."), pattern: "**/file" })).output).toEqual({
+          paths: [file, path("nested/file")],
+          truncated: false,
+        });
+        expect((await cell("find", { path: path("."), pattern: "*", limit: 1 })).output).toEqual({
+          paths: [file],
+          truncated: true,
+        });
+        expect((await cell("grep", { path: path("."), pattern: "gamma" })).output).toEqual({
+          matches: [
+            { path: file, line: 2, text: "gamma", before: [], after: [] },
+            { path: path("nested/file"), line: 1, text: "gamma in nested", before: [], after: [] },
+          ],
+          truncated: false,
+        });
+        expect(
+          (await cell("grep", { path: path("."), pattern: "GAMMA", ignoreCase: true, context: 1 }))
+            .output,
+        ).toMatchObject({
+          matches: [
+            { path: file, line: 2, before: ["alpha"], after: [""] },
+            { path: path("nested/file"), line: 1, before: [], after: [""] },
+          ],
+        });
+        expect(
+          (await cell("grep", { path: path("."), pattern: "a.*", literal: true })).output,
+        ).toEqual({ matches: [], truncated: false });
+        expect((await cell("grep", { path: file, pattern: "^al", limit: 1 })).output).toEqual({
+          matches: [{ path: file, line: 1, text: "alpha", before: [], after: [] }],
+          truncated: false,
+        });
       });
     });
     test("binary encoding, exact edit conflict, missing files, and full cell output", async () => {
@@ -201,7 +230,9 @@ for (const remote of [false, true]) {
         ).toMatchObject({ isError: true, errorKind: "precondition_failed" });
         await writeFile(join(root, "text"), "aaa");
         for (const oldText of ["missing", "aa"])
-          expect(await model("edit", { path: path("text"), oldText, newText: "x" })).toMatchObject({
+          expect(
+            await model("edit", { path: path("text"), edits: [{ oldText, newText: "x" }] }),
+          ).toMatchObject({
             isError: true,
             errorKind: "precondition_failed",
           });
@@ -228,13 +259,20 @@ for (const remote of [false, true]) {
         expect(
           (
             await cell("bash", {
-              cmd: `cd '${root}'; printf out; printf err >&2; exit 7`,
+              command: `cd '${root}'; printf out; printf err >&2; exit 7`,
               ...machine,
             })
           ).output,
-        ).toEqual({ stdout: "out", stderr: "err", exitCode: 7, signal: null, truncated: false });
+        ).toEqual({
+          stdout: "out",
+          stderr: "err",
+          exitCode: 7,
+          signal: null,
+          truncated: false,
+          timedOut: false,
+        });
         expect(
-          (await cell("bash", { cmd: "printf '%s' \"$PWD\"", ...machine })).output,
+          (await cell("bash", { command: "printf '%s' \"$PWD\"", ...machine })).output,
         ).toMatchObject({ stdout: remote ? "/" : process.cwd(), exitCode: 0 });
       });
     });
@@ -245,22 +283,22 @@ test("R1 bash rejects composite machine IDs before endpoint lookup even with an 
   await fixture(true, async ({ root, rawExec, endpointCalls, model }) => {
     const injected = join(root, "injected:");
     await mkdir(injected);
-    const cmd = "printf '%s' \"$PWD\"";
+    const command = "printf '%s' \"$PWD\"";
     // Prove the real daemon would allow the malformed locus's cwd: denial must be in the adapter.
-    expect(await rawExec(cmd, injected)).toMatchObject({
+    expect(await rawExec(command, injected)).toMatchObject({
       status: "completed",
       stdout: Buffer.from(await realpath(injected)),
       exitCode: 0,
     });
     for (const machine of [`c:${root}/injected`, "c:/", "c/path", "./c"]) {
       const before = endpointCalls();
-      expect(await model("bash", { machine, cmd })).toMatchObject({
+      expect(await model("bash", { machine, command })).toMatchObject({
         isError: true,
         errorKind: "precondition_failed",
       });
       expect(endpointCalls()).toEqual(before);
     }
-    expect((await model("bash", { machine: "c", cmd })).isError).toBeUndefined();
+    expect((await model("bash", { machine: "c", command })).isError).toBeUndefined();
   });
 });
 
@@ -272,25 +310,34 @@ test.each([
     await writeFile(join(root, "a:b"), "needle in file\n");
     await mkdir(join(root, "d:e"));
     await writeFile(join(root, "d:e", "f:g"), "needle in directory\n");
-    const absolute = await cell("search", { path: root, pattern: "needle" });
-    expect(absolute.output).toEqual([
-      { path: join(root, "a:b"), line: 1, text: "needle in file" },
-      { path: join(root, "d:e", "f:g"), line: 1, text: "needle in directory" },
-    ]);
+    const absolute = await cell("grep", { path: root, pattern: "needle" });
+    expect(absolute.output).toEqual({
+      matches: [
+        { path: join(root, "a:b"), line: 1, text: "needle in file", before: [], after: [] },
+        { path: join(root, "d:e", "f:g"), line: 1, text: "needle in directory", before: [], after: [] },
+      ],
+      truncated: false,
+    });
     const before = endpointCalls();
     const cwd = process.cwd();
     try {
       process.chdir(root);
-      const relative = await cell("search", { path, pattern: "needle" });
+      const relative = await cell("grep", { path, pattern: "needle" });
       expect(relative.isError).toBeUndefined();
-      const expected = [
-        { path: "./a:b", line: 1, text: "needle in file" },
-        { path: "./d:e/f:g", line: 1, text: "needle in directory" },
-      ];
-      expect(relative.output).toEqual(expected);
-      expect((await model("search", { path, pattern: "needle" })).output).toBe(
-        JSON.stringify(expected),
+      expect(relative.output).toEqual({
+        matches: [
+          { path: "./a:b", line: 1, text: "needle in file", before: [], after: [] },
+          { path: "./d:e/f:g", line: 1, text: "needle in directory", before: [], after: [] },
+        ],
+        truncated: false,
+      });
+      expect((await model("grep", { path, pattern: "needle" })).output).toBe(
+        "./a:b:1:needle in file\n./d:e/f:g:1:needle in directory",
       );
+      expect((await cell("find", { path, pattern: "d:e/*" })).output).toEqual({
+        paths: ["./d:e/f:g"],
+        truncated: false,
+      });
       expect(endpointCalls()).toEqual(before);
     } finally {
       process.chdir(cwd);
@@ -323,7 +370,7 @@ test("daemon authority refuses writes and exec independently of the catalog", as
         isError: true,
         errorKind: "precondition_failed",
       });
-      expect(await model("bash", { machine: "c", cmd: "true" })).toMatchObject({
+      expect(await model("bash", { machine: "c", command: "true" })).toMatchObject({
         isError: true,
         errorKind: "precondition_failed",
       });
@@ -336,8 +383,8 @@ test("missing machine host and malformed machine ids yield typed refusals", asyn
   const dispatcher = createDispatcher(createTools({}, origin), { executor });
   for (const [tool, input] of [
     ["read", { path: "c:/file" }],
-    ["bash", { machine: "c", cmd: "true" }],
-    ["bash", { machine: "./bad", cmd: "true" }],
+    ["bash", { machine: "c", command: "true" }],
+    ["bash", { machine: "./bad", command: "true" }],
   ] as const) {
     expect(await dispatcher.execute({ id: tool, tool, input }, context)).toMatchObject({
       isError: true,
