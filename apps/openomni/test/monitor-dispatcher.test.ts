@@ -23,21 +23,41 @@ import { alarmFixture } from "./helpers/alarm";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
   for (const input of [
-    { op: "create", command: "echo yes", description: "command", persistent: true },
-    { op: "create", path: "/tmp/target", event: "modify", description: "path", timeout_ms: 20 },
-    { op: "rearm", id: "watch" },
-    { op: "cancel", id: "watch" },
+    {
+      op: "create",
+      description: "command",
+      source: { kind: "command", command: "echo yes", persistent: true },
+    },
+    {
+      op: "create",
+      description: "path",
+      source: { kind: "path", path: "/tmp/target", event: "modify", timeout_ms: 20 },
+    },
+    { op: "rearm", alarmId: "watch" },
+    { op: "cancel", alarmId: "watch" },
   ])
-    expect(monitorTool.input.safeParse(input).success).toBe(true);
+    expect(monitorTool.input.safeParse({ operation: input }).success).toBe(true);
   for (const input of [
-    { op: "create", command: "echo yes", description: "no lifetime" },
-    { op: "create", command: "echo yes", description: "both", persistent: true, timeout_ms: 1 },
-    { op: "create", command: "echo yes", filter: "[", description: "regex", persistent: true },
-    { op: "create", path: "relative", event: "create", description: "path", persistent: true },
-    { op: "cancel", id: "watch", command: "echo wrong" },
+    { op: "create", description: "no lifetime", source: { kind: "command", command: "echo yes" } },
+    {
+      op: "create",
+      description: "both",
+      source: { kind: "command", command: "echo yes", persistent: true, timeout_ms: 1 },
+    },
+    {
+      op: "create",
+      description: "regex",
+      source: { kind: "command", command: "echo yes", filter: "[", persistent: true },
+    },
+    {
+      op: "create",
+      description: "path",
+      source: { kind: "path", path: "relative", event: "create", persistent: true },
+    },
+    { op: "cancel", alarmId: "watch", source: { kind: "command", command: "echo wrong" } },
     { op: "rearm" },
   ])
-    expect(monitorTool.input.safeParse(input).success).toBe(false);
+    expect(monitorTool.input.safeParse({ operation: input }).success).toBe(false);
   const dispatcher = createDispatcher([eraseTool(monitorTool)]);
   const context = { sessionId: "session", turnId: "turn" };
   expect(
@@ -48,7 +68,7 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   ).toMatchObject({ errorKind: "unregistered_tool" });
   await expect(
     dispatcher.execute(
-      { id: "context", tool: "monitor", input: { op: "cancel", id: "watch" } },
+      { id: "context", tool: "monitor", input: { operation: { op: "cancel", alarmId: "watch" } } },
       context,
     ),
   ).rejects.toThrow(ExecutorContextError);
@@ -65,19 +85,26 @@ test("monitor controls enforce session identity and throw on refused transitions
         callId: "call",
         signal: new AbortController().signal,
       };
-      expect(await monitorTool.execute({ op: "rearm", id: "control" }, context)).toMatchObject({
+      expect(
+        await monitorTool.execute({ operation: { op: "rearm", alarmId: "control" } }, context),
+      ).toMatchObject({
         id: "control",
         epoch: 2,
       });
       await expect(
-        monitorTool.execute({ op: "cancel", id: "control" }, { ...context, sessionId: "foreign" }),
+        monitorTool.execute(
+          { operation: { op: "cancel", alarmId: "control" } },
+          { ...context, sessionId: "foreign" },
+        ),
       ).rejects.toThrow(ToolRefused);
-      expect(await monitorTool.execute({ op: "cancel", id: "control" }, context)).toMatchObject({
+      expect(
+        await monitorTool.execute({ operation: { op: "cancel", alarmId: "control" } }, context),
+      ).toMatchObject({
         status: "cancelled",
       });
-      await expect(monitorTool.execute({ op: "rearm", id: "control" }, context)).rejects.toThrow(
-        ToolRefused,
-      );
+      await expect(
+        monitorTool.execute({ operation: { op: "rearm", alarmId: "control" } }, context),
+      ).rejects.toThrow(ToolRefused);
     } finally {
       await fixture.close();
     }
@@ -132,11 +159,16 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
                     state: {
                       status: "pending",
                       input: {
-                        op: "create",
-                        command: "printf 'WAKE\\n'; read value",
-                        filter: "^WAKE$",
-                        description: "wake",
-                        persistent: true,
+                        operation: {
+                          op: "create",
+                          description: "wake",
+                          source: {
+                            kind: "command",
+                            command: "printf 'WAKE\\n'; read value",
+                            filter: "^WAKE$",
+                            persistent: true,
+                          },
+                        },
                       },
                     },
                   });

@@ -29,8 +29,11 @@ No delegation file or deadline consumer is changed in stage 1.
   N+1; no automatic refill or resume. Explicit rearm starts a fresh budget.
 - Path watches observe one exact absolute pathname through its parent directory,
   with create or modify events. Backend rename is classified by pathname
-  existence. Events are observations, not replay cursors. Overflow/errors fail
-  visibly rather than inventing changes.
+  existence. The same source reconciles stat identity during the app's due scan,
+  so missing/coalesced native notifications cannot strand a still-present change.
+  Unchanged scans append nothing; commit must succeed before the source advances
+  its observed identity. Transient create/delete pairs entirely between observed
+  snapshots are not replayed. Errors fail visibly rather than inventing changes.
 - The app owns one evaluator band outside session residency. Boot discovers
   armed at alarms and persistent watches. Live streams restart from now: output
   in the restart gap is not replayed and delivery across that gap is at-most-once.
@@ -55,10 +58,20 @@ Only explicitly idempotent polling commands should be relied on for repeated
 external effects. The band assumes one active app per database; unified
 multi-owner evaluator leasing is #971's separate target.
 
-`monitor` uses the flat issue-defined fields `op`, `id`, `command`, `filter`,
-`path`, `event`, `description`, `persistent`, `timeout_ms`. Exactly one source
-and lifetime is accepted on create; controls accept only op and id. The current
-five-field lint cap blocks this nine-field ABI. Stage 1 adds no exemption.
+Owner-approved input amendment (2026-09-06): `monitor` has one object-root
+`operation` field, following the existing approval/provision ABI. Inside it,
+`op` discriminates create/rearm/cancel:
+
+```json
+{"operation":{"op":"create","description":"Watch readiness","source":{"kind":"command","command":"printf 'READY\\n'","filter":"^READY$","persistent":true}}}
+{"operation":{"op":"create","description":"Watch file creation","source":{"kind":"path","path":"/tmp/ready","event":"create","timeout_ms":60000}}}
+{"operation":{"op":"rearm","alarmId":"returned-alarm-id"}}
+{"operation":{"op":"cancel","alarmId":"returned-alarm-id"}}
+```
+
+Exactly one source and lifetime is required on create. Both control operations
+require the stable alarmId. Root and operation variants stay below the existing
+five-field cap; no exemption or baseline growth is needed.
 
 ## Boundaries
 

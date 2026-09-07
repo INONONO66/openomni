@@ -16,12 +16,13 @@ inbox doorbell re-enters the existing session controller, not a second loop.
 The focused 30-test run passes, including a real PTY, SQLite reopen and a
 one-model-call waiting terminal followed by a hibernated-session wake.
 
-This is not a merged/full-gate receipt: the full suite reports 3375 pass and
-one filesystem-create timeout in `monitor-tool-boundaries.test.ts`, despite the
-focused and app-lane runs passing. That source/test readiness issue remains
-unresolved. `lint:tools` also refuses the issue's flat nine-field monitor schema
-under its five-field cap. No exemption or lowered
-floor is included. [Decisions and operational limits](alarm-monitor-stage-1.md)
+The Owner-approved input now nests an op-discriminated `operation`, with create
+payload under `source` and required `alarmId` on controls. `lint:tools` passes
+without an exemption or lowered floor. Path sources reconcile stat identity in
+the same app scan as native notifications: unchanged observations write zero,
+and a missed native event no longer strands a durable create. The path test
+subscribes before mutation and drives reconciliation without yielding to the
+native callback, proving atomic delivery independently of callback timing. [Decisions and operational limits](alarm-monitor-stage-1.md)
 include the at-most-once restart gap. Stage 2 after #946 still owes only the
 message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
 restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.

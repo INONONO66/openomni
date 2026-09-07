@@ -15,9 +15,9 @@ The Owner-approved #945/#948 amendment overrides stale campaign labels and E4 pa
 | B4 | Not closed here. Delegation source is untouched; #946 owns deletion and stage 2 wires its deadline consumer to the existing `at` alarm owner. |
 | E8 | Additive `monitor` registration and strict create/rearm/cancel schema implemented; no claim about unrelated vocabulary. |
 | Alarm quality | Focused 30 tests pass, including real PTY exit/dedupe, exact timeout, budget pause/rearm, path create/modify/cancel, atomic rollback, SQLite reopen, and hibernation/live-wait. |
-| Full-suite blocker | `bun test --timeout 15000`: 3375 pass, 1 fail; `monitor path: subscribed create and modify, then cancellation fences callbacks` times out awaiting create. Focused/app-lane success is not a reliable full-suite receipt. |
+| Path readiness correction | The same path source reconciles stat identity on the app scan; unchanged scans append nothing. The test subscribes before mutation and drives reconciliation before native callbacks can run. The previous create timeout is retained in local history, not hidden by sleeps or retries. |
 | Coverage | All 11 coverage-producing lanes pass, then the unchanged ratchet passes: app 96.8%, agent 97.73%, ledger 99.34%; no floors lowered. |
-| Gate blocker | `bun run lint:tools` exits 1: `[tool-max-fields] public input schema exceeds 5 top-level fields`. The requested flat monitor ABI has nine fields; no lint exception or floor reduction was added. |
+| Tool schema | Owner-approved nested `operation` discriminates create/rearm/cancel; create nests `source`, controls require `alarmId`. `bun run lint:tools` passes under the existing field cap, with no exemption or floor reduction. |
 | Lifecycle campaign | No #969-#973 transition/deletion/test receipt is consumed by stage 1. |
 
 Decisions and operator contracts: [alarm-monitor-stage-1.md](alarm-monitor-stage-1.md).

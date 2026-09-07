@@ -1,9 +1,10 @@
-import { existsSync, statSync, watch } from "node:fs";
+import { statSync, watch } from "node:fs";
 import { basename, dirname } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { Alarm } from "@openomni/protocol";
 
 export interface AlarmSource {
+  observe?(): void;
   close(): Promise<void>;
 }
 
@@ -78,26 +79,32 @@ export function pathSource(
   failure: (error: Error) => void,
 ): AlarmSource {
   const identity = () => {
-    if (!existsSync(spec.path)) return null;
-    const stat = statSync(spec.path, { bigint: true });
-    return `${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    const stat = statSync(spec.path, { bigint: true, throwIfNoEntry: false });
+    return stat === undefined ? null : `${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
   };
   let previous = identity();
-  const source = watch(dirname(spec.path), (_kind, name) => {
-    if (name !== null && name !== basename(spec.path)) return;
+  let closed = false;
+  function observe() {
+    if (closed) return;
     try {
       const next = identity();
       const kind = previous === null && next !== null ? "create" : "modify";
-      const changed = next !== null && next !== previous;
+      if (next !== null && next !== previous && kind === spec.event)
+        event(JSON.stringify({ path: spec.path, event: kind }));
+      // Do not advance the observation cursor if committing the event failed.
       previous = next;
-      if (changed && kind === spec.event) event(JSON.stringify({ path: spec.path, event: kind }));
     } catch (error) {
       failure(error instanceof Error ? error : new Error(String(error)));
     }
+  }
+  const source = watch(dirname(spec.path), (_kind, name) => {
+    if (name === null || name === basename(spec.path)) observe();
   });
   source.on("error", failure);
   return {
+    observe,
     close() {
+      closed = true;
       source.close();
       return Promise.resolve();
     },

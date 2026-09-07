@@ -43,15 +43,31 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       fixture.worker.start();
       const created = fixture.next("create");
       writeFileSync(path, "first");
-      expect(JSON.parse((await created).content)).toEqual({ path, event: "create" });
+      // No yield: the native callback cannot run before this reconciliation.
+      fixture.worker.tick();
+      const createdRow = await created;
+      expect(JSON.parse(createdRow.content)).toEqual({ path, event: "create" });
+      const createActions = fixture.storage.actions.tree("monitor-session");
+      expect(createActions.map((action) => action.kind)).toEqual([
+        "alarm.arm",
+        "alarm.fired",
+        "prompt",
+      ]);
+      expect(createActions.at(-1)?.id).toBe(createdRow.id);
+      const revision = fixture.storage.sessions.get("monitor-session")?.revision;
+      fixture.worker.tick();
+      expect(fixture.storage.sessions.get("monitor-session")?.revision).toBe(revision);
       fixture.arm("modify", { path, event: "modify", description: "modify", persistent: true });
       fixture.worker.tick(); // Synchronous source installation precedes the filesystem mutation.
       const modified = fixture.next("modify");
       writeFileSync(path, "second longer");
+      fixture.worker.tick();
       expect(JSON.parse((await modified).content)).toEqual({ path, event: "modify" });
       const old = fixture.storage.alarms.get("modify");
       if (old === undefined) throw new Error("missing alarm");
       fixture.storage.alarms.cancel("modify", 1001);
+      writeFileSync(path, "after cancel");
+      fixture.worker.tick();
       expect(
         fixture.storage.alarms.fire({
           id: old.id,

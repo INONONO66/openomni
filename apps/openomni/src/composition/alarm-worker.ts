@@ -27,6 +27,7 @@ export function createAlarmWorker(options: {
   const settling = new Set<Promise<void>>();
   let stopped = false;
   let scanning = false;
+  let recovering = true;
   let cancelTick: (() => void) | undefined;
   let unsubscribe: (() => void) | undefined;
 
@@ -106,7 +107,7 @@ export function createAlarmWorker(options: {
       summary(owned, "timeout", null);
       return;
     }
-    if (row.fence > 0 && watch.persistent !== true) {
+    if (recovering && row.fence > 0 && watch.persistent !== true) {
       summary(owned, "restart", null);
       return;
     }
@@ -149,10 +150,12 @@ export function createAlarmWorker(options: {
         const { watch } = watchSpec.parse(current.spec?.value);
         if (watch.timeout_ms !== undefined && now() >= current.fireAt + watch.timeout_ms)
           summary(current, "timeout", null);
+        else entry.source.observe?.();
       }
       for (const row of options.alarms.due(now())) if (!running.has(row.id)) start(row);
     } finally {
       scanning = false;
+      recovering = false;
     }
   }
 

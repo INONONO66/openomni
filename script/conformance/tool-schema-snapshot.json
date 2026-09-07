@@ -5,44 +5,116 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "op": {
-          "type": "string",
-          "enum": ["create", "rearm", "cancel"]
-        },
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "command": {
-          "type": "string",
-          "minLength": 1
-        },
-        "filter": {
-          "type": "string"
-        },
-        "path": {
-          "type": "string",
-          "minLength": 1
-        },
-        "event": {
-          "type": "string",
-          "enum": ["create", "modify"]
-        },
-        "description": {
-          "type": "string",
-          "minLength": 1
-        },
-        "persistent": {
-          "type": "boolean",
-          "const": true
-        },
-        "timeout_ms": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
+        "operation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "create"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "source": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "command"
+                        },
+                        "command": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "filter": {
+                          "type": "string"
+                        },
+                        "persistent": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "timeout_ms": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["kind", "command"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "path"
+                        },
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "event": {
+                          "type": "string",
+                          "enum": ["create", "modify"]
+                        },
+                        "persistent": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "timeout_ms": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["kind", "path", "event"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": ["op", "description", "source"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "rearm"
+                },
+                "alarmId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["op", "alarmId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "cancel"
+                },
+                "alarmId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["op", "alarmId"],
+              "additionalProperties": false
+            }
+          ]
         }
       },
-      "required": ["op"],
+      "required": ["operation"],
       "additionalProperties": false
     },
     "safe": false,

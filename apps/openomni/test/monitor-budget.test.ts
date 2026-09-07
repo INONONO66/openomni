@@ -62,6 +62,11 @@ test("monitor timeout: exact deadline fences source before its exit summary", ()
       fixture.worker.tick();
       expect(JSON.parse((await summary).content).reason).toBe("timeout");
       expect(fixture.rows()).toHaveLength(2);
+      const rearmed = fixture.next("timeout", (row) => row.content === "READY");
+      fixture.storage.alarms.rearm("timeout", 1050);
+      fixture.worker.tick();
+      await rearmed;
+      expect(fixture.storage.alarms.get("timeout")).toMatchObject({ epoch: 2, status: "armed" });
       expect(fixture.errors).toEqual([]);
     } finally {
       await fixture.close();

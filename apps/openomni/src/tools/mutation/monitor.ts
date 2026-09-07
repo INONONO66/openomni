@@ -13,39 +13,40 @@ export const watchSpec = z
   })
   .strict();
 
-const input = z
-  .object({
-    op: z.enum(["create", "rearm", "cancel"]),
-    id: z.string().min(1).optional(),
-    command: z.string().min(1).optional(),
-    filter: z.string().optional(),
-    path: z.string().min(1).optional(),
-    event: z.enum(["create", "modify"]).optional(),
-    description: z.string().min(1).optional(),
-    persistent: z.literal(true).optional(),
-    timeout_ms: z.number().int().positive().optional(),
-  })
-  .strict()
-  .superRefine((args, context) => {
-    const { op, id, ...spec } = args;
-    if (op !== "create") {
-      if (id === undefined || Object.values(spec).some((value) => value !== undefined))
-        context.addIssue({ code: "custom", message: "control requires only op and id" });
-      return;
-    }
-    const parsed = Alarm.Watch.safeParse(spec);
-    if (id !== undefined || !parsed.success) {
+const lifetime = {
+  persistent: z.literal(true).optional(),
+  timeout_ms: z.number().int().positive().optional(),
+};
+const source = z
+  .discriminatedUnion("kind", [
+    z
+      .object({
+        kind: z.literal("command"),
+        command: z.string().min(1),
+        filter: z.string().optional(),
+        ...lifetime,
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal("path"),
+        path: z.string().min(1),
+        event: z.enum(["create", "modify"]),
+        ...lifetime,
+      })
+      .strict(),
+  ])
+  .superRefine((spec, context) => {
+    if ((spec.persistent === true) === (spec.timeout_ms !== undefined))
       context.addIssue({
         code: "custom",
-        message: "create requires one command or path watch and a lifetime",
+        message: "exactly one of persistent and timeout_ms is required",
       });
-      return;
-    }
-    if ("path" in parsed.data && !isAbsolute(parsed.data.path))
+    if (spec.kind === "path" && !isAbsolute(spec.path))
       context.addIssue({ code: "custom", path: ["path"], message: "path must be absolute" });
-    if ("filter" in parsed.data && parsed.data.filter !== undefined) {
+    if (spec.kind === "command" && spec.filter !== undefined) {
       try {
-        new RegExp(parsed.data.filter);
+        new RegExp(spec.filter);
       } catch {
         context.addIssue({
           code: "custom",
@@ -55,6 +56,13 @@ const input = z
       }
     }
   });
+const operation = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("create"), description: z.string().min(1), source }).strict(),
+  z.object({ op: z.literal("rearm"), alarmId: z.string().min(1) }).strict(),
+  z.object({ op: z.literal("cancel"), alarmId: z.string().min(1) }).strict(),
+]);
+// Like approval/provision: an object root preserves the framework's model ABI.
+const input = z.object({ operation }).strict();
 
 export const monitorTool = defineTool({
   name: "monitor",
@@ -65,13 +73,13 @@ export const monitorTool = defineTool({
   output: Alarm.Row,
   visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
   sequential: true,
-  async execute(args, context) {
+  async execute({ operation: args }, context) {
     const alarms = Storage.get().alarms;
     if (alarms === undefined) throw new ToolRefused("monitor", "alarm storage unavailable");
     context.signal.throwIfAborted();
     const at = Date.now();
     if (args.op !== "create") {
-      const current = args.id === undefined ? undefined : alarms.get(args.id);
+      const current = alarms.get(args.alarmId);
       if (current === undefined || current.sessionId !== context.sessionId)
         throw new ToolRefused("monitor", "alarm not found in this session");
       const row =
@@ -79,8 +87,8 @@ export const monitorTool = defineTool({
       if (row === undefined) throw new ToolRefused("monitor", "alarm control refused");
       return row;
     }
-    const { op: _op, id: _id, ...spec } = args;
-    const watch = Alarm.Watch.parse(spec);
+    const { kind: _kind, ...fields } = args.source;
+    const watch = Alarm.Watch.parse({ ...fields, description: args.description });
     const actions = SessionHandleStore.tree(context.sessionId);
     const turn = SessionHandleStore.turnIntent(
       actions.find((action) => action.id === context.turnId),
@@ -97,7 +105,7 @@ export const monitorTool = defineTool({
       op: "monitor",
       role: SessionHandleStore.row(context.sessionId).role,
       sessionId: context.sessionId,
-      value: spec,
+      value: watch,
     });
     const limits = evaluation.obligations.filter(
       (obligation) => obligation.metric === "notifications",
