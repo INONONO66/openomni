@@ -67,13 +67,14 @@ describe("provider retry and receipt paths", () => {
 
   it("provider delivery routes return accepted receipts", async () => {
     globalThis.fetch = (async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url.includes("conversations.open"))
+      const url = new URL(input instanceof Request ? input.url : input);
+      if (url.hostname === "slack.com" && url.pathname === "/api/conversations.open")
         return jsonResponse({ ok: true, channel: { id: "D1" } });
-      if (url.endsWith("/users/@me/channels")) return jsonResponse({ id: "dm-1" });
-      if (url.includes("api.telegram.org"))
+      if (url.hostname === "discord.com" && url.pathname === "/api/v10/users/@me/channels")
+        return jsonResponse({ id: "dm-1" });
+      if (url.hostname === "api.telegram.org")
         return jsonResponse({ ok: true, result: { message_id: 5 } });
-      if (url.includes("slack.com")) return jsonResponse({ ok: true, ts: "1.2" });
+      if (url.hostname === "slack.com") return jsonResponse({ ok: true, ts: "1.2" });
       return jsonResponse({ id: "m-9" });
     }) as typeof fetch;
 

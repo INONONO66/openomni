@@ -1,33 +1,31 @@
-import { parentPort, workerData } from "node:worker_threads";
+import { once } from "node:events";
 import { z } from "zod";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 
-const input = z
-  .object({
-    path: z.string(),
-    id: z.string(),
-    gate: z.instanceof(SharedArrayBuffer),
-  })
-  .parse(workerData);
-if (parentPort === null) throw new Error("reply-grant worker requires a parent");
-const adapter = new SqliteStorageAdapter(input.path);
+const [path, id] = z.tuple([z.string(), z.string()]).parse(process.argv.slice(2));
+if (!process.send) throw new Error("reply-grant contender requires IPC");
+const adapter = new SqliteStorageAdapter(path);
+let result: "claimed" | "existing" | "capacity";
 try {
-  parentPort.postMessage("ready");
-  Atomics.wait(new Int32Array(input.gate), 0, 0);
-  const result = adapter.replyGrant.claim(
+  const start = once(process, "message", { signal: AbortSignal.timeout(10_000) });
+  process.send("ready");
+  const [command] = await start;
+  if (command !== "claim") throw new Error("unexpected reply-grant race command");
+  result = adapter.replyGrant.claim(
     {
-      id: input.id,
+      id,
       ruleId: "rule-1",
       senderId: "persona",
-      targetActorId: input.id,
+      targetActorId: id,
       operations: ["fire_and_forget"],
-      replyScope: { surfaceKey: `telegram:${input.id}` },
+      replyScope: { surfaceKey: `telegram:${id}` },
       expiresAt: 100,
     },
     { at: 1, maxLiveInstances: 1 },
   );
-  parentPort.postMessage(result);
 } finally {
   adapter.close();
-  parentPort.close();
 }
+// Completion is observable only after checkpointing and closing this connection.
+process.send({ type: "closed", result });
+process.disconnect();
