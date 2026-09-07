@@ -5,9 +5,13 @@ import { STRIP } from "./fixture";
 /**
  * The strip's history trio is ONE node for the window's life: collapsing and
  * re-opening the sidebar changes nothing about its identity (it slides with the
- * zone's width; it carries no state attribute and no fade). Asserted on a live React root over a DOM, because
- * static markup cannot see a remount: the same HTML comes out of a node that
- * was replaced and one that was kept.
+ * zone's width; it carries no state attribute and no fade). The sidebar's
+ * container is ONE node across its three modes too: hidden -> overlay -> pinned
+ * is a class change on the same element, which is what lets the floating panel
+ * morph into the column instead of a second column growing beside it. Both are
+ * asserted on a live React root over a DOM, because static markup cannot see a
+ * remount: the same HTML comes out of a node that was replaced and one that was
+ * kept.
  *
  * The DOM is registered BEFORE `react-dom/client` loads: the client renderer
  * decides whether it can use a DOM at module evaluation.
@@ -30,10 +34,10 @@ function MountProbe() {
   return null;
 }
 
-function Frame({ open }: { readonly open: boolean }) {
+function Frame({ open, floating = false }: { readonly open: boolean; readonly floating?: boolean }) {
   return (
     <Sidebar
-      floating={false}
+      floating={floating}
       onFloatingChange={() => undefined}
       onToggle={() => undefined}
       onWidthCommit={() => undefined}
@@ -46,10 +50,29 @@ function Frame({ open }: { readonly open: boolean }) {
         onCreate={STRIP.onCreate}
         platform="darwin"
       />
+      <Sidebar.Gap />
+      <Sidebar.Container>
+        <ContainerMountProbe />
+      </Sidebar.Container>
       <MountProbe />
     </Sidebar>
   );
 }
+
+/** Counts the container's children's commits: a remount of the box would run this again. */
+let containerMounts = 0;
+function ContainerMountProbe() {
+  useEffect(() => {
+    containerMounts += 1;
+  }, []);
+  return null;
+}
+
+const containerOf = (root: Element) => {
+  const node = root.querySelector<HTMLElement>('[data-ui="Sidebar.Container"]');
+  if (node === null) throw new Error("no container");
+  return node;
+};
 
 const trioOf = (container: Element) => {
   const node = container.querySelector('[data-ui="TabStrip.Trio"]');
@@ -81,5 +104,41 @@ describe("the trio's identity", () => {
 
     await act(() => root.unmount());
     container.remove();
+  });
+});
+
+describe("the container's identity across modes", () => {
+  test("Given a collapsed sidebar, When the reveal floats it and a pin lands it, Then hidden -> overlay -> pinned is the same node with one mount", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    containerMounts = 0;
+    await act(() => root.render(<Frame open={false} />));
+    const box = containerOf(host);
+    expect(box.dataset.mode).toBe("hidden");
+    box.setAttribute("data-probe", "morph");
+
+    await act(() => root.render(<Frame floating open={false} />));
+    expect(containerOf(host)).toBe(box);
+    expect(box.dataset.mode).toBe("overlay");
+    expect(box.className).toContain("left-2");
+
+    // The pin: `open` flips while `floating` is still set, exactly as the
+    // store hands it over. The overlay's node becomes the pinned column.
+    await act(() => root.render(<Frame floating open />));
+    expect(containerOf(host)).toBe(box);
+    expect(box.dataset.mode).toBe("pinned");
+    expect(box.dataset.probe).toBe("morph");
+    expect(box.className).toContain("left-0");
+    expect(box.className).toContain("transition-[translate,inset,width,border-radius,box-shadow]");
+
+    // And back: collapsing keeps it too.
+    await act(() => root.render(<Frame open={false} />));
+    expect(containerOf(host)).toBe(box);
+    expect(box.dataset.mode).toBe("hidden");
+    expect(containerMounts).toBe(1);
+
+    await act(() => root.unmount());
+    host.remove();
   });
 });

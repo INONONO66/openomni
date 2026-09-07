@@ -97,7 +97,7 @@ describe("the sidebar root", () => {
     const content = tag(html, "Sidebar.Content");
     expect(gap).toContain("transition-[width]");
     expect(gap).toContain("group-data-[sidebar-state=collapsed]/sidebar:w-0");
-    expect(container).toContain("transition-[translate]");
+    expect(container).toContain("transition-[translate,inset,width,border-radius,box-shadow]");
     expect(content).toContain("transition-[opacity,translate]");
     expect(content).toContain("delay-[40ms]");
     // The measured scale: the frame slides on `base`, the column fades on `fast`.
@@ -150,6 +150,29 @@ describe("the hover reveal", () => {
     expect(tag(frame(true, null, "darwin", true), "Sidebar.Container")).toContain(
       'data-mode="pinned"',
     );
+  });
+
+  test("Given the overlay and the pinned column, When compared, Then the ONE box morphs: inset, radius, shadow, and width transition on the frame's curve, opaque in both, and neither starts from zero width", () => {
+    const overlay = tag(frame(false, null, "darwin", true), "Sidebar.Container");
+    const pinned = tag(frame(true, null), "Sidebar.Container");
+    for (const box of [overlay, pinned]) {
+      // The morph is a CSS transition on the same node: every property that
+      // differs between the two modes is in the list, on the frame's duration.
+      expect(box).toContain("transition-[translate,inset,width,border-radius,box-shadow]");
+      expect(box).toContain("duration-base");
+      expect(box).toContain("ease-frame");
+      // Both are fixed boxes with the sunken ground: nothing shows through mid-morph.
+      expect(box).toMatch(/(^|[\s"])fixed([\s"]|$)/);
+      expect(box).toContain("bg-sunken");
+      // The column never grows from nothing: no zero width in either mode.
+      expect(box).not.toMatch(/(^|[\s"])w-0([\s"]|$)/);
+    }
+    // The two ends of the glide: the overlay's inset and radius, the column's flush edge.
+    expect(overlay).toContain("left-2");
+    expect(overlay).toContain("rounded-panel");
+    expect(pinned).toContain("left-0");
+    expect(pinned).not.toContain("rounded-panel");
+    expect(pinned).not.toContain("shadow-panel");
   });
 });
 

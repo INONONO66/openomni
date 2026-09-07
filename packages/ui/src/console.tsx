@@ -103,10 +103,13 @@ export function Console({
       <Sidebar.Container>{sidebar}</Sidebar.Container>
       {/* The panel is inset from the chrome on its right and bottom only: its
           left edge meets the sidebar, where the resize handle straddles it,
-          and its top meets the strip. */}
+          and its top meets the strip. Collapsed, it keeps the 8px gutter on
+          the left too; that margin slides on the frame's curve with the gap
+          beside it, so pinning a floating panel moves this edge from 8 to the
+          sidebar's width in ONE motion under the morphing column. */}
       <Panel
         as="main"
-        className="mr-2 mb-2 flex min-w-0 flex-1 flex-col group-data-[sidebar-state=collapsed]/sidebar:ml-2"
+        className="mr-2 mb-2 flex min-w-0 flex-1 flex-col transition-[margin-left] duration-base ease-frame group-data-[sidebar-state=collapsed]/sidebar:ml-2 group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none"
         edge="box"
         tone="bg"
       >

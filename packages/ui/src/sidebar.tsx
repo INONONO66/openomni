@@ -238,12 +238,21 @@ function SidebarGap() {
  * the chrome) from the strip and the left edge, on the panel radius, over the
  * drawer layer, at `--spacing-sidebar-overlay` — the SAME token the strip's
  * collapsed zone is sized by, so the zone above is exactly as wide as the panel.
+ *
+ * The three are ONE fixed box whose mode is a class set, so a mode change is a
+ * CSS transition on the same node and never a remount: pinning a floating
+ * panel glides its inset 8 -> 0, its radius to 0, and its shadow away, while
+ * the gap grows in-flow beside it — the panel MORPHS into the column rather
+ * than vanishing while a column grows from the edge. Width rides the same
+ * transition: the overlay token equals the pinned default, so at 240 nothing
+ * moves; a wider pinned column eases from 240 to its width in step with the
+ * strip's zone above. A resize drag zeroes all of it (`data-resizing`).
  */
 const CONTAINER: Record<SidebarMode, string> = {
   pinned: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar) w-(--sidebar-width)",
   hidden: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar) w-(--sidebar-width) -translate-x-full",
   overlay:
-    "top-[calc(var(--shell-top)+--spacing(2))] left-2 bottom-2 z-(--z-drawer) w-sidebar-overlay overflow-hidden rounded-panel border-[0.5px] border-line-surface bg-sunken shadow-panel",
+    "top-[calc(var(--shell-top)+--spacing(2))] left-2 bottom-2 z-(--z-drawer) w-sidebar-overlay overflow-hidden rounded-panel border-[0.5px] border-line-surface shadow-panel",
 };
 
 /**
@@ -273,7 +282,10 @@ function SidebarContainer({ children }: { readonly children: ReactNode }) {
         />
       )}
       <div
-        className={`fixed flex transition-[translate] duration-base ${CONTAINER[mode]} ${FRAME_MOTION}`}
+        // `bg-sunken` in EVERY mode: the box is opaque, so while it morphs between
+        // the overlay's inset and the pinned column the main panel growing in
+        // beside it never shows through the rows.
+        className={`fixed flex bg-sunken transition-[translate,inset,width,border-radius,box-shadow] duration-base ${CONTAINER[mode]} ${FRAME_MOTION}`}
         data-mode={mode}
         data-ui={UI_NAMES.SidebarContainer}
         {...hot}
