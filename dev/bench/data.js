@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788752920791,
+  "lastUpdate": 1788762558820,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66871,6 +66871,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 893801,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "590bf0c57a59868da6467c7b048270f939df7a7a",
+          "message": "feat(desktop): state foundation on TanStack, delete all mock data, honest empty states (#996)\n\nClient state lives in one TanStack Store (src/renderer/state/store.ts:\nsessions, selectedSessionId, collapsedProjectIds, per-session drafts) read\nthrough useStore selectors; server state goes through TanStack Query\n(state/queries.ts mints every key; the one query is the gateway endpoint,\nreplacing the pre-mount await so the window paints immediately). Devtools\nmount under import.meta.env.DEV only.\n\nEvery mock is gone: src/renderer/mock/, the mock chat transport, the mock\ntimelines, run-state.ts, the probe/shoot scripts, and their tests. With no\nusable endpoint the composer is disabled and says why instead of falling\nback to fabricated conversation. The attention engine now ranks on the one\nfact a real session carries (createdAt) and PROJECT -> SESSION grouping\nfollows the sessions; search filters over store sessions (title, project).\n\npackages/ui: Console takes an optional session and renders an honest empty\ncolumn; Composer gains `disabled`; Disclosure is controllable and its header\nno longer takes a hover fill; rows are one line with a step between them so\nselected + hovered neighbours no longer read as one two-cell card.",
+          "timestamp": "2026-09-07T15:28:05+09:00",
+          "tree_id": "8e006dec5539bce27cc271b8a73563134370b212",
+          "url": "https://github.com/INONONO66/openomni/commit/590bf0c57a59868da6467c7b048270f939df7a7a"
+        },
+        "date": 1788762558428,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13150,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6941,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1767948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 457926,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 8360787,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 146,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1539,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 738,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 525113,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19269,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 183091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 936399,
             "unit": "ns/op"
           }
         ]
