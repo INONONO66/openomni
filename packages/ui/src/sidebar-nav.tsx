@@ -7,39 +7,11 @@ import { IconButton } from "./primitives/button";
 import { Text } from "./primitives/surface";
 
 /**
- * The sidebar column's rows, top to bottom: a 44px header, a nav of 28px
- * items, a section whose 32px header can turn into a search field, and a
+ * The sidebar column's rows, top to bottom: a nav of 28px items directly
+ * under the strip, a section whose 32px header can turn into a search field, and a
  * footer over a hairline. Every height is measured from the reference console
  * (docs/desktop-shell.md); the words in them are the app's.
  */
-
-/**
- * The header: the brand at the left, then `ml-auto` the search shortcut. The
- * sidebar toggle is NOT here: it lives in the tab strip, where it stays put in
- * both states (tab-strip.tsx). On desktop the header is a drag surface, so its
- * control opts out of dragging by the `drag-region` rule.
- */
-export function SidebarHeader({
-  brand,
-  onSearch,
-}: {
-  /** The wordmark or home mark, drawn in a 20px box. */
-  readonly brand?: ReactNode;
-  /** The header's search shortcut (⌘K); the field itself lives in the section header. */
-  readonly onSearch: () => void;
-}) {
-  return (
-    <div
-      className="drag-region flex h-11 shrink-0 items-center gap-1 px-2 pl-4"
-      data-ui={UI_NAMES.SidebarHeader}
-    >
-      <div className="flex h-5 items-center">{brand}</div>
-      <IconButton className="ml-auto" label="Search (⌘K)" onClick={onSearch} size="sm">
-        <Search />
-      </IconButton>
-    </div>
-  );
-}
 
 export function SidebarNav({ children }: { readonly children: ReactNode }) {
   return (

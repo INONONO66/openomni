@@ -46,15 +46,23 @@ describe("the one toggle", () => {
     const toggle = tag(html, "Sidebar.Toggle");
     expect(toggle).toContain('aria-label="Collapse sidebar"');
     expect(toggle).toContain('aria-expanded="true"');
-    // Inside the strip's controls zone, before the history trio, above the header.
+    // Inside the strip's controls zone, before the history trio, above the nav.
     const zone = html.indexOf('data-ui="TabStrip.Controls"');
     expect(zone).toBeLessThan(html.indexOf('data-ui="Sidebar.Toggle"'));
     expect(html.indexOf('data-ui="Sidebar.Toggle"')).toBeLessThan(
       html.indexOf('aria-label="History"'),
     );
     expect(html.indexOf('data-ui="Sidebar.Toggle"')).toBeLessThan(
-      html.indexOf('data-ui="Sidebar.Header"'),
+      html.indexOf('data-ui="Sidebar.Nav"'),
     );
+    // No header row: the column starts with the nav, and the one search entry
+    // point is the section header's toggle.
+    expect(html).not.toContain('data-ui="Sidebar.Header"');
+    expect(html).not.toContain('aria-label="Search (⌘K)"');
+    expect(html.match(/data-ui="SectionHeader.Toggle"/g)).toHaveLength(1);
+    // Pinned: the zone and the container ride the same runtime variable.
+    expect(tag(html, "TabStrip.Controls")).toContain("w-(--sidebar-width)");
+    expect(tag(html, "Sidebar.Container")).toContain("w-(--sidebar-width)");
     expect(html).not.toContain('aria-label="Expand sidebar"');
   });
 
@@ -82,9 +90,12 @@ describe("the one toggle", () => {
     expect(container).toContain('data-mode="overlay"');
     expect(container).toContain("rounded-panel");
     expect(container).toContain("shadow-panel");
-    // One tree, one header: the overlay IS the sidebar, not a copy of it.
+    // One tree, one nav: the overlay IS the sidebar, not a copy of it.
     expect(html.match(/role="tree"/g)).toHaveLength(1);
-    expect(html.match(/data-ui="Sidebar.Header"/g)).toHaveLength(1);
+    expect(html.match(/data-ui="Sidebar.Nav"/g)).toHaveLength(1);
+    // Collapsed: the zone and the overlay share one width token.
+    expect(container).toContain("w-sidebar-overlay");
+    expect(tag(html, "TabStrip.Controls")).toContain("w-sidebar-overlay");
     expect(tag(html, "Sidebar.Content")).not.toContain("inert");
     expect(tag(html, "Sidebar")).toContain('data-sidebar-state="collapsed"');
   });

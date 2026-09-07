@@ -39,9 +39,7 @@ export const UI_NAMES = {
   SidebarEdge: "Sidebar.Edge",
   /** The 16px grab zone on the sidebar's right edge; pinned mode only. */
   SidebarResizeHandle: "Sidebar.ResizeHandle",
-  /** The sidebar's top row: brand, then the search shortcut. */
-  SidebarHeader: "Sidebar.Header",
-  /** The primary destinations, under the header. */
+  /** The primary destinations: the column's first row, directly under the strip. */
   SidebarNav: "Sidebar.Nav",
   /** One destination in the nav. */
   NavItem: "NavItem",

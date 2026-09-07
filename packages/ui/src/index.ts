@@ -14,7 +14,6 @@ export {
   SectionHeader,
   SectionSearchInput,
   SidebarFooter,
-  SidebarHeader,
   SidebarNav,
   SidebarSection,
 } from "./sidebar-nav";

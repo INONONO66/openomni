@@ -5,7 +5,6 @@ import {
   SectionHeader,
   SectionSearchInput,
   SidebarFooter,
-  SidebarHeader,
   SidebarNav,
   SidebarSection,
   Text,
@@ -112,14 +111,6 @@ export function SessionTree({
 
   return (
     <>
-      <SidebarHeader
-        brand={
-          <Text level="label" sans tone="fg">
-            OpenOmni
-          </Text>
-        }
-        onSearch={() => search.setSearching(true)}
-      />
       <SidebarNav>
         {ROUTES.map((destination) => (
           <NavItem

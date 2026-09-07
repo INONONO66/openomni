@@ -61,7 +61,7 @@ export function Console({
   /**
    * The sidebar column's content. A slot rather than a prop-driven tree: what
    * ranks and filters those rows is the app's, and this component must not
-   * learn it. Composed from `SidebarHeader`, `SidebarNav`, `SidebarSection`,
+   * learn it. Composed from `SidebarNav`, `SidebarSection`,
    * `TreeRow`, and `SidebarFooter`.
    */
   readonly sidebar: ReactNode;
