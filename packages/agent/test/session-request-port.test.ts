@@ -54,14 +54,14 @@ test("gateway timeout resolves the original action without creating conversation
   let now = 100;
   const port = createSessionRequests({ clock: () => now, observations: { publish: () => undefined } });
   await port.open(opening("first"));
-  await port.expire(199);
+  port.timeout("first", 199);
   expect(port.list()[0]?.state).toBe("open");
   now = 200;
-  await port.expire(now);
+  port.timeout("first", now);
   expect(port.list()[0]?.state).toBe("expired");
   expect(SessionHandleStore.inboxRows("source")).toEqual([]);
   const before = SessionHandleStore.tree("source");
-  await port.expire(now);
+  port.timeout("first", now);
   expect(SessionHandleStore.tree("source")).toEqual(before);
 });
 
@@ -83,7 +83,7 @@ test("request opening uses its original turn generation, never a later catalog",
   });
   const port = createSessionRequests({ clock: () => 100, observations: { publish: () => undefined } });
   expect(await port.open(opening("pinned"))).toMatchObject({ turnId: "turn", callId: "call", toolsGeneration: 1 });
-  await expect(port.open(opening("missing-turn"))).rejects.toThrow("original request generation is unavailable");
+  expect(() => port.open(opening("missing-turn"))).toThrow("original request generation is unavailable");
   const row = SessionHandleStore.row("source");
   const lease = SessionHandleStore.acquireLease({ sessionId: "source", owner: "configure", expectedFence: row.leaseFence, now: 100, expiresAt: 200 });
   if (!lease.ok) throw new Error("configuration lease refused");
@@ -93,12 +93,12 @@ test("request opening uses its original turn generation, never a later catalog",
     consumeInboxIds: [], state: "idle", releaseLease: true,
     generation: { toolsGeneration: 2, systemHash: next.systemHash, policyGeneration: next.policyGeneration },
   }).ok).toBe(true);
-  await expect(port.open(opening("stale"))).rejects.toThrow("request open refused");
+  expect(() => port.open(opening("stale"))).toThrow("request open refused");
 });
 
 test("gateway port refuses missing original actions and mismatched physical receipts", async () => {
   const port = createSessionRequests({ clock: () => 100, observations: { publish: () => undefined } });
-  await expect(port.open(opening("missing"))).rejects.toThrow("original invocation missing");
+  expect(() => port.open(opening("missing"))).toThrow("original invocation missing");
   await port.open(opening("first"));
   const before = SessionHandleStore.tree("source");
   await expect(port.receipt({ inputId: "bad", requestId: "first", sessionId: "source", sourceActionId: "second",

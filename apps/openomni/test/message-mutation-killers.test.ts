@@ -209,7 +209,13 @@ test("an actor answer preserves platform correlation and wins its durable messag
   expect(SessionHandleStore.inboxRows(fixture.sessionId).at(-1)?.origin.value).toMatchObject({
     kind: "external_reply",
   });
-  await fixture.requests.expire(200);
+  for (const row of Storage.get().alarms?.due(200) ?? []) {
+    const request = SessionHandleStore.requestRows(fixture.sessionId).find(
+      item => `${item.requestId}:deadline` === row.id,
+    );
+    if (request === undefined) throw new Error("missing deadline request");
+    fixture.requests.timeout(request.requestId, 200);
+  }
   expect(SessionHandleStore.requestRows(fixture.sessionId)[0]?.state).toBe("resolved");
 });
 

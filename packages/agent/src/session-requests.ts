@@ -9,7 +9,6 @@ import { commitSessionRequest } from "./session-admission";
 
 export interface SessionRequestPort {
   list(): readonly SessionTransition.Request[];
-  expire(at: number): Promise<void>;
   timeout(requestId: string, at: number): void;
   open(input: {
     requestId: string;
@@ -100,12 +99,6 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
   return {
     list: () => SessionHandleStore.requestRows(),
     timeout,
-    async expire(at) {
-      for (const request of SessionHandleStore.requestRows()) {
-        if (request.state !== "open" || request.deadline > at) continue;
-        timeout(request.requestId, at);
-      }
-    },
     open(input) {
       const actions = SessionHandleStore.tree(input.sessionId);
       const original = actions.find((action) => action.id === input.requestId);

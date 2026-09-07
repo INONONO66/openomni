@@ -55,11 +55,14 @@ function dispatcher(
   bodies: string[],
   ready?: () => void,
 ) {
-  return createTurnDispatcher(
+  const result = createTurnDispatcher(
     definitions(bodies),
     {
       ...recording.identity,
-      ledger: recording.ledger,
+      ledger: { ...recording.ledger, actions: () => {
+        if ((result.executor.approvals?.pending().length ?? 0) > 0) ready?.();
+        return recording.ledger.actions?.() ?? [];
+      } },
       actionId: recording.identity.parentActionId,
       policy: compiledPolicy(),
     },
@@ -68,12 +71,9 @@ function dispatcher(
       entropy: recording.entropy,
       observations: { publish: () => undefined },
       authorizeApproval: async () => proof,
-      scheduleApprovalTimeout() {
-        ready?.();
-        return () => undefined;
-      },
     },
   );
+  return result;
 }
 function currentRequest(): SessionTransition.Request {
   const request = SessionHandleStore.requestRows()[0];

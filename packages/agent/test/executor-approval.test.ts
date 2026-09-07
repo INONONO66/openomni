@@ -74,7 +74,7 @@ function fixture(overrides: Partial<ExecutorOptions> = {}) {
   );
   const approvals = executor.approvals;
   if (approvals === undefined) throw new Error("missing approvals");
-  return { ...recording, executor, controller, bodies, running, approvals, opened: opened.promise };
+  return { ...recording, ledger: overrides.ledger ?? recording.ledger, executor, controller, bodies, running, approvals, opened: opened.promise };
 }
 for (const decision of ["approve", "refuse"] as const) {
   it(`commits authenticated ${decision} on the original invocation before opening the whole wave`, async () => {
@@ -172,23 +172,26 @@ it("rechecks cancellation after asynchronous authentication", async () => {
     await bounded(Promise.allSettled([f.running]));
   }
 });
-it("expires exactly once at the deadline, even with a delayed callback", async () => {
-  let now = 100;
-  let cancelled = 0;
-  const scheduled = Promise.withResolvers<() => void>();
-  const f = fixture({
-    clock: () => now,
-    approvalTimeoutMs: 25,
-    scheduleApprovalTimeout(expire) {
-      scheduled.resolve(expire);
-      return () => {
-        cancelled += 1;
-      };
-    },
-  });
+it("waits for the durable deadline owner instead of registering an executor timer", async () => {
+  const f = fixture();
   try {
-    const expire = await bounded(scheduled.promise);
-    expire();
+    const request = await bounded(f.opened);
+    expect(Storage.get().alarms?.get(`${request.requestId}:deadline`)).toMatchObject({
+      kind: "at", fireAt: request.deadline, status: "armed",
+    });
+    expect(f.approvals.pending()).toHaveLength(1);
+    expect(f.bodies).toEqual([]);
+  } finally {
+    f.controller.abort();
+    await bounded(Promise.allSettled([f.running]));
+  }
+});
+
+it("expires exactly once at the deadline, even with a delayed alarm", async () => {
+  let now = 100;
+  const f = fixture({ clock: () => now, approvalTimeoutMs: 25 });
+  try {
+    const request = await bounded(f.opened);
     expect(f.bodies).toEqual([]);
     now = 125;
     const pending = f.approvals.pending()[0];
@@ -197,26 +200,34 @@ it("expires exactly once at the deadline, even with a delayed callback", async (
       f.approvals.answer({ request: pending, credential: "x", decision: "approve" }),
     ).rejects.toMatchObject({ code: "stale_approval" });
     expect(SessionHandleStore.requestById(pending.id)?.state).toBe("expired");
-    expire();
+    await expireApproval(f, request.requestId, now);
     expect((await bounded(f.running))[1]).toEqual({
       terminal: "blocked_pre",
       reason: "approval_timeout",
     });
-    expire();
+    await expireApproval(f, request.requestId, now);
     expect(SessionHandleStore.requestById(pending.id)?.state).toBe("expired");
     expect(
       SessionHandleStore.tree(f.identity.sessionId).filter(
         (action) => action.id === `${pending.id}:resolution`,
       ),
     ).toHaveLength(1);
-    expect(cancelled).toBe(1);
   } finally {
     f.controller.abort();
     await bounded(Promise.allSettled([f.running]));
   }
 });
-it("handles immediate expiry through the native scheduler", async () => {
+async function expireApproval(f: ReturnType<typeof fixture>, requestId: string, at: number) {
+  const result = await f.ledger.transition?.(
+    { kind: "request.timeout", requestId }, `${requestId}:deadline`, at,
+  );
+  if (result?.request !== undefined) f.approvals.notify?.(result.request);
+}
+
+it("handles immediate expiry through the durable alarm transition", async () => {
   const f = fixture({ approvalTimeoutMs: 0 });
+  const request = await bounded(f.opened);
+  await expireApproval(f, request.requestId, 100);
   expect((await bounded(f.running))[1]).toEqual({
     terminal: "blocked_pre",
     reason: "approval_timeout",
@@ -251,12 +262,12 @@ it("does not treat an uncommitted notification as approval authority", async () 
   }
 });
 
-it("propagates a failed deadline commit and clears its live suspension", async () => {
+it("propagates a failed deadline commit without settling the live suspension", async () => {
   const recording = requestLedger({ id: "deadline-failure" });
   const transition = recording.ledger.transition;
   if (transition === undefined) throw new Error("missing transition");
   const failure = new Error("deadline storage unavailable");
-  let cancelled = 0;
+  const opened = Promise.withResolvers<SessionTransition.Request>();
   const f = fixture({
     ...recording,
     approvalTimeoutMs: 0,
@@ -264,20 +275,20 @@ it("propagates a failed deadline commit and clears its live suspension", async (
       ...recording.ledger,
       async transition(payload, inputId, at) {
         if (payload.kind === "request.timeout") throw failure;
-        return transition(payload, inputId, at);
+        const result = await transition(payload, inputId, at);
+        if (payload.kind === "request.open") opened.resolve(payload.request);
+        return result;
       },
     },
-    scheduleApprovalTimeout() {
-      return () => {
-        cancelled += 1;
-      };
-    },
   });
-  expect(await bounded(Promise.allSettled([f.running]))).toEqual([
-    { status: "rejected", reason: failure },
-  ]);
-  expect(f.bodies).toEqual([]);
-  expect(f.approvals.pending()).toEqual([]);
-  expect(cancelled).toBe(1);
-  expect(SessionHandleStore.requestRows("deadline-failure")[0]?.state).toBe("open");
+  try {
+    const request = await bounded(opened.promise);
+    await expect(expireApproval(f, request.requestId, 100)).rejects.toBe(failure);
+    expect(f.bodies).toEqual([]);
+    expect(f.approvals.pending()).toHaveLength(1);
+    expect(SessionHandleStore.requestRows("deadline-failure")[0]?.state).toBe("open");
+  } finally {
+    f.controller.abort();
+    await bounded(Promise.allSettled([f.running]));
+  }
 });

@@ -195,7 +195,6 @@ export interface ExecutorOptions {
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly approvalTimeoutMs?: number;
-  readonly scheduleApprovalTimeout?: (expire: () => void, delayMs: number) => () => void;
   readonly policy: CompiledPolicySnapshot;
   readonly ledger: ExecutionLedger;
   readonly observations: ObservationSink | BusEvent.Sink;

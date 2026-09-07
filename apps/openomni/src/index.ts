@@ -59,7 +59,6 @@ interface StartOptions {
     SessionRuntime,
     | "clock"
     | "approvalTimeoutMs"
-    | "scheduleApprovalTimeout"
     | "waitRetry"
     | "openIntent"
     | "onHibernate"
@@ -374,7 +373,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
             ),
       },
     );
-    await requests.expire((sessionRuntime.clock ?? Date.now)());
     const alarmStore = Storage.get().alarms;
     if (alarmStore === undefined) throw new Error("alarm storage unavailable at boot");
     const alarms = createAlarmWorker({

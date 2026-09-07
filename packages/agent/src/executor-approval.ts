@@ -147,7 +147,6 @@ export function createExecutionApprovals(options: ExecutorOptions) {
       settle: decision.resolve,
       revisions: binding.revisions,
     });
-    let cancelDeadline: (() => void) | undefined;
     const abort = () => {
       void transition(
         {
@@ -169,33 +168,15 @@ export function createExecutionApprovals(options: ExecutorOptions) {
         );
         if (opened.resolution !== "opened") throw new ExecutionApprovalError("stale_approval");
       }
-      if (durable.state !== "open") notify(durable);
-      else {
-        const expire = () => {
-          if (!pending.has(request.id) || options.clock() < durable.deadline || signal.aborted)
-            return;
-          void transition(
-            { kind: "request.timeout", requestId: request.id },
-            `${request.id}:timeout`,
-          ).then((result) => {
-            if (result.request !== undefined) notify(result.request);
-          }, decision.reject);
-        };
-        const delay = Math.max(0, durable.deadline - options.clock());
-        if (options.scheduleApprovalTimeout !== undefined)
-          cancelDeadline = options.scheduleApprovalTimeout(expire, delay);
-        else {
-          const timer = setTimeout(expire, delay);
-          timer.unref?.();
-          cancelDeadline = () => clearTimeout(timer);
-        }
+      // The durable at-alarm is the sole deadline owner, including recovery.
+      // Re-read after admission in case an answer committed while opening.
+      notify(durable);
+      if (pending.has(request.id)) {
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
-        else if (delay === 0) expire();
       }
       return await decision.promise;
     } finally {
-      cancelDeadline?.();
       signal.removeEventListener("abort", abort);
       pending.delete(request.id);
     }

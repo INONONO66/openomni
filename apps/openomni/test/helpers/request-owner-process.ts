@@ -54,7 +54,6 @@ export type OwnerSnapshot = ReturnType<typeof snapshot>;
 export type OwnerProcessEvent =
   | { type: "ready"; port: number; snapshot: OwnerSnapshot }
   | { type: "opened"; snapshot: OwnerSnapshot }
-  | { type: "suspended"; snapshot: OwnerSnapshot }
   | { type: "model"; snapshot: OwnerSnapshot }
   | { type: "applied"; snapshot: OwnerSnapshot }
   | { type: "settled"; snapshot: OwnerSnapshot }
@@ -144,10 +143,6 @@ async function serve() {
     },
     sessionRuntime: {
       clock: () => at,
-      scheduleApprovalTimeout: () => {
-        emit({ type: "suspended", snapshot: state() });
-        return () => undefined;
-      },
     },
     llm: {
       resolveModel: async (model) => ({

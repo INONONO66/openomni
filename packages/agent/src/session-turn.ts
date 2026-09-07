@@ -54,7 +54,7 @@ export function createSessionTurn(
       items: readonly Inbox.Row[],
       releaseLease: boolean,
     ) => Promise<void>;
-    readonly releaseHeldLease: () => Promise<void>;
+    readonly releaseHeldLease: () => void;
     readonly hibernate: (current: LedgerSession.Row) => Promise<void>;
   },
 ) {

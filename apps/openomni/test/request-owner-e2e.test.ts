@@ -204,7 +204,7 @@ test("authenticated Owner executes the captured Person invocation once across SI
     expect(restartedAt).toBeLessThan(request.deadline);
     const second = boot(restartedAt, true);
     expect(second.pid).not.toBe(first.pid);
-    const suspended = await second.next("suspended");
+    const suspended = await second.next("ready");
     expect(requestOf(suspended.snapshot)).toEqual(request);
     expect(suspended.snapshot.person).toBeNull();
     expect(suspended.snapshot.modelCalls).toBe(0);

@@ -117,7 +117,7 @@ for (const refuse of [false, true]) {
                 .get()?.n,
             ).toBe(1);
             expect(
-              independent.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM wait").get()?.n,
+              independent.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM action WHERE kind = 'request' AND json_extract(effect, '$.resolution') = 'opened'").get()?.n,
             ).toBe(1);
             return { value: "accepted" as const };
           },
@@ -156,7 +156,7 @@ for (const refuse of [false, true]) {
         )
         .get()?.n,
     ).toBe(refuse ? 0 : 1);
-    expect(WaitStore.list()).toHaveLength(refuse ? 0 : 1);
+    expect(SessionHandleStore.requestRows(fixture.sessionId)).toHaveLength(refuse ? 0 : 1);
     expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM egress_debit").get()?.n).toBe(
       refuse ? 0 : 1,
     );

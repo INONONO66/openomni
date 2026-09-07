@@ -506,7 +506,7 @@ describe("durable send admission faults", () => {
 
   test("propagates an unexpected request-store failure before delivery", async () => {
     const service = createExistingAgentMessaging({
-      requests: { ...seededRequests(), open: async () => { throw new Error("request commit unavailable"); } },
+      requests: { ...seededRequests(), open: () => { throw new Error("request commit unavailable"); } },
       deliver: message => { deliveries.push(message); return { value: "accepted" }; },
       grants: () => grants, publish: Bus.publish,
     });

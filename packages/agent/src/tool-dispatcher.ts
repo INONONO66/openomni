@@ -448,7 +448,6 @@ export interface TurnDispatchInput {
 export interface TurnDispatchRuntime {
   readonly waitRetry?: ExecutorOptions["waitRetry"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
-  readonly scheduleApprovalTimeout?: ExecutorOptions["scheduleApprovalTimeout"];
   readonly observations: ObservationSink | BusEvent.Sink;
   readonly clock?: () => number;
   readonly entropy?: () => string;
@@ -481,7 +480,6 @@ export function createTurnDispatcher(
     policy: input.policy,
     authorizeApproval: runtime.authorizeApproval,
     approvalTimeoutMs: runtime.approvalTimeoutMs,
-    scheduleApprovalTimeout: runtime.scheduleApprovalTimeout,
     ledger: input.ledger,
     observations: runtime.observations,
     identity: {
