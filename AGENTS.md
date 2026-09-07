@@ -4,7 +4,7 @@ Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 20
 
 Machine/codemode ownership updated on `kernel/949-tools-catalog` (2026-09-06), based on `f9c02a66`: raw WHERE handles, injected code runner, two-boundary authority, and production machine attach composition. Stage 1 adds locus-aware path tools and bash, deletes the target-selection workspace, and retains the legacy catalog entries pending stage 2.
 
-Desktop/ui verified against `feat/desktop-state` (2026-09-07): apps/desktop owns AI SDK chat state and the Electron window (hiddenInset chrome), with client state in one TanStack `Store` (`src/renderer/state/store.ts`) and server state through TanStack Query (`src/renderer/state/queries.ts`, one query: the gateway endpoint); all mock fixtures and the mock transport are deleted, so the shell renders real empty states. `packages/ui` is a minimal package whose barrel exports only what apps/desktop imports, with `src/names.ts` owning every `data-ui` address.
+Desktop/ui verified against `feat/desktop-capy-shell` (2026-09-07; shell geometry, sidebar mechanics, and navigation history documented in `docs/desktop-shell.md`): apps/desktop owns AI SDK chat state and the Electron window (hiddenInset chrome), with client state in one TanStack `Store` (`src/renderer/state/store.ts`) and server state through TanStack Query (`src/renderer/state/queries.ts`, one query: the gateway endpoint); all mock fixtures and the mock transport are deleted, so the shell renders real empty states. `packages/ui` is a minimal package whose barrel exports only what apps/desktop imports, with `src/names.ts` owning every `data-ui` address.
 
 ## OVERVIEW
 
