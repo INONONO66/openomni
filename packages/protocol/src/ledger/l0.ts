@@ -4,6 +4,8 @@ import { NamedError } from "../error/index.js";
 import { PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 
+export { SessionTransition } from "./session-transition.js";
+
 const Identifier = z.string().min(1);
 const NullableIdentifier = Identifier.nullable();
 
@@ -23,6 +25,9 @@ export namespace LedgerAction {
     "attempt",
     "tool",
     "message",
+    "request",
+    "reply",
+    "outbound",
     "inbox.deliver",
     "compaction",
     "alarm.arm",
@@ -72,7 +77,7 @@ export namespace LedgerAction {
   export type Receipt = z.infer<typeof Receipt>;
 }
 
-const InboxWrite = z
+const InboxAdmission = z
   .object({
     id: Identifier,
     sessionId: Identifier,
@@ -192,8 +197,13 @@ export namespace LedgerSession {
       consumeInboxIds: z.array(Identifier),
       state: State,
       generation: GenerationPointers.optional(),
+      requestCount: z
+        .object({ since: z.number().int(), count: z.number().int().nonnegative() })
+        .strict()
+        .optional(),
       releaseLease: z.boolean(),
-      deliveries: z.array(InboxWrite).optional(),
+      receive: InboxAdmission.optional(),
+      admit: z.lazy(() => Inbox.Commit).optional(),
     })
     .strict();
   export type Commit = z.infer<typeof Commit>;
@@ -619,17 +629,13 @@ export namespace Alarm {
     .strict();
   export type WatchSpec = z.infer<typeof WatchSpec>;
 
-  export const MessageDeadline = z
+  export const RequestDeadline = z
     .object({
-      kind: z.literal("message_deadline"),
-      messageId: Identifier,
-      sourceActionId: Identifier,
-      replyTo: Identifier.optional(),
-      createdAt: EpochMs,
-      generation: LedgerSession.GenerationPointers,
+      kind: z.literal("request_deadline"),
+      requestId: Identifier,
     })
     .strict();
-  export type MessageDeadline = z.infer<typeof MessageDeadline>;
+  export type RequestDeadline = z.infer<typeof RequestDeadline>;
 
   export const Kind = z.enum(["at", "watch"]);
   export type Kind = z.infer<typeof Kind>;

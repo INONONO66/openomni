@@ -1,5 +1,5 @@
 import { Retry, Run } from "@openomni/llm";
-import type { LedgerAction, PlainValue } from "@openomni/protocol";
+import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation } from "@openomni/policy";
 import type { AttemptRequest, ExecutorOptions, LlmAttempts } from "./executor-contract";
 import type { createExecutionRecord } from "./executor-record";
@@ -38,6 +38,7 @@ export function createAttemptRunner(
         op: prepared.request.op,
         parentId: parent.action.id,
         value: prepared.request.intent,
+        invocation: { effectHash: canonicalDigest(prepared.request.effect) },
       });
       if (policy?.verdict === "require_approval") {
         const decision = await approve(prepared.request, intent, policy);

@@ -3,8 +3,8 @@ import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Migration } from "../../src/storage/migration-runner";
-import { createSqliteWaitAdapter } from "../../src/storage/sqlite-wait-adapter";
-import { Wait } from "@openomni/protocol";
+import { HistoricalWait } from "../../src/storage/historical-request-format";
+import type { z } from "zod";
 import { Ledger } from "../../src/ledger-core/index";
 
 /** Historical fixture uses the shipped runner, never the auto-migrating adapter. */
@@ -56,8 +56,9 @@ export function createDispositionFixture(reportCleanup = true) {
     0,
   );
   if (appended.kind !== "appended") throw new Error("fixture history append failed");
-  createSqliteWaitAdapter(db).create(
-    Wait.Record.parse({
+  insertHistoricalWait(
+    db,
+    HistoricalWait.parse({
       id: "preserved",
       ownerRef: { kind: "session", id: "legacy" },
       originMessageId: "preserved-outbound",
@@ -90,8 +91,11 @@ export function createDispositionFixture(reportCleanup = true) {
   };
 }
 
-export function seedRetiredWait(db: Database, status: Wait.Record["status"] = "cancelled") {
-  const record = Wait.Record.parse({
+export function seedRetiredWait(
+  db: Database,
+  status: z.infer<typeof HistoricalWait>["status"] = "cancelled",
+) {
+  const record = HistoricalWait.parse({
     id: "retired",
     ownerRef: { kind: "session", id: "historical" },
     originMessageId: "outbound",
@@ -111,9 +115,36 @@ export function seedRetiredWait(db: Database, status: Wait.Record["status"] = "c
     ...(status === "cancelled" ? { cancelledAt: 2 } : {}),
     ...(status === "resolved" ? { resolvedAt: 2 } : {}),
   });
-  createSqliteWaitAdapter(db).create(record);
+  insertHistoricalWait(db, record);
   db.run(
     "UPDATE wait SET owner_kind = 'workItem', data = json_set(data, '$.ownerRef.kind', 'workItem') WHERE id = 'retired'",
+  );
+}
+
+/** Native old-schema fixture only, not a live storage adapter. */
+function insertHistoricalWait(db: Database, record: z.infer<typeof HistoricalWait>) {
+  db.query(`INSERT INTO wait (id,owner_kind,owner_id,origin_message_id,data,revision,status,
+    partial,endpoint_id,channel_id,reply_to_message_id,thread_id,token_hash,
+    external_conversation_id,expires_at,follow_up_until,time_created,time_updated)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    record.id,
+    record.ownerRef.kind,
+    record.ownerRef.id,
+    record.originMessageId,
+    JSON.stringify(record),
+    record.revision,
+    record.status,
+    Number(record.partial),
+    record.correlation.endpointId ?? null,
+    record.correlation.channelId ?? null,
+    record.correlation.replyToMessageId ?? null,
+    record.correlation.threadId ?? null,
+    record.correlation.tokenHash ?? null,
+    record.correlation.externalConversationId ?? null,
+    record.expiresAt,
+    record.resolvedAt === undefined ? null : record.resolvedAt + record.followUpWindow,
+    record.createdAt,
+    record.updatedAt,
   );
 }
 

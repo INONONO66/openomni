@@ -15,8 +15,8 @@ const EventBase = z.object({
  * Deterministic messaging audit trail (#215, descriptor re-homed to protocol
  * at #707 stage 2 — the gateway router publishes through an injected sink and
  * may not define zod schemas of its own): every send lands exactly one of
- * these. Fire-and-forget leaves ONLY the `Sent` event (no Wait row); denials
- * leave ONLY the `Denied` event (no delivery, no Wait, no allocation).
+ * these. Fire-and-forget leaves ONLY the `Sent` event (no request); denials
+ * leave ONLY the `Denied` event (no delivery, no request, no allocation).
  * Event name strings are byte-frozen wire vocabulary.
  */
 export const MessagingEvents = {
@@ -26,7 +26,7 @@ export const MessagingEvents = {
       operation: Gateway.MessageOperation,
       grantId: z.string().min(1),
       endpointId: z.string().min(1),
-      waitId: z.string().min(1).optional(),
+      requestId: z.string().min(1).optional(),
     }),
     { visibility: "llm_reason" },
   ),

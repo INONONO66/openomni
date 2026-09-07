@@ -20,6 +20,7 @@ import {
   type AnyToolDefinition,
   type PlainObject,
 } from "@openomni/protocol";
+import { createAlarmWorker } from "../src/composition/alarm-worker";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextMessage } from "./helpers/ws";
 
@@ -967,8 +968,6 @@ test("approval-time prompts retain durable identities and enter the next model s
 
 test("an exact approval deadline refuses only B and cannot grant late authority", async () => {
   let now = 100;
-  let expire: (() => void) | undefined;
-  const scheduled = Promise.withResolvers<void>();
   const started: string[] = [];
   const { app, socket } = await waveApp(
     ["A", "B", "C"].map((name) =>
@@ -981,13 +980,6 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
     {
       clock: () => now,
       approvalTimeoutMs: 1,
-      scheduleApprovalTimeout(callback) {
-        expire = callback;
-        scheduled.resolve();
-        return () => {
-          expire = undefined;
-        };
-      },
     },
   );
   requireBApproval();
@@ -998,10 +990,27 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
   try {
     expect(request.expiresAt).toBe(101);
     expect(started).toEqual([]);
-    await bounded(scheduled.promise);
+    const alarms = Storage.get().alarms;
+    if (alarms === undefined) throw new Error("missing alarm storage");
+    const worker = createAlarmWorker({
+      alarms,
+      observations: Bus,
+      clock: () => now,
+      requestTimeout: (requestId, at) => {
+        handle.requests.transition(
+          { kind: "request.timeout", requestId },
+          `${requestId}:deadline`,
+          at,
+        );
+      },
+      wake: async () => undefined,
+      failure: (error) => {
+        throw error;
+      },
+    });
+    suite.defer(() => worker.close());
     now = 101;
-    if (expire === undefined) throw new Error("missing deadline registration");
-    expire();
+    worker.tick();
     await response;
     expect(started).toEqual(["A", "C"]);
     expect(toolResults(handle.id).map((result) => [result.callId, result.terminal])).toEqual([

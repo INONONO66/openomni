@@ -3,6 +3,7 @@ import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   canonicalDigest,
   type SessionGeneration,
+  type SessionTransition,
   type Inbox,
   type LedgerAction,
   type LedgerSession,
@@ -27,6 +28,7 @@ import {
 } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { observeDrained } from "./session-message-observation";
+import { decideRequestTransition, type RequestDecision } from "./session-request";
 
 export function createSessionAdmission(
   sessionId: string,
@@ -218,6 +220,47 @@ export function createSessionAdmission(
   function createExecutionLedger(turnId?: string): SessionActionCommitPort {
     const executionFence = state.fence;
     return {
+      actions: () => SessionHandleStore.tree(sessionId),
+      validateRequest(request) {
+        const row = SessionHandleStore.row(sessionId);
+        return (
+          row.leaseOwner === owner &&
+          row.leaseFence === executionFence &&
+          row.leaseExpiresAt !== null &&
+          clock() < row.leaseExpiresAt &&
+          row.toolsGeneration === request.toolsGeneration &&
+          row.systemHash === request.systemHash &&
+          row.policyGeneration === request.generation &&
+          (runtime.requestDomainRevisions === undefined ||
+            canonicalDigest({ ...runtime.requestDomainRevisions(request) }) ===
+              canonicalDigest(request.domainRevisions))
+        );
+      },
+      async transition(payload, inputId, at) {
+        const current = SessionHandleStore.row(sessionId);
+        if (
+          current.leaseFence !== executionFence ||
+          (turnId !== undefined &&
+            SessionHandleStore.tree(sessionId).some(
+              (node) => SessionHandleStore.turnTerminal(node)?.turnId === turnId,
+            ))
+        ) {
+          throw new SessionCommitError({
+            ok: false,
+            reason: "stale",
+            currentFence: current.leaseFence,
+            currentRevision: current.revision,
+          });
+        }
+        return commitSessionRequest(
+          sessionId,
+          { owner, fence: executionFence },
+          payload,
+          inputId,
+          at,
+          runtime,
+        );
+      },
       async commit(action) {
         const current = SessionHandleStore.row(sessionId);
         const sealed =
@@ -373,4 +416,62 @@ export function createSessionAdmission(
     resumeInterrupted,
     consumeNoopInbox,
   };
+}
+
+export function commitSessionRequest(
+  sessionId: string,
+  authority: { owner: string; fence: number },
+  payload: SessionTransition.Payload,
+  inputId: string,
+  at: number,
+  runtime: SessionRuntime,
+  admission?: Inbox.Commit,
+): RequestDecision {
+  const row = SessionHandleStore.row(sessionId);
+  const requestId =
+    payload.kind === "request.open"
+      ? payload.request.requestId
+      : payload.kind === "request.answer"
+        ? payload.answer.requestId
+        : payload.kind === "request.delivery"
+          ? payload.receipt.requestId
+          : payload.requestId;
+  const request = SessionHandleStore.requestById(requestId);
+  const decision = decideRequestTransition(
+    {
+      version: 1,
+      sessionId,
+      inputId,
+      at,
+      expectedRevision: row.revision,
+      authority,
+      payload,
+    },
+    {
+      row,
+      actions: SessionHandleStore.tree(sessionId),
+      request,
+      requests: SessionHandleStore.requestRows(),
+      domainRevisions:
+        request === undefined ? undefined : runtime.requestDomainRevisions?.(request),
+    },
+  );
+  if (decision.actions.length > 0) {
+    requireCommit(
+      SessionHandleStore.commitRequestTransition({
+        sessionId,
+        ...authority,
+        now: at,
+        expectedRevision: row.revision,
+        actions: [...decision.actions],
+        consumeInboxIds: [],
+        state: row.state,
+        releaseLease: false,
+        ...(decision.receive === undefined ? {} : { receive: decision.receive }),
+        ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
+        ...(admission === undefined ? {} : { admit: admission }),
+      }),
+    );
+  }
+  return decision;
 }

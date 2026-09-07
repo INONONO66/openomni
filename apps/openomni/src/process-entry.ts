@@ -1,20 +1,22 @@
 import {
   Bus,
   closeSessions,
+  createSessionRequests,
   currentExecutor,
   wakeSession,
   type SessionRuntime,
 } from "@openomni/agent";
 import { createGatewayRouter } from "@openomni/channels";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
-import { Model } from "@openomni/protocol";
+import { Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { createLlmToolPort } from "./tools/execution/llm";
 import { createResident } from "./resident";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
 import { seedKernelPolicyRows } from "./policy-seed";
-import { commitTerminalMessage, terminalMessage } from "./composition/terminal-message";
+import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
+import { createProcessReplyChannel } from "./composition/process-replies";
 
 export const ProcessSessionRequest = z
   .object({
@@ -37,13 +39,14 @@ export const PROCESS_SESSION_NO_REQUEST_EXIT = 78;
 export async function serveProcessSession(
   request: ProcessSessionRequest,
   committed: (ids: readonly string[]) => void,
+  answer?: (input: SessionTransition.Answer) => Promise<SessionTransition.Resolution>,
 ): Promise<void> {
   initialize({ dbPath: request.dbPath, observationSink: Bus });
   seedKernelPolicyRows();
   const runtime: SessionRuntime = {
     observations: Bus,
     onInboxCommitted: committed,
-    commitTerminal: commitTerminalMessage((...args) => gateway.ingest(...args), Date.now),
+    dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), Date.now),
   };
   const messages = {
     ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>
@@ -71,14 +74,14 @@ export async function serveProcessSession(
     inbox: { commit: commitMessageInbox },
     prepare: prepareMessage(resident.materialize),
     run: async (sender, execution, body) => {
-      const result = await (terminalMessage.getStore()?.executor ?? currentExecutor()).run(
+      const result = await (outboundMessage.getStore()?.executor ?? currentExecutor()).run(
         execution,
         body,
       );
       if (sender.kind !== "session") throw new Error("process gateway requires a session sender");
       return { ...result, matchedRuleIds: messageDecisionRules(sender.id, execution) };
     },
-    armDeadline: SessionHandleStore.armMessageDeadline,
+    requests: { ...createSessionRequests(runtime), ...(answer === undefined ? {} : { answer }) },
     committed: (row) => committed([row.sessionId]),
   });
   try {
@@ -94,13 +97,16 @@ export async function serveProcessSession(
 }
 
 if (import.meta.main) {
-  let line: string | undefined;
-  for await (const candidate of console) {
-    line = candidate;
-    break;
+  const replies = createProcessReplyChannel(process.stdin, (line) => console.log(line));
+  try {
+    const line = await replies.first;
+    if (line === undefined) process.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
+    await serveProcessSession(
+      ProcessSessionRequest.parse(JSON.parse(line)),
+      (sessionIds) => console.log(JSON.stringify({ sessionIds })),
+      replies.answer,
+    );
+  } finally {
+    replies.close();
   }
-  if (line === undefined) process.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
-  await serveProcessSession(ProcessSessionRequest.parse(JSON.parse(line)), (sessionIds) =>
-    console.log(JSON.stringify({ sessionIds })),
-  );
 }

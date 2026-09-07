@@ -6,6 +6,7 @@ import {
   type AnyToolDefinition,
   type BusEvent,
   type LedgerSession,
+  type LedgerAction,
   type ObservationSink,
   type PlainValue,
   PlainValueSchema,
@@ -28,6 +29,10 @@ import {
 } from "./executor";
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
+const approvalBindings = new WeakMap<
+  AnyToolDefinition,
+  (input: PlainValue) => NonNullable<ExecutionRequest["approval"]>
+>();
 
 export class ToolRefused extends Error {
   readonly errorKind = "precondition_failed";
@@ -77,16 +82,20 @@ export interface Dispatcher {
     context: DispatchContext,
   ): Promise<readonly ToolDispatchResult[]>;
   executeCell(call: Tool.Call, context: DispatchContext): Promise<CellToolDispatchResult>;
+  recover(actions: readonly LedgerAction.Node[], context: DispatchContext): Promise<void>;
 }
 
 export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
+  approval?: (input: z.output<In>) => NonNullable<ExecutionRequest["approval"]>,
 ): ToolDefinition<In, Out> {
   if (definition.name.trim() === "") throw new Error("tool name must not be empty");
   if (definition.description.trim() === "") throw new Error("tool description must not be empty");
   if (toolInputSchema(definition).type !== "object") {
     throw new Error(`${definition.name} input schema root must be an object`);
   }
+  if (approval !== undefined)
+    approvalBindings.set(definition, (input) => approval(definition.input.parse(input)));
   return definition;
 }
 
@@ -140,6 +149,7 @@ export function createDispatcher(
     call: Tool.Call,
     providedContext: DispatchContext,
     door: "model" | "cell",
+    originalAction?: LedgerAction.Node,
   ): Prepared {
     const context = executionContext(call, providedContext);
     const definition = known.get(call.tool);
@@ -169,21 +179,52 @@ export function createDispatcher(
     if (executor === undefined) {
       throw new ExecutorContextError();
     }
+    const parsedValue = PlainValueSchema.parse(parsedInput.data);
+    const binding = approvalBindings.get(definition);
+    let approval = binding?.(parsedValue);
+    const original = originalAction?.intent.value;
+    if (
+      original !== undefined &&
+      original !== null &&
+      typeof original === "object" &&
+      !Array.isArray(original)
+    ) {
+      approval = {
+        required: original.approvalRequired === true,
+        domainRevisions: z.record(z.string(), z.number().int()).parse(original.domainRevisions),
+        timeoutMs: approval?.timeoutMs,
+      };
+    }
     const request: ExecutionRequest = {
       kind: "tool",
       op: definition.name,
-      intent: PlainValueSchema.parse(parsedInput.data),
+      intent: parsedValue,
       effect: { category: definition.category },
       toolObservation: {
         turnId: context.turnId,
         callId: call.id,
         ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
       },
+      ...(originalAction === undefined ? {} : { originalAction }),
+      ...(approval === undefined
+        ? {}
+        : {
+            approval,
+            domainRevisions: () => binding?.(parsedValue).domainRevisions ?? {},
+          }),
     };
     const body = () =>
       activeExecutor.run(executor, async () =>
         PlainValueSchema.parse(
-          await executeToolBody(definition, parsedInput.data, context, options?.timeoutMs),
+          await executeToolBody(
+            definition,
+            parsedInput.data,
+            {
+              ...context,
+              ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
+            },
+            options?.timeoutMs,
+          ),
         ),
       );
     const finish = (
@@ -263,6 +304,14 @@ export function createDispatcher(
     if (prepared.kind === "refused") return prepared.result;
     const executor = resolveExecutor();
     if (executor === undefined) throw new ExecutorContextError();
+    if (context.signal !== undefined && executor.runBatch !== undefined) {
+      const results = await executor.runBatch([prepared], { signal: context.signal });
+      const result = results[0];
+      if (result === undefined) throw new Error("single dispatch lost its result");
+      if (door === "cell" && result.terminal === "cancelled")
+        throw new DOMException("execution cancelled", "AbortError");
+      return prepared.finish(result);
+    }
     return prepared.finish(await executor.run(prepared.request, prepared.body));
   }
 
@@ -301,9 +350,48 @@ export function createDispatcher(
     ...(options?.executor === undefined ? {} : { executor: options.executor }),
     specs: definitions.filter((definition) => definition.visibility.model.length > 0).map(toolSpec),
     executeWave,
-    execute: (call, context) => dispatch(call, context, "model") as Promise<ToolDispatchResult>,
-    executeCell: (call, context) =>
-      dispatch(call, context, "cell") as Promise<CellToolDispatchResult>,
+    async recover(actions, context) {
+      const groups = recoverableWaves(actions, context.turnId);
+      for (const [waveId, group] of groups) {
+        if (
+          !actions.some((action) => {
+            const intent = action.intent.value;
+            return (
+              intent !== null &&
+              typeof intent === "object" &&
+              !Array.isArray(intent) &&
+              intent.waveId === waveId &&
+              intent.approvalRequired === true
+            );
+          })
+        )
+          continue;
+        const prepared = group.map(({ action, call }) => prepare(call, context, "model", action));
+        if (prepared.some((item) => item.kind === "refused"))
+          throw new Error("captured invocation no longer parses");
+        const ready = prepared.filter(
+          (item): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
+        );
+        const executor = resolveExecutor();
+        if (executor?.runBatch === undefined) throw new ExecutorContextError();
+        const results = await executor.runBatch(ready, {
+          signal: context.signal ?? new AbortController().signal,
+        });
+        results.forEach((result, index) => {
+          ready[index]?.finish(result);
+        });
+      }
+    },
+    execute(call, context) {
+      const wave = dispatch(call, context, "model") as Promise<ToolDispatchResult>;
+      options?.trackWave?.(wave.then(() => undefined));
+      return wave;
+    },
+    executeCell(call, context) {
+      const wave = dispatch(call, context, "cell") as Promise<CellToolDispatchResult>;
+      options?.trackWave?.(wave.then(() => undefined));
+      return wave;
+    },
   };
 }
 
@@ -322,6 +410,7 @@ export interface TurnDispatchInput {
   readonly tools?: readonly SessionGeneration.Tool[];
   readonly toolsGeneration?: number;
   readonly toolsHash?: string;
+  readonly systemHash?: string;
   readonly policy: CompiledPolicySnapshot;
   readonly ledger: ExecutionLedger;
   readonly retainEffect?: (effect: Promise<void>) => void;
@@ -329,11 +418,48 @@ export interface TurnDispatchInput {
   readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
 }
 
+function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string | undefined) {
+  const groups = new Map<string, { action: LedgerAction.Node; call: Tool.Call }[]>();
+  for (const action of actions) {
+    if (action.kind !== "tool") continue;
+    const intent = action.intent.value;
+    if (
+      intent === null ||
+      typeof intent !== "object" ||
+      Array.isArray(intent) ||
+      intent.phase !== "intent" ||
+      intent.turnId !== turnId ||
+      typeof intent.callId !== "string" ||
+      typeof intent.op !== "string" ||
+      typeof intent.waveId !== "string"
+    )
+      continue;
+    if (
+      actions.some(
+        (node) =>
+          node.kind === "tool" &&
+          node.parentId === action.id &&
+          node.effect.value !== null &&
+          typeof node.effect.value === "object" &&
+          !Array.isArray(node.effect.value) &&
+          node.effect.value.phase === "result",
+      )
+    )
+      continue;
+    const parsed = PlainValueSchema.parse(intent.value);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error(`invalid durable invocation: ${action.id}`);
+    const group = groups.get(intent.waveId) ?? [];
+    group.push({ action, call: { id: intent.callId, tool: intent.op, input: parsed } });
+    groups.set(intent.waveId, group);
+  }
+  return groups;
+}
+
 /** The runtime clock/entropy/observation sink shared across a session's turns. */
 export interface TurnDispatchRuntime {
   readonly waitRetry?: ExecutorOptions["waitRetry"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
-  readonly scheduleApprovalTimeout?: ExecutorOptions["scheduleApprovalTimeout"];
   readonly observations: ObservationSink | BusEvent.Sink;
   readonly clock?: () => number;
   readonly entropy?: () => string;
@@ -366,7 +492,6 @@ export function createTurnDispatcher(
     policy: input.policy,
     authorizeApproval: runtime.authorizeApproval,
     approvalTimeoutMs: runtime.approvalTimeoutMs,
-    scheduleApprovalTimeout: runtime.scheduleApprovalTimeout,
     ledger: input.ledger,
     observations: runtime.observations,
     identity: {
@@ -376,6 +501,7 @@ export function createTurnDispatcher(
       turnId: input.turnId,
       toolsGeneration: input.toolsGeneration,
       toolsHash: input.toolsHash,
+      systemHash: input.systemHash,
     },
     clock: runtime.clock ?? Date.now,
     entropy: runtime.entropy ?? (() => crypto.randomUUID()),
@@ -387,13 +513,25 @@ export function createTurnDispatcher(
     pinnedNames === undefined
       ? definitions
       : definitions.filter((definition) => pinnedNames.has(definition.name));
-  return {
-    ...createDispatcher(pinnedDefinitions, {
-      executor,
-      retainEffect: input.retainEffect,
-      trackWave: input.trackWave,
-    }),
+  const dispatcher = createDispatcher(pinnedDefinitions, {
     executor,
+    retainEffect: input.retainEffect,
+    trackWave: input.trackWave,
+  });
+  return {
+    ...dispatcher,
+    executor: {
+      ...executor,
+      recover() {
+        const wave = dispatcher.recover(input.ledger.actions?.() ?? [], {
+          sessionId: input.sessionId,
+          turnId: input.turnId ?? input.actionId,
+          signal: input.signal,
+        });
+        input.trackWave?.(wave);
+        return wave;
+      },
+    },
   };
 }
 

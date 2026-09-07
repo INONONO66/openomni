@@ -5,6 +5,7 @@ import {
   type ObservationSink,
   type BusEvent,
   type PlainValue,
+  type PlainObject,
 } from "@openomni/protocol";
 import type { ExecutionRequest, ExecutorOptions } from "./executor";
 import { waveBodyScope } from "./core/execution/tool-wave";
@@ -115,13 +116,19 @@ export function createExecutionRecord(
     readonly op: string;
     readonly parentId: string | null;
     readonly value: PlainValue;
+    readonly invocation?: PlainObject;
   }): Promise<LedgerAction.Receipt> {
     return commit(
       actionAppend(
         input,
         {
           encodingVersion: 1,
-          value: { phase: "intent", op: input.op, value: input.value },
+          value: {
+            phase: "intent",
+            op: input.op,
+            value: input.value,
+            ...input.invocation,
+          },
         },
         { encodingVersion: 1, value: { phase: "pending" } },
       ),

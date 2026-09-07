@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
 import { ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
-import { Gateway, Inbox } from "@openomni/protocol";
+import { Gateway, SessionTransition } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
@@ -122,24 +122,21 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     });
     expect(terminals.map((terminal) => terminal.kind)).toEqual([kind]);
     const letters = SessionHandleStore.inboxRows(child.parentId).filter(
-      (row) => Inbox.ReplyOrigin.safeParse(row.origin.value).success,
+      (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
     );
     expect(letters).toHaveLength(1);
     expect(letters[0]?.origin.value).toMatchObject({
-      kind: "child_terminal",
-      childSessionId: child.id,
+      sourceSessionId: child.id,
       replyTo: "ORIGINAL",
-      terminalKind: kind,
+      terminal: kind === "result" ? "completed" : kind,
     });
     expect(letters[0]?.content).toBe(terminals[0]?.text);
     // No child-owned request/alarm is opened by the terminal reply.
     expect(
       SessionHandleStore.tree(child.id).filter((action) => action.kind === "alarm.arm"),
     ).toEqual([]);
-    expect(
-      SessionHandleStore.tree(child.parentId).filter((action) => action.kind === "alarm.arm"),
-    ).toHaveLength(1);
-    expect(SessionHandleStore.expireMessageDeadlines(1000)).toEqual([]);
+    expect(SessionHandleStore.requestRows(child.parentId)).toHaveLength(1);
+    expect(SessionHandleStore.requestRows(child.parentId)[0]?.state).toBe("resolved");
     expect(
       SessionHandleStore.inboxRows(child.parentId).filter(
         (row) =>

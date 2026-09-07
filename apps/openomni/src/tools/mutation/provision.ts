@@ -1,14 +1,7 @@
-import { createHash } from "node:crypto";
 import { ChannelProviders } from "@openomni/channels";
-import type {
-  ApprovalStore,
-  ChannelInstanceStore,
-  PersonStore,
-  SecretStore,
-} from "@openomni/ledger";
-import { Vault } from "@openomni/ledger";
-import type { Actor, Approval, Provisioning } from "@openomni/protocol";
-import { newTraceId } from "@openomni/agent";
+import type { ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/ledger";
+import { Storage, Vault } from "@openomni/ledger";
+import type { Actor, Provisioning } from "@openomni/protocol";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "@openomni/agent";
 import {
@@ -25,9 +18,8 @@ import type { KekResolution } from "../../provisioning/vault-key";
  * durable declarations, and every mutation ends in the SAME reconcile the
  * boot runs — declarations change, affected stages bounce. Guard placement:
  * the sole-owner invariant lives in PersonStore (§8.8, one enforcement
- * layer); THIS layer owns the approval-lane guards — tier raises above
- * collaborator and any mutation of the owner Person consume an approved,
- * digest-matched `person_mutation` approval (§8.5, §8.6).
+ * layer); THIS layer captures the original-invocation guard for trust raises and
+ * owner Person changes; the executor owns authenticated approval.
  */
 
 export interface ProvisionPort {
@@ -37,11 +29,6 @@ export interface ProvisionPort {
   /** Boot's KEK resolution: sealing refuses while the vault is locked. */
   readonly kek: KekResolution;
   readonly supervisor: Pick<ChannelSupervisor, "reconcile" | "resume" | "status" | "source">;
-  readonly approvals: {
-    readonly request: typeof ApprovalStore.request;
-    readonly get: (id: string) => Approval.Record | undefined;
-    readonly decision: (id: string, at: number) => Approval.State;
-  };
   /** Replays Person manifests into actor identity/endpoint facts (boot's materializer). */
   readonly materialize: () => void;
   readonly removeIdentity: (id: string) => boolean;
@@ -83,11 +70,6 @@ const MANIFEST_INPUT = z
 const PERSON_DECLARE_INPUT = z
   .object({
     manifest: MANIFEST_INPUT,
-    approvalId: z
-      .string()
-      .min(1)
-      .optional()
-      .describe("Approved person_mutation approval, when the guard requires one."),
     timeoutMs: z
       .number()
       .int()
@@ -127,22 +109,6 @@ type ManifestInput = z.infer<typeof MANIFEST_INPUT>;
 
 type PersonManifest = Omit<ManifestInput, "displayName"> & { readonly displayName: string };
 
-/** Canonical manifest digest: the exact content the Owner approves (§8.6, anti-TOCTOU). */
-export function personManifestDigest(input: PersonManifest): string {
-  const canonical = JSON.stringify({
-    id: input.id,
-    displayName: input.displayName,
-    kind: input.kind,
-    trustTier: input.trustTier,
-    endpoints: input.endpoints.map((endpoint) => ({
-      channel: endpoint.channel,
-      externalId: endpoint.externalId,
-      workspace: endpoint.workspace ?? null,
-    })),
-  });
-  return createHash("sha256").update(canonical).digest("hex");
-}
-
 /**
  * The approval guard (§5): a raise above collaborator — measured against the
  * Person's current tier, so lateral and downward edits stay direct — and ANY
@@ -162,75 +128,6 @@ function approvalRequirement(
   return undefined;
 }
 
-/**
- * §8.13 anti-fatigue bound shared with the approval lane: a guard-opened
- * request storm refuses instead of burying the Owner.
- */
-const REQUEST_BOUND = { windowMs: 3_600_000, maxPending: 8 } as const;
-
-const DEFAULT_APPROVAL_TIMEOUT_MS = 86_400_000;
-
-/**
- * The guard opens its own approval request (§5): the digest is computed from
- * the exact manifest being declared, so the Owner approves THIS content —
- * re-running with an edited manifest is a digest-mismatch refusal, never a
- * silent swap (anti-TOCTOU, §8.6).
- */
-function openMutationApproval(
-  port: ProvisionPort,
-  requirement: string,
-  manifest: PersonManifest,
-  digest: string,
-  timeoutMs: number,
-  at: number,
-): { kind: "pending"; requirement: string; approvalId: string; digest: string; deadline: number } {
-  try {
-    const record = port.approvals.request(
-      {
-        id: `approval:${crypto.randomUUID()}`,
-        subject: { kind: "person_mutation", personId: manifest.id, manifestDigest: digest },
-        deadline: at + timeoutMs,
-      },
-      REQUEST_BOUND,
-      newTraceId(),
-      at,
-    );
-    return {
-      kind: "pending",
-      requirement,
-      approvalId: record.id,
-      digest,
-      deadline: record.deadline,
-    };
-  } catch (error) {
-    return refusal("person_declare", error instanceof Error ? error.message : String(error));
-  }
-}
-
-function consumeApproval(
-  port: ProvisionPort,
-  approvalId: string,
-  personId: string,
-  digest: string,
-  at: number,
-): string | undefined {
-  const record = port.approvals.get(approvalId);
-  if (record === undefined) return `approval ${approvalId} does not exist`;
-  if (port.approvals.decision(approvalId, at) !== "approved") {
-    return `approval ${approvalId} is not approved — unanswered reads as refused`;
-  }
-  if (record.subject.kind !== "person_mutation") {
-    return `approval ${approvalId} approves a ${record.subject.kind}, not a person_mutation`;
-  }
-  if (record.subject.personId !== personId) {
-    return `approval ${approvalId} names ${record.subject.personId}, not ${personId}`;
-  }
-  if (record.subject.manifestDigest !== digest) {
-    return `approval ${approvalId} approved a different manifest (digest mismatch)`;
-  }
-  return undefined;
-}
-
 function refusal(tool: string, reason: string): never {
   throw new ToolRefused(tool, reason);
 }
@@ -240,46 +137,40 @@ async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
 }
 
 function executePersonDeclare(port: ProvisionPort, now: () => number = Date.now) {
-  return async (input: z.output<typeof PERSON_DECLARE_INPUT>) => {
-    const { approvalId, timeoutMs } = input;
-    const { displayName, ...rest } = input.manifest;
-    const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
-    const existing = port.persons.get(manifest.id);
-    const digest = personManifestDigest(manifest);
-    const requirement = approvalRequirement(existing, manifest);
-    if (requirement !== undefined) {
-      if (approvalId === undefined) {
-        return openMutationApproval(
-          port,
-          requirement,
-          manifest,
-          digest,
-          timeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS,
-          now(),
-        );
+  return (
+    input: z.output<typeof PERSON_DECLARE_INPUT>,
+    domainRevisions?: Readonly<Record<string, number>>,
+  ) =>
+    Storage.get().transaction(() => {
+      const { displayName, ...rest } = input.manifest;
+      const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
+      const existing = port.persons.get(manifest.id);
+      if (
+        (domainRevisions === undefined && approvalRequirement(existing, manifest) !== undefined) ||
+        (domainRevisions !== undefined &&
+          domainRevisions[manifest.id] !== (existing?.revision ?? -1))
+      ) {
+        return refusal("person_declare", "domain revision changed");
       }
-      const rejection = consumeApproval(port, approvalId, manifest.id, digest, now());
-      if (rejection !== undefined) return refusal("person_declare", rejection);
-    }
-    try {
-      const person = port.persons.put({
-        ...manifest,
-        revision: (existing?.revision ?? -1) + 1,
-        createdBy: "resident",
-        updatedAt: now(),
-      });
-      port.materialize();
-      return {
-        kind: "declared" as const,
-        id: person.id,
-        trustTier: person.trustTier,
-        revision: person.revision,
-      };
-    } catch (error) {
-      // §8.8: a second owner surfaces the store's typed owner_exists refusal.
-      return refusal("person_declare", error instanceof Error ? error.message : String(error));
-    }
-  };
+      try {
+        const person = port.persons.put({
+          ...manifest,
+          revision: (existing?.revision ?? -1) + 1,
+          createdBy: "resident",
+          updatedAt: now(),
+        });
+        port.materialize();
+        return {
+          kind: "declared" as const,
+          id: person.id,
+          trustTier: person.trustTier,
+          revision: person.revision,
+        };
+      } catch (error) {
+        // §8.8: a second owner surfaces the store's typed owner_exists refusal.
+        return refusal("person_declare", error instanceof Error ? error.message : String(error));
+      }
+    });
 }
 
 function executePersonRemove(port: ProvisionPort) {
@@ -485,15 +376,6 @@ const ProvisionInput = z.object({ operation: ProvisionOperation }).strict();
 const PersonDeclareResult = z.discriminatedUnion("kind", [
   z
     .object({
-      kind: z.literal("pending"),
-      requirement: z.string(),
-      approvalId: z.string(),
-      digest: z.string(),
-      deadline: z.number(),
-    })
-    .strict(),
-  z
-    .object({
       kind: z.literal("declared"),
       id: z.string(),
       trustTier: z.string(),
@@ -559,55 +441,71 @@ export function createProvisionTool(port: ProvisionPort) {
     secret_rotate: executeSecretRotate(port),
     status: executeProvisionStatus(port),
   };
-  return defineTool({
-    name: "provision",
-    category: "mutation",
-    description:
-      "Administer people, channels, credentials, and provisioning status. Use op=person_declare|person_remove|channel_declare|channel_enable|channel_disable|secret_rotate|status.",
-    input: ProvisionInput,
-    output: ProvisionOutput,
-    visibility: { model: ["resident"], cell: ["resident"] },
-    execute: async ({ operation }) => {
-      switch (operation.op) {
-        case "person_declare":
-          return { op: operation.op, result: await executors.person_declare(operation.args) };
-        case "person_remove":
-          return { op: operation.op, ...(await executors.person_remove(operation.args)) };
-        case "channel_declare":
-          return { op: operation.op, ...(await executors.channel_declare(operation.args)) };
-        case "channel_enable":
-          return {
-            op: operation.op,
-            ...(await executors.channel_enable(operation.args)),
-            action: "enabled" as const,
-          };
-        case "channel_disable":
-          return {
-            op: operation.op,
-            ...(await executors.channel_disable(operation.args)),
-            action: "disabled" as const,
-          };
-        case "secret_rotate":
-          return { op: operation.op, ...(await executors.secret_rotate(operation.args)) };
-        case "status":
-          return { op: operation.op, ...(await executors.status(operation.args)) };
-      }
+  return defineTool(
+    {
+      name: "provision",
+      category: "mutation",
+      description:
+        "Administer people, channels, credentials, and provisioning status. Use op=person_declare|person_remove|channel_declare|channel_enable|channel_disable|secret_rotate|status.",
+      input: ProvisionInput,
+      output: ProvisionOutput,
+      visibility: { model: ["resident"], cell: ["resident"] },
+      execute: async ({ operation }, context) => {
+        switch (operation.op) {
+          case "person_declare":
+            return {
+              op: operation.op,
+              result: executors.person_declare(operation.args, context.domainRevisions),
+            };
+          case "person_remove":
+            return { op: operation.op, ...(await executors.person_remove(operation.args)) };
+          case "channel_declare":
+            return { op: operation.op, ...(await executors.channel_declare(operation.args)) };
+          case "channel_enable":
+            return {
+              op: operation.op,
+              ...(await executors.channel_enable(operation.args)),
+              action: "enabled" as const,
+            };
+          case "channel_disable":
+            return {
+              op: operation.op,
+              ...(await executors.channel_disable(operation.args)),
+              action: "disabled" as const,
+            };
+          case "secret_rotate":
+            return { op: operation.op, ...(await executors.secret_rotate(operation.args)) };
+          case "status":
+            return { op: operation.op, ...(await executors.status(operation.args)) };
+        }
+      },
+      render: (_args, value) => {
+        if (value.op === "status") return renderProvisionStatus(value);
+        if (value.op === "person_declare") {
+          return `person ${value.result.id} declared (tier ${value.result.trustTier}, revision ${value.result.revision})`;
+        }
+        if (value.op === "person_remove") return `person ${value.id} removed`;
+        if (
+          value.op === "channel_declare" ||
+          value.op === "channel_enable" ||
+          value.op === "channel_disable"
+        )
+          return `channel ${value.id} ${value.action}\n${statusLines(value.statuses)}`;
+        return `secret ${value.id} rotated (kek ${value.kekId})\n${statusLines(value.statuses)}`;
+      },
     },
-    render: (_args, value) => {
-      if (value.op === "status") return renderProvisionStatus(value);
-      if (value.op === "person_declare") {
-        return value.result.kind === "pending"
-          ? `person_declare pending: ${value.result.requirement} — approval ${value.result.approvalId} opened (digest ${value.result.digest}); unanswered after ${value.result.deadline} reads as refused.`
-          : `person ${value.result.id} declared (tier ${value.result.trustTier}, revision ${value.result.revision})`;
-      }
-      if (value.op === "person_remove") return `person ${value.id} removed`;
-      if (
-        value.op === "channel_declare" ||
-        value.op === "channel_enable" ||
-        value.op === "channel_disable"
-      )
-        return `channel ${value.id} ${value.action}\n${statusLines(value.statuses)}`;
-      return `secret ${value.id} rotated (kek ${value.kekId})\n${statusLines(value.statuses)}`;
+    ({ operation }) => {
+      if (operation.op !== "person_declare") return { required: false, domainRevisions: {} };
+      const manifest = {
+        ...operation.args.manifest,
+        displayName: operation.args.manifest.displayName ?? operation.args.manifest.id,
+      };
+      const existing = port.persons.get(manifest.id);
+      return {
+        required: approvalRequirement(existing, manifest) !== undefined,
+        domainRevisions: { [manifest.id]: existing?.revision ?? -1 },
+        timeoutMs: operation.args.timeoutMs,
+      };
     },
-  });
+  );
 }

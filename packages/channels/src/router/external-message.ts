@@ -16,6 +16,7 @@ export function externalMessage(
   sink: GatewayRouterPorts["sink"],
   at: number,
   budgets: readonly Gateway.SocialBudget[],
+  requests: GatewayRouterPorts["requests"],
 ) {
   if (sender.surface !== facts.surface) throw new Error("authenticated surface mismatch");
   const surfaceKey = Channel.SurfaceKey.fromChannel({
@@ -64,7 +65,7 @@ export function externalMessage(
       },
     },
   });
-  const route = resolveAndRecordRoute(event, surfaceKey, event.traceId, sink);
+  const route = resolveAndRecordRoute(event, surfaceKey, event.traceId, sink, requests, at);
   const identities = facts.addressees.flatMap((addressee) => {
     const resolved = ActorRegistry.resolveEndpoint(
       sender.surface,
@@ -85,7 +86,7 @@ export function externalMessage(
   // Table A applies declared peer restrictions to unrelated ingress, without
   // charging a send. Correlated answers retain the existing reply exemption.
   const egressBudget =
-    route.waitExecution.kind === "wait" ||
+    route.requestExecution.kind === "request" ||
     budget === undefined ||
     evaluateSocialBudget(
       budget,
@@ -102,7 +103,7 @@ export function externalMessage(
     identity: route.decision.outcome === "route",
     grantTier:
       route.decision.outcome === "route" &&
-      (route.waitExecution.kind === "wait" || isAuthorizedTopLevelActor(route.event)),
+      (route.requestExecution.kind === "request" || isAuthorizedTopLevelActor(route.event)),
     egressBudget,
     eventIdUnique: true,
     replyCorrelation: route.decision.outcome !== "ambiguous",

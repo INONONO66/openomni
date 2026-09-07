@@ -1,94 +1,119 @@
 import { expect, test } from "bun:test";
-import { Storage } from "@openomni/ledger";
-import { Alarm, Gateway } from "@openomni/protocol";
+import { createSessionRequests } from "@openomni/agent";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { alarmFixture } from "./helpers/alarm";
 
 for (const replyFirst of [false, true]) {
-  test(`live alarm band preserves the message ${replyFirst ? "answer" : "timeout"} winner`, () =>
+  test(`live alarm band preserves the request ${replyFirst ? "answer" : "timeout"} winner`, () =>
     Storage.withIsolation(async () => {
       const fixture = alarmFixture();
       const observations: Gateway.MessageObservation[] = [];
+      const timedOut = Promise.withResolvers<void>();
+      const signal = AbortSignal.timeout(5000);
+      const abort = () => timedOut.reject(new Error("request timeout observation missing"));
+      if (!replyFirst) signal.addEventListener("abort", abort, { once: true });
       const unsubscribe = fixture.events.subscribe(Gateway.MessageObserved, (event) => {
         observations.push(event);
+        if (event.kind === "message.timed_out") timedOut.resolve();
       });
+      let at = 1000;
+      const requests = createSessionRequests({ observations: fixture.events, clock: () => at });
       try {
+        SessionHandleStore.materialize({
+          id: "request-session",
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 1,
+          actionId: "configure-request",
+          at,
+        });
         expect(
           fixture.storage.actions.append(
             {
               id: "request-action",
-              sessionId: "monitor-session",
-              parentId: null,
+              sessionId: "request-session",
+              parentId: "configure-request",
               kind: "message",
-              intent: { encodingVersion: 1, value: { messageId: "request" } },
-              effect: { encodingVersion: 1, value: { state: "open" } },
+              intent: {
+                encodingVersion: 1,
+                value: {
+                  phase: "intent",
+                  value: { messageId: "request" },
+                  effectHash: canonicalDigest({}),
+                },
+              },
+              effect: { encodingVersion: 1, value: { phase: "pending" } },
               irreversible: true,
-              ts: 1000,
+              ts: at,
             },
-            0,
+            SessionHandleStore.row("request-session").revision,
           ),
         ).toBeDefined();
-        fixture.storage.alarms.arm({
-          id: "request-action:deadline",
-          sessionId: "monitor-session",
+        const request = requests.open({
+          requestId: "request-action",
+          sessionId: "request-session",
+          expectedResponders: ["peer"],
+          correlation: {},
+          allowedActions: ["report_result"],
+          resolution: "first",
+          threshold: 1,
+          deadline: 1050,
+          at,
+        });
+        expect(fixture.storage.alarms.get("request-action:deadline")).toMatchObject({
           kind: "at",
           fireAt: 1050,
-          spec: {
-            encodingVersion: 1,
-            value: Alarm.MessageDeadline.parse({
-              kind: "message_deadline",
-              messageId: "request",
-              sourceActionId: "request-action",
-              createdAt: 1000,
-              generation: { toolsGeneration: 0, systemHash: "", policyGeneration: 1 },
-            }),
-          },
+          status: "armed",
         });
         fixture.worker.start();
-        fixture.advance(1049);
+        at = 1049;
+        fixture.advance(at);
         fixture.worker.tick();
-        expect(fixture.rows()).toEqual([]);
+        expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
         if (replyFirst) {
-          fixture.storage.inbox.commit({
-            id: "reply",
-            sessionId: "monitor-session",
-            kind: "prompt",
-            content: "answer",
-            parentActionId: null,
-            createdAt: 1049,
-            origin: {
-              encodingVersion: 1,
-              value: {
-                kind: "external_reply",
-                messageId: "request",
-                sourceActionId: "request-action",
-                replyTo: "request",
-              },
-            },
-          });
+          expect(
+            await requests.answer({
+              inputId: "reply",
+              requestId: request.requestId,
+              sessionId: request.sessionId,
+              receivedAt: at,
+              principal: { kind: "actor", principalId: "peer", evidenceId: "reply" },
+              bindingDigest: request.bindingDigest,
+              inputHash: request.inputHash,
+              effectHash: request.effectHash,
+              generation: request.generation,
+              toolsHash: request.toolsHash,
+              domainRevisions: {},
+              decision: "reply",
+              allowedAction: "report_result",
+              content: "answer",
+            }),
+          ).toBe("resolved");
         }
-        fixture.advance(1050);
+        at = 1050;
+        fixture.advance(at);
         fixture.worker.tick();
         fixture.worker.tick();
+        expect(SessionHandleStore.requestById(request.requestId)?.state).toBe(
+          replyFirst ? "resolved" : "expired",
+        );
         expect(
           fixture.storage.actions
-            .tree("monitor-session")
-            .filter((action) => action.id === "request-action:answer")
-            .map((action) => action.effect.value),
-        ).toEqual([{ state: replyFirst ? "answered" : "timed_out" }]);
-        expect(fixture.rows()).toHaveLength(1);
-        expect(fixture.rows()[0]?.id).toBe(replyFirst ? "reply" : "request-action:timeout");
-        if (!replyFirst) {
-          expect(fixture.rows()[0]?.content).toBe(
-            JSON.stringify({ type: "timeout", messageId: "request", replyTo: "request" }),
-          );
-          expect(fixture.wakes).toEqual(["monitor-session"]);
-        } else expect(fixture.wakes).toEqual([]);
-        await fixture.close();
+            .tree("request-session")
+            .filter((action) => action.id === "request-action:resolution"),
+        ).toHaveLength(1);
+        expect(SessionHandleStore.inboxRows("request-session")).toHaveLength(replyFirst ? 1 : 0);
+        expect(fixture.storage.alarms.due(at)).toEqual([]);
+        if (!replyFirst) await timedOut.promise;
         expect(observations.filter((event) => event.kind === "message.timed_out")).toHaveLength(
           replyFirst ? 0 : 1,
         );
         expect(fixture.errors).toEqual([]);
       } finally {
+        signal.removeEventListener("abort", abort);
         unsubscribe();
         await fixture.close();
       }

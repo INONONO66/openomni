@@ -1,4 +1,4 @@
-import type { Actor, Ingress, Wait } from "@openomni/protocol";
+import type { Actor, Ingress } from "@openomni/protocol";
 import { effectiveTrustTier } from "./effective-tier.js";
 
 /**
@@ -18,14 +18,14 @@ export type RouteInbound = {
   readonly requestedAction?: string;
 };
 
-type RouteWait =
+type RouteRequest =
   | Readonly<{ kind: "none" }>
   | Readonly<{
       kind: "match";
-      backing: "wait";
+      backing: "request";
       key: string;
       recordId: string;
-      owner: Wait.OwnerRef;
+      sessionId: string;
       allowed: readonly string[];
     }>
   | Readonly<{
@@ -63,7 +63,7 @@ export type RouteState = {
     readonly kind: Actor.BlacklistKind;
     readonly reason?: string;
   };
-  readonly wait: RouteWait;
+  readonly request: RouteRequest;
   readonly channel?: RouteChannel;
   readonly actor?: RouteActor;
   readonly surfaceSessionId?: string;
@@ -77,7 +77,7 @@ type RouteCommon = Readonly<{
   mode: "direct";
 }>;
 
-type WaitResolution =
+type RequestResolution =
   | Readonly<{ decision: Ingress.RoutingDecisionPayload }>
   | Readonly<{ facts: readonly string[] }>;
 
@@ -108,35 +108,39 @@ function resolveBlacklist(
   };
 }
 
-function resolveWait(inbound: RouteInbound, wait: RouteWait, common: RouteCommon): WaitResolution {
-  if (wait.kind === "none") return { facts: ["wait:none"] };
-  if (wait.kind === "ambiguous") {
+function resolveRequest(
+  inbound: RouteInbound,
+  request: RouteRequest,
+  common: RouteCommon,
+): RequestResolution {
+  if (request.kind === "none") return { facts: ["request:none"] };
+  if (request.kind === "ambiguous") {
     return {
       decision: {
         ...common,
-        stage: "wait_correlation",
+        stage: "request_correlation",
         outcome: "ambiguous",
-        candidateInteractionIds: [...wait.candidateInteractionIds],
+        candidateInteractionIds: [...request.candidateInteractionIds],
         reason: "Multiple pending waits matched the inbound message",
-        factsUsed: wait.candidateInteractionIds.map((id) => `wait.candidate:${id}`),
+        factsUsed: request.candidateInteractionIds.map((id) => `request.candidate:${id}`),
       },
     };
   }
 
   const action = inbound.requestedAction;
-  if (action === undefined || !wait.allowed.includes(action)) {
-    // Fail closed: a matched durable wait never falls through to
+  if (action === undefined || !request.allowed.includes(action)) {
+    // Fail closed: a matched durable request never falls through to
     // surface routing — a disallowed action is a typed block.
     return {
       decision: {
         ...common,
-        stage: "wait_correlation",
+        stage: "request_correlation",
         outcome: "block",
-        reason: "Matched wait does not allow the requested action",
+        reason: "Matched request does not allow the requested action",
         factsUsed: [
-          `wait:${wait.key}`,
-          `wait.action:${action ?? "missing"}`,
-          "wait.action:disallowed",
+          `request:${request.key}`,
+          `request.action:${action ?? "missing"}`,
+          "request.action:disallowed",
         ],
       },
     };
@@ -144,15 +148,15 @@ function resolveWait(inbound: RouteInbound, wait: RouteWait, common: RouteCommon
   return {
     decision: {
       ...common,
-      stage: "wait_correlation",
+      stage: "request_correlation",
       outcome: "route",
       target: "resident",
-      sessionId: wait.owner.id,
-      reason: "Inbound message matched an open wait",
+      sessionId: request.sessionId,
+      reason: "Inbound message matched an open request",
       factsUsed: [
-        `wait:${wait.key}`,
-        `wait.action:${action}`,
-        `wait.owner:session:${wait.owner.id}`,
+        `request:${request.key}`,
+        `request.action:${action}`,
+        `request.owner:session:${request.sessionId}`,
       ],
     },
   };
@@ -244,7 +248,7 @@ export function resolveRoute(
   const common = routeCommon(inbound);
   if (state.blacklist !== undefined) return resolveBlacklist(common, state.blacklist);
 
-  const waitResolution = resolveWait(inbound, state.wait, common);
+  const waitResolution = resolveRequest(inbound, state.request, common);
   if ("decision" in waitResolution) return waitResolution.decision;
 
   return resolveChannelRoute(inbound, state, common, waitResolution.facts);

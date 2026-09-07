@@ -6,6 +6,7 @@ import { seedKernelPolicyRows } from "./policy-seed";
 import {
   type ChatAgentConfig,
   closeSessions,
+  createSessionRequests,
   type SessionRuntime,
   getSessionHandle,
   ExecutionApprovalError,
@@ -15,13 +16,11 @@ import {
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
-  WaitService,
   WebSocketHandler,
 } from "@openomni/channels";
 import { homedir } from "node:os";
 import {
   ActorRegistry,
-  ApprovalStore,
   ChannelInstanceStore,
   initialize,
   PersonStore,
@@ -48,21 +47,17 @@ import { createLlmToolPort } from "./tools/execution/llm";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
-import { commitTerminalMessage } from "./composition/terminal-message";
+import { dispatchOutboundMessage } from "./composition/terminal-message";
 import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
 import { createComposer, rollbackToCause } from "./composition/composer";
 import { createResident } from "./resident";
 import { composeCodemode } from "./composition/codemode";
+import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
 
 interface StartOptions {
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    | "clock"
-    | "approvalTimeoutMs"
-    | "scheduleApprovalTimeout"
-    | "waitRetry"
-    | "openIntent"
-    | "onHibernate"
+    "clock" | "approvalTimeoutMs" | "waitRetry" | "openIntent" | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
@@ -127,6 +122,18 @@ function createHttpRoutes(
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
+  const authenticateOwner = (credential: string, requestId: string) => {
+    const expected = Buffer.from(config.wsToken ?? "");
+    const presented = Buffer.from(credential);
+    if (
+      expected.length === 0 ||
+      presented.length !== expected.length ||
+      !timingSafeEqual(presented, expected)
+    ) {
+      throw new ExecutionApprovalError("unauthenticated");
+    }
+    return { kind: "owner" as const, principalId: "owner", evidenceId: `ws-owner:${requestId}` };
+  };
   // One resolution of the operator's endpoint and headers, shared by every
   // model caller this composition builds.
   const transport = modelTransport(config.model);
@@ -144,32 +151,34 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
-      commitTerminal: commitTerminalMessage(
+      dispatchOutbound: dispatchOutboundMessage(
         (...args) => messages.ingest(...args),
         options.sessionRuntime?.clock ?? Date.now,
       ),
       observations: Bus,
+      requestDomainRevisions,
+      onRequestReady: (id) => sessionRuntime.onInboxCommitted?.([id]),
       onInboxCommitted: (ids) => {
         for (const id of ids)
           doorbell.runInAsyncScope(() => {
             void wake(id);
           });
       },
-      async authorizeApproval(credential, request) {
-        const expected = Buffer.from(config.wsToken ?? "");
-        const presented = Buffer.from(credential);
-        if (
-          expected.length === 0 ||
-          presented.length !== expected.length ||
-          !timingSafeEqual(presented, expected)
-        ) {
-          throw new ExecutionApprovalError("unauthenticated");
-        }
-        return { kind: "owner", principalId: "owner", evidenceId: `ws-owner:${request.id}` };
-      },
+      authorizeApproval: async (credential, request) => authenticateOwner(credential, request.id),
     };
+    const requests = createSessionRequests(sessionRuntime);
+    let recovery: Promise<void> = Promise.resolve();
     await composer.mount("session.handles", (ctx) => {
-      ctx.effect(() => closeSessions(sessionRuntime));
+      ctx.effect(async () => {
+        const outcomes = await Promise.allSettled([closeSessions(sessionRuntime), recovery]);
+        const failures = outcomes.flatMap((outcome) =>
+          outcome.status === "rejected"
+            ? [outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason))]
+            : [],
+        );
+        if (failures.length > 0)
+          throw new AggregateError(failures, "session shutdown and recovery failed");
+      });
     });
     const actors: readonly RegisteredActor[] = config.actors ?? [];
     registerActors(actors);
@@ -206,19 +215,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
         status: () => liveSupervisor().status(),
         source: () => liveSupervisor().source(),
       },
-      approvals: {
-        request: ApprovalStore.request,
-        get: ApprovalStore.get,
-        decision: ApprovalStore.decision,
-      },
       materialize: materializePersons,
       removeIdentity: ActorRegistry.removeIdentity,
     };
     const approvalPort = {
-      request: ApprovalStore.request,
-      get: ApprovalStore.get,
-      decide: ApprovalStore.decide,
-      decision: ApprovalStore.decision,
       getIdentity: ActorRegistry.getIdentity,
       getEndpoint: ActorRegistry.getEndpoint,
       promote: ActorRegistry.promote,
@@ -307,6 +307,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     channelSupervisor = supervisor;
     const processSessions = createProcessSessionTransport({
+      answer: (answer) =>
+        requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
         dbPath: config.dbPath,
@@ -337,7 +339,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       {
         inbox: { commit: commitMessageInbox },
         prepare: prepareMessage(resident.materialize),
-        armDeadline: SessionHandleStore.armMessageDeadline,
+        requests,
+        authenticateAnswer: async (_sender, credential, requestId) =>
+          authenticateOwner(credential, requestId),
         committed: (row) => {
           doorbell.runInAsyncScope(() => {
             void wake(row.sessionId);
@@ -375,17 +379,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
             ),
       },
     );
-    WaitService.sweepExpired(newTraceId(), Bus.publish);
-    for (const id of SessionHandleStore.expireMessageDeadlines(
-      (sessionRuntime.clock ?? Date.now)(),
-    ))
-      await wake(id);
-    await sweepSessions(resident.runnerFor, sessionRuntime);
-
     const alarmStore = Storage.get().alarms;
     if (alarmStore === undefined) throw new Error("alarm storage unavailable at boot");
     const alarms = createAlarmWorker({
       alarms: alarmStore,
+      requestTimeout: requests.timeout,
       observations: Bus,
       clock: sessionRuntime.clock,
       wake: async (id) => {
@@ -403,11 +401,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await supervisor.reconcile();
     });
 
-    wsHandler = new WebSocketHandler(
-      routingHandler,
-      Bus.publish,
-      config.wsToken === undefined ? {} : { token: config.wsToken },
-    );
+    wsHandler = new WebSocketHandler(routingHandler, Bus.publish, {
+      ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
+      onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
+    });
 
     const server = Bun.serve({
       hostname: config.host,
@@ -427,6 +424,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
         void boundServer.stop();
       });
     });
+    const awaitingOwner = requests
+      .list()
+      .some((request) => request.mode === "approval" && request.state === "open");
+    recovery = sweepSessions(resident.runnerFor, sessionRuntime);
+    if (awaitingOwner) {
+      void recovery.catch((error: Error) => console.error("session recovery failed", error));
+    } else await recovery;
     return {
       port: boundPort,
       gateway,

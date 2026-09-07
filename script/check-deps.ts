@@ -244,7 +244,7 @@ const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledg
 /**
  * The perimeter store surfaces the gateway router may name from
  * @openomni/ledger (docs/gateway-design.md §4/§6): actors, blacklist,
- * channel grants, waits, the surface↔session map, and the SCOPED append
+ * channel grants, the surface↔session map, and the SCOPED append
  * port (append + headFact — never the master
  * `Storage` entry, whose adapter reaches every brain surface). Brain
  * surfaces (Session, transcript, artifact, worker-run/grant,
@@ -257,11 +257,10 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "BlacklistStore",
   "ChannelGrantStore",
   "ReplyGrantStore",
-  "WaitStore",
   "SurfaceKey",
   "LedgerAppend",
   // #219 active-egress debit ledger — a perimeter surface written ONLY by the
-  // router's send kernel (same isolation as the wait store; brain never reaches it).
+  // router's send kernel (brain never reaches the perimeter debit store).
   "EgressBudgetStore",
 ]);
 
@@ -273,7 +272,7 @@ function isChannelsJudgmentPath(filePath: string): boolean {
  * S8 intra-package banding for the channels gateway (docs/gateway-design.md
  * §7 S8; stage-2 shape, #707). The package-level whitelist admits
  * @openomni/policy and @openomni/ledger, but only the perimeter JUDGMENT
- * band — `src/router/` (routing, wait service, send kernel) and `src/authn/`
+ * band — `src/router/` (routing, physical correlation, send kernel) and `src/authn/`
  * (channel authn) — may use them. The driver sub-band (discord/, github/,
  * telegram/, support/, websocket.ts, channel-authn.ts) stays on the
  * dumb-driver contract {protocol, ipc}: adding a platform = one driver file
@@ -658,7 +657,7 @@ function selfTest(): void {
       "S8: router-internal relative imports stay legal",
       !isChannelsDriverRouterEdge(
         "packages/channels/src/router/routing-execution.ts",
-        "./wait/index.js",
+        "./request/correlation.js",
       ),
     ],
     [
@@ -668,8 +667,8 @@ function selfTest(): void {
     [
       "S8: the router may name a perimeter ledger surface",
       channelsRouterLedgerViolations(
-        "packages/channels/src/router/wait/lifecycle.ts",
-        'import { WaitStore } from "@openomni/ledger";',
+        "packages/channels/src/router/actor-resolver.ts",
+        'import { ActorRegistry } from "@openomni/ledger";',
       ).length === 0,
     ],
     [
@@ -746,8 +745,15 @@ function selfTest(): void {
       "S8: a perimeter-surface re-export stays legal",
       channelsRouterLedgerViolations(
         "packages/channels/src/router/index.ts",
-        'export { WaitStore } from "@openomni/ledger";',
+        'export { ActorRegistry } from "@openomni/ledger";',
       ).length === 0,
+    ],
+    [
+      "S8: retired independent authority cannot regain a perimeter allowance",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/index.ts",
+        `import { ${["Wait", "Store"].join("")} } from "@openomni/ledger";`,
+      ).length === 1,
     ],
     [
       "S8: a wholesale ledger re-export is refused",

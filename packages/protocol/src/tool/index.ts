@@ -12,6 +12,7 @@ export interface ToolExecutionContext {
   readonly turnId: string;
   readonly callId: string;
   readonly signal: AbortSignal;
+  readonly domainRevisions?: Readonly<Record<string, number>>;
 }
 
 /** Protocol shape only; definition validation and dispatch live in agent. */

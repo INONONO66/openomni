@@ -34,7 +34,7 @@ const decision = {
 } as const;
 
 describe("Gateway.Deliver", () => {
-  test("parses a minimal anonymous delivery (no actorId, no waitContext)", () => {
+  test("parses a minimal anonymous delivery (no actorId, no requestContext)", () => {
     const parsed = Gateway.Deliver.parse({
       sessionId: "s-1",
       actorContext,
@@ -42,18 +42,18 @@ describe("Gateway.Deliver", () => {
       decision,
     });
     expect(parsed.actorContext?.actorId).toBeUndefined();
-    expect(parsed.waitContext).toBeUndefined();
+    expect(parsed.requestContext).toBeUndefined();
   });
 
-  test("parses a wait resumption with waitContext", () => {
+  test("parses a request resumption with requestContext", () => {
     const parsed = Gateway.Deliver.parse({
       sessionId: "s-1",
       actorContext: { ...actorContext, actorId: "a-7", trustTier: "collaborator" },
-      waitContext: { waitId: "w-1", allowedAction: "report_result" },
+      requestContext: { requestId: "w-1", allowedAction: "report_result" },
       event,
       decision,
     });
-    expect(parsed.waitContext?.waitId).toBe("w-1");
+    expect(parsed.requestContext?.requestId).toBe("w-1");
   });
 
   test("rejects unknown fields (strict at every level)", () => {
@@ -87,12 +87,12 @@ describe("Gateway.Deliver", () => {
     ).toThrow(ZodError);
   });
 
-  test("nested strictness: waitContext rejects unknown fields", () => {
+  test("nested strictness: requestContext rejects unknown fields", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
         actorContext,
-        waitContext: { waitId: "w-1", allowedAction: "report_result", sessionPeek: true },
+        requestContext: { requestId: "w-1", allowedAction: "report_result", sessionPeek: true },
         event,
         decision,
       }),
@@ -155,43 +155,43 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
     at: 1_000,
   };
 
-  test("awaited requires a waitSpec", () => {
+  test("awaited requires a requestSpec", () => {
     expect(() => Gateway.SendInput.parse({ ...base, operation: "awaited" })).toThrow(ZodError);
   });
 
-  test("fire_and_forget forbids a waitSpec", () => {
+  test("fire_and_forget forbids a requestSpec", () => {
     expect(() =>
       Gateway.SendInput.parse({
         ...base,
         operation: "fire_and_forget",
-        waitSpec: {
-          waitId: "w-1",
-          ownerRef: { kind: "session", id: "s-1" },
+        requestSpec: {
+          requestId: "w-1",
+          sessionId: "s-1",
           allowedActions: ["report_result"],
           expectedResponders: ["seller-1"],
-          resolutionPolicy: "first_reply",
-          expiresAt: 2_000,
-          followUpWindow: 0,
+          resolution: "first",
+          deadline: 2_000,
+          threshold: 1,
         },
       }),
     ).toThrow(ZodError);
   });
 
-  test("awaited with a coherent waitSpec parses", () => {
+  test("awaited with a coherent requestSpec parses", () => {
     const parsed = Gateway.SendInput.parse({
       ...base,
       operation: "awaited",
-      waitSpec: {
-        waitId: "w-1",
-        ownerRef: { kind: "session", id: "s-1" },
+      requestSpec: {
+        requestId: "w-1",
+        sessionId: "s-1",
         allowedActions: ["report_result"],
         expectedResponders: ["seller-1"],
-        resolutionPolicy: "first_reply",
-        expiresAt: 2_000,
-        followUpWindow: 0,
+        resolution: "first",
+        deadline: 2_000,
+        threshold: 1,
       },
     });
-    expect(parsed.waitSpec?.waitId).toBe("w-1");
+    expect(parsed.requestSpec?.requestId).toBe("w-1");
   });
 
   test("class is additive-optional: absent parses (defaults from operation downstream)", () => {
@@ -209,14 +209,14 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
         ...base,
         operation: "awaited",
         class: "converse",
-        waitSpec: {
-          waitId: "w-1",
-          ownerRef: { kind: "session", id: "s-1" },
+        requestSpec: {
+          requestId: "w-1",
+          sessionId: "s-1",
           allowedActions: ["report_result"],
           expectedResponders: ["seller-1"],
-          resolutionPolicy: "first_reply",
-          expiresAt: 2_000,
-          followUpWindow: 0,
+          resolution: "first",
+          deadline: 2_000,
+          threshold: 1,
         },
       }).class,
     ).toBe("converse");
@@ -309,19 +309,18 @@ describe("Gateway.SenderTargetGrant (instances)", () => {
   });
 });
 
-describe("Gateway.AwaitSpec — quorum coherence is deliberately NOT refined here", () => {
-  test("quorum without resolutionPolicy 'quorum' still parses at spec level (#215 rule 4: Wait.Record.parse at WaitStore.create is the one enforcement layer)", () => {
-    const spec = Gateway.AwaitSpec.parse({
-      waitId: "w-1",
-      ownerRef: { kind: "session", id: "s-1" },
+describe("Gateway.RequestSpec — quorum coherence is deliberately NOT refined here", () => {
+  test("quorum without resolution 'quorum' still parses at spec level (#215 rule 4: Request.Record.parse at SessionHandleStore.create is the one enforcement layer)", () => {
+    const spec = Gateway.RequestSpec.parse({
+      requestId: "w-1",
+      sessionId: "s-1",
       allowedActions: ["report_result"],
       expectedResponders: ["a", "b"],
-      resolutionPolicy: "first_reply",
-      quorum: { expected: 2, threshold: 1 },
-      expiresAt: 2_000,
-      followUpWindow: 0,
+      resolution: "first",
+      threshold: 1,
+      deadline: 2_000,
     });
-    expect(spec.quorum?.expected).toBe(2);
+    expect(spec.threshold).toBe(1);
   });
 });
 
@@ -343,25 +342,5 @@ describe("Gateway.ReplyGrantRule", () => {
   test("rejects a zero or negative live-instance cap (farming bound)", () => {
     expect(() => Gateway.ReplyGrantRule.parse({ ...rule, maxLiveInstances: 0 })).toThrow(ZodError);
     expect(() => Gateway.ReplyGrantRule.parse({ ...rule, instanceTtlMs: -1 })).toThrow(ZodError);
-  });
-});
-
-describe("Gateway.WaitControl", () => {
-  test("parses cancel and expire_now, rejects other verbs", () => {
-    expect(
-      Gateway.WaitControl.parse({ waitId: "w-1", action: "cancel", reason: "engagement aborted" })
-        .action,
-    ).toBe("cancel");
-    expect(
-      Gateway.WaitControl.parse({ waitId: "w-1", action: "expire_now", reason: "term crossed" })
-        .action,
-    ).toBe("expire_now");
-    expect(() =>
-      Gateway.WaitControl.parse({ waitId: "w-1", action: "extend", reason: "nope" }),
-    ).toThrow(ZodError);
-  });
-
-  test("requires a reason (auditability)", () => {
-    expect(() => Gateway.WaitControl.parse({ waitId: "w-1", action: "cancel" })).toThrow(ZodError);
   });
 });

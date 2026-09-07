@@ -1,3 +1,4 @@
+import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
 import { EgressBudgetStore } from "@openomni/ledger";
@@ -170,6 +171,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   function messaging(withGate = true) {
     return createExistingAgentMessaging({
+      requests: seededRequests(),
       deliver: (message) => {
         deliveries.push(message.messageId);
         return { value: "accepted" as const };

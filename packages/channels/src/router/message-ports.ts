@@ -1,5 +1,12 @@
 import type { PolicyEvaluationInput } from "@openomni/policy";
-import type { BusEvent, Gateway, Inbox, LedgerAction, PlainValue } from "@openomni/protocol";
+import type {
+  BusEvent,
+  Gateway,
+  Inbox,
+  LedgerAction,
+  PlainValue,
+  SessionTransition,
+} from "@openomni/protocol";
 import type { DeliveryReceipt } from "./messaging/send";
 
 export type ChannelDeliveryRoute = (
@@ -26,7 +33,7 @@ interface PreparedMessage {
   readonly target: string;
   readonly messageId?: string;
   readonly limits?: { readonly fanout: number; readonly depth: number };
-  readonly origin?: Inbox.ReplyOrigin;
+  readonly origin?: Inbox.ReplyOrigin | SessionTransition.OutboundMessage;
   readonly message:
     | Extract<NonNullable<PolicyEvaluationInput["message"]>, { sender: "session" }>
     | { readonly sender: "external"; readonly eventIdUnique: boolean };
@@ -35,6 +42,29 @@ interface PreparedMessage {
 }
 
 export interface GatewayRouterPorts {
+  /** Authenticate explicit Owner evidence; never infer it from driver trust fields. */
+  readonly authenticateAnswer?: (
+    sender: Gateway.IngestSender & { kind: "external" },
+    credential: string,
+    requestId: string,
+  ) => Promise<SessionTransition.Principal>;
+  readonly requests: {
+    list(): readonly SessionTransition.Request[];
+    open(input: {
+      requestId: string;
+      sessionId: string;
+      expectedResponders: readonly string[];
+      correlation: SessionTransition.Correlation;
+      allowedActions: readonly SessionTransition.AllowedAction[];
+      resolution: "first" | "quorum" | "all";
+      threshold: number;
+      deadline: number;
+      at: number;
+      admission?: Inbox.Commit;
+    }): SessionTransition.Request;
+    answer(input: SessionTransition.Answer): Promise<SessionTransition.Resolution>;
+    receipt(input: SessionTransition.DeliveryReceipt): Promise<SessionTransition.Request>;
+  };
   readonly sink: BusEvent.Sink["publish"];
   readonly observe?: (
     sender: Gateway.IngestSender,
@@ -54,14 +84,6 @@ export interface GatewayRouterPorts {
     body: (intent: LedgerAction.Receipt) => Promise<PlainValue>,
   ) => Promise<MessageExecutionResult>;
   readonly committed?: (row: Inbox.Row) => void;
-  readonly armDeadline?: (input: {
-    messageId: string;
-    sessionId: string;
-    sourceActionId: string;
-    fireAt: number;
-    createdAt: number;
-    replyTo?: string;
-  }) => void;
   readonly clock?: () => number;
   readonly messaging?: {
     readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
@@ -74,6 +96,6 @@ export interface GatewayRouterPorts {
 export interface GatewayRouter {
   ingest(
     sender: Gateway.IngestSender,
-    message: Gateway.SendMessage | Gateway.IngressFacts,
+    message: Gateway.SendMessage | Gateway.IngressFacts | Gateway.RequestAnswer,
   ): Promise<Gateway.IngestResult>;
 }

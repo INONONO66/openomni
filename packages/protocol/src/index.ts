@@ -19,8 +19,6 @@ export * from "./ingress/index.js";
 export * from "./policy/index.js";
 export * from "./ipc/index.js";
 export * from "./deadline/index.js";
-export * from "./wait/index.js";
-export * from "./approval/index.js";
 export * from "./provisioning/index.js";
 export * from "./machine/index.js";
 export * from "./transcript/index.js";

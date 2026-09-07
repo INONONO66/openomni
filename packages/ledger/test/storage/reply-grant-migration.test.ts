@@ -14,7 +14,7 @@ import { Migration } from "../../src/storage/migration-runner";
 
 const migrationDir = join(import.meta.dir, "../../migration");
 
-test("0035 upgrade and fresh 0037 schema share the measured fingerprint and reopen", () => {
+test("0035 upgrade and fresh archive-target schema share the measured fingerprint and reopen", () => {
   using fixture = createDispositionFixture(false);
   fixture.db.run("DELETE FROM bus_event");
   Migration.applyOrdered(fixture.db, migrationDir, [
@@ -23,39 +23,22 @@ test("0035 upgrade and fresh 0037 schema share the measured fingerprint and reop
   ]);
   const before = snapshotDatabase(fixture.db);
 
-  initializeSqliteDatabase(fixture.db);
+  initializeSqliteDatabase(fixture.db, undefined, "archive967");
 
   expect(canonicalDigest(sqliteSchema(fixture.db))).toBe(
-    "sha256:f948a47d029d098334c56501460bb69932f48a81a3c7287c24b498c641ecc58e",
+    "sha256:89e7677fe96971ec5ff5f8176504f42a478ae4fd8dfa84e4e18560077279e0ff",
   );
   expect(
     snapshotDatabase(fixture.db).tables.filter(
       ({ name }) => !["_migrations", "reply_grant"].includes(name),
     ),
-  ).toEqual(
-    before.tables
-      .filter(({ name }) => name !== "_migrations")
-      .map((table) =>
-        table.name === "alarm"
-          ? {
-              ...table,
-              rows: table.rows.map((row) => ({
-                ...row,
-                epoch: 1n,
-                fence: 0n,
-                last_batch: null,
-                notifications: 0n,
-              })),
-            }
-          : table,
-      ),
-  );
+  ).toEqual(before.tables.filter(({ name }) => name !== "_migrations"));
   expect(preflightSqliteDatabase(fixture.db)).toBe("applied");
   using reopened = new Database(fixture.path);
-  initializeSqliteDatabase(reopened);
+  initializeSqliteDatabase(reopened, undefined, "archive967");
   expect(sqliteSchema(reopened)).toEqual(sqliteSchema(fixture.db));
   using fresh = new Database(":memory:");
-  initializeSqliteDatabase(fresh);
+  initializeSqliteDatabase(fresh, undefined, "archive967");
   expect(sqliteSchema(fresh)).toEqual(sqliteSchema(reopened));
 });
 
@@ -63,7 +46,7 @@ test("the old archive allows only an empty pinned forward projection", () => {
   using fixture = createDispositionFixture(false);
   copyFileSync(fixture.path, fixture.archive);
   using archived = new Database(fixture.archive, { readonly: true, safeIntegers: true });
-  initializeSqliteDatabase(fixture.db, (db) => db.run("DELETE FROM bus_event"));
+  initializeSqliteDatabase(fixture.db, (db) => db.run("DELETE FROM bus_event"), "archive967");
   expect(() => assertArchiveEquality(fixture.db, archived, true)).not.toThrow();
 
   fixture.db.run("INSERT INTO reply_grant VALUES ('new', '{}', 'rule', 'actor', 'surface', 100)");
@@ -77,7 +60,7 @@ test("archive comparison refuses schema drift even on an empty added projection"
   using fixture = createDispositionFixture(false);
   copyFileSync(fixture.path, fixture.archive);
   using archived = new Database(fixture.archive, { readonly: true, safeIntegers: true });
-  initializeSqliteDatabase(fixture.db, (db) => db.run("DELETE FROM bus_event"));
+  initializeSqliteDatabase(fixture.db, (db) => db.run("DELETE FROM bus_event"), "archive967");
 
   fixture.db.run("DROP INDEX idx_reply_grant_expiry");
 
@@ -87,7 +70,7 @@ test("archive comparison refuses schema drift even on an empty added projection"
 
 test("an archive containing projection rows requires native equality of those rows", () => {
   using fixture = createDispositionFixture(false);
-  initializeSqliteDatabase(fixture.db, (db) => db.run("DELETE FROM bus_event"));
+  initializeSqliteDatabase(fixture.db, (db) => db.run("DELETE FROM bus_event"), "archive967");
   fixture.db.run("INSERT INTO reply_grant VALUES ('grant', '{}', 'rule', 'actor', 'surface', 100)");
   fixture.db.run("PRAGMA wal_checkpoint(TRUNCATE)");
   copyFileSync(fixture.path, fixture.archive);

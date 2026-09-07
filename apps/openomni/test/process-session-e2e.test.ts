@@ -4,7 +4,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { rmSync } from "node:fs";
 import { serveProcessSession } from "../src/process-entry";
 import { messageFixture } from "./helpers/message-fixture";
-import { Gateway } from "@openomni/protocol";
+import { Gateway, SessionTransition } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 const suite = residentSuite();
@@ -81,15 +81,19 @@ test("process-session entry preserves the commissioned deadline and reports the 
     Storage.initialize({ dbPath: fixture.dbPath });
     expect(requests).toBe(1);
     expect(notified).toContain("sender");
-    expect(SessionHandleStore.inboxRows("sender")).toHaveLength(1);
-    expect(SessionHandleStore.inboxRows("sender")[0]).toMatchObject({
+    const received = SessionHandleStore.inboxRows("sender").filter(
+      (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
+    );
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({
       content: "PROCESS_SENTINEL",
-      origin: { value: { replyTo: "process-original", terminalKind: "result" } },
+      origin: { value: { replyTo: "process-original", terminal: "completed" } },
     });
     expect(
       SessionHandleStore.tree(child.id).filter((action) => action.kind === "alarm.arm"),
     ).toEqual([]);
-    expect(SessionHandleStore.expireMessageDeadlines(deadline)).toEqual([]);
+    expect(SessionHandleStore.requestRows("sender")[0]?.state).toBe("resolved");
+    expect(Storage.get().alarms?.due(deadline)).toEqual([]);
   } finally {
     await provider.stop(true);
     Storage.reset();
@@ -100,6 +104,15 @@ test("process-session entry preserves the commissioned deadline and reports the 
 
 test("startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement", async () => {
   const parentReply = Promise.withResolvers<void>();
+  const timer = setTimeout(
+    () => parentReply.reject(new Error("process reply was not drained")),
+    5000,
+  );
+  const received = parentReply.promise.then(
+    () => ({ ok: true }),
+    (error: Error) => ({ ok: false, error }),
+  );
+  suite.defer(() => clearTimeout(timer));
   suite.defer(
     Bus.subscribe(Gateway.MessageObserved, (event) => {
       if (event.kind === "message.drained" && event.messageId.endsWith(":reply"))
@@ -162,20 +175,19 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
       render: "start",
     },
   );
-  await parentReply.promise;
+  expect(await received).toEqual({ ok: true });
   const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
   if (child?.parentId === undefined || child.parentId === null)
     throw new Error("missing process child");
   const replies = SessionHandleStore.inboxRows(child.parentId).filter((row) =>
     row.id.endsWith(":reply"),
   );
-  console.log("process evidence", JSON.stringify({ requests, child, replies }));
   expect(requests).toBe(1);
   expect(replies).toHaveLength(1);
   expect(replies[0]?.content).toBe("PROCESS_SENTINEL");
   expect(replies[0]?.origin.value).toMatchObject({
-    childSessionId: child.id,
+    sourceSessionId: child.id,
     replyTo: "process-binding",
-    terminalKind: "result",
+    terminal: "completed",
   });
 }, 15000);

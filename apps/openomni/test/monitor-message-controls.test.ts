@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
-import { Bus, ToolRefused } from "@openomni/agent";
+import { Bus, createSessionRequests, ToolRefused } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
@@ -53,6 +53,7 @@ for (const status of ["armed", "fired"] as const) {
         const makeWorker = () =>
           createAlarmWorker({
             alarms: alarmStore(),
+            requestTimeout: createSessionRequests({ observations: Bus, clock: () => at }).timeout,
             observations: Bus,
             clock: () => at,
             schedule: () => () => undefined,

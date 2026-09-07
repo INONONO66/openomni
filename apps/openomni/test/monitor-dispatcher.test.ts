@@ -3,6 +3,7 @@ import {
   closeSessions,
   createDispatcher,
   createObservationBus,
+  createSessionRequests,
   createSessionChatRunner,
   createTurnDispatcher,
   eraseTool,
@@ -188,6 +189,7 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
     const errors: Error[] = [];
     const worker = createAlarmWorker({
       alarms: storage.alarms,
+      requestTimeout: createSessionRequests(runtime).timeout,
       observations: events,
       schedule: () => () => undefined,
       failure: (error) => {

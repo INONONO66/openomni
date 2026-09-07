@@ -14,7 +14,13 @@ import {
 } from "../src/timeline/spacing";
 import { type Expansion, Timeline, expansionFor } from "../src/timeline/timeline";
 import { segmentTurns } from "../src/timeline/turns";
-import { COLLAPSE_AFTER, collapses, isLoud, summarize, summaryLabel } from "../src/timeline/work-group";
+import {
+  COLLAPSE_AFTER,
+  collapses,
+  isLoud,
+  summarize,
+  summaryLabel,
+} from "../src/timeline/work-group";
 import { pending, transcript } from "./fixture";
 
 /**

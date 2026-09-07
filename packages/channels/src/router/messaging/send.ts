@@ -2,13 +2,13 @@ import { z } from "zod";
 import {
   Gateway,
   MessagingEvents,
-  Wait as WaitProtocol,
+  canonicalKey,
   type Actor,
   type BusEvent,
-  type Wait,
+  type SessionTransition,
 } from "@openomni/protocol";
-import { ActorRegistry, EgressBudgetStore, LedgerAppend, WaitStore } from "@openomni/ledger";
-import { WaitService } from "../wait/index.js";
+import { ActorRegistry, EgressBudgetStore, LedgerAppend } from "@openomni/ledger";
+import type { GatewayRouterPorts } from "../message-ports.js";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,
@@ -37,7 +37,7 @@ function sendClassOf(input: SendInput): MessageClass {
  * Existing-agent messaging service (#215). One send reaches exactly one
  * already-allocated actor endpoint or fails closed with a typed denial —
  * grant first, then target resolution, then delivery. Awaited delivery
- * appends exactly one Wait via WaitService.open; fire-and-forget records the
+ * appends exactly one request via the injected kernel requests.open; fire-and-forget records the
  * audit event only. This module allocates nothing: it never touches
  * worker/session/executor/budget stores, and the driver's
  * `allocationDelta: 0` receipt plus the messaging test suite pin that.
@@ -51,13 +51,13 @@ export type OutboundMessage = Readonly<{
   operation: MessageOperation;
   body: string;
   target: DeliveryTarget;
-  waitId?: string;
+  requestId?: string;
 }>;
 
 /**
  * What the concrete delivery owner reports back: the platform message id,
  * when the channel API returns one. Returning nothing is valid (channels
- * without message ids) — the wait correlation then keeps the internal id.
+ * without message ids) — the request correlation then keeps the internal id.
  */
 export type DeliveryReceipt = Readonly<{
   externalMessageId?: string;
@@ -65,6 +65,7 @@ export type DeliveryReceipt = Readonly<{
 }>;
 
 export type MessagingPorts = Readonly<{
+  requests: GatewayRouterPorts["requests"];
   /**
    * Concrete delivery owner (server channel / API / connector). Required at
    * construction — there is no ownerless send path, so "no owner" cannot be
@@ -94,7 +95,7 @@ type SendAuthorityInput = Pick<SendInput, "senderId" | "target" | "operation" | 
 
 export type ExistingAgentMessaging = Readonly<{
   preflight: (input: SendAuthorityInput) => MessageDenialCode | undefined;
-  send: (input: SendInput, admitted?: () => void) => Promise<SendReceipt>;
+  send: (input: SendInput) => Promise<SendReceipt>;
 }>;
 
 type TargetDenialCode = Extract<
@@ -191,7 +192,7 @@ function sendSignature(input: SendInput, target: DeliveryTarget): string {
     class: input.class,
     body: input.body,
     target,
-    waitSpec: input.waitSpec,
+    requestSpec: input.requestSpec,
   });
 }
 
@@ -302,7 +303,6 @@ function admitSend(
   authorization: AuthorizedSend,
   ports: MessagingPorts,
   deny: DenySend,
-  admitted?: () => void,
 ): SendAdmission | SendReceipt {
   const { input, target, grant } = authorization;
   const sendClass = sendClassOf(input);
@@ -311,7 +311,7 @@ function admitSend(
     admission = existingAdmission(input, target);
   } catch (error) {
     if (error instanceof SendAdmissionConflict && input.operation === "awaited") {
-      return deny(input, "wait_duplicate", error.message);
+      return deny(input, "request_duplicate", error.message);
     }
     throw error;
   }
@@ -339,7 +339,6 @@ function admitSend(
     }
   }
   admission = recordAdmission(input, target, budgeted, sendClass);
-  admitted?.();
   repairBudgetDebit(input, admission);
   return admission;
 }
@@ -349,90 +348,69 @@ function repairBudgetDebit(input: SendInput, admission: SendAdmission): void {
   EgressBudgetStore.claim(debitRow(input, admission.sendClass), input.at, () => "allow");
 }
 
-type WaitOpening =
-  | { readonly ok: true; readonly wait: Wait.Record | undefined }
-  | { readonly ok: false; readonly receipt: SendReceipt };
-
-/** Opens or resumes the awaited-send record before delivery. */
-function openSendWait(input: SendInput, target: DeliveryTarget, deny: DenySend): WaitOpening {
-  if (input.operation !== "awaited") return { ok: true, wait: undefined };
-  // SendInput's refinement requires waitSpec for awaited sends.
-  const spec = input.waitSpec as NonNullable<SendInput["waitSpec"]>;
-  try {
-    const wait = WaitService.open(
-      {
-        id: spec.waitId,
-        ownerRef: spec.ownerRef,
-        originMessageId: input.messageId,
-        correlation: {
-          ...spec.correlation,
-          endpointId: target.endpointId,
-          replyToMessageId: input.messageId,
-        },
-        allowedActions: spec.allowedActions,
-        expectedResponders: spec.expectedResponders,
-        resolutionPolicy: spec.resolutionPolicy,
-        ...(spec.quorum === undefined ? {} : { quorum: spec.quorum }),
-        expiresAt: spec.expiresAt,
-        followUpWindow: spec.followUpWindow,
-        createdAt: input.at,
-        updatedAt: input.at,
-      },
-      input.traceId,
+/** Kernel records the original action suspension before the physical effect. */
+function openSendRequest(
+  input: SendInput,
+  target: DeliveryTarget,
+  ports: MessagingPorts,
+): SessionTransition.Request | undefined {
+  if (input.operation !== "awaited") return undefined;
+  const spec = input.requestSpec as NonNullable<SendInput["requestSpec"]>;
+  const recorded = ports.requests
+    .list()
+    .find(
+      (candidate) =>
+        candidate.requestId === spec.requestId && candidate.sessionId === spec.sessionId,
     );
-    return { ok: true, wait };
-  } catch (error) {
-    if (WaitProtocol.StoreError.isInstance(error)) {
-      if (error.data.code !== "duplicate") throw error;
-      const recorded = WaitStore.get(spec.waitId);
-      if (recorded?.originMessageId === input.messageId) return { ok: true, wait: recorded };
-      return {
-        ok: false,
-        receipt: deny(
-          input,
-          "wait_duplicate",
-          `a different Wait already exists for message ${input.messageId} or wait ${spec.waitId}`,
-        ),
-      };
-    }
-    throw error;
-  }
+  return ports.requests.open({
+    ...spec,
+    correlation: {
+      ...spec.correlation,
+      endpointId: target.endpointId,
+      replyToMessageId: input.messageId,
+    },
+    at: recorded?.createdAt ?? input.at,
+  });
 }
 
-/** Delivers under the stable idempotency key and records external correlation when present. */
+/** Every retry reaches the physical driver's stable idempotency key. IDs are not receipts. */
 async function deliverSend(
   input: SendInput,
   target: DeliveryTarget,
-  wait: Wait.Record | undefined,
+  request: SessionTransition.Request | undefined,
   ports: MessagingPorts,
 ): Promise<{
-  readonly wait: Wait.Record | undefined;
+  readonly request: SessionTransition.Request | undefined;
   readonly value: "accepted" | "rejected" | "unknown";
 }> {
-  const recordedExternalId =
-    wait !== undefined && wait.correlation.replyToMessageId !== input.messageId
-      ? wait.correlation.replyToMessageId
-      : undefined;
-  const delivery =
-    recordedExternalId === undefined
-      ? await ports.deliver({
-          messageId: input.messageId,
-          idempotencyKey: input.messageId,
-          senderId: input.senderId,
-          operation: input.operation,
-          body: input.body,
-          target,
-          ...(wait === undefined ? {} : { waitId: wait.id }),
-        })
-      : { externalMessageId: recordedExternalId, value: "accepted" as const };
-  const value = delivery.value;
-  if (wait === undefined || delivery.externalMessageId === undefined) return { wait, value };
-  const receipt = WaitService.recordDeliveryReceipt(
-    wait.id,
-    { externalMessageId: delivery.externalMessageId, at: input.at },
-    input.traceId,
-  );
-  return { wait: receipt.kind === "delivery_recorded" ? receipt.record : wait, value };
+  const delivery = await ports.deliver({
+    messageId: input.messageId,
+    idempotencyKey: input.messageId,
+    senderId: input.senderId,
+    operation: input.operation,
+    body: input.body,
+    target,
+    ...(request === undefined ? {} : { requestId: request.requestId }),
+  });
+  if (request === undefined) return { request, value: delivery.value };
+  const recorded = await ports.requests.receipt({
+    inputId: canonicalKey([
+      input.messageId,
+      "delivery",
+      delivery.value,
+      delivery.externalMessageId ?? null,
+      input.at,
+    ]),
+    requestId: request.requestId,
+    sessionId: request.sessionId,
+    sourceActionId: request.requestId,
+    ...(delivery.externalMessageId === undefined
+      ? {}
+      : { externalMessageId: delivery.externalMessageId }),
+    value: delivery.value,
+    at: input.at,
+  });
+  return { request: recorded, value: delivery.value };
 }
 
 function recordSent(
@@ -441,7 +419,7 @@ function recordSent(
   ports: MessagingPorts,
 ): SendReceipt {
   const { input, target, grant } = authorization;
-  const { wait, value: delivery } = delivered;
+  const { request, value: delivery } = delivered;
   ports.publish(MessagingEvents.Sent, {
     messageId: input.messageId,
     traceId: input.traceId,
@@ -450,10 +428,10 @@ function recordSent(
     operation: input.operation,
     grantId: grant.id,
     endpointId: target.endpointId,
-    ...(wait === undefined ? {} : { waitId: wait.id }),
+    ...(request === undefined ? {} : { requestId: request.requestId }),
     time: input.at,
   });
-  if (wait !== undefined) {
+  if (request !== undefined) {
     return {
       kind: "sent",
       operation: "awaited",
@@ -462,7 +440,7 @@ function recordSent(
       senderId: input.senderId,
       grantId: grant.id,
       target,
-      wait,
+      request,
       at: input.at,
     };
   }
@@ -499,22 +477,23 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     };
   }
 
-  async function send(rawInput: SendInput, admitted?: () => void): Promise<SendReceipt> {
+  async function send(rawInput: SendInput): Promise<SendReceipt> {
     const input = SendInput.parse(rawInput);
     const checked = authorizeSend(input, ports);
     if (!checked.ok) return deny(input, checked.code, checked.reason);
     const authorization = { input, target: checked.target, grant: checked.grant };
     const { target } = authorization;
 
-    // Admission, deadline alarm and correlation commit before external delivery.
-    const waitOpening = LedgerAppend.transaction(() => {
-      const admission = admitSend(authorization, ports, deny, admitted);
-      if ("kind" in admission) return { ok: false as const, receipt: admission };
-      return openSendWait(input, target, deny);
+    // The synchronous kernel port joins request/alarm state to the perimeter
+    // admission and debit transaction; no promise may escape this write unit.
+    const opened = LedgerAppend.transaction(() => {
+      const admission = admitSend(authorization, ports, deny);
+      if ("kind" in admission) return { denied: admission };
+      return { request: openSendRequest(input, target, ports) };
     });
-    if (!waitOpening.ok) return waitOpening.receipt;
-    const wait = await deliverSend(input, target, waitOpening.wait, ports);
-    return recordSent(authorization, wait, ports);
+    if (opened.denied !== undefined) return opened.denied;
+    const request = await deliverSend(input, target, opened.request, ports);
+    return recordSent(authorization, request, ports);
   }
 
   return {
