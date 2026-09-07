@@ -26,7 +26,14 @@ const tree = (
   options: { pendingChanges?: number; collapsed?: ReadonlySet<string | null> } = {},
 ) =>
   renderToStaticMarkup(
-    <Sidebar onToggle={() => undefined} onWidthCommit={() => undefined} open width={240}>
+    <Sidebar
+      floating={false}
+      onFloatingChange={() => undefined}
+      onToggle={() => undefined}
+      onWidthCommit={() => undefined}
+      open
+      width={240}
+    >
       <SessionTree
         collapsedProjectIds={options.collapsed ?? new Set()}
         onNavigate={() => undefined}

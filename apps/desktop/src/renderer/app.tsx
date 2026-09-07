@@ -9,6 +9,7 @@ import { uiMessagesToTranscript } from "./chat/adapter";
 import type { OpenOmniUIMessage } from "./chat/message";
 import { selectChatTransport } from "./chat/select-transport";
 import { SessionTree } from "./shell/session-tree";
+import { shellShortcut } from "./shell/shortcuts";
 import { useGatewayEndpoint } from "./state/queries";
 import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
@@ -25,6 +26,7 @@ import {
   type Session,
   type SessionId,
   setDraft,
+  setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
   toggleProject,
@@ -59,6 +61,7 @@ export function App({ platform, storage }: AppEnvironment) {
   const route = useStore(consoleStore, (state) => state.route);
   const collapsedProjectIds = useStore(consoleStore, (state) => state.collapsedProjectIds);
   const sidebarOpen = useStore(consoleStore, (state) => state.sidebarOpen);
+  const sidebarFloating = useStore(consoleStore, (state) => state.sidebarFloating);
   const sidebarWidth = useStore(consoleStore, (state) => state.sidebarWidth);
   const history = useStore(consoleStore, (state) => state.history);
   const endpoint = useGatewayEndpoint();
@@ -78,14 +81,15 @@ export function App({ platform, storage }: AppEnvironment) {
     return subscription.unsubscribe;
   }, [storage]);
 
-  // ⌘[ / ⌘] are the renderer's: one owner for the shortcut, documented in
-  // docs/desktop-shell.md, and no IPC round trip for a cursor move.
+  // The frame's keys are the renderer's: one owner, one table (shell/shortcuts.ts),
+  // documented in docs/desktop-shell.md.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key === "[") back();
-      else if (event.key === "]") forward();
-      else return;
+      const action = shellShortcut(event, isEditing(event.target));
+      if (action === null) return;
+      if (action === "back") back();
+      else if (action === "forward") forward();
+      else toggleSidebar();
       event.preventDefault();
     };
     document.addEventListener("keydown", onKeyDown);
@@ -138,8 +142,10 @@ export function App({ platform, storage }: AppEnvironment) {
 
   const shell: ConsoleShell = {
     sidebarOpen,
+    sidebarFloating,
     sidebarWidth,
     onToggleSidebar: toggleSidebar,
+    onSidebarFloatingChange: setSidebarFloating,
     onSidebarWidthCommit: setSidebarWidth,
   };
   const strip: ConsoleStrip = {
@@ -210,6 +216,17 @@ export interface AppEnvironment {
   readonly platform: WindowPlatform;
   /** `null` in a runtime without one — the shell then runs on defaults. */
   readonly storage: Storage | null;
+}
+
+/** Whether a bare key lands in a field or editable content, where it is typed, not heard. */
+function isEditing(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
+  );
 }
 
 /** What each empty route says. Sentences, not placeholders: nothing is coming. */

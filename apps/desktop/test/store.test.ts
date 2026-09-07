@@ -12,6 +12,7 @@ import {
   jumpTo,
   navigate,
   setDraft,
+  setSidebarFloating,
   setSidebarWidth,
   toggleProject,
   toggleSidebar,
@@ -156,5 +157,39 @@ describe("the sidebar's width and mode", () => {
     expect(consoleStore.state.sidebarOpen).toBe(false);
     toggleSidebar();
     expect(consoleStore.state.sidebarOpen).toBe(true);
+  });
+
+  test("Given a collapsed sidebar revealed by hover, When toggled, Then it is pinned: open and no longer floating", () => {
+    toggleSidebar();
+    setSidebarFloating(true);
+    expect(consoleStore.state.sidebarFloating).toBe(true);
+    toggleSidebar();
+    expect(consoleStore.state.sidebarOpen).toBe(true);
+    expect(consoleStore.state.sidebarFloating).toBe(false);
+  });
+
+  test("Given a floating reveal, When the column arrives anywhere, Then the reveal is dismissed", () => {
+    const id = createSession(1);
+    toggleSidebar();
+    setSidebarFloating(true);
+    navigate({ kind: "route", route: "inbox" });
+    expect(consoleStore.state.sidebarFloating).toBe(false);
+    expect(consoleStore.state.sidebarOpen).toBe(false);
+
+    // The same place again is still an arrival: a row click on the selected
+    // session closes the reveal too.
+    setSidebarFloating(true);
+    navigate({ kind: "session", sessionId: id });
+    navigate({ kind: "session", sessionId: id });
+    expect(consoleStore.state.sidebarFloating).toBe(false);
+    setSidebarFloating(true);
+    back();
+    expect(consoleStore.state.sidebarFloating).toBe(false);
+  });
+
+  test("Given the reveal already in a state, When set to it again, Then the store does not churn", () => {
+    const before = consoleStore.state;
+    setSidebarFloating(false);
+    expect(consoleStore.state).toBe(before);
   });
 });

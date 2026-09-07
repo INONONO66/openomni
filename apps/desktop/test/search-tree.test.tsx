@@ -26,7 +26,14 @@ const selectedId = "s2";
 const ordered = orderByAttention(sessions);
 
 const html = renderToStaticMarkup(
-  <Sidebar onToggle={() => undefined} onWidthCommit={() => undefined} open width={240}>
+  <Sidebar
+    floating={false}
+    onFloatingChange={() => undefined}
+    onToggle={() => undefined}
+    onWidthCommit={() => undefined}
+    open
+    width={240}
+  >
     <SessionTree
       collapsedProjectIds={new Set()}
       defaultSearching

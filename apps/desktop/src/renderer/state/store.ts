@@ -75,6 +75,12 @@ export interface ClientState {
    */
   readonly drafts: Readonly<Record<SessionId, string>>;
   readonly sidebarOpen: boolean;
+  /**
+   * Collapsed, but revealed over the main column by hover. Transient by
+   * design: it is never persisted, a toggle pins it, and arriving anywhere
+   * (`at`) dismisses it — the peek has done its job once a place is chosen.
+   */
+  readonly sidebarFloating: boolean;
   /** Always within `SIDEBAR_WIDTH`; `setSidebarWidth` clamps. */
   readonly sidebarWidth: number;
   readonly history: History;
@@ -87,6 +93,7 @@ export const INITIAL_CLIENT_STATE: ClientState = {
   collapsedProjectIds: new Set(),
   drafts: {},
   sidebarOpen: true,
+  sidebarFloating: false,
   sidebarWidth: SIDEBAR_WIDTH.default,
   history: { entries: [], cursor: -1 },
 };
@@ -174,9 +181,14 @@ function moveCursor(delta: 1 | -1): void {
 function at(state: ClientState, place: Place): ClientState {
   switch (place.kind) {
     case "session":
-      return { ...state, route: "sessions", selectedSessionId: place.sessionId };
+      return {
+        ...state,
+        route: "sessions",
+        selectedSessionId: place.sessionId,
+        sidebarFloating: false,
+      };
     case "route":
-      return { ...state, route: place.route };
+      return { ...state, route: place.route, sidebarFloating: false };
     default:
       return unreachable(place);
   }
@@ -227,8 +239,19 @@ export function setSidebarOpen(open: boolean): void {
   consoleStore.setState((state) => ({ ...state, sidebarOpen: open }));
 }
 
+/** Open ↔ collapsed. A toggle while the reveal floats PINS it: open, no longer floating. */
 export function toggleSidebar(): void {
-  consoleStore.setState((state) => ({ ...state, sidebarOpen: !state.sidebarOpen }));
+  consoleStore.setState((state) => ({
+    ...state,
+    sidebarOpen: !state.sidebarOpen,
+    sidebarFloating: false,
+  }));
+}
+
+export function setSidebarFloating(floating: boolean): void {
+  consoleStore.setState((state) =>
+    state.sidebarFloating === floating ? state : { ...state, sidebarFloating: floating },
+  );
 }
 
 /** Clamped here, so no caller can put an out-of-range width in the store. */
