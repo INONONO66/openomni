@@ -1121,6 +1121,7 @@
   "Transcript.PartTransition#running": ["at", "to"],
   "Transcript.Usage": ["cache", "input", "output", "reasoning"],
   "Wait.Correlation": [
+    "chain",
     "channelId",
     "endpointId",
     "externalConversationId",
@@ -1129,6 +1130,7 @@
     "tokenHash"
   ],
   "Wait.CorrelationQuery": [
+    "chain",
     "channelId",
     "endpointId",
     "externalConversationId",

@@ -1,5 +1,6 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import type { LedgerSession } from "@openomni/protocol";
+import type { MachineHost } from "@openomni/machines";
 import { createSendMessageTool, type MessagePort } from "../authority/send-message";
 
 export interface CatalogOrigin {
@@ -13,9 +14,16 @@ import { createRunCodeTool } from "../execution/run-code";
 import type { composeCodemode } from "../../composition/codemode";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, toolSpec } from "@openomni/agent";
+import { createReadTool } from "../fs/read";
+import { createWriteTool } from "../fs/write";
+import { createEditTool } from "../fs/edit";
+import { createListTool } from "../fs/list";
+import { createSearchTool } from "../fs/search";
+import { createBashTool } from "../code/bash";
 
 export interface CatalogPorts {
   readonly messages?: MessagePort;
+  readonly machines?: MachineHost;
   readonly approvals?: ApprovalPort;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
   readonly llm?: LlmPort;
@@ -27,7 +35,14 @@ export function createTools(
   ports: CatalogPorts,
   origin: CatalogOrigin,
 ): readonly AnyToolDefinition[] {
-  const tools: AnyToolDefinition[] = [];
+  const tools: AnyToolDefinition[] = [
+    eraseTool(createReadTool(ports)),
+    eraseTool(createWriteTool(ports)),
+    eraseTool(createEditTool(ports)),
+    eraseTool(createListTool(ports)),
+    eraseTool(createSearchTool(ports)),
+    eraseTool(createBashTool(ports)),
+  ];
   if (ports.messages !== undefined) tools.push(eraseTool(createSendMessageTool(ports.messages)));
   if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
   if (ports.provisioning !== undefined)

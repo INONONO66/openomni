@@ -72,11 +72,8 @@ describe("tool dispatcher public contract", () => {
     const execution = definition({ name: "run", category: "execution" });
 
     expect(toolInputSchema(eraseTool(query))).toMatchObject({ type: "object" });
-    expect(toolSpec(eraseTool(query))).toMatchObject({
-      name: "echo",
-      safe: true,
-      placement: "host",
-    });
+    expect(toolSpec(eraseTool(query))).toMatchObject({ name: "echo", safe: true });
+    expect(toolSpec(eraseTool(query))).not.toHaveProperty("placement");
     expect(toolSpec(eraseTool(execution))).toMatchObject({ name: "run", safe: false });
     expect(sessionTool(eraseTool(execution))).toMatchObject({ name: "run", category: "execution" });
   });
@@ -134,6 +131,46 @@ describe("tool dispatcher public contract", () => {
     expect(cell.output).toBe(output);
     expect(typeof model.output).toBe("string");
     expect(model.output).toHaveLength(32_000);
-    expect(model.output).toEndWith("[truncated: 40000 chars]");
+    const marker = "\n[truncated: 8054 bytes dropped; 40000 bytes original]";
+    expect(model.output).toBe(`${output.slice(0, 32_000 - marker.length)}${marker}`);
+  });
+
+  it.each([
+    "\u{1F600}".repeat(25_000),
+    `a${"\u{1F600}".repeat(25_000)}`,
+    "\u00e9".repeat(40_000),
+    "\u4e2d".repeat(40_000),
+  ])("R3 multibyte truncation reports exactly the omitted UTF-8 bytes without splitting text", async (output) => {
+    const dispatch = dispatcher([definition({ execute: async () => output })]);
+    const cell = await dispatch.executeCell(call, context);
+    const model = await dispatch.execute(call, context);
+    expect(cell.output).toBe(output);
+    expect(model.isError).toBeUndefined();
+    expect(model.output.length).toBeLessThanOrEqual(32_000);
+    expect(Buffer.from(model.output, "utf8").toString("utf8")).toBe(model.output);
+    const receipt = /\n\[truncated: (\d+) bytes dropped; (\d+) bytes original\]$/.exec(
+      model.output,
+    );
+    expect(receipt).not.toBeNull();
+    if (receipt === null) throw new Error("missing byte receipt");
+    const prefix = model.output.slice(0, receipt.index);
+    expect(output.startsWith(prefix)).toBe(true);
+    const dropped = output.slice(prefix.length);
+    expect(Number(receipt[1])).toBe(Buffer.byteLength(dropped, "utf8"));
+    expect(Number(receipt[2])).toBe(Buffer.byteLength(output, "utf8"));
+    expect(Buffer.byteLength(prefix) + Number(receipt[1])).toBe(Number(receipt[2]));
+    const nextCodePoint = [...dropped][0];
+    expect(nextCodePoint).toBeDefined();
+    expect(model.output.length + (nextCodePoint?.length ?? 0)).toBeGreaterThan(32_000);
+  });
+
+  it("R3 Unicode boundary keeps the exact prefix and byte marker through the dispatcher", async () => {
+    const output = `a${"\u{1F600}".repeat(25_000)}`;
+    const dispatch = dispatcher([definition({ execute: async () => output })]);
+    const model = await dispatch.execute(call, context);
+    expect(model.output).toBe(
+      `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
+    );
+    expect((await dispatch.executeCell(call, context)).output).toBe(output);
   });
 });

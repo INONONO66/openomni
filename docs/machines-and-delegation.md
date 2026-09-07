@@ -156,20 +156,13 @@ Child terminal mail preserves final text, terminal kind and original reply bindi
 
 A machine remains WHERE execution happens, not a messaging target. Actor delivery uses the existing grant, egress-budget, endpoint and idempotency kernel, returning `accepted | rejected | unknown` only for an executed actor effect. Session commits succeed or throw. Current verification and remaining integration gaps are listed in [Implementation Status](implementation-status.md).
 
-## 4. Tool placement (`Tool.Placement`, `Tool.Spec`)
+## 4. Tool execution boundaries
 
-- `placement`: `machine` (runs on an attached machine's daemon), `host` (runs
-  on the brain's own host), `free` (anywhere — pure/network tools).
-  Additive-optional on `Tool.Spec`; the catalog resolver (stage 4 below) is
-  the single owner of the absent-means-`free` read.
-- `requires`: capabilities the executing side must hold
-  (`Machine.CapabilityId` grammar). Placement resolution =
-  `placement` × `requires` ⊆ effective set of a candidate target.
-- The mutation axis is the EXISTING `safe` field (`safe === false` is what
-  earlier drafts called `mutates`) — one spelling per convention.
-
-The machine axis of `@openomni/placement` folds candidate machines against
-`requires`; the model axis (#752) is unchanged.
+The executor's `tool.pre` policy point owns call-time admission. There is no
+separate target-selection package or capability-based catalog fold. Machine
+operations additionally cross the daemon's negotiated capability/export boundary.
+The model-fallback fold belongs to `@openomni/llm`. Tool `safe` derives only from
+`category === "query"`.
 
 ## 5. Ownership boundaries
 

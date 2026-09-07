@@ -1,5 +1,132 @@
 [
   {
+    "name": "read",
+    "description": "Read a local path or machineId:/absolute/path. UTF-8 text by default; base64 preserves binary bytes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "encoding": {
+          "default": "utf8",
+          "type": "string",
+          "enum": ["utf8", "base64"]
+        }
+      },
+      "required": ["path"],
+      "additionalProperties": false
+    },
+    "safe": true
+  },
+  {
+    "name": "write",
+    "description": "Create or overwrite one local or machineId:/absolute/path file. Parent directories must exist.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "type": "string"
+        },
+        "encoding": {
+          "default": "utf8",
+          "type": "string",
+          "enum": ["utf8", "base64"]
+        }
+      },
+      "required": ["path", "content"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "sequential": true
+  },
+  {
+    "name": "edit",
+    "description": "Replace exactly one literal UTF-8 occurrence in a local or machineId:/absolute/path file. Refuses absent or ambiguous matches. Read/write composition is not atomic against external writers.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "oldText": {
+          "type": "string",
+          "minLength": 1
+        },
+        "newText": {
+          "type": "string"
+        }
+      },
+      "required": ["path", "oldText", "newText"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "sequential": true
+  },
+  {
+    "name": "list",
+    "description": "List immediate directory entries at a local path or machineId:/absolute/path, without following symlinks.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["path"],
+      "additionalProperties": false
+    },
+    "safe": true
+  },
+  {
+    "name": "search",
+    "description": "Search UTF-8 file content for literal text at a local path or machineId:/absolute/path. Directories recurse in name order without following symlinks; binary files refuse. Returns matching lines, not regex or glob matches.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["path", "pattern"],
+      "additionalProperties": false
+    },
+    "safe": true
+  },
+  {
+    "name": "bash",
+    "description": "Run a shell command locally, or on the named machine. Local cwd is the host process cwd; remote cwd is /. Use cd in cmd to change directory. Remote / must be an offered export. No persistent cwd state.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "cmd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "machine": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["cmd"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "sequential": true
+  },
+  {
     "name": "sendMessage",
     "description": "Send a message, interrupt, or resume to a session; create a child session; or contact an actor. Returns a handle without waiting for a reply.",
     "inputSchema": {
@@ -81,8 +208,7 @@
       "required": ["to", "type", "content"],
       "additionalProperties": false
     },
-    "safe": false,
-    "placement": "host"
+    "safe": false
   },
   {
     "name": "approval",
@@ -220,8 +346,7 @@
       "required": ["operation"],
       "additionalProperties": false
     },
-    "safe": false,
-    "placement": "host"
+    "safe": false
   },
   {
     "name": "provision",
@@ -487,8 +612,7 @@
       "required": ["operation"],
       "additionalProperties": false
     },
-    "safe": false,
-    "placement": "host"
+    "safe": false
   },
   {
     "name": "run_code",
@@ -509,8 +633,7 @@
       "required": ["code", "timeoutMs"],
       "additionalProperties": false
     },
-    "safe": false,
-    "placement": "host"
+    "safe": false
   },
   {
     "name": "llm",
@@ -531,7 +654,6 @@
       "required": ["prompts"],
       "additionalProperties": false
     },
-    "safe": false,
-    "placement": "host"
+    "safe": false
   }
 ]

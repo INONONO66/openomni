@@ -147,10 +147,6 @@ export interface RunState {
 }
 
 export interface TurnArtifacts {
-  readonly refusedTools?: ReadonlyMap<
-    string,
-    NonNullable<import("@openomni/protocol").Tool.Spec["requires"]>
-  >;
   readonly toolExecutor?: import("../types").ChatAgentConfig["toolExecutor"];
   readonly runInput: RunInput;
   readonly trackingSink: Sink;

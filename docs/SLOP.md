@@ -164,6 +164,27 @@ GitHub changes executed and re-read with `gh` on 2026-09-06:
 - Scope stays exactly #950's machine-offer isolation capability/fail-closed execution and gateway egress secret gate, including its existing profile/blocklist/scanner acceptance. No implementation or profile/scanner design is absorbed into I08.
 - Re-triage remains closure of #938/#939 (I08) and #946 (I06); all three are OPEN at verification. This is a parking receipt, not a hardening delivery claim.
 
+## #949 stage 1 receipt (2026-09-06)
+
+Based on `f9c02a66` including the real machine consumer surface from #991.
+This receipt does not seal the final catalog or duplicate #946/#947 work.
+
+| Row | Stage-one disposition | Evidence |
+| --- | --- | --- |
+| B15, G-AG3 | CLOSED: target-selection workspace, topology/dependency/Knip/CI/coverage rows and executor eligibility wrapper deleted. Model selection moved to llm; tool.pre remains call-time authority. | `script/tool-target-deletion.test.ts`; model fallback and tool-admission tests |
+| G-H7 | CLOSED: credential decryption and bounce-key rotation share one store read per credential per reconciliation. | provisioning test observes one actual SecretStore.get call |
+| G-H9 | CLOSED: orphan model-resolution comment removed from llm tool module. | source diff; no prose test |
+| E8 / A15 truncation sub-condition | CLOSED after R1 review correction: central 32,000-code-unit model cap includes literal truncated and exact dropped/original UTF-8 byte counts, retaining a valid Unicode boundary; cell output remains full and no spill port is required. | `packages/agent/test/tool-dispatcher.test.ts` ASCII/multibyte exact receipts; local/real-daemon large-file and Unicode tests |
+| G-H8 | OPEN stage 2: schema census still constructs legacy approval/delegation factories using the catalog Proxy. Removing those dependencies would overlap protected #946 files. | `apps/openomni/src/tools/core/catalog.ts` |
+| A11, A12, B12, B17, B18, E6, E8 catalog seal | Not closed by stage 1. New path tools consume the existing package-owned dispatcher; final naming/layout and exact catalog belong to stage 2. | #949 stage boundary |
+
+`apps/openomni/test/locus-routing.test.ts` exercises five filesystem verbs and
+bash both locally and through a real attached Unix-socket daemon, binary reads,
+unique-match edit refusals, large raw cell values, recursive literal search and
+daemon capability refusal. Completion is promise settlement, with no sleep or
+polling. The explicit stage-one naming is retained rather than implementing the
+later naming amendment in parallel with the messaging worker.
+
 ## #938 follow-up
 
 - **R3-3 (parked):** add a platform-specific `fchdir`/descriptor-backed cwd

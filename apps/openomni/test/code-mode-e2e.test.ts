@@ -214,8 +214,10 @@ test("a cell creates three child sessions through sendMessage", async () => {
 
   const answer = String((await reply).text);
 
-  // The machine was attached, so the machine-placed tool was offered.
-  expect(answer).toContain("offered=[approval,provision,run_code,sendMessage]");
+  // The catalog is stable; the daemon enforces machine availability at execution.
+  expect(answer).toContain(
+    "offered=[approval,bash,edit,list,provision,read,run_code,search,sendMessage,write]",
+  );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("cell=3");
@@ -240,7 +242,7 @@ test("a cell creates three child sessions through sendMessage", async () => {
   );
 }, 60_000);
 
-test("the machine tool is not offered while nothing is attached", async () => {
+test("the catalog remains available while machine execution refuses without attachment", async () => {
   let offered: string[] = [];
 
   const app = await suite.boot({
@@ -253,8 +255,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
       resolveModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         offered = (input.tools ?? []).map((tool) => tool.name);
-        // Naming it anyway must be refused, not served: what the fold declined
-        // to offer it also declines to run.
+        // Availability is an endpoint precondition, not a second catalog gate.
         const forced = requestToolStep(input, sink, {
           id: "call-1",
           tool: "run_code",
@@ -280,8 +281,19 @@ test("the machine tool is not offered while nothing is attached", async () => {
 
   const answer = String((await reply).text);
 
-  expect(offered).toEqual(["sendMessage", "approval", "provision", "run_code"]);
-  // All tools are host-projected; the local default host reports live attachment failure.
+  expect(offered).toEqual([
+    "read",
+    "write",
+    "edit",
+    "list",
+    "search",
+    "bash",
+    "sendMessage",
+    "approval",
+    "provision",
+    "run_code",
+  ]);
+  // The raw machine endpoint reports live attachment failure.
   expect(answer).toContain("kernel_not_available");
 }, 30_000);
 

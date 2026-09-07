@@ -1,4 +1,3 @@
-import { refusedToolCall } from "./tool-placement";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Message, PlainValue } from "@openomni/protocol";
 import type { ChatAgentConfig } from "../types";
@@ -99,14 +98,13 @@ export async function settleModelTools(
     input: part.state.input,
   }));
   const execute = turn.toolExecutor;
-  const admittedCalls = calls.filter((call) => !turn.refusedTools?.has(call.tool));
   if (config.toolWave === undefined && execute === undefined)
     throw new Error("tool wave executor is required");
   const executed =
     config.toolWave !== undefined
-      ? await config.toolWave(admittedCalls, config.signal)
+      ? await config.toolWave(calls, config.signal)
       : await Promise.all(
-          admittedCalls.map(async (call) => {
+          calls.map(async (call) => {
             if (execute === undefined) throw new Error("tool executor missing");
             try {
               return await execute(call, { signal: config.signal });
@@ -122,8 +120,6 @@ export async function settleModelTools(
           }),
         );
   const results = calls.map((call) => {
-    const requires = turn.refusedTools?.get(call.tool);
-    if (requires !== undefined) return refusedToolCall(call, requires);
     const result = executed.find((result) => result.toolCallId === call.id);
     if (result === undefined) throw new Error(`missing tool result: ${call.id}`);
     return result;
@@ -134,8 +130,7 @@ export async function settleModelTools(
     if (part.type !== "tool" || !pending.includes(part)) return part;
     const result = byId.get(part.callID);
     if (result === undefined) throw new Error(`missing tool result: ${part.callID}`);
-    if (config.toolWave !== undefined && !turn.refusedTools?.has(part.tool))
-      state.budgetState = recordToolCall(state.budgetState, 0);
+    if (config.toolWave !== undefined) state.budgetState = recordToolCall(state.budgetState, 0);
     return {
       ...part,
       state: result.isError

@@ -2,7 +2,6 @@ import {
   createSessionChatRunner,
   createTurnDispatcher,
   failureFacts,
-  HOST_TARGET,
   newTraceId,
   sessionTool,
   type ChatAgentConfig,
@@ -10,7 +9,6 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
-import type { Placement } from "@openomni/placement";
 import type { AnyToolDefinition, LedgerSession, Model, Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { messageMaterialization } from "./composition/message-session";
@@ -40,7 +38,6 @@ export interface ResidentOptions {
   readonly compaction?: ChatAgentConfig["compaction"];
   readonly tools: CatalogPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
-  readonly targets?: () => readonly Placement.ToolTarget[];
   readonly sessionRuntime: SessionRuntime;
 }
 
@@ -80,7 +77,6 @@ export function createResident(options: ResidentOptions) {
             executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
-            toolTargets: options.targets?.() ?? [HOST_TARGET],
             toolChoice: tools.length === 0 ? "none" : "auto",
             toolExecutor: (call, context) =>
               evidenceOnly

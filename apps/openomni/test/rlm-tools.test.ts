@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { placementGatedExecutor } from "@openomni/agent";
-import { Placement } from "@openomni/placement";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
-import { createDispatcher, HOST_TARGET, toolSpec } from "@openomni/agent";
+import { createDispatcher, toolSpec } from "@openomni/agent";
 import {
   createLlmToolPort as llmToolPort,
   LLM_TOOL_NAME,
@@ -145,20 +143,15 @@ describe("the llm tool", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("is host-placed: it survives the cell-door fold against the brain alone", async () => {
+  it("dispatches the cell door without a target eligibility fold", async () => {
     const entries = createTools({ llm: async () => "ok" }, RESIDENT);
     const dispatcher = createDispatcher(entries, { executor });
-    // The exact fold run-code.ts's cellDoor performs: resolve against the
-    // host target only, then gate execution on the offerable set.
-    const door = placementGatedExecutor(
-      Placement.resolveTools(dispatcher.specs, [HOST_TARGET]),
-      (call) => dispatcher.execute(call, { sessionId: "rlm-session", turnId: "rlm-turn" }),
+    const result = await dispatcher.executeCell(
+      { id: "1", tool: LLM_TOOL_NAME, input: { prompts: ["hi"] } },
+      { sessionId: "rlm-session", turnId: "rlm-turn" },
     );
-
-    const result = await door({ id: "1", tool: LLM_TOOL_NAME, input: { prompts: ["hi"] } });
-
     expect(result.isError).toBeUndefined();
-    expect(result.output).toBe('["ok"]');
+    expect(result.output).toEqual(["ok"]);
   });
 });
 
@@ -244,11 +237,9 @@ describe("catalog gating for the rlm tools", () => {
     expect(names).toContain(LLM_TOOL_NAME);
   });
 
-  it("offers llm on the host target", () => {
+  it("projects llm without target metadata", () => {
     const specs = createTools({ llm: async () => "" }, RESIDENT).map((entry) => toolSpec(entry));
-    const offerable = Placement.resolveTools(specs, [HOST_TARGET])
-      .filter((decision) => decision.offerable)
-      .map((decision) => decision.tool.name);
-    expect(offerable).toContain(LLM_TOOL_NAME);
+    expect(specs.map((spec) => spec.name)).toContain(LLM_TOOL_NAME);
+    expect(specs.every((spec) => spec.placement === undefined)).toBe(true);
   });
 });

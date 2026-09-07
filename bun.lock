@@ -54,7 +54,6 @@
         "@openomni/ledger": "workspace:*",
         "@openomni/llm": "workspace:*",
         "@openomni/machines": "workspace:*",
-        "@openomni/placement": "workspace:*",
         "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "zod": "^4.5.4",
@@ -69,7 +68,6 @@
       "dependencies": {
         "@openomni/ledger": "workspace:*",
         "@openomni/llm": "workspace:*",
-        "@openomni/placement": "workspace:*",
         "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "zod": "^4.5.4",
@@ -151,17 +149,6 @@
         "@openomni/ipc": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "zod": "^4.5.4",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5",
-      },
-    },
-    "packages/placement": {
-      "name": "@openomni/placement",
-      "version": "0.0.1",
-      "dependencies": {
-        "@openomni/protocol": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -440,8 +427,6 @@
     "@openomni/llm": ["@openomni/llm@workspace:packages/llm"],
 
     "@openomni/machines": ["@openomni/machines@workspace:packages/machines"],
-
-    "@openomni/placement": ["@openomni/placement@workspace:packages/placement"],
 
     "@openomni/policy": ["@openomni/policy@workspace:packages/policy"],
 
@@ -1125,8 +1110,6 @@
 
     "@openomni/machines/@types/bun": ["@types/bun@1.4.1", "", { "dependencies": { "bun-types": "1.4.1" } }, "sha512-0AVGiTXGajf1rgKom3N+c5L7CBxuoyyv1i44M0nX4UDK0G/fnRAMiri93nHuVPIb429KKtAgj7HatVmmOjeQLA=="],
 
-    "@openomni/placement/@types/bun": ["@types/bun@1.4.1", "", { "dependencies": { "bun-types": "1.4.1" } }, "sha512-0AVGiTXGajf1rgKom3N+c5L7CBxuoyyv1i44M0nX4UDK0G/fnRAMiri93nHuVPIb429KKtAgj7HatVmmOjeQLA=="],
-
     "@openomni/policy/@types/bun": ["@types/bun@1.4.1", "", { "dependencies": { "bun-types": "1.4.1" } }, "sha512-0AVGiTXGajf1rgKom3N+c5L7CBxuoyyv1i44M0nX4UDK0G/fnRAMiri93nHuVPIb429KKtAgj7HatVmmOjeQLA=="],
 
     "@openomni/ui/@types/bun": ["@types/bun@1.4.1", "", { "dependencies": { "bun-types": "1.4.1" } }, "sha512-0AVGiTXGajf1rgKom3N+c5L7CBxuoyyv1i44M0nX4UDK0G/fnRAMiri93nHuVPIb429KKtAgj7HatVmmOjeQLA=="],
@@ -1244,8 +1227,6 @@
     "@openomni/llm/ai/@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@4.0.21", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@standard-schema/spec": "^1.1.0", "eventsource-parser": "^3.0.6" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-MtFUYI1/8mgDvRmaBDjbLJPFFrMG777AvSgyIFQtZHIMzm88R/12vYBBpnk7pfiWLFE1DSZzY4WDYzGbKAcmiw=="],
 
     "@openomni/machines/@types/bun/bun-types": ["bun-types@1.4.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-loKuVrAFZKfEv+JvWkHRS9GW5IqLuLRjVXN9p+vZvBN86O5hf/pBZQ5hSoyipsrMmWObZBDvWnlmKvjKTM0PdA=="],
-
-    "@openomni/placement/@types/bun/bun-types": ["bun-types@1.4.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-loKuVrAFZKfEv+JvWkHRS9GW5IqLuLRjVXN9p+vZvBN86O5hf/pBZQ5hSoyipsrMmWObZBDvWnlmKvjKTM0PdA=="],
 
     "@openomni/policy/@types/bun/bun-types": ["bun-types@1.4.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-loKuVrAFZKfEv+JvWkHRS9GW5IqLuLRjVXN9p+vZvBN86O5hf/pBZQ5hSoyipsrMmWObZBDvWnlmKvjKTM0PdA=="],
 

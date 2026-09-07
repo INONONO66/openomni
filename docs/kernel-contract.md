@@ -188,6 +188,39 @@ Owner grants shell execution knowingly. Codemode consumes these handles through
 one `run_code` cell runner, with per-tenant interpreter state and no legacy
 machines or filesystem tools.
 
+### Stage-one path tools (#949)
+
+`read`, `write`, `edit`, `list`, and `search` share one `parseLocus`: bare paths
+are local; `machineId:/absolute/path` selects a raw machine handle. Single-letter
+machine IDs are supported. Empty IDs, relative remote paths, URL syntax, NUL,
+remote parent traversal and the retired virtual root syntax refuse with typed
+errors. A local filename containing a colon can be addressed with `./`.
+
+Local filesystem calls use host-user permissions and process cwd, with ordinary
+OS symlink semantics; this is not a new local confinement boundary. Read/write
+support UTF-8 (default) or canonical base64. Write creates or overwrites one file
+and requires existing parents. Edit replaces one unique literal occurrence and
+is sequential but not atomic against external writers. Search recursively
+matches literal UTF-8 content, reports one-based lines, and does not traverse
+symlinks. Binary content requires explicit base64 read; text search refuses it.
+Remote read windows are assembled into a full value; daemon transport limits
+remain distinct from model rendering limits.
+
+`bash({cmd, machine?})` runs local bash in process cwd or the daemon's raw exec
+in `/`; remote `/` must be an offered, allowed export. Directory changes belong
+inside `cmd`, never persistent tool state. The existing raw exec boundary owns
+remote deadlines, cancellation limitations and transport byte limits. No new
+machine authority check is added to these adapters.
+
+Query category alone derives `safe`; write/edit/bash are sequential mutation or
+execution tools. The dispatcher alone caps model rendering at 32,000 UTF-16 code
+units, including `\n[truncated: N bytes dropped; M bytes original]`. The marker
+counts original and omitted UTF-8 bytes, excluding the marker itself from both
+counts. A retained prefix ends at a Unicode code-point boundary and can be one
+code unit shorter than the cap rather than splitting a surrogate pair. It drops
+overflow, never spills artifacts, and does not cap typed cell results. Final catalog and
+naming convergence is stage 2 after messaging and monitor land.
+
 ## 4. Turn termination, not task satisfaction
 
 The old task-ticket, executor-kind, completion-admission and evidence-gate contracts were withdrawn by #940. There is no replacement ticket/evidence store or completion authority. The kernel records that a turn terminated; the model reading the returned letter judges satisfaction. Generic provider attempts remain children of model actions, not a revived task domain. The gateway/session-inbox boundary and retained Wait/approval ownership are distinguished in [Implementation Status](implementation-status.md).

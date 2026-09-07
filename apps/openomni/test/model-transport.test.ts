@@ -74,7 +74,6 @@ describe("operator transport reaches every model caller", () => {
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
       tools: {},
-      targets: () => [],
       llm: {
         resolveModel,
         run: async (input, sink: Sink) => {

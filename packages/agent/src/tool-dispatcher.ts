@@ -1,5 +1,4 @@
 import { executeToolBody, ToolBodyOutcome } from "./tool-body";
-import type { Placement } from "@openomni/placement";
 import { activeExecutor, ExecutorContextError } from "./executor-context";
 export { currentExecutor, ExecutorContextError } from "./executor-context";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
@@ -29,7 +28,6 @@ import {
 } from "./executor";
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
-export const HOST_TARGET: Placement.ToolTarget = { kind: "host", capabilities: [] };
 
 export class ToolRefused extends Error {
   readonly errorKind = "precondition_failed";
@@ -415,7 +413,6 @@ export function toolSpec(definition: AnyToolDefinition): Tool.Spec {
     inputSchema: toolInputSchema(definition),
     safe: toolIsSafe(definition.category),
     ...(definition.sequential ? { sequential: true } : {}),
-    placement: "host",
   };
 }
 
@@ -441,6 +438,16 @@ function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): Tool
 
 function truncate(output: string): string {
   if (output.length <= MODEL_OUTPUT_MAX_CHARS) return output;
-  const marker = `\n[truncated: ${output.length} chars]`;
-  return `${output.slice(0, MODEL_OUTPUT_MAX_CHARS - marker.length)}${marker}`;
+  const originalBytes = Buffer.byteLength(output, "utf8");
+  // Reserve the marker's final width and never split a supplementary code point.
+  let kept = MODEL_OUTPUT_MAX_CHARS;
+  for (;;) {
+    if ((output.codePointAt(kept - 1) ?? 0) > 0xffff) kept -= 1;
+    const prefix = output.slice(0, kept);
+    const droppedBytes = originalBytes - Buffer.byteLength(prefix, "utf8");
+    const marker = `\n[truncated: ${droppedBytes} bytes dropped; ${originalBytes} bytes original]`;
+    const available = MODEL_OUTPUT_MAX_CHARS - marker.length;
+    if (kept <= available) return `${prefix}${marker}`;
+    kept = available;
+  }
 }
