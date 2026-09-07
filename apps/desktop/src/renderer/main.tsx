@@ -4,6 +4,9 @@ import { App, type AppEnvironment } from "./app";
 import { StateProvider } from "./state/provider";
 import "./styles.css";
 
+// Dev-only DOM-to-source inspector (https://react-grep.com); never in the production bundle.
+if (import.meta.env.DEV) void import("react-grep");
+
 const root = document.getElementById("root");
 if (!root) throw new Error("renderer root element missing");
 
