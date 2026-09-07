@@ -10,34 +10,51 @@ const noopPublish: PublishPort = () => undefined;
 const realFetch = globalThis.fetch;
 const Body = z.record(z.string(), PlainValueSchema);
 type Socket = import("bun").ServerWebSocket<Record<string, never>>;
-interface ApiCall { readonly method: string; readonly body: PlainObject; }
+interface ApiCall {
+  readonly method: string;
+  readonly body: PlainObject;
+}
 
 function installSlackApi() {
   const calls: ApiCall[] = [];
   const posted = Promise.withResolvers<PlainObject>();
   const opened = Promise.withResolvers<Socket>();
   const server = Bun.serve<Record<string, never>>({
-    hostname: "127.0.0.1", port: 0,
+    hostname: "127.0.0.1",
+    port: 0,
     fetch(request, srv) {
       if (srv.upgrade(request, { data: {} })) return;
       return new Response("expected websocket", { status: 400 });
     },
-    websocket: { open: (socket) => opened.resolve(socket), message() { return; } },
+    websocket: {
+      open: (socket) => opened.resolve(socket),
+      message() {
+        return;
+      },
+    },
   });
-  globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
-    const method = String(input).slice(String(input).lastIndexOf("/") + 1);
-    const body = Body.parse(JSON.parse(String(init?.body)));
-    calls.push({ method, body });
-    if (method === "apps.connections.open") return Response.json({ ok: true, url: `ws://127.0.0.1:${server.port}` });
-    if (method === "auth.test") return Response.json({ ok: true, user_id: "UBOT", team_id: "T9" });
-    if (method === "conversations.open") return Response.json({ ok: true, channel: { id: "D-open" } });
-    posted.resolve(body);
-    return Response.json({ ok: true, ts: "999.1" });
-  }, { preconnect: realFetch.preconnect });
+  globalThis.fetch = Object.assign(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const method = String(input).slice(String(input).lastIndexOf("/") + 1);
+      const body = Body.parse(JSON.parse(String(init?.body)));
+      calls.push({ method, body });
+      if (method === "apps.connections.open")
+        return Response.json({ ok: true, url: `ws://127.0.0.1:${server.port}` });
+      if (method === "auth.test")
+        return Response.json({ ok: true, user_id: "UBOT", team_id: "T9" });
+      if (method === "conversations.open")
+        return Response.json({ ok: true, channel: { id: "D-open" } });
+      posted.resolve(body);
+      return Response.json({ ok: true, ts: "999.1" });
+    },
+    { preconnect: realFetch.preconnect },
+  );
   return { calls, posts: posted.promise, sockets: opened.promise, stop: () => server.stop(true) };
 }
 
-afterEach(() => { globalThis.fetch = realFetch; });
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
 
 describe("SlackAdapter", () => {
   it("refuses to start without a handler", async () => {
@@ -49,20 +66,39 @@ describe("SlackAdapter", () => {
     const api = installSlackApi();
     const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish);
     const facts = Promise.withResolvers<Channel.InboundMessage>();
-    adapter.onMessage(async (message) => { facts.resolve(message); });
+    adapter.onMessage(async (message) => {
+      facts.resolve(message);
+    });
     try {
       const started = adapter.start("trace-1");
       const socket = await bounded(api.sockets);
       socket.send(JSON.stringify({ type: "hello" }));
       await bounded(started);
-      socket.send(JSON.stringify({ type: "events_api", envelope_id: "env-1", payload: {
-        event: { type: "message", channel: "C123", channel_type: "channel", user: "U77", text: "<@UBOT> tracking number", ts: "1710.0002", thread_ts: "1710.0001" },
-      } }));
+      socket.send(
+        JSON.stringify({
+          type: "events_api",
+          envelope_id: "env-1",
+          payload: {
+            event: {
+              type: "message",
+              channel: "C123",
+              channel_type: "channel",
+              user: "U77",
+              text: "<@UBOT> tracking number",
+              ts: "1710.0002",
+              thread_ts: "1710.0001",
+            },
+          },
+        }),
+      );
       expect(await bounded(facts.promise)).toMatchObject({
         sender: { externalId: "T9:U77" },
         facts: { workspaceId: "T9", channelId: "C123", reply: { chain: ["1710.0001"] } },
       });
-    } finally { adapter.stop("trace-stop"); await api.stop(); }
+    } finally {
+      adapter.stop("trace-stop");
+      await api.stop();
+    }
   });
 
   it("releases failed ingress for platform redelivery", async () => {
@@ -83,15 +119,29 @@ describe("SlackAdapter", () => {
       const socket = await bounded(api.sockets);
       socket.send(JSON.stringify({ type: "hello" }));
       await bounded(started);
-      const frame = JSON.stringify({ type: "events_api", envelope_id: "retry", payload: {
-        event: { type: "message", channel: "C123", channel_type: "channel", user: "U77", text: "hello", ts: "1.2" },
-      } });
+      const frame = JSON.stringify({
+        type: "events_api",
+        envelope_id: "retry",
+        payload: {
+          event: {
+            type: "message",
+            channel: "C123",
+            channel_type: "channel",
+            user: "U77",
+            text: "hello",
+            ts: "1.2",
+          },
+        },
+      });
       socket.send(frame);
       await bounded(failed.promise);
       socket.send(frame);
       await bounded(retried.promise);
       expect(attempts).toBe(2);
-    } finally { adapter.stop("stop"); await api.stop(); }
+    } finally {
+      adapter.stop("stop");
+      await api.stop();
+    }
   });
 
   it("reports a delivery receipt and rejects an unscoped endpoint", async () => {
@@ -100,9 +150,15 @@ describe("SlackAdapter", () => {
       const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish);
       const receipt = adapter.deliver("T9:U5", "direct note", "message-1");
       expect(await bounded(api.posts)).toEqual({ channel: "D-open", text: "direct note" });
-      expect(api.calls.find((call) => call.method === "conversations.open")?.body).toEqual({ users: "U5" });
+      expect(api.calls.find((call) => call.method === "conversations.open")?.body).toEqual({
+        users: "U5",
+      });
       expect(await receipt).toEqual({ value: "accepted", externalMessageId: "999.1" });
-      await expect(adapter.deliver("U5", "no workspace", "message-2")).rejects.toBeInstanceOf(SlackEndpointKeyError);
-    } finally { await api.stop(); }
+      await expect(adapter.deliver("U5", "no workspace", "message-2")).rejects.toBeInstanceOf(
+        SlackEndpointKeyError,
+      );
+    } finally {
+      await api.stop();
+    }
   });
 });

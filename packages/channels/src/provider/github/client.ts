@@ -71,7 +71,13 @@ export class GitHubClient {
 
     if (!response.ok) {
       const text = await response.text();
-      this.publish(Operational.Events.Warn, { traceId, time: Date.now(), component: "github", msg: "GitHub rejected comment delivery", context: { status: response.status, detail: text } });
+      this.publish(Operational.Events.Warn, {
+        traceId,
+        time: Date.now(),
+        component: "github",
+        msg: "GitHub rejected comment delivery",
+        context: { status: response.status, detail: text },
+      });
       return { value: response.status < 500 ? "rejected" : "unknown" };
     }
     const result = z.object({ id: z.number().optional() }).parse(await response.json());
@@ -83,7 +89,10 @@ export class GitHubClient {
       msg: "github comment posted",
       context: { repo, issueNumber },
     });
-    return { value: "accepted", ...(result.id === undefined ? {} : { externalMessageId: String(result.id) }) };
+    return {
+      value: "accepted",
+      ...(result.id === undefined ? {} : { externalMessageId: String(result.id) }),
+    };
   }
 
   private async hasComment(

@@ -42,11 +42,7 @@ class EventStream<Value> {
     timer: ReturnType<typeof setTimeout> | undefined;
   }>();
 
-  waitFor(
-    predicate: (value: Value) => boolean,
-    count = 1,
-    timeoutMs = 10_000,
-  ): Promise<Value> {
+  waitFor(predicate: (value: Value) => boolean, count = 1, timeoutMs = 10_000): Promise<Value> {
     return new Promise<Value>((resolve, reject) => {
       const subscriber = { predicate, remaining: count, resolve, timer: undefined } as {
         predicate: (value: Value) => boolean;
@@ -246,7 +242,10 @@ function createMissedAckHarness(local: FakeGateway) {
       try {
         await gateway.start();
       } catch (error) {
-        console.error("discord gateway test start failure", JSON.stringify(local.nativeCloses.at(-1)));
+        console.error(
+          "discord gateway test start failure",
+          JSON.stringify(local.nativeCloses.at(-1)),
+        );
         throw error;
       }
     },
@@ -545,7 +544,11 @@ describe("discord gateway state machine (#520)", () => {
     gateway = harness.gateway;
     try {
       await expect(harness.start()).rejects.toThrow("WebSocket closed before ready: 1002");
-      expect(harness.nativeClose).toMatchObject({ code: 1002, wasClean: false, phase: "connecting" });
+      expect(harness.nativeClose).toMatchObject({
+        code: 1002,
+        wasClean: false,
+        phase: "connecting",
+      });
       expect(harness.nativeClose?.reason.length).toBeGreaterThan(0);
       expect(local.clients.size).toBe(0);
       expect(local.received).toHaveLength(0);

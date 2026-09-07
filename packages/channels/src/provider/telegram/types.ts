@@ -16,7 +16,9 @@ const TelegramChatSchema = z.object({
 });
 
 const TelegramEntitySchema = z.object({
-  type: z.string(), offset: z.number().int().nonnegative(), length: z.number().int().nonnegative(),
+  type: z.string(),
+  offset: z.number().int().nonnegative(),
+  length: z.number().int().nonnegative(),
   user: TelegramUserSchema.optional(),
 });
 

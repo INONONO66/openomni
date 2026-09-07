@@ -211,11 +211,7 @@ describe("resolveRoute precedence", () => {
 
     const accepted = decisions[0];
     expect(accepted).toBeDefined();
-    if (
-      accepted === undefined ||
-      accepted.stage !== "blacklist" ||
-      accepted.outcome !== "drop"
-    ) {
+    if (accepted === undefined || accepted.stage !== "blacklist" || accepted.outcome !== "drop") {
       throw new TypeError("missing accepted decision fixture");
     }
     const codes = decisions.map((decision) => {

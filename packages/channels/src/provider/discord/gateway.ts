@@ -144,13 +144,13 @@ export class DiscordGateway {
           component: "server",
           msg: "discord gateway fatal close code",
           context: { code: event.code },
+        });
+        return;
+      }
+      if (this.shell.running) {
+        await this.shell.scheduleReconnect(event.code, (traceId) => this.reconnect(traceId));
+      }
     });
-          return;
-        }
-        if (this.shell.running) {
-          await this.shell.scheduleReconnect(event.code, (traceId) => this.reconnect(traceId));
-        }
-      });
   }
 
   /** Routes one gateway payload; returns true when the connection is ready. */

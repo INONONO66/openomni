@@ -5,33 +5,54 @@ import { makeEvent, setupIngressActorResolverTest } from "./_actor-resolver-fixt
 
 setupIngressActorResolverTest();
 
-function putMintGrant(max = 2, kind: "trusted_channel" | "broadcast_channel" = "trusted_channel"): void {
+function putMintGrant(
+  max = 2,
+  kind: "trusted_channel" | "broadcast_channel" = "trusted_channel",
+): void {
   ChannelGrantStore.put({
-    id: "grant-mint", surface: "whatsapp", workspace: "guild", channel: "dev", kind,
-    defaultTier: "observer", provisionalMint: { windowMs: 600_000, max }, createdBy: "act_owner",
+    id: "grant-mint",
+    surface: "whatsapp",
+    workspace: "guild",
+    channel: "dev",
+    kind,
+    defaultTier: "observer",
+    provisionalMint: { windowMs: 600_000, max },
+    createdBy: "act_owner",
   });
 }
-function whatsappEvent(id: string) { return { ...makeEvent(id), surface: "whatsapp" }; }
+function whatsappEvent(id: string) {
+  return { ...makeEvent(id), surface: "whatsapp" };
+}
 
 describe("provisional contact mint", () => {
   test("opted-in trusted channel mints evidence, never authority", () => {
     putMintGrant();
     const resolved = resolveIngressActor(whatsappEvent("stranger-1"));
     expect(resolved.meta?.actor).toMatchObject({
-      actorId: "contact:whatsapp:guild:stranger-1", kind: "unknown", trustTier: "observer",
-      standing: "provisional", endpointId: "ep:whatsapp:guild:stranger-1",
+      actorId: "contact:whatsapp:guild:stranger-1",
+      kind: "unknown",
+      trustTier: "observer",
+      standing: "provisional",
+      endpointId: "ep:whatsapp:guild:stranger-1",
     });
     expect(resolved.meta?.inboundTreatment).toBe("evidence_only");
-    expect(ActorRegistry.resolveEndpoint("whatsapp", "stranger-1", "guild")?.identity.standing).toBe("provisional");
+    expect(
+      ActorRegistry.resolveEndpoint("whatsapp", "stranger-1", "guild")?.identity.standing,
+    ).toBe("provisional");
   });
   test("redelivery resolves the same contact without a second mint", () => {
     putMintGrant();
     resolveIngressActor(whatsappEvent("stranger-1"));
-    expect(resolveIngressActor(whatsappEvent("stranger-1")).meta?.actor?.actorId).toBe("contact:whatsapp:guild:stranger-1");
+    expect(resolveIngressActor(whatsappEvent("stranger-1")).meta?.actor?.actorId).toBe(
+      "contact:whatsapp:guild:stranger-1",
+    );
     expect(ActorRegistry.countProvisionalMints("whatsapp", "guild", 0)).toBe(1);
   });
   test("no policy means no mint", () => {
-    expect(resolveIngressActor(makeEvent("stranger-2")).meta?.actor).toEqual({ role: "user", id: "stranger-2" });
+    expect(resolveIngressActor(makeEvent("stranger-2")).meta?.actor).toEqual({
+      role: "user",
+      id: "stranger-2",
+    });
     expect(ActorRegistry.countProvisionalMints("discord", "guild", 0)).toBe(0);
   });
   test("window bound leaves additional senders without a canonical actor", () => {

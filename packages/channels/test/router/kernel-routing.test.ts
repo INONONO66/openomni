@@ -2,7 +2,17 @@ import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Ingress } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
-import { createMappedOwnerSession, commits, kernelRouter, ownerEvent, ownerFacts, ownerSender, registerOwnerDm, resetRouterState, routingDecisions } from "./_router-fixture";
+import {
+  createMappedOwnerSession,
+  commits,
+  kernelRouter,
+  ownerEvent,
+  ownerFacts,
+  ownerSender,
+  registerOwnerDm,
+  resetRouterState,
+  routingDecisions,
+} from "./_router-fixture";
 
 describe("GatewayRouter kernel routing", () => {
   beforeEach(resetRouterState);
@@ -10,9 +20,17 @@ describe("GatewayRouter kernel routing", () => {
     registerOwnerDm();
     const mapped = createMappedOwnerSession();
     const result = await kernelRouter().ingest(ownerSender, ownerFacts);
-    expect(result).toEqual({ status: "executed", handle: { messageId: ownerEvent.id, target: mapped.id }, delivery: { kind: "session" } });
+    expect(result).toEqual({
+      status: "executed",
+      handle: { messageId: ownerEvent.id, target: mapped.id },
+      delivery: { kind: "session" },
+    });
     expect(commits).toHaveLength(1);
-    expect(commits[0]).toMatchObject({ sessionId: mapped.id, kind: "prompt", content: ownerFacts.render });
+    expect(commits[0]).toMatchObject({
+      sessionId: mapped.id,
+      kind: "prompt",
+      content: ownerFacts.render,
+    });
   });
   test("publishes one canonical route decision", async () => {
     registerOwnerDm();
@@ -20,8 +38,13 @@ describe("GatewayRouter kernel routing", () => {
     await kernelRouter().ingest(ownerSender, ownerFacts);
     expect(routingDecisions()).toHaveLength(1);
     expect(routingDecisions()[0]).toMatchObject({
-      inboundId: ownerEvent.id, stage: "surface_default", outcome: "route", sessionId: mapped.id,
-      actorId: "actor-owner", trustTier: "owner", inboundTreatment: "full_access",
+      inboundId: ownerEvent.id,
+      stage: "surface_default",
+      outcome: "route",
+      sessionId: mapped.id,
+      actorId: "actor-owner",
+      trustTier: "owner",
+      inboundTreatment: "full_access",
     });
   });
   test("routing publication failure does not invoke inbox commit", async () => {
@@ -33,9 +56,13 @@ describe("GatewayRouter kernel routing", () => {
       publish(event, data);
     });
     try {
-      await expect(kernelRouter().ingest(ownerSender, ownerFacts)).rejects.toThrow("routing publish failed");
+      await expect(kernelRouter().ingest(ownerSender, ownerFacts)).rejects.toThrow(
+        "routing publish failed",
+      );
       expect(commits).toHaveLength(0);
-    } finally { spy.mockRestore(); }
+    } finally {
+      spy.mockRestore();
+    }
   });
   test("reads blacklist and channel facts once", async () => {
     registerOwnerDm();
@@ -46,13 +73,17 @@ describe("GatewayRouter kernel routing", () => {
       await kernelRouter().ingest(ownerSender, ownerFacts);
       expect(blacklist).toHaveBeenCalledTimes(1);
       expect(channels).toHaveBeenCalledTimes(1);
-    } finally { blacklist.mockRestore(); channels.mockRestore(); }
+    } finally {
+      blacklist.mockRestore();
+      channels.mockRestore();
+    }
   });
   test("first admission claims the physical surface for the next event", async () => {
     registerOwnerDm();
     const first = await kernelRouter().ingest(ownerSender, ownerFacts);
     const second = await kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "second" });
-    if (first.status !== "executed" || second.status !== "executed") throw new Error("not executed");
+    if (first.status !== "executed" || second.status !== "executed")
+      throw new Error("not executed");
     expect(first.handle.target).toBe(second.handle.target);
     expect(commits).toHaveLength(2);
     expect(commits[0]?.sessionId).toBe(commits[1]?.sessionId);

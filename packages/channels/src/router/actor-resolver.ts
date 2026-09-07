@@ -16,9 +16,11 @@ function externalActorId(event: Gateway.DeliveredEvent): string | undefined {
 }
 
 function mintScopeKey(event: Gateway.DeliveredEvent, externalId: string): string {
-  return [event.surface, ...(event.workspace === undefined ? [] : [event.workspace]), externalId].join(
-    ":",
-  );
+  return [
+    event.surface,
+    ...(event.workspace === undefined ? [] : [event.workspace]),
+    externalId,
+  ].join(":");
 }
 
 /**
@@ -58,7 +60,11 @@ function mintProvisionalContact(
     ],
   });
   if (blacklisted !== undefined) return undefined;
-  const minted = ActorRegistry.countProvisionalMints(event.surface, event.workspace, now - policy.windowMs);
+  const minted = ActorRegistry.countProvisionalMints(
+    event.surface,
+    event.workspace,
+    now - policy.windowMs,
+  );
   if (minted >= policy.max) return undefined;
   const scope = mintScopeKey(event, externalId);
   return ActorRegistry.mintProvisional(

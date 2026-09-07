@@ -15,109 +15,106 @@ import { IngressRoutingError, type KernelRouteResolution } from "./routing-resol
 // single-fact stream, so a redelivered rejection sees cas_conflict and the
 // recorded correction stands.
 function recordRouteNotDelivered(
-	event: Gateway.DeliveredEvent,
-	decision: Ingress.RoutingDecisionPayload,
-	reason: string,
+  event: Gateway.DeliveredEvent,
+  decision: Ingress.RoutingDecisionPayload,
+  reason: string,
 ): void {
-	// resolveAndRecordRoute has just appended through this same synchronous
-	// adapter; no user code or await can replace it before correction.
-	const ledger = LedgerAppend.port() as LedgerAppend.Port;
-	const streamId = Ingress.routeCorrectionStreamId(event);
-	const correction: Ledger.RouteNotDelivered = { inboundId: event.id, reason };
-	let appended: ReturnType<typeof ledger.append>;
-	try {
-		appended = ledger.append(Ingress.routeNotDeliveredFact(streamId, correction), 0);
-	} catch (error) {
-		throw new IngressRoutingError(
-			"route_record_failed",
-			`route not-delivered correction append failed: ${error instanceof Error ? error.message : String(error)}`,
-			decision,
-		);
-	}
-	if (appended.kind === "appended") return;
-	// cas_conflict — the correction already sits at seq 1 (idempotent redelivery
-	// of the same rejected reply). Confirm the recorded fact and return.
-	const fact = ledger.headFact(streamId);
-	if (fact !== undefined && fact.type === Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return;
-	throw new IngressRoutingError(
-		"route_record_failed",
-		`route not-delivered correction conflicted without a recorded correction fact on ${streamId}`,
-		decision,
-	);
+  // resolveAndRecordRoute has just appended through this same synchronous
+  // adapter; no user code or await can replace it before correction.
+  const ledger = LedgerAppend.port() as LedgerAppend.Port;
+  const streamId = Ingress.routeCorrectionStreamId(event);
+  const correction: Ledger.RouteNotDelivered = { inboundId: event.id, reason };
+  let appended: ReturnType<typeof ledger.append>;
+  try {
+    appended = ledger.append(Ingress.routeNotDeliveredFact(streamId, correction), 0);
+  } catch (error) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      `route not-delivered correction append failed: ${error instanceof Error ? error.message : String(error)}`,
+      decision,
+    );
+  }
+  if (appended.kind === "appended") return;
+  // cas_conflict — the correction already sits at seq 1 (idempotent redelivery
+  // of the same rejected reply). Confirm the recorded fact and return.
+  const fact = ledger.headFact(streamId);
+  if (fact !== undefined && fact.type === Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return;
+  throw new IngressRoutingError(
+    "route_record_failed",
+    `route not-delivered correction conflicted without a recorded correction fact on ${streamId}`,
+    decision,
+  );
 }
 
 type RoutedDecision = Extract<Ingress.RoutingDecisionPayload, { readonly outcome: "route" }>;
 
-
 function factValue(decision: Ingress.RoutingDecisionPayload, prefix: string): string | undefined {
-	const fact = decision.factsUsed.find((candidate) => candidate.startsWith(prefix));
-	return fact?.slice(prefix.length);
+  const fact = decision.factsUsed.find((candidate) => candidate.startsWith(prefix));
+  return fact?.slice(prefix.length);
 }
 
 function terminalMessage(decision: Ingress.RoutingDecisionPayload): string {
-	if (decision.stage === "channel_ceiling") {
-		if (decision.factsUsed.includes("channel:missing")) return "channel_grant.missing";
-		const kind = factValue(decision, "channel.kind:");
-		const treatment = factValue(decision, "channel.treatment:");
-		if (kind !== undefined && treatment !== undefined)
-			return `channel_grant.${kind}.${treatment}`;
-	}
-	if (decision.stage === "actor_identity") {
-		return "actor is not authorized to create top-level inbound work";
-	}
-	return decision.reason;
+  if (decision.stage === "channel_ceiling") {
+    if (decision.factsUsed.includes("channel:missing")) return "channel_grant.missing";
+    const kind = factValue(decision, "channel.kind:");
+    const treatment = factValue(decision, "channel.treatment:");
+    if (kind !== undefined && treatment !== undefined) return `channel_grant.${kind}.${treatment}`;
+  }
+  if (decision.stage === "actor_identity") {
+    return "actor is not authorized to create top-level inbound work";
+  }
+  return decision.reason;
 }
 
 export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload): RoutedDecision {
-	if (decision.outcome === "route") return decision;
-	if (decision.outcome === "ambiguous") {
-		throw new IngressRoutingError("route_ambiguous", decision.reason, decision);
-	}
-	throw new IngressRoutingError("route_blocked", terminalMessage(decision), decision);
+  if (decision.outcome === "route") return decision;
+  if (decision.outcome === "ambiguous") {
+    throw new IngressRoutingError("route_ambiguous", decision.reason, decision);
+  }
+  throw new IngressRoutingError("route_blocked", terminalMessage(decision), decision);
 }
 
 export function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
-	trace: TraceContext.Type,
-	resolution: KernelRouteResolution<Event>,
-	decision: RoutedDecision,
-	at = Date.now(),
+  trace: TraceContext.Type,
+  resolution: KernelRouteResolution<Event>,
+  decision: RoutedDecision,
+  at = Date.now(),
 ): void {
-	const wait = resolution.waitExecution;
-	if (wait.kind === "none") return;
-	// The matcher only returns candidates; the protocol fold decides
-	// (duplicate / late / unknown / ambiguous / attach / resolve) and the
-	// store persists the outcome before the owner session sees the reply.
-	const outcome = WaitService.attachReply(
-		wait.record.id,
-		{
-			replyKey: resolution.event.id,
-			responderCandidates: Wait.responderCandidates(
-				targetsOfWait(wait.record),
-				Wait.ingressEvidence(resolution.event, wait.correlation),
-			),
-			messageId: resolution.event.id,
-			at,
-		},
-		trace.traceId,
-	);
-	if (outcome.kind === "rejected") {
-		if (outcome.code === "deadline_passed") {
-			// Expire through the existing fold before rejecting. A storage fault
-			// must propagate rather than masquerading as a successful expiry.
-			WaitService.expire(wait.record.id, trace.traceId, at);
-		}
-		// Fix the ledger lie (batch ② commit 4): route.decided already recorded
-		// outcome:route for this correlated reply, but the wait fold rejects it
-		// fail-closed (a non-responder must not resume a wait — gateway-design
-		// §2a-1) and the message is dropped. Append the correcting
-		// route.not_delivered fact BEFORE returning the rejection so the ledger
-		// never claims a delivery that never happened.
-		const reason = `wait reply rejected: ${outcome.code}`;
-		recordRouteNotDelivered(resolution.event, decision, reason);
-		throw new IngressRoutingError("wait_reply_rejected", reason, decision);
-	}
-	// "already_resolved" (channel redelivery of the resolving reply) falls
-	// through on purpose: the owner delivery repeats idempotently with the
-	// recorded resolution — no state change, no revision bump.
-
+  const wait = resolution.waitExecution;
+  if (wait.kind === "none") return;
+  // The matcher only returns candidates; the protocol fold decides
+  // (duplicate / late / unknown / ambiguous / attach / resolve) and the
+  // store persists the outcome before the owner session sees the reply.
+  const outcome = WaitService.attachReply(
+    wait.record.id,
+    {
+      replyKey: resolution.event.id,
+      responderCandidates: Wait.responderCandidates(
+        targetsOfWait(wait.record),
+        Wait.ingressEvidence(resolution.event, wait.correlation),
+      ),
+      messageId: resolution.event.id,
+      at,
+    },
+    trace.traceId,
+  );
+  if (outcome.kind === "rejected") {
+    if (outcome.code === "deadline_passed") {
+      // Expire through the existing fold before rejecting. A storage fault
+      // must propagate rather than masquerading as a successful expiry.
+      WaitService.expire(wait.record.id, trace.traceId, at);
+    }
+    // Fix the ledger lie (batch ② commit 4): route.decided already recorded
+    // outcome:route for this correlated reply, but the wait fold rejects it
+    // fail-closed (a non-responder must not resume a wait — gateway-design
+    // §2a-1) and the message is dropped. Append the correcting
+    // route.not_delivered fact BEFORE returning the rejection so the ledger
+    // never claims a delivery that never happened.
+    const reason = `wait reply rejected: ${outcome.code}`;
+    recordRouteNotDelivered(resolution.event, decision, reason);
+    throw new IngressRoutingError("wait_reply_rejected", reason, decision);
+  }
+  // "already_resolved" (channel redelivery of the resolving reply) falls
+  // through on purpose: the owner delivery repeats idempotently with the
+  // recorded resolution — no state change, no revision bump.
 }

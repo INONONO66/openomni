@@ -279,10 +279,16 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
       ...(surfaceSessionId === undefined ? {} : { surfaceSessionId }),
     },
   );
-  if (decision.outcome === "route" && decision.stage === "surface_default" && decision.sessionId === undefined) {
+  if (
+    decision.outcome === "route" &&
+    decision.stage === "surface_default" &&
+    decision.sessionId === undefined
+  ) {
     const id = SurfaceKey.claim(surfaceKey, crypto.randomUUID());
     decision.sessionId = id;
-    decision.factsUsed = decision.factsUsed.map((fact) => fact === "surface.default:new" ? `surface.default:${id}` : fact);
+    decision.factsUsed = decision.factsUsed.map((fact) =>
+      fact === "surface.default:new" ? `surface.default:${id}` : fact,
+    );
   }
   const waitExecution = kernelWaitExecution(gatheredWait, correlation, requestedAction);
   return {

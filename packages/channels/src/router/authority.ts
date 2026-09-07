@@ -12,9 +12,10 @@ export function applyChannelGrantTreatment(
   const actor = getActor(event);
   const actorTier = actorTrustTier(actor);
   const effectiveTier = effectiveTrustTier(actorTier, grant.defaultTier);
-  const actorWithChannelDefault = !actorTier && grant.defaultTier
-    ? { ...(actor ?? { role: "user" }), trustTier: effectiveTier }
-    : actor;
+  const actorWithChannelDefault =
+    !actorTier && grant.defaultTier
+      ? { ...(actor ?? { role: "user" }), trustTier: effectiveTier }
+      : actor;
   return {
     ...event,
     meta: {

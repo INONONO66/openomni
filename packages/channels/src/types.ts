@@ -15,8 +15,8 @@ export type PublishPort = BusEvent.Sink["publish"];
  * (Discord and Telegram do); awaited-delivery correlation records it.
  */
 export interface ChannelClient {
-	/** `traceId` is the causing occurrence's trace (D11) — the inbound message for replies, the surface's documented origin mint for outbound sends; retries of one send share it. */
-	send(channelId: string, text: string, traceId: string): Promise<string | undefined>;
+  /** `traceId` is the causing occurrence's trace (D11) — the inbound message for replies, the surface's documented origin mint for outbound sends; retries of one send share it. */
+  send(channelId: string, text: string, traceId: string): Promise<string | undefined>;
 }
 
 /**
@@ -25,5 +25,5 @@ export interface ChannelClient {
  * Pure transformation function — same input always produces same output.
  */
 export interface InboundNormalizer<TPayload> {
-	normalize(payload: TPayload): Channel.InboundMessage | null;
+  normalize(payload: TPayload): Channel.InboundMessage | null;
 }
