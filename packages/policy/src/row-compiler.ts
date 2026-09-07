@@ -99,6 +99,8 @@ function compileErrorMessage(options: CompileErrorOptions): string {
 const Match = z
   .object({
     op: z.string().min(1).optional(),
+    /** The `operation.op` discriminator inside a multi-operation tool input. */
+    operation: z.string().min(1).optional(),
     role: z.enum(["resident", "worker"]).optional(),
     sessionId: z.string().min(1).optional(),
     message: z.union([Gateway.RuleTableA, Gateway.RuleTableB]).optional(),
@@ -385,8 +387,17 @@ function buildBuckets(rows: readonly CompiledRow[]): ReadonlyMap<string, BucketS
   return buckets;
 }
 
+function innerOperation(value: PlainValue): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const operation = value.operation;
+  if (operation === null || typeof operation !== "object" || Array.isArray(operation))
+    return undefined;
+  return typeof operation.op === "string" ? operation.op : undefined;
+}
+
 function matches(row: CompiledRow, input: PolicyEvaluationInput): boolean {
   return (
+    (row.match.operation === undefined || row.match.operation === innerOperation(input.value)) &&
     (row.match.role === undefined || row.match.role === input.role) &&
     (row.match.sessionId === undefined || row.match.sessionId === input.sessionId) &&
     (row.match.message === undefined || matchesMessage(row.match.message, input.message))

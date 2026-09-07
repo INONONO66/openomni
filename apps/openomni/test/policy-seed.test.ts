@@ -8,6 +8,7 @@ import { Storage } from "@openomni/ledger";
 import type { PolicyRow } from "@openomni/protocol";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";
+import { PROVISION_POLICY_ROWS } from "../src/tools/provision";
 
 const identity = (row: Omit<PolicyRow.Row, "generation">) =>
   JSON.stringify([row.name, row.kind, row.phase]);
@@ -15,6 +16,7 @@ const budgetId = JSON.stringify(["monitor-wake-budget", "tool", "pre"]);
 const expectedIds = [
   ...SEEDED_POLICY_ROWS.map(identity),
   ...MESSAGE_POLICY_ROWS.map(identity),
+  ...PROVISION_POLICY_ROWS.map(identity),
   budgetId,
 ].sort();
 

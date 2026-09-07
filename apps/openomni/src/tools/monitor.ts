@@ -53,7 +53,7 @@ const operation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("rearm"), alarmId: z.string().min(1) }).strict(),
   z.object({ op: z.literal("cancel"), alarmId: z.string().min(1) }).strict(),
 ]);
-// Like approval/provision: an object root preserves the framework's model ABI.
+// Like provision: an object root preserves the framework's model ABI.
 const input = z.object({ operation }).strict();
 
 export const monitorTool = defineTool({

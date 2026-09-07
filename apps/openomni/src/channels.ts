@@ -159,7 +159,7 @@ export function isRegisteredProvider(provider: string): provider is keyof typeof
 }
 
 /**
- * The pre-persist credential gate for `channel_declare`/`secret_rotate`
+ * The pre-persist credential gate for `channel_add`/`secret_rotate`
  * (docs/provisioning-and-providers.md §5): the payload must parse under the
  * provider's credential schema BEFORE any row lands — an invalid credential
  * is a typed refusal string, and nothing is sealed or mounted.
@@ -176,7 +176,7 @@ export function validateProviderCredential(
 }
 
 /**
- * The pre-persist settings gate for `channel_declare`: knobs must parse under
+ * The pre-persist settings gate for `channel_add`: knobs must parse under
  * the provider's `settings` schema before the row lands. No shipped provider
  * carries knobs yet, so any settings key is a typed refusal — never
  * accepted-and-ignored.

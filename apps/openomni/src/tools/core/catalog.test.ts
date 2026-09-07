@@ -11,7 +11,6 @@ const EXPECTED = [
   "bash",
   "monitor",
   "sendMessage",
-  "approval",
   "provision",
   "run_code",
   "llm",

@@ -216,7 +216,7 @@ test("a cell creates three child sessions through sendMessage", async () => {
 
   // The catalog is stable; the daemon enforces machine availability at execution.
   expect(answer).toContain(
-    "offered=[approval,bash,edit,list,monitor,provision,read,run_code,search,sendMessage,write]",
+    "offered=[bash,edit,list,monitor,provision,read,run_code,search,sendMessage,write]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
@@ -290,7 +290,6 @@ test("the catalog remains available while machine execution refuses without atta
     "bash",
     "monitor",
     "sendMessage",
-    "approval",
     "provision",
     "run_code",
   ]);

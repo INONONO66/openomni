@@ -25,9 +25,10 @@ const Input = z
 
 export const LLM_TOOL_NAME = "llm";
 
-function executeLlm(llm: LlmPort) {
+function executeLlm(llm: LlmPort | undefined) {
   let calls = 0;
   return async ({ prompts }: z.output<typeof Input>): Promise<string[]> => {
+    if (llm === undefined) throw new ToolRefused(LLM_TOOL_NAME, "sub-model port is not composed");
     if (calls + prompts.length > MAX_LLM_CALLS) {
       throw new ToolRefused(
         LLM_TOOL_NAME,
@@ -39,7 +40,7 @@ function executeLlm(llm: LlmPort) {
   };
 }
 
-export function createLlmTool(llm: LlmPort) {
+export function createLlmTool(llm: LlmPort | undefined) {
   return defineTool({
     name: LLM_TOOL_NAME,
     category: "execution",

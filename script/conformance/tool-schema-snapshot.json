@@ -332,58 +332,8 @@
     "safe": false
   },
   {
-    "name": "approval",
-    "description": "Promote a contact or merge an endpoint. The original invocation suspends for authenticated Owner consent.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "operation": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "op": {
-                  "type": "string",
-                  "const": "contact_promote"
-                },
-                "actorId": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              },
-              "required": ["op", "actorId"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "op": {
-                  "type": "string",
-                  "const": "endpoint_merge"
-                },
-                "endpointId": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "toActorId": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              },
-              "required": ["op", "endpointId", "toActorId"],
-              "additionalProperties": false
-            }
-          ]
-        }
-      },
-      "required": ["operation"],
-      "additionalProperties": false
-    },
-    "safe": false
-  },
-  {
     "name": "provision",
-    "description": "Administer people, channels, credentials, and provisioning status. Use op=person_declare|person_remove|channel_declare|channel_enable|channel_disable|secret_rotate|status.",
+    "description": "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|endpoint_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and endpoint_merge suspend for Owner consent.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -394,7 +344,7 @@
               "properties": {
                 "op": {
                   "type": "string",
-                  "const": "person_declare"
+                  "const": "contact_add"
                 },
                 "args": {
                   "type": "object",
@@ -474,7 +424,7 @@
               "properties": {
                 "op": {
                   "type": "string",
-                  "const": "person_remove"
+                  "const": "contact_remove"
                 },
                 "args": {
                   "type": "object",
@@ -496,7 +446,55 @@
               "properties": {
                 "op": {
                   "type": "string",
-                  "const": "channel_declare"
+                  "const": "contact_promote"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "actorId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["actorId"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "endpoint_merge"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "endpointId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "toActorId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["endpointId", "toActorId"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "channel_add"
                 },
                 "args": {
                   "type": "object",

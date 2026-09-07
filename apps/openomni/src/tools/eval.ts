@@ -1,5 +1,5 @@
 import type { createCodemode } from "@openomni/codemode";
-import { defineTool } from "@openomni/agent";
+import { defineTool, ToolRefused } from "@openomni/agent";
 import { Machine } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -20,7 +20,7 @@ function describe(result: Machine.CellResult, timeoutMs: number): string {
   }
 }
 
-export function createRunCodeTool(cell: Cell) {
+export function createRunCodeTool(cell: Cell | undefined) {
   return defineTool({
     name: "run_code",
     category: "execution",
@@ -29,8 +29,10 @@ export function createRunCodeTool(cell: Cell) {
     input: z.object({ code: z.string().min(1), timeoutMs: z.number().int().positive() }).strict(),
     output: Machine.CellResult,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-    execute: ({ code, timeoutMs }, ctx) =>
-      cell.run(code, ctx.sessionId, { timeoutMs, signal: ctx.signal }),
+    execute: ({ code, timeoutMs }, ctx) => {
+      if (cell === undefined) throw new ToolRefused("run_code", "codemode is not composed");
+      return cell.run(code, ctx.sessionId, { timeoutMs, signal: ctx.signal });
+    },
     render: (args, value) => describe(value, args.timeoutMs),
   });
 }

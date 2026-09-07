@@ -17,10 +17,10 @@ const provisionTool = (name: string, port: ProvisionPort, now: () => number = Da
   return (input: Record<string, unknown>) => run({ operation: { op, args: input } });
 };
 const personDeclare = (port: ProvisionPort, now?: () => number) =>
-  provisionTool("person_declare", port, now);
-const personRemove = (port: ProvisionPort) => provisionTool("person_remove", port);
+  provisionTool("contact_add", port, now);
+const personRemove = (port: ProvisionPort) => provisionTool("contact_remove", port);
 const channelDeclare = (port: ProvisionPort, now?: () => number) =>
-  provisionTool("channel_declare", port, now);
+  provisionTool("channel_add", port, now);
 const channelEnable = (port: ProvisionPort, now?: () => number) =>
   provisionTool("channel_enable", port, now);
 const channelDisable = (port: ProvisionPort, now?: () => number) =>
@@ -114,12 +114,12 @@ describe("original Person invocation consent", () => {
   test("a protected raise suspends then applies the exact original manifest once", async () => {
     const { port, supervisor } = portWith();
     const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
+      operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
     });
     try {
       const request = await bounded(f.opened);
       expect(request.parsedInput).toEqual({
-        operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
+        operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
       });
       expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
       expect(supervisor.calls).toEqual([]);
@@ -134,7 +134,7 @@ describe("original Person invocation consent", () => {
   test("refusal leaves the Person unchanged and approvalId cannot mint authority", async () => {
     const { port } = portWith();
     const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
+      operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
     });
     try {
       expect((await f.answer("refuse")).isError).toBe(true);
@@ -157,7 +157,7 @@ describe("original Person invocation consent", () => {
   test("domain revision changes invalidate consent instead of applying a stale manifest", async () => {
     const { port } = portWith();
     const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
+      operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
     });
     try {
       await bounded(f.opened);
@@ -196,7 +196,7 @@ describe("owner Person protection and sole owner", () => {
       endpoints: [...ownerManifest.endpoints, { channel: "discord", externalId: "2" }],
     };
     const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "person_declare", args: { manifest: edited } },
+      operation: { op: "contact_add", args: { manifest: edited } },
     });
     try {
       await bounded(f.opened);
@@ -213,7 +213,7 @@ describe("owner Person protection and sole owner", () => {
     const { port } = portWith();
     const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
       operation: {
-        op: "person_declare",
+        op: "contact_add",
         args: { manifest: { ...ownerManifest, id: "person:second", endpoints: [] } },
       },
     });
@@ -225,7 +225,7 @@ describe("owner Person protection and sole owner", () => {
       await f.close();
     }
   });
-  test("person_remove refuses the owner and removes other people", async () => {
+  test("contact_remove refuses the owner and removes other people", async () => {
     putOwner();
     PersonStore.put({
       ...MANAGER_MANIFEST,
@@ -245,7 +245,7 @@ describe("owner Person protection and sole owner", () => {
 });
 
 describe("channel administration ends in reconcile (§5, §8.7)", () => {
-  test("channel_declare validates the credential BEFORE anything lands", async () => {
+  test("channel_add validates the credential BEFORE anything lands", async () => {
     const { port, supervisor } = portWith();
     const result = await channelDeclare(
       port,
@@ -255,13 +255,13 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       provider: "telegram",
       credential: { wrong: "field" },
     });
-    expect(result).toContain("channel_declare refused:");
+    expect(result).toContain("channel_add refused:");
     expect(ChannelInstanceStore.get("channel:telegram:main")).toBeUndefined();
     expect(SecretStore.get("secret:channel-telegram-main")).toBeUndefined();
     expect(supervisor.calls).toEqual([]);
   });
 
-  test("channel_declare refuses an unregistered provider before anything lands", async () => {
+  test("channel_add refuses an unregistered provider before anything lands", async () => {
     const { port, supervisor } = portWith();
     const result = await channelDeclare(
       port,
@@ -276,7 +276,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     expect(supervisor.calls).toEqual([]);
   });
 
-  test("§4 channel_declare refuses unknown settings knobs — never accepted-and-ignored", async () => {
+  test("§4 channel_add refuses unknown settings knobs — never accepted-and-ignored", async () => {
     const { port, supervisor } = portWith();
     const result = await channelDeclare(
       port,
@@ -287,7 +287,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       credential: { token: "tg-token" },
       settings: { knob: "x" },
     });
-    expect(result).toContain("channel_declare refused:");
+    expect(result).toContain("channel_add refused:");
     expect(ChannelInstanceStore.get("channel:telegram:main")).toBeUndefined();
     expect(supervisor.calls).toEqual([]);
   });
@@ -426,14 +426,21 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
         sessionId: "s",
       },
     ).map((entry) => entry.name);
-    const unwired = createTools({}, { role: "resident", depth: 0, sessionId: "s" }).map(
-      (entry) => entry.name,
-    );
     for (const name of provisionTools) {
       expect(resident).toContain(name);
       expect(worker).not.toContain(name);
-      expect(unwired).not.toContain(name);
     }
+  });
+
+  test("catalog gate: an uncomposed provisioning port keeps the tool and refuses", async () => {
+    const result = await dispatchModelTool(
+      "provision",
+      {},
+    )({
+      operation: { op: "status", args: {} },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("provision refused: provisioning is not composed");
   });
 
   test("provision_status reports source, vault state, and per-instance verdicts", async () => {
@@ -473,9 +480,9 @@ describe("refusal branches", () => {
   test("malformed inputs refuse with the tool's typed refusal", async () => {
     const { port } = portWith();
     for (const [name, input] of [
-      ["person_declare", {}],
-      ["person_remove", {}],
-      ["channel_declare", {}],
+      ["contact_add", {}],
+      ["contact_remove", {}],
+      ["channel_add", {}],
       ["channel_enable", {}],
       ["secret_rotate", {}],
       ["provision_status", "nope"],
@@ -500,7 +507,7 @@ describe("refusal branches", () => {
           id: approvalId,
           tool: "provision",
           input: {
-            operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST, approvalId } },
+            operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST, approvalId } },
           },
         },
         { sessionId: "test", turnId: "turn" },
@@ -518,7 +525,7 @@ describe("refusal branches", () => {
       {
         id: "no-authority",
         tool: "provision",
-        input: { operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } } },
+        input: { operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } } },
       },
       { sessionId: "test", turnId: "turn" },
     );
@@ -526,7 +533,7 @@ describe("refusal branches", () => {
     expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 
-  test("a durable-write failure in channel_declare is a typed refusal", async () => {
+  test("a durable-write failure in channel_add is a typed refusal", async () => {
     const { port } = portWith({
       instances: {
         get: ChannelInstanceStore.get,
@@ -545,6 +552,6 @@ describe("refusal branches", () => {
         provider: "telegram",
         credential: { token: "t" },
       }),
-    ).toBe("channel_declare refused: disk full");
+    ).toBe("channel_add refused: disk full");
   });
 });

@@ -227,14 +227,15 @@ describe("catalog gating for the rlm tools", () => {
     expect(names).toContain(LLM_TOOL_NAME);
   });
 
-  it("is absent from the catalog when the ports are not wired", () => {
+  it("stays in the static catalog without a wired port and refuses at execution", async () => {
     const names = createTools({}, RESIDENT).map((entry) => entry.name);
-    expect(names).not.toContain(LLM_TOOL_NAME);
-  });
-
-  it("appears when the port is wired", () => {
-    const names = createTools({ llm: async () => "" }, RESIDENT).map((entry) => entry.name);
     expect(names).toContain(LLM_TOOL_NAME);
+    const result = await createDispatcher(createTools({}, RESIDENT), { executor }).executeCell(
+      { id: "unwired", tool: LLM_TOOL_NAME, input: { prompts: ["x"] } },
+      { sessionId: RESIDENT.sessionId, turnId: "turn" },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("llm refused: sub-model port is not composed");
   });
 
   it("projects llm without target metadata", () => {

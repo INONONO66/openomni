@@ -8,7 +8,7 @@ export interface MessagePort {
   ): Promise<Gateway.IngestResult>;
 }
 
-export function createSendMessageTool(port: MessagePort) {
+export function createSendMessageTool(port: MessagePort | undefined) {
   return defineTool({
     name: "sendMessage",
     category: "authority",
@@ -18,6 +18,8 @@ export function createSendMessageTool(port: MessagePort) {
     output: Gateway.SendMessageHandle,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
     async execute(input, context) {
+      if (port === undefined)
+        throw new ToolRefused("sendMessage", "message gateway is not composed");
       const result = await port.ingest({ kind: "session", id: context.sessionId }, input);
       if (result.status !== "executed") throw new ToolRefused("sendMessage", result.reasonCode);
       return result.handle;
