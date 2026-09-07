@@ -11,7 +11,7 @@ The gateway is the single perimeter for cross-session and external messages. Thi
 
 Drivers submit event id, physical channel/workspace, addressee external ids, DM status, reply/thread/ancestor metadata, structured payload and rendered text. They cannot submit a tier, admission verdict, session activation, or policy result. The gateway resolves identity and addressee axes from perimeter stores. A structured Wait action is evaluated from payload, not from its rendered text.
 
-The model-visible tool is `sendMessage({to, type, content, replyTo?, deadline?})`. Its target is an existing session, a new child session, or an existing actor. `parent: "me"` binds to the authenticated session. The tool returns `{messageId, target}` without waiting. Actor handles name the actor, not an invented session.
+The model-visible tool is `send_message({to, message, kind?, reply_to?, deadline_ms?})`. Its target is an existing session, a new child session, or an existing contact. `parent: "me"` binds to the authenticated session. The tool returns `{messageId, target}` without waiting. Actor handles name the actor, not an invented session.
 
 ## Ownership
 

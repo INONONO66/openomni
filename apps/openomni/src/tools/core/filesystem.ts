@@ -108,7 +108,7 @@ export async function walk(
   await step(path);
 }
 
-export function childPath(locus: Locus, name: string): string {
+function childPath(locus: Locus, name: string): string {
   const path = join(locus.path, name);
   if (locus.kind === "machine") return `${locus.machine}:${path}`;
   // join removes './'; restore the local escape before a child is parsed again.

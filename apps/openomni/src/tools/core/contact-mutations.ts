@@ -1,6 +1,6 @@
 import { ToolRefused } from "@openomni/agent";
 import { ActorRegistry, Storage } from "@openomni/ledger";
-import { canonicalDigest, PlainValueSchema } from "@openomni/protocol";
+import { type Actor, canonicalDigest, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 
 export const CONTACT_PROMOTE_INPUT = z.object({ actorId: z.string().min(1) }).strict();
@@ -19,7 +19,7 @@ export const ContactResult = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_merge"), id: z.string(), actorId: z.string() }).strict(),
 ]);
 
-const digestKey = (kind: string, id: string, row: unknown) =>
+const digestKey = (kind: string, id: string, row: Actor.Identity | Actor.Endpoint | undefined) =>
   `${kind}:${id}:${canonicalDigest(PlainValueSchema.parse(row ?? null))}`;
 
 /** Actor rows carry no monotonic revision, so every participating row binds by digest. */

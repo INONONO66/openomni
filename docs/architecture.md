@@ -6,7 +6,7 @@ This document maps [Core Model](core-model.md) onto the post-#792 codebase. [Imp
 
 External traffic and session tools enter the same `gateway.ingest(sender, envelope)` operation. Drivers supply raw facts; the gateway resolves perimeter identity, Wait correlation and surface routing. The injected L2 executor applies compiled message pre/post policy. Session delivery calls only the injected L1 `Inbox.Port.commit`; actor delivery uses the retained channel send kernel.
 
-`sendMessage` returns a handle without waiting for a child. New-session configuration and first inbox are atomic. Resident and worker roles share the same session-owned runner; an OS process carries the session id and committed-inbox notifications, not a separate completion authority. Observations follow durable action commits and do not authorize delivery.
+`send_message` returns a handle without waiting for a child. New-session configuration and first inbox are atomic. Resident and worker roles share the same session-owned runner; an OS process carries the session id and committed-inbox notifications, not a separate completion authority. Observations follow durable action commits and do not authorize delivery.
 
 ## Ledger
 

@@ -141,7 +141,7 @@ remains the separate #971 target, not a receipt consumed by this baseline.
 
 ### Unified message boundary
 
-`sendMessage({to, type, content, replyTo?, deadline?})` enters `gateway.ingest(sender, envelope)`. Session identity is authenticated separately from model input. A/B are compiled message pre-policy rows; post policy is obligation-only. The gateway consumes perimeter facts and L1-projected session facts, and never reads the session store. Session delivery calls the injected inbox commit; new child configuration and first prompt share its transaction. Only executed actor delivery has an accepted/rejected/unknown receipt. A session commit succeeds or throws.
+`send_message({to, message, kind?, reply_to?, deadline_ms?})` folds onto the gateway send and enters `gateway.ingest(sender, envelope)`; `to.kind` is `session | new_session | contact`, and `kind` defaults to `prompt`. Session identity is authenticated separately from model input. A/B are compiled message pre-policy rows; post policy is obligation-only. The gateway consumes perimeter facts and L1-projected session facts, and never reads the session store. Session delivery calls the injected inbox commit; new child configuration and first prompt share its transaction. Only executed actor delivery has an accepted/rejected/unknown receipt. A session commit succeeds or throws.
 
 A child seals its terminal and a source-owned outbound obligation atomically, without changing the parent. The recorded bytes traverse gateway admission, an idempotent receiving inbox, and the receiving executor. Only a verified destination receipt permits the source acknowledgement; retries never reseal the child or repeat the receiving invocation. Process response maps correlate physical replies only. Mandatory terminal mail answers the original request under its existing deadline/CAS, never a new request. Native child admission commits the original request, deadline projection, child configuration and first inbox together.
 
@@ -204,12 +204,30 @@ TOCTOU for now (follow-up #938 in `docs/SLOP.md`). This is
 not an OS shell sandbox: commands run as
 the daemon user and may exercise that user's other OS authority once started;
 Owner grants shell execution knowingly. Codemode consumes these handles through
-one `run_code` cell runner, with per-tenant interpreter state and no legacy
+one `eval` cell runner, with per-tenant interpreter state and no legacy
 machines or filesystem tools.
 
-### Stage-one path tools (#949)
+### The sealed tool catalog (#949)
 
-`read`, `write`, `edit`, `list`, and `search` share one `parseLocus`: bare paths
+The model door offers exactly eleven tools, in catalog order: `read`, `write`,
+`edit`, `ls`, `find`, `grep`, `bash`, `eval`, `monitor`, `send_message`,
+`provision`. `completion(prompt)` is the one cell-only tool; batching is the
+cell's `parallel()`. Names are lowercase snake_case and follow the senpi/pi
+file-tool vocabulary; the file is the tool (`apps/openomni/src/tools/<name>.ts`).
+Every multi-operation tool takes `operation: { op, ... }` with one discriminator
+named `op`: `eval.op = run`, `monitor.op = create | rearm | cancel`,
+`provision.op = contact_add | contact_remove | contact_promote | contact_merge |
+channel_add | channel_enable | channel_disable | secret_rotate | status`. The
+root of every input schema is an object. There is no `approval` tool: Owner
+consent for `provision.contact_promote` and `provision.contact_merge` is a
+`require_approval` policy row that the executor resolves through the kernel
+request path, and no model-callable `decide` exists. Retired names (`list`,
+`search`, `run_code`, `llm`, `sendMessage`, `approval`, delegation and
+work-item tools) have no aliases; `lint:tools` and the catalog test pin the set.
+
+### Path tools
+
+`read`, `write`, `edit`, `ls`, `find`, and `grep` share one `parseLocus`: bare paths
 are local; `machineId:/absolute/path` selects a raw machine handle. Single-letter
 machine IDs are supported. Empty IDs, relative remote paths, URL syntax, NUL,
 remote parent traversal and the retired virtual root syntax refuse with typed
@@ -218,18 +236,24 @@ errors. A local filename containing a colon can be addressed with `./`.
 Local filesystem calls use host-user permissions and process cwd, with ordinary
 OS symlink semantics; this is not a new local confinement boundary. Read/write
 support UTF-8 (default) or canonical base64. Write creates or overwrites one file
-and requires existing parents. Edit replaces one unique literal occurrence and
-is sequential but not atomic against external writers. Search recursively
-matches literal UTF-8 content, reports one-based lines, and does not traverse
-symlinks. Binary content requires explicit base64 read; text search refuses it.
+and requires existing parents. `read` accepts a one-based `offset`/`limit` line
+window for UTF-8 reads. `edit` applies an `edits` array of exact literal
+replacements, each matching once and none overlapping; it is sequential but not
+atomic against external writers. `ls` lists immediate entries with an optional
+`limit`. `find` matches paths relative to the search root against a glob;
+`grep` matches UTF-8 content with a regular expression (`literal`,
+`ignoreCase`, `glob` name filter, `context` lines, `limit`), reports one-based
+lines, and neither traverses symlinks. Binary content requires explicit base64
+read; `grep` refuses it.
 Remote read windows are assembled into a full value; daemon transport limits
 remain distinct from model rendering limits.
 
-`bash({cmd, machine?})` runs local bash in process cwd or the daemon's raw exec
-in `/`; remote `/` must be an offered, allowed export. Directory changes belong
-inside `cmd`, never persistent tool state. The existing raw exec boundary owns
-remote deadlines, cancellation limitations and transport byte limits. No new
-machine authority check is added to these adapters.
+`bash({command, timeout?, machine?})` runs local bash in process cwd or the
+daemon's raw exec in `/`; remote `/` must be an offered, allowed export.
+Directory changes belong inside `command`, never persistent tool state.
+`timeout` (seconds) bounds local commands only; the existing raw exec boundary
+owns remote deadlines, cancellation limitations and transport byte limits. No
+new machine authority check is added to these adapters.
 
 Query category alone derives `safe`; write/edit/bash are sequential mutation or
 execution tools. The dispatcher alone caps model rendering at 32,000 UTF-16 code
@@ -237,8 +261,7 @@ units, including `\n[truncated: N bytes dropped; M bytes original]`. The marker
 counts original and omitted UTF-8 bytes, excluding the marker itself from both
 counts. A retained prefix ends at a Unicode code-point boundary and can be one
 code unit shorter than the cap rather than splitting a surrogate pair. It drops
-overflow, never spills artifacts, and does not cap typed cell results. Final catalog and
-naming convergence is stage 2 after messaging and monitor land.
+overflow, never spills artifacts, and does not cap typed cell results.
 
 ## 4. Turn termination, not task satisfaction
 

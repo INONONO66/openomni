@@ -46,7 +46,7 @@ export const SendMessageInput = z
 export type SendMessageInput = z.output<typeof SendMessageInput>;
 
 /** The tool's vocabulary folded onto the gateway's consumer surface. */
-export function toGatewaySend(input: SendMessageInput, now: number): Gateway.SendMessage {
+function toGatewaySend(input: SendMessageInput, now: number): Gateway.SendMessage {
   return {
     to: input.to.kind === "contact" ? { kind: "actor", actorId: input.to.id } : input.to,
     type: input.kind === "prompt" ? "message" : input.kind,
