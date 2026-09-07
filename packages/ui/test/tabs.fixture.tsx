@@ -105,6 +105,14 @@ describe("real tabs", () => {
     expect(host.querySelector("button button")).toBeNull();
   });
 
+  test("pressing the close control never takes focus: its pointerdown is cancelled", async () => {
+    const { host } = await mount(frame("a"));
+    const close = node(host, '[data-ui="Tab.Close"]');
+    const press = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 });
+    await act(() => close.dispatchEvent(press));
+    expect(press.defaultPrevented).toBe(true);
+  });
+
   test("close and middle auxiliary clicks close once without activating; right clicks never close", async () => {
     const closed: string[] = [];
     const activated: string[] = [];
@@ -193,15 +201,15 @@ describe("real tabs", () => {
   });
 });
 
-describe("bounded history", () => {
-  const entries = Array.from({ length: 25 }, (_, index) => ({
-    id: String(index),
-    title: `Entry ${index}`,
+describe("history menu", () => {
+  const entries = Array.from({ length: 20 }, (_, index) => ({
+    id: String(24 - index),
+    title: `Entry ${24 - index}`,
   }));
   test.each([
-    "0",
     "24",
-  ])("current %s remains in the newest-first twenty with original cursor ids and no fabricated ages", async (currentId) => {
+    "5",
+  ])("renders the caller's order verbatim with current %s marked once and no fabricated ages", async (currentId) => {
     const jumps: string[] = [];
     const { host } = await mount(
       <HistoryMenu
@@ -215,17 +223,12 @@ describe("bounded history", () => {
     const items = Array.from(
       document.querySelectorAll<HTMLElement>('[data-ui="HistoryMenu.Item"]'),
     );
-    expect(items).toHaveLength(20);
-    const expected =
-      currentId === "0"
-        ? [...entries.slice(-19).reverse(), ...entries.slice(0, 1)]
-        : entries.slice(-20).reverse();
-    expect(items.map((item) => item.textContent)).toEqual(expected.map((entry) => entry.title));
+    expect(items.map((item) => item.textContent)).toEqual(entries.map((entry) => entry.title));
     expect(items.filter((item) => item.getAttribute("aria-current") === "true")).toHaveLength(1);
     expect(items.every((item) => item.querySelector('[data-ui="Text"]') === null)).toBe(true);
     const last = items.at(-1);
     if (last === undefined) throw new Error("Missing last entry");
     await act(() => last.click());
-    expect(jumps).toEqual([currentId === "0" ? "0" : "5"]);
+    expect(jumps).toEqual(["5"]);
   });
 });

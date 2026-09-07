@@ -248,6 +248,7 @@ function Tab({
           event.stopPropagation();
           onClose(tab.id);
         }}
+        onPointerDown={(event) => event.preventDefault()}
         size="xs"
       >
         <X />

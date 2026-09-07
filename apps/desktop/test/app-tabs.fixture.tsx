@@ -30,9 +30,11 @@ const {
   activateTab,
   back,
   closeTab,
+  jumpTo,
   consoleStore,
   createSession,
   INITIAL_CLIENT_STATE,
+  historyMenuEntries,
   navigate,
   newSessionTab,
   openTab,
@@ -315,6 +317,47 @@ test("closing a composer onto a route focuses its tab rather than the removed pa
   await command("close-tab");
   expect(document.activeElement).toBe(node(host, `#tab-${routeTab}`));
   expect(host.querySelector("textarea")).toBeNull();
+});
+
+test.each(["newest", "oldest"])(
+  "mounted history menu is newest first at the %s cursor with the current entry included once",
+  async (position) => {
+    seed();
+    for (let index = 0; index < 25; index += 1) {
+      const id = createSession(4000 + index);
+      setSessionTitleIfPlaceholder(id, `visit-${index}`);
+      navigate({ kind: "session", sessionId: id });
+    }
+    if (position === "oldest") jumpTo(0);
+    const { host } = await mount();
+    await click(node(host, '[aria-label="History"]'));
+    const items = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-ui="HistoryMenu.Item"]'),
+    );
+    expect(items.map((item) => item.textContent)).toEqual(
+      historyMenuEntries().map((entry) => entry.title),
+    );
+    expect(items).toHaveLength(20);
+    expect(items[0]?.textContent).toBe("visit-24");
+    expect(items.at(-1)?.textContent).toBe(position === "oldest" ? "alpha" : "visit-5");
+    expect(items.filter((item) => item.getAttribute("aria-current") === "true")).toHaveLength(1);
+  },
+);
+
+test("pointer-pressing an inactive tab's close control leaves the editor focused", async () => {
+  const { bTab } = seed();
+  const { host } = await mount();
+  const editor = node(host, "textarea");
+  editor.focus();
+  const inactive = node(host, `#tab-${bTab}`).parentElement;
+  if (inactive === null) throw new Error("Missing tab wrapper");
+  const close = node(inactive, '[data-ui="Tab.Close"]');
+  const press = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 });
+  await act(async () => close.dispatchEvent(press));
+  if (!press.defaultPrevented) close.focus();
+  await click(close);
+  expect(consoleStore.state.tabs.some((tab) => tab.id === bTab)).toBe(false);
+  expect(document.activeElement === editor).toBe(true);
 });
 
 test("history stays local across live duplicate views and tab titles resolve current metadata", async () => {

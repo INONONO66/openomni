@@ -12,11 +12,9 @@ export interface HistoryEntry {
   readonly at?: number;
 }
 
-/** The menu lists this many, newest first; the stack behind it may be longer. */
-const HISTORY_MENU_LIMIT = 20;
-
 /**
- * The clock: a Base UI menu over the last twenty places, newest first, the
+ * The clock: a Base UI menu over the places it is handed, in the order it is
+ * handed them (the caller bounds and orders the ledger; this renders it), the
  * current one marked. Each place is ONE line — the title, then how long ago in
  * the ambient tone on the right — so the list reads as a ledger of where the
  * eye has been, not as a second navigator.
@@ -36,12 +34,6 @@ export function HistoryMenu({
   readonly now: number;
   readonly onJump: (id: string) => void;
 }) {
-  const recent = entries.slice(-HISTORY_MENU_LIMIT).reverse();
-  const current = entries.find((entry) => entry.id === currentId);
-  if (current !== undefined && !recent.includes(current)) {
-    recent.pop();
-    recent.push(current);
-  }
   return (
     <Menu.Root>
       <Menu.Trigger render={<IconButton label="History" size="base" />}>
@@ -58,14 +50,14 @@ export function HistoryMenu({
             className="min-w-56 rounded-card border-[0.5px] border-line-surface bg-raised p-1 outline-none"
             data-ui={UI_NAMES.HistoryMenu}
           >
-            {recent.length === 0 ? (
+            {entries.length === 0 ? (
               <Menu.Item className={ITEM} data-ui={UI_NAMES.HistoryMenuItem} disabled>
                 <Text level="label" tone="faint">
                   No history
                 </Text>
               </Menu.Item>
             ) : (
-              recent.map((entry) => {
+              entries.map((entry) => {
                 const current = entry.id === currentId;
                 return (
                   <Menu.Item
