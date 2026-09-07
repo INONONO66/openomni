@@ -1,159 +1,185 @@
-import { canonicalDigest, Deadline, PlainValueSchema, type LedgerAction } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  PlainValueSchema,
+  SessionTransition,
+  type PlainValue,
+} from "@openomni/protocol";
 import {
   ExecutionApprovalError,
   type ExecutionApprovals,
   type ExecutionApprovalRequest,
   type ExecutorOptions,
 } from "./executor-contract";
+import { requestBindingDigest } from "./session-request";
 
 type ApprovalDecision = "approve" | "refuse" | "timeout";
 
-/** Per-executor suspension capability. All durable authority remains with its supplied executor commit. */
-export function createExecutionApprovals(
-  options: ExecutorOptions,
-  commit: (action: LedgerAction.Append) => Promise<LedgerAction.Receipt>,
-) {
+/** A live promise over durable request facts; it owns no independent approval state. */
+export function createExecutionApprovals(options: ExecutorOptions) {
   if (
     options.approvalTimeoutMs !== undefined &&
     (!Number.isSafeInteger(options.approvalTimeoutMs) || options.approvalTimeoutMs < 0)
-  ) {
+  )
     throw new TypeError("approval timeout must be a nonnegative integer");
-  }
-  const expired = (request: ExecutionApprovalRequest) =>
-    request.expiresAt !== undefined && Deadline.isExpired(options.clock(), request.expiresAt);
-  const pendingApprovals = new Map<
+  const pending = new Map<
     string,
     {
-      readonly request: ExecutionApprovalRequest;
-      readonly signal: AbortSignal;
-      readonly resolve: (decision: ApprovalDecision) => void;
-      answering: boolean;
+      request: ExecutionApprovalRequest;
+      signal: AbortSignal;
+      settle: (decision: ApprovalDecision) => void;
+      revisions?: () => Readonly<Record<string, number>>;
     }
   >();
+  const transition = (payload: SessionTransition.Payload, inputId: string) => {
+    if (options.ledger.transition === undefined)
+      throw new ExecutionApprovalError("approval_authority_unavailable");
+    return options.ledger.transition(payload, inputId, options.clock());
+  };
+  const notify = (request: SessionTransition.Request) => {
+    let persisted: SessionTransition.Request | undefined;
+    for (const action of options.ledger.actions?.() ?? []) {
+      const effect = action.effect.value;
+      if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
+      const parsed = SessionTransition.Request.safeParse(effect.request);
+      if (parsed.success && parsed.data.requestId === request.requestId) persisted = parsed.data;
+    }
+    const suspended = pending.get(request.requestId);
+    if (suspended === undefined || persisted === undefined || persisted.state === "open") return;
+    pending.delete(request.requestId);
+    suspended.settle(
+      persisted.state === "resolved"
+        ? "approve"
+        : persisted.state === "expired"
+          ? "timeout"
+          : "refuse",
+    );
+  };
   const approvals: ExecutionApprovals = {
-    pending: () => [...pendingApprovals.values()].map((value) => structuredClone(value.request)),
+    pending: () => [...pending.values()].map((value) => structuredClone(value.request)),
+    notify,
     async answer(answer) {
-      const pending = pendingApprovals.get(answer.request.id);
-      if (
-        pending === undefined ||
-        pending.answering ||
-        pending.signal.aborted ||
-        expired(pending.request) ||
-        canonicalDigest(PlainValueSchema.parse(pending.request)) !==
-          canonicalDigest(PlainValueSchema.parse(answer.request))
-      ) {
-        throw new ExecutionApprovalError("stale_approval");
-      }
+      const suspended = pending.get(answer.request.id);
+      const valid = () =>
+        suspended !== undefined &&
+        !suspended.signal.aborted &&
+        pending.get(answer.request.id) === suspended &&
+        canonicalDigest(PlainValueSchema.parse(answer.request)) ===
+          canonicalDigest(PlainValueSchema.parse(suspended.request)) &&
+        (suspended.revisions === undefined ||
+          canonicalDigest({ ...suspended.revisions() }) ===
+            canonicalDigest(suspended.request.durable.domainRevisions));
+      if (!valid() || suspended === undefined) throw new ExecutionApprovalError("stale_approval");
       if (options.authorizeApproval === undefined)
         throw new ExecutionApprovalError("approval_authority_unavailable");
-      const evidence = await options.authorizeApproval(answer.credential, pending.request);
-      if (
-        pending.answering ||
-        pending.signal.aborted ||
-        expired(pending.request) ||
-        pendingApprovals.get(answer.request.id) !== pending
-      ) {
+      const principal = await options.authorizeApproval(answer.credential, suspended.request);
+      if (!valid()) throw new ExecutionApprovalError("stale_approval");
+      const request = suspended.request.durable;
+      const input: SessionTransition.Answer = {
+        inputId: `${request.requestId}:owner-answer`,
+        requestId: request.requestId,
+        sessionId: request.sessionId,
+        receivedAt: options.clock(),
+        principal,
+        bindingDigest: request.bindingDigest,
+        inputHash: request.inputHash,
+        effectHash: request.effectHash,
+        generation: request.generation,
+        toolsHash: request.toolsHash,
+        domainRevisions: request.domainRevisions,
+        decision: answer.decision,
+        allowedAction: "report_result",
+        content: answer.decision,
+      };
+      const decision = await transition({ kind: "request.answer", answer: input }, input.inputId);
+      if (decision.request !== undefined) notify(decision.request);
+      if (decision.request === undefined || !["resolved", "refused"].includes(decision.resolution))
         throw new ExecutionApprovalError("stale_approval");
-      }
-      pending.answering = true;
-      await commit({
-        id: options.entropy(),
-        parentId: pending.request.id,
-        sessionId: options.identity.sessionId,
-        kind: "policy.decision",
-        intent: { encodingVersion: 1, value: { phase: "approval", op: "answer" } },
-        effect: {
-          encodingVersion: 1,
-          value: PlainValueSchema.parse({
-            decision: answer.decision,
-            evidence,
-            request: pending.request,
-          }),
-        },
-        ts: options.clock(),
-        irreversible: true,
-      });
-      pendingApprovals.delete(answer.request.id);
-      pending.resolve(answer.decision);
     },
   };
-
   async function awaitApproval(
-    requested: ExecutionApprovalRequest,
+    captured: Omit<ExecutionApprovalRequest, "durable">,
     signal: AbortSignal,
+    binding: {
+      effect: PlainValue;
+      domainRevisions?: Readonly<Record<string, number>>;
+      revisions?: () => Readonly<Record<string, number>>;
+      timeoutMs?: number;
+      original?: SessionTransition.Request;
+    },
   ): Promise<ApprovalDecision> {
-    const request =
-      options.approvalTimeoutMs === undefined
-        ? requested
-        : { ...requested, expiresAt: options.clock() + options.approvalTimeoutMs };
+    const timeout = binding.timeoutMs ?? options.approvalTimeoutMs ?? 86_400_000;
+    const createdAt = options.clock();
+    const durable =
+      binding.original ??
+      SessionTransition.Request.parse({
+        requestId: captured.id,
+        sessionId: captured.sessionId,
+        turnId: captured.turnId,
+        callId: captured.callId,
+        mode: "approval",
+        parsedInput: captured.intent,
+        inputHash: captured.inputHash,
+        effectHash: canonicalDigest(binding.effect),
+        generation: captured.generation,
+        toolsGeneration: captured.toolsGeneration ?? 0,
+        toolsHash: captured.toolsHash ?? canonicalDigest([]),
+        systemHash: options.identity.systemHash ?? canonicalDigest([]),
+        domainRevisions: binding.domainRevisions ?? {},
+        deadline: createdAt + timeout,
+        expectedResponders: ["owner"],
+        correlation: {},
+        allowedActions: ["report_result"],
+        bindingDigest: "pending",
+        resolution: "first",
+        threshold: 1,
+        seenReplyIds: [],
+        replies: [],
+        state: "open",
+        outcome: null,
+        createdAt,
+      });
+    if (binding.original === undefined) durable.bindingDigest = requestBindingDigest(durable);
+    const request: ExecutionApprovalRequest = { ...captured, expiresAt: durable.deadline, durable };
     const decision = Promise.withResolvers<ApprovalDecision>();
-    let cancelDeadline: (() => void) | undefined;
-    const abort = () => decision.resolve("refuse");
-    pendingApprovals.set(request.id, {
+    pending.set(request.id, {
       request,
       signal,
-      resolve: decision.resolve,
-      answering: false,
+      settle: decision.resolve,
+      revisions: binding.revisions,
     });
-    signal.addEventListener("abort", abort, { once: true });
-    try {
-      await commit({
-        id: options.entropy(),
-        parentId: request.id,
-        sessionId: options.identity.sessionId,
-        kind: "policy.decision",
-        intent: { encodingVersion: 1, value: { phase: "approval", op: "request" } },
-        effect: {
-          encodingVersion: 1,
-          value: PlainValueSchema.parse({ state: "pending", request }),
+    const abort = () => {
+      void transition(
+        {
+          kind: "request.cancel",
+          requestId: request.id,
+          principal: { kind: "session", principalId: request.sessionId, evidenceId: request.id },
         },
-        ts: options.clock(),
-        irreversible: true,
-      });
-      if (options.approvalTimeoutMs !== undefined) {
-        const expire = async () => {
-          const pending = pendingApprovals.get(request.id);
-          if (pending === undefined || pending.answering || signal.aborted || !expired(request))
-            return;
-          pending.answering = true;
-          await commit({
-            id: options.entropy(),
-            parentId: request.id,
-            sessionId: options.identity.sessionId,
-            kind: "policy.decision",
-            intent: { encodingVersion: 1, value: { phase: "approval", op: "timeout" } },
-            effect: {
-              encodingVersion: 1,
-              value: PlainValueSchema.parse({
-                decision: "timeout",
-                request,
-                evidence: { kind: "deadline", at: options.clock(), expiresAt: request.expiresAt },
-              }),
-            },
-            ts: options.clock(),
-            irreversible: true,
-          });
-          pendingApprovals.delete(request.id);
-          decision.resolve("timeout");
-        };
-        const callback = () => {
-          void expire().catch(decision.reject);
-        };
-        if (options.scheduleApprovalTimeout !== undefined)
-          cancelDeadline = options.scheduleApprovalTimeout(callback, options.approvalTimeoutMs);
-        else {
-          const timer = setTimeout(callback, options.approvalTimeoutMs);
-          cancelDeadline = () => clearTimeout(timer);
-        }
+        `${request.id}:cancel`,
+      ).then((result) => {
+        if (result.request !== undefined) notify(result.request);
+        else decision.resolve("refuse");
+      }, decision.reject);
+    };
+    try {
+      if (binding.original === undefined) {
+        const opened = await transition(
+          { kind: "request.open", request: durable },
+          `${request.id}:open`,
+        );
+        if (opened.resolution !== "opened") throw new ExecutionApprovalError("stale_approval");
       }
-      if (signal.aborted) abort();
+      // The durable at-alarm is the sole deadline owner, including recovery.
+      // Re-read after admission in case an answer committed while opening.
+      notify(durable);
+      if (pending.has(request.id)) {
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+      }
       return await decision.promise;
     } finally {
-      cancelDeadline?.();
       signal.removeEventListener("abort", abort);
-      pendingApprovals.delete(request.id);
+      pending.delete(request.id);
     }
   }
-
   return { approvals, awaitApproval };
 }

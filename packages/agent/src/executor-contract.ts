@@ -4,6 +4,7 @@ import type {
   LedgerSession,
   ObservationSink,
   PlainValue,
+  SessionTransition,
   Tool,
 } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput } from "@openomni/policy";
@@ -18,6 +19,13 @@ interface ExecutionKindRegistration {
 
 export interface ExecutionLedger {
   commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
+  actions?(): readonly LedgerAction.Node[];
+  validateRequest?(request: SessionTransition.Request): boolean;
+  transition?(
+    payload: SessionTransition.Payload,
+    inputId: string,
+    at: number,
+  ): Promise<import("./session-request").RequestDecision>;
 }
 
 interface ExecutionIdentity {
@@ -27,6 +35,7 @@ interface ExecutionIdentity {
   readonly turnId?: string;
   readonly toolsHash?: string;
   readonly toolsGeneration?: number;
+  readonly systemHash?: string;
 }
 
 interface ToolObservationIdentity {
@@ -47,6 +56,13 @@ export interface ExecutionRequest {
   readonly toolObservation?: ToolObservationIdentity;
   /** Model-facing settlement, committed atomically with the tool's effect evidence. */
   readonly toolResult?: (outcome: ExecutionBatchResult) => Tool.Result;
+  readonly approval?: {
+    readonly required: boolean;
+    readonly domainRevisions: Readonly<Record<string, number>>;
+    readonly timeoutMs?: number;
+  };
+  readonly domainRevisions?: () => Readonly<Record<string, number>>;
+  readonly originalAction?: LedgerAction.Node;
 }
 
 export interface AttemptRequest {
@@ -86,6 +102,7 @@ export type ExecutionResult =
     };
 
 export interface ExecutionApprovalRequest {
+  readonly durable: SessionTransition.Request;
   readonly id: string;
   readonly sessionId: string;
   readonly turnId: string | null;
@@ -115,6 +132,7 @@ interface OwnerApprovalEvidence {
 export interface ExecutionApprovals {
   pending(): readonly ExecutionApprovalRequest[];
   answer(answer: ExecutionApprovalAnswer): Promise<void>;
+  notify?(request: SessionTransition.Request): void;
 }
 
 export class ExecutionApprovalError extends Error {
@@ -137,6 +155,7 @@ export type ExecutionBatchResult =
   | { readonly terminal: "failed"; readonly error: Error };
 
 export interface Executor {
+  recover?(): Promise<void>;
   runAttempts?<T extends PlainValue>(
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
@@ -176,7 +195,6 @@ export interface ExecutorOptions {
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly approvalTimeoutMs?: number;
-  readonly scheduleApprovalTimeout?: (expire: () => void, delayMs: number) => () => void;
   readonly policy: CompiledPolicySnapshot;
   readonly ledger: ExecutionLedger;
   readonly observations: ObservationSink | BusEvent.Sink;

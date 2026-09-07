@@ -132,7 +132,8 @@ export const TOPOLOGY = [
     displayName: "channels",
     dir: "packages/channels",
     packageName: "@openomni/channels",
-    allowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger"],
+    // Agent is test-only: correlation acceptance exercises the real request kernel.
+    allowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger", "@openomni/agent"],
     srcAllowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger"],
     testLane: true,
     coverageLane: true,

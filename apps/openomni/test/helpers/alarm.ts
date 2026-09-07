@@ -1,4 +1,4 @@
-import { createObservationBus } from "@openomni/agent";
+import { createObservationBus, createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
 import { createAlarmWorker } from "../../src/composition/alarm-worker";
@@ -28,6 +28,7 @@ export function alarmFixture(path = ":memory:") {
     observations: events,
     clock: () => at,
     schedule: () => () => undefined,
+    requestTimeout: createSessionRequests({ observations: events, clock: () => at }).timeout,
     failure: (error) => errors.push(error),
     wake: (id) => {
       wakes.push(id);

@@ -8,24 +8,24 @@ import { runExistingAgentMessageDriver } from "../../harness/existing-agent-mess
  */
 
 describe("existing-agent-message-driver", () => {
-  test("restart-quorum resolves a persisted 2-of-3 Wait for the original owner without allocation", async () => {
+  test("restart-quorum resolves a persisted 2-of-3 request for the original owner without allocation", async () => {
     const result = await runExistingAgentMessageDriver(["--scenario", "restart-quorum", "--json"]);
 
     expect(result.exitCode).toBe(0);
     const receipt = JSON.parse(result.stdout);
     expect(receipt.resultCode).toBe("restart_quorum_resolved");
     expect(receipt.allocationDelta).toBe(0);
-    expect(receipt.ownerRef).toEqual({ kind: "session", id: "session:qa-owner" });
-    expect(receipt.waitStatus).toBe("resolved");
-    expect(receipt.resumeReceipts).toHaveLength(1);
-    expect(receipt.resumeReceipts[0]).toMatchObject({
-      waitId: "wait:qa:briefing",
-      ownerRef: { kind: "session", id: "session:qa-owner" },
+    expect(receipt.sessionId).toBe("session:qa-owner");
+    expect(receipt.requestState).toBe("resolved");
+    expect(receipt.resolutionActions).toHaveLength(1);
+    expect(receipt.resolutionActions[0]).toMatchObject({
+      requestId: "request:qa:briefing",
+      sessionId: "session:qa-owner",
     });
-    expect(receipt.fireAndForget).toEqual({ outcome: "sent", waitCountAfterSend: 0 });
+    expect(receipt.fireAndForget).toEqual({ outcome: "sent", requestCountAfterSend: 0 });
     expect(receipt.restart).toEqual({
       storageReopened: true,
-      statusAtRestart: "open",
+      stateAtRestart: "open",
       repliesPersistedAcrossRestart: 1,
     });
     expect(receipt.deliveries).toHaveLength(2);
@@ -42,13 +42,13 @@ describe("existing-agent-message-driver", () => {
     const receipt = JSON.parse(result.stdout);
     expect(receipt.resultCode).toBe("duplicate_and_ambiguous_denied");
     expect(receipt.denials).toEqual([
-      { plane: "reply", code: "duplicate_reply" },
-      { plane: "reply", code: "ambiguous_responder" },
+      { plane: "reply", code: "duplicate" },
+      { plane: "correlation", code: "ambiguous" },
       { plane: "messaging", code: "target_ambiguous" },
     ]);
     expect(receipt.quorum.unchanged).toBe(true);
     expect(receipt.quorum.after).toEqual({
-      status: "open",
+      state: "open",
       replies: 1,
       responders: 1,
       threshold: 2,

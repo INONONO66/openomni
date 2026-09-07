@@ -7,6 +7,7 @@ import type {
   ObservationSink,
   SessionGeneration,
   SessionTurn,
+  SessionTransition,
 } from "@openomni/protocol";
 import type { ChatAgentConfig } from "./core/types";
 import type { ExecutionApprovals, ExecutorOptions } from "./executor";
@@ -39,6 +40,9 @@ interface SessionGetOptions {
 
 export interface SessionActionCommitPort {
   commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
+  actions?(): readonly LedgerAction.Node[];
+  validateRequest?: import("./executor-contract").ExecutionLedger["validateRequest"];
+  transition?: import("./executor-contract").ExecutionLedger["transition"];
 }
 
 export interface SessionRunnerInput {
@@ -107,12 +111,12 @@ export type SessionRunnerResult =
 export type SessionRunner = (input: SessionRunnerInput) => Promise<SessionRunnerResult>;
 
 export interface SessionRuntime {
-  /** L1 admits the terminal letter through gateway.ingest, then atomically commits it with this terminal. */
-  readonly commitTerminal?: (input: {
-    readonly commit: LedgerSession.Commit;
-    readonly reply: Inbox.Commit;
+  /** Dispatches only an already committed source obligation through gateway admission. */
+  readonly dispatchOutbound?: (input: {
+    readonly message: SessionTransition.OutboundMessage;
+    readonly authority: { readonly owner: string; readonly fence: number };
     readonly policy: CompiledPolicySnapshot;
-  }) => Promise<LedgerSession.CommitResult>;
+  }) => Promise<LedgerAction.Receipt>;
   /** Direct post-commit doorbells, independent of the lossy observation bus. */
   readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
   readonly openIntent?: (input: {
@@ -122,13 +126,16 @@ export interface SessionRuntime {
   }) => Promise<readonly { actionId: string; kind: "message" | "approval" }[]>;
   readonly waitRetry?: ExecutorOptions["waitRetry"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
-  readonly scheduleApprovalTimeout?: ExecutorOptions["scheduleApprovalTimeout"];
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly processId?: string;
   readonly observations: ObservationSink;
   readonly authorizeConfigure?: SessionHandleStore.ConfigureAuthority;
   readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
+  readonly requestDomainRevisions?: (
+    request: SessionTransition.Request,
+  ) => Readonly<Record<string, number>>;
+  readonly onRequestReady?: (sessionId: string) => void;
   /**
    * Lease contract. The durable lease is a fenced single-writer guarantee:
    * every commit carries the fence of the executor that owns the lease, so a
@@ -167,6 +174,14 @@ export interface SessionSystemBlocksHandle {
 export interface SessionHandle {
   readonly id: string;
   readonly approvals: ExecutionApprovals;
+  readonly requests: {
+    transition(
+      payload: SessionTransition.Payload,
+      inputId: string,
+      at: number,
+      admission?: Inbox.Commit,
+    ): import("./session-request").RequestDecision;
+  };
   readonly tools: SessionToolsHandle;
   readonly system: { readonly blocks: SessionSystemBlocksHandle };
   prompt(content: string, origin?: Inbox.Origin): Promise<SessionRunnerResult | undefined>;

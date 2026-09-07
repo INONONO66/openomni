@@ -13,6 +13,7 @@ import {
   REPLY_GRANT_MIGRATION,
 } from "../packages/ledger/src/storage/u967-preflight";
 import { preflightSqliteDatabase } from "../packages/ledger/src/storage/sqlite-schema-lifecycle";
+import { REQUEST_MIGRATION } from "../packages/ledger/src/storage/u969-preflight";
 
 export function fileSha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -76,39 +77,133 @@ export function assertArchiveEquality(
   const removedTables = new Set(dispositionDelta ? ["bus_event"] : []);
   const addedTables = new Set<string>();
   const migrationDelta: string[] = [];
+  const requestCutover =
+    dispositionDelta &&
+    sourceSchema.some((row) => row.name === "archive_969_wait") &&
+    archivedSchema.some((row) => row.name === "wait");
+  const rebuiltTables = new Set(requestCutover ? ["action", "policy", "wait", "approval"] : []);
+  if (dispositionDelta && hasWatchUpgrade(source, restored)) {
+    rebuiltTables.add("alarm");
+    migrationDelta.push("0037_watch_alarms/migration.sql");
+  }
+  if (requestCutover) {
+    preflightSqliteDatabase(source);
+    preflightSqliteDatabase(restored);
+    addedTables.add("archive_969_wait");
+    addedTables.add("archive_969_approval");
+  }
   if (dispositionDelta) {
-    for (const table of ["delegation", "worker_grant", "worker_run_state"]) {
-      if (
-        sourceSchema.some((row) => row.name === table) ||
-        !archivedSchema.some((row) => row.name === table)
-      )
-        continue;
-      using remaining = restored.prepare<{ present: number | bigint }, []>(
-        `SELECT 1 AS present FROM ${sqlIdentifier(table)} LIMIT 1`,
-      );
-      if (remaining.get() !== null) throw new U967Error(`stale_archive:${table}`);
+    for (const table of removedEmptyTables(sourceSchema, archivedSchema, restored))
       removedTables.add(table);
-    }
     if (
       !archivedSchema.some((row) => row.name === "reply_grant") &&
       sourceSchema.some((row) => row.name === "reply_grant")
     ) {
-      // Only the pinned forward schema with an empty new projection is allowed.
       preflightSqliteDatabase(source);
       using remaining = source.prepare("SELECT 1 FROM reply_grant LIMIT 1");
       if (remaining.get() !== null) throw new U967Error("stale_archive:reply_grant");
       addedTables.add("reply_grant");
     }
-    for (const name of [U967_MIGRATION, RETIRED_TABLE_MIGRATION, REPLY_GRANT_MIGRATION]) {
-      using marker = restored.prepare("SELECT 1 FROM _migrations WHERE name = ?");
-      if (marker.get(name) === null) migrationDelta.push(name);
-    }
+    migrationDelta.push(...addedMigrations(source, restored));
   }
+  assertArchivedRows(source, restored, dispositionDelta, {
+    sourceSchema,
+    archivedSchema,
+    removedTables,
+    addedTables,
+    rebuiltTables,
+    migrationDelta,
+    requestCutover,
+  });
+}
+
+function hasWatchUpgrade(source: Database, restored: Database): boolean {
+  const watchMigration = "0037_watch_alarms/migration.sql";
+  if (
+    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) !== null &&
+    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) === null
+  ) {
+    preflightSqliteDatabase(source);
+    preflightSqliteDatabase(restored);
+    // Only migration defaults may accompany the byte-identical historical columns.
+    if (
+      source
+        .query(`SELECT 1 FROM alarm WHERE epoch IS NOT 1 OR fence IS NOT 0
+      OR last_batch IS NOT NULL OR notifications IS NOT 0 LIMIT 1`)
+        .get() !== null
+    )
+      throw new U967Error("stale_archive:alarm");
+    return true;
+  }
+  return false;
+}
+
+function removedEmptyTables(
+  sourceSchema: ReturnType<typeof sqliteSchema>,
+  archivedSchema: ReturnType<typeof sqliteSchema>,
+  restored: Database,
+): string[] {
+  const removed: string[] = [];
+  for (const table of ["delegation", "worker_grant", "worker_run_state"]) {
+    if (
+      sourceSchema.some((row) => row.name === table) ||
+      !archivedSchema.some((row) => row.name === table)
+    )
+      continue;
+    using remaining = restored.prepare<{ present: number | bigint }, []>(
+      `SELECT 1 AS present FROM ${sqlIdentifier(table)} LIMIT 1`,
+    );
+    if (remaining.get() !== null) throw new U967Error(`stale_archive:${table}`);
+    removed.push(table);
+  }
+  return removed;
+}
+
+function addedMigrations(source: Database, restored: Database): string[] {
+  const migrationDelta: string[] = [];
+  for (const name of [
+    U967_MIGRATION,
+    RETIRED_TABLE_MIGRATION,
+    REPLY_GRANT_MIGRATION,
+    REQUEST_MIGRATION,
+  ]) {
+    using marker = restored.prepare("SELECT 1 FROM _migrations WHERE name = ?");
+    using current = source.prepare("SELECT 1 FROM _migrations WHERE name = ?");
+    if (marker.get(name) === null && current.get(name) !== null) migrationDelta.push(name);
+  }
+  return migrationDelta;
+}
+
+function assertArchivedRows(
+  source: Database,
+  restored: Database,
+  dispositionDelta: boolean,
+  delta: {
+    sourceSchema: ReturnType<typeof sqliteSchema>;
+    archivedSchema: ReturnType<typeof sqliteSchema>;
+    removedTables: ReadonlySet<string>;
+    addedTables: ReadonlySet<string>;
+    rebuiltTables: ReadonlySet<string>;
+    migrationDelta: readonly string[];
+    requestCutover: boolean;
+  },
+): void {
+  const {
+    sourceSchema,
+    archivedSchema,
+    removedTables,
+    addedTables,
+    rebuiltTables,
+    migrationDelta,
+    requestCutover,
+  } = delta;
   const expectedSchema = archivedSchema.filter((row) => !removedTables.has(row.tbl_name));
   if (
     !isDeepStrictEqual(
-      sourceSchema.filter((row) => !addedTables.has(row.tbl_name)),
-      expectedSchema,
+      sourceSchema.filter(
+        (row) => !addedTables.has(row.tbl_name) && !rebuiltTables.has(row.tbl_name),
+      ),
+      expectedSchema.filter((row) => !rebuiltTables.has(row.tbl_name)),
     )
   )
     throw new U967Error("stale_archive");
@@ -125,16 +220,28 @@ export function assertArchiveEquality(
     });
     const read = (db: Database, archived: boolean) => {
       let where = "";
-      if (dispositionDelta && archived && table === "wait") where = " WHERE owner_kind = 'session'";
+      if (
+        dispositionDelta &&
+        archived &&
+        table === "wait" &&
+        archivedSchema.some((row) => row.name === "bus_event")
+      )
+        where = " WHERE owner_kind = 'session'";
       if (dispositionDelta && archived && table === "sqlite_sequence")
         where = " WHERE name <> 'bus_event'";
       if (dispositionDelta && table === "_migrations" && !archived && migrationDelta.length > 0) {
         where = ` WHERE name NOT IN (${migrationDelta.map((name) => `'${name}'`).join(", ")})`;
       }
+      const physicalTable =
+        requestCutover && !archived && (table === "wait" || table === "approval")
+          ? `archive_969_${table}`
+          : table;
       using statement = db.prepare<
         Record<string, string | number | bigint | Uint8Array | null>,
         []
-      >(`SELECT rowid, ${values.join(", ")} FROM ${sqlIdentifier(table)}${where} ORDER BY rowid`);
+      >(
+        `SELECT rowid, ${values.join(", ")} FROM ${sqlIdentifier(physicalTable)}${where} ORDER BY rowid`,
+      );
       return statement.all();
     };
     if (!isDeepStrictEqual(read(source, false), read(restored, true)))

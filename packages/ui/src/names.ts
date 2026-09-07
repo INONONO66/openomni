@@ -91,4 +91,3 @@ export const UI_NAMES = {
   /** The tail of streaming output. */
   Caret: "Caret",
 } as const;
-

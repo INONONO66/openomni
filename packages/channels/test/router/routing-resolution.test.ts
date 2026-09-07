@@ -1,6 +1,12 @@
 import { beforeEach, expect, test } from "bun:test";
 import { Channel, Ingress, type Ledger } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
+import {
+  ActorRegistry,
+  ChannelGrantStore,
+  SessionHandleStore,
+  Storage,
+  SurfaceKey,
+} from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import {
   commits,
@@ -47,12 +53,14 @@ test("blocked decisions are durable before returning the receipt", async () => {
 
 test("equivalent redelivery uses one route fact and the same inbox id", async () => {
   registerOwnerDm();
-  createMappedOwnerSession();
+  const mapped = createMappedOwnerSession();
   const router = makeRouter();
   await router.ingest(ownerSender, ownerFacts);
+  const before = SessionHandleStore.tree(mapped.id);
   await router.ingest(ownerSender, ownerFacts);
-  expect(commits).toHaveLength(2);
-  expect(commits[0]?.id).toBe(commits[1]?.id);
+  expect(commits).toHaveLength(1);
+  expect(SessionHandleStore.tree(mapped.id)).toEqual(before);
+  expect(SessionHandleStore.inboxRows(mapped.id)).toHaveLength(1);
   expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
 });
 

@@ -10,14 +10,11 @@ import {
   LedgerSession,
   PolicyRow,
   type Storage as ProtocolStorage,
-  Wait,
 } from "@openomni/protocol";
 import { createMemoryL0Adapter } from "./memory-l0-adapter.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
-import { WaitStore } from "../../src/wait/index.js";
-import { buildWaitCreate } from "../helpers/wait.js";
 
 const directories: string[] = [];
 let adapter: SqliteStorageAdapter;
@@ -335,24 +332,22 @@ describe("SQLite adapter contract guards", () => {
     expect(adapter.actions.tree(row.id)).toEqual([]);
   });
 
-  test("wait correlation and compare-and-set fail closed on malformed calls", () => {
-    const record = WaitStore.create(buildWaitCreate(), "trace-adapter");
-    const subAdapter = adapter.wait;
-    if (!subAdapter) throw new Error("wait adapter missing");
-    const next = Wait.Record.parse({ ...record, revision: record.revision + 1, updatedAt: 101 });
-
-    expect(() => subAdapter.findByCorrelation({})).toThrow(
-      "Wait correlation query must carry at least one correlation field",
-    );
-    expect(() => subAdapter.compareAndSet("wait-foreign", record.revision, next)).toThrow(
-      "Wait id mismatch",
-    );
-    expect(() =>
-      subAdapter.compareAndSet(record.id, record.revision, {
-        ...next,
-        revision: record.revision + 2,
-      }),
-    ).toThrow("Wait revision must advance exactly once");
+  test("request action compare-and-set rejects foreign parent and stale revision", () => {
+    adapter.sessions.create(sessionRow("request-owner"));
+    const action = LedgerAction.Append.parse({
+      id: "request",
+      parentId: "missing",
+      sessionId: "request-owner",
+      kind: "request",
+      intent: encoded("original"),
+      effect: encoded("open"),
+      irreversible: true,
+      ts: 1,
+    });
+    expect(adapter.actions.append(action, 0)).toBeUndefined();
+    expect(adapter.actions.append({ ...action, parentId: null }, 1)).toBeUndefined();
+    expect(adapter.sessions.get("request-owner")?.revision).toBe(0);
+    expect(adapter.actions.tree("request-owner")).toEqual([]);
   });
 
   test("canonical session reads cannot mutate a later snapshot", () => {
@@ -379,6 +374,7 @@ describe("migration rollback preservation", () => {
       query(sql: string) {
         return {
           get: () => null,
+          all: () => [],
           run: () => {
             if (sql.startsWith("INSERT INTO _migrations")) return undefined;
             throw migrationFailure;

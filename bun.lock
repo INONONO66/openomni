@@ -103,6 +103,7 @@
         "zod": "^4.5.4",
       },
       "devDependencies": {
+        "@openomni/agent": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^5",
       },

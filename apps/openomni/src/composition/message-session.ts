@@ -1,38 +1,24 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import { Inbox, Gateway, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
-import { terminalMessage } from "./terminal-message";
+import { outboundMessage } from "./terminal-message";
 
 type Ports = Parameters<typeof createGatewayRouter>[0];
 
 export function commitMessageInbox(input: Inbox.Commit): Inbox.Row {
-  const terminal = terminalMessage.getStore();
-  if (terminal === undefined) return SessionHandleStore.commitInbox(input);
-  const { commit, reply } = terminal.input;
-  if (input.id !== reply.id || input.sessionId !== reply.sessionId) {
-    throw new Error("terminal inbox binding mismatch");
+  const outbound = outboundMessage.getStore();
+  const message = outbound?.input.message;
+  if (
+    message !== undefined &&
+    (input.id !== message.messageId ||
+      input.sessionId !== message.destinationSessionId ||
+      input.content !== message.content)
+  ) {
+    throw new Error("outbound inbox binding mismatch");
   }
-  const result = SessionHandleStore.commit({
-    ...commit,
-    expectedRevision: SessionHandleStore.row(commit.sessionId).revision,
-    deliveries: [
-      {
-        id: input.id,
-        sessionId: input.sessionId,
-        kind: input.kind,
-        content: input.content,
-        origin: input.origin,
-        createdAt: input.createdAt,
-        parentActionId: input.parentActionId,
-      },
-    ],
-    releaseLease: false,
-  });
-  if (!result.ok) throw new Error(`terminal inbox commit ${result.reason}`);
-  terminal.result = result;
-  const row = SessionHandleStore.inboxRows(reply.sessionId).find((item) => item.id === input.id);
-  if (row === undefined) throw new Error("terminal inbox receipt missing");
-  return row;
+  const received = SessionHandleStore.commitReceivedMessage(input);
+  if (outbound !== undefined) outbound.receipt = received.receipt;
+  return received.row;
 }
 
 export function messageMaterialization(input: {
@@ -139,7 +125,7 @@ export function prepareMessage(
       return parsed.success ? [parsed.data] : [];
     });
     const parentDeadline = origins.at(-1)?.deadline;
-    const terminal = terminalMessage.getStore();
+    const outbound = outboundMessage.getStore();
     const bounds = SessionHandleStore.policyRows(source.policyGeneration).flatMap((row) => {
       const match = row.match.value;
       if (
@@ -174,11 +160,11 @@ export function prepareMessage(
     }
     return {
       target,
-      ...(terminal === undefined
+      ...(outbound === undefined
         ? {}
         : {
-            messageId: terminal.input.reply.id,
-            origin: Inbox.ReplyOrigin.parse(terminal.input.reply.origin.value),
+            messageId: outbound.input.message.messageId,
+            origin: outbound.input.message,
           }),
       sender: { sessionId: sender.id, owner: source.leaseOwner, fence: source.leaseFence },
       ...(send.to.kind === "new_session"
@@ -207,7 +193,7 @@ export function prepareMessage(
         // Mandatory terminal mail answers the original request. Its existing
         // alarm/answer CAS owns the bound; a reply must not open another alarm.
         withinParentDeadline:
-          terminal !== undefined ||
+          outbound !== undefined ||
           parentDeadline === undefined ||
           (send.deadline !== undefined && send.deadline <= parentDeadline),
       },

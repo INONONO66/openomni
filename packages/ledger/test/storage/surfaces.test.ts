@@ -3,7 +3,7 @@ import { ActorRegistry } from "../../src/actor/index.js";
 import { LedgerAppend } from "../../src/storage/append-port.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
-import { bareStorageAdapter } from "../helpers/wait.js";
+import { bareStorageAdapter } from "../helpers/session.js";
 
 afterEach(() => {
   Storage.reset();

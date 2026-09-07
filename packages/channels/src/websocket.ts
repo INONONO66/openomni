@@ -1,11 +1,16 @@
 import { newTraceId } from "./support/trace";
-import { Channel, Operational } from "@openomni/protocol";
+import { Channel, Gateway, Operational, type PlainValue } from "@openomni/protocol";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
 import type { PublishPort } from "./types";
 
 export interface WebSocketConfig {
   token?: string;
   onAuthDecision?: ChannelAuthnDecisionObserver;
+  /** Compose with the same gateway.ingest used by ordinary channel messages. */
+  onRequestAnswer?: (
+    sender: Gateway.IngestSender & { kind: "external" },
+    answer: Gateway.RequestAnswer,
+  ) => Promise<Gateway.IngestResult>;
 }
 
 interface WsConnectionData {
@@ -42,7 +47,7 @@ export class WebSocketHandler {
   /**
    * Outbound delivery to a declared connection. Mints the platform message id
    * the client must echo back as `replyToId` — returning it lets the send
-   * kernel re-key the Wait's correlation to it.
+   * kernel re-key the request's correlation to it.
    */
   push(
     externalId: string,
@@ -121,7 +126,7 @@ export class WebSocketHandler {
     const authenticated = hasConfiguredToken && auth.verdict.verdict === "allow";
 
     // An actor declaration binds this connection to a registered identity
-    // (delegated instructions are pushed to it, its replies settle Waits), so
+    // (delegated instructions are pushed to it, its replies settle requests), so
     // it requires the shared token — unlike plain owner chat, which loopback
     // trust covers. On a tokenless bind the declaration is simply not taken.
     const declaredId = authenticated
@@ -151,13 +156,37 @@ export class WebSocketHandler {
 
   private async handleMessage(ws: WsConnection, raw: string): Promise<void> {
     try {
-      const parsed = JSON.parse(raw) as {
-        type?: string;
-        text?: string;
-        replyToId?: string;
-      };
+      const parsed = JSON.parse(raw) as PlainValue;
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        ws.send(JSON.stringify({ type: "error", message: "invalid websocket frame" }));
+        return;
+      }
+      const sender = {
+        kind: "external",
+        surface: "ws",
+        externalId: ws.data.externalId,
+      } as const;
+      if (parsed.type === "request_answer") {
+        const { type: _type, ...fields } = parsed;
+        const answer = Gateway.RequestAnswer.safeParse({ ...fields, kind: "request_answer" });
+        if (!answer.success) {
+          ws.send(JSON.stringify({ type: "error", message: "invalid request_answer frame" }));
+          return;
+        }
+        if (this.config.onRequestAnswer === undefined) {
+          ws.send(JSON.stringify({ type: "error", message: "request_answer unavailable" }));
+          return;
+        }
+        try {
+          const result = await this.config.onRequestAnswer(sender, answer.data);
+          ws.send(JSON.stringify({ type: "receipt", inputId: answer.data.inputId, result }));
+        } catch {
+          ws.send(JSON.stringify({ type: "error", message: "request_answer failed" }));
+        }
+        return;
+      }
 
-      if (!parsed.text) {
+      if (typeof parsed.text !== "string" || !parsed.text) {
         ws.send(JSON.stringify({ type: "error", message: "text field required" }));
         return;
       }
@@ -165,13 +194,12 @@ export class WebSocketHandler {
       const surfaceKey = ws.data.surfaceKey;
 
       await this.handler({
-        sender: {
-          kind: "external",
-          surface: "ws",
-          externalId: ws.data.externalId,
-        },
+        sender,
         facts: {
-          eventId: crypto.randomUUID(),
+          eventId:
+            typeof parsed.eventId === "string" && parsed.eventId.length > 0
+              ? parsed.eventId
+              : crypto.randomUUID(),
           surface: "ws",
           channelId: surfaceKey,
           addressees: [],
@@ -185,11 +213,11 @@ export class WebSocketHandler {
       });
 
       ws.send(JSON.stringify({ type: "receipt", status: "accepted" }));
-    } catch (err) {
+    } catch {
       ws.send(
         JSON.stringify({
           type: "error",
-          message: err instanceof Error ? err.message : String(err),
+          message: "websocket message failed",
         }),
       );
     }

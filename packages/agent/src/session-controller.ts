@@ -2,6 +2,7 @@ import { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { Inbox, LedgerSession } from "@openomni/protocol";
 import { ExecutionApprovalError } from "./executor";
+import { SessionLeaseError } from "./session-contract";
 import type {
   SessionController,
   SessionControllerLifecycle,
@@ -15,8 +16,9 @@ import type {
 import { toolSnapshot, internalOrigin, requireCommit } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { createSessionTurn } from "./session-turn";
-import { createSessionAdmission } from "./session-admission";
+import { createSessionAdmission, commitSessionRequest } from "./session-admission";
 import { createSessionConfiguration } from "./session-configuration";
+import { dispatchSessionOutbound } from "./session-outbound";
 
 export function createController(
   sessionId: string,
@@ -133,6 +135,38 @@ export function createController(
   };
   const handle: SessionHandle = {
     id: sessionId,
+    requests: {
+      transition(payload, inputId, at, admission) {
+        const nextHandle = replacement();
+        if (nextHandle !== undefined)
+          return nextHandle.requests.transition(payload, inputId, at, admission);
+        const current = SessionHandleStore.row(sessionId);
+        const ownsLease =
+          current.leaseOwner === owner && current.leaseFence === state.fence && leaseLive(current);
+        if (!ownsLease && (state.active !== undefined || state.retainedRunner !== undefined))
+          throw new SessionLeaseError({
+            ok: false,
+            reason: "stale",
+            currentFence: current.leaseFence,
+          });
+        if (!ownsLease) state.fence = acquire(current.leaseFence);
+        try {
+          const decision = commitSessionRequest(
+            sessionId,
+            { owner, fence: state.fence },
+            payload,
+            inputId,
+            Math.max(at, clock()),
+            runtime,
+            admission,
+          );
+          if (decision.request !== undefined) state.activeApprovals?.notify?.(decision.request);
+          return decision;
+        } finally {
+          if (!ownsLease) releaseHeldLease();
+        }
+      },
+    },
     approvals: {
       pending: () => state.activeApprovals?.pending() ?? [],
       async answer(answer) {
@@ -259,6 +293,18 @@ export function createController(
     let result: SessionRunnerResult | undefined;
     for (;;) {
       if (state.closed) return result;
+      if (SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "pending")) {
+        state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
+        await dispatchSessionOutbound(
+          sessionId,
+          runtime,
+          owner,
+          state.fence,
+          clock,
+          pinPolicy,
+          true,
+        );
+      }
       const actions = SessionHandleStore.tree(sessionId);
       const open = SessionHandleStore.openTurns(actions).at(-1);
       if (open !== undefined) {

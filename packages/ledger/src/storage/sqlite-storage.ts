@@ -10,8 +10,6 @@ import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-li
 import { createSqliteL0Adapters } from "./sqlite-l0-adapter";
 import type { ObservationSink } from "@openomni/protocol";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
-import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
-import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { productionStorageAdapterBrand, type Storage } from "./storage";
 
 export class SqliteStorageAdapter implements Storage.Adapter {
@@ -21,8 +19,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   private closed = false;
 
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
-  readonly wait: NonNullable<Storage.Adapter["wait"]>;
-  readonly approval: NonNullable<Storage.Adapter["approval"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
   readonly egressBudget: NonNullable<Storage.Adapter["egressBudget"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
@@ -47,8 +43,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     }
 
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
-    this.wait = createSqliteWaitAdapter(this.db);
-    this.approval = createSqliteApprovalAdapter(this.db);
     // Decision-class append rides the adapter's own connection so append +
     // projection share one transaction (#510 phase B). The append core keeps
     // owning the SQL (raw prepared statements) — this is wiring only.

@@ -13,12 +13,12 @@ const inbound = Object.freeze({
   requestedAction: "report_result",
 }) satisfies RouteInbound;
 
-const matchedWait = Object.freeze({
+const matchedRequest = Object.freeze({
   kind: "match",
-  backing: "wait",
-  key: "wait:wait-match",
-  recordId: "wait-match",
-  owner: Object.freeze({ kind: "session", id: "session-wait" }),
+  backing: "request",
+  key: "request:request-match",
+  recordId: "request-match",
+  sessionId: "session-request",
   allowed: Object.freeze(["report_result"]),
 });
 
@@ -45,10 +45,10 @@ interface PrecedenceCase {
 
 const precedenceCases = Object.freeze([
   {
-    name: "blacklist before wait correlation",
+    name: "blacklist before request correlation",
     state: Object.freeze({
       blacklist: Object.freeze({ id: "blacklist-actor", kind: "actor", reason: "revoked" }),
-      wait: matchedWait,
+      request: matchedRequest,
       channel: trustedChannel,
       actor: registeredActor,
       surfaceSessionId: "session-surface",
@@ -57,9 +57,9 @@ const precedenceCases = Object.freeze([
     outcome: "drop",
   },
   {
-    name: "wait correlation before channel ceiling",
+    name: "request correlation before channel ceiling",
     state: Object.freeze({
-      wait: matchedWait,
+      request: matchedRequest,
       channel: Object.freeze({
         id: "grant-blocked",
         kind: "blocked_channel",
@@ -68,15 +68,15 @@ const precedenceCases = Object.freeze([
       actor: registeredActor,
       surfaceSessionId: "session-surface",
     }),
-    stage: "wait_correlation",
+    stage: "request_correlation",
     outcome: "route",
-    // The wait OWNER's session wins over the conflicting surface-key mapping.
-    sessionId: "session-wait",
+    // The request OWNER's session wins over the conflicting surface-key mapping.
+    sessionId: "session-request",
   },
   {
     name: "channel ceiling before actor identity",
     state: Object.freeze({
-      wait: Object.freeze({ kind: "none" }),
+      request: Object.freeze({ kind: "none" }),
       channel: Object.freeze({
         id: "grant-blocked",
         kind: "blocked_channel",
@@ -91,7 +91,7 @@ const precedenceCases = Object.freeze([
   {
     name: "actor identity before surface default",
     state: Object.freeze({
-      wait: Object.freeze({ kind: "none" }),
+      request: Object.freeze({ kind: "none" }),
       channel: Object.freeze({
         id: "grant-no-default",
         kind: "trusted_channel",
@@ -105,7 +105,7 @@ const precedenceCases = Object.freeze([
   {
     name: "surface default after all earlier stages pass",
     state: Object.freeze({
-      wait: Object.freeze({ kind: "none" }),
+      request: Object.freeze({ kind: "none" }),
       channel: trustedChannel,
       actor: registeredActor,
       surfaceSessionId: "session-surface",
@@ -134,12 +134,12 @@ describe("resolveRoute precedence", () => {
     });
   }
 
-  it("preserves fail-closed ambiguity from the winning wait-correlation level", () => {
+  it("preserves fail-closed ambiguity from the winning request-correlation level", () => {
     // Given
     const state = Object.freeze({
-      wait: Object.freeze({
+      request: Object.freeze({
         kind: "ambiguous",
-        candidateInteractionIds: Object.freeze(["wait:wait-a", "wait:wait-b"]),
+        candidateInteractionIds: Object.freeze(["request:request-a", "request:request-b"]),
       }),
       channel: trustedChannel,
       actor: registeredActor,
@@ -151,9 +151,9 @@ describe("resolveRoute precedence", () => {
 
     // Then
     expect(decision).toMatchObject({
-      stage: "wait_correlation",
+      stage: "request_correlation",
       outcome: "ambiguous",
-      candidateInteractionIds: ["wait:wait-a", "wait:wait-b"],
+      candidateInteractionIds: ["request:request-a", "request:request-b"],
     });
     expect(decision.sessionId).toBeUndefined();
   });
@@ -162,7 +162,7 @@ describe("resolveRoute precedence", () => {
     // Given
     const states = Object.freeze([
       Object.freeze({
-        wait: Object.freeze({ kind: "none" }),
+        request: Object.freeze({ kind: "none" }),
         channel: Object.freeze({
           id: "grant-blocked",
           kind: "blocked_channel",
@@ -172,7 +172,7 @@ describe("resolveRoute precedence", () => {
         surfaceSessionId: "session-surface",
       }),
       Object.freeze({
-        wait: Object.freeze({ kind: "none" }),
+        request: Object.freeze({ kind: "none" }),
         actor: registeredActor,
         surfaceSessionId: "session-surface",
       }),
@@ -191,18 +191,18 @@ describe("resolveRoute precedence", () => {
     const decisions = [
       resolveRoute(inbound, {
         blacklist: { id: "blacklist-actor", kind: "actor", reason: "revoked" },
-        wait: matchedWait,
+        request: matchedRequest,
         channel: trustedChannel,
         actor: registeredActor,
       }),
       resolveRoute(inbound, {
-        wait: { kind: "none" },
+        request: { kind: "none" },
         actor: registeredActor,
       }),
       resolveRoute(inbound, {
-        wait: {
+        request: {
           kind: "ambiguous",
-          candidateInteractionIds: ["wait:wait-a", "wait:wait-b"],
+          candidateInteractionIds: ["request:request-a", "request:request-b"],
         },
         channel: trustedChannel,
         actor: registeredActor,
@@ -228,7 +228,7 @@ describe("resolveRoute precedence", () => {
   it("classifies a blocked channel through the typed routing error", () => {
     const decision = Ingress.Events.RoutingDecision.schema.parse(
       resolveRoute(inbound, {
-        wait: { kind: "none" },
+        request: { kind: "none" },
         channel: {
           id: "grant-blocked",
           kind: "blocked_channel",
@@ -249,7 +249,7 @@ describe("resolveRoute precedence", () => {
   it("classifies an actor-identity block through the typed routing error", () => {
     const decision = Ingress.Events.RoutingDecision.schema.parse(
       resolveRoute(inbound, {
-        wait: { kind: "none" },
+        request: { kind: "none" },
         channel: {
           id: "grant-no-default",
           kind: "trusted_channel",
@@ -270,7 +270,7 @@ describe("resolveRoute precedence", () => {
   it("preserves evidence_only treatment while routing a broadcast channel", () => {
     // Given
     const state = Object.freeze({
-      wait: Object.freeze({ kind: "none" }),
+      request: Object.freeze({ kind: "none" }),
       channel: Object.freeze({
         id: "grant-broadcast",
         kind: "broadcast_channel",
@@ -298,7 +298,7 @@ describe("resolveRoute precedence", () => {
   it("blocks an unknown actor when the channel supplies no default tier", () => {
     // Given
     const state = Object.freeze({
-      wait: Object.freeze({ kind: "none" }),
+      request: Object.freeze({ kind: "none" }),
       channel: Object.freeze({
         id: "grant-no-default",
         kind: "trusted_channel",

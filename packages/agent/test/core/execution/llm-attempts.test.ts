@@ -1,8 +1,11 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
+import { Storage } from "@openomni/ledger";
+import { bounded, requestLedger } from "../../helpers/request-ledger";
 import { Run } from "@openomni/llm";
 import { createExecutor, type ExecutorOptions } from "../../../src/executor";
 import { compiledPolicy, recordingLedger } from "../../helpers/compiled-policy";
 import type { LedgerAction } from "@openomni/protocol";
+afterEach(() => Storage.reset());
 
 const usage = {
   inputTokens: 17,
@@ -232,7 +235,14 @@ test("interrupt cancels an exactly registered backoff without another provider a
 
 test("retry approval suspends the captured child without reconstructing the provider call", async () => {
   const waiting = Promise.withResolvers<void>();
-  const { executor, committed } = harness({
+  Storage.initialize({ dbPath: ":memory:" });
+  const recording = requestLedger({
+    onRequest: (request) => {
+      if (request.state === "open") waiting.resolve();
+    },
+  });
+  const { executor } = harness({
+    ...recording,
     policy: compiledPolicy([
       {
         name: "retry-approval",
@@ -249,11 +259,6 @@ test("retry approval suspends the captured child without reconstructing the prov
       principalId: "owner",
       evidenceId: "authenticated",
     }),
-    observations: {
-      publish() {
-        if (executor.approvals?.pending().length) waiting.resolve();
-      },
-    },
   });
   let calls = 0;
   let prepared = 0;
@@ -273,14 +278,16 @@ test("retry approval suspends the captured child without reconstructing the prov
       },
     }),
   );
-  await waiting.promise;
+  await bounded(waiting.promise);
   expect(calls).toBe(1);
   const request = executor.approvals?.pending()[0];
   if (request === undefined) throw new Error("missing retry approval");
-  expect(intents(committed, "attempt").map((action) => action.id)).toContain(request.id);
+  expect(
+    intents(recording.ledger.actions?.() ?? [], "attempt").map((action) => action.id),
+  ).toContain(request.id);
   await executor.approvals?.answer({ request, credential: "proof", decision: "approve" });
-  expect(await running).toMatchObject({ terminal: "executed" });
+  expect(await bounded(running)).toMatchObject({ terminal: "executed" });
   expect(calls).toBe(2);
   expect(prepared).toBe(2);
-  expect(intents(committed, "llm")).toHaveLength(1);
+  expect(intents(recording.ledger.actions?.() ?? [], "llm")).toHaveLength(1);
 });

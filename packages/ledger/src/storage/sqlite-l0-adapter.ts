@@ -8,17 +8,13 @@ import {
   LedgerAction,
   LedgerSession,
   PolicyRow,
+  PlainValueSchema,
+  SessionTransition,
   L0Observation,
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import {
-  alarmAppend,
-  inboxAppend,
-  messageAnswerAppend,
-  messageDeadlineArm,
-  messageTimeoutInbox,
-} from "./l0-action-builders.js";
+import { alarmAppend, inboxAppend } from "./l0-action-builders.js";
 
 const actionRowSchema = LedgerAction.Node;
 const inboxRowSchema = Inbox.Row;
@@ -368,8 +364,35 @@ function appendAction(
     action.ts,
     revision,
   );
+  projectRequestDeadline(db, action);
   const node = LedgerAction.Node.parse({ ...action, ordinal: revision });
   return { action: node, revision };
+}
+
+function projectRequestDeadline(db: Database, action: LedgerAction.Append): void {
+  if (action.kind !== "request" && action.kind !== "reply") return;
+  const effect = action.effect.value;
+  if (
+    effect === null ||
+    typeof effect !== "object" ||
+    Array.isArray(effect) ||
+    effect.phase !== "state"
+  )
+    return;
+  const request = SessionTransition.Request.parse(effect.request);
+  const status =
+    request.state === "open" ? "armed" : request.state === "expired" ? "fired" : "cancelled";
+  db.query(`INSERT INTO alarm (id, session_id, kind, fire_at, spec, encoding_version, status, time_created, time_updated)
+    VALUES (?, ?, 'at', ?, ?, 1, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET status = excluded.status, time_updated = excluded.time_updated`).run(
+    `${request.requestId}:deadline`,
+    request.sessionId,
+    request.deadline,
+    JSON.stringify({ kind: "request_deadline", requestId: request.requestId }),
+    status,
+    request.createdAt,
+    action.ts,
+  );
 }
 
 class SessionCommitRefused extends Error {
@@ -385,19 +408,13 @@ function commitSession(
 ): LedgerSession.CommitResult | undefined {
   const current = selectSession(db, request.sessionId);
   if (current === undefined) return undefined;
-  if (
-    current.leaseOwner !== request.owner ||
-    current.leaseFence !== request.fence ||
-    current.leaseExpiresAt === null ||
-    Deadline.isExpired(request.now, current.leaseExpiresAt)
-  ) {
-    return refusedSessionCommit("stale", current);
-  }
-  if (current.revision !== request.expectedRevision) {
-    return refusedSessionCommit("revision", current);
-  }
+  const refusal = sessionAuthorityRefusal(db, request, current);
+  if (refusal !== undefined) return refusal;
   if (!validActionBatch(db, request.actions, request.sessionId)) {
     return refusedSessionCommit("revision", current);
+  }
+  if (!validSessionInboxOwnership(request)) {
+    return refusedSessionCommit("inbox", current);
   }
   if (!canConsumeInbox(db, request)) {
     return refusedSessionCommit("inbox", current);
@@ -425,6 +442,19 @@ function commitSession(
     }
   }
 
+  if (request.receive !== undefined) {
+    const received = commitInbox(db, request.receive);
+    if (received === undefined)
+      throw new SessionCommitRefused(refusedSessionCommit("inbox", current));
+    receipts.push(...received.receipts);
+    revision = received.receipts.at(-1)?.revision ?? revision;
+  }
+  if (request.admit !== undefined) {
+    const admitted = commitInbox(db, request.admit);
+    if (admitted === undefined)
+      throw new SessionCommitRefused(refusedSessionCommit("inbox", current));
+    receipts.push(...admitted.receipts);
+  }
   const generation = request.generation ?? current;
   const updated = db
     .query(
@@ -449,16 +479,49 @@ function commitSession(
   if (updated.changes !== 1) {
     throw new SessionCommitRefused(refusedSessionCommit("stale", current));
   }
-  for (const delivery of request.deliveries ?? []) {
-    const committed = commitInbox(db, delivery);
-    if (committed === undefined) {
-      throw new SessionCommitRefused(refusedSessionCommit("inbox", current));
-    }
-    receipts.push(...committed.receipts);
-  }
   const row = selectSession(db, request.sessionId);
   if (row === undefined) throw new Error("committed session disappeared");
   return { ok: true, row, receipts };
+}
+
+function sessionAuthorityRefusal(
+  db: Database,
+  request: LedgerSession.Commit,
+  current: LedgerSession.Row,
+): LedgerSession.CommitResult | undefined {
+  if (
+    current.leaseOwner !== request.owner ||
+    current.leaseFence !== request.fence ||
+    current.leaseExpiresAt === null ||
+    Deadline.isExpired(request.now, current.leaseExpiresAt)
+  ) {
+    return refusedSessionCommit("stale", current);
+  }
+  if (current.revision !== request.expectedRevision) {
+    return refusedSessionCommit("revision", current);
+  }
+  if (
+    request.requestCount !== undefined &&
+    pendingRequestCount(db, request.requestCount.since) !== request.requestCount.count
+  ) {
+    return refusedSessionCommit("revision", current);
+  }
+  return undefined;
+}
+
+function validSessionInboxOwnership(request: LedgerSession.Commit): boolean {
+  if (request.receive !== undefined && request.receive.sessionId !== request.sessionId) {
+    return false;
+  }
+  if (
+    request.admit !== undefined &&
+    (request.admit.createSession?.row.parentId !== request.sessionId ||
+      request.admit.sender?.sessionId !== request.sessionId ||
+      request.admit.sender.owner !== request.owner ||
+      request.admit.sender.fence !== request.fence)
+  )
+    return false;
+  return true;
 }
 
 function validActionBatch(
@@ -542,62 +605,16 @@ interface InboxCommitResult {
 
 function commitInbox(db: Database, row: Inbox.Commit): InboxCommitResult | undefined {
   if (actionExists(db, row.id)) return undefined;
-  if (row.sender !== undefined) {
-    const sender = selectSession(db, row.sender.sessionId);
-    if (
-      sender === undefined ||
-      sender.leaseOwner !== row.sender.owner ||
-      sender.leaseFence !== row.sender.fence ||
-      sender.leaseExpiresAt === null ||
-      Deadline.isExpired(row.createdAt, sender.leaseExpiresAt)
-    )
-      return undefined;
-  }
+  if (!validInboxSender(db, row)) return undefined;
   const receipts: LedgerAction.Receipt[] = [];
   const child = row.createSession;
   if (child !== undefined) {
-    if (
-      (child.row.parentId !== null && child.row.parentId !== row.sender?.sessionId) ||
-      child.row.id !== row.sessionId ||
-      child.row.revision !== 0 ||
-      child.initialAction.sessionId !== row.sessionId ||
-      child.initialAction.parentId !== null ||
-      child.initialAction.kind !== "session.configure" ||
-      row.parentActionId !== null ||
-      actionExists(db, child.initialAction.id) ||
-      child.initialAction.id === row.id
-    )
-      return undefined;
-    if (child.row.parentId !== null) {
-      const limits = row.limits;
-      if (limits === undefined || openChildCount(db, child.row.parentId) >= limits.fanout)
-        return undefined;
-      let depth = 1;
-      let ancestor = selectSession(db, child.row.parentId);
-      while (ancestor?.parentId !== null) {
-        if (ancestor === undefined) throw new Error("session ancestry is missing");
-        depth += 1;
-        ancestor = selectSession(db, ancestor.parentId);
-      }
-      if (depth > limits.depth) return undefined;
-    }
+    if (!validInboxChild(db, row, child)) return undefined;
+    if (!withinChildLimits(db, child.row.parentId, row.limits)) return undefined;
     if (!insertSession(db, child.row)) return undefined;
     const configured = appendAction(db, child.initialAction, 0);
     if (configured === undefined) throw new Error("child configuration refused");
     receipts.push(configured);
-  }
-  const reply = Inbox.ReplyOrigin.safeParse(row.origin.value);
-  if (reply.success) {
-    const due = fireMessageDeadline(db, `${reply.data.sourceActionId}:deadline`, row.createdAt);
-    if (due !== undefined) receipts.push(...due.receipts);
-    const answer = claimMessageAnswer(db, {
-      sessionId: row.sessionId,
-      sourceActionId: reply.data.sourceActionId,
-      messageId: reply.data.messageId,
-      at: row.createdAt,
-      state: "answered",
-    });
-    if (answer !== undefined) receipts.push(answer);
   }
   const session = db.query("SELECT revision FROM session WHERE id = ?").get(row.sessionId) as {
     revision: number;
@@ -642,29 +659,75 @@ function commitInbox(db: Database, row: Inbox.Commit): InboxCommitResult | undef
     committed.ordinal,
   );
   receipts.push(receipt);
-  const origin = Inbox.MessageOrigin.safeParse(row.origin.value);
-  if (origin.success && origin.data.deadline !== undefined) {
-    const source = origin.data;
-    const sender = selectSession(db, source.senderSessionId);
-    if (sender === undefined) throw new Error("message deadline sender is missing");
-    const alarm = armAlarm(
-      db,
-      messageDeadlineArm(
-        {
-          messageId: source.messageId,
-          sessionId: source.senderSessionId,
-          sourceActionId: source.sourceActionId,
-          fireAt: origin.data.deadline,
-          createdAt: row.createdAt,
-          ...(source.replyTo === undefined ? {} : { replyTo: source.replyTo }),
-        },
-        sender,
-      ),
-    );
-    if (alarm === undefined) throw new Error("message deadline arm refused");
-    receipts.push(alarm.receipt);
-  }
   return { committed, receipts };
+}
+
+function validInboxSender(db: Database, row: Inbox.Commit): boolean {
+  if (row.sender === undefined) return true;
+  const sender = selectSession(db, row.sender.sessionId);
+  return (
+    sender !== undefined &&
+    sender.leaseOwner === row.sender.owner &&
+    sender.leaseFence === row.sender.fence &&
+    sender.leaseExpiresAt !== null &&
+    !Deadline.isExpired(row.createdAt, sender.leaseExpiresAt)
+  );
+}
+
+function validInboxChild(
+  db: Database,
+  row: Inbox.Commit,
+  child: LedgerSession.Materialize,
+): boolean {
+  if (
+    (child.row.parentId !== null && child.row.parentId !== row.sender?.sessionId) ||
+    child.row.id !== row.sessionId ||
+    child.row.revision !== 0 ||
+    child.initialAction.sessionId !== row.sessionId ||
+    child.initialAction.parentId !== null ||
+    child.initialAction.kind !== "session.configure" ||
+    row.parentActionId !== null ||
+    actionExists(db, child.initialAction.id) ||
+    child.initialAction.id === row.id
+  )
+    return false;
+  return true;
+}
+
+function withinChildLimits(
+  db: Database,
+  parentId: string | null,
+  limits: Inbox.Commit["limits"],
+): boolean {
+  if (parentId === null) return true;
+  if (limits === undefined || openChildCount(db, parentId) >= limits.fanout) return false;
+  let depth = 1;
+  let ancestor = selectSession(db, parentId);
+  while (ancestor?.parentId !== null) {
+    if (ancestor === undefined) throw new Error("session ancestry is missing");
+    depth += 1;
+    ancestor = selectSession(db, ancestor.parentId);
+  }
+  return depth <= limits.depth;
+}
+
+function pendingRequestCount(db: Database, since: number): number {
+  const row = db
+    .query(`
+    SELECT COUNT(*) AS count FROM (
+      SELECT effect, ROW_NUMBER() OVER (
+        PARTITION BY json_extract(effect, '$.request.requestId') ORDER BY ordinal DESC
+      ) AS latest
+      FROM action
+      WHERE kind IN ('request', 'reply') AND json_extract(effect, '$.phase') = 'state'
+    )
+    WHERE latest = 1
+      AND json_extract(effect, '$.request.state') = 'open'
+      AND json_extract(effect, '$.request.mode') = 'approval'
+      AND json_extract(effect, '$.request.createdAt') > ?
+  `)
+    .get(since) as { count: number };
+  return row.count;
 }
 
 function createInbox(
@@ -679,6 +742,31 @@ function createInbox(
       if (result === undefined) return undefined;
       for (const receipt of result.receipts) publishCommitted(db, observationSink, receipt);
       return result.committed;
+    },
+    receive(input) {
+      const row = Inbox.Commit.parse(input);
+      const received = transaction(() => {
+        const existing = db
+          .query("SELECT * FROM inbox WHERE id = ?")
+          .get(row.id) as InboxSqlRow | null;
+        if (existing !== null) {
+          const committed = decodeInbox(existing);
+          if (receivedDigest(committed) !== receivedDigest(row)) {
+            throw new Error("message identity reused with different payload");
+          }
+          return { row: committed, receipt: receivedAction(db, row.id), receipts: [] };
+        }
+        const result = commitInbox(db, row);
+        if (result === undefined) return undefined;
+        return {
+          row: result.committed,
+          receipt: receivedAction(db, row.id),
+          receipts: result.receipts,
+        };
+      });
+      if (received === undefined) return undefined;
+      for (const receipt of received.receipts) publishCommitted(db, observationSink, receipt);
+      return { row: received.row, receipt: received.receipt };
     },
     list(sessionId, status) {
       const rows = (
@@ -731,84 +819,23 @@ function selectAlarm(db: Database, id: string): Alarm.Row | undefined {
   return row === null ? undefined : decodeAlarm(row);
 }
 
-function claimMessageAnswer(
-  db: Database,
-  input: Parameters<typeof messageAnswerAppend>[0],
-): LedgerAction.Receipt | undefined {
-  const action = messageAnswerAppend(input);
-  if (actionExists(db, action.id)) return undefined;
-  const source = db
-    .query("SELECT kind, session_id FROM action WHERE id = ?")
-    .get(input.sourceActionId) as { kind: string; session_id: string } | null;
-  if (source?.kind !== "message" || source.session_id !== input.sessionId) {
-    throw new Error("message reply source does not belong to its receiving session");
-  }
-  const session = selectSession(db, input.sessionId);
-  if (session === undefined) throw new Error("message sender session is missing");
-  const receipt = appendAction(db, action, session.revision);
-  if (receipt === undefined) throw new Error("message answer CAS refused");
-  return receipt;
+function receivedDigest(
+  row: Pick<Inbox.Row, "id" | "sessionId" | "kind" | "content" | "origin">,
+): string {
+  return canonicalDigest({
+    id: row.id,
+    sessionId: row.sessionId,
+    kind: row.kind,
+    content: row.content,
+    origin: row.origin,
+  });
 }
 
-function fireMessageDeadline(
-  db: Database,
-  id: string,
-  at: number,
-):
-  | {
-      readonly receipts: LedgerAction.Receipt[];
-      readonly committed?: Inbox.Row;
-    }
-  | undefined {
-  const raw = db
-    .query("SELECT * FROM alarm WHERE id = ? AND status = 'armed' AND fire_at <= ?")
-    .get(id, at) as AlarmSqlRow | null;
-  if (raw === null) return undefined;
-  const alarm = decodeAlarm(raw);
-  const parsed = Alarm.MessageDeadline.safeParse(alarm.spec?.value);
-  if (!parsed.success) return undefined;
-  const spec = parsed.data;
-  const session = selectSession(db, alarm.sessionId);
-  if (session === undefined) throw new Error("alarm session is missing");
-  const pinned = spec.generation;
-  const current =
-    session.toolsGeneration === pinned.toolsGeneration &&
-    session.systemHash === pinned.systemHash &&
-    session.policyGeneration === pinned.policyGeneration;
-  const receipt = appendAction(
-    db,
-    {
-      id: `${id}:fired`,
-      parentId: id,
-      sessionId: alarm.sessionId,
-      kind: current ? "alarm.fired" : "alarm.paused",
-      intent: { encodingVersion: 1, value: { alarmId: id, fireAt: alarm.fireAt } },
-      effect: { encodingVersion: 1, value: { generationMatched: current } },
-      ts: at,
-      irreversible: true,
-    },
-    session.revision,
-  );
-  if (receipt === undefined) throw new Error("message alarm commit refused");
-  db.query("UPDATE alarm SET status = ?, time_updated = ? WHERE id = ? AND status = 'armed'").run(
-    current ? "fired" : "paused",
-    at,
-    id,
-  );
-  const receipts = [receipt];
-  if (!current) return { receipts };
-  const answer = claimMessageAnswer(db, {
-    sessionId: alarm.sessionId,
-    sourceActionId: spec.sourceActionId,
-    messageId: spec.messageId,
-    at,
-    state: "timed_out",
-  });
-  if (answer === undefined) return { receipts };
-  receipts.push(answer);
-  const inbox = commitInbox(db, messageTimeoutInbox(alarm, spec, at));
-  if (inbox === undefined) throw new Error("message timeout inbox refused");
-  return { receipts: [...receipts, ...inbox.receipts], committed: inbox.committed };
+function receivedAction(db: Database, id: string): LedgerAction.Receipt {
+  const row = db.query("SELECT * FROM action WHERE id = ?").get(id) as ActionSqlRow | null;
+  if (row === null) throw new Error("receiving inbox action is missing");
+  const action = decodeAction(row);
+  return { action, revision: action.ordinal };
 }
 
 function armAlarm(db: Database, parsed: Alarm.Arm) {
@@ -878,12 +905,6 @@ function createAlarms(
       if (result !== undefined)
         for (const receipt of result.receipts) publishCommitted(db, observationSink, receipt);
       return result;
-    },
-    fireMessage(id, at) {
-      const result = transaction(() => fireMessageDeadline(db, id, at));
-      if (result === undefined) return undefined;
-      for (const receipt of result.receipts) publishCommitted(db, observationSink, receipt);
-      return result.committed;
     },
     due(at) {
       const rows = db
@@ -1098,35 +1119,61 @@ function publishMessageTerminal(
   sink: ObservationSink,
   action: LedgerAction.Node,
 ): void {
-  if (action.kind !== "prompt") return;
   const scoped = sink.scope?.({ sessionId: action.sessionId }) ?? sink;
-  const reply = Inbox.ReplyOrigin.safeParse(action.intent.value);
-  if (reply.success) {
-    const source = db
-      .query("SELECT ts FROM action WHERE id = ? AND session_id = ?")
-      .get(reply.data.sourceActionId, action.sessionId) as { ts: number } | null;
-    if (source === null) throw new Error("committed reply source is missing");
-    scoped.publish(Gateway.MessageObserved, {
-      kind: "message.replied",
-      messageId: reply.data.messageId,
-      replyTo: reply.data.replyTo,
-      roundTripMs: Math.max(0, action.ts - source.ts),
-    });
+  if (action.kind === "request" && action.id.endsWith(":resolution")) {
+    const effect = action.effect.value;
+    if (effect === null || typeof effect !== "object" || Array.isArray(effect)) return;
+    const request = SessionTransition.Request.parse(effect.request);
+    if (request.mode === "reply" && request.state === "expired") {
+      const source = requestMessageIdentity(db, request.requestId, action.sessionId);
+      scoped.publish(Gateway.MessageObserved, {
+        kind: "message.timed_out",
+        messageId: source.messageId,
+        waitedMs: Math.max(0, action.ts - request.createdAt),
+      });
+    }
     return;
   }
-  const origin = action.intent.value;
-  if (origin === null || typeof origin !== "object" || Array.isArray(origin)) return;
-  if (
-    origin.kind === "message_timeout" &&
-    typeof origin.messageId === "string" &&
-    typeof origin.waitedMs === "number"
-  ) {
-    scoped.publish(Gateway.MessageObserved, {
-      kind: "message.timed_out",
-      messageId: origin.messageId,
-      waitedMs: origin.waitedMs,
-    });
-  }
+  if (action.kind !== "prompt") return;
+  const native = SessionTransition.OutboundMessage.safeParse(action.intent.value);
+  const external = Inbox.ReplyOrigin.safeParse(action.intent.value);
+  const binding = native.success
+    ? { requestId: native.data.requestId, replyTo: native.data.replyTo }
+    : external.success
+      ? { requestId: external.data.sourceActionId, replyTo: external.data.replyTo }
+      : undefined;
+  if (binding === undefined) return;
+  const source = requestMessageIdentity(db, binding.requestId, action.sessionId);
+  scoped.publish(Gateway.MessageObserved, {
+    kind: "message.replied",
+    messageId: source.messageId,
+    replyTo: binding.replyTo,
+    roundTripMs: Math.max(0, action.ts - source.ts),
+  });
+}
+
+function requestMessageIdentity(
+  db: Database,
+  id: string,
+  sessionId: string,
+): { messageId: string; ts: number } {
+  const source = db
+    .query("SELECT intent, ts FROM action WHERE id = ? AND session_id = ?")
+    .get(id, sessionId) as { intent: string; ts: number } | null;
+  if (source === null) throw new Error("committed reply source is missing");
+  const intent = PlainValueSchema.parse(JSON.parse(source.intent));
+  const value =
+    intent !== null && typeof intent === "object" && !Array.isArray(intent)
+      ? intent.value
+      : undefined;
+  const messageId =
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof value.messageId === "string"
+      ? value.messageId
+      : id;
+  return { messageId, ts: source.ts };
 }
 
 function l0SessionInfo(row: LedgerSession.Row) {

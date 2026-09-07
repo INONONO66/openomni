@@ -19,7 +19,7 @@ describe("resolveRoute", () => {
       target: "resident",
     }) satisfies RouteInbound;
     const state = Object.freeze({
-      wait: Object.freeze({ kind: "none" }),
+      request: Object.freeze({ kind: "none" }),
       channel: Object.freeze({
         id: "grant-owner-dm",
         kind: "trusted_channel",
@@ -68,7 +68,7 @@ describe("resolveRoute", () => {
       target: "resident",
     }) satisfies RouteInbound;
     const state = Object.freeze({
-      wait: Object.freeze({ kind: "none" }),
+      request: Object.freeze({ kind: "none" }),
       channel: Object.freeze({
         id: "grant-first-contact",
         kind: "trusted_channel",

@@ -1,5 +1,7 @@
 # SLOP: I09 deletion and closure receipts (#948)
 
+#969 cutover, 2026-09-07: request waiting, authenticated consent and outbound delivery now use canonical actions. The new receipt below covers the replacement; historical receipts retain their original source pins. Final HEAD and gate outputs are in the PR and local report.
+
 Verified on 2026-09-06 against source HEAD `c4fb774869fb060859bbdc2f58ce37ee3a3072c9`, tree `0d6318c742a1ca0eeaa5ddf30003108ba8a53487`; a fresh `git fetch origin main` resolved to the same commit. This docs-only patch preserves that production tree. Final documentation commit/tree and PR URL are recorded in the local `REPORT.md` and PR body.
 
 ## Receipt location and scope
@@ -49,7 +51,7 @@ Decisions and operator contracts: [alarm-monitor-stage-1.md](alarm-monitor-stage
 | A13 | `WorkItem`/task Attempt domain, completion, stores, schemas and tools | ALREADY-ABSENT under the exact #940 grep. Semantic archival survivors below are not hidden. Provider attempt children remain live. | #940, PR #960, `6c5d65d6`; #967 correction PR #977, `eec7f7fc` |
 | A14 | Curated memory, tool/config/snapshot injection | ALREADY-ABSENT, no replacement engine/port | #941, PR #958, `d35cdd39` |
 | A15 | Artifact store/schema/adapter/tools and model spill | ALREADY-ABSENT; model truncation and full cell results retained | #942, PR #959, `7edfe5d2` |
-| A4, A16 | Conversation/lease/engagement stores/schemas and converse/lease tools | ALREADY-ABSENT; session fencing, gateway send, grants, egress budgets and session-owned Wait retained | #943, PR #961, `23ad4f6b` |
+| A4, A16 | Conversation/lease/engagement stores/schemas and converse/lease tools | ALREADY-ABSENT; session fencing, gateway send, grants, egress budgets and waiting retained at that historical source; replaced by original-action requests in #969 | #943, PR #961, `23ad4f6b` |
 
 ### Exact issue greps
 
@@ -120,7 +122,7 @@ rg -n -i '(work[_-]?item|complete_work|work_items)' apps packages script -g '*.t
 
 It returns **two production-source hits**, not zero:
 
-- `packages/ledger/src/storage/u967-projection.ts:9`: offline historical projection schema accepts the retired owner spelling to validate archival eligibility. `initializeSqliteDatabase` / archive verification -> `inspect967Projections` -> `HistoricalProjection` checks old rows; the public `Wait.OwnerKind` permits only `session`.
+- `packages/ledger/src/storage/u967-projection.ts:9`: offline historical projection schema accepts the retired owner spelling to validate archival eligibility. `initializeSqliteDatabase` / archive verification -> `inspect967Projections` -> `HistoricalProjection` checks old rows; that historical public owner schema was subsequently removed by #969; frozen formats now live in `storage/historical-request-format.ts`.
 - `script/generate-ledger-archive-manifest.ts:151`: approved archive disposition deletes eligible retired-owner rows with revision and owner predicates. CLI -> locked receipt verification -> guarded migration preparation -> this delete. No live owner creation or fallback reader is reintroduced.
 
 The semantic census must keep these archival-only uses visible. They are not relabeled grep-zero, and no schema/history is destroyed to satisfy a lexical check. A direct schema probe rejects `workItem` and accepts `session`. Generic model attempt children are distinct and remain live.
@@ -221,7 +223,7 @@ later naming amendment in parallel with the messaging worker.
   helper for exec so shell startup can inherit the pinned export directory.
   Current contract deliberately accepts the bounded pathname check/spawn TOCTOU.
 
-## #946 stage-2 cutover receipts
+## #946 stage-2 cutover receipts (historical; #969 supersedes lifecycle ownership)
 
 Rebased onto `f9c02a66` (#991). This PR closes the implementation rows below; final gate receipts are in its PR body. Historical sections above are not rewritten as current gate evidence.
 
@@ -238,9 +240,8 @@ Rebased onto `f9c02a66` (#991). This PR closes the implementation rows below; fi
 
 Retained ownership, not a hidden alternate path:
 
-- #947: `apps/openomni/src/index.ts:344` invokes startup expiry; `packages/ledger/src/session/kernel.ts:127` is the due-dispatch consumer. Continuous live alarm dispatch/monitor scheduling remains #947.
-- #969: `packages/channels/src/router/routing-execution.ts:90` attaches correlated replies; `packages/channels/src/router/messaging/send.ts:359` opens the existing Wait and `:424` records platform reply identity. Wait lifecycle replacement is not part of this PR.
-- #969: `apps/openomni/src/index.ts:212-223` composes existing approval store operations. Typed executor approval evidence and its CAS remain with their existing owner.
+- #947 still owns continuous live due-dispatch and monitoring. The former message-specific startup expiry path is replaced in #969; its historical receipt does not prove the new path.
+
 
 Source and test runtime-symbol census (each prints zero matches and exits 1):
 
@@ -250,3 +251,20 @@ rg -n 'deliverWake|settleFromReply|awaitDelegation|processWorkerRun|registerDele
 ```
 
 The immutable migration manifest still names historical migration 0023. The guarded SQL migrations and offline archive checks intentionally retain historical table names; they are not live adapters or producers. No coverage floor is lowered.
+
+## #969 action waiting, delivery and retained history
+
+| Scope | Cutover disposition | Acceptance surface |
+| --- | --- | --- |
+| Waiting/approval authority | Independent protocol folds, stores, adapters, tables and writers removed; one original-action CAS | Kernel request race tests; real Owner socket/SIGKILL/restart test |
+| Protected mutations | Captured input/effect/catalog/domain binding; global pending-count CAS; at-most-once application claim | Wrong principal/hash/domain tests; body-entry domain race |
+| Child delivery | Terminal plus source obligation commit together; receiving inbox is idempotent and source acknowledgement requires its receipt | Native/process app tests; lost-ack restart; dropped-receiving-consumer mutant |
+| Physical channels | Grant/budget/idempotency and drivers retained; receipt identity never upgrades unknown/rejected to accepted | Real Telegram harness; quorum/all/chain and receipt tests |
+| Historical data | Forward migration refuses unresolved state and retains terminal rows in immutable archives | Fresh/0035 upgrades, archival equality, rollback and Bun 1.3.6 tests |
+
+
+`script/request-authority-census.ts` scans production, fixtures, and public schemas, including local untracked files, using Linux-compatible git grep. It rejects retired public APIs, live-table SQL, old correlation fields/events, and legacy module paths. Exact archival SQL allowances do not exempt an entire file: adding a store/sub-adapter to an archival fixture or a write to the read-only preflight still fails. One exact historical event remains in the hash-chain adoption fixture. Source comments and immutable migration comments are not executable authority. Dynamic SQL/name construction and semantically renamed engines remain outside this lexical/AST guard.
+
+The old producer entries and allowed perimeter store import are removed. Protocol/tool snapshots are generated from the current public barrel and catalog: SessionTransition maps to existing Session/Action vocabulary, and protected mutation no longer accepts model-minted approval decisions. The channels manifest allows agent for real-kernel tests only, not production source.
+
+Migration 0038 retains terminal legacy row bytes in immutable archive_969_wait/archive_969_approval tables; it does not erase action history or rewrite historical migrations. Unresolved or invalid old rows refuse before mutation. The #967 archive command remains explicitly confirmed and pinned separately. Unresolved old message alarms and native child execution also refuse. The replacement is covered by request/outbound race, restart and actual receiving-executor tests; final command receipts remain attached to the PR. Message/part retention, continuous scheduling (#947), and the broader #945/#948 quality campaign remain outside this cutover.

@@ -10,7 +10,7 @@ import {
 } from "@openomni/protocol";
 import { Bus } from "../helpers/observation";
 import { SessionHandleStore, Storage } from "../../src/index";
-import { bareStorageAdapter } from "../helpers/wait";
+import { bareStorageAdapter } from "../helpers/session";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
 

@@ -2,7 +2,7 @@ import {
   type Gateway,
   Ingress,
   NamedError,
-  Wait,
+  SessionTransition,
   resolveTarget,
   targetKey,
   type BusEvent,
@@ -13,7 +13,8 @@ import { matchBlacklist } from "./blacklist.js";
 import { resolveChannelGrant, type ChannelGrantResolution } from "./channel-grant.js";
 import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
-import { findWaitCandidates, type WaitResolution } from "./wait/index.js";
+import { findRequestCandidates, type RequestResolution } from "./request/correlation.js";
+import type { GatewayRouterPorts } from "./message-ports.js";
 
 const ingressRoutingErrorCodes = [
   "route_blocked",
@@ -21,7 +22,7 @@ const ingressRoutingErrorCodes = [
   "route_record_failed",
   /** Redelivered inbound whose fresh decision diverges from the recorded route.decided fact — fail closed, no action, no second fact (#510 review fix F2). */
   "route_replay_divergent",
-  "wait_reply_rejected",
+  "request_reply_rejected",
 ] as const;
 export type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];
 const IngressRoutingErrorCode = NamedError.Unknown.Schema.shape.data.shape.message.refine(
@@ -30,13 +31,14 @@ const IngressRoutingErrorCode = NamedError.Unknown.Schema.shape.data.shape.messa
 );
 
 /**
- * #498 C3: ingress correlation claims reuse THE one Wait.Correlation shape.
+ * #498 C3: ingress correlation claims reuse THE one SessionTransition.Correlation shape.
  * A claim envelope must carry its endpoint+channel scope pins — kept as a
  * local type-narrowing refine at this call site so no second correlation
  * shape is exported.
  */
-type ScopedCorrelation = Wait.Correlation & Readonly<{ endpointId: string; channelId: string }>;
-const ScopedCorrelationClaim = Wait.Correlation.refine(
+type ScopedCorrelation = SessionTransition.Correlation &
+  Readonly<{ endpointId: string; channelId: string }>;
+const ScopedCorrelationClaim = SessionTransition.Correlation.refine(
   (value): value is ScopedCorrelation =>
     value.endpointId !== undefined && value.channelId !== undefined,
   { message: "correlation claims require endpointId and channelId" },
@@ -67,23 +69,23 @@ export class IngressRoutingError extends IngressRoutingErrorBase {
   }
 }
 
-type KernelWaitExecution =
+type KernelRequestExecution =
   | Readonly<{ kind: "none" }>
   | Readonly<{
-      kind: "wait";
-      // Required: a wait match can only come from the wait tier, which
+      kind: "request";
+      // Required: a request match can only come from the request tier, which
       // refuses without a correlation envelope — optionality here would
       // weaken the sender-match evidence below its real invariant.
       correlation: ScopedCorrelation;
-      requestedAction: Wait.RequestedWaitAction;
-      record: Wait.Record;
+      requestedAction: SessionTransition.AllowedAction | "invalid";
+      record: SessionTransition.Request;
     }>;
 
 export type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
   Readonly<{
     decision: Ingress.RoutingDecisionPayload;
     event: Event;
-    waitExecution: KernelWaitExecution;
+    requestExecution: KernelRequestExecution;
     selectedTarget: Ingress.Target;
   }>;
 
@@ -92,7 +94,7 @@ function parseCorrelation(event: Gateway.DeliveredEvent): ScopedCorrelation | un
   return value === undefined ? undefined : ScopedCorrelationClaim.parse(value);
 }
 
-function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
+function routeRequestState(resolution: RequestResolution): RouteState["request"] {
   switch (resolution.kind) {
     case "none":
       return { kind: "none" };
@@ -102,24 +104,24 @@ function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
         candidateInteractionIds: resolution.candidates.map((candidate) => candidate.key),
       };
     case "match": {
-      const record = resolution.candidate.wait;
+      const record = resolution.candidate.request;
       return {
         kind: "match",
-        backing: "wait",
+        backing: "request",
         key: resolution.candidate.key,
-        recordId: record.id,
-        owner: record.ownerRef,
+        recordId: record.requestId,
+        sessionId: record.sessionId,
         allowed: record.allowedActions,
       };
     }
   }
 }
 
-function kernelWaitExecution(
-  resolution: WaitResolution,
+function kernelRequestExecution(
+  resolution: RequestResolution,
   correlation: ScopedCorrelation | undefined,
-  requestedAction: Wait.RequestedWaitAction,
-): KernelWaitExecution {
+  requestedAction: SessionTransition.AllowedAction | "invalid",
+): KernelRequestExecution {
   switch (resolution.kind) {
     case "none":
     case "ambiguous":
@@ -127,11 +129,11 @@ function kernelWaitExecution(
       return { kind: "none" };
     case "match":
       return {
-        kind: "wait",
-        // findWaitCandidates can return a match only for a scoped correlation.
+        kind: "request",
+        // findRequestCandidates can return a match only for a scoped correlation.
         correlation: correlation as ScopedCorrelation,
         requestedAction,
-        record: resolution.candidate.wait,
+        record: resolution.candidate.request,
       };
   }
 }
@@ -143,8 +145,8 @@ function selectedRouteTarget(
   if (decision.outcome !== "route") {
     return surfaceDefault;
   }
-  if (decision.stage !== "wait_correlation") return surfaceDefault;
-  // A routed wait-correlation decision can only come from a matched wait.
+  if (decision.stage !== "request_correlation") return surfaceDefault;
+  // A routed request-correlation decision can only come from a matched request.
   return { kind: "resident" };
 }
 
@@ -244,11 +246,18 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   event: Event,
   surfaceKey: string,
   traceId: string,
+  requests: GatewayRouterPorts["requests"],
+  at: number,
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
-  const requestedAction = Wait.requestedWaitAction(event.payload);
-  const gatheredWait = findWaitCandidates(correlation);
-  const wait = routeWaitState(gatheredWait);
+  const payload = event.payload;
+  const parsedAction =
+    payload !== null && typeof payload === "object" && "action" in payload
+      ? SessionTransition.AllowedAction.safeParse(payload.action)
+      : SessionTransition.AllowedAction.safeParse("report_result");
+  const requestedAction = parsedAction.success ? parsedAction.data : "invalid";
+  const gatheredRequest = findRequestCandidates(requests.list(), correlation);
+  const request = routeRequestState(gatheredRequest);
   const surfaceDefaultTarget = resolveTarget(event);
   const target = targetKey(surfaceDefaultTarget);
   const surfaceSessionId = SurfaceKey.lookup(surfaceKey);
@@ -264,7 +273,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   const decision = resolveRoute(
     {
       traceId,
-      time: Date.now(),
+      time: at,
       id: event.id,
       surface: event.surface,
       mode: event.mode,
@@ -272,7 +281,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
       requestedAction,
     },
     {
-      wait,
+      request,
       ...(blacklist === undefined ? {} : { blacklist }),
       ...(channel === undefined ? {} : { channel }),
       ...(actor === undefined ? {} : { actor }),
@@ -290,11 +299,11 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
       fact === "surface.default:new" ? `surface.default:${id}` : fact,
     );
   }
-  const waitExecution = kernelWaitExecution(gatheredWait, correlation, requestedAction);
+  const requestExecution = kernelRequestExecution(gatheredRequest, correlation, requestedAction);
   return {
     decision,
     event: routedEvent(event, channelResolution, channel),
-    waitExecution,
+    requestExecution,
     selectedTarget: selectedRouteTarget(decision, surfaceDefaultTarget),
   };
 }
@@ -394,7 +403,7 @@ function recordRouteDecided(
   return decision;
 }
 
-// Correlation is read-only (#215): wait ambiguity is recorded solely by the
+// Correlation is read-only (#215): request ambiguity is recorded solely by the
 // appended route.decided fact, its published RoutingDecision projection, and
 // the typed route_ambiguous rejection — candidates are never mutated on
 // lookup.
@@ -403,8 +412,10 @@ export function resolveAndRecordRoute<Event extends Gateway.DeliveredEvent>(
   surfaceKey: string,
   traceId: string,
   publish: BusEvent.Sink["publish"],
+  requests: GatewayRouterPorts["requests"],
+  at: number,
 ): KernelRouteResolution<Event> {
-  const resolution = resolveKernelRoute(event, surfaceKey, traceId);
+  const resolution = resolveKernelRoute(event, surfaceKey, traceId, requests, at);
   const decision = Ingress.Events.RoutingDecision.schema.parse(
     pinReplyGrantEndpoint(resolution.decision, event),
   );

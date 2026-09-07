@@ -79,7 +79,6 @@ describe("ledger producer drift", () => {
     expect([...scan.appendCallSites].sort()).toEqual(
       [
         ...LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers),
-        LEDGER_PRODUCER_MANIFEST.sharedAppendExecutor,
         adapterBinding,
       ].sort(),
     );

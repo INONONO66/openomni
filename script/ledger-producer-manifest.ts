@@ -26,19 +26,12 @@
 //
 // Four write surfaces are manifested:
 //   - streams: the ONE producer module per decision-class stream family
-//     (`wait:` / `work:` / `route:`).
+//     (route decisions/corrections and gateway send admissions).
 //   - appendCore: the modules allowed to touch `ledger_event`/`ledger_head`
 //     rows directly (raw prepared statements) plus the storage-adapter
 //     binding that exposes them as the ledger sub-adapter.
-//   - sharedAppendExecutor: the ONE module that may perform the append on a
-//     manifested producer's behalf. A stream family's `producers` entry still
-//     names who OWNS that family's facts (payload, adoption genesis, conflict
-//     taxonomy). Delegating the mechanics does NOT exempt a caller from the
-//     write manifest: the scan matches the executor's entry points
-//     (COMMIT_EXECUTOR_ENTRIES) as well as direct `ledger.append` calls, so a
-//     module cannot launder an unmanifested stream class through the shared
-//     executor. The executor itself is the only module allowed to appear in
-//     the scan without owning a stream family.
+// The deleted commit coordinator has no allowance. Its former entry points
+// remain detectable so a reintroduced caller fails the producer census.
 //   - frozenTableWriters: the sqlite adapter modules that still CONTAIN
 //     write SQL against frozen legacy tables. Their store layers throw the
 //     typed frozen errors (`worker_run_frozen` — pinned by conformance), so
@@ -55,7 +48,7 @@ import ts from "typescript";
 
 interface LedgerStreamProducer {
   /** Stream class key owned by this producer manifest. */
-  readonly streamClass: "wait" | "route" | "route_correction" | "gateway_send" | "approval";
+  readonly streamClass: "route" | "route_correction" | "gateway_send";
   /**
    * Repo-relative paths of the enumerated modules that append this class's facts.
    */
@@ -68,11 +61,6 @@ export interface LedgerProducerManifest {
   readonly streams: readonly LedgerStreamProducer[];
   /** Modules allowed to write `ledger_event`/`ledger_head` rows directly, plus the sub-adapter binding. */
   readonly appendCore: readonly string[];
-  /**
-   * The single module that executes appends on manifested producers' behalf
-   * (shared commit sequencing). Fact ownership stays with `streams`.
-   */
-  readonly sharedAppendExecutor: string;
   /** Frozen legacy tables and the ONLY modules still containing write SQL for them. */
   readonly frozenTableWriters: readonly { table: string; adapter: string }[];
   /** Migration .sql files allowed to carry write SQL against manifested tables. */
@@ -82,11 +70,6 @@ export interface LedgerProducerManifest {
 export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
   streams: [
     {
-      streamClass: "wait",
-      producers: ["packages/ledger/src/wait/index.ts"],
-      writes: "append+adoptStream",
-    },
-    {
       streamClass: "route",
       // The gateway router records channel-admitted route decisions before
       // anything acts. The removed product kernel's internal arm is gone.
@@ -94,26 +77,15 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       writes: "append",
     },
     {
-      // batch ② commit 4 — the route.decided ledger-lie correction. A routed
-      // wait-correlated delivery rejected fail-closed at the wait fold records
-      // route.not_delivered on the separate route_correction stream. Sole
-      // producer: the gateway router's wait execution (external arm only —
-      // the brain's internal path retires wait correlation).
+      // A request-correlated delivery rejected by the kernel records
+      // route.not_delivered on the separate route_correction stream.
       streamClass: "route_correction",
       producers: ["packages/channels/src/router/routing-execution.ts"],
       writes: "append",
     },
     {
-      // #P3 approval (docs/conversation-and-message-io.md §6) — one producer:
-      // the ledger ApprovalStore (append-before-CAS, no adoption path — the
-      // stream class is born with the table).
-      streamClass: "approval",
-      producers: ["packages/ledger/src/approval/index.ts"],
-      writes: "append",
-    },
-    {
       // Todo 21: one durable admission per outbound message id. Retries read
-      // this single-fact stream before resuming debit/wait/delivery state.
+      // this single-fact stream before resuming debit and physical delivery.
       streamClass: "gateway_send",
       producers: ["packages/channels/src/router/messaging/send.ts"],
       writes: "append",
@@ -126,11 +98,6 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
     // The storage adapter binding that exposes them as `Storage.ledger`:
     "packages/ledger/src/storage/sqlite-storage.ts",
   ],
-  // Decision-class commit sequencing (append at expectedHead → pre-cutover
-  // adoption → projection compare-and-set, in one transaction) has one owner.
-  // The wait/work producers below supply their own facts, adoption
-  // genesis, and conflict taxonomy through it.
-  sharedAppendExecutor: "packages/ledger/src/storage/commit-coordinator.ts",
   frozenTableWriters: [],
   migrationSqlWriters: [
     // Pre-freeze historical backfill: sets executor_kind on then-live rows.
@@ -177,8 +144,6 @@ const COMMIT_EXECUTOR_ACCESS = new RegExp(
   `\\[\\s*(?:["'](?:${COMMIT_EXECUTOR_ENTRIES.join("|")})["']|\`(?:${COMMIT_EXECUTOR_ENTRIES.join("|")})\`)\\s*\\]`,
   "i",
 );
-/** The executor module itself defines these names; it is manifested separately. */
-const COMMIT_EXECUTOR_MODULE = "packages/ledger/src/storage/commit-coordinator.ts";
 
 function tableWriteSqlPattern(tables: readonly string[]): RegExp {
   const table = `(?:${tables.join("|")})`;
@@ -308,7 +273,7 @@ export async function scanLedgerProducers(rootDir: string): Promise<LedgerProduc
     const content = await Bun.file(join(rootDir, file)).text();
     const writesDirectly = file !== LEDGER_CORE_FACADE && matchesLedgerWriteCall(content);
     // Delegating through the shared executor is the same write surface.
-    const writesViaExecutor = file !== COMMIT_EXECUTOR_MODULE && matchesCommitExecutorCall(content);
+    const writesViaExecutor = matchesCommitExecutorCall(content);
     if (writesDirectly || writesViaExecutor) appendCallSites.push(file);
     if (matchesLedgerTableWriteSql(content)) ledgerTableWriters.push(file);
     if (matchesFrozenTableWriteSql(content)) frozenTableWriters.push(file);

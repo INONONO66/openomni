@@ -7,6 +7,4 @@ export { BlacklistStore } from "./blacklist/index.js";
 export { ChannelGrantStore } from "./channel-grant/index.js";
 export { ReplyGrantStore } from "./reply-grant/index.js";
 export { PersonStore, ChannelInstanceStore, SecretStore, Vault } from "./provisioning/index.js";
-export { ApprovalStore } from "./approval/index.js";
-export { WaitStore } from "./wait/index.js";
 export { EgressBudgetStore } from "./egress/index.js";

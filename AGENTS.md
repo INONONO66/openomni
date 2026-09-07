@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 2026-09-06. Resident and native workers share the session-owned loop; legacy session CRUD/TTL and the I09 deletion surfaces are absent. Native archive confirmation and guarded migration 0034 are wired; session-owned Wait and physical message/part retention remain. Deletion and outstanding quality receipts: `docs/SLOP.md`. Keep this stamp current when editing (doc-state sync law). Gateway transport wiring verified on `feat/desktop-gateway-transport` (2026-09-06): the endpoint is resolved in Electron main from env and reaches the renderer over one `contextBridge` call.
+Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 2026-09-06. Resident and native workers share the session-owned loop; legacy session CRUD/TTL and the I09 deletion surfaces are absent. Native archive confirmation and guarded migration 0034 are wired; physical message/part retention remains. #969 ownership updated on `kernel/969-delegation-inbox`, 2026-09-07: original-action requests replace independent waiting/approval authority; guarded 0038 retains terminal legacy rows in immutable archives. Integration and final quality gates are not claimed complete. Deletion and outstanding quality receipts: `docs/SLOP.md`. Keep this stamp current when editing (doc-state sync law). Gateway transport wiring verified on `feat/desktop-gateway-transport` (2026-09-06): the endpoint is resolved in Electron main from env and reaches the renderer over one `contextBridge` call.
 
 Machine/codemode ownership updated on `kernel/949-tools-catalog` (2026-09-06), based on `f9c02a66`: raw WHERE handles, injected code runner, two-boundary authority, and production machine attach composition. Stage 1 adds locus-aware path tools and bash, deletes the target-selection workspace, and retains the legacy catalog entries pending stage 2.
 
@@ -46,7 +46,7 @@ ipc <- machines, apps/openomni
 ledger <- agent, channels, apps/openomni
 policy <- agent, channels, apps/openomni
 llm <- agent, apps/openomni
-agent <- apps/openomni
+agent <- channels, apps/openomni
 machines <- codemode, apps/openomni
 codemode <- apps/openomni
 channels <- apps/openomni
@@ -63,7 +63,7 @@ ui <- apps/desktop
 | `agent` | protocol, ledger, policy, llm; `src/` may depend on protocol, ledger, policy, llm |
 | `machines` | protocol, ipc |
 | `codemode` | protocol, machines |
-| `channels` | protocol, policy, ledger; `src/` may depend on protocol, policy, ledger |
+| `channels` | protocol, policy, ledger, agent; `src/` may depend on protocol, policy, ledger |
 | `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, machines, codemode |
 | `ui` | none |
 | `apps/desktop` | protocol, ui |
@@ -84,7 +84,7 @@ ui <- apps/desktop
 | `packages/ipc` | Framing and bidirectional transport | Run semantics or authorization |
 | `packages/machines` | Machine attachment, confined fs, exec and injected code wire | Interpreter internals, enrollment policy or product judgment |
 | `packages/codemode` | Code facade, machine object handles, per-tenant interpreter and call routing | Kernel policy, ledger, model rendering |
-| `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
+| `packages/channels` | Drivers plus perimeter routing, physical request correlation, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, code mode, boot/shutdown | Reimplementation of package primitives |
 | `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults, the gateway endpoint resolved from env in main and handed to the renderer over one `contextBridge` call; AI SDK chat state and the gateway transport; client state in one TanStack `Store` (`state/store.ts`: sessions, selection, collapsed project groups, per-session drafts) read through `useStore` selectors, and server state through TanStack Query (`state/queries.ts` mints every key; the only query is the gateway endpoint — the wire has no session-list method yet); the attention ordering engine and the search engine over store sessions; no mock data of any kind | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
 | `packages/ui` | The renderer's UI package: tokens (`src/styles.css`), primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray), and the one `Console` composition; `src/index.ts` exports only what apps/desktop imports, and `src/names.ts` is the single owner of every `data-ui` address | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
@@ -180,7 +180,7 @@ requires a complete campaign receipt, including restoration and cleanup proof.
 ## NOTES
 
 - `apps/openomni` is the kernel composition root. `apps/desktop` owns Electron and AI SDK chat state and imports `packages/ui`; its dependency band permits `protocol` and `ui`, not kernel implementation packages. It speaks to the daemon over the gateway's WebSocket rather than importing it: main resolves `OPENOMNI_WS_URL`, else `ws://127.0.0.1:<OPENOMNI_WS_PORT or 3000>/ws`, and `OPENOMNI_WS_TOKEN`, with the port default and the `/ws` path copied as literals from `apps/openomni/src/config.ts` and `apps/openomni/src/index.ts` and the source named at each — the dependency the console must not take is the reason the copy exists.
-- `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports. Conversation windows, send leases, and engagement lifecycles were removed in issue #943; ordinary sends use grants, egress budgets, idempotency, and Wait correlation.
+- `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports. Conversation windows, send leases, and engagement lifecycles were removed in issue #943; ordinary sends use grants, egress budgets, idempotency, and physical request correlation.
 - `packages/agent` coordinates generic session handles through `SessionHandleStore`; `packages/ledger` owns the durable facts, while product-specific session identity, routing, and lifecycle policy remain in `apps/openomni`.
 - Shipped-state claims, including Stakes, effective authority, and connector consumers, belong only in `docs/implementation-status.md`; other docs define target contracts or historical context and defer to it.
 - CI lives in `.github/workflows/ci.yml`; its Ultracite check is `bunx ultracite check --formatter-enabled=false .` (formatting disabled). Full formatting checks use `bunx ultracite check .`; the pinned baseline has existing formatter failures, recorded in `docs/SLOP.md`.

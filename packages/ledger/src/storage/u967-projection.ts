@@ -1,19 +1,16 @@
-import { Wait } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
+import { HistoricalWait } from "./historical-request-format";
 
 // Offline projection boundary only, reusing the surviving field schemas.
 // No runtime store reads historical owners through this boundary.
-const HistoricalProjection = z.strictObject({
-  ...Wait.Record.shape,
-  ownerRef: z.strictObject({ kind: z.enum(["session", "workItem"]), id: z.string().min(1) }),
-});
+const HistoricalProjection = HistoricalWait;
 
 export const DispositionCandidates = z.array(
   z.strictObject({
     id: z.string(),
     revision: z.number().int().nonnegative(),
-    status: Wait.Status,
+    status: HistoricalWait.shape.status,
   }),
 );
 export type DispositionCandidates = z.infer<typeof DispositionCandidates>;
@@ -64,7 +61,7 @@ function coherentWaits(db: Database): boolean {
   return statement.get() === null;
 }
 
-function terminalComplete(record: z.infer<typeof HistoricalProjection>): boolean {
+export function terminalComplete(record: z.infer<typeof HistoricalProjection>): boolean {
   const times = [
     record.createdAt,
     record.updatedAt,
@@ -174,7 +171,6 @@ export function inspect967Projections(db: Database, now: number) {
     }
     const record = parsed.data;
     if (record.ownerRef.kind === "session") {
-      if (!Wait.Record.safeParse(record).success) blocked.push("invalid_rows");
       continue;
     }
     if (

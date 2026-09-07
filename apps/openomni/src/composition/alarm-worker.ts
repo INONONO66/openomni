@@ -24,6 +24,7 @@ export function createAlarmWorker(options: {
   readonly alarms: Storage.AlarmSubAdapter;
   readonly observations: Required<Pick<ObservationSink, "subscribe">>;
   readonly wake: (sessionId: string) => Promise<void>;
+  readonly requestTimeout: (requestId: string, at: number) => void;
   readonly failure: (error: Error) => void;
   readonly clock?: () => number;
   readonly schedule?: (tick: () => void) => () => void;
@@ -100,10 +101,9 @@ export function createAlarmWorker(options: {
   }
 
   function start(row: Alarm.Row) {
-    if (row.kind === "at" && Alarm.MessageDeadline.safeParse(row.spec?.value).success) {
-      const timeout = options.alarms.fireMessage(row.id, now());
-      if (timeout !== undefined)
-        void options.wake(timeout.sessionId).catch((error: Error) => options.failure(error));
+    const deadline = Alarm.RequestDeadline.safeParse(row.spec?.value);
+    if (row.kind === "at" && deadline.success) {
+      options.requestTimeout(deadline.data.requestId, now());
       return;
     }
     const owned = options.alarms.acquire(row.id, row.fence);

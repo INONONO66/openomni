@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Migration } from "./migration-runner";
 import { preflight967, U967Error, U967_MIGRATION, REPLY_GRANT_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
+import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
 const retiredDomain = ["work", "item"].join("_");
@@ -46,6 +47,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0035_drop_retired_delegation_tables/migration.sql" },
   { name: "0036_reply_grant_projection/migration.sql" },
   { name: "0037_watch_alarms/migration.sql" },
+  { name: REQUEST_MIGRATION },
 ];
 
 const CLEAR_ORDER = [
@@ -56,8 +58,6 @@ const CLEAR_ORDER = [
   "ledger_event",
   "ledger_head",
   "event_chain",
-  "wait",
-  "approval",
   "channel_grant",
   "blacklist",
   "actor_endpoint",
@@ -77,6 +77,7 @@ export function preflightSqliteDatabase(db: Database) {
 export function initializeSqliteDatabase(
   db: Database,
   prepare967?: Migration.Preparation967,
+  target: "current" | "archive967" = "current",
 ): void {
   const state = preflightSqliteDatabase(db);
   if (state === "pending" && prepare967 === undefined) {
@@ -88,6 +89,7 @@ export function initializeSqliteDatabase(
     )
       throw new U967Error("approval_required");
   }
+  if (target === "current" && state !== "fresh") preflight969(db, Date.now());
   // The primary connection owns every decision-class write (ledger appends +
   // projections share its transactions), so it runs at synchronous=FULL: a
   // committed append survives power loss, which is what "no record, no
@@ -95,7 +97,7 @@ export function initializeSqliteDatabase(
   applyConnectionPragmas(db, "FULL");
   // Preserve the shipped archive chain through 0036, never authorize later migrations.
   const migrations =
-    prepare967 === undefined
+    target === "current" && prepare967 === undefined
       ? ORDERED_MIGRATIONS
       : ORDERED_MIGRATIONS.slice(
           0,
@@ -112,12 +114,22 @@ export function clearSqliteStorage(db: Database): void {
 }
 
 function applyConnectionPragmas(db: Database, synchronous: "FULL" | "NORMAL"): void {
-  db.query("PRAGMA journal_mode = WAL").get();
-  db.query(`PRAGMA synchronous = ${synchronous}`).get();
-  db.query("PRAGMA busy_timeout = 5000").get();
-  db.query("PRAGMA cache_size = -64000").get();
-  db.query("PRAGMA mmap_size = 268435456").get();
-  db.query("PRAGMA temp_store = MEMORY").get();
-  db.query("PRAGMA foreign_keys = ON").get();
-  db.query("PRAGMA wal_checkpoint(PASSIVE)").get();
+  for (const sql of [
+    "PRAGMA journal_mode = WAL",
+    `PRAGMA synchronous = ${synchronous}`,
+    "PRAGMA busy_timeout = 5000",
+    "PRAGMA cache_size = -64000",
+    "PRAGMA mmap_size = 268435456",
+    "PRAGMA temp_store = MEMORY",
+    "PRAGMA foreign_keys = ON",
+    "PRAGMA wal_checkpoint(PASSIVE)",
+  ]) {
+    // Bun 1.3.6 must not retain cached pragma cursors across the table rebuild.
+    const statement = db.prepare(sql);
+    try {
+      statement.all();
+    } finally {
+      statement.finalize();
+    }
+  }
 }

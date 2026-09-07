@@ -1,11 +1,10 @@
 import { beforeEach, expect, test } from "bun:test";
-import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
+import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
-import type { ChannelDeliveryRoute, GatewayRouterPorts } from "../../../src/router";
+import type { ChannelDeliveryRoute } from "../../../src/router";
 import { makeRouter as makeFixtureRouter, resetRouterState } from "../_router-fixture";
 
 const delivered: Array<{ externalId: string; body: string; idempotencyKey: string }> = [];
-const deadlines: Array<Parameters<NonNullable<GatewayRouterPorts["armDeadline"]>>[0]> = [];
 const sender = { kind: "external", surface: "discord", externalId: "buyer-external" } as const;
 const facts: Gateway.IngressFacts = {
   eventId: "contact",
@@ -26,9 +25,6 @@ const reply: Gateway.SendMessage = {
 
 function makeRouter(routes?: ReadonlyMap<string, ChannelDeliveryRoute>) {
   return makeFixtureRouter({
-    armDeadline: (input) => {
-      deadlines.push(input);
-    },
     messaging: {
       deliveryRoutes:
         routes ??
@@ -62,7 +58,6 @@ function makeRouter(routes?: ReadonlyMap<string, ChannelDeliveryRoute>) {
 beforeEach(() => {
   resetRouterState();
   delivered.length = 0;
-  deadlines.length = 0;
   ChannelGrantStore.put({
     id: "market",
     surface: "discord",
@@ -98,9 +93,13 @@ test("admitted first contact grants a scoped reply through the same ingest", asy
     delivery: { kind: "actor", value: "accepted" },
   });
   if (sent.status !== "executed") throw new Error("not executed");
-  expect(deadlines).toMatchObject([
-    { messageId: sent.handle.messageId, sessionId: "persona-owner", fireAt: reply.deadline },
-  ]);
+  const request = SessionHandleStore.requestRows("persona-owner")[0];
+  expect(request).toMatchObject({ deadline: reply.deadline, state: "open" });
+  expect(Storage.get().alarms?.get(`${request?.requestId}:deadline`)).toMatchObject({
+    kind: "at",
+    fireAt: reply.deadline,
+    status: "armed",
+  });
   expect(delivered).toEqual([
     { externalId: "buyer-external", body: "yes", idempotencyKey: sent.handle.messageId },
   ]);

@@ -1417,23 +1417,30 @@ describe("durable session handle", () => {
     let commits = 0;
     runtime = {
       ...runtime,
-      commitTerminal: async ({ commit, reply }) => {
+      dispatchOutbound: async ({ message }) => {
         commits += 1;
         expect(
-          SessionHandleStore.tree(commit.sessionId).some(
+          SessionHandleStore.tree(message.sourceSessionId).some(
             (action) => SessionHandleStore.turnTerminal(action) !== undefined,
           ),
-        ).toBe(false);
+        ).toBe(true);
+        expect(SessionHandleStore.outboundRows(message.sourceSessionId)[0]?.state).toBe("pending");
         expect(SessionHandleStore.inboxRows(parent.id)).toEqual([]);
-        expect(reply.origin.value).toEqual({
-          kind: "child_terminal",
-          messageId: "request",
-          sourceActionId: "original-send",
+        expect(message).toMatchObject({
+          requestId: "original-send",
           replyTo: "original-binding",
-          childSessionId: "reply-child",
-          terminalKind: kind,
+          sourceSessionId: "reply-child",
+          terminal: kind === "result" ? "completed" : kind,
         });
-        return SessionHandleStore.commit({ ...commit, deliveries: [reply] });
+        return SessionHandleStore.commitReceivedMessage({
+          id: message.messageId,
+          sessionId: message.destinationSessionId,
+          kind: "prompt",
+          content: message.content,
+          createdAt: now,
+          parentActionId: null,
+          origin: { encodingVersion: 1, value: message },
+        }).receipt;
       },
     };
     const worker = session(

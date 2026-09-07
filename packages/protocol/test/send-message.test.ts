@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
-import { Actor, Gateway, LedgerAction, Wait } from "../src/index.js";
+import { Actor, Gateway, LedgerAction, SessionTransition } from "../src/index.js";
 
 function issues<T>(result: z.ZodSafeParseResult<T>) {
   expect(result.success).toBe(false);
@@ -79,8 +79,8 @@ describe("sendMessage stage-1 protocol", () => {
       });
       expect(value).toEqual({ messageId: "message-1", target });
     }
-    expect(issues(Gateway.SendMessageHandle.safeParse({ ...handle, waitId: "w-1" }))).toEqual([
-      { code: "unrecognized_keys", path: [], keys: ["waitId"] },
+    expect(issues(Gateway.SendMessageHandle.safeParse({ ...handle, requestId: "w-1" }))).toEqual([
+      { code: "unrecognized_keys", path: [], keys: ["requestId"] },
     ]);
   });
 
@@ -161,42 +161,27 @@ describe("gateway ingest", () => {
 
   test("normalized reply facts preserve shared correlation fields and precedence", () => {
     const pins = { endpointId: "endpoint-1", channelId: ingress.channelId };
-    const cases: { correlation: Wait.Correlation; levels: Wait.CorrelationQuery[] }[] = [
-      { correlation: { tokenHash: "token-1" }, levels: [{ tokenHash: "token-1" }, pins] },
+    const cases: SessionTransition.Correlation[] = [
+      { tokenHash: "token-1" },
+      { externalConversationId: "conversation-1" },
+      { tokenHash: "token-1", externalConversationId: "conversation-1" },
       {
-        correlation: { externalConversationId: "conversation-1" },
-        levels: [{ externalConversationId: "conversation-1" }],
-      },
-      {
-        correlation: { tokenHash: "token-1", externalConversationId: "conversation-1" },
-        levels: [{ tokenHash: "token-1" }, { externalConversationId: "conversation-1" }],
-      },
-      {
-        correlation: {
-          replyToMessageId: "message-0",
-          threadId: "thread-1",
-          tokenHash: "token-1",
-          externalConversationId: "conversation-1",
-        },
-        levels: [
-          { replyToMessageId: "message-0" },
-          { threadId: "thread-1" },
-          { tokenHash: "token-1" },
-          { externalConversationId: "conversation-1" },
-        ],
+        replyToMessageId: "message-0",
+        threadId: "thread-1",
+        tokenHash: "token-1",
+        externalConversationId: "conversation-1",
       },
     ];
-    for (const { correlation, levels } of cases) {
-      const shared: Wait.Correlation = Wait.Correlation.parse(correlation);
+    for (const correlation of cases) {
+      const shared = SessionTransition.Correlation.parse(correlation);
       const input = { ...ingress, reply: { ...shared, chain: [] } };
-      const parsed: Gateway.IngressFacts = Gateway.IngressFacts.parse(input);
-      expect(shared).toEqual(correlation);
+      const parsed = Gateway.IngressFacts.parse(input);
       expect(parsed).toEqual(input);
-      if (parsed.reply === undefined) throw new Error("expected parsed reply");
-      const { chain, ...normalized } = parsed.reply;
-      expect(chain).toEqual([]);
-      const scoped: Wait.Correlation = Wait.Correlation.parse({ ...normalized, ...pins });
-      expect(Wait.waitTierLevels(scoped)).toEqual(levels);
+      expect(SessionTransition.Correlation.parse({ ...parsed.reply, ...pins })).toEqual({
+        ...shared,
+        chain: [],
+        ...pins,
+      });
     }
   });
 
