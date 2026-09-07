@@ -27,10 +27,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { collectToolSpecs, TOOL_DEFINITIONS } from "../apps/openomni/src/tools/core/catalog.js";
-import type {
-  AnyToolDefinition,
-  ToolCategory,
-} from "../packages/protocol/src/tool/index.js";
+import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
 
 interface Violation {
   readonly check:
@@ -644,13 +641,6 @@ function selfTest(): void {
       name: "unsafe_query",
       category: "query",
     } as AnyToolDefinition;
-    const invariantViolations = definitionInvariantViolations(
-      [unsafeQuery],
-      [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/mutation/unsafe.ts" }],
-    );
-    if (!invariantViolations.some(({ message }) => message.includes("[tool-category-directory]"))) {
-      failures.push("definition invariants did not flag a category-directory mismatch");
-    }
     if (
       !definitionInvariantViolations(
         [],

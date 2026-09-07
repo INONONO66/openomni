@@ -9,14 +9,14 @@ test("retired target-selection workspace and executor are absent repository-wide
   expect(existsSync(join(root, "packages", retired))).toBe(false);
   const result = Bun.spawnSync(
     [
-      "rg",
+      "git",
+      "grep",
       "-n",
+      "-E",
       `@openomni/${retired}|packages/${retired}|${retired}GatedExecutor`,
+      "--",
       ".",
-      "--glob",
-      "!node_modules",
-      "--glob",
-      "!**/dist/**",
+      ":!**/dist/**",
     ],
     { cwd: root },
   );
