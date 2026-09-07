@@ -22,8 +22,20 @@ export interface GatewayEndpoint {
  * from here.
  */
 export const GATEWAY_CHANNEL = "openomni:gateway";
+export const SHELL_COMMAND_CHANNEL = "shell:command";
+
+export type ShellCommand =
+  | "new-tab"
+  | "close-tab"
+  | "reopen-tab"
+  | "next-tab"
+  | "previous-tab"
+  | "back"
+  | "forward"
+  | `select-tab-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
 
 export interface DesktopApi {
+  readonly onShellCommand: (listener: (command: ShellCommand) => void) => () => void;
   readonly versions: { readonly electron: string; readonly chrome: string; readonly node: string };
   /**
    * Where the gateway is, or `undefined` when this build has none.
