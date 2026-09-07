@@ -47,7 +47,10 @@ No delegation file or deadline consumer is changed in stage 1.
 ## Operations
 
 The normal app boot mounts the alarm band after session recovery and before
-channel binding. Shutdown invalidates source fences before closing the PTY or
+channel binding. Evaluator entry is bound to the app's async context at band
+construction: a tool-origin bus notification cannot lend its expiring executor
+wave signal or authority to a persistent source or its later wake.
+Shutdown invalidates source fences before closing the PTY or
 filesystem handle; it does not cancel durable armed rows. One-second due scans
 recover missed bus observations and process-worker-created rows. Operators
 inspect the existing alarm row and action/inbox history, not a second watcher

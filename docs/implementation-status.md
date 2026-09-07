@@ -22,7 +22,10 @@ without an exemption or lowered floor. Path sources reconcile stat identity in
 the same app scan as native notifications: unchanged observations write zero,
 and a missed native event no longer strands a durable create. The path test
 subscribes before mutation and drives reconciliation without yielding to the
-native callback, proving atomic delivery independently of callback timing. [Decisions and operational limits](alarm-monitor-stage-1.md)
+native callback, proving atomic delivery independently of callback timing.
+Evaluator entry captures the app async context, preventing tool-wave abort
+inheritance. A real WebSocket/PTY/FIFO regression verifies that a tool-created
+source wakes a hibernated app session after its original tool wave has ended. [Decisions and operational limits](alarm-monitor-stage-1.md)
 include the at-most-once restart gap. Stage 2 after #946 still owes only the
 message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
 restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.

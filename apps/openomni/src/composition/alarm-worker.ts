@@ -1,3 +1,4 @@
+import { AsyncResource } from "node:async_hooks";
 import {
   canonicalDigest,
   L0Observation,
@@ -159,8 +160,11 @@ export function createAlarmWorker(options: {
     }
   }
 
+  // A bus publication can originate inside an executor wave. Never inherit its
+  // abort/authority scope into a long-lived source or a future session wake.
+  const evaluate = AsyncResource.bind(tick);
   return {
-    tick,
+    tick: evaluate,
     start() {
       if (cancelTick !== undefined) throw new Error("alarm worker already started");
       unsubscribe = options.observations.subscribe(
@@ -168,13 +172,13 @@ export function createAlarmWorker(options: {
         (payload) => {
           if (payload.kind !== "alarm.arm") return;
           try {
-            tick();
+            evaluate();
           } catch (error) {
             options.failure(error instanceof Error ? error : new Error(String(error)));
           }
         },
       );
-      tick();
+      evaluate();
       cancelTick = (
         options.schedule ??
         ((callback) => {
@@ -187,7 +191,7 @@ export function createAlarmWorker(options: {
           }, 1000);
           return () => clearInterval(timer);
         })
-      )(tick);
+      )(evaluate);
     },
     async close() {
       stopped = true;
