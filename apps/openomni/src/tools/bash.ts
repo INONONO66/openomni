@@ -1,7 +1,7 @@
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { z } from "zod";
-import { parseLocus } from "../locus";
-import { fileOperation, type FilePorts } from "../fs/endpoint";
+import { parseLocus } from "./locus";
+import { fileOperation, type FilePorts } from "./core/filesystem";
 
 export function createBashTool(ports: FilePorts) {
   return defineTool({

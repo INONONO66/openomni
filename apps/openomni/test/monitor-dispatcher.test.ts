@@ -18,7 +18,7 @@ import {
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
 import { seedKernelPolicyRows } from "../src/policy-seed";
-import { monitorTool } from "../src/tools/mutation/monitor";
+import { monitorTool } from "../src/tools/monitor";
 import { assistantMessage } from "./helpers/assistant-message";
 import { alarmFixture } from "./helpers/alarm";
 

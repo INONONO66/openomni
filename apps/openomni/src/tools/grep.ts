@@ -1,6 +1,6 @@
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { z } from "zod";
-import { childPath, fileOperation, filesystem, text, type FilePorts } from "./endpoint";
+import { childPath, fileOperation, filesystem, text, type FilePorts } from "./core/filesystem";
 
 export function createSearchTool(ports: FilePorts) {
   return defineTool({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { LlmIo } from "../src/tools/execution/llm";
+import type { LlmIo } from "../src/tools/completion";
 import { Run } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import {

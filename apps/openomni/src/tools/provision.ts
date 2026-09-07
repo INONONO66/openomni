@@ -8,9 +8,9 @@ import {
   isRegisteredProvider,
   validateProviderCredential,
   validateProviderSettings,
-} from "../../channels";
-import type { ChannelRuntimeStatus, ChannelSupervisor } from "../../provisioning/supervisor";
-import type { KekResolution } from "../../provisioning/vault-key";
+} from "../channels";
+import type { ChannelRuntimeStatus, ChannelSupervisor } from "../provisioning/supervisor";
+import type { KekResolution } from "../provisioning/vault-key";
 
 /**
  * Resident-gated provisioning administration

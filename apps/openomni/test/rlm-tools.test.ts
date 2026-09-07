@@ -5,7 +5,7 @@ import {
   createLlmToolPort as llmToolPort,
   LLM_TOOL_NAME,
   MAX_LLM_CALLS,
-} from "../src/tools/execution/llm";
+} from "../src/tools/completion";
 import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
 
 afterEach(() => mock.restore());

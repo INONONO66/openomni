@@ -35,7 +35,7 @@ import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import { resolveKek } from "./provisioning/vault-key";
-import type { ProvisionPort } from "./tools/mutation/provision";
+import type { ProvisionPort } from "./tools/provision";
 import {
   assertWsExposure,
   loadConfig,
@@ -43,7 +43,7 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import { createLlmToolPort } from "./tools/execution/llm";
+import { createLlmToolPort } from "./tools/completion";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";

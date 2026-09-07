@@ -1,6 +1,6 @@
 import { defineTool } from "@openomni/agent";
 import { z } from "zod";
-import { fileOperation, filesystem, type FilePorts } from "./endpoint";
+import { fileOperation, filesystem, type FilePorts } from "./core/filesystem";
 
 export function createListTool(ports: FilePorts) {
   return defineTool({

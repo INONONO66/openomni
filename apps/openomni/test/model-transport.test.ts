@@ -7,7 +7,7 @@ import type { RunInput, Sink } from "@openomni/llm";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
 import { residentRunner as createResident } from "./helpers/resident-runner";
-import { createLlmToolPort } from "../src/tools/execution/llm";
+import { createLlmToolPort } from "../src/tools/completion";
 import { assistantMessage } from "./helpers/assistant-message";
 import { admittedOperation } from "./helpers/admitted-operation";
 

@@ -4,7 +4,7 @@ import { Bus, createSessionRequests, ToolRefused } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
-import { monitorTool } from "../src/tools/mutation/monitor";
+import { monitorTool } from "../src/tools/monitor";
 import { messageFixture } from "./helpers/message-fixture";
 
 function alarmStore() {

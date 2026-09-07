@@ -3,7 +3,7 @@ import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { createTools } from "../src/tools/core/catalog";
 import { createDispatcher, eraseTool } from "@openomni/agent";
-import { createProvisionTool, type ProvisionPort } from "../src/tools/mutation/provision";
+import { createProvisionTool, type ProvisionPort } from "../src/tools/provision";
 import { executor } from "./helpers/executor";
 import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";

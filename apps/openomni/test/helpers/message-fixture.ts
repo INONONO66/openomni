@@ -19,7 +19,7 @@ import {
   prepareMessage,
 } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
-import { createSendMessageTool } from "../../src/tools/authority/send-message";
+import { createSendMessageTool } from "../../src/tools/send_message";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
 
 export function messageFixture(

@@ -1,8 +1,8 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
-import { monitorTool } from "../mutation/monitor";
+import { monitorTool } from "../monitor";
 import type { LedgerSession } from "@openomni/protocol";
 import type { MachineHost } from "@openomni/machines";
-import { createSendMessageTool, type MessagePort } from "../authority/send-message";
+import { createSendMessageTool, type MessagePort } from "../send_message";
 
 export interface CatalogOrigin {
   readonly role: LedgerSession.Role;
@@ -10,17 +10,17 @@ export interface CatalogOrigin {
   readonly sessionId: string;
 }
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
-import { createLlmTool, type LlmPort } from "../execution/llm";
-import { createRunCodeTool } from "../execution/run-code";
+import { createLlmTool, type LlmPort } from "../completion";
+import { createRunCodeTool } from "../eval";
 import type { composeCodemode } from "../../composition/codemode";
-import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
+import { createProvisionTool, type ProvisionPort } from "../provision";
 import { eraseTool, toolSpec } from "@openomni/agent";
-import { createReadTool } from "../fs/read";
-import { createWriteTool } from "../fs/write";
-import { createEditTool } from "../fs/edit";
-import { createListTool } from "../fs/list";
-import { createSearchTool } from "../fs/search";
-import { createBashTool } from "../code/bash";
+import { createReadTool } from "../read";
+import { createWriteTool } from "../write";
+import { createEditTool } from "../edit";
+import { createListTool } from "../ls";
+import { createSearchTool } from "../grep";
+import { createBashTool } from "../bash";
 
 export interface CatalogPorts {
   readonly messages?: MessagePort;

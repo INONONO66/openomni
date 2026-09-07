@@ -10,7 +10,7 @@ import { createGatewayRouter } from "@openomni/channels";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
-import { createLlmToolPort } from "./tools/execution/llm";
+import { createLlmToolPort } from "./tools/completion";
 import { createResident } from "./resident";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
