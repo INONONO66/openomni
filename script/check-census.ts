@@ -468,11 +468,15 @@ function productionRoots(root: string, files: Entry[], qualityOnly = false) {
             const htmlPath = relative(root, configured),
               html = readFileSync(sourcePath(root, htmlPath), "utf8");
             configurationHashes.push({ path: htmlPath, sha256: digest(html) });
-            for (const tag of html.matchAll(/<script\b([^>]*)>/g)) {
-              if (!/\btype=["']module["']/.test(tag[1] ?? "")) continue;
-              const src = /\bsrc=["']([^"']+)["']/.exec(tag[1] ?? "")?.[1];
-              if (src) paths.push(resolve(dirname(configured), src.replace(/^\//, "")));
-            }
+            new HTMLRewriter()
+              .on("script", {
+                element(element: { getAttribute(name: string): string | null }) {
+                  if (element.getAttribute("type") !== "module") return;
+                  const src = element.getAttribute("src");
+                  if (src) paths.push(resolve(dirname(configured), src.replace(/^\//, "")));
+                },
+              })
+              .transform(html);
             if (!paths.length) fail("missing_roots", htmlPath, "no module script entry");
           } else paths.push(configured);
           for (const path of paths) {

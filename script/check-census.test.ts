@@ -599,7 +599,7 @@ test("Electron Vite roots include main, preload and HTML module entries", () => 
     "src/package.json",
     JSON.stringify({ name: "application", scripts: { build: "electron-vite build" } }),
   );
-  fixture.write("src/index.html", '<script type="module" src="./renderer.ts"></script>');
+  fixture.write("src/index.html", '<SCRIPT TYPE=module SRC="./renderer.ts"></SCRIPT>');
   const result = fixture.run("publisher");
   expect(result.code).toBe(0);
   for (const entry of ["main", "preload", "renderer"]) {
