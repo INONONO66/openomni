@@ -25,7 +25,7 @@ export function SidebarNav({ children }: { readonly children: ReactNode }) {
   );
 }
 
-/** One destination: a 16px glyph and a label on a 28px row. */
+/** One destination: a 16px glyph at the frame's 1.5px line and a label on a 28px row. */
 export function NavItem({
   icon,
   active = false,
@@ -41,7 +41,7 @@ export function NavItem({
   return (
     <BaseButton
       aria-current={active ? "page" : undefined}
-      className={`focus-ring flex h-7 select-none items-center gap-2 rounded-sm px-2 font-medium text-label transition-quiet motion-reduce:transition-none [&_svg]:size-4 [&_svg]:shrink-0 ${
+      className={`focus-ring [&_svg]:glyph-stroke flex h-7 select-none items-center gap-2 rounded-sm px-2 font-medium text-label transition-quiet motion-reduce:transition-none [&_svg]:size-4 [&_svg]:shrink-0 ${
         active ? "bg-hover text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
       } ${className}`}
       data-ui={UI_NAMES.NavItem}

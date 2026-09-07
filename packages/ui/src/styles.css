@@ -265,6 +265,13 @@
   --duration-slow: 0.3s;
   --ease-frame: var(--motion-fast-ease);
 
+  /* The frame's stroked glyphs (lucide, drawn on a 24 grid) take the reference
+     console's line weight: its icons are 16px with 1.5-unit strokes in a
+     `0 0 16 16` box (`Icon` default `size: 16`; every measured path is built
+     from 0.75 radii), so 1.5 CSS px. Applied through `glyph-stroke`, which
+     pins the stroke in screen pixels, so the number is right at any glyph size. */
+  --stroke-glyph: 1.5px;
+
   /* ---- Shell geometry ---------------------------------------------------- */
   /* The tab strip's height (reference: `desktopTabsHeight: 42`) and the one
      tab's inside it (`desktopTabHeight: 26`). `--shell-top` reads the strip's
@@ -460,6 +467,16 @@ body {
 @utility duration-slow {
   --tw-duration: var(--duration-slow);
   transition-duration: var(--duration-slow);
+}
+
+/* A stroked glyph at the reference console's weight. `non-scaling-stroke` reads
+   `stroke-width` in the host's pixels rather than the icon's grid, so a lucide
+   glyph scaled from 24 to 16 keeps the 1.5px line and does not thin to 1.33. */
+@utility glyph-stroke {
+  stroke-width: var(--stroke-glyph);
+  & * {
+    vector-effect: non-scaling-stroke;
+  }
 }
 
 /* The one shared transition, and the ONLY place a component may acquire one.

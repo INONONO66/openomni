@@ -75,6 +75,23 @@ describe("the strip's tokens", () => {
 });
 
 describe("the strip's glyphs", () => {
+  test("Given the reference's 16px icons at 1.5 units, When read, Then the stroked glyphs run 1.5px in screen pixels at the 16px sites only", async () => {
+    expect(px("--stroke-glyph")).toBe(1.5);
+    const utility = CSS.slice(CSS.indexOf("@utility glyph-stroke {"));
+    const block = utility.slice(0, utility.indexOf("\n}\n"));
+    expect(block).toContain("stroke-width: var(--stroke-glyph);");
+    expect(block).toContain("vector-effect: non-scaling-stroke;");
+    const button = await Bun.file(join(SRC, "primitives", "button.tsx")).text();
+    const sizes = Object.fromEntries(
+      [...button.matchAll(/^\s+(sm|base|md): "([^"]+)",$/gm)].map((hit) => [hit[1], hit[2]]),
+    );
+    expect(sizes.base).toContain("[&_svg]:glyph-stroke");
+    expect(sizes.sm).not.toContain("glyph-stroke");
+    expect(sizes.md).not.toContain("glyph-stroke");
+    const nav = await Bun.file(join(SRC, "sidebar-nav.tsx")).text();
+    expect(nav).toContain("[&_svg]:glyph-stroke flex h-7");
+  });
+
   test("Given the strip, When its imports are read, Then the toggle and chevrons are ours, not lucide's", async () => {
     const strip = await Bun.file(join(SRC, "tab-strip.tsx")).text();
     const lucide = strip.match(/import \{([^}]+)\} from "lucide-react"/)?.[1] ?? "";

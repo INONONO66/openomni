@@ -35,13 +35,17 @@ const ICON_SLOT = "[&_svg]:pointer-events-none [&_svg]:shrink-0";
 
 const BASE = `focus-ring transition-quiet inline-flex shrink-0 items-center justify-center font-medium whitespace-nowrap select-none disabled:pointer-events-none ${ICON_SLOT}`;
 
-/** `base` is the strip's step: a 28px box around a 16px glyph, between `sm` and `md`. */
+/**
+ * `base` is the strip's step: a 28px box around a 16px glyph, between `sm` and
+ * `md`, at the reference's measured 1.5px line (`glyph-stroke`). The 14px
+ * glyphs of `sm` and `md` were not measured and keep lucide's own weight.
+ */
 export type IconButtonSize = "sm" | "base" | "md";
 
 /** Box and glyph per step; the glyph rule yields to an explicit `size-*` on the svg. */
 const ICON_SIZE: Record<IconButtonSize, string> = {
   sm: "size-control-sm rounded-sm [&_svg:not([class*='size-'])]:size-3.5",
-  base: "size-control-base rounded-sm [&_svg:not([class*='size-'])]:size-4",
+  base: "size-control-base rounded-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:glyph-stroke",
   md: "size-control-md rounded-sm [&_svg:not([class*='size-'])]:size-3.5",
 };
 
