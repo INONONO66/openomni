@@ -19,6 +19,23 @@ export function createProcessSessionTransport(options: {
   readonly answer: (answer: SessionTransition.Answer) => Promise<SessionTransition.Resolution>;
 }) {
   const children = new Map<string, { close: () => void; done: Promise<void> }>();
+  async function receive(line: string, sessionId: string, write: (value: string) => void) {
+    const output = ProcessOutput.parse(JSON.parse(line));
+    if ("sessionIds" in output) {
+      options.committed(output.sessionIds);
+      return;
+    }
+    const answer = output.answer;
+    if (answer.principal.kind !== "session" || answer.principal.principalId !== sessionId || answer.outbound?.sourceSessionId !== sessionId)
+      throw new Error("process answer principal does not match its authenticated child");
+    let receipt: z.infer<typeof ProcessReplyReceipt>;
+    try {
+      receipt = { ok: true, inputId: answer.inputId, resolution: await options.answer(answer) };
+    } catch (error) {
+      receipt = { ok: false, inputId: answer.inputId, error: error instanceof Error ? error.message : String(error) };
+    }
+    write(`${JSON.stringify(receipt)}\n`);
+  }
   return {
     wake(sessionId: string): Promise<void> {
       const existing = children.get(sessionId);
@@ -42,21 +59,7 @@ export function createProcessSessionTransport(options: {
             while (end >= 0) {
               const line = buffer.slice(0, end);
               buffer = buffer.slice(end + 1);
-              const output = ProcessOutput.parse(JSON.parse(line));
-              if ("sessionIds" in output) options.committed(output.sessionIds);
-              else {
-                const answer = output.answer;
-                if (answer.principal.kind !== "session" || answer.principal.principalId !== sessionId || answer.outbound?.sourceSessionId !== sessionId) {
-                  throw new Error("process answer principal does not match its authenticated child");
-                }
-                let receipt: z.infer<typeof ProcessReplyReceipt>;
-                try {
-                  receipt = { ok: true, inputId: answer.inputId, resolution: await options.answer(answer) };
-                } catch (error) {
-                  receipt = { ok: false, inputId: answer.inputId, error: error instanceof Error ? error.message : String(error) };
-                }
-                child.stdin.write(`${JSON.stringify(receipt)}\n`);
-              }
+              await receive(line, sessionId, value => { child.stdin.write(value); });
               end = buffer.indexOf("\n");
             }
           }

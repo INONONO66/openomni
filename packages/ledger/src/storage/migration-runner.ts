@@ -73,6 +73,16 @@ function validateWatchAlarms(db: Database): void {
   }
 }
 
+function prepareArchiveDisposition(db: Database, prepare967?: Migration.Preparation967): void {
+  if (prepare967) {
+    prepare967(db);
+    return;
+  }
+  const projection = inspect967Projections(db, Date.now());
+  if (projection.blocked.length > 0 || projection.candidates.length > 0)
+    throw new U967Error("approval_required");
+}
+
 function applyMigration(
   db: Database,
   migrationDir: string,
@@ -104,14 +114,7 @@ function applyMigration(
       .get(migration.name);
     if (!applied) {
       if (rebuild) preflight969(db, Date.now());
-      if (migration.name === U967_MIGRATION) {
-        if (prepare967) prepare967(db);
-        else {
-          const projection = inspect967Projections(db, Date.now());
-          if (projection.blocked.length > 0 || projection.candidates.length > 0)
-            throw new U967Error("approval_required");
-        }
-      }
+      if (migration.name === U967_MIGRATION) prepareArchiveDisposition(db, prepare967);
       if (migration.name === "0037_watch_alarms/migration.sql") validateWatchAlarms(db);
       const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
       for (const statement of migrationStatements(sql)) {

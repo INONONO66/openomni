@@ -81,18 +81,9 @@ export function assertArchiveEquality(
     sourceSchema.some((row) => row.name === "archive_969_wait") &&
     archivedSchema.some((row) => row.name === "wait");
   const rebuiltTables = new Set(requestCutover ? ["action", "policy", "wait", "approval"] : []);
-  const watchMigration = "0037_watch_alarms/migration.sql";
-  if (dispositionDelta &&
-    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) !== null &&
-    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) === null) {
-    preflightSqliteDatabase(source);
-    preflightSqliteDatabase(restored);
-    // Only migration defaults may accompany the byte-identical historical columns.
-    if (source.query(`SELECT 1 FROM alarm WHERE epoch IS NOT 1 OR fence IS NOT 0
-      OR last_batch IS NOT NULL OR notifications IS NOT 0 LIMIT 1`).get() !== null)
-      throw new U967Error("stale_archive:alarm");
+  if (dispositionDelta && hasWatchUpgrade(source, restored)) {
     rebuiltTables.add("alarm");
-    migrationDelta.push(watchMigration);
+    migrationDelta.push("0037_watch_alarms/migration.sql");
   }
   if (requestCutover) {
     preflightSqliteDatabase(source);
@@ -101,7 +92,43 @@ export function assertArchiveEquality(
     addedTables.add("archive_969_approval");
   }
   if (dispositionDelta) {
-    for (const table of ["delegation", "worker_grant", "worker_run_state"]) {
+    for (const table of removedEmptyTables(sourceSchema, archivedSchema, restored)) removedTables.add(table);
+    if (
+      !archivedSchema.some((row) => row.name === "reply_grant") &&
+      sourceSchema.some((row) => row.name === "reply_grant")
+    ) {
+      preflightSqliteDatabase(source);
+      using remaining = source.prepare("SELECT 1 FROM reply_grant LIMIT 1");
+      if (remaining.get() !== null) throw new U967Error("stale_archive:reply_grant");
+      addedTables.add("reply_grant");
+    }
+    migrationDelta.push(...addedMigrations(source, restored));
+  }
+  assertArchivedRows(source, restored, dispositionDelta, {
+    sourceSchema, archivedSchema, removedTables, addedTables, rebuiltTables, migrationDelta, requestCutover,
+  });
+}
+
+function hasWatchUpgrade(source: Database, restored: Database): boolean {
+  const watchMigration = "0037_watch_alarms/migration.sql";
+  if (source.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) !== null &&
+    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) === null) {
+    preflightSqliteDatabase(source);
+    preflightSqliteDatabase(restored);
+    // Only migration defaults may accompany the byte-identical historical columns.
+    if (source.query(`SELECT 1 FROM alarm WHERE epoch IS NOT 1 OR fence IS NOT 0
+      OR last_batch IS NOT NULL OR notifications IS NOT 0 LIMIT 1`).get() !== null)
+      throw new U967Error("stale_archive:alarm");
+    return true;
+  }
+  return false;
+}
+
+function removedEmptyTables(
+  sourceSchema: ReturnType<typeof sqliteSchema>, archivedSchema: ReturnType<typeof sqliteSchema>, restored: Database,
+): string[] {
+  const removed: string[] = [];
+  for (const table of ["delegation", "worker_grant", "worker_run_state"]) {
       if (
         sourceSchema.some((row) => row.name === table) ||
         !archivedSchema.some((row) => row.name === table)
@@ -111,24 +138,31 @@ export function assertArchiveEquality(
         `SELECT 1 AS present FROM ${sqlIdentifier(table)} LIMIT 1`,
       );
       if (remaining.get() !== null) throw new U967Error(`stale_archive:${table}`);
-      removedTables.add(table);
-    }
-    if (
-      !archivedSchema.some((row) => row.name === "reply_grant") &&
-      sourceSchema.some((row) => row.name === "reply_grant")
-    ) {
-      // Only the pinned forward schema with an empty new projection is allowed.
-      preflightSqliteDatabase(source);
-      using remaining = source.prepare("SELECT 1 FROM reply_grant LIMIT 1");
-      if (remaining.get() !== null) throw new U967Error("stale_archive:reply_grant");
-      addedTables.add("reply_grant");
-    }
-    for (const name of [U967_MIGRATION, RETIRED_TABLE_MIGRATION, REPLY_GRANT_MIGRATION, REQUEST_MIGRATION]) {
+      removed.push(table);
+  }
+  return removed;
+}
+
+function addedMigrations(source: Database, restored: Database): string[] {
+  const migrationDelta: string[] = [];
+  for (const name of [U967_MIGRATION, RETIRED_TABLE_MIGRATION, REPLY_GRANT_MIGRATION, REQUEST_MIGRATION]) {
       using marker = restored.prepare("SELECT 1 FROM _migrations WHERE name = ?");
       using current = source.prepare("SELECT 1 FROM _migrations WHERE name = ?");
       if (marker.get(name) === null && current.get(name) !== null) migrationDelta.push(name);
-    }
   }
+  return migrationDelta;
+}
+
+function assertArchivedRows(source: Database, restored: Database, dispositionDelta: boolean, delta: {
+  sourceSchema: ReturnType<typeof sqliteSchema>;
+  archivedSchema: ReturnType<typeof sqliteSchema>;
+  removedTables: ReadonlySet<string>;
+  addedTables: ReadonlySet<string>;
+  rebuiltTables: ReadonlySet<string>;
+  migrationDelta: readonly string[];
+  requestCutover: boolean;
+}): void {
+  const { sourceSchema, archivedSchema, removedTables, addedTables, rebuiltTables, migrationDelta, requestCutover } = delta;
   const expectedSchema = archivedSchema.filter((row) => !removedTables.has(row.tbl_name));
   if (
     !isDeepStrictEqual(

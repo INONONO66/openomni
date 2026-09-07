@@ -46,17 +46,14 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
   const latestIndex =
     latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
   const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);
-  const schemaDigest =
-    latest === REQUEST_MIGRATION ? SCHEMA_0038 :
-    latest === "0037_watch_alarms/migration.sql"
-      ? SCHEMA_0037
-      : latest === REPLY_GRANT_MIGRATION
-        ? SCHEMA_0036
-        : latest === RETIRED_TABLE_MIGRATION
-          ? SCHEMA_0035
-          : applied
-            ? SCHEMA_0034
-            : SCHEMA_0033;
+  const fingerprints: Readonly<Record<string, string>> = {
+    [U967_MIGRATION]: SCHEMA_0034,
+    [RETIRED_TABLE_MIGRATION]: SCHEMA_0035,
+    [REPLY_GRANT_MIGRATION]: SCHEMA_0036,
+    "0037_watch_alarms/migration.sql": SCHEMA_0037,
+    [REQUEST_MIGRATION]: SCHEMA_0038,
+  };
+  const schemaDigest = fingerprints[latest ?? ""] ?? SCHEMA_0033;
   if (
     canonicalDigest(history) !== canonicalDigest(expected) ||
     canonicalDigest(schema) !== schemaDigest

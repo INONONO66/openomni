@@ -344,40 +344,7 @@ export function createDispatcher(
     specs: definitions.filter((definition) => definition.visibility.model.length > 0).map(toolSpec),
     executeWave,
     async recover(actions, context) {
-      const groups = new Map<string, { action: LedgerAction.Node; call: Tool.Call }[]>();
-      for (const action of actions) {
-        if (action.kind !== "tool") continue;
-        const intent = action.intent.value;
-        if (
-          intent === null ||
-          typeof intent !== "object" ||
-          Array.isArray(intent) ||
-          intent.phase !== "intent" ||
-          intent.turnId !== context.turnId ||
-          typeof intent.callId !== "string" ||
-          typeof intent.op !== "string" ||
-          typeof intent.waveId !== "string"
-        )
-          continue;
-        if (
-          actions.some(
-            (node) =>
-              node.kind === "tool" &&
-              node.parentId === action.id &&
-              node.effect.value !== null &&
-              typeof node.effect.value === "object" &&
-              !Array.isArray(node.effect.value) &&
-              node.effect.value.phase === "result",
-          )
-        )
-          continue;
-        const parsed = PlainValueSchema.parse(intent.value);
-        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-          throw new Error(`invalid durable invocation: ${action.id}`);
-        const group = groups.get(intent.waveId) ?? [];
-        group.push({ action, call: { id: intent.callId, tool: intent.op, input: parsed } });
-        groups.set(intent.waveId, group);
-      }
+      const groups = recoverableWaves(actions, context.turnId);
       for (const [waveId, group] of groups) {
         if (
           !actions.some((action) => {
@@ -442,6 +409,27 @@ export interface TurnDispatchInput {
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly trackWave?: (wave: Promise<void>) => void;
   readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
+}
+
+function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string | undefined) {
+  const groups = new Map<string, { action: LedgerAction.Node; call: Tool.Call }[]>();
+  for (const action of actions) {
+    if (action.kind !== "tool") continue;
+    const intent = action.intent.value;
+    if (intent === null || typeof intent !== "object" || Array.isArray(intent) ||
+      intent.phase !== "intent" || intent.turnId !== turnId ||
+      typeof intent.callId !== "string" || typeof intent.op !== "string" || typeof intent.waveId !== "string") continue;
+    if (actions.some(node => node.kind === "tool" && node.parentId === action.id &&
+      node.effect.value !== null && typeof node.effect.value === "object" &&
+      !Array.isArray(node.effect.value) && node.effect.value.phase === "result")) continue;
+    const parsed = PlainValueSchema.parse(intent.value);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error(`invalid durable invocation: ${action.id}`);
+    const group = groups.get(intent.waveId) ?? [];
+    group.push({ action, call: { id: intent.callId, tool: intent.op, input: parsed } });
+    groups.set(intent.waveId, group);
+  }
+  return groups;
 }
 
 /** The runtime clock/entropy/observation sink shared across a session's turns. */
