@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { consoleStore, INITIAL_CLIENT_STATE, newSessionTab } from "../src/renderer/state/store";
+import { consoleStore, INITIAL_CLIENT_STATE, newSessionTab, openTab } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
 
 /**
@@ -35,7 +35,8 @@ describe("nothing open", () => {
 describe("empty routes", () => {
   test("renders each non-session route as an honest empty column", () => {
     for (const route of ["inbox", "automations", "memory"] as const) {
-      consoleStore.setState((state) => ({ ...state, route }));
+      consoleStore.setState(() => INITIAL_CLIENT_STATE);
+      openTab({ kind: "route", route });
       const html = shell(null);
       expect(html).toContain('data-ui="Panel"');
       expect(html.match(/aria-current="page"/g)).toHaveLength(1);
