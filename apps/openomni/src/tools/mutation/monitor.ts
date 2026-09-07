@@ -5,14 +5,6 @@ import { compilePolicySnapshot } from "@openomni/policy";
 import { Alarm, LedgerAction } from "@openomni/protocol";
 import { z } from "zod";
 
-export const watchSpec = z
-  .object({
-    watch: Alarm.Watch,
-    policyGeneration: z.number().int().positive(),
-    notificationLimit: z.number().int().positive(),
-  })
-  .strict();
-
 const lifetime = {
   persistent: z.literal(true).optional(),
   timeout_ms: z.number().int().positive().optional(),

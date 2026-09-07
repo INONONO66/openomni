@@ -2,11 +2,10 @@ import { AsyncResource } from "node:async_hooks";
 import {
   canonicalDigest,
   L0Observation,
-  type Alarm,
+  Alarm,
   type ObservationSink,
   type Storage,
 } from "@openomni/protocol";
-import { watchSpec } from "../tools/mutation/monitor";
 import { commandSource, pathSource, type AlarmSource } from "./alarm-sources";
 
 interface Running {
@@ -52,7 +51,7 @@ export function createAlarmWorker(options: {
 
   function deliver(row: Alarm.Row, content: string, terminal: boolean, batchHash?: string) {
     if (stopped) return;
-    const spec = row.kind === "watch" ? watchSpec.parse(row.spec?.value) : undefined;
+    const spec = row.kind === "watch" ? Alarm.WatchSpec.parse(row.spec?.value) : undefined;
     const at = now();
     const expired =
       spec?.watch.timeout_ms !== undefined && at >= row.fireAt + spec.watch.timeout_ms;
@@ -108,7 +107,7 @@ export function createAlarmWorker(options: {
       );
       return;
     }
-    const { watch } = watchSpec.parse(owned.spec?.value);
+    const { watch } = Alarm.WatchSpec.parse(owned.spec?.value);
     if (watch.timeout_ms !== undefined && now() >= owned.fireAt + watch.timeout_ms) {
       summary(owned, "timeout", null);
       return;
@@ -153,7 +152,7 @@ export function createAlarmWorker(options: {
           release(id);
           continue;
         }
-        const { watch } = watchSpec.parse(current.spec?.value);
+        const { watch } = Alarm.WatchSpec.parse(current.spec?.value);
         if (watch.timeout_ms !== undefined && now() >= current.fireAt + watch.timeout_ms)
           summary(current, "timeout", null);
         else entry.source.observe?.();

@@ -531,8 +531,32 @@ export namespace Alarm {
     ])
     .refine((spec) => (spec.persistent === true) !== (spec.timeout_ms !== undefined), {
       message: "exactly one of persistent and timeout_ms is required",
+    })
+    .superRefine((spec, context) => {
+      if ("path" in spec && !spec.path.startsWith("/"))
+        context.addIssue({ code: "custom", path: ["path"], message: "path must be absolute" });
+      if ("filter" in spec && spec.filter !== undefined) {
+        try {
+          new RegExp(spec.filter);
+        } catch {
+          context.addIssue({
+            code: "custom",
+            path: ["filter"],
+            message: "invalid regular expression",
+          });
+        }
+      }
     });
   export type Watch = z.infer<typeof Watch>;
+
+  export const WatchSpec = z
+    .object({
+      watch: Watch,
+      policyGeneration: z.number().int().positive(),
+      notificationLimit: z.number().int().positive(),
+    })
+    .strict();
+  export type WatchSpec = z.infer<typeof WatchSpec>;
 
   export const Kind = z.enum(["at", "watch"]);
   export type Kind = z.infer<typeof Kind>;

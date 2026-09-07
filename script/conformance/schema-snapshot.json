@@ -91,6 +91,7 @@
     "timeout_ms"
   ],
   "Alarm.Watch#1": ["description", "event", "path", "persistent", "timeout_ms"],
+  "Alarm.WatchSpec": ["notificationLimit", "policyGeneration", "watch"],
   "AppConnector.Consent": [
     "capabilities",
     "credentials",
