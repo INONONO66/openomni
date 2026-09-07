@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788734033889,
+  "lastUpdate": 1788741051430,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66589,6 +66589,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 872732,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "678d357e40f156742c8801cd4b707d1c6d6ca297",
+          "message": "feat(openomni): locus-aware fs verbs + bash, delete placement (#949 stage 1) (#993)\n\n* refactor(kernel): remove target eligibility fold and centralize model selection\n\n* feat(openomni): add locus-aware filesystem verbs and bash\n\n* test(tools): update catalog and model-selection surface assertions\n\n* fix(tools): reject composite bash machine selectors (R1)\n\n* fix(tools): preserve local locus in recursive search paths (R2)\n\n* fix(agent): report exact UTF-8 truncation loss at Unicode boundaries (R3)\n\n* fix(script): drop stale category-directory self-test, use git grep in deletion receipt\n\nCI runners have no rg binary; the self-test still asserted a check the\ntarget-axis directory rule removed.",
+          "timestamp": "2026-09-07T00:29:37Z",
+          "tree_id": "a876f94c3f2bc198f17fb41adc6d6bb8e349f980",
+          "url": "https://github.com/INONONO66/openomni/commit/678d357e40f156742c8801cd4b707d1c6d6ca297"
+        },
+        "date": 1788741050749,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1425,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 10885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 5594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1452474,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 355523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6788573,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1128,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 386578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2532,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 138040,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 699503,
             "unit": "ns/op"
           }
         ]
