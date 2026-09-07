@@ -24,7 +24,7 @@ test("skips executable jobs when only root documentation changes", () => {
   expect(plan).toMatchObject({ full: false, verify: false, dependencyReview: false, matrix: { include: [] } });
 });
 
-test.each(["packages/ui/src/button.tsx", "packages/ui/COMPONENTS.md", "packages/ui/test/deleted.test.ts"])(
+test.each(["packages/ui/src/button.tsx", "packages/ui/README.md", "packages/ui/test/deleted.test.ts"])(
   "selects UI consumers and schema-consuming scripts when %s changes", (path) => {
     // Given a workspace-owned file, including package documentation or a removed file.
     // When the impact is planned, then only its reverse closure and scripts run.

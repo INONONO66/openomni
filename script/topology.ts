@@ -184,11 +184,11 @@ export const TOPOLOGY = [
     // None, and that is the whole rule: the design system may not depend on the
     // app it dresses, nor on any kernel package. It owns tokens, primitives,
     // window chrome, the transcript's presentation, and the one `Console`
-    // composition — all of it data-blind. See DESIGN.md 10.
+    // composition — all of it data-blind.
     allowedDeps: [],
     testLane: true,
-    // Deliberate: the surface's claim is visual and is reviewed through the
-    // showcase shots; there is no approved line-coverage baseline yet.
+    // Deliberate: the surface's claim is visual and is reviewed by running the
+    // desktop app; there is no approved line-coverage baseline yet.
     coverageLane: false,
     knipWorkspace: true,
     tsconfigVerify: true,

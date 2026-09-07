@@ -46,8 +46,7 @@ import { SessionTree } from "./shell/session-tree";
  * worse under a query than at rest because the result set moves too.
  *
  * The screen itself is `Console` from `@openomni/ui`, rendered here with live
- * data and in the showcase with a fixture — one component, so the two cannot
- * drift. This file's job is what the design system must not know: which session
+ * data. This file's job is what the design system must not know: which session
  * is selected, how the list is ranked, and what the product's words are. It
  * composes the shell; it does not draw one.
  */
@@ -106,8 +105,7 @@ export function App({ transport }: { readonly transport?: ChatTransport<UIMessag
   };
 
   return (
-    // The window's own height. `Console` fills whatever box it is given, which
-    // is what lets the showcase mount the same component in a bounded pane.
+    // The window's own height. `Console` fills whatever box it is given.
     <div className="h-screen min-h-0">
       <Console
         composerHint={session?.agent ?? "—"}

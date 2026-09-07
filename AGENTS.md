@@ -4,6 +4,8 @@ Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 20
 
 Machine/codemode ownership updated on `kernel/949-tools-catalog` (2026-09-06), based on `f9c02a66`: raw WHERE handles, injected code runner, two-boundary authority, and production machine attach composition. Stage 1 adds locus-aware path tools and bash, deletes the target-selection workspace, and retains the legacy catalog entries pending stage 2.
 
+Desktop/ui verified against `feat/desktop-chrome` (2026-09-06): apps/desktop owns AI SDK chat state and the Electron window (hiddenInset chrome); `packages/ui` is a minimal package whose barrel exports only what apps/desktop imports, with `src/names.ts` owning every `data-ui` address.
+
 ## OVERVIEW
 
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
@@ -85,7 +87,7 @@ ui <- apps/desktop
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, code mode, boot/shutdown | Reimplementation of package primitives |
 | `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults, the gateway endpoint resolved from env in main and handed to the renderer over one `contextBridge` call; AI SDK chat state and transports; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
-| `packages/ui` | The design system: tokens, primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray, anchors), the one `Console` composition both the renderer and the showcase render, and the component NAMES the Owner reviews by — `src/names.ts` is the single owner of every `data-ui` address, documented 1:1 in `COMPONENTS.md` | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
+| `packages/ui` | The renderer's UI package: tokens (`src/styles.css`), primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray), and the one `Console` composition; `src/index.ts` exports only what apps/desktop imports, and `src/names.ts` is the single owner of every `data-ui` address | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
 
 ## WHERE TO LOOK
 
