@@ -1,0 +1,182 @@
+[
+  {
+    "gate": "cyclomatic",
+    "path": "apps/openomni/src/composition/message-session.ts",
+    "line": 90,
+    "endLine": 215,
+    "symbol": "ArrowFunction:<anonymous@2826>",
+    "value": 27,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "apps/openomni/src/index.ts",
+    "line": 121,
+    "endLine": 425,
+    "symbol": "FunctionDeclaration:startOpenOmni",
+    "value": 23,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/agent/src/core/budget.ts",
+    "line": 75,
+    "endLine": 111,
+    "symbol": "FunctionDeclaration:evaluateBudget",
+    "value": 22,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/agent/src/executor-attempts.ts",
+    "line": 21,
+    "endLine": 107,
+    "symbol": "FunctionExpression:runAttempts",
+    "value": 34,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/agent/src/executor.ts",
+    "line": 144,
+    "endLine": 277,
+    "symbol": "FunctionDeclaration:executeBatch",
+    "value": 23,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/agent/src/session-history.ts",
+    "line": 6,
+    "endLine": 142,
+    "symbol": "FunctionDeclaration:sessionHistory",
+    "value": 34,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/agent/src/session-record.ts",
+    "line": 289,
+    "endLine": 344,
+    "symbol": "FunctionDeclaration:sessionRunnerResultFromValue",
+    "value": 33,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/channels/src/router/external-message.ts",
+    "line": 13,
+    "endLine": 111,
+    "symbol": "FunctionDeclaration:externalMessage",
+    "value": 28,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/channels/src/router/index.ts",
+    "line": 107,
+    "endLine": 230,
+    "symbol": "ArrowFunction:<anonymous@4574>",
+    "value": 41,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/channels/src/router/index.ts",
+    "line": 39,
+    "endLine": 270,
+    "symbol": "MethodDeclaration:ingest",
+    "value": 27,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/channels/test/harness/existing-agent-message-driver.ts",
+    "line": 191,
+    "endLine": 356,
+    "symbol": "FunctionDeclaration:runRestartQuorumScenario",
+    "value": 23,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 538,
+    "endLine": 663,
+    "symbol": "FunctionDeclaration:commitInbox",
+    "value": 40,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 67,
+    "endLine": 149,
+    "symbol": "FunctionDeclaration:terminalComplete",
+    "value": 39,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 220,
+    "endLine": 307,
+    "symbol": "ArrowFunction:<anonymous@7808>",
+    "value": 37,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/machines/src/fs.ts",
+    "line": 184,
+    "endLine": 272,
+    "symbol": "FunctionDeclaration:walk",
+    "value": 25,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/policy/src/message-match.ts",
+    "line": 28,
+    "endLine": 79,
+    "symbol": "FunctionDeclaration:matchesMessage",
+    "value": 23,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 432,
+    "endLine": 497,
+    "symbol": "FunctionDeclaration:evaluateSnapshot",
+    "value": 25,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 124,
+    "endLine": 167,
+    "symbol": "ArrowFunction:<anonymous@4830>",
+    "value": 28,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 217,
+    "endLine": 260,
+    "symbol": "FunctionDeclaration:parseLcovSummary",
+    "value": 22,
+    "count": 1
+  },
+  {
+    "gate": "cyclomatic",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 407,
+    "endLine": 548,
+    "symbol": "FunctionDeclaration:selfTest",
+    "value": 23,
+    "count": 1
+  }
+]

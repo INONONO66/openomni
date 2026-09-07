@@ -5,9 +5,9 @@
     "pct": 92.96
   },
   "apps/openomni": {
-    "linesFound": 4494,
-    "linesHit": 4366,
-    "pct": 97.15
+    "linesFound": 3897,
+    "linesHit": 3820,
+    "pct": 98.02
   },
   "packages/agent": {
     "linesFound": 5365,
@@ -20,9 +20,9 @@
     "pct": 99.98
   },
   "packages/codemode": {
-    "linesFound": 327,
-    "linesHit": 322,
-    "pct": 98.47
+    "linesFound": 439,
+    "linesHit": 434,
+    "pct": 98.86
   },
   "packages/ipc": {
     "linesFound": 486,
@@ -35,9 +35,9 @@
     "pct": 99.31
   },
   "packages/llm": {
-    "linesFound": 2077,
-    "linesHit": 2058,
-    "pct": 99.09
+    "linesFound": 2149,
+    "linesHit": 2130,
+    "pct": 99.12
   },
   "packages/machines": {
     "linesFound": 904,
@@ -60,8 +60,8 @@
     "pct": 92.93
   },
   "script": {
-    "linesFound": 4357,
-    "linesHit": 1486,
-    "pct": 34.11
+    "linesFound": 13497,
+    "linesHit": 7519,
+    "pct": 55.71
   }
 }

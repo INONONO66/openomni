@@ -1,0 +1,378 @@
+[
+  {
+    "path": "packages/agent/src/core/execution/events.ts",
+    "line": 52,
+    "symbol": "agent.budget.reassurance",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/events.ts",
+    "line": 44,
+    "symbol": "agent.budget.warning",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/events.ts",
+    "line": 81,
+    "symbol": "agent.compaction.completed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/events.ts",
+    "line": 68,
+    "symbol": "agent.compaction.started",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/events.ts",
+    "line": 105,
+    "symbol": "agent.error.retry",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/events.ts",
+    "line": 36,
+    "symbol": "agent.turn.complete",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/events.ts",
+    "line": 29,
+    "symbol": "agent.turn.start",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/approval/events.ts",
+    "line": 24,
+    "symbol": "approval.decided",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/approval/events.ts",
+    "line": 21,
+    "symbol": "approval.requested",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/component.ts",
+    "line": 17,
+    "symbol": "component.active",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/component.ts",
+    "line": 27,
+    "symbol": "component.disposed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/component.ts",
+    "line": 21,
+    "symbol": "component.failed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/ingress.ts",
+    "line": 99,
+    "symbol": "ingress.routing.decision",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/llm.ts",
+    "line": 26,
+    "symbol": "llm.call.completed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/llm.ts",
+    "line": 42,
+    "symbol": "llm.call.failed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/llm.ts",
+    "line": 54,
+    "symbol": "llm.call.retry.decided",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/llm.ts",
+    "line": 15,
+    "symbol": "llm.call.started",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/llm.ts",
+    "line": 65,
+    "symbol": "llm.rate.limited",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/mcp.ts",
+    "line": 13,
+    "symbol": "mcp.connected",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/mcp.ts",
+    "line": 22,
+    "symbol": "mcp.disconnected",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/mcp.ts",
+    "line": 26,
+    "symbol": "mcp.tool.called",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/mcp.ts",
+    "line": 35,
+    "symbol": "mcp.tool.completed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/mcp.ts",
+    "line": 46,
+    "symbol": "mcp.tool.failed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/operational.ts",
+    "line": 37,
+    "symbol": "operational.debug",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/operational.ts",
+    "line": 44,
+    "symbol": "operational.error",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/operational.ts",
+    "line": 39,
+    "symbol": "operational.info",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/operational.ts",
+    "line": 41,
+    "symbol": "operational.warn",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/policy.ts",
+    "line": 88,
+    "symbol": "policy.action.blocked",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/policy.ts",
+    "line": 63,
+    "symbol": "policy.action.requested",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/policy.ts",
+    "line": 81,
+    "symbol": "policy.decision.composed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/policy.ts",
+    "line": 72,
+    "symbol": "policy.evaluated",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 23,
+    "symbol": "tool.execution.completed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 31,
+    "symbol": "tool.execution.permission_denied",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 16,
+    "symbol": "tool.execution.started",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 38,
+    "symbol": "tool.execution.timed_out",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 33,
+    "symbol": "messaging.denied",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 23,
+    "symbol": "messaging.sent",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 403,
+    "symbol": "message.observed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 617,
+    "symbol": "ledger.action.committed",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/machine/events.ts",
+    "line": 13,
+    "symbol": "machine.attached",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/machine/events.ts",
+    "line": 20,
+    "symbol": "machine.detached",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/events.ts",
+    "line": 35,
+    "symbol": "wait.cancelled",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/events.ts",
+    "line": 32,
+    "symbol": "wait.expired",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/events.ts",
+    "line": 17,
+    "symbol": "wait.opened",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/events.ts",
+    "line": 18,
+    "symbol": "wait.reply_attached",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/events.ts",
+    "line": 38,
+    "symbol": "wait.reply_rejected",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/events.ts",
+    "line": 29,
+    "symbol": "wait.resolved",
+    "gate": "publisher",
+    "value": 1,
+    "count": 1
+  }
+]

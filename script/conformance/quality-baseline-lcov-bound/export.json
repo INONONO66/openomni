@@ -1,0 +1,3058 @@
+[
+  {
+    "path": "apps/desktop/src/main/gateway-endpoint.ts",
+    "line": 21,
+    "symbol": "GatewayEndpoint",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/main/gateway-endpoint.ts",
+    "line": 51,
+    "symbol": "GatewayEnv",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/order.ts",
+    "line": 25,
+    "symbol": "Ordered",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/order.ts",
+    "line": 30,
+    "symbol": "ProjectSessionFacts",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/order.ts",
+    "line": 132,
+    "symbol": "changedSince",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/order.ts",
+    "line": 52,
+    "symbol": "orderByAttention",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/reason.ts",
+    "line": 20,
+    "symbol": "reasonFor",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/score.ts",
+    "line": 22,
+    "symbol": "AttentionClass",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/score.ts",
+    "line": 13,
+    "symbol": "CLASS_RANK",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/score.ts",
+    "line": 4,
+    "symbol": "EpochMs",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/score.ts",
+    "line": 39,
+    "symbol": "SessionFacts",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/score.ts",
+    "line": 25,
+    "symbol": "Signals",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/score.ts",
+    "line": 63,
+    "symbol": "classify",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/score.ts",
+    "line": 93,
+    "symbol": "score",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/stability.ts",
+    "line": 4,
+    "symbol": "Boundary",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/stability.ts",
+    "line": 6,
+    "symbol": "Held",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/stability.ts",
+    "line": 37,
+    "symbol": "IDLE_BOUNDARY_MS",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/stability.ts",
+    "line": 25,
+    "symbol": "applyAtBoundary",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/attention/stability.ts",
+    "line": 39,
+    "symbol": "idleBoundaryReached",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/chat/adapter.ts",
+    "line": 55,
+    "symbol": "uiMessagesToTranscript",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/chat/message.ts",
+    "line": 67,
+    "symbol": "OpenOmniUIMessage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/chat/message.ts",
+    "line": 32,
+    "symbol": "TurnMetadata",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/chat/select-transport.ts",
+    "line": 26,
+    "symbol": "SelectedTransport",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 9,
+    "symbol": "Project",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 5,
+    "symbol": "ProjectId",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 22,
+    "symbol": "Session",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 145,
+    "symbol": "lastReadAt",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 37,
+    "symbol": "now",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 143,
+    "symbol": "pins",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 44,
+    "symbol": "projects",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 135,
+    "symbol": "selectedSessionId",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 55,
+    "symbol": "sessions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/console.ts",
+    "line": 144,
+    "symbol": "snoozes",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/mock/timelines.ts",
+    "line": 214,
+    "symbol": "timelines",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/run-state.ts",
+    "line": 28,
+    "symbol": "RUN_STATE_SHAPE",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/run-state.ts",
+    "line": 45,
+    "symbol": "RUN_STATE_TIER",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/filter.ts",
+    "line": 49,
+    "symbol": "Filtered",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/filter.ts",
+    "line": 25,
+    "symbol": "FilteredSession",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/filter.ts",
+    "line": 153,
+    "symbol": "Run",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/filter.ts",
+    "line": 23,
+    "symbol": "SearchFields",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/filter.ts",
+    "line": 62,
+    "symbol": "filterOrdered",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/filter.ts",
+    "line": 158,
+    "symbol": "highlightRuns",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/keyboard.ts",
+    "line": 37,
+    "symbol": "Effect",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/keyboard.ts",
+    "line": 47,
+    "symbol": "INITIAL",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/keyboard.ts",
+    "line": 17,
+    "symbol": "Intent",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/keyboard.ts",
+    "line": 25,
+    "symbol": "SearchState",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/keyboard.ts",
+    "line": 42,
+    "symbol": "Transition",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/keyboard.ts",
+    "line": 136,
+    "symbol": "intentFor",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/keyboard.ts",
+    "line": 55,
+    "symbol": "reduce",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/score.ts",
+    "line": 142,
+    "symbol": "FieldMatch",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/score.ts",
+    "line": 32,
+    "symbol": "Match",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/score.ts",
+    "line": 147,
+    "symbol": "scoreFields",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/search/score.ts",
+    "line": 45,
+    "symbol": "scoreText",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/shell/row-id.ts",
+    "line": 16,
+    "symbol": "TREE_ID",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/shell/row-id.ts",
+    "line": 11,
+    "symbol": "rowId",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
+    "line": 46,
+    "symbol": "SessionTree",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/shell/use-search.ts",
+    "line": 23,
+    "symbol": "Search",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/shell/use-search.ts",
+    "line": 33,
+    "symbol": "useSearch",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/channels.ts",
+    "line": 196,
+    "symbol": "DeclaredChannelRow",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/channels.ts",
+    "line": 167,
+    "symbol": "validateProviderCredential",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/channels.ts",
+    "line": 184,
+    "symbol": "validateProviderSettings",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/cli/doctor.ts",
+    "line": 25,
+    "symbol": "DoctorReport",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/cli/main.ts",
+    "line": 54,
+    "symbol": "CliRuntimeOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/cli/main.ts",
+    "line": 59,
+    "symbol": "createCliDeps",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/cli/main.ts",
+    "line": 191,
+    "symbol": "main",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/compaction/summarizer.ts",
+    "line": 8,
+    "symbol": "SummarizerError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/compaction/summarizer.ts",
+    "line": 6,
+    "symbol": "SummarizerErrorKind",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/chat-provider.ts",
+    "line": 3,
+    "symbol": "ChatProviderOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/composer.ts",
+    "line": 45,
+    "symbol": "Composer",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/message-session.ts",
+    "line": 8,
+    "symbol": "commitMessageInbox",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/session-bindings.ts",
+    "line": 18,
+    "symbol": "SessionBindingCache",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/session-bindings.ts",
+    "line": 12,
+    "symbol": "SessionBindingLease",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/gateway.ts",
+    "line": 88,
+    "symbol": "OutboundMessaging",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/gateway.ts",
+    "line": 32,
+    "symbol": "TrustedChannelGrant",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/observation/component.ts",
+    "line": 4,
+    "symbol": "ObservedComponent",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/observation/llm-failure.ts",
+    "line": 23,
+    "symbol": "ClassifiedFailure",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/process-entry.ts",
+    "line": 35,
+    "symbol": "PROCESS_SESSION_NO_REQUEST_EXIT",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/provisioning/supervisor.ts",
+    "line": 50,
+    "symbol": "SupervisorDeps",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/provisioning/vault-key.ts",
+    "line": 46,
+    "symbol": "ensureVaultKeyFile",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/resident.ts",
+    "line": 32,
+    "symbol": "ResidentOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/authority/approval.ts",
+    "line": 16,
+    "symbol": "ApprovalPort",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/authority/send-message.ts",
+    "line": 4,
+    "symbol": "MessagePort",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/core/catalog.ts",
+    "line": 6,
+    "symbol": "CatalogOrigin",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/core/catalog.ts",
+    "line": 24,
+    "symbol": "CatalogPorts",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/core/catalog.ts",
+    "line": 66,
+    "symbol": "TOOL_DEFINITIONS",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/core/catalog.ts",
+    "line": 71,
+    "symbol": "collectToolSpecs",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/execution/llm.ts",
+    "line": 26,
+    "symbol": "LLM_TOOL_NAME",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/execution/llm.ts",
+    "line": 12,
+    "symbol": "LlmPort",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/execution/llm.ts",
+    "line": 15,
+    "symbol": "MAX_LLM_CALLS",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/fs/endpoint.ts",
+    "line": 82,
+    "symbol": "childPath",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/fs/endpoint.ts",
+    "line": 12,
+    "symbol": "fileOperation",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/fs/endpoint.ts",
+    "line": 24,
+    "symbol": "filesystem",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/fs/endpoint.ts",
+    "line": 89,
+    "symbol": "text",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/locus.ts",
+    "line": 4,
+    "symbol": "Locus",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/locus.ts",
+    "line": 9,
+    "symbol": "parseLocus",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 452,
+    "symbol": "ProvisionStatusOutput",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 131,
+    "symbol": "personManifestDigest",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/durable.ts",
+    "line": 21,
+    "symbol": "CompactionPlan",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/durable.ts",
+    "line": 75,
+    "symbol": "restoreCompactionProjection",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/geometry.ts",
+    "line": 12,
+    "symbol": "CompactionGeometry",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/geometry.ts",
+    "line": 6,
+    "symbol": "CompactionGeometryOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/budget.ts",
+    "line": 45,
+    "symbol": "BUDGET_DEFAULTS",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/budget.ts",
+    "line": 36,
+    "symbol": "BudgetStatus",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/run-events.ts",
+    "line": 73,
+    "symbol": "emitErrorRetry",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/tool-wave.ts",
+    "line": 15,
+    "symbol": "WaveBody",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/tool-wave.ts",
+    "line": 10,
+    "symbol": "WaveBodyOutcome",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/execution/turn.ts",
+    "line": 204,
+    "symbol": "StopOutcome",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/core/retry.ts",
+    "line": 54,
+    "symbol": "AgentFailureFacts",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor-contract.ts",
+    "line": 120,
+    "symbol": "ExecutionApprovalError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 10,
+    "symbol": "UnregisteredExecutionKindError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/observation/bus.ts",
+    "line": 41,
+    "symbol": "ObservationBus",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/observation/bus.ts",
+    "line": 149,
+    "symbol": "ScopeObservationOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/observation/bus.ts",
+    "line": 224,
+    "symbol": "collector",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/observation/bus.ts",
+    "line": 238,
+    "symbol": "noopSink",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/session-chat-runner.ts",
+    "line": 14,
+    "symbol": "SessionChatRunnerOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/session-contract.ts",
+    "line": 26,
+    "symbol": "SessionCreateOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/session-contract.ts",
+    "line": 21,
+    "symbol": "SessionSystem",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/session-handle.ts",
+    "line": 37,
+    "symbol": "getSessionHandle",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/session-handle.ts",
+    "line": 28,
+    "symbol": "session",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/session-record.ts",
+    "line": 51,
+    "symbol": "internalOrigin",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/session-record.ts",
+    "line": 47,
+    "symbol": "toolSnapshot",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/tool-body.ts",
+    "line": 23,
+    "symbol": "executeToolBody",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 71,
+    "symbol": "Dispatcher",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 58,
+    "symbol": "DispatcherOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 32,
+    "symbol": "ToolRefused",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 316,
+    "symbol": "TurnDispatchInput",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 333,
+    "symbol": "TurnDispatchRuntime",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 409,
+    "symbol": "toolSpec",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 5,
+    "symbol": "evaluateChannelPermission",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/decision.ts",
+    "line": 50,
+    "symbol": "recordDecision",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/github.ts",
+    "line": 41,
+    "symbol": "authenticateGitHubWebhook",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 15,
+    "symbol": "ChannelAuthnDecisionObserver",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 3,
+    "symbol": "ChannelAuthnPolicyId",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 23,
+    "symbol": "GitHubAuthResult",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/types.ts",
+    "line": 17,
+    "symbol": "WebSocketAuthResult",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/authn/websocket.ts",
+    "line": 90,
+    "symbol": "authenticateWebSocketUpgrade",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/channel-authn.ts",
+    "line": 17,
+    "symbol": "ChannelAuthnMiddleware",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/channel-authn.ts",
+    "line": 11,
+    "symbol": "decisionOption",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/format.ts",
+    "line": 8,
+    "symbol": "DISCORD_RENDER",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/gateway.ts",
+    "line": 22,
+    "symbol": "GatewayCallbacks",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 6,
+    "symbol": "DiscordCredentials",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/discord/provider.ts",
+    "line": 17,
+    "symbol": "DiscordProvider",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 5,
+    "symbol": "GitHubCredentials",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/provider.ts",
+    "line": 15,
+    "symbol": "GitHubProvider",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 46,
+    "symbol": "GitHubEventContent",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 42,
+    "symbol": "GitHubIssuePayload",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 41,
+    "symbol": "GitHubUser",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/types.ts",
+    "line": 27,
+    "symbol": "GitHubWebhookPayloadSchemas",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/github/webhook.ts",
+    "line": 3,
+    "symbol": "verifyGitHubSignature",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/error.ts",
+    "line": 11,
+    "symbol": "SlackEndpointKeyError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/format.ts",
+    "line": 8,
+    "symbol": "SLACK_RENDER",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/normalizer.ts",
+    "line": 5,
+    "symbol": "SlackNormalizerContext",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 6,
+    "symbol": "SlackCredentials",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/provider.ts",
+    "line": 22,
+    "symbol": "SlackProvider",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/slack/socket.ts",
+    "line": 15,
+    "symbol": "SocketCallbacks",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/client.ts",
+    "line": 24,
+    "symbol": "TelegramApiError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/format.ts",
+    "line": 8,
+    "symbol": "TELEGRAM_RENDER",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/normalizer.ts",
+    "line": 5,
+    "symbol": "TelegramNormalizerContext",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/poller.ts",
+    "line": 8,
+    "symbol": "PollerCallbacks",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 6,
+    "symbol": "TelegramCredentials",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/provider/telegram/provider.ts",
+    "line": 12,
+    "symbol": "TelegramProvider",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/authority-actor.ts",
+    "line": 3,
+    "symbol": "ActorRecord",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/blacklist.ts",
+    "line": 4,
+    "symbol": "BlacklistMatchInput",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/channel-grant.ts",
+    "line": 4,
+    "symbol": "ChannelGrantMatchInput",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/channel-grant.ts",
+    "line": 12,
+    "symbol": "ChannelGrantResolution",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/messaging/reply-grant.ts",
+    "line": 51,
+    "symbol": "ReplyGrantAdmission",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/messaging/reply-grant.ts",
+    "line": 65,
+    "symbol": "ReplyGrantInstances",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/messaging/send.ts",
+    "line": 62,
+    "symbol": "DeliveryReceipt",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/messaging/send.ts",
+    "line": 95,
+    "symbol": "ExistingAgentMessaging",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/messaging/send.ts",
+    "line": 67,
+    "symbol": "MessagingPorts",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/messaging/send.ts",
+    "line": 46,
+    "symbol": "OutboundMessage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/messaging/social-budget.ts",
+    "line": 21,
+    "symbol": "SocialBudgetVerdict",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/resolve-route.ts",
+    "line": 11,
+    "symbol": "RouteInbound",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/routing-execution.ts",
+    "line": 77,
+    "symbol": "executeWaitRoute",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/routing-execution.ts",
+    "line": 69,
+    "symbol": "requireRoutedDecision",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/routing-resolution.ts",
+    "line": 53,
+    "symbol": "IngressRoutingError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/routing-resolution.ts",
+    "line": 26,
+    "symbol": "IngressRoutingErrorCode",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/routing-resolution.ts",
+    "line": 82,
+    "symbol": "KernelRouteResolution",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/wait/matcher.ts",
+    "line": 13,
+    "symbol": "targetsOfWait",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/dedupe.ts",
+    "line": 41,
+    "symbol": "DedupeToken",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/deliver.ts",
+    "line": 21,
+    "symbol": "deliverKeyed",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/fetch-retry.ts",
+    "line": 11,
+    "symbol": "RetryExhaustedError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/format/chunk.ts",
+    "line": 13,
+    "symbol": "ChunkLengthError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/format/chunk.ts",
+    "line": 98,
+    "symbol": "chunkMarkdown",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/format/discord.ts",
+    "line": 10,
+    "symbol": "renderDiscordMarkdown",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/format/table.ts",
+    "line": 53,
+    "symbol": "tablesToBullets",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/format/telegram.ts",
+    "line": 60,
+    "symbol": "renderTelegramMarkdown",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/send-text.ts",
+    "line": 4,
+    "symbol": "PartialDeliveryError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/send-text.ts",
+    "line": 18,
+    "symbol": "sendText",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/support/socket-shell.ts",
+    "line": 14,
+    "symbol": "SocketShellMessages",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/websocket.ts",
+    "line": 6,
+    "symbol": "WebSocketConfig",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/codemode/src/index.ts",
+    "line": 7,
+    "symbol": "RunOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/client.ts",
+    "line": 12,
+    "symbol": "ConnectIpcClientOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/framing.ts",
+    "line": 15,
+    "symbol": "DecodedChunk",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/framing.ts",
+    "line": 23,
+    "symbol": "LineSplitter",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 24,
+    "symbol": "IpcServerOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/approval/index.ts",
+    "line": 83,
+    "symbol": "Record",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/egress/index.ts",
+    "line": 14,
+    "symbol": "ClaimResult",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 17,
+    "symbol": "ledgerEvent",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 33,
+    "symbol": "ledgerHead",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 78,
+    "symbol": "Revealed",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 20,
+    "symbol": "MaterializeInput",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 92,
+    "symbol": "commitInbox",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 367,
+    "symbol": "watchSnapshot",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/atomic-file.ts",
+    "line": 6,
+    "symbol": "AtomicFileOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/atomic-file.ts",
+    "line": 18,
+    "symbol": "replaceFileAtomically",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/commit-coordinator.ts",
+    "line": 65,
+    "symbol": "CommitOutcome",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/commit-coordinator.ts",
+    "line": 47,
+    "symbol": "CommitRequest",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/commit-coordinator.ts",
+    "line": 86,
+    "symbol": "commitFact",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/counted-window-claim.ts",
+    "line": 1,
+    "symbol": "CountedWindowClaimResult",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/initialize.ts",
+    "line": 7,
+    "symbol": "InitializeOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/l0-action-builders.ts",
+    "line": 96,
+    "symbol": "alarmAppend",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/l0-action-builders.ts",
+    "line": 35,
+    "symbol": "inboxAppend",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/l0-action-builders.ts",
+    "line": 48,
+    "symbol": "messageAnswerAppend",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/l0-action-builders.ts",
+    "line": 3,
+    "symbol": "messageDeadlineArm",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/l0-action-builders.ts",
+    "line": 67,
+    "symbol": "messageTimeoutInbox",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 4,
+    "symbol": "SqliteJsonDataTable",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 6,
+    "symbol": "SqliteStringEqualityColumn",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 92,
+    "symbol": "SqliteL0Adapters",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-schema-lifecycle.ts",
+    "line": 99,
+    "symbol": "clearSqliteStorage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 84,
+    "symbol": "ProductionCapability",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/timestamped-store.ts",
+    "line": 16,
+    "symbol": "withCreateTimestamps",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-preflight.ts",
+    "line": 6,
+    "symbol": "REPLY_GRANT_MIGRATION",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-preflight.ts",
+    "line": 5,
+    "symbol": "RETIRED_TABLE_MIGRATION",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 12,
+    "symbol": "DispositionCandidates",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/wait/index.ts",
+    "line": 191,
+    "symbol": "Record",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 25,
+    "symbol": "ProviderError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 6,
+    "symbol": "SDKMessage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 69,
+    "symbol": "stringifyToolOutput",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 155,
+    "symbol": "toModelMessages",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 21,
+    "symbol": "Processor",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 6,
+    "symbol": "StreamEvent",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 11,
+    "symbol": "StreamEventContext",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 47,
+    "symbol": "StreamEventState",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 62,
+    "symbol": "createStreamEventState",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 95,
+    "symbol": "handleStreamEvent",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 80,
+    "symbol": "mapFinishReason",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 410,
+    "symbol": "settleAttempt",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 18,
+    "symbol": "advancePart",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 9,
+    "symbol": "appendPart",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 150,
+    "symbol": "drainToolSettlements",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 32,
+    "symbol": "handleToolCall",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 61,
+    "symbol": "handleToolResult",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/identity.ts",
+    "line": 22,
+    "symbol": "clientIdentity",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 10,
+    "symbol": "ProxyModelsError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 175,
+    "symbol": "getLanguage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 161,
+    "symbol": "getSDK",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 4,
+    "symbol": "ProviderTransform",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/telemetry.ts",
+    "line": 5,
+    "symbol": "observeRetry",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 19,
+    "symbol": "EstimateUsage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 46,
+    "symbol": "TokenTracker",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 8,
+    "symbol": "UsageEstimate",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 28,
+    "symbol": "estimateUsage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/machines/src/daemon.ts",
+    "line": 26,
+    "symbol": "MachineDaemon",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/machines/src/daemon.ts",
+    "line": 19,
+    "symbol": "MachineDaemonOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/machines/src/fs.ts",
+    "line": 19,
+    "symbol": "FsDriver",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/machines/src/host.ts",
+    "line": 7,
+    "symbol": "MachineHostOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/compose.ts",
+    "line": 13,
+    "symbol": "composeEffects",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/conflicts.ts",
+    "line": 5,
+    "symbol": "collectPreConflicts",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/conflicts.ts",
+    "line": 199,
+    "symbol": "conflictDiagnostic",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/accumulators.ts",
+    "line": 42,
+    "symbol": "appendPriorityReason",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/accumulators.ts",
+    "line": 19,
+    "symbol": "appendReason",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/accumulators.ts",
+    "line": 33,
+    "symbol": "approvalEffect",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/accumulators.ts",
+    "line": 63,
+    "symbol": "mergeRetry",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/accumulators.ts",
+    "line": 84,
+    "symbol": "retryEffect",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/accumulators.ts",
+    "line": 10,
+    "symbol": "selectPriorityEffect",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/output.ts",
+    "line": 10,
+    "symbol": "EffectAccumulatorSet",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/output.ts",
+    "line": 28,
+    "symbol": "appendMergedEffects",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/merge/rules.ts",
+    "line": 64,
+    "symbol": "foldEffectEntries",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/ordering.ts",
+    "line": 33,
+    "symbol": "collectEffectEntries",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/ordering.ts",
+    "line": 71,
+    "symbol": "collectObligations",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/ordering.ts",
+    "line": 65,
+    "symbol": "collectSafeDenyEffects",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/ordering.ts",
+    "line": 5,
+    "symbol": "orderDecisions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/ordering.ts",
+    "line": 20,
+    "symbol": "uniquePolicyIds",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/records.ts",
+    "line": 25,
+    "symbol": "deepMergeRecords",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/records.ts",
+    "line": 3,
+    "symbol": "flattenRecord",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/records.ts",
+    "line": 21,
+    "symbol": "pathsOverlap",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/records.ts",
+    "line": 36,
+    "symbol": "stableKey",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 35,
+    "symbol": "ApprovalAccumulator",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 18,
+    "symbol": "Conflict",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 9,
+    "symbol": "EffectEntry",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 54,
+    "symbol": "FAIL_CLOSED_CONFLICT",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 22,
+    "symbol": "FieldOwner",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 50,
+    "symbol": "MergeResult",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 29,
+    "symbol": "MergedEffect",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 3,
+    "symbol": "OrderedDecision",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 40,
+    "symbol": "PriorityApprovalAccumulator",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/effects/types.ts",
+    "line": 44,
+    "symbol": "RetryAccumulator",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/message-match.ts",
+    "line": 28,
+    "symbol": "matchesMessage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/permission-evaluate.ts",
+    "line": 156,
+    "symbol": "decisionFromEvaluation",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/permission-evaluate.ts",
+    "line": 137,
+    "symbol": "evaluatePermission",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 216,
+    "symbol": "CompilePolicySnapshotOptions",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 55,
+    "symbol": "PolicyCompileError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 35,
+    "symbol": "PolicyCompileErrorCode",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 550,
+    "symbol": "PolicyCompiler",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 548,
+    "symbol": "PolicyRowDraft",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 16,
+    "symbol": "RuleName",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/app-connector/definition.ts",
+    "line": 6,
+    "symbol": "positiveInteger",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/app-connector/index.ts",
+    "line": 4,
+    "symbol": "AppConnector",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/approval/events.ts",
+    "line": 20,
+    "symbol": "ApprovalEvents",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/approval/fold.ts",
+    "line": 12,
+    "symbol": "DecideOutcome",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/llm.ts",
+    "line": 13,
+    "symbol": "LlmCall",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/mcp.ts",
+    "line": 11,
+    "symbol": "Mcp",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/policy.ts",
+    "line": 62,
+    "symbol": "Events",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 22,
+    "symbol": "MessagingEvents",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 299,
+    "symbol": "extractSurfaceKey",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/route-record.ts",
+    "line": 16,
+    "symbol": "RouteStreamScope",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 133,
+    "symbol": "canonicalKey",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 67,
+    "symbol": "isPlainValue",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/machine/fold.ts",
+    "line": 39,
+    "symbol": "EffectiveExportsOutcome",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/machine/fold.ts",
+    "line": 3,
+    "symbol": "EffectiveOutcome",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/mcp/index.ts",
+    "line": 3,
+    "symbol": "McpConfig",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/platform.ts",
+    "line": 4,
+    "symbol": "Clock",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/platform.ts",
+    "line": 10,
+    "symbol": "EntropySource",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/platform.ts",
+    "line": 7,
+    "symbol": "IdSource",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/policy/definition.ts",
+    "line": 3,
+    "symbol": "policyKernelVersion",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/policy/index.ts",
+    "line": 78,
+    "symbol": "PolicyDecision",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 50,
+    "symbol": "FoldOutcome",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 9,
+    "symbol": "Transcript",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/matcher.ts",
+    "line": 17,
+    "symbol": "ResponderTarget",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/matcher.ts",
+    "line": 28,
+    "symbol": "SenderEvidence",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/wait/schema.ts",
+    "line": 5,
+    "symbol": "OwnerKind",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 169,
+    "symbol": "MainHeader",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 70,
+    "symbol": "SearchLine",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 19,
+    "symbol": "SidebarHeader",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 37,
+    "symbol": "ApprovalTray",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 190,
+    "symbol": "Composer",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 132,
+    "symbol": "ComposerAction",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 147,
+    "symbol": "composerKey",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 42,
+    "symbol": "Console",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/names.ts",
+    "line": 15,
+    "symbol": "UI_NAMES",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 5,
+    "symbol": "ButtonVariant",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 45,
+    "symbol": "IconButton",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 34,
+    "symbol": "IconButtonSize",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 59,
+    "symbol": "CodeFence",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 23,
+    "symbol": "CodeToken",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 64,
+    "symbol": "Disclosure",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 50,
+    "symbol": "DisclosureTone",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/epoch-rule.tsx",
+    "line": 36,
+    "symbol": "EpochRule",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/gutter.tsx",
+    "line": 85,
+    "symbol": "GutterLine",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/highlight.tsx",
+    "line": 44,
+    "symbol": "Highlight",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/highlight.tsx",
+    "line": 31,
+    "symbol": "HighlightRun",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 72,
+    "symbol": "Row",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 38,
+    "symbol": "RowLines",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 26,
+    "symbol": "ScrollArea",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/spinner.tsx",
+    "line": 68,
+    "symbol": "Spinner",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/state.tsx",
+    "line": 76,
+    "symbol": "StatusDot",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 166,
+    "symbol": "Caret",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 30,
+    "symbol": "Panel",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 11,
+    "symbol": "PanelEdge",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 4,
+    "symbol": "PanelTone",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 111,
+    "symbol": "Text",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 56,
+    "symbol": "TextLevel",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/anchor.ts",
+    "line": 24,
+    "symbol": "anchorId",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 61,
+    "symbol": "MarkdownBlockView",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/model.ts",
+    "line": 124,
+    "symbol": "PendingApproval",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/model.ts",
+    "line": 100,
+    "symbol": "TranscriptAssistant",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/model.ts",
+    "line": 69,
+    "symbol": "TranscriptEpoch",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/model.ts",
+    "line": 108,
+    "symbol": "TranscriptNode",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/model.ts",
+    "line": 58,
+    "symbol": "TranscriptPrompt",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/model.ts",
+    "line": 141,
+    "symbol": "TurnCost",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/spacing.ts",
+    "line": 48,
+    "symbol": "BLOCK_GAP",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/spacing.ts",
+    "line": 47,
+    "symbol": "PAIR_GAP",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/spacing.ts",
+    "line": 49,
+    "symbol": "PARAGRAPH_GAP",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/spacing.ts",
+    "line": 43,
+    "symbol": "PartKind",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/spacing.ts",
+    "line": 46,
+    "symbol": "TURN_GAP",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 36,
+    "symbol": "Expansion",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 82,
+    "symbol": "Timeline",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 48,
+    "symbol": "expansionFor",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 224,
+    "symbol": "ToolGroup",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 129,
+    "symbol": "ToolRow",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/turns.ts",
+    "line": 64,
+    "symbol": "Turn",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/turns.ts",
+    "line": 73,
+    "symbol": "partKind",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/turns.ts",
+    "line": 85,
+    "symbol": "segmentTurns",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 54,
+    "symbol": "Voice",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 42,
+    "symbol": "VoiceName",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/work-group.ts",
+    "line": 18,
+    "symbol": "COLLAPSE_AFTER",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/work-group.ts",
+    "line": 40,
+    "symbol": "GroupSummary",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/work-group.ts",
+    "line": 50,
+    "symbol": "collapses",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/work-group.ts",
+    "line": 35,
+    "symbol": "isLoud",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/work-group.ts",
+    "line": 62,
+    "symbol": "summarize",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/work-group.ts",
+    "line": 80,
+    "symbol": "summaryLabel",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  }
+]

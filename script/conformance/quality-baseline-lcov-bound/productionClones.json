@@ -1,0 +1,461 @@
+[
+  {
+    "gate": "productionClones",
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 221,
+    "endLine": 234,
+    "symbol": "b5d7b2ab2f627543fab6a0b2fe33fca0c0ec237af0c39fe188db371f6e83d846",
+    "value": 71,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/desktop/src/renderer/chat/gateway-transport.ts",
+    "line": 34,
+    "endLine": 40,
+    "symbol": "60478baf77fa382418bae0b22394a3bcc448bb67e7667fe763957b94274c3586",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/desktop/src/renderer/shell/use-search.ts",
+    "line": 57,
+    "endLine": 64,
+    "symbol": "fbb78e7c61487d088359175c4bd1b9626583ec05aeab735d0ad8312de81bf636",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/desktop/test/gateway-transport.test.ts",
+    "line": 124,
+    "endLine": 130,
+    "symbol": "60478baf77fa382418bae0b22394a3bcc448bb67e7667fe763957b94274c3586",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/desktop/test/search-filter.test.ts",
+    "line": 47,
+    "endLine": 54,
+    "symbol": "fbb78e7c61487d088359175c4bd1b9626583ec05aeab735d0ad8312de81bf636",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/desktop/test/search-tree.test.tsx",
+    "line": 30,
+    "endLine": 44,
+    "symbol": "b5d7b2ab2f627543fab6a0b2fe33fca0c0ec237af0c39fe188db371f6e83d846",
+    "value": 71,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/openomni/src/composition/message-session.ts",
+    "line": 57,
+    "endLine": 71,
+    "symbol": "10d21056f5beb31747f25fee67b38ffa3da38061639bb0df804e7a46fed7f04c",
+    "value": 64,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/openomni/src/gateway.ts",
+    "line": 88,
+    "endLine": 93,
+    "symbol": "d21f20b3389aaf7a3f712ff4fbfa293c5538af860135dbfef486231f018406fe",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/openomni/src/index.ts",
+    "line": 211,
+    "endLine": 220,
+    "symbol": "d1bf13806c15dd26e18550070745bcb7c04c984d385992cdb3186016cd7e0d90",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/openomni/src/tools/code/bash.ts",
+    "line": 48,
+    "endLine": 54,
+    "symbol": "602e21bca585bc6e3f09b1b19e6a457cd95cdea9a94a7134795f2501e345d05a",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/openomni/src/tools/fs/edit.ts",
+    "line": 13,
+    "endLine": 18,
+    "symbol": "df4ec57506ec0d50ccb7deab31692af25bd958f170cfad4e43ca30329fd3970c",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/openomni/src/tools/fs/write.ts",
+    "line": 17,
+    "endLine": 22,
+    "symbol": "df4ec57506ec0d50ccb7deab31692af25bd958f170cfad4e43ca30329fd3970c",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 18,
+    "endLine": 27,
+    "symbol": "d1bf13806c15dd26e18550070745bcb7c04c984d385992cdb3186016cd7e0d90",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/agent/src/core/message-factory.ts",
+    "line": 4,
+    "endLine": 14,
+    "symbol": "56cde20c9e16f66d7cf5f076c7b855a812307a72f3c2500e85d2922434a73763",
+    "value": 54,
+    "count": 2
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/agent/src/core/message-factory.ts",
+    "line": 55,
+    "endLine": 71,
+    "symbol": "a0841a9072a64a72faf4b80ca42f818e48c9750f9005e1a4ab41401d65ab445f",
+    "value": 66,
+    "count": 2
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/agent/src/session-history.ts",
+    "line": 106,
+    "endLine": 116,
+    "symbol": "9ff2a068976435d1d315df71a8a0b3bb76cf74df95240aa9b7570162131020a7",
+    "value": 72,
+    "count": 2
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/agent/src/session-record.ts",
+    "line": 154,
+    "endLine": 164,
+    "symbol": "b816cefa6d4393113bae89b149eeafece6694f591c39f55c4dd5fe0874fc7cc2",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/channels/src/router/message-ports.ts",
+    "line": 66,
+    "endLine": 71,
+    "symbol": "d21f20b3389aaf7a3f712ff4fbfa293c5538af860135dbfef486231f018406fe",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 49,
+    "endLine": 63,
+    "symbol": "10d21056f5beb31747f25fee67b38ffa3da38061639bb0df804e7a46fed7f04c",
+    "value": 64,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 736,
+    "endLine": 746,
+    "symbol": "20e8d81b15832c870da394236b721f865678dd0616bf63f955ef92437073fc74",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 381,
+    "endLine": 389,
+    "symbol": "9c36448333836f1980c2bf1faaaf020902b29f36853bd3494f0db0e6b766db60",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 124,
+    "endLine": 135,
+    "symbol": "eac92ece79833f2d2f9e3b823608314dcb8384e5b05350fed9058403b86ce8a0",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 171,
+    "endLine": 181,
+    "symbol": "b816cefa6d4393113bae89b149eeafece6694f591c39f55c4dd5fe0874fc7cc2",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 359,
+    "endLine": 369,
+    "symbol": "20e8d81b15832c870da394236b721f865678dd0616bf63f955ef92437073fc74",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 447,
+    "endLine": 455,
+    "symbol": "9c36448333836f1980c2bf1faaaf020902b29f36853bd3494f0db0e6b766db60",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 88,
+    "endLine": 99,
+    "symbol": "eac92ece79833f2d2f9e3b823608314dcb8384e5b05350fed9058403b86ce8a0",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/protocol/src/app-connector/definition.ts",
+    "line": 174,
+    "endLine": 179,
+    "symbol": "15c7423ca38ad685e1cf27e3a3b9c0f1166e8df1bb5924beb6e357f3cac92d53",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/protocol/src/app-connector/installation.ts",
+    "line": 19,
+    "endLine": 24,
+    "symbol": "15c7423ca38ad685e1cf27e3a3b9c0f1166e8df1bb5924beb6e357f3cac92d53",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/protocol/src/policy/policy-point.ts",
+    "line": 326,
+    "endLine": 334,
+    "symbol": "15097145e4236d75c7b8b14434e87fec28a82899912e27999c54828447755628",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 149,
+    "endLine": 162,
+    "symbol": "15097145e4236d75c7b8b14434e87fec28a82899912e27999c54828447755628",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "packages/protocol/test/module-surface.test.ts",
+    "line": 83,
+    "endLine": 88,
+    "symbol": "1ec5df6186a51c24ef9924299d3411a24b4ca9560016f2bc390737c83c58bd0c",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-census.ts",
+    "line": 276,
+    "endLine": 284,
+    "symbol": "fb3592cb97f83c6aeb0fa5ccef2caa8f0228c134a2738bd23363670a08fb5500",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 629,
+    "endLine": 638,
+    "symbol": "37fa719e2416018ae2f2781c3a975b62b1a0667e41801deb3452db984af948ef",
+    "value": 65,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 629,
+    "endLine": 638,
+    "symbol": "a4c747f56b9d627432909a68b288bf5f9504ccfa4d7a62a121e138a57b44e96b",
+    "value": 64,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 627,
+    "endLine": 638,
+    "symbol": "ef209cb11f98c2b510f3f96337fdea59d58f9553a116844b1b9fac8eb33db9da",
+    "value": 73,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-dead-exports.ts",
+    "line": 152,
+    "endLine": 162,
+    "symbol": "206fcb6126548c335264f8156bc3766d84c15ad133b07d739ab9cc28392cd3e3",
+    "value": 60,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-dead-exports.ts",
+    "line": 329,
+    "endLine": 341,
+    "symbol": "2a1465c7b18c8b91c40577e3c0696167d5267f6de1620ae4b2e63dc350084258",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-dead-exports.ts",
+    "line": 330,
+    "endLine": 341,
+    "symbol": "ef209cb11f98c2b510f3f96337fdea59d58f9553a116844b1b9fac8eb33db9da",
+    "value": 73,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-dead-exports.ts",
+    "line": 152,
+    "endLine": 162,
+    "symbol": "ef4cfd04199c69370c6082fa6b4b013e28bca855fe14d404b1c9f6fa01ffe0ce",
+    "value": 68,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-deps.ts",
+    "line": 525,
+    "endLine": 532,
+    "symbol": "206fcb6126548c335264f8156bc3766d84c15ad133b07d739ab9cc28392cd3e3",
+    "value": 60,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/check-types-census.ts",
+    "line": 123,
+    "endLine": 131,
+    "symbol": "fb3592cb97f83c6aeb0fa5ccef2caa8f0228c134a2738bd23363670a08fb5500",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/lint-guards.ts",
+    "line": 333,
+    "endLine": 342,
+    "symbol": "a4c747f56b9d627432909a68b288bf5f9504ccfa4d7a62a121e138a57b44e96b",
+    "value": 64,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/lint-guards.ts",
+    "line": 139,
+    "endLine": 152,
+    "symbol": "cd35ff56b6795e90fa0213daeb31390e05b9d1c31d99609ee3465c357e05ed9e",
+    "value": 58,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/lint-side-effects.ts",
+    "line": 103,
+    "endLine": 112,
+    "symbol": "37fa719e2416018ae2f2781c3a975b62b1a0667e41801deb3452db984af948ef",
+    "value": 65,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/lint-side-effects.ts",
+    "line": 24,
+    "endLine": 37,
+    "symbol": "cd35ff56b6795e90fa0213daeb31390e05b9d1c31d99609ee3465c357e05ed9e",
+    "value": 58,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/lint-tools.ts",
+    "line": 737,
+    "endLine": 749,
+    "symbol": "2a1465c7b18c8b91c40577e3c0696167d5267f6de1620ae4b2e63dc350084258",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/quality-native-process.ts",
+    "line": 16,
+    "endLine": 22,
+    "symbol": "602e21bca585bc6e3f09b1b19e6a457cd95cdea9a94a7134795f2501e345d05a",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/report-source-metrics.ts",
+    "line": 102,
+    "endLine": 111,
+    "symbol": "37fa719e2416018ae2f2781c3a975b62b1a0667e41801deb3452db984af948ef",
+    "value": 65,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/report-source-metrics.ts",
+    "line": 57,
+    "endLine": 64,
+    "symbol": "ef4cfd04199c69370c6082fa6b4b013e28bca855fe14d404b1c9f6fa01ffe0ce",
+    "value": 68,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 219,
+    "endLine": 228,
+    "symbol": "37fa719e2416018ae2f2781c3a975b62b1a0667e41801deb3452db984af948ef",
+    "value": 65,
+    "count": 1
+  },
+  {
+    "gate": "productionClones",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 240,
+    "endLine": 245,
+    "symbol": "1ec5df6186a51c24ef9924299d3411a24b4ca9560016f2bc390737c83c58bd0c",
+    "value": 56,
+    "count": 1
+  }
+]

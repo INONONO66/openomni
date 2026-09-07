@@ -1,0 +1,34 @@
+[
+  {
+    "path": "packages/ledger/migration/0001_initial/migration.sql",
+    "line": 149,
+    "symbol": "event_chain",
+    "gate": "store",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/migration/0001_initial/migration.sql",
+    "line": 8,
+    "symbol": "message",
+    "gate": "store",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/migration/0001_initial/migration.sql",
+    "line": 20,
+    "symbol": "part",
+    "gate": "store",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/migration/0028_approval/migration.sql",
+    "line": 1,
+    "symbol": "approval",
+    "gate": "store",
+    "value": 1,
+    "count": 1
+  }
+]

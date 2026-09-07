@@ -1,0 +1,1650 @@
+[
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 48,
+    "symbol": "unknown:projectModel",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 19,
+    "symbol": "unknown:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 27,
+    "symbol": "unknown:rawModel",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 17,
+    "symbol": "unknown:subset",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/ledger-archive-fault.test.ts",
+    "line": 69,
+    "symbol": "implicitAny:ownedRestore",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-fault.test.ts",
+    "line": 69,
+    "symbol": "implicitAny:resource",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/ledger-archive-fault.test.ts",
+    "line": 69,
+    "symbol": "unknown:ownedRestore",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-fault.test.ts",
+    "line": 69,
+    "symbol": "unknown:resource",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 190,
+    "symbol": "implicitAny:historical",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 194,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 436,
+    "symbol": "implicitAny:inode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 193,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 192,
+    "symbol": "implicitAny:ownerRef",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 436,
+    "symbol": "implicitAny:receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:resultCode",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 436,
+    "symbol": "implicitAny:source",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 105,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 188,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 190,
+    "symbol": "unknown:historical",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 194,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 436,
+    "symbol": "unknown:inode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 193,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 192,
+    "symbol": "unknown:ownerRef",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 436,
+    "symbol": "unknown:receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 29,
+    "symbol": "unknown:resultCode",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 436,
+    "symbol": "unknown:source",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 48,
+    "symbol": "implicitAny:ids",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 103,
+    "symbol": "implicitAny:marker",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 35,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 86,
+    "symbol": "implicitAny:remaining",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 45,
+    "symbol": "implicitAny:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 26,
+    "symbol": "implicitAny:statement",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 161,
+    "symbol": "unknown:[Symbol.dispose]",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 89,
+    "symbol": "unknown:assertArchiveEquality",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 103,
+    "symbol": "unknown:marker",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 98,
+    "symbol": "unknown:remaining",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 150,
+    "symbol": "unknown:withRestoredArchive",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/ledger-producer-manifest.ts",
+    "line": 316,
+    "symbol": "implicitAny:migrationFiles",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-producer-manifest.ts",
+    "line": 301,
+    "symbol": "implicitAny:sourceFiles",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-guards.ts",
+    "line": 157,
+    "symbol": "implicitAny:collectSourceFiles",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-guards.ts",
+    "line": 337,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-guards.ts",
+    "line": 338,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-guards.ts",
+    "line": 337,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-guards.ts",
+    "line": 112,
+    "symbol": "unknown:verifyPinnedFilesExist",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-side-effects.ts",
+    "line": 64,
+    "symbol": "implicitAny:expression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-side-effects.ts",
+    "line": 107,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-side-effects.ts",
+    "line": 108,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-side-effects.ts",
+    "line": 107,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-side-effects.ts",
+    "line": 40,
+    "symbol": "unknown:verifyHotFilesExist",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 104,
+    "symbol": "implicitAny:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 104,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 112,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 13,
+    "symbol": "implicitAny:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 39,
+    "symbol": "implicitAny:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 58,
+    "symbol": "implicitAny:deletedSymbolViolations",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 123,
+    "symbol": "implicitAny:first",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 31,
+    "symbol": "implicitAny:item",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 31,
+    "symbol": "implicitAny:located",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:locations",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 38,
+    "symbol": "implicitAny:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:overrides",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 124,
+    "symbol": "implicitAny:second",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 104,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 92,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 92,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 112,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 13,
+    "symbol": "unknown:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 39,
+    "symbol": "unknown:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 123,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 31,
+    "symbol": "unknown:item",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 31,
+    "symbol": "unknown:located",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 40,
+    "symbol": "unknown:locations",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 38,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 16,
+    "symbol": "unknown:overrides",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.test.ts",
+    "line": 124,
+    "symbol": "unknown:second",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 333,
+    "symbol": "implicitAny:LocatedDefinition",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 428,
+    "symbol": "implicitAny:TOOL_DEFINITIONS",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 718,
+    "symbol": "implicitAny:baseline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 198,
+    "symbol": "implicitAny:branch",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 198,
+    "symbol": "implicitAny:branches",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 489,
+    "symbol": "implicitAny:buildSchemaSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 323,
+    "symbol": "implicitAny:candidate",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 369,
+    "symbol": "implicitAny:catalog",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 429,
+    "symbol": "implicitAny:checkEarned",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 295,
+    "symbol": "implicitAny:checkNaming",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 334,
+    "symbol": "implicitAny:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 364,
+    "symbol": "implicitAny:definitionInvariantViolations",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 339,
+    "symbol": "implicitAny:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 633,
+    "symbol": "implicitAny:exemplar",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 489,
+    "symbol": "implicitAny:exportValue",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 371,
+    "symbol": "implicitAny:item",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 94,
+    "symbol": "implicitAny:listProtocolNamespaces",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 338,
+    "symbol": "implicitAny:locateExportedDefinitions",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 341,
+    "symbol": "implicitAny:located",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 370,
+    "symbol": "implicitAny:locations",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 321,
+    "symbol": "implicitAny:looksLikeToolDefinition",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 346,
+    "symbol": "implicitAny:module",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 504,
+    "symbol": "implicitAny:option",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 550,
+    "symbol": "implicitAny:previous",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 644,
+    "symbol": "implicitAny:selfTest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 636,
+    "symbol": "implicitAny:unsafeQuery",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 321,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 210,
+    "symbol": "implicitAny:variants",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 744,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 745,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 333,
+    "symbol": "unknown:LocatedDefinition",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 428,
+    "symbol": "unknown:TOOL_DEFINITIONS",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 137,
+    "symbol": "unknown:ToolSurface",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 437,
+    "symbol": "unknown:ZodObjectLike",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 441,
+    "symbol": "unknown:_def",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 605,
+    "symbol": "unknown:badTool",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 196,
+    "symbol": "unknown:branches",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 485,
+    "symbol": "unknown:buildSchemaSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 555,
+    "symbol": "unknown:buildToolSchemaSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 323,
+    "symbol": "unknown:candidate",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 369,
+    "symbol": "unknown:catalog",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 429,
+    "symbol": "unknown:checkEarned",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 585,
+    "symbol": "unknown:checkToolSchemaSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 252,
+    "symbol": "unknown:collectToolSurfaces",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 561,
+    "symbol": "unknown:current",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 569,
+    "symbol": "unknown:currentNames",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 334,
+    "symbol": "unknown:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 364,
+    "symbol": "unknown:definitionInvariantViolations",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 339,
+    "symbol": "unknown:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 559,
+    "symbol": "unknown:diffToolSchemaSnapshots",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 503,
+    "symbol": "unknown:discriminator",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 472,
+    "symbol": "unknown:discriminatorValue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 744,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 633,
+    "symbol": "unknown:exemplar",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 493,
+    "symbol": "unknown:exportValue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 473,
+    "symbol": "unknown:field",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 140,
+    "symbol": "unknown:inputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 444,
+    "symbol": "unknown:isZodSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 371,
+    "symbol": "unknown:item",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 229,
+    "symbol": "unknown:lintToolSurface",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 147,
+    "symbol": "unknown:localReference",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 338,
+    "symbol": "unknown:locateExportedDefinitions",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 341,
+    "symbol": "unknown:located",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 370,
+    "symbol": "unknown:locations",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 321,
+    "symbol": "unknown:looksLikeToolDefinition",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 346,
+    "symbol": "unknown:module",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 485,
+    "symbol": "unknown:namespaceValue",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 472,
+    "symbol": "unknown:option",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 439,
+    "symbol": "unknown:options",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 177,
+    "symbol": "unknown:own",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 560,
+    "symbol": "unknown:previous",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 564,
+    "symbol": "unknown:previousNames",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 482,
+    "symbol": "unknown:protocol",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 184,
+    "symbol": "unknown:reference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 148,
+    "symbol": "unknown:root",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 440,
+    "symbol": "unknown:safeParse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 171,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 452,
+    "symbol": "unknown:seen",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 644,
+    "symbol": "unknown:selfTest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 438,
+    "symbol": "unknown:shape",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 452,
+    "symbol": "unknown:shapeKeys",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 253,
+    "symbol": "unknown:spec",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 264,
+    "symbol": "unknown:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 261,
+    "symbol": "unknown:surfaces",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 187,
+    "symbol": "unknown:target",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 229,
+    "symbol": "unknown:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 709,
+    "symbol": "unknown:toolSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 220,
+    "symbol": "unknown:topLevelFieldCount",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 170,
+    "symbol": "unknown:topLevelFieldSets",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 636,
+    "symbol": "unknown:unsafeQuery",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 152,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 25
+  },
+  {
+    "path": "script/lint-tools.ts",
+    "line": 212,
+    "symbol": "unknown:variants",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/report-source-metrics.ts",
+    "line": 106,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/report-source-metrics.ts",
+    "line": 107,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/report-source-metrics.ts",
+    "line": 106,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/report-source-metrics.ts",
+    "line": 64,
+    "symbol": "unknown:runGit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 82,
+    "symbol": "implicitAny:item",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 78,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 133,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 223,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 224,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 223,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 133,
+    "symbol": "unknown:isBenchmarkMetric",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 54,
+    "symbol": "unknown:main",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 78,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 71,
+    "symbol": "unknown:readBenchmarkRuns",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 100,
+    "symbol": "unknown:validateBenchmarkRuns",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 133,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 196,
+    "symbol": "unknown:writeJson",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/topology.ts",
+    "line": 207,
+    "symbol": "implicitAny:rootManifest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/topology.ts",
+    "line": 212,
+    "symbol": "implicitAny:topologyInventoryDrift",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/topology.ts",
+    "line": 212,
+    "symbol": "implicitAny:workspace",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/topology.ts",
+    "line": 241,
+    "symbol": "unknown:assertTopologyComplete",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/topology.ts",
+    "line": 207,
+    "symbol": "unknown:rootManifest",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/topology.ts",
+    "line": 211,
+    "symbol": "unknown:topologyInventoryDrift",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/topology.ts",
+    "line": 208,
+    "symbol": "unknown:workspaces",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/verify-ledger-rename.ts",
+    "line": 101,
+    "symbol": "implicitAny:main",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/verify-ledger-rename.ts",
+    "line": 47,
+    "symbol": "implicitAny:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/verify-ledger-rename.ts",
+    "line": 102,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 66,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 258,
+    "symbol": "implicitAny:actual",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 170,
+    "symbol": "implicitAny:checkEmitPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 360,
+    "symbol": "implicitAny:discoverRepoProjects",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 119,
+    "symbol": "implicitAny:extendsValue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 201,
+    "symbol": "implicitAny:listSourceFiles",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 155,
+    "symbol": "implicitAny:parseProject",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 156,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 407,
+    "symbol": "implicitAny:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 109,
+    "symbol": "implicitAny:read",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 119,
+    "symbol": "unknown:extends",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 119,
+    "symbol": "unknown:extendsValue",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  }
+]

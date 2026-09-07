@@ -1,0 +1,3287 @@
+[
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 221,
+    "endLine": 234,
+    "symbol": "b5d7b2ab2f627543fab6a0b2fe33fca0c0ec237af0c39fe188db371f6e83d846",
+    "value": 71,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/src/renderer/chat/gateway-transport.ts",
+    "line": 34,
+    "endLine": 40,
+    "symbol": "60478baf77fa382418bae0b22394a3bcc448bb67e7667fe763957b94274c3586",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/src/renderer/shell/use-search.ts",
+    "line": 57,
+    "endLine": 64,
+    "symbol": "fbb78e7c61487d088359175c4bd1b9626583ec05aeab735d0ad8312de81bf636",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/app-chat.test.tsx",
+    "line": 168,
+    "endLine": 173,
+    "symbol": "1a7fa5fee8edc0be8f6d424eee1b7574741786dbf8b3cec05f0605d7b995496a",
+    "value": 59,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/app-chat.test.tsx",
+    "line": 173,
+    "endLine": 180,
+    "symbol": "35b9d0be3092e8b05fda750cbdf29772e47fbbd2dfcbe4e16f9fa052f8f2acf2",
+    "value": 68,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/gateway-transport.test.ts",
+    "line": 124,
+    "endLine": 130,
+    "symbol": "60478baf77fa382418bae0b22394a3bcc448bb67e7667fe763957b94274c3586",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/gateway-transport.test.ts",
+    "line": 292,
+    "endLine": 302,
+    "symbol": "87520dbccf0bf9a9aa08cbfddf1680aefbb7f0fdbeb2d225a51e53c48c319bf3",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/gateway-transport.test.ts",
+    "line": 77,
+    "endLine": 85,
+    "symbol": "bf743ec9e7448887dccbd96ddc3e30be40def995d451f869cf55d7000caf5d27",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/mock-transport.test.ts",
+    "line": 11,
+    "endLine": 19,
+    "symbol": "bf743ec9e7448887dccbd96ddc3e30be40def995d451f869cf55d7000caf5d27",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/search-filter.test.ts",
+    "line": 47,
+    "endLine": 54,
+    "symbol": "fbb78e7c61487d088359175c4bd1b9626583ec05aeab735d0ad8312de81bf636",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/search-tree.test.tsx",
+    "line": 15,
+    "endLine": 52,
+    "symbol": "5db3f42c2967079d1abc526dd00c76a285fec5a482daa950acfd9ef486bf4273",
+    "value": 108,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/search-tree.test.tsx",
+    "line": 30,
+    "endLine": 44,
+    "symbol": "b5d7b2ab2f627543fab6a0b2fe33fca0c0ec237af0c39fe188db371f6e83d846",
+    "value": 71,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/select-transport.test.ts",
+    "line": 136,
+    "endLine": 151,
+    "symbol": "e9f65ee2429432aef00ae5c9fdafd2299e7c94385378bcbdcbfcfe84f9cc4783",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/desktop/test/selection.test.tsx",
+    "line": 28,
+    "endLine": 54,
+    "symbol": "5db3f42c2967079d1abc526dd00c76a285fec5a482daa950acfd9ef486bf4273",
+    "value": 108,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/src/index.ts",
+    "line": 211,
+    "endLine": 220,
+    "symbol": "d1bf13806c15dd26e18550070745bcb7c04c984d385992cdb3186016cd7e0d90",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 233,
+    "endLine": 238,
+    "symbol": "c41079f43c09062b11306eee67d427c841619e5d2a11fa2d6fa05abae7f3c25d",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 18,
+    "endLine": 27,
+    "symbol": "d1bf13806c15dd26e18550070745bcb7c04c984d385992cdb3186016cd7e0d90",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/boot-wiring.test.ts",
+    "line": 139,
+    "endLine": 145,
+    "symbol": "0302c6f4da9e69bbe71c6ff96aee8beb7bb509c04509dce29ec6565f32181f99",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/channel-composition.test.ts",
+    "line": 71,
+    "endLine": 77,
+    "symbol": "deac4031faf61e196212c8b777f013b3a5417d58a17e465effa99f2f629e98e9",
+    "value": 51,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/cleanup-oracle.test.ts",
+    "line": 24,
+    "endLine": 34,
+    "symbol": "04e8b3ef7dfdf45fdc0b5229efd70763682093b237604f4275b83c05dcf40521",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/cli.test.ts",
+    "line": 308,
+    "endLine": 316,
+    "symbol": "1a0fcf8dc05aca78372a5312693f712091fc30c8f663d15501b44a26c9d86148",
+    "value": 65,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/cli.test.ts",
+    "line": 488,
+    "endLine": 493,
+    "symbol": "b867ef90bdd93cfc71f9d246898d23d26e661c41743506899870d51efe760ca7",
+    "value": 62,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/code-mode-e2e.test.ts",
+    "line": 411,
+    "endLine": 423,
+    "symbol": "43398be13d079a4b7314bd7be89de28fc9bc510fec7069a6b45808f803a2ae8d",
+    "value": 57,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/compaction-summarizer.test.ts",
+    "line": 88,
+    "endLine": 95,
+    "symbol": "5b65df7d6f5fc74297697504d960c622f67801c435dafa1f835b2fe3a7be05e8",
+    "value": 58,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/e2e.test.ts",
+    "line": 298,
+    "endLine": 303,
+    "symbol": "515d982d8470a9e5121ddf1f86e9fb52495a9eb72ac965695f372311a2af2093",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/fact-tap-retirement.test.ts",
+    "line": 10,
+    "endLine": 20,
+    "symbol": "04e8b3ef7dfdf45fdc0b5229efd70763682093b237604f4275b83c05dcf40521",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 15,
+    "endLine": 27,
+    "symbol": "e6602b67bdefd11b6d0e03502c138663ceeb8f65f016c7e0e20bdda87b54e9c6",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/helpers/socket-path.test.ts",
+    "line": 1,
+    "endLine": 14,
+    "symbol": "9225af7bb33d6425710fc113f0f8fbc77ad88d9726727a873e89cee206cab399",
+    "value": 105,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/llm-failure-classification.test.ts",
+    "line": 8,
+    "endLine": 18,
+    "symbol": "09d05f07a40840afa143195236842ee14cc7e4a2f887362a384c9dda85316c8f",
+    "value": 80,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/machine-tool-bridge.test.ts",
+    "line": 56,
+    "endLine": 69,
+    "symbol": "4f35e22905f558ae170ead5a1521f760a47ad37539d0df4636df7d898fd59778",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/machine-tool-bridge.test.ts",
+    "line": 35,
+    "endLine": 45,
+    "symbol": "627c81b71b99b7da623255adadf0b9033520ed514b6fd69babf71d9b33d6158f",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/machine-tool-bridge.test.ts",
+    "line": 699,
+    "endLine": 711,
+    "symbol": "7e611cac9b22ddb9182c58bef937c37e3e174dc17467989e8507dc339b0add95",
+    "value": 66,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/machine-tool-bridge.test.ts",
+    "line": 366,
+    "endLine": 377,
+    "symbol": "843ea2ae45db006145979d5f462448f86b28a8f0e5fe14ada8f1e1ae87fc0d1c",
+    "value": 53,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/machine-tool-bridge.test.ts",
+    "line": 364,
+    "endLine": 383,
+    "symbol": "bdf08e7cfc8ea770054c9b9f8edd9c7d3e7cde1b750f637d02bc7d041cfc85b7",
+    "value": 100,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/machine-tool-bridge.test.ts",
+    "line": 35,
+    "endLine": 46,
+    "symbol": "f2d5caed3caf72c7b85053f7b871b03bb1016c0b7a6b082e22899d30f3be1cc4",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-admission.test.ts",
+    "line": 47,
+    "endLine": 56,
+    "symbol": "2679d0f09715601f4eaef50c73ef88b03f7d50daf732a0cf33399396a04d2ee4",
+    "value": 57,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-admission.test.ts",
+    "line": 6,
+    "endLine": 16,
+    "symbol": "85b5b6bc8e5eb9143c4bc5c2cf568087ec72c0a64f8bc46e7356763c5b600fc1",
+    "value": 60,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-admission.test.ts",
+    "line": 4,
+    "endLine": 14,
+    "symbol": "d3f42253e6e9b09f2c95f9c7f22127a61b5ee607e2e6511974bdd22e36f28811",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-admission.test.ts",
+    "line": 76,
+    "endLine": 88,
+    "symbol": "e828c0459d981e953664e23543cd02deb700072c56371b6a804706a5939a445d",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
+    "line": 14,
+    "endLine": 24,
+    "symbol": "85b5b6bc8e5eb9143c4bc5c2cf568087ec72c0a64f8bc46e7356763c5b600fc1",
+    "value": 60,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-mutation-killers.test.ts",
+    "line": 5,
+    "endLine": 15,
+    "symbol": "d3f42253e6e9b09f2c95f9c7f22127a61b5ee607e2e6511974bdd22e36f28811",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-mutation-killers.test.ts",
+    "line": 19,
+    "endLine": 31,
+    "symbol": "e828c0459d981e953664e23543cd02deb700072c56371b6a804706a5939a445d",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-terminal-boundaries.test.ts",
+    "line": 91,
+    "endLine": 107,
+    "symbol": "e6eff5f09ba999cb7e8d86c01f9787b3e55143ad17f765040c37cdf064544edb",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/message-terminal-boundaries.test.ts",
+    "line": 72,
+    "endLine": 82,
+    "symbol": "ea5478213e5b93d8682b2e77fa7ac052263573bedb88fe6d27e463b918662e97",
+    "value": 65,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/model-transport.test.ts",
+    "line": 12,
+    "endLine": 21,
+    "symbol": "47328d466b13a8e78e5f758f68e13747f5d408da7cf97811979152a7fa103e7c",
+    "value": 55,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 33,
+    "endLine": 40,
+    "symbol": "0f8285d1ab2f45124e7044ca1cf2f376e452e7077bf523c4b9c9c4be7edfc586",
+    "value": 69,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 36,
+    "endLine": 42,
+    "symbol": "45c67e649e8e90f8ba0bc4958188b6f2de906e52ba300ffbfa72e5ee1dcea10f",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 34,
+    "endLine": 44,
+    "symbol": "834746acc2f77e940a07ba0b37e0ddd2285b1eeecf0051f5a9915f897dcd2799",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 141,
+    "endLine": 156,
+    "symbol": "de4fd663944322a2536686c675cb15648a9afd54f8d6c194bcee9cf98f504b9e",
+    "value": 92,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 13,
+    "endLine": 25,
+    "symbol": "e22e3c25225436d2ed165c4b19ff9d2957174381120e45a7996964e1f2ea1b9a",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/provisioning.test.ts",
+    "line": 268,
+    "endLine": 280,
+    "symbol": "46bedc5642d6c03c247251bb2dc9079743de9b4670b9b91b405d17f79119bf07",
+    "value": 78,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/resident-compaction.test.ts",
+    "line": 8,
+    "endLine": 17,
+    "symbol": "47328d466b13a8e78e5f758f68e13747f5d408da7cf97811979152a7fa103e7c",
+    "value": 55,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/resident-llm-resilience.test.ts",
+    "line": 118,
+    "endLine": 128,
+    "symbol": "09d05f07a40840afa143195236842ee14cc7e4a2f887362a384c9dda85316c8f",
+    "value": 80,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/resident-llm-resilience.test.ts",
+    "line": 56,
+    "endLine": 64,
+    "symbol": "4205ffbb579302aff7e19b4e5fa57ddcf1d72aea13f4de6b661418a521db2b9b",
+    "value": 60,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/resident-llm-resilience.test.ts",
+    "line": 46,
+    "endLine": 54,
+    "symbol": "e3235bc030b80b4eba0dbac6734a5f94e8f3d801112c68c2df15421c1cd17fd1",
+    "value": 61,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 79,
+    "endLine": 94,
+    "symbol": "de4fd663944322a2536686c675cb15648a9afd54f8d6c194bcee9cf98f504b9e",
+    "value": 92,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 86,
+    "endLine": 102,
+    "symbol": "e6eff5f09ba999cb7e8d86c01f9787b3e55143ad17f765040c37cdf064544edb",
+    "value": 74,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 68,
+    "endLine": 78,
+    "symbol": "ea5478213e5b93d8682b2e77fa7ac052263573bedb88fe6d27e463b918662e97",
+    "value": 65,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-attempt-e2e.test.ts",
+    "line": 52,
+    "endLine": 58,
+    "symbol": "45c67e649e8e90f8ba0bc4958188b6f2de906e52ba300ffbfa72e5ee1dcea10f",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 34,
+    "endLine": 44,
+    "symbol": "834746acc2f77e940a07ba0b37e0ddd2285b1eeecf0051f5a9915f897dcd2799",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 13,
+    "endLine": 25,
+    "symbol": "e6602b67bdefd11b6d0e03502c138663ceeb8f65f016c7e0e20bdda87b54e9c6",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 70,
+    "endLine": 78,
+    "symbol": "0f8285d1ab2f45124e7044ca1cf2f376e452e7077bf523c4b9c9c4be7edfc586",
+    "value": 69,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 23,
+    "endLine": 41,
+    "symbol": "c2a47009681c2707a0a3e083add00a916f969f41f40fc703363feeaaa09bf045",
+    "value": 96,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 56,
+    "endLine": 70,
+    "symbol": "c506fe4d6b32260dec0b888033261603e5ed9fa0e530d596e4106b81d71557a9",
+    "value": 91,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 48,
+    "endLine": 60,
+    "symbol": "e22e3c25225436d2ed165c4b19ff9d2957174381120e45a7996964e1f2ea1b9a",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 83,
+    "endLine": 88,
+    "symbol": "fd74c3686282984003eeff950e8466ba871ca1e4a7b7eb0f05434bdb44726607",
+    "value": 61,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 1038,
+    "endLine": 1049,
+    "symbol": "18c68a46e014963f7a56007b08e97d5858fe5033c23501350a0e71ee85e1dbdd",
+    "value": 92,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 486,
+    "endLine": 493,
+    "symbol": "24f36453a511d5cc7bab1a83d493854248f016f3c1d4bd23b35c523472092884",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 745,
+    "endLine": 760,
+    "symbol": "37d749f9974ee345f8a93becc0c813d3c817546790f6a44dbef7f62059e2148b",
+    "value": 77,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 723,
+    "endLine": 731,
+    "symbol": "38a0a06891be5c738237fb00541a4445421ad52f754673fba304ec2ec5838b4b",
+    "value": 85,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 667,
+    "endLine": 673,
+    "symbol": "40da660e93dd9ac7b6fd05e2126b49481ceeb531d4e97b20361f1457dc63eccf",
+    "value": 67,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 1052,
+    "endLine": 1057,
+    "symbol": "66d1788aa342cd38d67a45c2ab6a9633ec669674f3958289b56424a11097c308",
+    "value": 62,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 138,
+    "endLine": 156,
+    "symbol": "c2a47009681c2707a0a3e083add00a916f969f41f40fc703363feeaaa09bf045",
+    "value": 96,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 48,
+    "endLine": 62,
+    "symbol": "c506fe4d6b32260dec0b888033261603e5ed9fa0e530d596e4106b81d71557a9",
+    "value": 91,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 156,
+    "endLine": 161,
+    "symbol": "fd74c3686282984003eeff950e8466ba871ca1e4a7b7eb0f05434bdb44726607",
+    "value": 61,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/src/session-record.ts",
+    "line": 154,
+    "endLine": 164,
+    "symbol": "b816cefa6d4393113bae89b149eeafece6694f591c39f55c4dd5fe0874fc7cc2",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/agent.test.ts",
+    "line": 39,
+    "endLine": 44,
+    "symbol": "9cc12217c5940a6ccd8056849ae453ab991056b2113fe69a7ba177af2236c0dd",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/bracket.test.ts",
+    "line": 53,
+    "endLine": 72,
+    "symbol": "0232fd2550462d802c9762f51b8ac8cca614c09b74997416f2b95547eaef8055",
+    "value": 117,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/bracket.test.ts",
+    "line": 61,
+    "endLine": 66,
+    "symbol": "0d285200ecee3566264e2785ba8e9a5765d0f8166ae8309c522fbe999b9228ca",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/bracket.test.ts",
+    "line": 22,
+    "endLine": 32,
+    "symbol": "3dc5abd391e81f83189b4bcedd2335542b5055302eea0dfffdfc3cb872068739",
+    "value": 55,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/bracket.test.ts",
+    "line": 32,
+    "endLine": 53,
+    "symbol": "d2bdfcbbddb04c7bdb36d981c1a3f53daf817d501a7b8c0a25d67806e7a8f903",
+    "value": 111,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 50,
+    "endLine": 69,
+    "symbol": "0232fd2550462d802c9762f51b8ac8cca614c09b74997416f2b95547eaef8055",
+    "value": 117,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 158,
+    "endLine": 169,
+    "symbol": "06c1ed71afab220aa64295291a1bbc1adebb1c322eb317e7266a0e3efedcf5a1",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 158,
+    "endLine": 169,
+    "symbol": "277b5f9c1b7c75226ee10b3c30f4071abd061533692c1e820f1237eb28088f53",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 14,
+    "endLine": 25,
+    "symbol": "3dc5abd391e81f83189b4bcedd2335542b5055302eea0dfffdfc3cb872068739",
+    "value": 55,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 318,
+    "endLine": 329,
+    "symbol": "436de37859fcf1b0b05d55ca0cb9f9fde03dfdccf2737e3127750d465dabaa0b",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 175,
+    "endLine": 182,
+    "symbol": "93d6171c138ab1101f5274c87299ab187f87957146c3a854b3d1b6caa579ae2f",
+    "value": 53,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 403,
+    "endLine": 412,
+    "symbol": "bdc6e77fc0e404e8859f8f18435162c54bf441da7a533ebfb7b743598eeda5f9",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 25,
+    "endLine": 46,
+    "symbol": "d2bdfcbbddb04c7bdb36d981c1a3f53daf817d501a7b8c0a25d67806e7a8f903",
+    "value": 111,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/compact.test.ts",
+    "line": 124,
+    "endLine": 129,
+    "symbol": "dac8cb83be248409b85ad4e87b2cb3c2efc187628c74cd0775d64391b369e16d",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/measure.test.ts",
+    "line": 9,
+    "endLine": 18,
+    "symbol": "668744a18be389f21253acd74aea5e98f61dcab790ad6e1e18114e07993f4a1e",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/policy.test.ts",
+    "line": 32,
+    "endLine": 37,
+    "symbol": "0d285200ecee3566264e2785ba8e9a5765d0f8166ae8309c522fbe999b9228ca",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/policy.test.ts",
+    "line": 27,
+    "endLine": 36,
+    "symbol": "668744a18be389f21253acd74aea5e98f61dcab790ad6e1e18114e07993f4a1e",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/policy.test.ts",
+    "line": 47,
+    "endLine": 52,
+    "symbol": "dac8cb83be248409b85ad4e87b2cb3c2efc187628c74cd0775d64391b369e16d",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/policy.test.ts",
+    "line": 33,
+    "endLine": 39,
+    "symbol": "dcd84058e0501bf450a5190018b91e0dc8f917235151fa60e8c80529b18f28e6",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/reduce.test.ts",
+    "line": 117,
+    "endLine": 132,
+    "symbol": "32fb531bc4177a4a4f9e23053822445fc1be60b3953194ee70fd76906ef0b865",
+    "value": 76,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/reduce.test.ts",
+    "line": 121,
+    "endLine": 136,
+    "symbol": "348c280faa279a194df8441fce7995efc7c0e376efba4c8b22c6bd4f0115bdc1",
+    "value": 69,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/reduce.test.ts",
+    "line": 190,
+    "endLine": 210,
+    "symbol": "7ee0be7cb050be08dd9cdeff12da272b62fba950021c469c1b9e1553570de19a",
+    "value": 79,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/reduce.test.ts",
+    "line": 33,
+    "endLine": 45,
+    "symbol": "847d0c9e81d2b8ac15dbf8b833ff029f0079ccf581fa82457ebf1d10bad9961d",
+    "value": 81,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/speculate.test.ts",
+    "line": 394,
+    "endLine": 403,
+    "symbol": "2ada0071eb5358335d0e258def4f528aa9dc6815743e4daa6d627f1e314d4912",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/speculate.test.ts",
+    "line": 254,
+    "endLine": 265,
+    "symbol": "42b57efd75bd8072f508fc068e15a9f7c1a2515b4275576ec20298fc5e9d0149",
+    "value": 68,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/speculate.test.ts",
+    "line": 113,
+    "endLine": 127,
+    "symbol": "662ce9833cb128a0e016adc8937f552d84602d2b28220b8f7207021d497d021f",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/speculate.test.ts",
+    "line": 113,
+    "endLine": 126,
+    "symbol": "845e0469e073529fda65481d0d600b1598a2358e762b125e4003963c5c13b1eb",
+    "value": 63,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/speculate.test.ts",
+    "line": 27,
+    "endLine": 39,
+    "symbol": "847d0c9e81d2b8ac15dbf8b833ff029f0079ccf581fa82457ebf1d10bad9961d",
+    "value": 81,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/compaction/speculate.test.ts",
+    "line": 100,
+    "endLine": 112,
+    "symbol": "db8f1f872a78e22d760ed39ea7439e71af7d4bbe6d9cc4cce4bc0abec202617e",
+    "value": 69,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/compaction-node.test.ts",
+    "line": 22,
+    "endLine": 29,
+    "symbol": "dcd84058e0501bf450a5190018b91e0dc8f917235151fa60e8c80529b18f28e6",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/execution-verdicts-model.test.ts",
+    "line": 235,
+    "endLine": 243,
+    "symbol": "e3ae04c57055597fd7a12dd7eb89eb01dad629bfa3291039fe4d2d8cd94d9f30",
+    "value": 67,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/lifecycle-budget.test.ts",
+    "line": 112,
+    "endLine": 119,
+    "symbol": "225142fa0fb598f5c8fca776764c80a76c6d2fac8066fe40683cb67b158b240b",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/lifecycle-budget.test.ts",
+    "line": 138,
+    "endLine": 151,
+    "symbol": "4f31613d7ec7ba8f69f16686a913c45a36b6db5479803b0e6523d034855838b9",
+    "value": 89,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/lifecycle-budget.test.ts",
+    "line": 114,
+    "endLine": 126,
+    "symbol": "964be0edf427fe799f54fda7e19b63634ce232402d1e8c35bf34b3e468d128ba",
+    "value": 92,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/lifecycle-budget.test.ts",
+    "line": 115,
+    "endLine": 126,
+    "symbol": "aa70ddbc8346075656a7632642f9f1f92569b0149dea6feb9c7dc64ef9195980",
+    "value": 87,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/lifecycle-budget.test.ts",
+    "line": 112,
+    "endLine": 124,
+    "symbol": "ecdf806667b9833694a8950bc8d8342e8a191e07aa40db9e42471acdc20f8d52",
+    "value": 68,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/llm-attempts.test.ts",
+    "line": 111,
+    "endLine": 121,
+    "symbol": "63b2147a9006939511156c3518b51af75f0bc9db6f5ba22ab9d947ef94a11b3a",
+    "value": 91,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/llm-attempts.test.ts",
+    "line": 114,
+    "endLine": 119,
+    "symbol": "f674a17277356a7bcb899bb6551a63a811c7c7bdd8e9e023d5d41e1bf93e4569",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/overflow-recovery.test.ts",
+    "line": 69,
+    "endLine": 80,
+    "symbol": "8f14356912736baa514bfa3f7703b0b22bd34dcceacad1396f136738d21c65fe",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-agent-loop.test.ts",
+    "line": 82,
+    "endLine": 96,
+    "symbol": "72ab1446f8084f8fb25b9eb9100f1db2b3c31ee136523d70293b74ef9df6a400",
+    "value": 74,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-agent-loop.test.ts",
+    "line": 44,
+    "endLine": 65,
+    "symbol": "78cb13e771ef3cb2a53edf21255938d4746c5deccfa73e562cda8a5e91c07fc2",
+    "value": 175,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-agent-loop.test.ts",
+    "line": 47,
+    "endLine": 53,
+    "symbol": "acee37132ff1b54d83f9b0587dc7ed8a343e81aa644b0154a68c04ec7290be7e",
+    "value": 60,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-agent-loop.test.ts",
+    "line": 83,
+    "endLine": 94,
+    "symbol": "b1174ecb4f9146645655f6461ac11b02275fa91afc6b58fc1938db26fc353ccc",
+    "value": 61,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-terminal-record.test.ts",
+    "line": 146,
+    "endLine": 153,
+    "symbol": "1fb8242faf7abdd1f138df5ff994084744112631d2aaa820b18f59ebdb45208f",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-terminal-record.test.ts",
+    "line": 70,
+    "endLine": 82,
+    "symbol": "4f31613d7ec7ba8f69f16686a913c45a36b6db5479803b0e6523d034855838b9",
+    "value": 89,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-terminal-record.test.ts",
+    "line": 69,
+    "endLine": 81,
+    "symbol": "964be0edf427fe799f54fda7e19b63634ce232402d1e8c35bf34b3e468d128ba",
+    "value": 92,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-terminal-record.test.ts",
+    "line": 42,
+    "endLine": 48,
+    "symbol": "9e39ec2cc55d7d79523729aac5bce236e566da1292660098b11dadcf3e8d2c1c",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-terminal-record.test.ts",
+    "line": 100,
+    "endLine": 107,
+    "symbol": "ca5d87e667c7f58f999a593ac31c02393b453d3bc446eabd3547775764672bb1",
+    "value": 67,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-terminal-record.test.ts",
+    "line": 107,
+    "endLine": 117,
+    "symbol": "e5c16a844a6f15678b295ee8022e62359e10af37019aa60d95f1ea41da1c265c",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/run-terminal-record.test.ts",
+    "line": 101,
+    "endLine": 108,
+    "symbol": "fbb2e3f5a21f67c6c603f1a643b13062d50e6a018626582b2e9cf39dafa20be1",
+    "value": 65,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/stop-runtime.test.ts",
+    "line": 74,
+    "endLine": 95,
+    "symbol": "78cb13e771ef3cb2a53edf21255938d4746c5deccfa73e562cda8a5e91c07fc2",
+    "value": 175,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/tool-history.test.ts",
+    "line": 48,
+    "endLine": 56,
+    "symbol": "8c7013a194a862cdbe1ad44a704025a24408f3ae4a336070ca59ecd47b54a9e1",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/tool-wave.test.ts",
+    "line": 58,
+    "endLine": 66,
+    "symbol": "40d3cd321a9e67b24be263bd1359e2e98317078255ee3e4b99d7ad2fe94d474f",
+    "value": 86,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/tool-wave.test.ts",
+    "line": 58,
+    "endLine": 64,
+    "symbol": "957ab974e70e8fab8920f41bcbed4ede7bbe24d7e915bc3b12ee925690b9af0a",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/tool-wave.test.ts",
+    "line": 6,
+    "endLine": 13,
+    "symbol": "c925f73f7fb149e570cfaa373e2e3adc5360d3c5a87e86cffbd6ec9020426777",
+    "value": 64,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/turn-yield.test.ts",
+    "line": 187,
+    "endLine": 192,
+    "symbol": "2c6ce049addb98358365c07f11e937af8cde782479457e8921cfbe5b10282545",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/turn-yield.test.ts",
+    "line": 16,
+    "endLine": 25,
+    "symbol": "668744a18be389f21253acd74aea5e98f61dcab790ad6e1e18114e07993f4a1e",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/turn-yield.test.ts",
+    "line": 75,
+    "endLine": 84,
+    "symbol": "677b07c4fe39a82c10f39d19adc7edfaa3677f1b744e2dba7063e76195f89dba",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/execution/turn-yield.test.ts",
+    "line": 50,
+    "endLine": 61,
+    "symbol": "846fefbdc0a6c1032e4faa6de91b9dec75baefa000ec8f07cb2f4c0d6333a502",
+    "value": 81,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/model-fallback.test.ts",
+    "line": 12,
+    "endLine": 28,
+    "symbol": "115326889d6dbbe5043569a52af8356c8c4c328007e55409443f5d93f44d8f6c",
+    "value": 109,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/model-fallback.test.ts",
+    "line": 84,
+    "endLine": 91,
+    "symbol": "3ca3e27c7f65dccc6a0f23b2c21d164a716c7fa7588c66141fbb0311ea1caea4",
+    "value": 66,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/model-fallback.test.ts",
+    "line": 20,
+    "endLine": 28,
+    "symbol": "8c7013a194a862cdbe1ad44a704025a24408f3ae4a336070ca59ecd47b54a9e1",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/policy/native-tool-post-dispatch.test.ts",
+    "line": 67,
+    "endLine": 78,
+    "symbol": "88f58db885966cddbb414fbba64d631b813f6edb5d5dc0b58fd759ee841e14b2",
+    "value": 71,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 36,
+    "endLine": 41,
+    "symbol": "9cc12217c5940a6ccd8056849ae453ab991056b2113fe69a7ba177af2236c0dd",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/run-message.test.ts",
+    "line": 51,
+    "endLine": 63,
+    "symbol": "ecdf806667b9833694a8950bc8d8342e8a191e07aa40db9e42471acdc20f8d52",
+    "value": 68,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/steering.test.ts",
+    "line": 14,
+    "endLine": 30,
+    "symbol": "115326889d6dbbe5043569a52af8356c8c4c328007e55409443f5d93f44d8f6c",
+    "value": 109,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/core/streaming.test.ts",
+    "line": 64,
+    "endLine": 75,
+    "symbol": "1718585e6a6e5ad961a842f55d3d75f34bb5304b52342b77d7a548a158059516",
+    "value": 58,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 183,
+    "endLine": 188,
+    "symbol": "20697038188a9cac18eb10fb3fc9b38fd18792c52fee1937cc207a64dad51148",
+    "value": 71,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 24,
+    "endLine": 31,
+    "symbol": "c925f73f7fb149e570cfaa373e2e3adc5360d3c5a87e86cffbd6ec9020426777",
+    "value": 64,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 320,
+    "endLine": 326,
+    "symbol": "d0d0bf96516dba7af14796fb874337be4265cc807ed27de1d6ab4eeb11d486c6",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 185,
+    "endLine": 193,
+    "symbol": "f63574d22aee5700e0f636484ae8a7063a8e5248745526cdf9ef649b21acb8a0",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-chat-runner.test.ts",
+    "line": 164,
+    "endLine": 176,
+    "symbol": "eca88883124091aede326a7d59d74c79a3bc00200fd55ee3a1529076d34e6e2b",
+    "value": 72,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 338,
+    "endLine": 343,
+    "symbol": "3dc9cd5bdbcfd7cbc7abfc9836d151596b37090eb7218a9cab1fa20d1ce22158",
+    "value": 67,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 670,
+    "endLine": 676,
+    "symbol": "6d35e4529a65c58d0a0ebca7e56d1ada1988d33157cff5840d4c511f4e422f07",
+    "value": 54,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 864,
+    "endLine": 880,
+    "symbol": "77e183ac957bac2e0ecaf22513342865e18d49ce6cc51e6accf4d5af10551b05",
+    "value": 78,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 864,
+    "endLine": 872,
+    "symbol": "a8ce7e4b7945b19b452166ff6f7652cea99d41cb20a6e03c219695f2110739fb",
+    "value": 61,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1011,
+    "endLine": 1025,
+    "symbol": "af736918079805f884ddbdfaadfceffe475d685c26c82b671d230616087c3191",
+    "value": 106,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 40,
+    "endLine": 53,
+    "symbol": "b474d59994832f7e7dbc50f17a513d0644482faefd995aaf13192720e42371c5",
+    "value": 109,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 883,
+    "endLine": 909,
+    "symbol": "c268d3a734188ff2ab03d283f23bb8b50150e97208ff53b4e245e84e17e0d80b",
+    "value": 163,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 65,
+    "endLine": 77,
+    "symbol": "cea9b6ad0f9b49e7d58cb8358f0ac13001ef1b0d3e79c98a4fa3161b8044d65d",
+    "value": 70,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 848,
+    "endLine": 864,
+    "symbol": "d69c35f149249948eed34d431711bb9ef3f1586abf8fda599d08e090d04f7158",
+    "value": 141,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 1213,
+    "endLine": 1219,
+    "symbol": "f5e633f09c85e943cb34cda68e9ab805dbbac6acdb571defce21966f9933dccb",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-handle.test.ts",
+    "line": 888,
+    "endLine": 897,
+    "symbol": "fef16de2ae9af8837ff3895e97f0a22c4d4bb549333c3b0ef6379aef33a701e8",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/agent/test/session-resume-reopen.test.ts",
+    "line": 55,
+    "endLine": 66,
+    "symbol": "b1174ecb4f9146645655f6461ac11b02275fa91afc6b58fc1938db26fc353ccc",
+    "value": 61,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/channel-normalizer.test.ts",
+    "line": 37,
+    "endLine": 48,
+    "symbol": "130a1664f048c3457e3ae4b03ad2bb58d26a9c946f90575f80f7046e5c4115f8",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/channel-normalizer.test.ts",
+    "line": 30,
+    "endLine": 37,
+    "symbol": "1fe28f0f2f634651cee947520a7f52032ea4c093268255582c4b49f4bdfc9a92",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/delivery-chunks.test.ts",
+    "line": 127,
+    "endLine": 134,
+    "symbol": "2f30ad94c417175bae309a639151e9cf5f877aaeb90666efa43ebe5d2b61ae7c",
+    "value": 83,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/delivery-chunks.test.ts",
+    "line": 109,
+    "endLine": 118,
+    "symbol": "d3b0f9dc767f5b8b4a25a7bd8036b21412c61dca74057660950002acd317a0f7",
+    "value": 70,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/delivery-receipts.test.ts",
+    "line": 18,
+    "endLine": 25,
+    "symbol": "2f30ad94c417175bae309a639151e9cf5f877aaeb90666efa43ebe5d2b61ae7c",
+    "value": 83,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/fetch-retry.test.ts",
+    "line": 20,
+    "endLine": 29,
+    "symbol": "d3b0f9dc767f5b8b4a25a7bd8036b21412c61dca74057660950002acd317a0f7",
+    "value": 70,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/github-authn.test.ts",
+    "line": 97,
+    "endLine": 106,
+    "symbol": "6ba3abe533a40d90a3c42538144342ac118a7f26ac2f7a3056afdf44248e2d26",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/github-authn.test.ts",
+    "line": 43,
+    "endLine": 50,
+    "symbol": "90a3ff1fe62c4075c253dbd53f3bab9644a6d0c95f3b26a3efb507c253390539",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/github-retry.test.ts",
+    "line": 53,
+    "endLine": 62,
+    "symbol": "6ba3abe533a40d90a3c42538144342ac118a7f26ac2f7a3056afdf44248e2d26",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/harness/existing-agent-message-driver.ts",
+    "line": 381,
+    "endLine": 391,
+    "symbol": "c16895897ac7fd1fb9d307345f89c34b7fb1f007ee058f6f43d7bab593d3f4e7",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/helpers/wait.ts",
+    "line": 39,
+    "endLine": 51,
+    "symbol": "fd22e07690e1fbbca5dfbfd8e38d7d4ed69f0f2b1758fd290675c946392fe956",
+    "value": 72,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/prg-coverage.test.ts",
+    "line": 32,
+    "endLine": 39,
+    "symbol": "e253485f90d419313651f010885243d2c9d161fd98e09c8a360963b5efdbdcd5",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/provider-golden.test.ts",
+    "line": 15,
+    "endLine": 26,
+    "symbol": "130a1664f048c3457e3ae4b03ad2bb58d26a9c946f90575f80f7046e5c4115f8",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/provider-golden.test.ts",
+    "line": 8,
+    "endLine": 15,
+    "symbol": "1fe28f0f2f634651cee947520a7f52032ea4c093268255582c4b49f4bdfc9a92",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/_router-fixture.ts",
+    "line": 196,
+    "endLine": 207,
+    "symbol": "aea93dfaedb55baa7b51ac75fe7518012f6f17b1099324e8945fa660a654688b",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/channel-grant-allowlist.test.ts",
+    "line": 1,
+    "endLine": 8,
+    "symbol": "5d5529d25fa1423628193761984639a93d672637f9cef7f9ec66100e3e50479d",
+    "value": 55,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/channel-grant-resolution.test.ts",
+    "line": 1,
+    "endLine": 8,
+    "symbol": "5d5529d25fa1423628193761984639a93d672637f9cef7f9ec66100e3e50479d",
+    "value": 55,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/channel-grant.test.ts",
+    "line": 31,
+    "endLine": 38,
+    "symbol": "7a68132a093ae07e0a845547c29b54c609f012c405c7af5e3cf9356af60c1179",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/conformance/no-bypass.test.ts",
+    "line": 13,
+    "endLine": 23,
+    "symbol": "6322b089f9aafe4dcc6136acc5cc65e82c6171ffe015b280ede00bf1edb99e66",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/integration.test.ts",
+    "line": 24,
+    "endLine": 29,
+    "symbol": "11766630311cc4c002c6037027a17a63458414d6bc31a654709452c5f23daaad",
+    "value": 86,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/kernel-routing-access.test.ts",
+    "line": 22,
+    "endLine": 32,
+    "symbol": "6322b089f9aafe4dcc6136acc5cc65e82c6171ffe015b280ede00bf1edb99e66",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/kernel-routing-access.test.ts",
+    "line": 84,
+    "endLine": 91,
+    "symbol": "7a68132a093ae07e0a845547c29b54c609f012c405c7af5e3cf9356af60c1179",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/kernel-routing-waits.test.ts",
+    "line": 200,
+    "endLine": 208,
+    "symbol": "7f2e7d76087c85b237da40873b8118119524e2c6d3b83e7dab5511dc1f62079e",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/kernel-routing-waits.test.ts",
+    "line": 200,
+    "endLine": 207,
+    "symbol": "9d705cffa7dfc5015358f3462f79a7bfe43563b7c4bbbbb4b7392a9281257f6b",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/kernel-routing.test.ts",
+    "line": 83,
+    "endLine": 88,
+    "symbol": "11766630311cc4c002c6037027a17a63458414d6bc31a654709452c5f23daaad",
+    "value": 86,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/message-ingest.test.ts",
+    "line": 72,
+    "endLine": 83,
+    "symbol": "6ce2afe2a65adc1260f0b175abf6f3f823f2b9300f1481a2f03476dc5b2f98fc",
+    "value": 82,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/message-ingest.test.ts",
+    "line": 41,
+    "endLine": 52,
+    "symbol": "aea93dfaedb55baa7b51ac75fe7518012f6f17b1099324e8945fa660a654688b",
+    "value": 62,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/composition.test.ts",
+    "line": 111,
+    "endLine": 119,
+    "symbol": "7f2e7d76087c85b237da40873b8118119524e2c6d3b83e7dab5511dc1f62079e",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/scoped-grant.test.ts",
+    "line": 150,
+    "endLine": 156,
+    "symbol": "147baf26f63d96fa573a29a97cae68935cc47efc5e693edac882b2eca1432059",
+    "value": 62,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/scoped-grant.test.ts",
+    "line": 150,
+    "endLine": 156,
+    "symbol": "18fd55ce72aa8e31f044d6bc5f36fe195f0807221d426cbaa95d181db6d40f76",
+    "value": 71,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/scoped-grant.test.ts",
+    "line": 162,
+    "endLine": 167,
+    "symbol": "6f82a6bd7ec3b3765cd85f418f83f8a16f66895b51c4c6dc5479263fb75db18b",
+    "value": 66,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/send.test.ts",
+    "line": 120,
+    "endLine": 126,
+    "symbol": "18fd55ce72aa8e31f044d6bc5f36fe195f0807221d426cbaa95d181db6d40f76",
+    "value": 71,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/send.test.ts",
+    "line": 135,
+    "endLine": 143,
+    "symbol": "44d2b1c47712b6cf6494354a3b17fe0d8644f600803cc9417fa595b756707bb0",
+    "value": 50,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/send.test.ts",
+    "line": 340,
+    "endLine": 346,
+    "symbol": "5d7019991de52bd116798452bf58a1bec149d2c99f6e28009e23d9ffe26230da",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/send.test.ts",
+    "line": 112,
+    "endLine": 117,
+    "symbol": "6f82a6bd7ec3b3765cd85f418f83f8a16f66895b51c4c6dc5479263fb75db18b",
+    "value": 66,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/send.test.ts",
+    "line": 459,
+    "endLine": 468,
+    "symbol": "928915748a2296a24496061f1dfc4002af5123b898af016fa34d0cd3ab60790d",
+    "value": 68,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/send.test.ts",
+    "line": 321,
+    "endLine": 329,
+    "symbol": "d8c4afe374c921df58b30374bf362a3560aebb2bd2af40f221c441ffa20c304f",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/messaging/send.test.ts",
+    "line": 74,
+    "endLine": 80,
+    "symbol": "f3b1ae8e173c41de2d24dff18ca9fece5b03352c8ec509f1717c32d5e3d0bf34",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/routing-precedence.test.ts",
+    "line": 235,
+    "endLine": 249,
+    "symbol": "9df62a116046066b1a7b6f0305a6706d8b08edee9becf9e268d6535d2f02e100",
+    "value": 60,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/routing-precedence.test.ts",
+    "line": 78,
+    "endLine": 87,
+    "symbol": "fa59bb1ca490eb9e05398be3beae631125a38bfeccfebcabe441e3d5c90fb723",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/routing-resolution.test.ts",
+    "line": 166,
+    "endLine": 173,
+    "symbol": "9d705cffa7dfc5015358f3462f79a7bfe43563b7c4bbbbb4b7392a9281257f6b",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/router/wait/correlation.test.ts",
+    "line": 56,
+    "endLine": 64,
+    "symbol": "259ac48a30142dddf9e0f6f177b5e31de68171894641be9f73a079c6ac182b2e",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/slack-socket.test.ts",
+    "line": 55,
+    "endLine": 62,
+    "symbol": "56525780029330e88e39cb84fdba0055386eebf7d46b974080dd4420ab8970d5",
+    "value": 53,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/slack-socket.test.ts",
+    "line": 140,
+    "endLine": 146,
+    "symbol": "e8814f72914bde55a72c6c35abbc3bb4c2d4c45186bc192e74d6e17394bdbe22",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/channels/test/telegram-dedupe.test.ts",
+    "line": 214,
+    "endLine": 221,
+    "symbol": "d436b1af93110e7f7e9f2e4d1d932b987fdc7e3430499b218eab8014ed26e648",
+    "value": 65,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 23,
+    "endLine": 39,
+    "symbol": "4efe98bd0bed8fd54eb107b0a9a83737b1aa39c68e33a298dd766c527ea7199c",
+    "value": 103,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 13,
+    "endLine": 20,
+    "symbol": "5698baef4a8fff4be4b51ea1f7b774fa402980a1a9bf744ef125abb30d15fefd",
+    "value": 78,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 48,
+    "endLine": 64,
+    "symbol": "06ee7c20a214a434b83bb74ae77c7173b7bc42f55ffedde6814e1841f7c89f9e",
+    "value": 82,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 185,
+    "endLine": 191,
+    "symbol": "0b4652da7b414a2f87d7cc7372331c7dee3e92910140bf7a5f79807739b0475f",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 316,
+    "endLine": 325,
+    "symbol": "529da4c1d85429bffaa4a52f3e19c1abcba0233c3c66a1e00b1cc689033ba403",
+    "value": 84,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 119,
+    "endLine": 129,
+    "symbol": "a17889497fe1d727052a08f436fc67a41de7bd3691678f0cec36cc6171b24701",
+    "value": 63,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 7,
+    "endLine": 16,
+    "symbol": "529da4c1d85429bffaa4a52f3e19c1abcba0233c3c66a1e00b1cc689033ba403",
+    "value": 84,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 37,
+    "endLine": 44,
+    "symbol": "5698baef4a8fff4be4b51ea1f7b774fa402980a1a9bf744ef125abb30d15fefd",
+    "value": 78,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 168,
+    "endLine": 175,
+    "symbol": "0b4652da7b414a2f87d7cc7372331c7dee3e92910140bf7a5f79807739b0475f",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 10,
+    "endLine": 19,
+    "symbol": "529da4c1d85429bffaa4a52f3e19c1abcba0233c3c66a1e00b1cc689033ba403",
+    "value": 84,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 736,
+    "endLine": 746,
+    "symbol": "20e8d81b15832c870da394236b721f865678dd0616bf63f955ef92437073fc74",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 381,
+    "endLine": 389,
+    "symbol": "9c36448333836f1980c2bf1faaaf020902b29f36853bd3494f0db0e6b766db60",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 124,
+    "endLine": 135,
+    "symbol": "eac92ece79833f2d2f9e3b823608314dcb8384e5b05350fed9058403b86ce8a0",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 13,
+    "endLine": 24,
+    "symbol": "2a2afe5a614fdeebb437338708f65064ed245d42f841f224bab84b935690eb66",
+    "value": 67,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 102,
+    "endLine": 115,
+    "symbol": "ceebc9b857c9d081772e7e7f47d4af9b47f28c617e963333f83259667fdbb13a",
+    "value": 53,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/approval/store.test.ts",
+    "line": 4,
+    "endLine": 17,
+    "symbol": "503a5840cacdc4609cf319ad12d2941486961eb6062aa244ec978bd893a986fd",
+    "value": 85,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/approval/store.test.ts",
+    "line": 158,
+    "endLine": 170,
+    "symbol": "ec1a36af4951dd7be2d93deca2165b2f41e634f99c14166f637c68edf13c305e",
+    "value": 88,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/bench/memory-regression.bench.ts",
+    "line": 12,
+    "endLine": 19,
+    "symbol": "c0b8c9a81c1bc325dbacf861bee8db9ff92125ee8a0b160b33ecc840073a823b",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/blacklist/persistence.test.ts",
+    "line": 53,
+    "endLine": 60,
+    "symbol": "5d37f55240eaf4972ee2fa17c09a5aaedc0aa1a614309a1790d15e2788dd7b3e",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/blacklist/persistence.test.ts",
+    "line": 12,
+    "endLine": 22,
+    "symbol": "dd67ab5af80635796faf0c839cb214d5b08e1639176229a6c6416eb7aad46a53",
+    "value": 54,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/channel-grant/persistence.test.ts",
+    "line": 81,
+    "endLine": 88,
+    "symbol": "5d37f55240eaf4972ee2fa17c09a5aaedc0aa1a614309a1790d15e2788dd7b3e",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/channel-grant/persistence.test.ts",
+    "line": 13,
+    "endLine": 23,
+    "symbol": "dd67ab5af80635796faf0c839cb214d5b08e1639176229a6c6416eb7aad46a53",
+    "value": 54,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/helpers/wait.ts",
+    "line": 9,
+    "endLine": 22,
+    "symbol": "353bb70d45886b887df7cfb3af1fc95eac641561422ad902cd778ddae1f4f1aa",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/integration/observability.test.ts",
+    "line": 68,
+    "endLine": 79,
+    "symbol": "42413154ca707ff29f5a87106c4c8d1e86699e7d8bf6578044ca559aa492bd65",
+    "value": 88,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/integration/observability.test.ts",
+    "line": 14,
+    "endLine": 27,
+    "symbol": "6391bcaf0c4428b447835959c555e33d963d6e7ae241bea7c9db656eb2021ef2",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/ledger-core/adopt.test.ts",
+    "line": 6,
+    "endLine": 25,
+    "symbol": "0c65970db89bda624b0dbbf71c3d2081b6743d44a778ea1158fa241d57a097fa",
+    "value": 83,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 12,
+    "endLine": 31,
+    "symbol": "0c65970db89bda624b0dbbf71c3d2081b6743d44a778ea1158fa241d57a097fa",
+    "value": 83,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/provisioning/provisioning.test.ts",
+    "line": 51,
+    "endLine": 62,
+    "symbol": "2a2afe5a614fdeebb437338708f65064ed245d42f841f224bab84b935690eb66",
+    "value": 67,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/events.test.ts",
+    "line": 7,
+    "endLine": 14,
+    "symbol": "c0b8c9a81c1bc325dbacf861bee8db9ff92125ee8a0b160b33ecc840073a823b",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 110,
+    "endLine": 121,
+    "symbol": "37145d60e3c98e7a23d46accf68fe90b1f26347b57edb71a75d14f5475eb6a00",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 17,
+    "endLine": 30,
+    "symbol": "b474d59994832f7e7dbc50f17a513d0644482faefd995aaf13192720e42371c5",
+    "value": 109,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 171,
+    "endLine": 181,
+    "symbol": "b816cefa6d4393113bae89b149eeafece6694f591c39f55c4dd5fe0874fc7cc2",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 53,
+    "endLine": 65,
+    "symbol": "cea9b6ad0f9b49e7d58cb8358f0ac13001ef1b0d3e79c98a4fa3161b8044d65d",
+    "value": 70,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/materialize.test.ts",
+    "line": 1,
+    "endLine": 7,
+    "symbol": "feb85ad18e717eb4f5c06c43b0c1d357755295e665851d580a8ae42c3c7ea0e7",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/message-commit.test.ts",
+    "line": 3,
+    "endLine": 11,
+    "symbol": "9d9e238175203c094eda2521e9065a15274b39ba302503b1ef1fce0663f58927",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/message-commit.test.ts",
+    "line": 108,
+    "endLine": 113,
+    "symbol": "fe9f9b6fd0260eace492f4dcbd9f5739642055a4802dd63b2bbbf8158dae0f21",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 3,
+    "endLine": 11,
+    "symbol": "9d9e238175203c094eda2521e9065a15274b39ba302503b1ef1fce0663f58927",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 36,
+    "endLine": 49,
+    "symbol": "6391bcaf0c4428b447835959c555e33d963d6e7ae241bea7c9db656eb2021ef2",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/commit-coordinator.test.ts",
+    "line": 131,
+    "endLine": 141,
+    "symbol": "232dfe87a79925b0ee83d0dab5e57b53f00338aa49bb5685451e50de6836b908",
+    "value": 58,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/commit-coordinator.test.ts",
+    "line": 115,
+    "endLine": 122,
+    "symbol": "af1ac9d9a57754a4ef32c3f931c317dc0571d0276d0d16ea11de5e801acb8d8c",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/commit-coordinator.test.ts",
+    "line": 134,
+    "endLine": 145,
+    "symbol": "bd99e176771712cc512f6c1b612b1cd2b4bba378e8c2b48c45404d378d30274f",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/commit-coordinator.test.ts",
+    "line": 134,
+    "endLine": 141,
+    "symbol": "c09e32f94d9289e4fc3233d89ad20e249b5be989b70039504b4f7ae915212e7e",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/commit-coordinator.test.ts",
+    "line": 115,
+    "endLine": 122,
+    "symbol": "ec99423ebf8c8cc8880af7dec43344d382a9ce73b04402c0e6ce4978d58856a5",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/commit-sequencing.test.ts",
+    "line": 5,
+    "endLine": 34,
+    "symbol": "503a5840cacdc4609cf319ad12d2941486961eb6062aa244ec978bd893a986fd",
+    "value": 85,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/commit-sequencing.test.ts",
+    "line": 95,
+    "endLine": 110,
+    "symbol": "ec1a36af4951dd7be2d93deca2165b2f41e634f99c14166f637c68edf13c305e",
+    "value": 88,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 359,
+    "endLine": 369,
+    "symbol": "20e8d81b15832c870da394236b721f865678dd0616bf63f955ef92437073fc74",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 447,
+    "endLine": 455,
+    "symbol": "9c36448333836f1980c2bf1faaaf020902b29f36853bd3494f0db0e6b766db60",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 88,
+    "endLine": 99,
+    "symbol": "eac92ece79833f2d2f9e3b823608314dcb8384e5b05350fed9058403b86ce8a0",
+    "value": 63,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/read-validation.test.ts",
+    "line": 1,
+    "endLine": 7,
+    "symbol": "feb85ad18e717eb4f5c06c43b0c1d357755295e665851d580a8ae42c3c7ea0e7",
+    "value": 52,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 75,
+    "endLine": 84,
+    "symbol": "b92f6ffbd8b90da2d83c386bee6829fd22a676e04a90da105a09f4ed453853be",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 138,
+    "endLine": 146,
+    "symbol": "4c50c20e772e3e3cafead3a44728d28852bff82567640d8e78a096072b053504",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 21,
+    "endLine": 35,
+    "symbol": "6391bcaf0c4428b447835959c555e33d963d6e7ae241bea7c9db656eb2021ef2",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/storage/u967-disposition-cases.ts",
+    "line": 177,
+    "endLine": 183,
+    "symbol": "550b04b260ff61e5533c3a1a387e646552946ee2120c6eabffb864b51f085143",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/surface-key.test.ts",
+    "line": 234,
+    "endLine": 241,
+    "symbol": "5d37f55240eaf4972ee2fa17c09a5aaedc0aa1a614309a1790d15e2788dd7b3e",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/surface-key.test.ts",
+    "line": 58,
+    "endLine": 68,
+    "symbol": "77187f51ef3f5d4374b55176f3a8c0b62e0e99bc7dfbfe783307dc61a74842d9",
+    "value": 73,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/surface-key.test.ts",
+    "line": 42,
+    "endLine": 50,
+    "symbol": "78d0a626b8f8e0b4f26089305183a2bcc264d6117dd32e406a53e8d575da916a",
+    "value": 54,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/surface-key/persistence.test.ts",
+    "line": 18,
+    "endLine": 28,
+    "symbol": "dd67ab5af80635796faf0c839cb214d5b08e1639176229a6c6416eb7aad46a53",
+    "value": 54,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/ledger/test/wait/store.test.ts",
+    "line": 286,
+    "endLine": 301,
+    "symbol": "15a7d7451f332f44887005648392c337f9e20b3220e95abcc145fe85bd6f9099",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/message/to-model-messages.test.ts",
+    "line": 79,
+    "endLine": 84,
+    "symbol": "50eb6621f6ee91cfba709b7e7491415d5b8698471ff073583624514f4b039d4c",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/message/to-model-messages.test.ts",
+    "line": 143,
+    "endLine": 153,
+    "symbol": "deda4b433d3aad3c581f26ff22504fb4995dee7265daceb754e7b02355d07123",
+    "value": 66,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/model/models.test.ts",
+    "line": 126,
+    "endLine": 137,
+    "symbol": "18b902be1dea2a600554f54356b8a526f248683301948af67b6c7f0639a7dae9",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/model/models.test.ts",
+    "line": 80,
+    "endLine": 87,
+    "symbol": "e7f0f265d0e9e476e5ca34e31311d798948018baea95cd0e196e3c6e336aa616",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/model/models.test.ts",
+    "line": 87,
+    "endLine": 99,
+    "symbol": "f0022af68e5d43204217177f273418ce9652590286e28a674d4c80c7ab4427a2",
+    "value": 58,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/attempt-settlement.test.ts",
+    "line": 58,
+    "endLine": 67,
+    "symbol": "4aa7bcecbadce6df32a7b04b05d57dbcc17a5fb57013b74294e843ac90a611c0",
+    "value": 53,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/attempt-settlement.test.ts",
+    "line": 37,
+    "endLine": 50,
+    "symbol": "c71e0bd1c8ae08879f72526f2a7c33156d2d0af8c2b288c5c42d9526e84160e3",
+    "value": 139,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 35,
+    "endLine": 41,
+    "symbol": "130fd3b1b969117e8386357b5628efa2273d5579260e3a1d50429058171b59f1",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 189,
+    "endLine": 197,
+    "symbol": "3081809941546ffe169029aef05b4623f14794d64af91ef772469d361c62c7a5",
+    "value": 68,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 95,
+    "endLine": 106,
+    "symbol": "3378fb3454becaca11c068a90b3b621871794376fed888814733d656c301c57b",
+    "value": 83,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 131,
+    "endLine": 137,
+    "symbol": "3734073b84a235c02b66a3715fb4e60e1ada5a521554331e7b2142c00df5ca30",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 203,
+    "endLine": 213,
+    "symbol": "4091e8206fd5ef4e07ded7782a0ebb76df67a2de6ea27dec4a1acf2e0930a9d1",
+    "value": 90,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 338,
+    "endLine": 348,
+    "symbol": "46ca05ff7887288a2116169e27648dd4dd674b6f2ab3f49c20f2c807b1ff52b0",
+    "value": 75,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 95,
+    "endLine": 106,
+    "symbol": "6c2a5daff7daa58bb5da97f548838a3cc1968c2c26b35832cbf9953b7335cb0f",
+    "value": 82,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 279,
+    "endLine": 290,
+    "symbol": "895707cc4eecb86dda0415749f912a5cc122a90582510403f83be89dcf390be3",
+    "value": 101,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/fold-emission.test.ts",
+    "line": 134,
+    "endLine": 144,
+    "symbol": "c319b7c491f5f68a0cf2676338f972f5b1cad2f16129c906f3ea8d7809738678",
+    "value": 85,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 1041,
+    "endLine": 1051,
+    "symbol": "071600d4179f6253e482e50e33fe611aaddc3bc2a1b5c96b3095c85fa98e1100",
+    "value": 63,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 179,
+    "endLine": 186,
+    "symbol": "09d642ad8ee33a444fd2656d258779f448a9f636b6dbf75cf060e28e95fa4c72",
+    "value": 54,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 19,
+    "endLine": 25,
+    "symbol": "130fd3b1b969117e8386357b5628efa2273d5579260e3a1d50429058171b59f1",
+    "value": 53,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 887,
+    "endLine": 899,
+    "symbol": "47e2e49e81062913950f983775b80db5b930956de7e25a6b45b4be52e7a6a76c",
+    "value": 61,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 1042,
+    "endLine": 1051,
+    "symbol": "4c6aec4ab53a96a1cdbfdecb8022c31ce13997b650e95503260efaf543eecd4f",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 364,
+    "endLine": 369,
+    "symbol": "4f5b3395697efe20abea07dce0218cb6db58c07231ff28330acb37e8d2ce7b0c",
+    "value": 54,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 640,
+    "endLine": 650,
+    "symbol": "5e00f809acda129c7247d88d8746357490865b3d486e9b74bb1f67fc14e17391",
+    "value": 59,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 455,
+    "endLine": 462,
+    "symbol": "820c55a9bfe8a84e575bf29858899c1a64bfe79c3ec463e7649f2a4e6d7090c9",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 1070,
+    "endLine": 1079,
+    "symbol": "8384227b66c687be1f910e3ac849d83528b30328ba2858bf206c0192908ac199",
+    "value": 59,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 858,
+    "endLine": 866,
+    "symbol": "a6eee7d92c46a84e7f5b8bdd3391c341e2411c294f5c2c1d8b61e97ad8bd311d",
+    "value": 54,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 222,
+    "endLine": 232,
+    "symbol": "c319b7c491f5f68a0cf2676338f972f5b1cad2f16129c906f3ea8d7809738678",
+    "value": 85,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 643,
+    "endLine": 650,
+    "symbol": "dbb00b56492b02c07a06e067bfabc78b7348384a476aae10854de37a10154214",
+    "value": 54,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 641,
+    "endLine": 650,
+    "symbol": "de2190eff679d3640cfb751e4bdc4211b036cfb7257cbaa1946b365e04236542",
+    "value": 56,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 635,
+    "endLine": 643,
+    "symbol": "e1a59fd9f6f9127e57bf2c320d17699b0dc208a32ec8277190144c7e463516fe",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/processor.test.ts",
+    "line": 859,
+    "endLine": 867,
+    "symbol": "eda95cdc8e95a6efe2886fc9d8043807b934b85a4abf84f0b932060122985974",
+    "value": 74,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/tool-result.test.ts",
+    "line": 371,
+    "endLine": 389,
+    "symbol": "0053871d4493faf1c86a4865d9d137641f04aaa06121b2f97f5a93f0d89ce92f",
+    "value": 82,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/tool-result.test.ts",
+    "line": 133,
+    "endLine": 153,
+    "symbol": "279d8f83aaaac843ba54f60f8ce090452051588b9093bb091989d143bcc33af8",
+    "value": 94,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/tool-result.test.ts",
+    "line": 133,
+    "endLine": 147,
+    "symbol": "bb30a45129ff146e4d06060733504d6bbc4d81a1a9931ff819a0953ef7303b97",
+    "value": 57,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/processor/tool-result.test.ts",
+    "line": 330,
+    "endLine": 341,
+    "symbol": "e411719e6ff942c1569bc8a064fc4b56b7d651259b8d36d21fbe1bea88bc309c",
+    "value": 53,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/provider/identity.test.ts",
+    "line": 48,
+    "endLine": 63,
+    "symbol": "d6a7534dc6229c471deba8fd08679ee4e661dd78787b0ed825850242660244ed",
+    "value": 93,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/provider/identity.test.ts",
+    "line": 63,
+    "endLine": 70,
+    "symbol": "feec63c5857cf3d5d01bf65292bc181987552d0040115fae9fe3e31e0095a460",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/provider/transform.test.ts",
+    "line": 84,
+    "endLine": 94,
+    "symbol": "601dfaefb67dfad38a69c126e0a600d892d97d914685fee5b46a489f134a546a",
+    "value": 68,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/provider/transport.test.ts",
+    "line": 31,
+    "endLine": 46,
+    "symbol": "d6a7534dc6229c471deba8fd08679ee4e661dd78787b0ed825850242660244ed",
+    "value": 93,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/provider/transport.test.ts",
+    "line": 46,
+    "endLine": 53,
+    "symbol": "feec63c5857cf3d5d01bf65292bc181987552d0040115fae9fe3e31e0095a460",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/retry/hardening.test.ts",
+    "line": 1,
+    "endLine": 8,
+    "symbol": "e9d7b24a86f23987448fff491b7612b6b8fde260e98796bf31f399bb27e4d2f1",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/retry/hardening.test.ts",
+    "line": 9,
+    "endLine": 22,
+    "symbol": "f17a475d7c60d5cba1efd9282339067c475cb4430f34e46fbed9085dfa237156",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/retry/retry.test.ts",
+    "line": 1,
+    "endLine": 8,
+    "symbol": "e9d7b24a86f23987448fff491b7612b6b8fde260e98796bf31f399bb27e4d2f1",
+    "value": 57,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/retry/retry.test.ts",
+    "line": 13,
+    "endLine": 31,
+    "symbol": "f17a475d7c60d5cba1efd9282339067c475cb4430f34e46fbed9085dfa237156",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-stream-args.test.ts",
+    "line": 400,
+    "endLine": 414,
+    "symbol": "21d10caae1d6543721d3b33aee029bd52ff1e059333c318ab4d9a60b97229bc0",
+    "value": 55,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-stream-args.test.ts",
+    "line": 30,
+    "endLine": 43,
+    "symbol": "2dda8149132a9980ecaf0299c9d5e28a1c4ac32cbb9d41ce5f2dd16bc6f86ad2",
+    "value": 67,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-stream-args.test.ts",
+    "line": 176,
+    "endLine": 190,
+    "symbol": "7dc7af8869bda0e050234324691a5a9a0f7c93badf5b1e052141a000d339f96d",
+    "value": 89,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-stream-args.test.ts",
+    "line": 17,
+    "endLine": 28,
+    "symbol": "913484034bcedc1d71e9dab9cbc933f327aed917439d3689fadf59dbd369b6a0",
+    "value": 88,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-stream-args.test.ts",
+    "line": 133,
+    "endLine": 147,
+    "symbol": "ae850718c5c99f72fe8400ead7a833fe31a536695f0804103890a1e9d650a8a4",
+    "value": 73,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-stream-args.test.ts",
+    "line": 402,
+    "endLine": 414,
+    "symbol": "b7fa3188690bd654c29c6f550a8cf4ef4fa246d5a1b59a0496041eb62ce8254f",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-stream-args.test.ts",
+    "line": 84,
+    "endLine": 91,
+    "symbol": "efa53c7d6451745e6eb05d6bf2d43ce10cb8d09f497b68d6219afe8e060c4f9e",
+    "value": 76,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 107,
+    "endLine": 121,
+    "symbol": "24fcc1d50fe0aa402ea0f9448bdb3d12b4989769a245e276aa6ae71d0faf02a8",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 31,
+    "endLine": 44,
+    "symbol": "2dda8149132a9980ecaf0299c9d5e28a1c4ac32cbb9d41ce5f2dd16bc6f86ad2",
+    "value": 67,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 66,
+    "endLine": 78,
+    "symbol": "4924c8037b210742021727641bbd0f3a1b49d8cf5624441144dca135fd2b268c",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 65,
+    "endLine": 78,
+    "symbol": "796f4dac1ecce1ff7c22aa626f415165cafce2a4838e6a9793c2c473f398024f",
+    "value": 60,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 25,
+    "endLine": 36,
+    "symbol": "89bcb142bc8b6586ff3bac4b37210e497dba8e2b71e8849150e6d37865674fa0",
+    "value": 67,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 19,
+    "endLine": 30,
+    "symbol": "913484034bcedc1d71e9dab9cbc933f327aed917439d3689fadf59dbd369b6a0",
+    "value": 88,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 51,
+    "endLine": 68,
+    "symbol": "a19cb3d6a91a135cce7739d837e19b3edf9f2daf9f2414fddc78da6163c72140",
+    "value": 80,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run-tool-schema.test.ts",
+    "line": 112,
+    "endLine": 122,
+    "symbol": "bd80d6f03f65bd9c2ff3c6e51473f92322ba6c4b8838673889ea89b81f33ed74",
+    "value": 63,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run.test.ts",
+    "line": 163,
+    "endLine": 175,
+    "symbol": "0ec159d4892220730b52aacbaacd790b32488c693d965ddb4bbbd4d9cfa165a5",
+    "value": 96,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/llm/test/run.test.ts",
+    "line": 33,
+    "endLine": 44,
+    "symbol": "89bcb142bc8b6586ff3bac4b37210e497dba8e2b71e8849150e6d37865674fa0",
+    "value": 67,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/machines/test/fs-wire.test.ts",
+    "line": 338,
+    "endLine": 345,
+    "symbol": "950e21945d89dab2a04caa85f262a913549b8de2ab49276dcca1a6739791c42c",
+    "value": 53,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/machines/test/fs.test.ts",
+    "line": 208,
+    "endLine": 215,
+    "symbol": "7f08f7257780084a34d5b07165851ea28b1d0136fba9adfc3bd6fb298f028975",
+    "value": 60,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/machines/test/fs.test.ts",
+    "line": 402,
+    "endLine": 411,
+    "symbol": "97c5c50cef2ec25557adc649d782eb970477cc22e07d73a89e735e0791c36bee",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/machines/test/fs.test.ts",
+    "line": 169,
+    "endLine": 179,
+    "symbol": "bbbe36c7220f70ce878f7bcd42e160a3c909dbaac915ff15d5b44850e8f17d63",
+    "value": 70,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/machines/test/helpers/socket-path.test.ts",
+    "line": 1,
+    "endLine": 14,
+    "symbol": "9225af7bb33d6425710fc113f0f8fbc77ad88d9726727a873e89cee206cab399",
+    "value": 105,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/policy/test/bucket-lookup.bench.ts",
+    "line": 20,
+    "endLine": 28,
+    "symbol": "b44bab77eec393e4e16e82d5bd96c89a12dd4a43e27c76cdd1f107fa79421461",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/policy/test/engine-determinism.test.ts",
+    "line": 134,
+    "endLine": 142,
+    "symbol": "b44bab77eec393e4e16e82d5bd96c89a12dd4a43e27c76cdd1f107fa79421461",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/policy/test/point-enforcement.test.ts",
+    "line": 178,
+    "endLine": 188,
+    "symbol": "cce84eab17d345b17acd0951bc566e3643bc50f85230e9c9b73606f363e7a6cd",
+    "value": 52,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 143,
+    "endLine": 157,
+    "symbol": "39fb91636a2ae7a2213d9581861705c42cb05169b3709580741f8f3da694faed",
+    "value": 73,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 144,
+    "endLine": 157,
+    "symbol": "434e3a7e17681cf7c091f2bafb749c187aeaa72fd271a1c3102f74da4d10d308",
+    "value": 69,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 332,
+    "endLine": 348,
+    "symbol": "4452854577326daec6fbd46809f86f6edfe9e35c2807f61f2c4ded72509171d4",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/helpers/wait.ts",
+    "line": 8,
+    "endLine": 21,
+    "symbol": "353bb70d45886b887df7cfb3af1fc95eac641561422ad902cd778ddae1f4f1aa",
+    "value": 76,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/ingress-internal.test.ts",
+    "line": 56,
+    "endLine": 68,
+    "symbol": "a6ad7a64aae64681073d4bdac555101d701eab705c615dcce2b1b65d3c3a7d11",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 123,
+    "endLine": 137,
+    "symbol": "11b31edd3413fb9f50750b7bbbe36124e23fa83cd78af601dbd8c1da537516a0",
+    "value": 72,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 231,
+    "endLine": 243,
+    "symbol": "a6ad7a64aae64681073d4bdac555101d701eab705c615dcce2b1b65d3c3a7d11",
+    "value": 51,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 78,
+    "endLine": 83,
+    "symbol": "246eed8127f6817df578bce58684ad5d2c84704fbb9c14c46c0e2225e7c02452",
+    "value": 72,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 78,
+    "endLine": 83,
+    "symbol": "5545b3180fbbf5340fedf5b7bcf06862f46ec458c9b2db7339469b71d9f8f89c",
+    "value": 67,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 300,
+    "endLine": 305,
+    "symbol": "dc3486bc0f13d7186c5599bb45b33f72a212c0d13323cff7edd6aa5fca5387a1",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/machine/machine.test.ts",
+    "line": 34,
+    "endLine": 40,
+    "symbol": "27255c570e836ecff8f45b59f40dbe1e1769119e1a6266832069fe1b2fd97c01",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/machine/machine.test.ts",
+    "line": 59,
+    "endLine": 64,
+    "symbol": "68ba89ade892fe575fbd78aa35f51858a428d13f133c21ed86bfe4d57c4c262b",
+    "value": 72,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/machine/machine.test.ts",
+    "line": 145,
+    "endLine": 153,
+    "symbol": "a68873eaf2412532bbf57035da2c95ce03f9f77fb4b4376d13ccfc684556bb64",
+    "value": 81,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/module-surface.test.ts",
+    "line": 83,
+    "endLine": 88,
+    "symbol": "1ec5df6186a51c24ef9924299d3411a24b4ca9560016f2bc390737c83c58bd0c",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/policy/point-registry.test.ts",
+    "line": 94,
+    "endLine": 102,
+    "symbol": "6926dc9f47ae445e720d2a00a168d47bd23058f7c43c84aaacc643cbee0d9e3b",
+    "value": 78,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 31,
+    "endLine": 37,
+    "symbol": "27255c570e836ecff8f45b59f40dbe1e1769119e1a6266832069fe1b2fd97c01",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 138,
+    "endLine": 147,
+    "symbol": "dbbe6f12459b8328bc76ce92f83ee74811bd3ae7840a75254c4c73434dfb690d",
+    "value": 51,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/wait/fold.test.ts",
+    "line": 386,
+    "endLine": 391,
+    "symbol": "2c58f8e11fff34c4f4cae26bbf97f8556979a381806bf8c87786b9b85850813c",
+    "value": 51,
+    "count": 4
+  },
+  {
+    "gate": "testClones",
+    "path": "packages/protocol/test/wait/fold.test.ts",
+    "line": 335,
+    "endLine": 340,
+    "symbol": "ac3ae7e8111e3ee4e18e2aa5cb682267ab33ee148a42a7866096dcdb514f55fe",
+    "value": 51,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 998,
+    "endLine": 1004,
+    "symbol": "153635ef909d2760ca098cb3c04fb7e8cc73eda0cac22ec4f05c37ea47141a01",
+    "value": 63,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 327,
+    "endLine": 333,
+    "symbol": "40a68964b393715561b4ce9789ededf73c5aeb59fd96ba6c88562a523094725c",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 542,
+    "endLine": 548,
+    "symbol": "62cb8e6c6f8e8de112f7cc064e11b995a3d4d75221be9bd53505567d5ff402b3",
+    "value": 67,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 859,
+    "endLine": 866,
+    "symbol": "7690fcc2056587fd8615ae4c431f5a16c0d12c8de450a66e448e695115f2ad44",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 514,
+    "endLine": 521,
+    "symbol": "9cb719030e879a5afe09a3cabee2dee91f3cc3ea23c9187f42dfe9c12a4925f7",
+    "value": 61,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 327,
+    "endLine": 333,
+    "symbol": "d4cab1a293981a7f6079fd7acd90d6af2601916b328ee5528cb4882af4fc8386",
+    "value": 63,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 673,
+    "endLine": 680,
+    "symbol": "de7124aa7c13c2da6597e40dd36395b89839c0ea95fc6f28553a521ff1cd7144",
+    "value": 67,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 785,
+    "endLine": 791,
+    "symbol": "f1470e1629c0f6ea0aceda15e1ef34c0dffb167897f4eedde53121d26e7bdf6d",
+    "value": 60,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 859,
+    "endLine": 864,
+    "symbol": "f1a2eeae3ae3f3de6c3eaf43c77b9e3cfde490503b9951123c87dbadd8bffd89",
+    "value": 62,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/check-census.test.ts",
+    "line": 310,
+    "endLine": 315,
+    "symbol": "fd6aa7eec9506034da31001b7d1a23fe703d8109558b09bd05e651840f72e1bc",
+    "value": 51,
+    "count": 3
+  },
+  {
+    "gate": "testClones",
+    "path": "script/generate-ledger-archive-manifest.test.ts",
+    "line": 146,
+    "endLine": 152,
+    "symbol": "550b04b260ff61e5533c3a1a387e646552946ee2120c6eabffb864b51f085143",
+    "value": 50,
+    "count": 1
+  },
+  {
+    "gate": "testClones",
+    "path": "script/ledger-archive-review-r2.test.ts",
+    "line": 96,
+    "endLine": 103,
+    "symbol": "613d06174fe793430b9bb98a309e6a30a7153144d4d5f90eb25ef4bace5052c3",
+    "value": 64,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/quality-native-mutation.test.ts",
+    "line": 97,
+    "endLine": 109,
+    "symbol": "14b3ffcdf87021ba6ecb79502f391b36eaff7863e7e8d2157d623230a909a555",
+    "value": 50,
+    "count": 2
+  },
+  {
+    "gate": "testClones",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 240,
+    "endLine": 245,
+    "symbol": "1ec5df6186a51c24ef9924299d3411a24b4ca9560016f2bc390737c83c58bd0c",
+    "value": 56,
+    "count": 1
+  }
+]

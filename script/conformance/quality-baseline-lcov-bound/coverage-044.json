@@ -1,0 +1,3179 @@
+[
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 67,
+    "endLine": 67,
+    "symbol": "unproven-statement:1493de1ebd4b1e0a38dcbd630b17b16e35803268a9549ba511f0c110541d05ff",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 223,
+    "endLine": 227,
+    "symbol": "unproven-statement:177db78780dd0119dad554c8103ce656749f507612f58765ebb5419fb1450734",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 53,
+    "endLine": 55,
+    "symbol": "unproven-statement:1916c060abec92010f343d87df4a6785aa021be7d57235f98fd5f4d5f34c24d8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 222,
+    "endLine": 228,
+    "symbol": "unproven-statement:19a4ad6f44096f0ef22f188e1b5407b651da288b575496629a7b0a615c870c03",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 86,
+    "endLine": 86,
+    "symbol": "unproven-statement:19fa335202c54901a059057b0db3d7fb06b5ea330bb3ad9bace8fffbb68b8c0f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 186,
+    "endLine": 186,
+    "symbol": "unproven-statement:1a04eb014bc153a217b82b3e090b6efce01aa9cc83d21edbbb218d7cbcee49e8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 82,
+    "endLine": 87,
+    "symbol": "unproven-statement:1c8c82ba1dba7e3efe6da6a86c4fd46aecbbd55a98fc8ec308bfc14b8791194d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 48,
+    "endLine": 48,
+    "symbol": "unproven-statement:212d28bd1676863564af264edd4c031618f8adf78a0f1b0c2663cce61f5ce18c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 106,
+    "endLine": 116,
+    "symbol": "unproven-statement:2857412804b7e1e6860cca5d7e3f485f7c709e20d24ee3402266d521908842fd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 84,
+    "endLine": 84,
+    "symbol": "unproven-statement:2ce3cf3cb04e8374f5b13f27480ab87a2f009eaec7640c73dfbbe39078819c5b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 202,
+    "endLine": 205,
+    "symbol": "unproven-statement:32815fb6498deaacab012689f5c0f5141be6099e70c315cf77389d95ad53845f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 52,
+    "endLine": 52,
+    "symbol": "unproven-statement:36c8c9717c2809868343c9d69b23f278b5231ecf64484a005f4c686eefe5da42",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 78,
+    "endLine": 78,
+    "symbol": "unproven-statement:3d1f6024c05e4f912e75324c1e04d00509dbe3593099bf46632a7ba68b95c6b4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 149,
+    "endLine": 153,
+    "symbol": "unproven-statement:40b79ad4c1227d66a531025f75eebb10f8358f5ef39bee7996248ad1acee0255",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 43,
+    "endLine": 43,
+    "symbol": "unproven-statement:484ef2eb54cd8b7830daa974f1de52e67dfe4529834c1fec44900e24c66c1016",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 204,
+    "endLine": 204,
+    "symbol": "unproven-statement:48a3e7321f26e1a20a2ed45b016ea46d437fef2f0b7f52b91cd2341254dcd874",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 124,
+    "endLine": 128,
+    "symbol": "unproven-statement:493c99735e8451c25a45ceae7e42336f05c76fa031ea566430ce819bd96ec6bd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 51,
+    "endLine": 51,
+    "symbol": "unproven-statement:49ab30d3340ea2c64724b96896bb592e899e5333a690c842ed6caa06e79a350d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 198,
+    "endLine": 198,
+    "symbol": "unproven-statement:4e9eb9662db56e24bf7580c6336720b8d92d5cf953c7673f547d6e0e3393c864",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 157,
+    "endLine": 157,
+    "symbol": "unproven-statement:516560d69a4146e6e07145c745e98b19579c969c11c5fe76f9e2e5dad48a1317",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 174,
+    "endLine": 178,
+    "symbol": "unproven-statement:52eb7ee3a5212b55dd63cdbe3270f8284ed521efc5dea100170bf3dafb3b84be",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 99,
+    "endLine": 101,
+    "symbol": "unproven-statement:55b01695abcdf6516289a0653c97b3bc6a302dc667700b040febb9be1f82f177",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 158,
+    "endLine": 168,
+    "symbol": "unproven-statement:569feb8bfa3ceaa87c89c1f86faf21c9a65997f399fa56f89f9ae135f0cbfa23",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 148,
+    "endLine": 148,
+    "symbol": "unproven-statement:5a59d0b55f6bb210078681da130863067874633bac2ca902fa6576277a657e40",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 69,
+    "endLine": 90,
+    "symbol": "unproven-statement:5b53561c09caa9b925af65909e1efb9f1278ddb5ce8cc6ddb0f20cadc78f31df",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 62,
+    "endLine": 62,
+    "symbol": "unproven-statement:6080553c9a6d23495ca57c04ba7e6ca66e70601672c3e03542f3d5efdd7f06c9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 66,
+    "endLine": 66,
+    "symbol": "unproven-statement:66009a243f527628badee05c6c74172c974d4a909ecb0f363f278c7aff70f138",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 183,
+    "endLine": 183,
+    "symbol": "unproven-statement:73476d8b8fda0d33bdbeb991c90df6dc3c1b28428c7109077504c3252829efc5",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 92,
+    "endLine": 92,
+    "symbol": "unproven-statement:7619b44306ec2b1b14a26ee833a9196c3166a19b446a759c7e45234bebe2b84a",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 170,
+    "endLine": 170,
+    "symbol": "unproven-statement:7e09dc2bf2cc21dd28e114bc4e113ad5511deb0d6a5317a1d57f64f8e6d1e631",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 187,
+    "endLine": 187,
+    "symbol": "unproven-statement:7e52fa074230b35397c38a7ff6e8e81b1c972aeaac6e20b8c33947c3d24228d7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 111,
+    "endLine": 113,
+    "symbol": "unproven-statement:824ce2084e20a567e2dff3572d7508a08752bfbccf90c7f53a37d725613921d3",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 226,
+    "endLine": 226,
+    "symbol": "unproven-statement:833c294dba0f193f18fd6862fcb76a76d4a8f22393312c942da06e648ad45513",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 89,
+    "endLine": 89,
+    "symbol": "unproven-statement:83775585f08037fd604ff968cf67f796df4b7554cf8d65e4dcc9c4303e92a71f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 76,
+    "endLine": 76,
+    "symbol": "unproven-statement:83e6825200de73b06597a75e4627555b1d17849cb1b281759fb1617d3351ad50",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 58,
+    "endLine": 58,
+    "symbol": "unproven-statement:85c89d3e5c36038f8084f0bb0f798e17e41815ad4eb3a2acc1a6d40b097e00cf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 150,
+    "endLine": 150,
+    "symbol": "unproven-statement:85fd22dfa567ce7b64d6e5e1fdf8de77cabeab2f7f5c40ffbcae053fad79d77a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 152,
+    "endLine": 152,
+    "symbol": "unproven-statement:86de4bbabb8712d07e03e0ac96bbc0ee80314e0ac8d7fb4a8f9945659b33f1fe",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 115,
+    "endLine": 115,
+    "symbol": "unproven-statement:8a9f0d739586f81ce672e1f86407f3a47fe5751bc8c67b8e7ec106df6fd3d1f0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 188,
+    "endLine": 188,
+    "symbol": "unproven-statement:8addebb6f2dd4f9beb12e69ed44fc0aed90da99b7c1616c1b4f970102cd0b133",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 70,
+    "endLine": 74,
+    "symbol": "unproven-statement:8bdd13316eb400aa63851b2e2267e93d6f58c36bacb16f7115e52d9b0b558f44",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 75,
+    "endLine": 75,
+    "symbol": "unproven-statement:8d1997e86cb3d3b276eabeea52376bb23ce9eacb3242babd4873e9fd928b18c9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 121,
+    "endLine": 121,
+    "symbol": "unproven-statement:9097d05bc008bb898f0241936453315fdfe25a312832915a8f070cc75ed68083",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 225,
+    "endLine": 225,
+    "symbol": "unproven-statement:924fb756c708cb03e300ab0968287eb3c32f68ec2782896eef8f856bec4fd0ac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 130,
+    "endLine": 130,
+    "symbol": "unproven-statement:941f72eaceaa71bf03a332a8fea126a469de180b2b613202f2e818697b846e15",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 127,
+    "endLine": 127,
+    "symbol": "unproven-statement:968b8da514233fdf7fbb4c52636af4cdde9963cbc43d14a22c4cd5228488bfaf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 189,
+    "endLine": 189,
+    "symbol": "unproven-statement:97194c597e146c1e53846eea9e1778ac8284866f69772568210bf45849c668ec",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 49,
+    "endLine": 49,
+    "symbol": "unproven-statement:9a9a873e3f9be9a6d22930e141d3f1660bc203edb962c251539683e8b654136e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 42,
+    "endLine": 42,
+    "symbol": "unproven-statement:9d656aec1b07625c368d99a9e5fb57261d4317ebc51ba9dde3de284b02beb7da",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 122,
+    "endLine": 129,
+    "symbol": "unproven-statement:9e9532e2f6cd259267d8069ff592a3829bd842db27ab5b437e8d166c31b19468",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 104,
+    "endLine": 104,
+    "symbol": "unproven-statement:a53724ca529624cc5e46f881292eafcfc1bf108e6bd44f3785a845cb618dbc25",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 109,
+    "endLine": 109,
+    "symbol": "unproven-statement:a7a0a461a7a1c179892716fccf37bc81f0b8b05993e9d9d1bb369bbdceca87f4",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 151,
+    "endLine": 151,
+    "symbol": "unproven-statement:aabd82f72c9c0bd4b0674ac9eb81a7c7ce28bad356579234e1b842945644c3c4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 182,
+    "endLine": 182,
+    "symbol": "unproven-statement:acb65527231ee447b7fa8435e448ea1d7bbfb6fba2d604addd82d1c69d3956c8",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 108,
+    "endLine": 114,
+    "symbol": "unproven-statement:c0e1e144d22c93882e7fec5c360f62a89be5ca547af3e8d1f7045fec1b3280e3",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 126,
+    "endLine": 128,
+    "symbol": "unproven-statement:c15f9b50a9fdd751735872663d10fcd43dacfe374e2e7e3c4d4e70f96f939245",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 56,
+    "endLine": 56,
+    "symbol": "unproven-statement:c3e29ad1aaecc5d2990a8e931cb3e7363523a9187469b30c920997475a4b62c9",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 100,
+    "endLine": 100,
+    "symbol": "unproven-statement:c525e75dba0ad44c81ba9ab03f86e6022b3efdf0522be6f10b060be0a7cdbc9b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 47,
+    "endLine": 47,
+    "symbol": "unproven-statement:c6620ab07345d370a507b36ed8da423f0411e483ac22cced3b400bdaae62ae14",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 134,
+    "endLine": 144,
+    "symbol": "unproven-statement:c77573ee7cb58f8a2eb2ef1ea415c8fac29399ace7f9c4b88506d5a56a4fd073",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 105,
+    "endLine": 105,
+    "symbol": "unproven-statement:c7e358127f087e03fefd1cb79106e990de23e589b692ba4a3c30f8b917b7bb9b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 80,
+    "endLine": 80,
+    "symbol": "unproven-statement:c8bc8e49d1c8783556f080b03e138d2e9bedbf4f796be7c8c33fe800e1ef557a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 125,
+    "endLine": 125,
+    "symbol": "unproven-statement:cf5b105f2ca054678c2b701a3484d1719c6b0fa0c30ae11c93ad025995c2af35",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 41,
+    "endLine": 41,
+    "symbol": "unproven-statement:cf94bb745fd539d4486485bba98ae1d794b8deb08cf5042f751554db5a6c5785",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 83,
+    "endLine": 85,
+    "symbol": "unproven-statement:d0fe00e852107248036726bfde77f60f425338db391e11aed5de0cc1912a14a6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 44,
+    "endLine": 44,
+    "symbol": "unproven-statement:d2944b58e408597ccfde0d88cc2daa360ba6cf9b1a0d35751f27264edb9687ff",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 110,
+    "endLine": 110,
+    "symbol": "unproven-statement:d2cd897f3d4a24e1e574eafd0816d469948020be8d9cf745af699fc55858cc45",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 197,
+    "endLine": 197,
+    "symbol": "unproven-statement:d7d1e1c735684cc1da5f97f6bf97755253ab94723ab6179c74648dc62f4a226e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 103,
+    "endLine": 103,
+    "symbol": "unproven-statement:dbb64a6b6f3b1378d1cafa8417167d743bd99d7f2e6d747c0c0543cde4a494e7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 123,
+    "endLine": 123,
+    "symbol": "unproven-statement:dee3759550e6ead53f1abedaa74763389adef976a85508d30f5bce3f08a07505",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 50,
+    "endLine": 50,
+    "symbol": "unproven-statement:e00dd93d1dbc23873284787733927211f4414c4e2063a115964382cef12bda1c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 224,
+    "endLine": 224,
+    "symbol": "unproven-statement:e289600f16b2a136158260ca990d3ac9277454f06f1aa816bd9e131c1cfc2d2f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 60,
+    "endLine": 60,
+    "symbol": "unproven-statement:e85982a7d92a614511f3bebf558436a07884869f67edaf2bf3c1268c29716e15",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 24,
+    "endLine": 39,
+    "symbol": "unproven-statement:e9e9955690f6e488f479c0ec0002e78fe0081a065e8402fb5f29e762dfe56d5f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 71,
+    "endLine": 73,
+    "symbol": "unproven-statement:eb93a3590c57554da53940a141838dd8c5d5cedefa256df65d2cac5ac0b0add4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 193,
+    "endLine": 193,
+    "symbol": "unproven-statement:ec115f2c20b1865ab1cc5df94991a6b704eb40100987acd485f0d256a90a4eb9",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 184,
+    "endLine": 184,
+    "symbol": "unproven-statement:ec341adb25a280e05e9d421bc22209ee207febbf9147f76475495a2715d48c72",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 155,
+    "endLine": 170,
+    "symbol": "unproven-statement:f3ed2eda6bc7a3bd940e54f91a2db9809119c28643666ca072cd0ed6d637c86f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 151,
+    "endLine": 152,
+    "symbol": "unproven-statement:f8c4f04978ae6fc783c775f3a77864ebb8402ab5f0759f0749e04e53c3722c06",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 107,
+    "endLine": 107,
+    "symbol": "unproven-statement:fbb4f704185fc995c18c1539ccd8e76232f012d69ca1e241ae804b9a59d428ce",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 185,
+    "endLine": 185,
+    "symbol": "unproven-statement:fd763e2e5252b2cbec64658cdecddb48b23456f872d5bbe2e6692c2847a075ec",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/summarize-benchmark-runs.ts",
+    "line": 77,
+    "endLine": 88,
+    "symbol": "unproven-statement:ff0810720b6324b99fb64a1b2da4e102fe9fcdcf608899c7d34c8afe297ae66d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 23,
+    "endLine": 23,
+    "symbol": "unproven-statement:06aab50f588998557dbf906d979ba9ee0cf551e1baa9302adcf63a6e5d281739",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 9,
+    "endLine": 9,
+    "symbol": "unproven-statement:1868758eea8aebb9a4aa11e8082520c589d5c77b90a859148f982a47f3ae5e8e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 25,
+    "endLine": 25,
+    "symbol": "unproven-statement:354e0547e69cba8060841f4f9b35b3354a238913745adb9fc85e662dcf7d535c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 6,
+    "endLine": 26,
+    "symbol": "unproven-statement:39771efd6de5a6cd76b3ca934e9d0a6fd4b8c82ad86856cc3be710035a42eaec",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 7,
+    "endLine": 7,
+    "symbol": "unproven-statement:8526456e4fabe0c9f68077a8b2e4b7c6a10ba8ae2c4dc831ddc85faef5860767",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 24,
+    "endLine": 24,
+    "symbol": "unproven-statement:9266c0bbe6dcf1bed1d156ebadfffcc57d97defdb276e360869cb9d221d25173",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 10,
+    "endLine": 22,
+    "symbol": "unproven-statement:c27bd75beb1110b4d70d44ec0a5378000992e7d601f85a14aacb8ddddcdcae6e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/tool-target-deletion.test.ts",
+    "line": 8,
+    "endLine": 8,
+    "symbol": "unproven-statement:c79f7fb4697dcef7123e371ce8f49f15b6846b7d1d579312af7d505a232bb214",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 240,
+    "endLine": 242,
+    "symbol": "unproven-statement:029fbb907dac35621cf1cae8ff676dcadfcc27018eef62bb4df965af3765d7d8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 228,
+    "endLine": 231,
+    "symbol": "unproven-statement:08ba590cff3723caeed97ae694d7e9b89ad280eedd0cacdfb44b0ee397903cfc",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 207,
+    "endLine": 209,
+    "symbol": "unproven-statement:13974fc345ca26257777896ad865efd66806dcc1ea84ec3d9a49ed0222e845bb",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 261,
+    "endLine": 261,
+    "symbol": "unproven-statement:16f6a563b3506e02eab575747ce2402b5be7d9d80d474573e527ac26bb4f7f69",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 243,
+    "endLine": 247,
+    "symbol": "unproven-statement:1f4f542e19e40e3e38259e45efa7f61289e9917f5786da141f1580d5c3f40299",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 284,
+    "endLine": 289,
+    "symbol": "unproven-statement:226f6155837a490be431b8d18641ec2b4f4f8c16b9c177179554bb691f8b57e2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 260,
+    "endLine": 260,
+    "symbol": "unproven-statement:284dec4d573f6cf1a9418f4f97a18b89157134e0fdbfc23c711ed370a22120af",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 37,
+    "endLine": 193,
+    "symbol": "unproven-statement:2bfb14320782e84e77bf0d774d3bf3300a6473f46b21ce2699338d8ad9c53cc0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 250,
+    "endLine": 254,
+    "symbol": "unproven-statement:36ef75715892840ac4413fc7c26891cab85d5cd7f24581fe5110aca4ee50ec9a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 217,
+    "endLine": 217,
+    "symbol": "unproven-statement:3c6344a2fbd0fb18b0b4b4fe1a6c967b6f14b6de247fa6c0bb8b9e0bc673fe2a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 244,
+    "endLine": 246,
+    "symbol": "unproven-statement:3fa767a68eb5d5dbc7b6b6929063cba530a758517511ecc6a6e4adc488823b3f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 266,
+    "endLine": 266,
+    "symbol": "unproven-statement:41421ef5c7c04a952893304d601933693a5de33483acbdc1e1c1a790d9885b21",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 229,
+    "endLine": 229,
+    "symbol": "unproven-statement:42ac83845616db3fe79c9d916d671194aa1f80efece5e7220c8dd89064d75593",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 265,
+    "endLine": 266,
+    "symbol": "unproven-statement:4716b2999cd8f0f2a3d2e39897fd2fb6fa3453549dc5761052994fdec35e3d82",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 268,
+    "endLine": 269,
+    "symbol": "unproven-statement:4c975585f573fa16b5aca027cef49f96678c5a7a0b3ff18253114dbe7603f8c1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 218,
+    "endLine": 225,
+    "symbol": "unproven-statement:55895462447c15735224a35db23a094830d2375af00c11647d332d9f88f14c61",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 214,
+    "endLine": 214,
+    "symbol": "unproven-statement:5a444e5f45f7f5411de6a18955ef9273acea50d7afb3b3aa98f44aeadfe2b60e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 273,
+    "endLine": 273,
+    "symbol": "unproven-statement:76d6dd8bd7e05b7bc5adc348fe4401d2cd298bd5c64fd7584b0dfe85f225334b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 269,
+    "endLine": 269,
+    "symbol": "unproven-statement:78c56c3739029813ff5178695266099d95b6bf164dd460add5d69cb57cdc21e2",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 274,
+    "endLine": 283,
+    "symbol": "unproven-statement:79668c4681bb18351030cfaf5bbda41a0fcd62fdcd51152961cc4575679d05c7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 272,
+    "endLine": 283,
+    "symbol": "unproven-statement:7f9bbec86d1c0b38fa09d3e655a4ede66a588d86647f58368fc11615d24f337c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 258,
+    "endLine": 263,
+    "symbol": "unproven-statement:9587832afbf01ce75b9c6b630e7feab33eda9d69d7939f1b15e44bc26b64b2fc",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 291,
+    "endLine": 296,
+    "symbol": "unproven-statement:a71d096a1bbce76252e5352710c65b3d4f5796e7a0347a7d9bbd1d1c558dfd75",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 241,
+    "endLine": 241,
+    "symbol": "unproven-statement:a9e2dd384ff3bbe6c3335d89b5e5828c73099018b83350f8f9aa4b8992d453dd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 200,
+    "endLine": 200,
+    "symbol": "unproven-statement:b3fb1e18a243e35ee632c5578153bccf702c30d486d8f94c23b64dc29b2afaac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 227,
+    "endLine": 227,
+    "symbol": "unproven-statement:b67a5f9dded95248559fbbffe2052270b0450131bd44a1ed15c06edca3823ce5",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 223,
+    "endLine": 223,
+    "symbol": "unproven-statement:bfc043c2f6d3cb4aa3592e8e2cc361240feafccdc74b76aa85e9b40ea980d39c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 219,
+    "endLine": 224,
+    "symbol": "unproven-statement:c08d0f540a8c8dd79808f18316ae1cb305e69b2be9175a199d0bacbc7c28c123",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 210,
+    "endLine": 215,
+    "symbol": "unproven-statement:c6916f7b02f39a34447f8f1feafbbfee0aeba09ed4a7af895d63bf22de656d81",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 256,
+    "endLine": 263,
+    "symbol": "unproven-statement:d19c1beb67faaee2fc0fe794a2eaf71c917eea4652b71ba7f31142502a7e2e8b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 230,
+    "endLine": 230,
+    "symbol": "unproven-statement:d7b616e197bd328c0f5794cf2b142c0d647e8118b5e7222594462e7e34059e79",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 212,
+    "endLine": 212,
+    "symbol": "unproven-statement:dfd6b93eac7481d80980fe0542284517dc84239c1302ff15ba0fef76513e9439",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 294,
+    "endLine": 294,
+    "symbol": "unproven-statement:eabcc6552083392a1e6c86279b9cc491043fdf27a733d261db07f08f2f3bc3b3",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/topology.ts",
+    "line": 239,
+    "endLine": 239,
+    "symbol": "unproven-statement:f0b165d5898d075245ca11c624b80ce9215db9a875ca9028b8913848369cd80b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 31,
+    "endLine": 31,
+    "symbol": "unproven-statement:063d1c0ce42188d9796c64c18a7d3f95616d4559629a5eac43be1fcdd9e5954a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 41,
+    "endLine": 43,
+    "symbol": "unproven-statement:0f2fcbb7ff55df0cc2e8905786813ae9db45fdc75d50c7d88507318166a133f6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 56,
+    "endLine": 58,
+    "symbol": "unproven-statement:11bd37849fa306805b569b5394490b04fefe636b78e194f14dca19784021dcf6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 55,
+    "endLine": 55,
+    "symbol": "unproven-statement:156a3d7ba0720c832a75ae4601f795157a27b8a2738196db2fc1253d8b332af8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 94,
+    "endLine": 94,
+    "symbol": "unproven-statement:18678abafb983ae369a9ba15391a507f9a78919dfd358e50eb74f81ceac34a9e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 65,
+    "endLine": 65,
+    "symbol": "unproven-statement:21da7d7eeaaa3a814b131d76d6db3b7ecd5e05254ceaab7831f1cc172443801d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 67,
+    "endLine": 67,
+    "symbol": "unproven-statement:233a9ceb889623982c89eb8633409b31e40998a5dd7f6bd7cff1975ef3e23d80",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 30,
+    "endLine": 32,
+    "symbol": "unproven-statement:242d245d0bd9ed914bdd331210118fa516f48ca4f9148ccd0e6468f764850ccc",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 27,
+    "endLine": 27,
+    "symbol": "unproven-statement:31fde95dd3072d3f281ee3469df6e0ae72a2bb2538d6db5ec5fc308224f90208",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 99,
+    "endLine": 104,
+    "symbol": "unproven-statement:32ff1ec922ad27fc5ee5534fb3484b8f0119bfefec6db67c4326541dc3a5ea0b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 24,
+    "endLine": 24,
+    "symbol": "unproven-statement:392050bbe9710efadcf0ae15339f8aa0d553a33ef11a0be00f97756ced9945d1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 34,
+    "endLine": 34,
+    "symbol": "unproven-statement:3b8a3e5d869a4200e47785469e90fc4d3c8c3f949383e6bca19442f4dd6403ad",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 95,
+    "endLine": 95,
+    "symbol": "unproven-statement:45639a5d8e8040da881b92a48aef613044f69d42559acade39a7f3db7cd69ff1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 79,
+    "endLine": 79,
+    "symbol": "unproven-statement:45649163fe2b3774e2a9494a972f3c8ce8285e1f99d083e5cdd71a3c401d78ce",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 100,
+    "endLine": 100,
+    "symbol": "unproven-statement:50f59a2cfdb83b39b0a6f89d75dc01b9cb2659c2d91ed14b4c1d8a30c5ebcb45",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 20,
+    "endLine": 20,
+    "symbol": "unproven-statement:5362bf9b221a86eae476c379164916b0e66c5276b2ac27a48cff12050aa332bb",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 92,
+    "endLine": 92,
+    "symbol": "unproven-statement:54f174151a75516cbc31a77ed7d356f1586fa6de6f9fdd864fb6c98c03d24eb1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 40,
+    "endLine": 40,
+    "symbol": "unproven-statement:562e30d0456a29778bdc50ec967abca22140348ae33574107a48209280b46db9",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 81,
+    "endLine": 86,
+    "symbol": "unproven-statement:59079e5e97384c0cbdedd5597db047b1f2f32fcae95b59fdaea471e681342b52",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 103,
+    "endLine": 103,
+    "symbol": "unproven-statement:5ea254a5198209c596e12719762e73e6197908465c03fdcc94e063a961fa5e4f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 83,
+    "endLine": 83,
+    "symbol": "unproven-statement:61852552523cb15e3c30b592f0ffbcecf2806ef6b3930e89e4c3ed7069afcfe4",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 42,
+    "endLine": 42,
+    "symbol": "unproven-statement:6b2d2072c606d55990e35cd62081cdc6d235d0083c4f832ced39894594d25997",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 109,
+    "endLine": 109,
+    "symbol": "unproven-statement:6d555afb75bd5bff60721ab2efedcab477e72558361ae4bf6f649c739322af9d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 114,
+    "endLine": 117,
+    "symbol": "unproven-statement:8128cf054e7913f25acfcdbc33fd991ffbb0ddd711bf4ed2a6d648ce035d3460",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 111,
+    "endLine": 111,
+    "symbol": "unproven-statement:833c294dba0f193f18fd6862fcb76a76d4a8f22393312c942da06e648ad45513",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 50,
+    "endLine": 52,
+    "symbol": "unproven-statement:8a8c015984afdabea4a2ff45a2bc03e22e55b3bc834ead5172861d32e2209402",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 36,
+    "endLine": 36,
+    "symbol": "unproven-statement:8aa05439c0bdda30815dc39761093f0bc3fd643c51ed4c571ebee7d699e36d9f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 60,
+    "endLine": 60,
+    "symbol": "unproven-statement:8ac3be25fbccf9bc062b7d6fcee389af043b8b91fe16ea00d1fff4b73b9ffea1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 38,
+    "endLine": 38,
+    "symbol": "unproven-statement:8cd063f501e81a04772ba2aedb500852664c63e7b4d7d440ab016b4c091c9bda",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 59,
+    "endLine": 61,
+    "symbol": "unproven-statement:8e4ceb0d18d5a2123060c0b5645429880e348072f216c6764233f8ace76aa27a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 108,
+    "endLine": 110,
+    "symbol": "unproven-statement:925356d99d44c72e7665fa9bb93197f851208517d9abf4e4108b3ad71ee2cb60",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 106,
+    "endLine": 112,
+    "symbol": "unproven-statement:9ea2f54c75997a2c77efbd12baeba6203f72d77bebfa8f854424dfdd1e8384bf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 21,
+    "endLine": 21,
+    "symbol": "unproven-statement:a29a49ba27d6c0df2381550ba10a07df982e522440f0a212bdebb29ded94ce64",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 33,
+    "endLine": 35,
+    "symbol": "unproven-statement:b2b45e5d902611a0365b22615dc6783d012a91fd6de4347335ef06c10642224b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 66,
+    "endLine": 68,
+    "symbol": "unproven-statement:b2e1342e1b5a7774fb0e9c4ecab9df7460333fe821c6d2257978172e7683266e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 69,
+    "endLine": 72,
+    "symbol": "unproven-statement:b4363dd78ef910aea99c6f538df39a4538ba79be722ecb85ac00fdd18efe1d98",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 93,
+    "endLine": 98,
+    "symbol": "unproven-statement:b5e06462ea39c6636bbd89c9d872ffe5ee34122bab375063f3b01c47e8a72c03",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 82,
+    "endLine": 85,
+    "symbol": "unproven-statement:b6d2f68873f629cb774e5ae6acf97f17fb33d75b2da5fa9b7180760626a6d8cf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 74,
+    "endLine": 87,
+    "symbol": "unproven-statement:b7be765ab800b00b1906bb4c092899504f3dd0d3be8761655690747a27b136a1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 107,
+    "endLine": 107,
+    "symbol": "unproven-statement:b806eb5d583fea31cd13392b84ffd4fb53e8253907c7414cccd0ccb9cbb22c84",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 37,
+    "endLine": 44,
+    "symbol": "unproven-statement:bc1e4779618f2c30578fcc7273d42a5762ed4bb15109a178af54ba0fd742e652",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 75,
+    "endLine": 75,
+    "symbol": "unproven-statement:be0c06c02252fd330cbb597bbd95659a22fdd8425d15e339795964f55139fdf9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 80,
+    "endLine": 80,
+    "symbol": "unproven-statement:cd29fef19ca4e443f31363a038f53f881e248664eb016c913b446772c10b5ab9",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 76,
+    "endLine": 76,
+    "symbol": "unproven-statement:d090093f64ecb4d2475035e57198f17bc6d6aba7d8ddc6c32da96a675fedc7ca",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 84,
+    "endLine": 84,
+    "symbol": "unproven-statement:d792184ebd06c25360f7e0ae88972a8f01d9b7217657e83da44cf998531c5da4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 121,
+    "endLine": 121,
+    "symbol": "unproven-statement:e0d0f80e6f2b4099a25228073376bae3db5db68149d0ea12eabe47ef9a043faf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 47,
+    "endLine": 47,
+    "symbol": "unproven-statement:e19aa299ca9f9dfdaf62386df6c0ee1ae2e24879b55072fa97fadcd9cf6beb07",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 101,
+    "endLine": 101,
+    "symbol": "unproven-statement:e71a3700a21b44eb3efb8448c4911d4cd7e32b0bb308865e7bc937e9f27790fc",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 57,
+    "endLine": 57,
+    "symbol": "unproven-statement:f2c01888da422ca99cd81fb5f0d6a0d3f54e44f1a6475a0210b6d6fd129f31f2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 22,
+    "endLine": 22,
+    "symbol": "unproven-statement:f3a6068ff84043b221c3cb4725dfe4392d0a9c466c3345d719ec1e9ffd1ae937",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 51,
+    "endLine": 51,
+    "symbol": "unproven-statement:f57f478ce02829dda8f91914b07723ce7e6723cae2dcf9a39bcf02bd103bcd5b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 72,
+    "endLine": 72,
+    "symbol": "unproven-statement:fd0c23c8141e6fd456b982f70621e9b7dc7da3986b60a39b909e3ad05b8d6c21",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 120,
+    "endLine": 122,
+    "symbol": "unproven-statement:ff5aecc6902908cc1c718f4060d15fe35b99f967871c3fda8efc2d78cedc4ae4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 77,
+    "endLine": 79,
+    "symbol": "unproven-statement:ff7b9ecd90a6bfdc548cfc1a578482f3e3fd47447f87078a8a407577a3f4d660",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 30,
+    "endLine": 30,
+    "symbol": "unproven-statement:1427a3713fb383fcf6c17632258a73a83c4f2e1a3f95f52a7b8ee6f2751fc7a4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 29,
+    "endLine": 34,
+    "symbol": "unproven-statement:1959710e1f81a02e83c1b3e085a77bbe8d295a47a120c6e1cd6c3b9c43220a5a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 66,
+    "endLine": 66,
+    "symbol": "unproven-statement:19a41b6ead79a9f870b550ac7c549c8fdc98221402a6b8141d3a43f11fb4c66a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 20,
+    "endLine": 20,
+    "symbol": "unproven-statement:247235db02b795c31ec5f4b86a1a386e1774b48a76ec02eeedfe5cbb4af18dcf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 16,
+    "endLine": 16,
+    "symbol": "unproven-statement:2bf29f71028c1f0cacadfd799c06bdf504873491ff9439e4514d990310a17f60",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 41,
+    "endLine": 41,
+    "symbol": "unproven-statement:34aa255a8b1a04423e9604abdacae26a159827735a6f4691861c08a157525bc7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 5,
+    "endLine": 5,
+    "symbol": "unproven-statement:396cf114fbbd17ad6f8908bae5e4af77670b32525c943a5a1a8610859225b8d1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 45,
+    "endLine": 50,
+    "symbol": "unproven-statement:47ed70fb46e6358bcda004944f9c60c313baafb0bc5f1817ccf7ac1c30b244a5",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 33,
+    "endLine": 33,
+    "symbol": "unproven-statement:4c4d0b911ccc415f26bb26e91680b203db2ad0c830f5ab2d7662ae542cee1a4e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 17,
+    "endLine": 17,
+    "symbol": "unproven-statement:5ff9cb2662eb6af4c12896bdd62c44da3882509e1d790153e7305ffcde16b63f",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 23,
+    "endLine": 27,
+    "symbol": "unproven-statement:61e6ae157a7842039c044cd861ae38be42d465cb4d0e56e285eac8844502c778",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 52,
+    "endLine": 69,
+    "symbol": "unproven-statement:66d7f98c7dab33a010d3fa521226b5d10502f0a303ee53d7b1a6649564417e6d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 32,
+    "endLine": 32,
+    "symbol": "unproven-statement:6ae793f99de0d20a5f87a9f9bb53b2d427863e7d916c1cce9f4f5d47659b0e0d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 42,
+    "endLine": 42,
+    "symbol": "unproven-statement:7124240127aeb4413188143f1a8bef891478b46f6f0d27aa85b4df4de53e8eb6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 53,
+    "endLine": 63,
+    "symbol": "unproven-statement:739da0a038667413c37c8bf783101cb45836708f63da3f5c255c230d895195a3",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 67,
+    "endLine": 67,
+    "symbol": "unproven-statement:8120eeab039e09d1f83c1278161a2712d036e8f5406523721feccc06d5761967",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 65,
+    "endLine": 65,
+    "symbol": "unproven-statement:8663ffd4100392bb12f642c7828b42415d32a201a1210452bf12ba633802f27d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 9,
+    "endLine": 9,
+    "symbol": "unproven-statement:889dd175f8f5a5e94ced9609f424a3fb57ac0fda8f558a25ae49907f5ed73e86",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 6,
+    "endLine": 6,
+    "symbol": "unproven-statement:89f046ca5310a2d099dddd79c3ee4b43e1a38f9462b78d016be960ab40161bfc",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 46,
+    "endLine": 46,
+    "symbol": "unproven-statement:8aed6dcd548e2ce1fae9552fbfc4e9eea18f374a84e5ca4e2cf8e585f4c8d241",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 40,
+    "endLine": 40,
+    "symbol": "unproven-statement:9b6513523d21b67b30f8e26e0618b827277f2dc1df703f09ab34909257c45904",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 15,
+    "endLine": 15,
+    "symbol": "unproven-statement:a5f2f703ae1e37f0c3850ae4667483e4618d8d5ac37547c975f55fa0b82e5c6b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 19,
+    "endLine": 19,
+    "symbol": "unproven-statement:af11d3e1efef62c63d5aa7053896605fe3e84a5831af2bec19d57e112eb9883f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 14,
+    "endLine": 14,
+    "symbol": "unproven-statement:bbf28f7b0387926e0d8e367bf527b61d05713582bf2c9fb740ebbab6c57375d6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 26,
+    "endLine": 26,
+    "symbol": "unproven-statement:c2ab1c781cab14c8fd78f3e0c16a354e3598dd082053c17a868b8029535d4af0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 68,
+    "endLine": 68,
+    "symbol": "unproven-statement:c497f4783d7b5e9e101e915093345636e5bb9b9b3a2238fd36935ab36bfc1ecd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 25,
+    "endLine": 25,
+    "symbol": "unproven-statement:c5879e53616da34ea0ce3b17918a304cade87df059b8013b984727834332bc67",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 13,
+    "endLine": 21,
+    "symbol": "unproven-statement:cbded442c7a2cc9cab239d046b31de0157605c61f8d268ca283d1eaaece41ca9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 64,
+    "endLine": 64,
+    "symbol": "unproven-statement:cee393afdc83fc3946ff1ff5a647097c2f553111f3411d3a787763c8cb2ba3e0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 37,
+    "endLine": 37,
+    "symbol": "unproven-statement:d4790d3faf54d515412572f6ac7c1c7449fe68cfd3c0265c4b4ed183fef1302a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 39,
+    "endLine": 39,
+    "symbol": "unproven-statement:d916bfbb4a1e0828e3c82a92bb9243f0b3030ac2a07c8e0ac7bc97eab550bcac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 36,
+    "endLine": 43,
+    "symbol": "unproven-statement:e3e1441d5e27e3b24bf58a83760313b5af99750a8e86765f2eeb5ec90fb57676",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 24,
+    "endLine": 24,
+    "symbol": "unproven-statement:f0aca238b64636152ec980ae040ea18dbd76901a87aca9353c435d7d853513b8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 12,
+    "endLine": 70,
+    "symbol": "unproven-statement:f7968bb5c1e444459d978a4f17c88476301806244092a3907597baccb3579ca9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 18,
+    "endLine": 18,
+    "symbol": "unproven-statement:f9210f472e416e0f3dcd2c66fe63e89137cd7810c35f077d059c50ceca588c1e",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 443,
+    "endLine": 445,
+    "symbol": "unproven-statement:00d11bdc663f5639fb5fff637c4a67a76ce80a38584e43fd2bce139e0838d749",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 119,
+    "endLine": 119,
+    "symbol": "unproven-statement:01e478a10a87d4df4f928c0753d2bf6cfcb86135fe22bbd3f874d3b8be66fc9e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 407,
+    "endLine": 409,
+    "symbol": "unproven-statement:034e8752944286b2ffe61808ddcc7db813089fe508614b5d4a32f40570acfcbf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 224,
+    "endLine": 231,
+    "symbol": "unproven-statement:05a24a7b2b2915714537b1506f19159d5bac75ec90aacee68ac400fefdaa3ea4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 435,
+    "endLine": 437,
+    "symbol": "unproven-statement:065ddeb0cc38eaf57e7b855c299fdd8398a3dafff4016714bdb0fd903422a79b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 423,
+    "endLine": 423,
+    "symbol": "unproven-statement:0cc68f6ba9cc83b3493a6e8ce5c6680d7b7705f46c7d9d089b9b83bf58d5c912",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 359,
+    "endLine": 359,
+    "symbol": "unproven-statement:0e250e71e3520a174e22f7a504d7bad6dd69864de3a191535b47c7c09bfec132",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 175,
+    "endLine": 175,
+    "symbol": "unproven-statement:0fb438fb3a8d17cd2e2e6238ee9773daf5844588f11357f7befa6b3ffb4a1ca7",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 257,
+    "endLine": 261,
+    "symbol": "unproven-statement:1168b42c06ec2c833c4f34265b6c062dd7a9d8cdb33772048c213e7e0d230504",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 245,
+    "endLine": 245,
+    "symbol": "unproven-statement:1509b029ec81624f93172a89fb8d4f46e3b264f454d4699bc596b0d27bdec088",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 295,
+    "endLine": 302,
+    "symbol": "unproven-statement:15223dcd874a2a9068e67da2c87233bf11152c039f0c414c6800a84ff67093d0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 327,
+    "endLine": 327,
+    "symbol": "unproven-statement:157a746c13bc5bf14dbe1e39b72250897c7e0499c9ffc57c512436fdfe585032",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 177,
+    "endLine": 177,
+    "symbol": "unproven-statement:1596c35ef401219ac3823a3ba317ff39369ff83b870cf548a2c10f8542a9577b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 307,
+    "endLine": 307,
+    "symbol": "unproven-statement:15daee802f31153bec89dffa8f506408d1669ae2cd2a87d77549b248ece000af",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 211,
+    "endLine": 223,
+    "symbol": "unproven-statement:17f99c2df30829c158675c9dc9f6e56996fbff104d7e0d9703cc3d0d6c71939b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 241,
+    "endLine": 254,
+    "symbol": "unproven-statement:1cb57fa565fbc314ec7235850874f1f507655c6de5febe260c1e3f43d1504b75",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 190,
+    "endLine": 192,
+    "symbol": "unproven-statement:1ebeb3e4a8d909c9b0497d2fc181c95f6b9768457bd00d0bf25c0517e1369050",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 431,
+    "endLine": 433,
+    "symbol": "unproven-statement:1fce7da59f4464e88b90a4923db67d666cc5d75a0574783c3ff479511560f2d6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 417,
+    "endLine": 417,
+    "symbol": "unproven-statement:21f836a044dd9bb04ade4dd6f6f021a7467c59d25b1d7bb79fc2891396db822f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 436,
+    "endLine": 436,
+    "symbol": "unproven-statement:242163c910ba90594de95231d6a9b811586a972b7aba97b864cf1d4dd9fe1042",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 319,
+    "endLine": 319,
+    "symbol": "unproven-statement:255c06df1ae9d3c7ff7534afe2772c2208ca0368c3a48395e81459204b6453d2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 332,
+    "endLine": 335,
+    "symbol": "unproven-statement:260a86fc776b890e66ec9fa098388438e8a2273daa83330fdfe444d01f37d3ac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 306,
+    "endLine": 306,
+    "symbol": "unproven-statement:2744b8744c2f64290b5717b3d503b9db7d25100030f6e4ac7f601245d9b22f75",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 290,
+    "endLine": 290,
+    "symbol": "unproven-statement:2868e149c895eada2e7ff21106ba3d7ce540fc76b9cbb49798e50c628f5da205",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 429,
+    "endLine": 429,
+    "symbol": "unproven-statement:29e88bbe3cd4c4aa22dccd11c53f18165b0c5b0d436e5119db74e73c67f4ca62",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 157,
+    "endLine": 159,
+    "symbol": "unproven-statement:2fe2b2de2de27ef5fc0fd3e7e630fac0282be8eeb23c1b8f5b8c8b801a1888fd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 161,
+    "endLine": 161,
+    "symbol": "unproven-statement:321efe4fe318be56d0fad8599aa0fbbaaee71f72dfe02c799d73958bf1c82a8d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 363,
+    "endLine": 363,
+    "symbol": "unproven-statement:34993e0dde3dd761d6907be00774fd305aee2cea2f961fc4e0881a1e682f4d87",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 259,
+    "endLine": 259,
+    "symbol": "unproven-statement:361515ba8bb705987af8be58a1689fe93883f5a0aa708d5a1bc8a5d703bd5ca9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 212,
+    "endLine": 212,
+    "symbol": "unproven-statement:36392a5ca452ac567a97244e0b7296468ac2bfcae51bd3e05a1f1604bbf8dcd0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 203,
+    "endLine": 203,
+    "symbol": "unproven-statement:3667dab20e190a4b0c9015f9468a720c656101231d73a14b3efc12171a3505ec",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 353,
+    "endLine": 353,
+    "symbol": "unproven-statement:36d922b01fab828d9f08a43d4d2a810df490503b11a9ce322338aab537b645a4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 317,
+    "endLine": 317,
+    "symbol": "unproven-statement:37aaa6aeb88b4da6e0be9c5a58812a9c18b39c7c365a7a112ba22ad775faec71",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 253,
+    "endLine": 253,
+    "symbol": "unproven-statement:37fe0c7ca6641f87e450887ed9c50e4c35d869d836b7ac1ee7a6cd7c6bf2e5bc",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 420,
+    "endLine": 420,
+    "symbol": "unproven-statement:414db28148506fd159a1eb7a71835b02e2e8ed6599ab6aff45efb16c3da0f509",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 236,
+    "endLine": 236,
+    "symbol": "unproven-statement:431ed804c12d978ab5586915e1cecdc4707332bcbfafcbac5e4a0a0b4463f26c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 444,
+    "endLine": 444,
+    "symbol": "unproven-statement:43cdea24be06d8c42ed5788b886dea4c594411761598789e511196a222dd7625",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 93,
+    "endLine": 93,
+    "symbol": "unproven-statement:445114a6f3810bcbbbf78449de96fd02f80aed8d0ffd7682ee2659bbf9af588f",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 238,
+    "endLine": 238,
+    "symbol": "unproven-statement:4507a25334d9a01cffcd5dbe7766411e28ba0d710893842cb216e68bd8c03e29",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 196,
+    "endLine": 196,
+    "symbol": "unproven-statement:4c83b0686b84bf974aad094b037bc703a7bd66699c45eedc8411a9aa8a711191",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 180,
+    "endLine": 182,
+    "symbol": "unproven-statement:4cabbdbed59d27a6950c9be8441b979aea639fd73445587baf43df4deac6c087",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 108,
+    "endLine": 152,
+    "symbol": "unproven-statement:4dec2ed579b0c87057f9bb9a4e84c9142d5996ca99f392cf5f25295acb23d39e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 240,
+    "endLine": 240,
+    "symbol": "unproven-statement:4e39351797a3f8c17f5672d9eef686a300b994a29c8f1c439d6067f2d9e825e0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 364,
+    "endLine": 364,
+    "symbol": "unproven-statement:4f650681a49c76867fc93cc8a234e78de12460f071cb7a9225f2e93788d8f9fc",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 220,
+    "endLine": 222,
+    "symbol": "unproven-statement:4fe3448ac15cbc1bc006e47bcf3a1e717598ec577cd0a3f3179a2149520c5ab1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 438,
+    "endLine": 438,
+    "symbol": "unproven-statement:51269529c2c0cdf9c74352c096f8c6777fe41d1486640334edb1c1f1fb3b3da6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 425,
+    "endLine": 425,
+    "symbol": "unproven-statement:52fc39cc608a76d9fa71bdfdd340d4ff5036086a880b5c53341a367952b0fefe",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 243,
+    "endLine": 245,
+    "symbol": "unproven-statement:56867b091a0171b665db1a53561f3b1fe19543b51630e7735efdc065892a36c7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 256,
+    "endLine": 278,
+    "symbol": "unproven-statement:5c58472963890879bf259e9837a804e231c5bc9f6bf68d4d6fed13f0c207102e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 130,
+    "endLine": 130,
+    "symbol": "unproven-statement:612751b872fe2a7cbf01b472ed752c2746618fab406898f0d00d407299a64332",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 109,
+    "endLine": 109,
+    "symbol": "unproven-statement:638fbef1947a021600f28a6eda05f11d0dbcc5e1d5d07070c63cbbcd824e0378",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 151,
+    "endLine": 151,
+    "symbol": "unproven-statement:6463e983142c901791d05fde850d2abfe994088bd17f716e1eef56f3cc449df6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 131,
+    "endLine": 139,
+    "symbol": "unproven-statement:6ae9f00748a8bda7f8e41b9a245bfb546048b9d37fbec5fd7ef5899582153561",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 163,
+    "endLine": 166,
+    "symbol": "unproven-statement:6fa2595dbd6596ec18eefab12bd90a0d7d07f8602d55dfe4e3c66ec816bd4e19",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 263,
+    "endLine": 268,
+    "symbol": "unproven-statement:729b7ff53c9579cee00aa2480742aa2698aa3bac41a0a19641377cc85885a5e9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 164,
+    "endLine": 164,
+    "symbol": "unproven-statement:73b5496b16031f835eb18979333d11eca30f9c015028c370240e9997ea5f8634",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 140,
+    "endLine": 148,
+    "symbol": "unproven-statement:74492337198b1098af5a5e21464440eb649e68680a286109c1b79e0b73fd2631",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 264,
+    "endLine": 267,
+    "symbol": "unproven-statement:74f02e9b8777f04b7746922e562a59ea1351df263a3ded4a898e197687031d1f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 242,
+    "endLine": 242,
+    "symbol": "unproven-statement:779291a23ddf149a7e2fd77c2d6a7d7503fb1a81e1f2285424a6fe3cd719bc9c",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 428,
+    "endLine": 439,
+    "symbol": "unproven-statement:77c4ffa98f122c03705da1fcddb63d86fc6661c0007bd50f000b2f8571d5d861",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 179,
+    "endLine": 179,
+    "symbol": "unproven-statement:789f068ad47c851a1d43545088bcac67958fc4f70482afe659d225e38beb6622",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 340,
+    "endLine": 340,
+    "symbol": "unproven-statement:7923feced955877d8ef03c6ac2fc0925af18ff743083eb21f59d92135e54b177",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 111,
+    "endLine": 117,
+    "symbol": "unproven-statement:7f3e2c653581418fe366a76df6415a6a6d8d91607e6dfa8fb8d96268047edfcd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 331,
+    "endLine": 342,
+    "symbol": "unproven-statement:807044a1cdba83c838e8f9a0bbb118ddad2235e36ed6bd82f159441495017d93",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 202,
+    "endLine": 202,
+    "symbol": "unproven-statement:81aaa38bd7f34956fcfe9a89bae65a5ab95c0d801e67c1601d3bd9cc44058cc6",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 288,
+    "endLine": 288,
+    "symbol": "unproven-statement:81afa0fad64446a9ca6d8cb73db6b58630b7f63dec91973730bcff490171c982",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 271,
+    "endLine": 276,
+    "symbol": "unproven-statement:82d57ce51920d189c8990d2f81eca1b625e2b48c2fc0e2ca729a69750465db7c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 362,
+    "endLine": 362,
+    "symbol": "unproven-statement:83a3dea2e60796a14c8101dd85ab0bcb0ab103da1d866d9175cd4ed45f8cca22",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 361,
+    "endLine": 361,
+    "symbol": "unproven-statement:87692ed3681a9a7377537d3459880fbd2b8f0f7bf39e185a5f3c41771c4bb7ef",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 357,
+    "endLine": 357,
+    "symbol": "unproven-statement:8a60d6f610cdc86aa7d2eaba19e5b40715dccec2ac30f93744b7447c9ce5adab",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 227,
+    "endLine": 230,
+    "symbol": "unproven-statement:8a6df57090635f26a77831cec0213d412b638221efcaa327d6d2b4eedc5864aa",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 122,
+    "endLine": 128,
+    "symbol": "unproven-statement:8af97f86e89acfb4cc07ccaa5a48db0f87146b75251b47ee7dadef0387a002f4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 360,
+    "endLine": 365,
+    "symbol": "unproven-statement:8e4759bc6bd110b4a0f9e5f657e54c2ef4b91563559eb8994564c5bf294fcf77",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 200,
+    "endLine": 200,
+    "symbol": "unproven-statement:9097d05bc008bb898f0241936453315fdfe25a312832915a8f070cc75ed68083",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 185,
+    "endLine": 185,
+    "symbol": "unproven-statement:90d872d0d1ba0aac3e95544d5c69dccc73fd9aaeb7a6febf2e40dddbc74b5995",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 218,
+    "endLine": 218,
+    "symbol": "unproven-statement:9153e11a7abe177f2e6a382ac0c23733509eb6f7756ba93cd472446abfc7c6b2",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 293,
+    "endLine": 293,
+    "symbol": "unproven-statement:91b1ce27aa48e21cf5d6a43d4403221a22967e938093f06bf03ee26ae1df6d7e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 121,
+    "endLine": 129,
+    "symbol": "unproven-statement:91d025e0f47e4004abd2d6850c942a017f96bbc09533e4911eaf0aa6e0ff38b1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 320,
+    "endLine": 320,
+    "symbol": "unproven-statement:93e2b5c4b6d42e859091a71e34292596c84f4378b05cb7b2a72269c10aaf03dd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 150,
+    "endLine": 150,
+    "symbol": "unproven-statement:956acb02fb144b0b74cd960eeecd30fdaa58748676382e2740f89f556e37d12f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 330,
+    "endLine": 330,
+    "symbol": "unproven-statement:96e7b6c377a9a168396c54f99fea28aee3c3f0e55988877cd067743f50b297ca",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 304,
+    "endLine": 304,
+    "symbol": "unproven-statement:97249eb57142ce3c917efcd07b0515cd841c804b8afb424407bdbc711db0aa9f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 270,
+    "endLine": 277,
+    "symbol": "unproven-statement:97eab5d6f93bc942a36d1aaf353a220dd055b9dfcb14a1e142a786e354ab3fc8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 132,
+    "endLine": 138,
+    "symbol": "unproven-statement:980814cd8b704c09c0beef872de5bdb879ecf78d250cfa736a5ddb3854a439c8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 199,
+    "endLine": 199,
+    "symbol": "unproven-statement:9d1089ab0e953af38b95b566eb8e7fd6796fffc1c05bd41a9b78cc32537c327f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 339,
+    "endLine": 341,
+    "symbol": "unproven-statement:9de14432c199f851376384e0135d75cdb62f0d314143127bb996735614262feb",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 214,
+    "endLine": 217,
+    "symbol": "unproven-statement:9ded70953ea23b080e5caa15510b99f453e32977fc80a7af8fe4987321563f95",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 318,
+    "endLine": 321,
+    "symbol": "unproven-statement:9f9da732b60cbc5f0ebc7e24365d554621a61fcef2d814ec554036cefa0b0a4f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 92,
+    "endLine": 92,
+    "symbol": "unproven-statement:9f9e70894a05831621b82854d181315670471c755b0e266ea97d5413dff51e22",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 149,
+    "endLine": 149,
+    "symbol": "unproven-statement:a3e9889bad8fc82e8a5ac623a79b7ea567db1fcb31b37faeb4d7b706788730e1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 262,
+    "endLine": 269,
+    "symbol": "unproven-statement:a67380cd46fa1e658d46774d65f65bd06ce56b9dfa1c081e51c1296c14ad7c8b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 210,
+    "endLine": 210,
+    "symbol": "unproven-statement:a71ce1c6f66f811707761b6111afa49a8718804a3c72693402cb1080450b215d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 183,
+    "endLine": 183,
+    "symbol": "unproven-statement:a989f2d519985c7906bdb712d95ebfb92e045a52129393ccc2f49236f63a1a32",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 158,
+    "endLine": 158,
+    "symbol": "unproven-statement:aa621ea5a0a7af78acdb9567aa2e0d78a57c438f3d5898773ea7e7960f761147",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 395,
+    "endLine": 399,
+    "symbol": "unproven-statement:aa705decf682dc6cd4e23deb497f5f4c70544106be986ef104b24586a9e164fa",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 213,
+    "endLine": 219,
+    "symbol": "unproven-statement:aabbe843598526726995c2000da53b5bc577e3eb1be3e044e3cbdd70d50402bf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 337,
+    "endLine": 337,
+    "symbol": "unproven-statement:abaa4c4ad7151312853295d4e0dafb49b69bbbc599ac3a8227c5ce2ef1d013c5",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 415,
+    "endLine": 415,
+    "symbol": "unproven-statement:abd2e5e6a09e85a479077485f262f572779e181f28274d7719192dff6c6bf678",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 416,
+    "endLine": 416,
+    "symbol": "unproven-statement:ac336f2133e1f42024d2fe033c7df3b11ae45aadf94adc377870f6d632fb3f84",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 94,
+    "endLine": 94,
+    "symbol": "unproven-statement:b23163e6b9722dd65c6e11be101c5bf2003483b56e8ca72bb26231d36537bb9f",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 156,
+    "endLine": 156,
+    "symbol": "unproven-statement:b2504368e2ba5d6992d56ef70702d717c21b82ac1266c0e65d2c4d23cdab39d1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 398,
+    "endLine": 398,
+    "symbol": "unproven-statement:b2812ce6da2c7816c5f44b0634de1d93fdf08522e8cffd56b4d2459e011633b6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 426,
+    "endLine": 426,
+    "symbol": "unproven-statement:b458790d767f65fcb443962dc0ac4dcfd340a71295a11707fd0b06f81d7fd16c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 226,
+    "endLine": 226,
+    "symbol": "unproven-statement:b82f187d88ea793d859309978a328de26c7fd7d67bfc75eab64255578f872c56",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 237,
+    "endLine": 237,
+    "symbol": "unproven-statement:bc56a6afa7960015aeaae4744e4bf2f6ee50c44bf1bbe14a5d058c83cf0a9202",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 141,
+    "endLine": 147,
+    "symbol": "unproven-statement:bcb3a66354b92583e01894ce28ac79fc80ff905b07ef6708568ae4a62962678b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 105,
+    "endLine": 105,
+    "symbol": "unproven-statement:be76771f283237c6b0baec959aabe3d5ad31a84354c0602a5729fffbefe799cd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 184,
+    "endLine": 186,
+    "symbol": "unproven-statement:bf392ee92b76f867cbb305520748f32ef614d3b1bf60c7a3b54053db7377f25b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 247,
+    "endLine": 250,
+    "symbol": "unproven-statement:c0bcdb5ab3529507ee70d7da9def4d3660af5e8b6015585aea68d0da3f938c52",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 358,
+    "endLine": 366,
+    "symbol": "unproven-statement:c0cefc2930d981c013c983cc3250f2026e9fd74e2891045afd1d6381ac69d650",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 294,
+    "endLine": 294,
+    "symbol": "unproven-statement:c3a9695e92a4b49689c979410bd2bdf708aad3b566770ef18942134a05c9e8d2",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 419,
+    "endLine": 419,
+    "symbol": "unproven-statement:c45d3916ae5f42808f9594f38267dd93b1dbe78c61a908f88c0e3a0221369b24",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 414,
+    "endLine": 414,
+    "symbol": "unproven-statement:c64b1e1714673a240f60aa86cc958f048d388686eb510f1c08012d234f3dfd45",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 296,
+    "endLine": 301,
+    "symbol": "unproven-statement:c78ecd7158223e14ce853fded71097b3a6237325a89262446717104b50fe572e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 225,
+    "endLine": 225,
+    "symbol": "unproven-statement:ccd0bf262798adbe488ebe517e818ab92a3c8407bbb5fe7eee10732482451318",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 160,
+    "endLine": 162,
+    "symbol": "unproven-statement:cd60d84eef9f564cf66cd32ea6e59f679bac4f5041f154bf202267148e12c7d2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 272,
+    "endLine": 275,
+    "symbol": "unproven-statement:cd67a2580a1828088215eca937e851f0bf6edf305c633225afc0e6e7c6ad372a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 221,
+    "endLine": 221,
+    "symbol": "unproven-statement:cefc5910a518bfdcf785f3a577d8b7d557bb9bbc540b258d9fbe7221c0db5934",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 187,
+    "endLine": 189,
+    "symbol": "unproven-statement:d426c6e5fd9258b77f305d0adc909dc2f8855b67ca0b762bcb7a86f9d7a17557",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 191,
+    "endLine": 191,
+    "symbol": "unproven-statement:da0e0cda3d35962a1ecad76e636363d65acc133f3dcece06717be22780557985",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 165,
+    "endLine": 165,
+    "symbol": "unproven-statement:dade2c543e394aeb1f3e0a9b51c157bbdb4d20b24245fa807e64e8c1be8db85f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 110,
+    "endLine": 118,
+    "symbol": "unproven-statement:dd04489655148d2a12a6db93619f3edaf0b267887c6cfd6083b3436fb38a1958",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 255,
+    "endLine": 255,
+    "symbol": "unproven-statement:e1681152b711070740f1a56ed34f465aa04ce849e6efad14a424207451fea6e8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 246,
+    "endLine": 252,
+    "symbol": "unproven-statement:e398d4b35a3a1504500c4171407a08d8d30ba981ae004646309890e0b4fe68cf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 107,
+    "endLine": 107,
+    "symbol": "unproven-statement:e51a9b282a82280abf3f517068bb67b08e5a6c55af99f5a7aa4260531032300c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 371,
+    "endLine": 403,
+    "symbol": "unproven-statement:e56858bd7ddf720ed110234612466d47c9125e53c1fa385228ad972e1553c401",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 338,
+    "endLine": 338,
+    "symbol": "unproven-statement:e60c7b76d8056cef1216d496cf60f47d9218c8cf0f284a60f78817f153c8ef6c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 201,
+    "endLine": 204,
+    "symbol": "unproven-statement:e7cbf5134c65578f8a2fd6d7a0620f343600ae7bb9c43f750e5479d5a2c353e4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 120,
+    "endLine": 120,
+    "symbol": "unproven-statement:e8cd113ad43e541134a122d35dd5fdb6df403fec917cbd4aa61f588d2e7ea6f6",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 418,
+    "endLine": 421,
+    "symbol": "unproven-statement:e9df7b3ab2ffcf77ad4e603d77e1e26d0733a9e7bafc5ac0e622061fb2b2a418",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 358,
+    "endLine": 358,
+    "symbol": "unproven-statement:eaf2bb2de83679ff8296c889183855aff5ada4a460724ac1313814e142591fba",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 430,
+    "endLine": 439,
+    "symbol": "unproven-statement:ed7214fce82fe2b417bda60fd503bc5211ef2fc6fe11caef5f1c3a5a1fa3ed27",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 344,
+    "endLine": 350,
+    "symbol": "unproven-statement:eff1c53a3b9ae9f61abe8ee4c4e7be3af778aec4d024385e33b69aad7a2a83e1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 176,
+    "endLine": 178,
+    "symbol": "unproven-statement:f29eb54112ae98f7d77f231a9ddfff88227c2f10e1259a760168c82b6ca48009",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 87,
+    "endLine": 87,
+    "symbol": "unproven-statement:f836a3c803bbe72df94bf3f69158d27df87b1b490c2366a069f5ae39da10a094",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 181,
+    "endLine": 181,
+    "symbol": "unproven-statement:f904af526319e4718f6fc4a445d1679cd79da965ec9f1cf8ba1f56c32a428dd2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 289,
+    "endLine": 291,
+    "symbol": "unproven-statement:f94f67818d44b9cbc58d9dde372c24b1860445ff117a46459959d9b580b917ac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 188,
+    "endLine": 188,
+    "symbol": "unproven-statement:f962a575ea212b99eb13df3b5b164474b2b4761f17890533f45ced480d9234e9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 75,
+    "endLine": 84,
+    "symbol": "unproven-statement:faf6f9a5cf27d9158faf709dc899f28e0096babde6c15826fbbd39f73434c40e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 106,
+    "endLine": 106,
+    "symbol": "unproven-statement:fb9c1970c39287c56797749b7da93933dc2d5734c04e4eada46c367e8ae21425",
+    "value": 1,
+    "count": 1
+  }
+]

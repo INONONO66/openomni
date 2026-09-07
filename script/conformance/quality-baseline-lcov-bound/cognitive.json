@@ -1,0 +1,128 @@
+[
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 108,
+    "endLine": 252,
+    "symbol": "FunctionDeclaration:compactUnbracketed",
+    "value": 26,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/executor-attempts.ts",
+    "line": 21,
+    "endLine": 107,
+    "symbol": "FunctionExpression:runAttempts",
+    "value": 36,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/executor.ts",
+    "line": 144,
+    "endLine": 277,
+    "symbol": "FunctionDeclaration:executeBatch",
+    "value": 26,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/session-history.ts",
+    "line": 6,
+    "endLine": 142,
+    "symbol": "FunctionDeclaration:sessionHistory",
+    "value": 26,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/agent/src/session-record.ts",
+    "line": 289,
+    "endLine": 344,
+    "symbol": "FunctionDeclaration:sessionRunnerResultFromValue",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/channels/src/router/index.ts",
+    "line": 107,
+    "endLine": 230,
+    "symbol": "ArrowFunction:<anonymous@4574>",
+    "value": 43,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 538,
+    "endLine": 663,
+    "symbol": "FunctionDeclaration:commitInbox",
+    "value": 44,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 220,
+    "endLine": 307,
+    "symbol": "ArrowFunction:<anonymous@7808>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/machines/src/fs.ts",
+    "line": 184,
+    "endLine": 272,
+    "symbol": "FunctionDeclaration:walk",
+    "value": 48,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "packages/policy/src/message-match.ts",
+    "line": 28,
+    "endLine": 79,
+    "symbol": "FunctionDeclaration:matchesMessage",
+    "value": 23,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 217,
+    "endLine": 260,
+    "symbol": "FunctionDeclaration:parseLcovSummary",
+    "value": 33,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/ci-plan.ts",
+    "line": 20,
+    "endLine": 69,
+    "symbol": "FunctionDeclaration:planChanges",
+    "value": 22,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 69,
+    "endLine": 143,
+    "symbol": "FunctionDeclaration:assertArchiveEquality",
+    "value": 25,
+    "count": 1
+  },
+  {
+    "gate": "cognitive",
+    "path": "script/verify-ledger-rename.ts",
+    "line": 26,
+    "endLine": 118,
+    "symbol": "FunctionDeclaration:main",
+    "value": 25,
+    "count": 1
+  }
+]
