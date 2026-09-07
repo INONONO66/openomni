@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788762558820,
+  "lastUpdate": 1788763232247,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66965,6 +66965,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 936399,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7904622087777543bce62924a534447976eeebdc",
+          "message": "feat(ledger,agent,openomni): durable watch alarms and monitor tool (#947 stage 1) (#994)\n\n* feat(ledger): extend durable alarms with fenced watch delivery (#947)\n\n* feat(agent,openomni): add alarm worker and monitor checkpoint (#947)\n\n* fix(openomni): reconcile path watches and nest monitor operations (#947)\n\n* fix(openomni): isolate alarm sources from expired tool waves (#947)\n\n* docs: record verified alarm monitor stage-1 gates (#947)\n\n* fix(openomni): enforce callback timeout precedence (R1)\n\n* test(openomni): kill the path reconciliation mutant (R4)\n\n* fix(openomni): reap command watch process groups (R2)\n\n* fix(ledger): validate complete watch specs before migration (R3)\n\n* fix(openomni): validate typed alarm boundaries and cleanup outcomes (R5)\n\n* fix(ledger): preserve migration fault-injection boundary and record R1\n\n* docs: record merged R1 verification for alarm monitor\n\n* fix(ledger): promote monitor policy generations atomically\n\n* style(agent): format monitor wake exports and entry\n\n* fix(ci): pin Bun 1.4 and isolate alarm verification\n\n* fix(alarm): bind PTY lifetime to its spawned child\n\n* fix(ledger): scope monitor controls to live owned watches",
+          "timestamp": "2026-09-07T06:39:19Z",
+          "tree_id": "c0b221d3173a0b87f6dc5c2f823a5fd59927092a",
+          "url": "https://github.com/INONONO66/openomni/commit/7904622087777543bce62924a534447976eeebdc"
+        },
+        "date": 1788763231532,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 5470,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1403696,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 336720,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6746215,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1133,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 522075,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3481,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19763,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 183222,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 947179,
             "unit": "ns/op"
           }
         ]
