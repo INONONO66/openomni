@@ -104,7 +104,7 @@ describe("separators define a word start", () => {
     // `atlas-migration` the way it reads.
     for (const [text, query] of [
       ["atlas-migration", "am"],
-      ["mock_console", "mc"],
+      ["snake_case", "sc"],
       ["fs.read", "fr"],
       ["src/renderer", "sr"],
       ["state:running", "sr"],

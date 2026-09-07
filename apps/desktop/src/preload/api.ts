@@ -28,9 +28,9 @@ export interface DesktopApi {
   /**
    * Where the gateway is, or `undefined` when this build has none.
    *
-   * `undefined` is a real answer rather than an error: the renderer is also
-   * rendered with no Electron behind it at all (the showcase, the screenshot
-   * script), and it falls back to the mock transport in exactly that case.
+   * `undefined` is a real answer rather than an error: it is how a build with
+   * no gateway configured tells the renderer to disable its composer and say
+   * so, rather than talk to anything fabricated.
    */
   readonly gateway: () => Promise<GatewayEndpoint | undefined>;
 }

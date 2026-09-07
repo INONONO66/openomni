@@ -6,25 +6,12 @@ import { selectChatTransport } from "../src/renderer/chat/select-transport";
 /**
  * Which transport the renderer speaks through is one decision, and it is made
  * here rather than inside `app.tsx` so it can be asserted without mounting a
- * window: a shell that silently fell back to the mock while a gateway was
- * configured would show a fluent, entirely fictional conversation.
- *
- * The mock is the answer when there is no endpoint, and that is deliberate
- * rather than a placeholder — the showcase and `scripts/shoot-chat.ts` render
- * the same renderer with no Electron main behind them.
+ * window. There is no fallback: with no usable gateway the answer is a named
+ * refusal, and the composer is disabled on it, because a shell that fell back
+ * to anything else would show a fluent, entirely fictional conversation.
  */
 
 describe("the transport follows the endpoint", () => {
-  test("Given no endpoint, When selected, Then the mock answers", () => {
-    const selected = selectChatTransport(undefined);
-
-    expect(selected.kind).toBe("mock");
-    // The mock arrives as ABSENCE: `app.tsx` owns the mock's tuning, and a
-    // second mock constructed here would replace a stream that paints with one
-    // that finishes first.
-    expect(selected.transport).toBeUndefined();
-  });
-
   test("Given an endpoint, When selected, Then the gateway answers with a usable transport", () => {
     const selected = selectChatTransport({ url: "ws://127.0.0.1:3000/ws" });
 
@@ -46,10 +33,10 @@ describe("the transport follows the endpoint", () => {
   test("Given an endpoint without a token, When selected, Then no subprotocol is offered", () => {
     // A loopback gateway with no configured token rejects an `auth` offer it
     // cannot match, so an empty offer is not the same as an absent one.
-    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws" }).protocols).toBeUndefined();
-    expect(
-      selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "" }).protocols,
-    ).toBeUndefined();
+    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws" })).not.toHaveProperty("protocols");
+    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "" })).not.toHaveProperty(
+      "protocols",
+    );
   });
 
   test("Given a token no subprotocol can carry, When selected, Then it is refused by name", () => {
@@ -60,9 +47,13 @@ describe("the transport follows the endpoint", () => {
     // pointing at the variable that caused it. The daemon puts no character
     // constraint on the token, so this is reachable by configuration.
     for (const token of ["has space", "tab\there", 'quote"d', "comma,d", "sla/sh"]) {
-      expect(() => selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token })).toThrow(
-        /OPENOMNI_WS_TOKEN/,
-      );
+      const selected = selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token });
+
+      expect(selected.kind).toBe("misconfigured");
+      expect(selected.transport).toBeNull();
+      expect(selected.kind === "misconfigured" && selected.problem).toMatch(/OPENOMNI_WS_TOKEN/);
+      // The value is a credential and the message reaches the screen.
+      expect(selected.kind === "misconfigured" && selected.problem).not.toContain(token);
     }
   });
 
@@ -70,10 +61,9 @@ describe("the transport follows the endpoint", () => {
     // The refusal above must not reject what a token generator actually emits:
     // base64url, hex, and JWT-shaped values are all HTTP tokens.
     for (const token of ["s3cret", "a-b_c.d~e", "YWJjZDEyMzQ", "ey.J9.sig", "0123456789abcdef"]) {
-      expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token }).protocols).toEqual([
-        "auth",
-        token,
-      ]);
+      expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token })).toMatchObject({
+        protocols: ["auth", token],
+      });
     }
   });
 });
