@@ -425,6 +425,26 @@ test("crash after a successful assertion is infrastructure despite Bun JUnit lab
 	expect(rows(result.selected[0]?.assertionIdentities)).toHaveLength(0);
 }, 90000);
 
+test("GitHub grouped diagnostics preserve kills without promoting crashes", async () => {
+	const previous = process.env.GITHUB_ACTIONS;
+	process.env.GITHUB_ACTIONS = "true";
+	try {
+		for (const [assertion, outcome, code] of [
+			["expect(run()).toBe(true);", "killed", 0],
+			['expect(1).toBe(1);if(!run())throw new Error("crash-not-assertion");', "infrastructure", 2],
+		] as const) {
+			const input = await fixture("export const run = () => true;", assertion);
+			const result = await invoke(input, `github-${outcome}`, select("boolean-literal"));
+			expect(result.code).toBe(code);
+			expect(result.selected[0]?.outcome).toBe(outcome);
+			expect(rows(result.selected[0]?.assertionIdentities)).toHaveLength(code === 0 ? 1 : 0);
+		}
+	} finally {
+		if (previous === undefined) delete process.env.GITHUB_ACTIONS;
+		else process.env.GITHUB_ACTIONS = previous;
+	}
+}, 90000);
+
 test("bounded mutant hang is infrastructure, not killed", async () => {
 	const input = await fixture(
 		"export const run = () => true;",

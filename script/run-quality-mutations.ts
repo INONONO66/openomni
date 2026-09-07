@@ -913,7 +913,7 @@ async function runTests(
 	let diagnosticFile = "";
 	let segment: string[] = [];
 	for (const line of processReceipt.stderr.split("\n")) {
-		const file = line.match(/^([^\s].*\.[cm]?[jt]sx?):$/)?.[1];
+		const file = line.match(/^(?:::group::)?([^\s].*\.[cm]?[jt]sx?):$/)?.[1];
 		if (file) {
 			diagnosticFile = file.replace(/^\.\//, "");
 			segment = [];
