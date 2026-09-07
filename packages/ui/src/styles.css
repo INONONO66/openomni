@@ -279,33 +279,14 @@
   --spacing-traffic-safe: 81px;
   --spacing-strip-inset-darwin: calc(var(--spacing-traffic-safe) + 8px);
 
-  /* The tab strip's controls zone while the sidebar is COLLAPSED, when it has
-     to hold the window controls plus the sidebar toggle and the history trio
-     without clipping. Stated as a sum of tokens so it can be re-measured, not
-     guessed:
-
-       darwin  89 inset + 28 toggle + 4 gap
-               + 28 history + 4 + 28 back + 4 + 28 forward + 12 right pad = 225
-       other   8 left pad + 28 toggle + 4 gap
-               + 28 history + 4 + 28 back + 4 + 28 forward + 8 right pad = 140
-
-     The open width is not a token: it is the runtime `--sidebar-width`. */
-  --spacing-tab-controls-collapsed: calc(
-    var(--spacing-strip-inset-darwin) +
-    4 *
-    var(--spacing-control-base) +
-    3 *
-    4px +
-    12px
-  );
-  --spacing-tab-controls-collapsed-generic: calc(
-    8px +
-    4 *
-    var(--spacing-control-base) +
-    3 *
-    4px +
-    8px
-  );
+  /* The sidebar's width while it is NOT pinned: the hover-reveal overlay panel
+     and the tab strip's controls zone while collapsed read this ONE token, so
+     the zone is exactly as wide as the panel that appears under it, by
+     construction. Pinned, both read the runtime `--sidebar-width` instead.
+     240 = the pinned default (SIDEBAR_WIDTH.default), so the column keeps its
+     line breaks between overlay and pin. The zone's contents need, on darwin,
+     89 inset + 28 toggle + 4 gap + (3 * 28 + 2 * 4) trio + 12 right pad = 225. */
+  --spacing-sidebar-overlay: 240px;
 }
 
 /* ---- Layer scale ----------------------------------------------------------

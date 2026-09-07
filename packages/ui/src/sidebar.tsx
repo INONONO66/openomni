@@ -230,15 +230,17 @@ export function SidebarGap() {
 
 /**
  * The container per mode. Pinned and hidden share the frame's geometry and
- * differ only in where the slide rests; the overlay leaves the layout: inset
- * `2` (the same 8px the main panel keeps from the chrome) from the strip and
- * the left edge, on the panel radius, over the drawer layer.
+ * differ only in where the slide rests, at the runtime `--sidebar-width`; the
+ * overlay leaves the layout: inset `2` (the same 8px the main panel keeps from
+ * the chrome) from the strip and the left edge, on the panel radius, over the
+ * drawer layer, at `--spacing-sidebar-overlay` — the SAME token the strip's
+ * collapsed zone is sized by, so the zone above is exactly as wide as the panel.
  */
 const CONTAINER: Record<SidebarMode, string> = {
-  pinned: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar)",
-  hidden: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar) -translate-x-full",
+  pinned: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar) w-(--sidebar-width)",
+  hidden: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar) w-(--sidebar-width) -translate-x-full",
   overlay:
-    "top-[calc(var(--shell-top)+--spacing(2))] left-2 bottom-2 z-(--z-drawer) overflow-hidden rounded-panel border-[0.5px] border-line-surface bg-sunken shadow-panel",
+    "top-[calc(var(--shell-top)+--spacing(2))] left-2 bottom-2 z-(--z-drawer) w-sidebar-overlay overflow-hidden rounded-panel border-[0.5px] border-line-surface bg-sunken shadow-panel",
 };
 
 /**
@@ -268,7 +270,7 @@ export function SidebarContainer({ children }: { readonly children: ReactNode })
         />
       )}
       <div
-        className={`fixed flex w-(--sidebar-width) transition-[translate] duration-base ${CONTAINER[mode]} ${FRAME_MOTION}`}
+        className={`fixed flex transition-[translate] duration-base ${CONTAINER[mode]} ${FRAME_MOTION}`}
         data-mode={mode}
         data-ui={UI_NAMES.SidebarContainer}
         {...hot}
@@ -286,7 +288,7 @@ export function SidebarContainer({ children }: { readonly children: ReactNode })
           {children}
         </div>
         {/* Only a pinned column has a width to change: the overlay floats at
-            the remembered width and the hidden one has none to show. */}
+            the shared overlay token and the hidden one has none to show. */}
         {open && <SidebarResizeHandle />}
       </div>
     </>

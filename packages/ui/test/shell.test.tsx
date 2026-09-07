@@ -11,7 +11,7 @@ import {
   SidebarContainer,
   SidebarGap,
 } from "../src/sidebar";
-import { SectionHeader, SidebarHeader } from "../src/sidebar-nav";
+import { SectionHeader } from "../src/sidebar-nav";
 import { TabStrip, type WindowPlatform } from "../src/tab-strip";
 import { TreeRow } from "../src/tree-row";
 import { STRIP } from "./fixture";
@@ -135,7 +135,10 @@ describe("the hover reveal", () => {
     expect(container).toContain("rounded-panel");
     expect(container).toContain("shadow-panel");
     expect(container).toContain("z-(--z-drawer)");
-    expect(container).toContain("w-(--sidebar-width)");
+    // The overlay's width is the strip's collapsed zone's width: one token.
+    expect(container).toContain("w-sidebar-overlay");
+    expect(container).not.toContain("w-(--sidebar-width)");
+    expect(tag(html, "TabStrip.Controls")).toContain("w-sidebar-overlay");
     expect(container).not.toContain("-translate-x-full");
     // Live: the rows are reachable and there is exactly one of them.
     expect(tag(html, "Sidebar.Content")).not.toContain("inert");
@@ -322,11 +325,12 @@ describe("the tab strip's controls zone", () => {
     expect(icon(frame(false, null))).toContain('height="6" rx="0.75"');
   });
 
-  test("Given a collapsed sidebar on darwin, When rendered, Then the zone clears the traffic lights and the same toggle leads it", () => {
+  test("Given a collapsed sidebar on darwin, When rendered, Then the zone clears the traffic lights, is as wide as the overlay, and the same toggle leads it", () => {
     const html = frame(false, null);
     const zone = tag(html, "TabStrip.Controls");
     expect(zone).toContain("pl-strip-inset-darwin");
-    expect(zone).toContain("w-tab-controls-collapsed ");
+    expect(zone).toContain("w-sidebar-overlay");
+    expect(zone).not.toContain("w-(--sidebar-width)");
     expect(html.match(/data-ui="Sidebar.Toggle"/g)).toHaveLength(1);
     expect(toggle(html)).toContain('aria-label="Expand sidebar"');
     expect(toggle(html)).toContain('aria-expanded="false"');
@@ -343,7 +347,7 @@ describe("the tab strip's controls zone", () => {
 
   test("Given a collapsed sidebar elsewhere, When rendered, Then the zone starts at the window edge", () => {
     const zone = tag(frame(false, null, "other"), "TabStrip.Controls");
-    expect(zone).toContain("w-tab-controls-collapsed-generic");
+    expect(zone).toContain("w-sidebar-overlay");
     expect(zone).not.toContain("pl-strip-inset-darwin");
   });
 
@@ -391,21 +395,6 @@ describe("the tab strip's controls zone", () => {
     const html = frame(true, null);
     expect(html).toMatch(/aria-label="Back"[^>]*disabled/);
     expect(html).toMatch(/aria-label="Forward"[^>]*disabled/);
-  });
-});
-
-describe("the sidebar header", () => {
-  test("Given the header, When rendered, Then it is a 44px drag surface with the search at the right and no toggle of its own", () => {
-    const html = frame(true, <SidebarHeader onSearch={() => undefined} />);
-    const header = tag(html, "Sidebar.Header");
-    expect(header).toContain("h-11");
-    expect(header).toContain("drag-region");
-    const headerHtml = html.slice(html.indexOf(header));
-    expect(headerHtml).toContain('aria-label="Search (⌘K)"');
-    expect(headerHtml).not.toContain("Collapse sidebar");
-    // The one toggle in the window is the strip's, above the header.
-    expect(html.match(/data-ui="Sidebar.Toggle"/g)).toHaveLength(1);
-    expect(html.indexOf('data-ui="Sidebar.Toggle"')).toBeLessThan(html.indexOf(header));
   });
 });
 

@@ -3,8 +3,9 @@ import { join } from "node:path";
 
 /**
  * The strip's geometry is a handful of tokens that must add up: the collapsed
- * zone's width is stated as a `calc()` over the inset, the control step, and
- * the gaps, and the numbers behind it are the reference console's. Asserted on
+ * zone and the overlay panel share one width token, which must hold the zone's
+ * inset, the control step, and the gaps; the numbers behind it are the
+ * reference console's. Asserted on
  * the CSS text, because a token that drifts is invisible to the compiler.
  */
 const SRC = join(import.meta.dir, "..", "src");
@@ -38,17 +39,15 @@ describe("the strip's tokens", () => {
     expect(px("--spacing-traffic-safe") + 8).toBe(89);
   });
 
-  test("Given the collapsed zone, When resolved, Then its width is the sum of its tokens: 225 on darwin, 140 elsewhere", () => {
+  test("Given the collapsed zone and the overlay, When resolved, Then both read ONE token that holds the zone's contents", () => {
+    const overlay = px("--spacing-sidebar-overlay");
     const control = px("--spacing-control-base");
     const inset = px("--spacing-traffic-safe") + 8;
-    expect(calc("--spacing-tab-controls-collapsed")).toBe(
-      "var(--spacing-strip-inset-darwin) + 4 * var(--spacing-control-base) + 3 * 4px + 12px",
-    );
-    expect(inset + 4 * control + 3 * 4 + 12).toBe(225);
-    expect(calc("--spacing-tab-controls-collapsed-generic")).toBe(
-      "8px + 4 * var(--spacing-control-base) + 3 * 4px + 8px",
-    );
-    expect(8 + 4 * control + 3 * 4 + 8).toBe(140);
+    // darwin: 89 inset + toggle + gap + trio (3 controls, 2 gaps) + 12 right pad.
+    const contents = inset + control + 4 + (3 * control + 2 * 4) + 12;
+    expect(contents).toBe(225);
+    expect(overlay).toBeGreaterThanOrEqual(contents);
+    expect(overlay).toBe(240);
   });
 
   test("Given the trio's arrive transition, When read, Then it is timed by the zone's own duration and curve", () => {

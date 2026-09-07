@@ -11,17 +11,18 @@ import { useSidebar } from "./sidebar";
  * The window's top row, as the reference console builds it: a 42px strip that is the drag
  * surface, with a CONTROLS ZONE on the left whose width tracks the sidebar.
  *
- * The zone is the trick. While the sidebar is open it is exactly
- * `--sidebar-width` wide, so the tab starts where the main column starts. When
- * the sidebar collapses the zone shrinks to what the window controls, the
- * sidebar toggle, and the trio need — and because it animates `width` on the
+ * The zone is the trick: it is ALWAYS exactly as wide as the sidebar. While
+ * the sidebar is pinned it is `--sidebar-width` wide, so the tab starts where
+ * the main column starts. When the sidebar collapses the zone shrinks to
+ * `--spacing-sidebar-overlay`, the width the hover-reveal panel will have —
+ * the same token the panel reads — so the trio's place marks where the panel's
+ * right edge lands when it appears. Because the zone animates `width` on the
  * same duration and curve as the sidebar gap, the tab slides left in lockstep
  * with the column beneath it. The zone is `[toggle] [spacer] [trio]`, the
- * spacer being the trio's `ml-auto`: open, the trio is pinned to the sidebar's
- * right edge 12px in, riding `--sidebar-width`; collapsed, the zone's width is
- * exactly the content's and the spacer is zero, so the trio sits 4px after the
- * toggle. The toggle itself never moves, so it is always in the same place
- * under the pointer. Every number is measured (docs/desktop-shell.md).
+ * spacer being the trio's `ml-auto`: the trio is pinned to the zone's right
+ * edge 12px in, in both states. The toggle itself never moves, so it is
+ * always in the same place under the pointer. Every number is measured
+ * (docs/desktop-shell.md).
  *
  * `platform` is a fact about where the OS draws its window controls, not about
  * the data: on darwin the traffic lights own the first 81px and the zone's
@@ -53,7 +54,7 @@ export function TabStrip({
     >
       <div
         className={`flex h-full shrink-0 items-center gap-1 overflow-hidden transition-[width] duration-base ease-frame group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none ${
-          open ? "w-(--sidebar-width)" : COLLAPSED_WIDTH[platform]
+          open ? "w-(--sidebar-width)" : "w-sidebar-overlay"
         } ${ZONE_INSET[platform]}`}
         data-ui={UI_NAMES.TabStripControls}
       >
@@ -112,13 +113,8 @@ export function TabStrip({
   );
 }
 
-/** Where the OS draws its window controls; decides the collapsed zone's shape. */
+/** Where the OS draws its window controls; decides the zone's inset. */
 export type WindowPlatform = "darwin" | "other";
-
-const COLLAPSED_WIDTH: Record<WindowPlatform, string> = {
-  darwin: "w-tab-controls-collapsed",
-  other: "w-tab-controls-collapsed-generic",
-};
 
 /** The zone's padding is the same in both states: only its width moves. */
 const ZONE_INSET: Record<WindowPlatform, string> = {
