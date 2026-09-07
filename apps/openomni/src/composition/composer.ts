@@ -158,6 +158,5 @@ export function createComposer(): Composer {
       })();
       return disposal;
     },
-
   };
 }

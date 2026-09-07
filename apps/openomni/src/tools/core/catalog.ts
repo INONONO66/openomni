@@ -2,7 +2,11 @@ import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import type { LedgerSession } from "@openomni/protocol";
 import { createSendMessageTool, type MessagePort } from "../authority/send-message";
 
-export interface CatalogOrigin { readonly role: LedgerSession.Role; readonly depth: number; readonly sessionId: string; }
+export interface CatalogOrigin {
+  readonly role: LedgerSession.Role;
+  readonly depth: number;
+  readonly sessionId: string;
+}
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
 import { createLlmTool, type LlmPort } from "../execution/llm";
 import { createRunCodeTool } from "../execution/run-code";
@@ -11,7 +15,7 @@ import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, toolSpec } from "@openomni/agent";
 
 export interface CatalogPorts {
-	readonly messages?: MessagePort;
+  readonly messages?: MessagePort;
   readonly approvals?: ApprovalPort;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
   readonly llm?: LlmPort;
@@ -21,10 +25,10 @@ export interface CatalogPorts {
 /** Construct the immutable tool set once for a session. */
 export function createTools(
   ports: CatalogPorts,
-	origin: CatalogOrigin,
+  origin: CatalogOrigin,
 ): readonly AnyToolDefinition[] {
   const tools: AnyToolDefinition[] = [];
-	if (ports.messages !== undefined) tools.push(eraseTool(createSendMessageTool(ports.messages)));
+  if (ports.messages !== undefined) tools.push(eraseTool(createSendMessageTool(ports.messages)));
   if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
   if (ports.provisioning !== undefined)
     tools.push(eraseTool(createProvisionTool(ports.provisioning)));

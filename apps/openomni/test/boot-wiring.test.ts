@@ -43,14 +43,14 @@ describe("boot tool catalog", () => {
       },
     });
 
-		const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
+    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
       "auth",
       "boot-catalog-token",
     ]);
-		const reply = nextFrame(ws, (frame) => frame.type === "message");
+    const reply = nextFrame(ws, (frame) => frame.type === "message");
     ws.send(JSON.stringify({ type: "message", text: "catalog" }));
 
-		expect(await reply).toMatchObject({ type: "message", text: "ready" });
+    expect(await reply).toMatchObject({ type: "message", text: "ready" });
     expect(await toolNames).not.toContain("work_items");
     expect(await toolNames).not.toContain("complete_work");
   });
@@ -76,7 +76,7 @@ test("967 boot preserves promoted expired session", async () => {
   const response = nextMessage(ws);
   ws.send(JSON.stringify({ type: "message", text: "catalog seed" }));
   await response;
-	const template = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
+  const template = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
   if (template === undefined) throw new Error("missing app session");
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(template.id));
   await first.stop();
@@ -231,7 +231,7 @@ describe("channel supervisor", () => {
         build: (): BuiltChannel => {
           const surface: Channel.Surface = {
             id,
-						config: {},
+            config: {},
             async start() {
               if (channel.failNextStarts > 0) {
                 channel.failNextStarts -= 1;
@@ -268,7 +268,7 @@ describe("channel supervisor", () => {
     const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
     const supervisor = createChannelSupervisor({
       desired,
-			build: (component) => component.build(async () => undefined),
+      build: (component) => component.build(async () => undefined),
       grant: (surface, defaultTier) => registerTrustedChannelGrant({ surface, defaultTier }),
       deliveryRoutes,
       webhookHandlers,
@@ -286,7 +286,7 @@ describe("channel supervisor", () => {
 
   test("a stage owns its grant, route, and webhook; stopAll revokes all of them", async () => {
     const calls: string[] = [];
-		const route: ProviderDeliveryRoute = async () => ({ value: "accepted" });
+    const route: ProviderDeliveryRoute = async () => ({ value: "accepted" });
     const routed = fakeChannel("telegram", calls, { deliveryRoute: route });
     const ingressOnly = fakeChannel("github", calls, { webhook: true });
     const { supervisor, deliveryRoutes, webhookHandlers } = supervisorFor(() => ({

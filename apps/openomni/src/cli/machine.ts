@@ -9,5 +9,9 @@ const Configuration = z.object({ socketPath: z.string().min(1), offer: Machine.O
 export async function attachConfiguredMachine(configPath: string) {
   const config = Configuration.parse(JSON.parse(await Bun.file(configPath).text()));
   const mode = createCodemode();
-  return attachMachineDaemon({ ...config, fsExports: new Map((config.offer.exports ?? []).map((entry) => [entry.name, entry.path])), runner: mode.runner });
+  return attachMachineDaemon({
+    ...config,
+    fsExports: new Map((config.offer.exports ?? []).map((entry) => [entry.name, entry.path])),
+    runner: mode.runner,
+  });
 }

@@ -242,7 +242,11 @@ async function waveApp(
 function toolResults(sessionId: string) {
   const result = z.object({ phase: z.literal("result"), terminal: z.string(), callId: z.string() });
   return SessionHandleStore.tree(sessionId)
-    .filter((action) => action.kind === "tool" && z.object({ op: z.string() }).parse(action.intent.value).op !== "sendMessage")
+    .filter(
+      (action) =>
+        action.kind === "tool" &&
+        z.object({ op: z.string() }).parse(action.intent.value).op !== "sendMessage",
+    )
     .flatMap((action) => {
       const parsed = result.safeParse(action.effect.value);
       return parsed.success ? [parsed.data] : [];
@@ -251,14 +255,24 @@ function toolResults(sessionId: string) {
 
 function nextTerminal(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { stop(); reject(new Error("missing session terminal")); }, 5000);
+    const timer = setTimeout(() => {
+      stop();
+      reject(new Error("missing session terminal"));
+    }, 5000);
     const stop = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.sessionId === "gateway-ingress" || event.kind !== "turn") return;
-      const terminal = SessionHandleStore.tree(event.sessionId).find((action) => action.id === event.id);
+      const terminal = SessionHandleStore.tree(event.sessionId).find(
+        (action) => action.id === event.id,
+      );
       if (terminal === undefined || SessionHandleStore.turnTerminal(terminal) === undefined) return;
-      clearTimeout(timer); stop(); resolve();
+      clearTimeout(timer);
+      stop();
+      resolve();
     });
-    suite.defer(() => { clearTimeout(timer); stop(); });
+    suite.defer(() => {
+      clearTimeout(timer);
+      stop();
+    });
   });
 }
 
@@ -551,7 +565,14 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
   }
 });
 
-for (const door of ["current-run", "current-batch", "captured-run", "captured-batch", "captured-cell", "captured-wave"] as const) {
+for (const door of [
+  "current-run",
+  "current-batch",
+  "captured-run",
+  "captured-batch",
+  "captured-cell",
+  "captured-wave",
+] as const) {
   test(`nested raw effects retain the lease through ${door} after caller interruption`, async () => {
     // Given: the review countercase, through the real app/SDK/SSE and file SQLite.
     const captured = Promise.withResolvers<ReturnType<typeof currentExecutor>>();
@@ -606,21 +627,24 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
         return error.name;
       }
     };
-    const { app, socket, received, cleanup } = await waveApp([
-      waveTool("A", async () => "A", true),
-      waveTool("outer", async (turnSignal) => {
-        signal = turnSignal;
-        const executor = currentExecutor();
-        captured.resolve(executor);
-        try {
-          if (isCurrent) wrapperSettled.resolve(await invoke(currentExecutor()));
-          else await outerDone.promise;
-        } finally {
-          parentSettled.resolve();
-        }
-        return "outer";
-      }),
-    ], ["A", "outer"]);
+    const { app, socket, received, cleanup } = await waveApp(
+      [
+        waveTool("A", async () => "A", true),
+        waveTool("outer", async (turnSignal) => {
+          signal = turnSignal;
+          const executor = currentExecutor();
+          captured.resolve(executor);
+          try {
+            if (isCurrent) wrapperSettled.resolve(await invoke(currentExecutor()));
+            else await outerDone.promise;
+          } finally {
+            parentSettled.resolve();
+          }
+          return "outer";
+        }),
+      ],
+      ["A", "outer"],
+    );
     let handle: SessionHandle | undefined;
     let competitorFence: number | undefined;
     try {
@@ -641,10 +665,12 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
       else {
         // Finish the top-level body first, so it cannot mask missing captured retention.
         const interrupted = Promise.withResolvers<void>();
-        suite.defer(Bus.subscribe(LlmCall.Events.Completed, () => {
-          if (received.length !== 2 || handle === undefined) return;
-          void handle.interrupt().then(interrupted.resolve, interrupted.reject);
-        }));
+        suite.defer(
+          Bus.subscribe(LlmCall.Events.Completed, () => {
+            if (received.length !== 2 || handle === undefined) return;
+            void handle.interrupt().then(interrupted.resolve, interrupted.reject);
+          }),
+        );
         outerDone.resolve();
         await bounded(interrupted.promise);
       }
@@ -654,14 +680,22 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
       );
       expect(existsSync(marker)).toBe(false);
       expect(signal.aborted).toBe(true);
-      expect(toolResults(row.id).filter((result) => result.callId.startsWith("call-")).map(
-        (result) => [result.callId, result.terminal],
-      )).toEqual([["call-A", "executed"], ["call-outer", isCurrent ? "cancelled" : "executed"]]);
+      expect(
+        toolResults(row.id)
+          .filter((result) => result.callId.startsWith("call-"))
+          .map((result) => [result.callId, result.terminal]),
+      ).toEqual([
+        ["call-A", "executed"],
+        ["call-outer", isCurrent ? "cancelled" : "executed"],
+      ]);
       const held = SessionHandleStore.row(row.id);
       const now = Date.now();
       const competitor = SessionHandleStore.acquireLease({
-        sessionId: row.id, owner: "nested-contender", expectedFence: held.leaseFence,
-        now, expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+        sessionId: row.id,
+        owner: "nested-contender",
+        expectedFence: held.leaseFence,
+        now,
+        expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
       });
       if (competitor.ok) competitorFence = competitor.fence;
       // Then: abort-raced wrapper settlement cannot transfer the live effect's lease.
@@ -669,7 +703,11 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
       expect(held.leaseOwner).toBe(row.leaseOwner);
       const beforeActions = SessionHandleStore.tree(row.id).length;
       let staleBodyStarts = 0;
-      const stale = () => executor.run(request, async () => { staleBodyStarts += 1; return null; });
+      const stale = () =>
+        executor.run(request, async () => {
+          staleBodyStarts += 1;
+          return null;
+        });
       await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
       expect(staleBodyStarts).toBe(0);
       expect(SessionHandleStore.tree(row.id)).toHaveLength(beforeActions);
@@ -681,8 +719,11 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
       const released = SessionHandleStore.row(row.id);
       expect(released.leaseOwner).toBeNull();
       const next = SessionHandleStore.acquireLease({
-        sessionId: row.id, owner: "nested-contender", expectedFence: released.leaseFence,
-        now: Date.now(), expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
+        sessionId: row.id,
+        owner: "nested-contender",
+        expectedFence: released.leaseFence,
+        now: Date.now(),
+        expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
       });
       if (next.ok) competitorFence = next.fence;
       expect(next).toMatchObject({ ok: true, fence: row.leaseFence + 1 });
@@ -698,11 +739,19 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
       await bounded(handle?.close() ?? Promise.resolve());
       if (competitorFence !== undefined) {
         const row = SessionHandleStore.row(sessionId);
-        expect(SessionHandleStore.commit({
-          sessionId, owner: "nested-contender", fence: competitorFence, now: Date.now(),
-          expectedRevision: row.revision, actions: [], consumeInboxIds: [],
-          state: row.state, releaseLease: true,
-        }).ok).toBe(true);
+        expect(
+          SessionHandleStore.commit({
+            sessionId,
+            owner: "nested-contender",
+            fence: competitorFence,
+            now: Date.now(),
+            expectedRevision: row.revision,
+            actions: [],
+            consumeInboxIds: [],
+            state: row.state,
+            releaseLease: true,
+          }).ok,
+        ).toBe(true);
       }
       await cleanup();
       expect(existsSync(directory)).toBe(false);
@@ -737,7 +786,8 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
       const dispatch = (executor?: ReturnType<typeof currentExecutor>) => {
         // The current door resolves its executor from the enclosing tool scope.
         const dispatcher = createDispatcher([inner], {
-          executor: executor ?? currentExecutor(), timeoutMs: 0,
+          executor: executor ?? currentExecutor(),
+          timeoutMs: 0,
         });
         const call = { id: "timed-inner", tool: "inner", input: { slot: "inner" } };
         const context = { sessionId, turnId: "timed-turn", signal: new AbortController().signal };
@@ -745,16 +795,19 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           ? dispatcher.executeCell(call, context).then((result) => [result])
           : dispatcher.executeWave([call], context);
       };
-      const { app, socket, received, dbPath, cleanup } = await waveApp([
-        waveTool("A", async () => "A", true),
-        waveTool("outer", async () => {
-          captured.resolve(currentExecutor());
-          await outerGate.promise;
-          if (current) wrapper.resolve(await dispatch());
-          return "outer";
-        }),
-      ], ["A", "outer"]);
-        let handle: SessionHandle | undefined;
+      const { app, socket, received, dbPath, cleanup } = await waveApp(
+        [
+          waveTool("A", async () => "A", true),
+          waveTool("outer", async () => {
+            captured.resolve(currentExecutor());
+            await outerGate.promise;
+            if (current) wrapper.resolve(await dispatch());
+            return "outer";
+          }),
+        ],
+        ["A", "outer"],
+      );
+      let handle: SessionHandle | undefined;
       let competitorFence: number | undefined;
       try {
         socket.send(JSON.stringify({ type: "message", text: "run timed nested effect" }));
@@ -764,10 +817,12 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         handle = app.sessions.get(sessionId);
         if (handle === undefined) throw new Error("missing SDK handle");
         const interrupted = Promise.withResolvers<void>();
-        suite.defer(Bus.subscribe(LlmCall.Events.Completed, () => {
-          if (received.length !== 2 || handle === undefined) return;
-          void handle.interrupt().then(interrupted.resolve, interrupted.reject);
-        }));
+        suite.defer(
+          Bus.subscribe(LlmCall.Events.Completed, () => {
+            if (received.length !== 2 || handle === undefined) return;
+            void handle.interrupt().then(interrupted.resolve, interrupted.reject);
+          }),
+        );
         if (current) outerGate.resolve();
         else {
           expect(() => currentExecutor()).toThrow("executor context is required");
@@ -780,12 +835,17 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         await bounded(interrupted.promise);
         expect(existsSync(marker)).toBe(false);
         expect(toolResults(sessionId).map((result) => [result.callId, result.terminal])).toEqual([
-          ["timed-inner", "executed"], ["call-A", "executed"], ["call-outer", "executed"],
+          ["timed-inner", "executed"],
+          ["call-A", "executed"],
+          ["call-outer", "executed"],
         ]);
         const held = SessionHandleStore.row(sessionId);
         const contender = SessionHandleStore.acquireLease({
-          sessionId, owner: "timed-contender", expectedFence: held.leaseFence,
-          now: Date.now(), expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
+          sessionId,
+          owner: "timed-contender",
+          expectedFence: held.leaseFence,
+          now: Date.now(),
+          expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
         });
         if (contender.ok) competitorFence = contender.fence;
         // Then: neither timeout nor SDK interruption transfers the live effect's lease.
@@ -794,14 +854,22 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         const beforeActions = SessionHandleStore.tree(sessionId).length;
         const db = new Database(dbPath, { readonly: true });
         try {
-          expect(db.query<{ count: number }, [string]>("SELECT count(*) AS count FROM action WHERE session_id=?").get(sessionId)?.count)
-            .toBe(beforeActions);
-        } finally { db.close(); }
+          expect(
+            db
+              .query<{ count: number }, [string]>(
+                "SELECT count(*) AS count FROM action WHERE session_id=?",
+              )
+              .get(sessionId)?.count,
+          ).toBe(beforeActions);
+        } finally {
+          db.close();
+        }
         let staleStarts = 0;
-        const stale = () => executor.run({ kind: "tool", op: "stale", intent: {}, effect: {} }, async () => {
-          staleStarts += 1;
-          return null;
-        });
+        const stale = () =>
+          executor.run({ kind: "tool", op: "stale", intent: {}, effect: {} }, async () => {
+            staleStarts += 1;
+            return null;
+          });
         await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
         rawGate.resolve();
         await bounded(rawDone.promise);
@@ -810,8 +878,11 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         const released = SessionHandleStore.row(sessionId);
         expect(released.leaseOwner).toBeNull();
         const next = SessionHandleStore.acquireLease({
-          sessionId, owner: "timed-contender", expectedFence: released.leaseFence,
-          now: Date.now(), expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
+          sessionId,
+          owner: "timed-contender",
+          expectedFence: released.leaseFence,
+          now: Date.now(),
+          expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
         });
         if (next.ok) competitorFence = next.fence;
         expect(next).toMatchObject({ ok: true, fence: row.leaseFence + 1 });
@@ -827,11 +898,19 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         await bounded(handle?.close() ?? Promise.resolve());
         if (competitorFence !== undefined) {
           const row = SessionHandleStore.row(sessionId);
-          expect(SessionHandleStore.commit({
-            sessionId, owner: "timed-contender", fence: competitorFence, now: Date.now(),
-            expectedRevision: row.revision, actions: [], consumeInboxIds: [],
-            state: row.state, releaseLease: true,
-          }).ok).toBe(true);
+          expect(
+            SessionHandleStore.commit({
+              sessionId,
+              owner: "timed-contender",
+              fence: competitorFence,
+              now: Date.now(),
+              expectedRevision: row.revision,
+              actions: [],
+              consumeInboxIds: [],
+              state: row.state,
+              releaseLease: true,
+            }).ok,
+          ).toBe(true);
         }
         await cleanup();
         expect(existsSync(directory)).toBe(false);

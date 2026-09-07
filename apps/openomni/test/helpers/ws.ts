@@ -55,10 +55,14 @@ export function closeSocket(ws: WebSocket, timeoutMs = 2000): Promise<void> {
   if (ws.readyState === WebSocket.CLOSED) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("WebSocket close timed out")), timeoutMs);
-    ws.addEventListener("close", () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
+    ws.addEventListener(
+      "close",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
     ws.close();
   });
 }

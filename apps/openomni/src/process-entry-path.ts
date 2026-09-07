@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
  * package), compiled tsc output, TypeScript source (bun from src/).
  */
 export function processEntryPath(baseUrl: string): string {
-	const candidates = ["./process-entry.js"];
-	for (const candidate of candidates) {
-		const resolved = fileURLToPath(new URL(candidate, baseUrl));
-		if (existsSync(resolved)) return resolved;
-	}
-	return fileURLToPath(new URL("./process-entry.ts", baseUrl));
+  const candidates = ["./process-entry.js"];
+  for (const candidate of candidates) {
+    const resolved = fileURLToPath(new URL(candidate, baseUrl));
+    if (existsSync(resolved)) return resolved;
+  }
+  return fileURLToPath(new URL("./process-entry.ts", baseUrl));
 }

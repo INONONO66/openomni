@@ -658,7 +658,12 @@ describe("cli dispatch", () => {
 
   test("machine attach validates arity and forwards the config without starting the Resident", async () => {
     const seen: string[] = [];
-    const { deps: cli } = deps({ attachMachine: async (path) => { seen.push(path); return 7; } });
+    const { deps: cli } = deps({
+      attachMachine: async (path) => {
+        seen.push(path);
+        return 7;
+      },
+    });
     expect(await runCli(["machine"], cli)).toBe(1);
     expect(await runCli(["machine", "attach"], cli)).toBe(1);
     expect(await runCli(["machine", "attach", "config.json", "extra"], cli)).toBe(1);

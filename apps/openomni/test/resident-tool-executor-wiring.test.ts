@@ -5,12 +5,7 @@ import { join } from "node:path";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import type { RunInput, Sink } from "@openomni/llm";
-import {
-  Tool,
-  type BusEvent,
-  type ObservationSink,
-  type PlainValue,
-} from "@openomni/protocol";
+import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 
@@ -44,15 +39,17 @@ test("a resident tool call is executed and observed through the durable executor
     apiKey: "test-key",
     tools: {
       cells: {
-        cell: { async run() {
-          bodyRuns += 1;
-          return {
-            status: "completed",
-            cellId: "cell-1",
-            value: "ok",
-            output: { stdout: "ok", stderr: "" },
-          };
-        } },
+        cell: {
+          async run() {
+            bodyRuns += 1;
+            return {
+              status: "completed",
+              cellId: "cell-1",
+              value: "ok",
+              output: { stdout: "ok", stderr: "" },
+            };
+          },
+        },
         bindTools: () => undefined,
       },
     },
@@ -84,7 +81,7 @@ test("a resident tool call is executed and observed through the durable executor
     },
   });
 
-	await resident.prompt(sessionId, "please answer");
+  await resident.prompt(sessionId, "please answer");
 
   const tree = SessionHandleStore.tree(sessionId);
   const prompt = tree.find((action) => action.kind === "prompt");

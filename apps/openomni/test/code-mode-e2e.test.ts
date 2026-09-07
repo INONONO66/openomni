@@ -118,14 +118,18 @@ test("app root runs machine read write shell and code through one run_code cell"
       },
     },
   });
-  const daemon = await attachMachineDaemon({ socketPath, fsExports: new Map([["data", root]]), offer: {
-    machineId: MACHINE_ID,
-    offeredCapabilities: appEnrollment.allowedCapabilities,
-    exports: [{ name: "data", path: root }],
-    daemonVersion: "test",
-    platform: `${process.platform}-${process.arch}`,
-    offeredAt: 1,
-  }});
+  const daemon = await attachMachineDaemon({
+    socketPath,
+    fsExports: new Map([["data", root]]),
+    offer: {
+      machineId: MACHINE_ID,
+      offeredCapabilities: appEnrollment.allowedCapabilities,
+      exports: [{ name: "data", path: root }],
+      daemonVersion: "test",
+      platform: `${process.platform}-${process.arch}`,
+      offeredAt: 1,
+    },
+  });
   suite.defer(() => daemon.close());
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
@@ -170,10 +174,10 @@ test("a cell creates three child sessions through sendMessage", async () => {
           input: {
             code: [
               "answers = [",
-							"  tool.sendMessage(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, type='message', content=f'check {name}')['target']",
+              "  tool.sendMessage(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, type='message', content=f'check {name}')['target']",
               "  for name in ('lint', 'types', 'tests')",
               "]",
-							"len(set(answers))",
+              "len(set(answers))",
             ].join("\n"),
             timeoutMs: 20_000,
           },
@@ -201,20 +205,21 @@ test("a cell creates three child sessions through sendMessage", async () => {
   });
   expect(daemon.attachment.status).toBe("attached");
 
-	const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", WS_TOKEN]);
-	const reply = nextFrame(ws, (frame) => frame.type === "message", 30_000);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
+    "auth",
+    WS_TOKEN,
+  ]);
+  const reply = nextFrame(ws, (frame) => frame.type === "message", 30_000);
   ws.send(JSON.stringify({ type: "message", text: "check everything" }));
 
-	const answer = String((await reply).text);
+  const answer = String((await reply).text);
 
   // The machine was attached, so the machine-placed tool was offered.
-  expect(answer).toContain(
-		"offered=[approval,provision,run_code,sendMessage]",
-  );
+  expect(answer).toContain("offered=[approval,provision,run_code,sendMessage]");
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
-	expect(answer).toContain("cell=3");
-	expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toHaveLength(3);
+  expect(answer).toContain("cell=3");
+  expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toHaveLength(3);
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns.length).toBeGreaterThanOrEqual(2);
   expect(new Set(residentTurns).size).toBe(1);
@@ -266,18 +271,16 @@ test("the machine tool is not offered while nothing is attached", async () => {
     },
   });
 
-	const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", WS_TOKEN]);
-	const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
+    "auth",
+    WS_TOKEN,
+  ]);
+  const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
   ws.send(JSON.stringify({ type: "message", text: "run something" }));
 
-	const answer = String((await reply).text);
+  const answer = String((await reply).text);
 
-  expect(offered).toEqual([
-		"sendMessage",
-    "approval",
-    "provision",
-    "run_code",
-  ]);
+  expect(offered).toEqual(["sendMessage", "approval", "provision", "run_code"]);
   // All tools are host-projected; the local default host reports live attachment failure.
   expect(answer).toContain("kernel_not_available");
 }, 30_000);
@@ -333,7 +336,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
   const forging = await host.get(MACHINE_ID).runCode({
     cellId: "BBB",
     // The call carries no id of its own; naming one changes nothing.
-		code: "tool.sendMessage(cellId='AAA', instruction='borrow')",
+    code: "tool.sendMessage(cellId='AAA', instruction='borrow')",
     timeoutMs: 15_000,
     tenant: "tenant-two",
   });
@@ -341,7 +344,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
 
   // Completion itself proves the overlap: on one interpreter AAA's hold would
   // wait forever for a BBB that cannot start until AAA settles.
-	expect([...served].sort()).toEqual(["hold@AAA", "sendMessage@BBB"]);
+  expect([...served].sort()).toEqual(["hold@AAA", "sendMessage@BBB"]);
   expect(forging.status).toBe("completed");
 }, 40_000);
 
@@ -412,15 +415,15 @@ async function startCellHarness(ports: CatalogPorts) {
   return {
     socketPath,
     run: (code: string) => execute({ code, timeoutMs: 15_000 }),
-		runWith: (origin: CatalogOrigin, code: string) =>
+    runWith: (origin: CatalogOrigin, code: string) =>
       modelToolOutput("run_code", { ...ports, cells }, origin)({ code, timeoutMs: 15_000 }),
   };
 }
 
 test("cells from different sessions never share interpreter state", async () => {
   const { runWith } = await startCellHarness({ llm: async () => "ok" });
-	const sessionA: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
-	const sessionB: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
+  const sessionA: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
+  const sessionB: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
 
   await runWith(sessionA, "shared = 'mine'\n'set'");
   const sameSession = await runWith(sessionA, "shared");
@@ -550,5 +553,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
   });
 
   // Without kernel.py in the effective set, run_code stays unofferable.
-  expect(host.list().find((entry) => entry.machineId === MACHINE_ID)?.capabilities).toEqual(["fs.read"]);
+  expect(host.list().find((entry) => entry.machineId === MACHINE_ID)?.capabilities).toEqual([
+    "fs.read",
+  ]);
 }, 30_000);
