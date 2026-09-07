@@ -33,7 +33,11 @@ mock.module("electron", () => ({
   },
 }));
 
-await import("../src/preload/index");
+// Query-suffixed so this file gets its own module instance: entry-wiring.test.ts
+// evaluates the same preload against a different electron double first in a
+// whole-suite run, and a cache hit would never call this file's exposeInMainWorld.
+const ownInstance: string = "../src/preload/index?preload-ipc";
+await import(ownInstance);
 afterAll(() => mock.restore());
 beforeEach(() => {
   listeners.clear();
