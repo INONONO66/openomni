@@ -60,7 +60,8 @@ Component-level truth lives in [Implementation Status](docs/implementation-statu
 
 ## Install & Run 24/7
 
-OpenOmni ships as an npm package running on the [Bun](https://bun.sh) runtime:
+OpenOmni ships as an npm package running on [Bun](https://bun.sh) >=1.4.0
+for built-in PTY alarm monitoring (development and CI pin 1.4.1):
 
 ```bash
 npm install -g openomni     # or: bun add -g openomni

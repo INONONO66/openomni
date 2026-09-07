@@ -10,6 +10,7 @@ import { commitSessionRequest } from "./session-admission";
 export interface SessionRequestPort {
   list(): readonly SessionTransition.Request[];
   expire(at: number): Promise<void>;
+  timeout(requestId: string, at: number): void;
   open(input: {
     requestId: string;
     sessionId: string;
@@ -21,7 +22,7 @@ export interface SessionRequestPort {
     deadline: number;
     at: number;
     admission?: Inbox.Commit;
-  }): Promise<SessionTransition.Request>;
+  }): SessionTransition.Request;
   answer(input: SessionTransition.Answer): Promise<SessionTransition.Resolution>;
   receipt(input: SessionTransition.DeliveryReceipt): Promise<SessionTransition.Request>;
 }
@@ -41,7 +42,7 @@ function requestGeneration(actions: readonly LedgerAction.Node[], turnId: string
 export function createSessionRequests(runtime: SessionRuntime): SessionRequestPort {
   const clock = runtime.clock ?? Date.now;
   const entropy = runtime.entropy ?? (() => crypto.randomUUID());
-  async function transition(
+  function transition(
     sessionId: string,
     payload: SessionTransition.Payload,
     inputId: string,
@@ -88,26 +89,24 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
       );
     }
   }
+  function timeout(requestId: string, at: number): void {
+    const request = SessionHandleStore.requestById(requestId);
+    if (request === undefined) throw new Error(`deadline request missing: ${requestId}`);
+    const result = transition(request.sessionId,
+      { kind: "request.timeout", requestId }, `${requestId}:deadline`, at);
+    if (result.actions.length > 0 && result.request?.mode === "approval" && result.request.state !== "open")
+      runtime.onRequestReady?.(request.sessionId);
+  }
   return {
     list: () => SessionHandleStore.requestRows(),
+    timeout,
     async expire(at) {
       for (const request of SessionHandleStore.requestRows()) {
         if (request.state !== "open" || request.deadline > at) continue;
-        const result = await transition(
-          request.sessionId,
-          { kind: "request.timeout", requestId: request.requestId },
-          `${request.requestId}:deadline`,
-          at,
-        );
-        if (
-          result.actions.length > 0 &&
-          result.request?.mode === "approval" &&
-          result.request.state !== "open"
-        )
-          runtime.onRequestReady?.(request.sessionId);
+        timeout(request.requestId, at);
       }
     },
-    async open(input) {
+    open(input) {
       const actions = SessionHandleStore.tree(input.sessionId);
       const original = actions.find((action) => action.id === input.requestId);
       const intent = original?.intent.value;
@@ -149,7 +148,7 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
         createdAt: input.at,
       };
       request.bindingDigest = requestBindingDigest(request);
-      const decision = await transition(
+      const decision = transition(
         input.sessionId,
         { kind: "request.open", request },
         `${input.requestId}:open`,

@@ -24,7 +24,7 @@ export function alarmAppend(input: Alarm.Arm): LedgerAction.Append {
       encodingVersion: 1,
       value: input.spec === undefined ? { status: "armed" } : { status: "armed", spec: input.spec.value },
     },
-    irreversible: true,
+    revert: { encodingVersion: 1, value: { op: "cancel", id: input.id } },
     ts: input.fireAt,
   });
 }

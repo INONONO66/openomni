@@ -378,19 +378,21 @@ describe("tool expansion is scoped to its session", () => {
  */
 const SCREEN = renderToStaticMarkup(
   <Console
-    composerHint="claude-sonnet-4-6"
-    composerMeta="39.8k"
-    detail="claude-sonnet-4-6"
-    draft=""
-    nodes={transcript}
-    onApprove={() => undefined}
-    onDeny={() => undefined}
-    onDraftChange={() => undefined}
-    onSubmit={() => undefined}
-    pending={pending}
-    sessionId="budget"
+    session={{
+      id: "budget",
+      title: "ledger append path",
+      detail: "claude-sonnet-4-6",
+      nodes: transcript,
+      draft: "",
+      composerHint: "claude-sonnet-4-6",
+      composerMeta: "39.8k",
+      onApprove: () => undefined,
+      onDeny: () => undefined,
+      onDraftChange: () => undefined,
+      onSubmit: () => undefined,
+      pending,
+    }}
     sidebar={<nav aria-label="Sessions" />}
-    title="ledger append path"
   />,
 );
 

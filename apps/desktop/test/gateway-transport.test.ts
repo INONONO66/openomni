@@ -35,6 +35,7 @@ function serveWire(script: readonly (readonly Readonly<Record<string, string>>[]
   let connectionCount = 0;
   let turn = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request, self) {
       protocols.push(request.headers.get("sec-websocket-protocol"));

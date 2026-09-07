@@ -1,5 +1,6 @@
 import { AsyncResource } from "node:async_hooks";
 import { timingSafeEqual } from "node:crypto";
+import { createAlarmWorker } from "./composition/alarm-worker";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import {
@@ -56,7 +57,12 @@ import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
 interface StartOptions {
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    "clock" | "approvalTimeoutMs" | "scheduleApprovalTimeout" | "waitRetry" | "openIntent"
+    | "clock"
+    | "approvalTimeoutMs"
+    | "scheduleApprovalTimeout"
+    | "waitRetry"
+    | "openIntent"
+    | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
@@ -369,6 +375,23 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
     );
     await requests.expire((sessionRuntime.clock ?? Date.now)());
+    const alarmStore = Storage.get().alarms;
+    if (alarmStore === undefined) throw new Error("alarm storage unavailable at boot");
+    const alarms = createAlarmWorker({
+      alarms: alarmStore,
+      requestTimeout: requests.timeout,
+      observations: Bus,
+      clock: sessionRuntime.clock,
+      wake: async (id) => {
+        await wake(id);
+      },
+      failure: (error) => console.error("alarm worker failure", error),
+    });
+    await composer.mount("alarms", (ctx) => {
+      ctx.effect(() => alarms.close());
+      alarms.start();
+    });
+
     await composer.mount("channels", async (ctx) => {
       ctx.effect(() => supervisor.stopAll());
       await supervisor.reconcile();

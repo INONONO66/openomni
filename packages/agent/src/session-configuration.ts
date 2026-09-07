@@ -112,7 +112,7 @@ export function createSessionConfiguration(
     );
   }
 
-  async function releaseHeldLease(): Promise<void> {
+  function releaseHeldLease(): void {
     const current = SessionHandleStore.row(sessionId);
     // Lease already stolen or lapsed: nothing of ours left to release. A lapsed
     // lease is recoverable by TTL takeover; releasing it would be refused as

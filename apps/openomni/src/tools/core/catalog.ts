@@ -1,4 +1,5 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
+import { monitorTool } from "../mutation/monitor";
 import type { LedgerSession } from "@openomni/protocol";
 import type { MachineHost } from "@openomni/machines";
 import { createSendMessageTool, type MessagePort } from "../authority/send-message";
@@ -43,6 +44,7 @@ export function createTools(
     eraseTool(createSearchTool(ports)),
     eraseTool(createBashTool(ports)),
   ];
+  tools.push(eraseTool(monitorTool));
   if (ports.messages !== undefined) tools.push(eraseTool(createSendMessageTool(ports.messages)));
   if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
   if (ports.provisioning !== undefined)

@@ -181,7 +181,7 @@ export interface SessionHandle {
       inputId: string,
       at: number,
       admission?: Inbox.Commit,
-    ): Promise<import("./session-request").RequestDecision>;
+    ): import("./session-request").RequestDecision;
   };
   readonly tools: SessionToolsHandle;
   readonly system: { readonly blocks: SessionSystemBlocksHandle };

@@ -1,161 +1,82 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { App } from "../src/renderer/app";
-import type { ProjectSessionFacts, Signals } from "../src/renderer/attention";
 import { orderByAttention } from "../src/renderer/attention";
-import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
-import {
-  lastReadAt,
-  now,
-  pins,
-  projects,
-  selectedSessionId,
-  sessions,
-  snoozes,
-} from "../src/renderer/mock/console";
-import { timelines } from "../src/renderer/mock/timelines";
 import { SessionTree } from "../src/renderer/shell/session-tree";
+import type { Session } from "../src/renderer/state/store";
 
 /**
- * Selection is renderer view state (app.tsx). These assert the render contract
- * that state feeds: the header names the selected session and its agent, the
- * selected row is the only marked one, and the main column shows that session's
- * transcript.
+ * The tree's render contract over store sessions: PROJECT → SESSION, exactly
+ * one row marked current, and an honest sentence when there is nothing to list.
  *
  * The click/keydown handlers are exercised in visual QA — there is no DOM test
- * runner here, and the engine's own behavior is covered by the attention tests.
+ * runner here — and the store's own transitions are covered by store.test.ts.
  */
-const selected = sessions.find((session) => session.id === selectedSessionId);
+const sessions: readonly Session[] = [
+  { id: "s1", title: "Session 1", projectId: "default", createdAt: 1 },
+  { id: "s2", title: "Session 2", projectId: "default", createdAt: 2 },
+  { id: "s3", title: "Session 3", projectId: "other", createdAt: 3 },
+];
 
-const signals: Signals = {
-  now,
-  activeSessionId: selectedSessionId,
-  pins,
-  snoozes,
-  lastReadAt,
-  userBusy: false,
-};
+const ordered = orderByAttention(sessions);
 
-const facts: readonly ProjectSessionFacts[] = sessions.map((session) => ({
-  id: session.id,
-  projectId: session.projectId,
-  state: session.state,
-  lastEventAt: session.lastEventAt,
-  lastUserTurnAt: session.lastUserTurnAt,
-  unreadCount: session.unreadCount,
-}));
-
-const ordered = orderByAttention(
-  projects.map((project) => project.id),
-  facts,
-  signals,
-);
-
-const tree = (selectedId: string) =>
+const tree = (
+  selectedId: string | null,
+  list: readonly Session[] = sessions,
+  options: { pendingChanges?: number; collapsed?: ReadonlySet<string | null> } = {},
+) =>
   renderToStaticMarkup(
     <SessionTree
+      collapsedProjectIds={options.collapsed ?? new Set()}
+      onCreate={() => undefined}
       onSelect={() => undefined}
-      ordered={ordered}
-      pendingChanges={0}
-      projects={projects}
+      onToggleProject={() => undefined}
+      ordered={orderByAttention(list)}
+      pendingChanges={options.pendingChanges ?? 0}
       selectedId={selectedId}
-      sessions={sessions}
+      sessions={list}
     />,
   );
 
-describe("selection drives the main header", () => {
-  test("Given the initial selection, When the app renders, Then the header names it", () => {
-    const html = renderToStaticMarkup(<App />);
-
-    expect(selected).toBeDefined();
-    expect(html).toContain(selected?.name ?? "");
-    expect(html).toContain(selected?.agent ?? "");
-  });
-
-  test("Given every mock session, When inspected, Then each can be named by the header", () => {
-    for (const session of sessions) {
-      expect(session.name.length).toBeGreaterThan(0);
-      expect(session.agent.length).toBeGreaterThan(0);
-    }
-  });
-});
-
-describe("selection drives the transcript", () => {
-  test("Given the initial selection, When the app renders, Then its own timeline is shown", () => {
-    const html = renderToStaticMarkup(<App />);
-    // Through the adapter, because that is the path the shell itself takes:
-    // the fixture is SDK messages and the column is transcript nodes.
-    const { nodes } = uiMessagesToTranscript(timelines[selectedSessionId] ?? []);
-    const prompt = nodes.find((node) => node.kind === "prompt");
-
-    expect(prompt).toBeDefined();
-    if (prompt?.kind === "prompt") {
-      expect(html).toContain(prompt.text.slice(0, 40));
-    }
-  });
-
-  test("Given every mock session, When looked up, Then each resolves to a timeline", () => {
-    for (const session of sessions) {
-      expect(timelines[session.id]).toBeDefined();
-    }
-  });
-});
-
 describe("the sidebar marks exactly one selected row", () => {
   test("Given a selection, When the tree renders, Then one row is marked current", () => {
-    expect(tree(selectedSessionId).match(/aria-current="true"/g)).toHaveLength(1);
+    expect(tree("s1").match(/aria-current="true"/g)).toHaveLength(1);
   });
 
   test("Given a different selection, When the tree renders, Then the marker moves", () => {
-    const other = sessions.find((session) => session.id !== selectedSessionId);
-    expect(other).toBeDefined();
+    const html = tree("s3");
 
-    expect(tree(other?.id ?? "").match(/aria-current="true"/g)).toHaveLength(1);
+    expect(html.match(/aria-current="true"/g)).toHaveLength(1);
+    expect(html).toMatch(
+      /id="session-row-s3"[^>]*aria-current="true"|aria-current="true"[^>]*id="session-row-s3"/,
+    );
+  });
+
+  test("Given no selection, When the tree renders, Then no row is marked", () => {
+    expect(tree(null).match(/aria-current="true"/g)).toBeNull();
   });
 });
 
 describe("the sidebar is project groups over sessions", () => {
-  const html = tree(selectedSessionId);
+  const html = tree("s1");
 
   test("Given the ordered groups, When the tree renders, Then every project is a disclosure header", () => {
-    for (const group of ordered.projects) {
-      const name = projects.find((project) => project.id === group.id)?.name ?? "";
-      expect(html).toContain(name);
-    }
-    expect(html.match(/aria-expanded="true"/g)?.length).toBeGreaterThanOrEqual(
-      ordered.projects.length,
-    );
+    for (const group of ordered.projects) expect(html).toContain(group.id ?? "no project");
+    expect(html.match(/aria-expanded="true"/g)).toHaveLength(ordered.projects.length);
   });
 
-  test("Given each live row, When the tree renders, Then its reason is the second line", () => {
-    // The reason line is the column's whole justification: without it the order
-    // is an unexplained ranking.
-    for (const group of ordered.projects) {
-      for (const entry of group.live) {
-        expect(html).toContain(entry.reason);
-      }
-    }
+  test("Given every row, When the tree renders, Then it is one line: the title", () => {
+    for (const session of sessions) expect(html).toContain(`>${session.title}</span>`);
+    expect(html.match(/role="option"/g)).toHaveLength(sessions.length);
+    // No second line and no status cell: nothing real fills either yet.
+    expect(html).not.toContain("data-status-dot");
   });
 
-  test("Given a project with settled work, When the tree renders, Then it collapses to a counted tail", () => {
-    const withSettled = ordered.projects.filter((group) => group.settled.length > 0);
+  test("Given a collapsed project, When the tree renders, Then its rows are absent from the tree", () => {
+    const collapsed = tree("s1", sessions, { collapsed: new Set(["other"]) });
 
-    expect(withSettled.length).toBeGreaterThan(0);
-    for (const group of withSettled) {
-      expect(html).toContain(`settled · ${group.settled.length}`);
-    }
-  });
-
-  test("Given a collapsed settled tail, When the tree renders, Then its rows are absent from the tree", () => {
-    const settledIds = ordered.projects.flatMap((group) => group.settled);
-    const settledNames = settledIds.map(
-      (id) => sessions.find((session) => session.id === id)?.name ?? "",
-    );
-
-    expect(settledNames.length).toBeGreaterThan(0);
-    for (const name of settledNames) {
-      expect(html).not.toContain(name);
-    }
+    expect(collapsed).toContain('aria-expanded="false"');
+    expect(collapsed).not.toContain("Session 3");
+    expect(collapsed).toContain("Session 1");
   });
 
   test("Given no pending drift, When the tree renders, Then no change hint is shown", () => {
@@ -163,17 +84,18 @@ describe("the sidebar is project groups over sessions", () => {
   });
 
   test("Given pending drift, When the tree renders, Then the hint reports the count", () => {
-    const html = renderToStaticMarkup(
-      <SessionTree
-        onSelect={() => undefined}
-        ordered={ordered}
-        pendingChanges={3}
-        projects={projects}
-        selectedId={selectedSessionId}
-        sessions={sessions}
-      />,
-    );
+    expect(tree("s1", sessions, { pendingChanges: 3 })).toContain("3 changes");
+  });
+});
 
-    expect(html).toContain("3 changes");
+describe("the empty sidebar says so", () => {
+  test("Given no sessions, When the tree renders, Then the sentence names the way out and no group is drawn", () => {
+    const html = tree(null, []);
+
+    expect(html).toContain("No sessions yet");
+    expect(html).not.toContain('data-ui="Disclosure"');
+    expect(html).not.toContain('role="option"');
+    // The way out is still there: the header's create control.
+    expect(html).toContain('aria-label="New session"');
   });
 });

@@ -349,11 +349,11 @@ function repairBudgetDebit(input: SendInput, admission: SendAdmission): void {
 }
 
 /** Kernel records the original action suspension before the physical effect. */
-async function openSendRequest(
+function openSendRequest(
   input: SendInput,
   target: DeliveryTarget,
   ports: MessagingPorts,
-): Promise<SessionTransition.Request | undefined> {
+): SessionTransition.Request | undefined {
   if (input.operation !== "awaited") return undefined;
   const spec = input.requestSpec as NonNullable<SendInput["requestSpec"]>;
   const recorded = ports.requests.list().find(
@@ -477,11 +477,15 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     const authorization = { input, target: checked.target, grant: checked.grant };
     const { target } = authorization;
 
-    const admission = admitSend(authorization, ports, deny);
-    if ("kind" in admission) return admission;
-
-    const opened = await openSendRequest(input, target, ports);
-    const request = await deliverSend(input, target, opened, ports);
+    // The synchronous kernel port joins request/alarm state to the perimeter
+    // admission and debit transaction; no promise may escape this write unit.
+    const opened = LedgerAppend.transaction(() => {
+      const admission = admitSend(authorization, ports, deny);
+      if ("kind" in admission) return { denied: admission };
+      return { request: openSendRequest(input, target, ports) };
+    });
+    if (opened.denied !== undefined) return opened.denied;
+    const request = await deliverSend(input, target, opened.request, ports);
     return recordSent(authorization, request, ports);
   }
 

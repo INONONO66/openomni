@@ -1,5 +1,5 @@
 import type { Ordered } from "../attention";
-import type { ProjectId, SessionId } from "../mock/console";
+import type { ProjectId, SessionId } from "../state/store";
 import { type MatchSpan, scoreFields } from "./score";
 
 /**
@@ -13,37 +13,28 @@ import { type MatchSpan, scoreFields } from "./score";
  *    with no matching session disappears entirely — an empty header is a row
  *    spent saying nothing.
  * 2. **The attention order survives.** Results are painted in exactly the
- *    sequence the attention engine produced. The scorer's number orders matches
- *    only INSIDE a class, and it never moves a row across one: a `waiting`
- *    session does not sink below a `running` one because the query happened to
- *    spell the running one better.
+ *    sequence the attention engine produced. The scorer's number decides which
+ *    field a row matched on, never where the row sits.
  */
 
 /** What a row's searchable text is made of, in recall-likelihood order. */
-export type SearchFields = readonly [session: string, project: string, reason: string];
+export type SearchFields = readonly [session: string, project: string];
 
 export interface FilteredSession {
   readonly id: SessionId;
-  readonly reason: string;
   /**
-   * Glyph indices in the SESSION NAME to weight, or empty when the match landed
-   * on the project or the reason instead. Highlighting is weight-only, so a
-   * match elsewhere is reported by the row's presence rather than by decorating
-   * a field the query did not hit.
+   * Glyph indices in the SESSION TITLE to weight, or empty when the match landed
+   * on the project instead. Highlighting is weight-only, so a match elsewhere is
+   * reported by the row's presence rather than by decorating a field the query
+   * did not hit.
    */
   readonly spans: MatchSpan;
 }
 
 /** Not exported: callers reach it through `Filtered.projects`, not by name. */
 interface FilteredProject {
-  readonly id: ProjectId;
-  readonly live: readonly FilteredSession[];
-  readonly settled: readonly FilteredSession[];
-  /**
-   * A settled tail auto-opens when it holds a match: a result hidden behind a
-   * collapsed disclosure is a result the operator was not shown.
-   */
-  readonly settledOpen: boolean;
+  readonly id: ProjectId | null;
+  readonly sessions: readonly FilteredSession[];
 }
 
 export interface Filtered {
@@ -62,21 +53,19 @@ export interface Filtered {
 export function filterOrdered(
   ordered: Ordered,
   query: string,
-  fieldsFor: (id: SessionId, reason: string) => SearchFields,
+  fieldsFor: (id: SessionId) => SearchFields,
 ): Filtered {
   const trimmed = query.trim();
 
   if (trimmed.length === 0) {
     const projects = ordered.projects.map((group) => ({
       id: group.id,
-      live: group.live.map((entry) => ({ id: entry.id, reason: entry.reason, spans: EMPTY })),
-      settled: group.settled.map((id) => ({ id, reason: "", spans: EMPTY })),
-      settledOpen: false,
+      sessions: group.sessions.map((id) => ({ id, spans: EMPTY })),
     }));
     return {
       projects,
-      sequence: projects.flatMap((group) => group.live.map((entry) => entry.id)),
-      total: projects.reduce((count, group) => count + group.live.length, 0),
+      sequence: projects.flatMap((group) => group.sessions.map((entry) => entry.id)),
+      total: projects.reduce((count, group) => count + group.sessions.length, 0),
       unfiltered: true,
     };
   }
@@ -84,27 +73,13 @@ export function filterOrdered(
   const projects: FilteredProject[] = [];
 
   for (const group of ordered.projects) {
-    const live = matching(
-      group.live.map((entry) => ({ id: entry.id, reason: entry.reason })),
-      trimmed,
-      fieldsFor,
-    );
-    const settled = matching(
-      group.settled.map((id) => ({ id, reason: "" })),
-      trimmed,
-      fieldsFor,
-    );
-
+    const sessions = matching(group.sessions, trimmed, fieldsFor);
     // A header with no matching child is a row spent on nothing.
-    if (live.length === 0 && settled.length === 0) continue;
-
-    projects.push({ id: group.id, live, settled, settledOpen: settled.length > 0 });
+    if (sessions.length === 0) continue;
+    projects.push({ id: group.id, sessions });
   }
 
-  const sequence = projects.flatMap((group) => [
-    ...group.live.map((entry) => entry.id),
-    ...group.settled.map((entry) => entry.id),
-  ]);
+  const sequence = projects.flatMap((group) => group.sessions.map((entry) => entry.id));
 
   return { projects, sequence, total: sequence.length, unfiltered: false };
 }
@@ -116,28 +91,23 @@ const EMPTY: MatchSpan = [];
  *
  * The scorer's number is deliberately NOT used to sort here. It selects which
  * field a row matched on and therefore which glyphs to weight; the sequence
- * belongs to the attention engine. Sorting by score would answer "which name
+ * belongs to the attention engine. Sorting by score would answer "which title
  * does the query spell best", and the question on screen is "what needs you".
  */
 function matching(
-  rows: readonly { readonly id: SessionId; readonly reason: string }[],
+  rows: readonly SessionId[],
   query: string,
-  fieldsFor: (id: SessionId, reason: string) => SearchFields,
+  fieldsFor: (id: SessionId) => SearchFields,
 ): readonly FilteredSession[] {
   const kept: FilteredSession[] = [];
 
-  for (const row of rows) {
-    const fields = fieldsFor(row.id, row.reason);
-    const hit = scoreFields(fields, query);
+  for (const id of rows) {
+    const hit = scoreFields(fieldsFor(id), query);
     if (hit === null) continue;
 
-    // Only a hit on field 0 — the session's own name — produces highlight
+    // Only a hit on field 0 — the session's own title — produces highlight
     // spans, because that is the only string the row prints in full.
-    kept.push({
-      id: row.id,
-      reason: row.reason,
-      spans: hit.field === 0 ? hit.match.spans : EMPTY,
-    });
+    kept.push({ id, spans: hit.field === 0 ? hit.match.spans : EMPTY });
   }
   return kept;
 }

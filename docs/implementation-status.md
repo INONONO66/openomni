@@ -6,6 +6,59 @@ Single source of truth for current wiring, not a declaration that every target i
 
 **Source baseline:** #946 stage 2 includes main `678d357e` (#993/#949 stage 1), #991 codemode, #988's protocol contract and #990's desktop gateway selection. Historical #948 receipts below retain their `c4fb7748` source pin. [SLOP](SLOP.md) records deletion ownership; the PR body records the final gate commands and exit codes. Closed issue labels are not implementation evidence.
 
+## #947 stage-1 branch receipt (2026-09-06)
+
+The stage-1 branch extends the existing alarm owner with fenced evaluation,
+atomic fired/prompt delivery, persistent PTY and path sources, durable dedupe,
+policy-budget pause/rearm, and boot discovery. The additive `monitor` tool uses
+`op:create|rearm|cancel`. The app band outlives session hibernation; its committed
+inbox doorbell re-enters the existing session controller, not a second loop.
+The focused 30-test run passes, including a real PTY, SQLite reopen and a
+one-model-call waiting terminal followed by a hibernated-session wake.
+
+The Owner-approved input now nests an op-discriminated `operation`, with create
+payload under `source` and required `alarmId` on controls. `lint:tools` passes
+without an exemption or lowered floor. Path sources reconcile stat identity in
+the same app scan as native notifications: unchanged observations write zero,
+and a missed native event no longer strands a durable create. The path test
+subscribes before mutation and drives reconciliation without yielding to the
+native callback, proving atomic delivery independently of callback timing.
+Evaluator entry captures the app async context, preventing tool-wave abort
+inheritance. A real WebSocket/PTY/FIFO regression verifies that a tool-created
+source wakes a hibernated app session after its original tool wave has ended.
+
+Rebased production checkpoint `6a912340` passes the complete gate chain:
+3377 tests across 359 files, zero failures, and all 11 coverage lanes plus the
+unchanged coverage ratchet. The real app WebSocket/path exercise reaches a
+hibernated-session wake at revision 59 with two model calls. Removing the app
+async-context binding makes the PTY/FIFO regression fail with AbortError.
+
+[Decisions and operational limits](alarm-monitor-stage-1.md) include the
+at-most-once restart gap. Stage 2 after #946 still owes only the
+message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
+restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.
+
+### PR #994 R1 correction receipt
+
+The R1 implementation merges main `678d357e` (#993): all six fs/bash tools,
+monitor and existing tools remain in the catalog; placement stays deleted.
+Callback deadline precedence now applies before ordinary match/exit admission.
+Command cleanup kills its process group, including HUP-ignoring grandchildren,
+and stale cleanup is fenced from a rearmed source. Migration validates the
+complete shared WatchSpec before committing 0035. Synchronous inbox/action
+assertions kill the path-reconciliation mutant before native callbacks can run.
+A compiler-backed boundary test reports zero inferred unsafe values and rejects
+its deliberately planted JSON/catch mutant; runtime payloads are schema-checked.
+The earlier 3377-test receipt above remains historical, not a claim that R1
+was already addressed at that checkpoint.
+
+Production checkpoint `21675e12` passes the merged full suite: 3435 tests,
+zero failures, 11167 assertions across 365 files. All ten current coverage lanes
+and the unchanged ratchet pass (app 97.08%, ledger 99.34%). The full build/type/
+dependency/cycle/lint/export chain, including tool-lint self-test, exits 0.
+The reviewer's added-line compiler probe emits no unsafe values. The real-app
+WebSocket/path wake still commits one fired pair and reaches revision 59.
+
 ## Deployed shape
 
 | Component | Current wiring | Source |
@@ -24,7 +77,7 @@ Single source of truth for current wiring, not a declaration that every target i
 | Observation | Scoped agent bus/component observations are projections, not durable authority. Ledger facts commit before observation. The old telemetry package and bus-persistence writer are absent. | `packages/agent/src/observation/`, `apps/openomni/src/observation/` |
 | Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; machines owns no interpreter. Old app filesystem/list-machines tools remain absent. | `packages/machines/`, `packages/protocol/src/machine/`, `packages/ipc/` |
 | Code mode | Public factory supplies machine object handles and cell.run. The injected daemon runner owns lazy per-tenant Python processes, parallel/llm helpers and callback routing. The brain facade never spawns Python. Cancellation and close propagate across the attachment and await process cleanup. App VFS, cell registry and old machine methods are deleted; the single run_code tool delegates to codemode. Cell-only llm retains batched prompts and its 32-prompt per-catalog budget. The scp-style plain-tool door is supplied by #949 stage 1. | `packages/codemode/`, `apps/openomni/src/composition/codemode.ts`, `apps/openomni/src/tools/execution/` |
-| Tool catalog and prompts | The current catalog has read/write/edit/list/search/bash alongside sendMessage, approval, provisioning, cell execution and cell LLM definitions. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Dispatcher-only model truncation caps at 32,000 UTF-16 code units on a Unicode code-point boundary, with exact dropped/original UTF-8 byte counts; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/tool-dispatcher.ts` |
+| Tool catalog and prompts | The current catalog has read/write/edit/list/search/bash and monitor alongside sendMessage, approval, provisioning, cell execution and cell LLM definitions. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Dispatcher-only model truncation caps at 32,000 UTF-16 code units on a Unicode code-point boundary, with exact dropped/original UTF-8 byte counts; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/tool-dispatcher.ts` |
 | CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |
 
 #949 stage 1 removes the target-selection workspace and capability-based catalog fold; call-time admission belongs to executor `tool.pre`. Model fallback selection belongs to `packages/llm`. Together with #991's codemode workspace, the generated topology describes twelve workspaces. The current protected-mutation tool remains; the standalone waiting/approval folds and stores are removed by #969; no final #949 catalog seal is claimed.
@@ -33,7 +86,7 @@ Single source of truth for current wiring, not a declaration that every target i
 
 The app exposes one sendMessage tool and one two-argument gateway ingest. Driver facts carry no authority. A/B message rows, tier and actor-grant preflight, transactional root/child inbox writes, source-owned outbound obligations and idempotent receiving inbox mail, durable reply-grant recovery and actor receipt distinctions are wired. Native, process, WebSocket and code-mode integration tests exercise the actual composition roots.
 
-#969 replaces the former message-specific answer/deadline writer with the canonical request transition and an alarm projection. The request retains the original action binding and deadline; answer, timeout, refusal, and cancellation compete for one terminal action. Source terminal commits an outbound obligation; receiving acknowledgement is idempotent, and `LedgerSession.Commit.receive` is restricted to the committing session. **#947 still owns continuous live due-dispatch scheduling and monitoring.** The earlier #946 deadline and native-delivery receipts do not, by themselves, verify these replacement paths.
+#969 replaces the former message-specific answer/deadline writer with the canonical request transition and an alarm projection. The request retains the original action binding and deadline; answer, timeout, refusal, and cancellation compete for one terminal action. Source terminal commits an outbound obligation; receiving acknowledgement is idempotent, and `LedgerSession.Commit.receive` is restricted to the committing session. **#947 supplies the shared live alarm worker; request deadlines use its `at` rows and the canonical request transition.** The earlier #946 deadline and native-delivery receipts do not, by themselves, verify these replacement paths.
 
 The legacy tool trio, separate worker-run stores/process ACK lifecycle, channel return-value writeback, trigger rules and GitHub normalizer are deleted. Migration 0035 refuses nonempty retired tables rather than discarding their data; 0036 adds the bounded durable reply-grant projection. Historical migrations remain immutable. The coverage baseline is unchanged.
 
@@ -60,7 +113,7 @@ The A-row domain deletions below pass their exact production grep at the verifie
 | A15 | Blob store/schema/adapter/tools and spill removed; distinct model/cell output handling survives. | #942 / PR #959, `7edfe5d2` |
 | A4, A16 | Dialogue-window, send-permission, and engagement domain stores/schemas/tools removed. Ordinary gateway send remains; #969 moves waiting to original-action request state. | #943 / PR #961, `23ad4f6b` |
 
-Historical migrations remain immutable. The migration runner applies both 0030 deletion migrations, 0032's guarded dormant-table drops, 0033's session-handle lift, 0034's archive disposition, 0035's guarded retired-table deletion, and 0036's reply-grant projection. Source-level grep-zero does not mean that every historical identifier or every retained archival byte is gone.
+Historical migrations remain immutable. The migration runner applies both 0030 deletion migrations, 0032's guarded dormant-table drops, 0033's session-handle lift, 0034's archive disposition, 0035's guarded retired-table deletion, 0036's reply-grant projection, and 0037's watch-alarm state. Source-level grep-zero does not mean that every historical identifier or every retained archival byte is gone.
 
 ## #937 and #967: merged corrections versus remaining retention
 

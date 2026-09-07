@@ -61,7 +61,7 @@ export interface GatewayRouterPorts {
       deadline: number;
       at: number;
       admission?: Inbox.Commit;
-    }): Promise<SessionTransition.Request>;
+    }): SessionTransition.Request;
     answer(input: SessionTransition.Answer): Promise<SessionTransition.Resolution>;
     receipt(input: SessionTransition.DeliveryReceipt): Promise<SessionTransition.Request>;
   };

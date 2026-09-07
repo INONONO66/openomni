@@ -135,7 +135,7 @@ function compactness(spans: MatchSpan): number {
  * Score a row across all of its searchable fields and keep the best one.
  *
  * `fields` is ordered by how much the operator is likely to have been recalling
- * — a session's own name first, then its project, then the engine's reason —
+ * — a session's own title first, then its project —
  * and ties are broken toward the earlier field, so `kernel` typed at a session
  * named `kernel` does not rank behind one merely belonging to that project.
  */

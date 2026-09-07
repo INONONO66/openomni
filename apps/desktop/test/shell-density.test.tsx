@@ -1,9 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { Timeline } from "@openomni/ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "../src/renderer/app";
 import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
-import { timelines } from "../src/renderer/mock/timelines";
+import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
+import { StateProvider } from "../src/renderer/state/provider";
+import { consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
 
 /**
  * The renderer reads at Shell density, and every transcript role declares its
@@ -23,23 +25,51 @@ import { timelines } from "../src/renderer/mock/timelines";
  * pins that this surface is actually inside them.
  */
 
-const SHELL = renderToStaticMarkup(<App />);
+/** The shell with one session open, so both columns have rows to measure. */
+let SHELL = "";
+beforeAll(() => {
+  consoleStore.setState(() => INITIAL_CLIENT_STATE);
+  createSession(1);
+  SHELL = renderToStaticMarkup(
+    <StateProvider>
+      <App />
+    </StateProvider>,
+  );
+  consoleStore.setState(() => INITIAL_CLIENT_STATE);
+});
 
 /**
- * The fixtures are SDK messages, so the nodes this file asserts on are the
+ * One conversation as SDK messages, so the nodes this file asserts on are the
  * ADAPTER'S output — the same crossing `App` makes. Rendering a hand-built node
  * array here would let the shell and this gate disagree about what the column
- * actually contains.
+ * actually contains. Small on purpose: one prompt, one tool call, one answer.
  */
-function nodesOf(id: string) {
-  const messages = timelines[id];
-  if (!messages) throw new Error(`no timeline fixture for ${id}`);
-  return uiMessagesToTranscript(messages).nodes;
-}
+const MESSAGES: readonly OpenOmniUIMessage[] = [
+  {
+    id: "m1",
+    role: "user",
+    parts: [{ type: "text", text: "Why does append take the lease twice?" }],
+  },
+  {
+    id: "m2",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-bash",
+        toolCallId: "c1",
+        state: "output-available",
+        input: { command: "rg lease.acquire src/ledger/append.rs" },
+        output: { stdout: "138: let lease = acquire();" },
+      },
+      { type: "text", text: "The retry branch re-enters acquire() without releasing." },
+    ],
+  },
+];
 
-function transcript(id: string): string {
-  return renderToStaticMarkup(<Timeline emptyLabel="empty" nodes={nodesOf(id)} sessionId={id} />);
-}
+const nodes = uiMessagesToTranscript(MESSAGES).nodes;
+
+const transcript = () =>
+  renderToStaticMarkup(<Timeline emptyLabel="empty" nodes={nodes} sessionId="density" />);
 
 /**
  * The three voices, as the exact class pairs the transcript emits.
@@ -80,13 +110,12 @@ describe("the shell renders at shell density", () => {
 });
 
 describe("the transcript sets exactly three voices", () => {
-  const IDS = Object.keys(timelines);
-
-  test("Given the fixtures, When surveyed, Then there is something to assert", () => {
-    expect(IDS.length).toBeGreaterThan(0);
+  test("Given the fixture, When adapted, Then there is a prompt and a tool call to assert on", () => {
+    expect(nodes.some((node) => node.kind === "prompt")).toBe(true);
+    expect(nodes.some((node) => node.kind === "tool")).toBe(true);
   });
 
-  test("Given each transcript, When rendered, Then every size is one of the three voices", () => {
+  test("Given the transcript, When rendered, Then every size is one of the three voices", () => {
     // THE gate on the transcript law. Three voices and no fourth: any
     // `text-[Npx]` in the column that is not one of these three is a size the
     // reader has to learn, and at five sizes a system stops reading as a system.
@@ -94,16 +123,15 @@ describe("the transcript sets exactly three voices", () => {
     // Code-fence INTERIORS are exempt because the `<pre>` owns one size for the
     // whole block and its syntax tokens carry tone only — the fence is asserted
     // as a unit separately.
-    for (const id of IDS) {
-      const html = transcript(id);
-      const outside = html.split(/<pre[\s\S]*?<\/pre>/).join("");
-      const sizes = [...outside.matchAll(/text-\[(\d+)px\]\/\[(\d+)px\]/g)].map(
-        (m) => `${m[1]}/${m[2]}`,
-      );
-      expect(sizes.length, `no sized text in ${id}`).toBeGreaterThan(0);
-      for (const size of sizes) {
-        expect(VOICES, `unnamed size ${size} in ${id}`).toContain(size);
-      }
+    const outside = transcript()
+      .split(/<pre[\s\S]*?<\/pre>/)
+      .join("");
+    const sizes = [...outside.matchAll(/text-\[(\d+)px\]\/\[(\d+)px\]/g)].map(
+      (m) => `${m[1]}/${m[2]}`,
+    );
+    expect(sizes.length, "no sized text").toBeGreaterThan(0);
+    for (const size of sizes) {
+      expect(VOICES, `unnamed size ${size}`).toContain(size);
     }
   });
 
@@ -112,19 +140,11 @@ describe("the transcript sets exactly three voices", () => {
     // a `text-body` or `text-meta` from the shared type scale appearing in the
     // column means something is being sized by the density scope instead — a
     // fourth voice that arrives without anyone declaring one.
-    for (const id of IDS) {
-      const outside = transcript(id)
-        .split(/<pre[\s\S]*?<\/pre>/)
-        .join("");
-      for (const level of [
-        "text-display",
-        "text-title",
-        "text-heading",
-        "text-body",
-        "text-label",
-      ]) {
-        expect(outside, `${level} leaked into the transcript in ${id}`).not.toContain(level);
-      }
+    const outside = transcript()
+      .split(/<pre[\s\S]*?<\/pre>/)
+      .join("");
+    for (const level of ["text-display", "text-title", "text-heading", "text-body", "text-label"]) {
+      expect(outside, `${level} leaked into the transcript`).not.toContain(level);
     }
   });
 
@@ -174,10 +194,7 @@ describe("the transcript sets exactly three voices", () => {
     // two-line layout, no status column — those belonged to the grammar this
     // replaced, and the row is the transcript's densest element becoming its
     // most decorated one the moment any of them come back.
-    const withTool = IDS.find((id) => nodesOf(id).some((node) => node.kind === "tool"));
-    if (!withTool) throw new Error("no tool fixture");
-
-    const html = transcript(withTool);
+    const html = transcript();
     const row = html.slice(html.indexOf("data-tool-row"));
     expect(row).toContain(META);
     expect(html).not.toContain('lines="two"');
@@ -185,19 +202,13 @@ describe("the transcript sets exactly three voices", () => {
   });
 
   test("Given the transcript, When prose is rendered, Then it is the prose voice", () => {
-    const withPrompt = IDS.find((id) => nodesOf(id).some((node) => node.kind === "prompt"));
-    if (!withPrompt) throw new Error("no prompt fixture");
-
-    expect(transcript(withPrompt)).toContain(PROSE);
+    expect(transcript()).toContain(PROSE);
   });
 
   test("Given a user message, When rendered, Then it is a right-aligned block with no fill", () => {
     // The one asymmetry that tells two speakers apart. It must stay geometry:
     // a background or a border here is the chat bubble the column rejected.
-    const withPrompt = IDS.find((id) => nodesOf(id).some((node) => node.kind === "prompt"));
-    if (!withPrompt) throw new Error("no prompt fixture");
-
-    const html = transcript(withPrompt);
+    const html = transcript();
     const marker = html.indexOf("data-user-message");
     expect(marker).toBeGreaterThanOrEqual(0);
     // From the wrapper's own `<div` — the alignment class sits before the
@@ -216,12 +227,12 @@ describe("the transcript sets exactly three voices", () => {
 });
 
 describe("the sidebar row keeps its own rank", () => {
-  test("Given a session row, When rendered, Then the name is label and the reason is meta", () => {
-    // The row is two lines and the second must read as supporting the first.
-    // Both levels have to be NAMED: the name used to inherit 16px, which put a
-    // session name above the transcript's own prose.
-    expect(SHELL).toContain("text-label");
-    expect(SHELL).toContain("text-meta");
+  test("Given a session row, When rendered, Then the title is label and the header is overline", () => {
+    // Both levels have to be NAMED: the title used to inherit 16px, which put a
+    // session title above the transcript's own prose.
+    const nav = SHELL.slice(SHELL.indexOf('aria-label="Sessions"'), SHELL.indexOf("<main"));
+    expect(nav).toContain("text-label");
+    expect(nav).toContain("text-overline");
   });
 
   test("Given the navigator, When scanned, Then no element sets a raw font size", () => {

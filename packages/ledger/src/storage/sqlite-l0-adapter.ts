@@ -64,6 +64,10 @@ interface InboxSqlRow {
 }
 
 interface AlarmSqlRow {
+  epoch: number;
+  fence: number;
+  last_batch: string | null;
+  notifications: number;
   id: string;
   session_id: string;
   kind: string;
@@ -107,7 +111,7 @@ export function createSqliteL0Adapters(
     actions,
     inbox,
     alarms: createAlarms(db, transaction, observationSink),
-    policies: createPolicies(db),
+    policies: createPolicies(db, transaction),
   };
 }
 
@@ -749,6 +753,44 @@ function createInbox(
   };
 }
 
+function insertInbox(db: Database, row: Inbox.Commit): Inbox.Row {
+  const ordinal = db
+    .query<{ ordinal: number }, [string]>(
+      "SELECT COALESCE(MAX(ordinal), 0) + 1 AS ordinal FROM inbox WHERE session_id = ?",
+    )
+    .get(row.sessionId);
+  if (ordinal === null) throw new Error("inbox ordinal unavailable");
+  const committed = Inbox.Row.parse({
+    id: row.id,
+    sessionId: row.sessionId,
+    kind: row.kind,
+    content: row.content,
+    origin: row.origin,
+    createdAt: row.createdAt,
+    status: "pending",
+    consumedBy: null,
+    consumedAt: null,
+    ordinal: ordinal.ordinal,
+  });
+  db.query(`INSERT INTO inbox (id, session_id, kind, content, origin, encoding_version, status, consumed_by, consumed_at, time_created, ordinal)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, ?, ?)`).run(
+    row.id,
+    row.sessionId,
+    row.kind,
+    row.content,
+    JSON.stringify(row.origin.value),
+    row.origin.encodingVersion,
+    row.createdAt,
+    committed.ordinal,
+  );
+  return committed;
+}
+
+function selectAlarm(db: Database, id: string): Alarm.Row | undefined {
+  const row = db.query<AlarmSqlRow, [string]>("SELECT * FROM alarm WHERE id = ?").get(id);
+  return row === null ? undefined : decodeAlarm(row);
+}
+
 function receivedDigest(row: Pick<Inbox.Row, "id" | "sessionId" | "kind" | "content" | "origin">): string {
   return canonicalDigest({
     id: row.id, sessionId: row.sessionId, kind: row.kind,
@@ -803,15 +845,33 @@ function createAlarms(
       publishCommitted(db, observationSink, result.receipt);
       return result.row;
     },
-    cancel(id, updatedAt) {
-      const result = db
-        .query(
-          "UPDATE alarm SET status = 'cancelled', time_updated = ? WHERE id = ? AND status = 'armed'",
-        )
-        .run(updatedAt, id);
-      if (result.changes !== 1) return undefined;
-      const row = db.query("SELECT * FROM alarm WHERE id = ?").get(id) as AlarmSqlRow;
-      return decodeAlarm(row);
+    get: (id) => selectAlarm(db, id),
+    cancel(id, sessionId, at) {
+      const result = transaction(() => controlAlarm(db, id, sessionId, at, "cancel"));
+      if (result !== undefined) publishCommitted(db, observationSink, result.receipt);
+      return result?.row;
+    },
+    rearm(id, sessionId, at) {
+      const result = transaction(() => controlAlarm(db, id, sessionId, at, "rearm"));
+      if (result !== undefined) publishCommitted(db, observationSink, result.receipt);
+      return result?.row;
+    },
+    acquire(id, expectedFence) {
+      return transaction(() => {
+        const updated = db
+          .query(
+            "UPDATE alarm SET fence = fence + 1 WHERE id = ? AND fence = ? AND status = 'armed'",
+          )
+          .run(id, expectedFence);
+        return updated.changes === 1 ? selectAlarm(db, id) : undefined;
+      });
+    },
+    fire(input) {
+      const parsed = Alarm.Fire.parse(input);
+      const result = transaction(() => fireAlarm(db, parsed));
+      if (result !== undefined)
+        for (const receipt of result.receipts) publishCommitted(db, observationSink, receipt);
+      return result;
     },
     due(at) {
       const rows = db
@@ -822,8 +882,147 @@ function createAlarms(
   };
 }
 
-function createPolicies(db: Database): ProtocolStorage.PolicyRowSubAdapter {
+function controlAlarm(
+  db: Database,
+  id: string,
+  sessionId: string,
+  at: number,
+  op: "cancel" | "rearm",
+) {
+  const current = selectAlarm(db, id);
+  if (
+    current === undefined ||
+    current.sessionId !== sessionId ||
+    current.kind !== "watch" ||
+    (current.status !== "armed" && current.status !== "paused")
+  )
+    return undefined;
+  const session = selectSession(db, current.sessionId);
+  if (session === undefined) return undefined;
+  const row: Alarm.Row = {
+    ...current,
+    status: op === "cancel" ? "cancelled" : "armed",
+    updatedAt: at,
+    fence: current.fence + 1,
+    ...(op === "rearm"
+      ? { epoch: current.epoch + 1, fireAt: at, notifications: 0, lastBatch: null }
+      : {}),
+  };
+  const receipt = appendAction(
+    db,
+    {
+      id: canonicalDigest([id, row.epoch, op]),
+      parentId: id,
+      sessionId: row.sessionId,
+      kind: "alarm.arm",
+      intent: { encodingVersion: 1, value: { op, alarmId: id, epoch: row.epoch } },
+      effect: {
+        encodingVersion: 1,
+        value: {
+          status: row.status,
+          epoch: row.epoch,
+          fence: row.fence,
+          fireAt: row.fireAt,
+          notifications: row.notifications,
+          lastBatch: row.lastBatch,
+        },
+      },
+      irreversible: true,
+      ts: at,
+    },
+    session.revision,
+  );
+  if (receipt === undefined) return undefined;
+  db.query(
+    "UPDATE alarm SET status = ?, time_updated = ?, fire_at = ?, epoch = ?, fence = ?, notifications = ?, last_batch = ? WHERE id = ?",
+  ).run(row.status, at, row.fireAt, row.epoch, row.fence, row.notifications, row.lastBatch, id);
+  return { row, receipt };
+}
+
+function fireAlarm(db: Database, input: Alarm.Fire): Alarm.Fired | undefined {
+  const row = selectAlarm(db, input.id);
+  if (
+    row === undefined ||
+    row.status !== "armed" ||
+    row.epoch !== input.epoch ||
+    row.fence !== input.fence ||
+    input.at < row.fireAt
+  )
+    return undefined;
+  if (input.batchHash !== undefined && row.lastBatch === input.batchHash) return undefined;
+  const session = selectSession(db, row.sessionId);
+  if (session === undefined) return undefined;
+  const paused = !input.terminal && row.notifications >= input.limit;
+  const status = paused ? "paused" : input.terminal || row.kind === "at" ? "fired" : "armed";
+  const content = paused
+    ? JSON.stringify({ alarmId: row.id, epoch: row.epoch, reason: "wake_budget", status: "paused" })
+    : input.content;
+  const fired = appendAction(
+    db,
+    {
+      id: input.actionId,
+      parentId: row.id,
+      sessionId: row.sessionId,
+      kind: paused ? "alarm.paused" : "alarm.fired",
+      intent: {
+        encodingVersion: 1,
+        value: { alarmId: row.id, epoch: row.epoch, fence: row.fence, inboxId: input.inboxId },
+      },
+      effect: { encodingVersion: 1, value: { status, content } },
+      irreversible: true,
+      ts: input.at,
+    },
+    session.revision,
+  );
+  if (fired === undefined) return undefined;
+  const pending: Inbox.Commit = {
+    id: input.inboxId,
+    sessionId: row.sessionId,
+    kind: "prompt",
+    content,
+    origin: { encodingVersion: 1, value: row.id },
+    createdAt: input.at,
+    parentActionId: fired.action.id,
+  };
+  const prompt = appendAction(db, inboxAppend(pending), fired.revision);
+  if (prompt === undefined) throw new Error("alarm prompt append refused");
+  const inbox = insertInbox(db, pending);
+  db.query(
+    "UPDATE alarm SET status = ?, notifications = notifications + ?, last_batch = ?, fence = fence + ?, time_updated = ? WHERE id = ?",
+  ).run(
+    status,
+    paused || input.terminal ? 0 : 1,
+    input.batchHash ?? row.lastBatch,
+    status === "armed" ? 0 : 1,
+    input.at,
+    row.id,
+  );
+  const committed = selectAlarm(db, row.id);
+  if (committed === undefined) throw new Error("fired alarm disappeared");
+  return { row: committed, inbox, receipts: [fired, prompt] };
+}
+
+function createPolicies(
+  db: Database,
+  transaction: <T>(operation: () => T) => T,
+): ProtocolStorage.PolicyRowSubAdapter {
   return {
+    appendGeneration(derive) {
+      return transaction(() => {
+        const all = this.rows();
+        const latest = Math.max(0, ...all.map((row) => row.generation));
+        const drafts = derive(all.filter((row) => row.generation === latest));
+        if (drafts === undefined) return latest;
+        if (drafts.length === 0) throw new Error("policy generation must not be empty");
+        const generation = latest + 1;
+        for (const draft of drafts) {
+          if (!this.append({ ...draft, generation })) {
+            throw new Error(`could not append policy row: ${draft.name}`);
+          }
+        }
+        return generation;
+      });
+    },
     append(input) {
       const row = PolicyRow.Row.parse(input);
       const result = db
@@ -988,6 +1187,10 @@ function decodeInbox(row: InboxSqlRow): Inbox.Row {
 
 function decodeAlarm(row: AlarmSqlRow): Alarm.Row {
   return alarmRowSchema.parse({
+    epoch: row.epoch,
+    fence: row.fence,
+    lastBatch: row.last_batch,
+    notifications: row.notifications,
     id: row.id,
     sessionId: row.session_id,
     kind: row.kind,

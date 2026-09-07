@@ -136,7 +136,7 @@ export function createController(
   const handle: SessionHandle = {
     id: sessionId,
     requests: {
-      async transition(payload, inputId, at, admission) {
+      transition(payload, inputId, at, admission) {
         const nextHandle = replacement();
         if (nextHandle !== undefined) return nextHandle.requests.transition(payload, inputId, at, admission);
         const current = SessionHandleStore.row(sessionId);
@@ -162,7 +162,7 @@ export function createController(
           if (decision.request !== undefined) state.activeApprovals?.notify?.(decision.request);
           return decision;
         } finally {
-          if (!ownsLease) await releaseHeldLease();
+          if (!ownsLease) releaseHeldLease();
         }
       },
     },

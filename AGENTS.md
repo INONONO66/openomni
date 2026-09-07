@@ -4,7 +4,7 @@ Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 20
 
 Machine/codemode ownership updated on `kernel/949-tools-catalog` (2026-09-06), based on `f9c02a66`: raw WHERE handles, injected code runner, two-boundary authority, and production machine attach composition. Stage 1 adds locus-aware path tools and bash, deletes the target-selection workspace, and retains the legacy catalog entries pending stage 2.
 
-Desktop/ui verified against `feat/desktop-chrome` (2026-09-06): apps/desktop owns AI SDK chat state and the Electron window (hiddenInset chrome); `packages/ui` is a minimal package whose barrel exports only what apps/desktop imports, with `src/names.ts` owning every `data-ui` address.
+Desktop/ui verified against `feat/desktop-state` (2026-09-07): apps/desktop owns AI SDK chat state and the Electron window (hiddenInset chrome), with client state in one TanStack `Store` (`src/renderer/state/store.ts`) and server state through TanStack Query (`src/renderer/state/queries.ts`, one query: the gateway endpoint); all mock fixtures and the mock transport are deleted, so the shell renders real empty states. `packages/ui` is a minimal package whose barrel exports only what apps/desktop imports, with `src/names.ts` owning every `data-ui` address.
 
 ## OVERVIEW
 
@@ -86,7 +86,7 @@ ui <- apps/desktop
 | `packages/codemode` | Code facade, machine object handles, per-tenant interpreter and call routing | Kernel policy, ledger, model rendering |
 | `packages/channels` | Drivers plus perimeter routing, physical request correlation, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, code mode, boot/shutdown | Reimplementation of package primitives |
-| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults, the gateway endpoint resolved from env in main and handed to the renderer over one `contextBridge` call; AI SDK chat state and transports; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
+| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults, the gateway endpoint resolved from env in main and handed to the renderer over one `contextBridge` call; AI SDK chat state and the gateway transport; client state in one TanStack `Store` (`state/store.ts`: sessions, selection, collapsed project groups, per-session drafts) read through `useStore` selectors, and server state through TanStack Query (`state/queries.ts` mints every key; the only query is the gateway endpoint — the wire has no session-list method yet); the attention ordering engine and the search engine over store sessions; no mock data of any kind | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
 | `packages/ui` | The renderer's UI package: tokens (`src/styles.css`), primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray), and the one `Console` composition; `src/index.ts` exports only what apps/desktop imports, and `src/names.ts` is the single owner of every `data-ui` address | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
 
 ## WHERE TO LOOK
@@ -122,7 +122,8 @@ ui <- apps/desktop
 
 CI selection and verification wiring inspected at `c4fb7748` (includes PR #983),
 2026-09-06. See `docs/ci.md` for dependency-aware PR lanes, full runs, and
-fail-closed completion checks.
+fail-closed completion checks. Use Bun 1.4.1 as pinned in `package.json`;
+alarm monitoring requires Bun >=1.4.0 for built-in PTY support.
 
 ```bash
 bun install

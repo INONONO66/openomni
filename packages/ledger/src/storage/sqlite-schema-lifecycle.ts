@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { Migration } from "./migration-runner";
-import { preflight967, U967Error, U967_MIGRATION } from "./u967-preflight";
+import { preflight967, U967Error, U967_MIGRATION, REPLY_GRANT_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
 
@@ -46,6 +46,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: U967_MIGRATION },
   { name: "0035_drop_retired_delegation_tables/migration.sql" },
   { name: "0036_reply_grant_projection/migration.sql" },
+  { name: "0037_watch_alarms/migration.sql" },
   { name: REQUEST_MIGRATION },
 ];
 
@@ -94,12 +95,15 @@ export function initializeSqliteDatabase(
   // committed append survives power loss, which is what "no record, no
   // action" durably means (#510 D1).
   applyConnectionPragmas(db, "FULL");
-  Migration.applyOrdered(
-    db,
-    MIGRATION_DIR,
-    target === "archive967" ? ORDERED_MIGRATIONS.slice(0, -1) : ORDERED_MIGRATIONS,
-    prepare967,
-  );
+  // Preserve the shipped archive chain through 0036, never authorize later migrations.
+  const migrations =
+    target === "current" && prepare967 === undefined
+      ? ORDERED_MIGRATIONS
+      : ORDERED_MIGRATIONS.slice(
+          0,
+          ORDERED_MIGRATIONS.findIndex((migration) => migration.name === REPLY_GRANT_MIGRATION) + 1,
+        );
+  Migration.applyOrdered(db, MIGRATION_DIR, migrations, prepare967);
 }
 
 /** @internal Test-only fixture reset (Adapter.clear) — no production caller. */
