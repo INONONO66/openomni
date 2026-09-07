@@ -11,7 +11,36 @@ import { claimWithinCountedWindow } from "./counted-window-claim.js";
 export function createSqliteEgressBudgetAdapter(
   db: Database,
 ): ProtocolStorage.EgressBudgetSubAdapter {
+  const read: ProtocolStorage.EgressBudgetSubAdapter["read"] = (
+    senderId,
+    targetActorId,
+    windowStartAt,
+  ) => {
+    const state = db
+      .query<
+        {
+          count_in_window: number;
+          notify_in_window: number;
+          converse_in_window: number;
+          last_send_at: number | null;
+        },
+        [number, number, number, string, string]
+      >(`SELECT
+      COUNT(*) FILTER (WHERE at >= ?) AS count_in_window,
+      COUNT(*) FILTER (WHERE at >= ? AND class = 'notify') AS notify_in_window,
+      COUNT(*) FILTER (WHERE at >= ? AND class = 'converse') AS converse_in_window,
+      MAX(at) AS last_send_at
+      FROM egress_debit WHERE sender_id = ? AND target_actor_id = ?`)
+      .get(windowStartAt, windowStartAt, windowStartAt, senderId, targetActorId);
+    return Gateway.EgressDebitState.parse({
+      countInWindow: state?.count_in_window ?? 0,
+      notifyInWindow: state?.notify_in_window ?? 0,
+      converseInWindow: state?.converse_in_window ?? 0,
+      ...(state?.last_send_at == null ? {} : { lastSendAt: state.last_send_at }),
+    });
+  };
   return {
+    read,
     claim(row, windowStartAt, canClaim) {
       const parsed = Gateway.EgressDebitRow.parse(row);
       return claimWithinCountedWindow({
@@ -40,36 +69,7 @@ export function createSqliteEgressBudgetAdapter(
           }
           return true;
         },
-        readWindowState: () => {
-          const state = db
-            .query(
-              `SELECT
-                 COUNT(*) FILTER (WHERE at >= ?) AS count_in_window,
-                 COUNT(*) FILTER (WHERE at >= ? AND class = 'notify') AS notify_in_window,
-                 COUNT(*) FILTER (WHERE at >= ? AND class = 'converse') AS converse_in_window,
-                 MAX(at) AS last_send_at
-               FROM egress_debit
-               WHERE sender_id = ? AND target_actor_id = ?`,
-            )
-            .get(
-              windowStartAt,
-              windowStartAt,
-              windowStartAt,
-              parsed.senderId,
-              parsed.targetActorId,
-            ) as {
-            count_in_window: number;
-            notify_in_window: number;
-            converse_in_window: number;
-            last_send_at: number | null;
-          } | null;
-          return Gateway.EgressDebitState.parse({
-            countInWindow: state?.count_in_window ?? 0,
-            notifyInWindow: state?.notify_in_window ?? 0,
-            converseInWindow: state?.converse_in_window ?? 0,
-            ...(state?.last_send_at == null ? {} : { lastSendAt: state.last_send_at }),
-          });
-        },
+        readWindowState: () => read(parsed.senderId, parsed.targetActorId, windowStartAt),
         canClaim,
         append: () => {
           db.query(

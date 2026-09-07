@@ -1,23 +1,16 @@
 import { newTraceId } from "../../support/trace";
-import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
+import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../../support/dedupe";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
-import { respondUnderTyping } from "../../support/handler-frame";
 import { DiscordClient } from "./client";
-import { DiscordHandlerMissingError } from "./error";
+import { DiscordApiError, DiscordHandlerMissingError } from "./error";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import { type DiscordMessage, DiscordMessageSchema } from "./types";
 import type { PublishPort } from "../../types";
-import {
-  ChannelAuthnMiddleware,
-  type ChannelAuthnDecisionObserver,
-  decisionOption,
-} from "../../channel-authn";
-
-interface DiscordAuthOptions {
-  readonly onDecision?: ChannelAuthnDecisionObserver;
-}
+import { sendText } from "../../support/send-text";
+import { RetryExhaustedError } from "../../support/fetch-retry";
+import { DISCORD_RENDER } from "./format";
 
 export class DiscordAdapter implements Channel.Surface {
   readonly id = "discord";
@@ -34,7 +27,6 @@ export class DiscordAdapter implements Channel.Surface {
     token: string,
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
-    private readonly authOptions: DiscordAuthOptions = {},
   ) {
     this.client = new DiscordClient(token, publish);
     this.gateway = new DiscordGateway(
@@ -43,10 +35,7 @@ export class DiscordAdapter implements Channel.Surface {
       {
         onReady: ({ botId, botUsername }) => {
           this.botId = botId;
-          this.normalizer = new DiscordNormalizer({
-            botId,
-            triggers: this.config.triggers,
-          });
+          this.normalizer = new DiscordNormalizer();
           this.publish(Operational.Events.Info, {
             // Origin: a gateway READY is a distinct occurrence (initial connect
             // AND every re-identify) — deliberately its own trace, not the boot's.
@@ -104,11 +93,21 @@ export class DiscordAdapter implements Channel.Surface {
    * Discord user id — deliver by DM and report the platform message id of
    * the final chunk (the message a reply would reference).
    */
-  deliver(externalId: string, body: string, idempotencyKey?: string): Promise<DeliveryReceipt> {
-    return deliverKeyed(this.outboundDedupe, idempotencyKey, async (traceId) => {
-      const channelId = await this.client.createDmChannel(externalId, traceId);
-      return await sendDiscordMessage(this.client, channelId, { text: body }, traceId);
-    });
+  deliver(externalId: string, body: string, idempotencyKey: string): Promise<DeliveryReceipt> {
+    return deliverKeyed(
+      this.outboundDedupe,
+      idempotencyKey,
+      async (traceId) => {
+        const channelId = await this.client.createDmChannel(externalId, traceId);
+        return await sendText(body, DISCORD_RENDER, (chunk) =>
+          this.client.send(channelId, chunk, traceId),
+        );
+      },
+      (error) =>
+        (error instanceof DiscordApiError && error.data.rejected === true) ||
+        (error instanceof RetryExhaustedError && error.status === 429),
+      this.publish,
+    );
   }
 
   private handleMessageCreate(message: DiscordMessage, traceId: string): void {
@@ -119,14 +118,10 @@ export class DiscordAdapter implements Channel.Surface {
     if (message.author.bot) return;
     if (!message.content) return;
 
-    const isDM = !message.guild_id;
     const botId = this.botId;
     if (!botId) return;
 
-    const mentioned = message.mentions?.some((u) => u.id === botId) ?? false;
-    if (this.triggerBlocks(message, isDM, mentioned)) return;
-
-    const inbound = this.normalizer.normalize(message, traceId);
+    const inbound = this.normalizer.normalize(message);
     if (!inbound) return;
 
     this.handleIncoming(inbound, message.channel_id, traceId).catch((err) => {
@@ -139,22 +134,6 @@ export class DiscordAdapter implements Channel.Surface {
         context: { err: String(err) },
       });
     });
-  }
-
-  private triggerBlocks(message: DiscordMessage, isDM: boolean, mentioned: boolean): boolean {
-    const auth = ChannelAuthnMiddleware.authenticateDiscordTriggers({
-      triggers: this.config.triggers,
-      ctx: {
-        event: "message",
-        mentioned,
-        channelId: message.channel_id,
-        senderId: message.author.id,
-        isDM,
-        text: message.content,
-      },
-      ...decisionOption(this.authOptions.onDecision),
-    });
-    return PolicyDecision.isBlocking(auth.verdict);
   }
 
   private async handleIncoming(
@@ -170,40 +149,6 @@ export class DiscordAdapter implements Channel.Surface {
       context: { channelId },
     });
 
-    await respondUnderTyping({
-      typing: () => this.client.sendTyping(channelId, traceId),
-      typingIntervalMs: 8000,
-      run: () => (this.handler as Channel.MessageHandler)(inbound),
-      send: (message) => sendDiscordMessage(this.client, channelId, message, traceId),
-      onError: (err) =>
-        this.publish(Operational.Events.Error, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "discord message handler error",
-          context: { channelId, err },
-        }),
-    });
+    await (this.handler as Channel.MessageHandler)(inbound);
   }
-}
-
-// merged from formatter.ts (#453 hygiene: sub-30-LOC single-importer)
-import { chunkMarkdown } from "../../support/format/chunk";
-import { DISCORD_RENDER } from "./format";
-import type { ChannelClient } from "../../types";
-
-
-async function sendDiscordMessage(
-  client: ChannelClient,
-  channelId: string,
-  message: Channel.OutboundMessage,
-  traceId: string,
-): Promise<string | undefined> {
-  if (!message.text) return undefined;
-  let lastMessageId: string | undefined;
-  const rendered = DISCORD_RENDER.renderMarkdown(message.text);
-  for (const chunk of chunkMarkdown(rendered, DISCORD_RENDER.messageLimit)) {
-    lastMessageId = (await client.send(channelId, chunk, traceId)) ?? lastMessageId;
-  }
-  return lastMessageId;
 }

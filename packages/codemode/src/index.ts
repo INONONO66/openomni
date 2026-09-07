@@ -14,12 +14,26 @@ interface Options {
   readonly llm?: (prompts: string[]) => Promise<string[]>;
   /** Captured synchronously at cell entry, preserving the consumer's executor context. */
   readonly tools?: (tenant: string) => Caller;
-  readonly boundary?: (tenant: string) => (call: Machine.ToolCall, body: () => Promise<Machine.ToolCallResult>) => Promise<Machine.ToolCallResult>;
+  readonly boundary?: (
+    tenant: string,
+  ) => (
+    call: Machine.ToolCall,
+    body: () => Promise<Machine.ToolCallResult>,
+  ) => Promise<Machine.ToolCallResult>;
 }
-const CodemodeError = NamedError.create("CodemodeError", z.object({
-  reason: z.enum(["closed", "machines_not_bound", "machine_not_found", "ambiguous_machine", "unknown_cell_id"]),
-  message: z.string(),
-}));
+const CodemodeError = NamedError.create(
+  "CodemodeError",
+  z.object({
+    reason: z.enum([
+      "closed",
+      "machines_not_bound",
+      "machine_not_found",
+      "ambiguous_machine",
+      "unknown_cell_id",
+    ]),
+    message: z.string(),
+  }),
+);
 const PathInput = z.object({ machineId: Machine.MachineId, path: Machine.AbsolutePath }).strict();
 const WriteInput = PathInput.extend({ data: z.string() });
 const ShellInput = Machine.ExecRequest.extend({ machineId: Machine.MachineId });
@@ -30,7 +44,16 @@ const FindInput = z.object({ tag: z.string().min(1) }).strict();
 export function createCodemode(options: Options = {}) {
   const kernels = new Map<string, PythonKernel>();
   const handles = new Map<string, ReturnType<typeof makeHandle>>();
-  const live = new Map<string, { caller: Caller; tenant: string; timeoutMs: number; signal?: AbortSignal; boundary?: ReturnType<NonNullable<Options["boundary"]>> }>();
+  const live = new Map<
+    string,
+    {
+      caller: Caller;
+      tenant: string;
+      timeoutMs: number;
+      signal?: AbortSignal;
+      boundary?: ReturnType<NonNullable<Options["boundary"]>>;
+    }
+  >();
   const lifetime = new AbortController();
   const running = new Set<Promise<Machine.CellResult>>();
   let closed = false;
@@ -39,15 +62,29 @@ export function createCodemode(options: Options = {}) {
   }
   function machines(): Pick<MachineHost, "list" | "get"> {
     requireOpen();
-    if (options.machines === undefined) throw new CodemodeError({ reason: "machines_not_bound", message: "machine port is not bound" });
+    if (options.machines === undefined)
+      throw new CodemodeError({
+        reason: "machines_not_bound",
+        message: "machine port is not bound",
+      });
     return options.machines;
   }
   function select(query: { tag: string }): string {
     const parsed = FindInput.parse(query);
-    const found = machines().list().filter((entry) => entry.tags.includes(parsed.tag));
+    const found = machines()
+      .list()
+      .filter((entry) => entry.tags.includes(parsed.tag));
     const first = found[0];
-    if (first === undefined) throw new CodemodeError({ reason: "machine_not_found", message: "no machine matches the tag" });
-    if (found.length > 1) throw new CodemodeError({ reason: "ambiguous_machine", message: "multiple machines match the tag" });
+    if (first === undefined)
+      throw new CodemodeError({
+        reason: "machine_not_found",
+        message: "no machine matches the tag",
+      });
+    if (found.length > 1)
+      throw new CodemodeError({
+        reason: "ambiguous_machine",
+        message: "multiple machines match the tag",
+      });
     return first.machineId;
   }
   function makeHandle(id: string) {
@@ -65,19 +102,30 @@ export function createCodemode(options: Options = {}) {
     const parsed = Machine.MachineId.parse(id);
     requireOpen();
     let handle = handles.get(parsed);
-    if (handle === undefined) { handle = makeHandle(parsed); handles.set(parsed, handle); }
+    if (handle === undefined) {
+      handle = makeHandle(parsed);
+      handles.set(parsed, handle);
+    }
     return handle;
   }
 
   function callTool(call: Machine.ToolCall): Promise<Machine.ToolCallResult> {
     const binding = live.get(call.cellId);
-    if (binding === undefined) return Promise.resolve({ status: "failed", error: `no tools are bound to cell ${call.cellId}` });
-    return binding.boundary === undefined ? dispatch(call) : binding.boundary(call, () => dispatch(call));
+    if (binding === undefined)
+      return Promise.resolve({
+        status: "failed",
+        error: `no tools are bound to cell ${call.cellId}`,
+      });
+    return binding.boundary === undefined
+      ? dispatch(call)
+      : binding.boundary(call, () => dispatch(call));
   }
   async function dispatch(call: Machine.ToolCall): Promise<Machine.ToolCallResult> {
     const binding = live.get(call.cellId);
-    if (binding === undefined) throw new CodemodeError({ reason: "unknown_cell_id", message: "cell has settled" });
-    if (call.name === "codemode.listMachines") return Machine.ToolCallResult.parse({ status: "completed", value: machines().list() });
+    if (binding === undefined)
+      throw new CodemodeError({ reason: "unknown_cell_id", message: "cell has settled" });
+    if (call.name === "codemode.listMachines")
+      return Machine.ToolCallResult.parse({ status: "completed", value: machines().list() });
     if (call.name === "codemode.findMachine") {
       const input = z.object({ query: FindInput }).strict().parse(call.arguments);
       return { status: "completed", value: select(input.query) };
@@ -85,49 +133,103 @@ export function createCodemode(options: Options = {}) {
     if (call.name === "codemode.read") {
       const input = PathInput.parse(call.arguments);
       const value = await getMachine(input.machineId).read(input.path);
-      return { status: "completed", value: { ...value, data: Buffer.from(value.data).toString("base64") } };
+      return {
+        status: "completed",
+        value: { ...value, data: Buffer.from(value.data).toString("base64") },
+      };
     }
     if (call.name === "codemode.write") {
       const input = WriteInput.parse(call.arguments);
-      return { status: "completed", value: await getMachine(input.machineId).write(input.path, Buffer.from(input.data, "base64")) };
+      return {
+        status: "completed",
+        value: await getMachine(input.machineId).write(
+          input.path,
+          Buffer.from(input.data, "base64"),
+        ),
+      };
     }
     if (call.name === "codemode.list" || call.name === "codemode.stat") {
       const input = PathInput.parse(call.arguments);
       const handle = getMachine(input.machineId);
-      return { status: "completed", value: await (call.name === "codemode.list" ? handle.list(input.path) : handle.stat(input.path)) };
+      return {
+        status: "completed",
+        value: await (call.name === "codemode.list"
+          ? handle.list(input.path)
+          : handle.stat(input.path)),
+      };
     }
     if (call.name === "codemode.shell") {
       const input = ShellInput.parse(call.arguments);
       const value = await getMachine(input.machineId).shell(input.cmd, input.cwd);
-      return { status: "completed", value: value.status === "completed" ? { ...value, stdout: Buffer.from(value.stdout).toString("base64"), stderr: Buffer.from(value.stderr).toString("base64") } : value };
+      return {
+        status: "completed",
+        value:
+          value.status === "completed"
+            ? {
+                ...value,
+                stdout: Buffer.from(value.stdout).toString("base64"),
+                stderr: Buffer.from(value.stderr).toString("base64"),
+              }
+            : value,
+      };
     }
     if (call.name === "codemode.run") {
       const input = RunInput.parse(call.arguments);
-      return { status: "completed", value: await runOn(input.machineId, input.code, `${binding.tenant}/nested`, binding.caller, { timeoutMs: binding.timeoutMs, signal: binding.signal }, binding.boundary) };
+      return {
+        status: "completed",
+        value: await runOn(
+          input.machineId,
+          input.code,
+          `${binding.tenant}/nested`,
+          binding.caller,
+          { timeoutMs: binding.timeoutMs, signal: binding.signal },
+          binding.boundary,
+        ),
+      };
     }
     if (call.name === "llm" && options.llm !== undefined) {
-      const input = z.object({ prompts: z.array(z.string()).min(1) }).strict().parse(call.arguments);
+      const input = z
+        .object({ prompts: z.array(z.string()).min(1) })
+        .strict()
+        .parse(call.arguments);
       return { status: "completed", value: await options.llm(input.prompts) };
     }
     return binding.caller(call);
   }
 
-  async function runOn(id: string, code: string, tenant: string, caller: Caller, runOptions: RunOptions, boundary = options.boundary?.(tenant)): Promise<Machine.CellResult> {
+  async function runOn(
+    id: string,
+    code: string,
+    tenant: string,
+    caller: Caller,
+    runOptions: RunOptions,
+    boundary = options.boundary?.(tenant),
+  ): Promise<Machine.CellResult> {
     const timeoutMs = runOptions.timeoutMs ?? 15_000;
     const cellId = crypto.randomUUID();
-    const signal = runOptions.signal === undefined ? lifetime.signal : AbortSignal.any([lifetime.signal, runOptions.signal]);
+    const signal =
+      runOptions.signal === undefined
+        ? lifetime.signal
+        : AbortSignal.any([lifetime.signal, runOptions.signal]);
     live.set(cellId, { caller, tenant, timeoutMs, signal, boundary });
     const execution = machines().get(id).runCode({ cellId, code, tenant, timeoutMs }, signal);
     running.add(execution);
-    try { return await execution; }
-    finally { live.delete(cellId); running.delete(execution); }
+    try {
+      return await execution;
+    } finally {
+      live.delete(cellId);
+      running.delete(execution);
+    }
   }
   const runner: CodeRunner = {
     async runCode(request, call, signal) {
       requireOpen();
       const tenant = request.tenant ?? "default";
       let kernel = kernels.get(tenant);
-      if (kernel === undefined) { kernel = new PythonKernel(); kernels.set(tenant, kernel); }
+      if (kernel === undefined) {
+        kernel = new PythonKernel();
+        kernels.set(tenant, kernel);
+      }
       return kernel.run(request, call, signal);
     },
     async close() {
@@ -148,9 +250,14 @@ export function createCodemode(options: Options = {}) {
     close: runner.close,
     cell: {
       run(code: string, tenant: string, runOptions: RunOptions = {}): Promise<Machine.CellResult> {
-        const target = machines().list().find((entry) => entry.capabilities.includes(Machine.WellKnownCapability.pythonKernel));
-        if (target === undefined) return Promise.resolve({ status: "refused", reason: "kernel_not_available" });
-        const caller = options.tools?.(tenant) ?? (async () => ({ status: "failed" as const, error: "this cell exposes no tools" }));
+        const target = machines()
+          .list()
+          .find((entry) => entry.capabilities.includes(Machine.WellKnownCapability.pythonKernel));
+        if (target === undefined)
+          return Promise.resolve({ status: "refused", reason: "kernel_not_available" });
+        const caller =
+          options.tools?.(tenant) ??
+          (async () => ({ status: "failed" as const, error: "this cell exposes no tools" }));
         return runOn(target.machineId, code, tenant, caller, runOptions);
       },
     },

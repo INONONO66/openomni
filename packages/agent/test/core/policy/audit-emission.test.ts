@@ -38,7 +38,10 @@ it("awaits policy.decision commit before publishing its observation", async () =
       generation: 7,
       mandatory: ["compaction"],
       rows: [
-        { ...policyRow("compaction", "turn", "post", { type: "allow" }), match: { encodingVersion: 1, value: {} } },
+        {
+          ...policyRow("compaction", "turn", "post", { type: "allow" }),
+          match: { encodingVersion: 1, value: {} },
+        },
         policyRow("allow-read", "tool", "pre", { type: "allow" }),
       ],
     }),
@@ -89,8 +92,11 @@ it("awaits policy.decision commit before publishing its observation", async () =
     },
   });
   const value = decision?.intent.value;
-  expect(typeof value === "object" && value !== null && !Array.isArray(value) ? value.inputHash : undefined)
-    .toMatch(/^sha256:[0-9a-f]{64}$/);
+  expect(
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? value.inputHash
+      : undefined,
+  ).toMatch(/^sha256:[0-9a-f]{64}$/);
   expect(observations[0]).toBe(decision?.id);
   expect(appended.findIndex((action) => action.id === observations[0])).toBe(0);
 });

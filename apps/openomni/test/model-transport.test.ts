@@ -2,14 +2,11 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { initialize, Storage } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
-import type { Gateway } from "@openomni/protocol";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
-import type { DelegationKernel } from "../src/delegation/kernel";
-import { createChildKernel, ProcessWorkerRequest } from "../src/delegation/process-entry";
-import { createWorkerSessionRunner } from "../src/composition/worker-session";
-import { createResident } from "../src/resident";
+import { ProcessSessionRequest } from "../src/process-entry";
+import { residentRunner as createResident } from "./helpers/resident-runner";
 import { createLlmToolPort } from "../src/tools/execution/llm";
 import { assistantMessage } from "./helpers/assistant-message";
 import { admittedOperation } from "./helpers/admitted-operation";
@@ -39,36 +36,6 @@ function createSession(): string {
   return crypto.randomUUID();
 }
 
-function residentDelivery(sessionId: string): Gateway.Deliver {
-  const id = "inbound-transport";
-  const traceId = "1".padStart(32, "0");
-  return {
-    sessionId,
-    event: {
-      id,
-      traceId,
-      surface: "internal",
-      userId: "owner",
-      payload: "resident question",
-      target: { kind: "resident" },
-      mode: "direct",
-    },
-    decision: {
-      traceId,
-      time: Date.now(),
-      inboundId: id,
-      surface: "internal",
-      mode: "direct",
-      stage: "surface_default",
-      outcome: "route",
-      reason: "test",
-      factsUsed: [],
-      target: "resident",
-      sessionId,
-    },
-  };
-}
-
 describe("modelTransport", () => {
   const base: OpenOmniConfig["model"] = { provider: "fake", id: "m", apiKey: "k" };
 
@@ -96,54 +63,6 @@ describe("modelTransport", () => {
 });
 
 describe("operator transport reaches every model caller", () => {
-  it("the worker loop forwards it to the llm call", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "openomni-worker-transport-"));
-    directories.push(directory);
-    initialize({ dbPath: join(directory, "chat.db") });
-    SessionHandleStore.materialize({
-      id: "session-transport",
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: 0,
-      actionId: "session-transport:configure",
-      at: 1,
-    });
-    let seen: RunInput | undefined;
-    let kernel: DelegationKernel;
-    const runner = createWorkerSessionRunner({
-      model: { provider: "fake", id: "worker-test" },
-      apiKey: "test-key",
-      transport: OPERATOR_TRANSPORT,
-      llm: {
-        resolveModel,
-        run: async (input: RunInput, sink: Sink) => {
-          seen = input;
-          sink.onMessage(assistantMessage(input, { call: 1, text: "done" }));
-          return { type: "stop" };
-        },
-      },
-      kernel: () => kernel,
-    });
-    kernel = createChildKernel(runner);
-
-    try {
-      await runner({
-        delegationId: "d-transport",
-        operation: "ask",
-        instruction: "answer",
-        acceptanceCriteria: [],
-        origin: { role: "worker", depth: 1, sessionId: "session-transport" },
-        signal: new AbortController().signal,
-      });
-    } finally {
-      kernel.stop();
-    }
-
-    expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
-  });
-
   it("the Resident forwards it to the llm call", async () => {
     const directory = mkdtempSync(join(tmpdir(), "openomni-model-transport-"));
     directories.push(directory);
@@ -165,7 +84,7 @@ describe("operator transport reaches every model caller", () => {
       },
     });
 
-    await resident(residentDelivery(createSession()));
+    await resident.prompt(createSession(), "resident question");
 
     expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
   });
@@ -190,13 +109,9 @@ describe("operator transport reaches every model caller", () => {
   });
 
   it("the process worker wire carries it across the process boundary", () => {
-    const request = ProcessWorkerRequest.parse({
-      delegationId: "d-1",
-      workerRunId: "run-transport",
-      operation: "ask",
-      instruction: "answer",
-      acceptanceCriteria: [],
-      origin: { role: "worker", depth: 1, sessionId: "session-transport" },
+    const request = ProcessSessionRequest.parse({
+      sessionId: "worker-session",
+      dbPath: "test.sqlite",
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
@@ -206,13 +121,9 @@ describe("operator transport reaches every model caller", () => {
   });
 
   it("the process worker wire rejects an unknown transport field", () => {
-    const parsed = ProcessWorkerRequest.safeParse({
-      delegationId: "d-1",
-      workerRunId: "run-transport",
-      operation: "ask",
-      instruction: "answer",
-      acceptanceCriteria: [],
-      origin: { role: "worker", depth: 1, sessionId: "session-transport" },
+    const parsed = ProcessSessionRequest.safeParse({
+      sessionId: "worker-session",
+      dbPath: "test.sqlite",
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
       transport: { baseUrl: "https://gw/v1", insecure: true },

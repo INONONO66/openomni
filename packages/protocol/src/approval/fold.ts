@@ -38,11 +38,7 @@ export function request(create: Create, at: EpochMs): Record {
  * deadline's refusal instead — the Owner cannot approve into the past
  * (fail-closed, §8.13).
  */
-export function decide(
-  record: Record,
-  answer: "approved" | "refused",
-  at: EpochMs,
-): DecideOutcome {
+export function decide(record: Record, answer: "approved" | "refused", at: EpochMs): DecideOutcome {
   if (record.state !== "pending") return { kind: "unchanged", record };
   const overdue = at >= record.deadline;
   const state: State = overdue ? "refused" : answer;

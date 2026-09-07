@@ -1,5 +1,8 @@
 import { existsSync } from "node:fs";
-import { createDispositionFixture, seedRetiredWait } from "../../../ledger/test/helpers/disposition-967";
+import {
+  createDispositionFixture,
+  seedRetiredWait,
+} from "../../../ledger/test/helpers/disposition-967";
 import { archiveCli, disposeCli } from "../../../ledger/test/helpers/disposition-967-cli";
 import { Wait, type Gateway } from "@openomni/protocol";
 import {
@@ -112,8 +115,6 @@ function registerDriverActors(): void {
   for (const responder of Responders) registerAgent(responder, []);
 }
 
-// Frozen worker_run_state archive statuses (#510 D2b / #498 K1) — counted at
-// the adapter layer; the store surface is session-internal.
 /** Session census: messaging must never allocate a session. */
 function allocationCount(): number {
   return SessionHandleStore.listRows().length;
@@ -210,10 +211,12 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
     const baseline = allocationCount();
     const priorWaitCount = WaitStore.list().length;
     const preserved = WaitStore.get("preserved");
-    if (preserved?.correlation.replyToMessageId !== "preserved-platform-receipt") throw new Error("upgraded correlation was not preserved");
+    if (preserved?.correlation.replyToMessageId !== "preserved-platform-receipt")
+      throw new Error("upgraded correlation was not preserved");
     const messaging = createExistingAgentMessaging({
       deliver: (message) => {
         deliveries.push(message);
+        return { value: "accepted" as const };
       },
       grants: () => DriverGrants,
       publish: Bus.publish,
@@ -269,7 +272,12 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
       });
       resolved.resolve();
     });
-    using _witness = { [Symbol.dispose]() { unsubscribe(); deadline.removeEventListener("abort", timedOut); } };
+    using _witness = {
+      [Symbol.dispose]() {
+        unsubscribe();
+        deadline.removeEventListener("abort", timedOut);
+      },
+    };
 
     const reopened = WaitStore.get(AwaitedWaitId);
     if (reopened === undefined) throw new Error("persisted wait not found after restart");
@@ -374,6 +382,7 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
   const messaging = createExistingAgentMessaging({
     deliver: (message) => {
       deliveries.push(message);
+      return { value: "accepted" as const };
     },
     grants: () => DriverGrants,
     publish: Bus.publish,

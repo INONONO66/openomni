@@ -36,12 +36,16 @@ test("967-U1 cleanup attempts every disposer and propagates every rejection", as
 
 test("967-U1 a single cleanup rejection retains its identity", async () => {
   const failure = new Error("U1_SINGLE_DISPOSER_FAILURE");
-  suite.defer(() => { throw failure; });
+  suite.defer(() => {
+    throw failure;
+  });
   await expect(suite.cleanup()).rejects.toBe(failure);
 });
 
 test("967-U1 non-Error cleanup rejections retain their cause", async () => {
   const cause = Symbol("U1_NON_ERROR_REJECTION");
-  suite.defer(() => { throw cause; });
+  suite.defer(() => {
+    throw cause;
+  });
   await expect(suite.cleanup()).rejects.toMatchObject({ cause });
 });

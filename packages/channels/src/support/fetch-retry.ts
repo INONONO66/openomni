@@ -8,6 +8,20 @@ export function sleep(ms: number): Promise<void> {
 
 const MAX_API_RETRIES = 3;
 
+export class RetryExhaustedError extends Error {
+  readonly status: number;
+
+  constructor(
+    readonly response: Response,
+    readonly attempts: number,
+    label: string,
+  ) {
+    super(`${label}: rate limited after ${attempts - 1} retries`);
+    this.name = "RetryExhaustedError";
+    this.status = response.status;
+  }
+}
+
 export async function fetchWithRetry(
   url: string,
   init: RequestInit,
@@ -29,7 +43,7 @@ export async function fetchWithRetry(
 
   if (response.status === 429) {
     if (retries >= MAX_API_RETRIES) {
-      throw new Error(`${label}: rate limited after ${MAX_API_RETRIES} retries`);
+      throw new RetryExhaustedError(response, retries + 1, label);
     }
 
     let retryAfter = 5;

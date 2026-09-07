@@ -98,10 +98,9 @@ async function requestPromotion(at = T0): Promise<string> {
 describe("approval output boundary", () => {
   it("rejects malformed output through the dispatcher", async () => {
     const tool = eraseTool(createApprovalTool(port));
-    const result = await createDispatcher(
-      [{ ...tool, execute: async () => ({ op: "request" }) }],
-      { executor },
-    ).execute(
+    const result = await createDispatcher([{ ...tool, execute: async () => ({ op: "request" }) }], {
+      executor,
+    }).execute(
       {
         id: "approval-invalid-output",
         tool: "approval",

@@ -154,9 +154,7 @@ function toolNode(part: ToolPart): {
   const tool = getToolName(part);
   const target = targetOf(part.input);
   const status =
-    part.state === "approval-responded" && !part.approval.approved
-      ? "denied"
-      : STATUS[part.state];
+    part.state === "approval-responded" && !part.approval.approved ? "denied" : STATUS[part.state];
 
   // The row's id is the APPROVAL's id while a decision is outstanding.
   //

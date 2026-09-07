@@ -171,32 +171,6 @@ describe("policy effect composition conformance", () => {
         "policy.effect_conflict.fail_closed: tool.rewrite_input.command rewritten by policy.audit-command and policy.safe-command",
     },
     {
-      name: "incompatible delegation maxDepth",
-      decisions: [
-        d("policy.delegate-a", [
-          { type: "delegation.set_constraints", constraints: { maxDepth: 1 } },
-        ]),
-        d("policy.delegate-b", [
-          { type: "delegation.set_constraints", constraints: { maxDepth: 2 } },
-        ]),
-      ],
-      annotation:
-        "policy.effect_conflict.fail_closed: delegation.set_constraints.maxDepth rewritten by policy.delegate-a and policy.delegate-b",
-    },
-    {
-      name: "incompatible delegation maxTurns",
-      decisions: [
-        d("policy.strict-a", [
-          { type: "delegation.set_constraints", constraints: { maxTurns: 1 } },
-        ]),
-        d("policy.strict-b", [
-          { type: "delegation.set_constraints", constraints: { maxTurns: 2 } },
-        ]),
-      ],
-      annotation:
-        "policy.effect_conflict.fail_closed: delegation.set_constraints.maxTurns rewritten by policy.strict-a and policy.strict-b",
-    },
-    {
       name: "prompt replacement",
       decisions: [
         d("policy.prompt-a", [{ type: "prompt.replace", prompt: "Prompt A" }]),
@@ -267,35 +241,6 @@ describe("policy effect composition conformance", () => {
         d("policy.high", [{ type: "tool.rewrite_input", input: { command: "ls" } }], 20),
       ],
       effect: { type: "tool.rewrite_input", input: { command: "ls", cwd: "/tmp" } },
-    },
-    {
-      name: "delegation constraints",
-      decisions: [
-        d(
-          "policy.low",
-          [
-            {
-              type: "delegation.set_constraints",
-              constraints: { maxTurns: 1, timeout: { softMs: 100 } },
-            },
-          ],
-          10,
-        ),
-        d(
-          "policy.high",
-          [
-            {
-              type: "delegation.set_constraints",
-              constraints: { maxTurns: 2, timeout: { hardMs: 200 } },
-            },
-          ],
-          20,
-        ),
-      ],
-      effect: {
-        type: "delegation.set_constraints",
-        constraints: { maxTurns: 2, timeout: { softMs: 100, hardMs: 200 } },
-      },
     },
     {
       name: "continuation prompts",
@@ -457,19 +402,12 @@ describe("policy effect composition conformance", () => {
 
   it("concatenates approval reasons", () => {
     const result = composeEffects([
-      d("policy.alpha", [
-        { type: "tool.require_approval", reason: "workspace write" },
-        { type: "delegation.require_approval", reason: "external worker" },
-      ]),
-      d("policy.beta", [
-        { type: "tool.require_approval", reason: "network access" },
-        { type: "delegation.require_approval", reason: "sensitive prompt" },
-      ]),
+      d("policy.alpha", [{ type: "tool.require_approval", reason: "workspace write" }]),
+      d("policy.beta", [{ type: "tool.require_approval", reason: "network access" }]),
     ]);
     expect(result.mergedEffects).toEqual(
       expect.arrayContaining([
         { type: "tool.require_approval", reason: "workspace write; network access" },
-        { type: "delegation.require_approval", reason: "external worker; sensitive prompt" },
       ]),
     );
   });

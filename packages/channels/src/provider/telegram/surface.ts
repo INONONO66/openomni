@@ -1,25 +1,16 @@
 import { newTraceId } from "../../support/trace";
-import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
+import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../../support/dedupe";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
-import { requireHandler, respondUnderTyping } from "../../support/handler-frame";
-import { chunkMarkdown } from "../../support/format/chunk";
+import { requireHandler } from "../../support/handler-frame";
+import { sendText } from "../../support/send-text";
+import { RetryExhaustedError } from "../../support/fetch-retry";
 import { TELEGRAM_RENDER } from "./format";
-import { TelegramClient } from "./client";
+import { TelegramApiError, TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";
 import type { TelegramMessage } from "./types";
 import type { PublishPort } from "../../types";
-import {
-  ChannelAuthnMiddleware,
-  type ChannelAuthnDecisionObserver,
-  decisionOption,
-} from "../../channel-authn";
-
-
-interface TelegramAuthOptions {
-  readonly onDecision?: ChannelAuthnDecisionObserver;
-}
 
 export class TelegramAdapter implements Channel.Surface {
   readonly id = "telegram";
@@ -29,14 +20,12 @@ export class TelegramAdapter implements Channel.Surface {
   private readonly outboundDedupe = new DedupeWindow<DeliveryReceipt>();
   private normalizer: TelegramNormalizer | null = null;
   private poller: TelegramPoller | null = null;
-  private botUsername = "";
   private handler: Channel.MessageHandler | null = null;
 
   constructor(
     token: string,
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
-    private readonly authOptions: TelegramAuthOptions = {},
   ) {
     this.client = new TelegramClient(token, publish);
   }
@@ -51,7 +40,6 @@ export class TelegramAdapter implements Channel.Surface {
     const me = await this.client.getMe(traceId);
     const botId = String(me.id);
     const botUsername = me.username ?? "";
-    this.botUsername = botUsername;
     this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
@@ -63,7 +51,6 @@ export class TelegramAdapter implements Channel.Surface {
     this.normalizer = new TelegramNormalizer({
       botId,
       botUsername,
-      triggers: this.config.triggers,
     });
 
     this.poller = new TelegramPoller(
@@ -116,9 +103,18 @@ export class TelegramAdapter implements Channel.Surface {
    * Telegram chat id — deliver there and report the platform message id of
    * the final chunk (the message a reply would reference).
    */
-  deliver(externalId: string, body: string, idempotencyKey?: string): Promise<DeliveryReceipt> {
-    return deliverKeyed(this.outboundDedupe, idempotencyKey, (traceId) =>
-      this.sendOutbound(externalId, { text: body }, traceId),
+  deliver(externalId: string, body: string, idempotencyKey: string): Promise<DeliveryReceipt> {
+    return deliverKeyed(
+      this.outboundDedupe,
+      idempotencyKey,
+      (traceId) =>
+        sendText(body, TELEGRAM_RENDER, (chunk) =>
+          this.client.sendMarkdown(externalId, chunk, traceId),
+        ),
+      (error) =>
+        (error instanceof TelegramApiError && error.rejected) ||
+        (error instanceof RetryExhaustedError && error.status === 429),
+      this.publish,
     );
   }
 
@@ -129,10 +125,7 @@ export class TelegramAdapter implements Channel.Surface {
     if (!message.from) return;
 
     const chatId = String(message.chat.id);
-    if (this.triggerBlocks(text, chatId, String(message.from.id), message.chat.type === "private"))
-      return;
-
-    const inbound = this.normalizer.normalize(message, traceId);
+    const inbound = this.normalizer.normalize(message);
     if (!inbound) return;
 
     this.publish(Operational.Events.Debug, {
@@ -143,52 +136,6 @@ export class TelegramAdapter implements Channel.Surface {
       context: { chatId },
     });
 
-    await respondUnderTyping({
-      typing: () => this.client.sendTyping(chatId, traceId),
-      typingIntervalMs: 4000,
-      run: () => (this.handler as Channel.MessageHandler)(inbound),
-      send: (message) => this.sendOutbound(chatId, message, traceId),
-      onError: (err) =>
-        this.publish(Operational.Events.Error, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "telegram message handler error",
-          context: { chatId, err },
-        }),
-    });
-  }
-
-  private triggerBlocks(text: string, chatId: string, senderId: string, isDM: boolean): boolean {
-    const auth = ChannelAuthnMiddleware.authenticateTelegramTriggers({
-      triggers: this.config.triggers,
-      ctx: {
-        event: "message",
-        // Word-boundary match: `@foo` must not count a mention of `@foobar`.
-        mentioned:
-          this.botUsername !== "" &&
-          new RegExp(`@${this.botUsername}(?![A-Za-z0-9_])`).test(text),
-        channelId: chatId,
-        senderId,
-        isDM,
-        text,
-      },
-      ...decisionOption(this.authOptions.onDecision),
-    });
-    return PolicyDecision.isBlocking(auth.verdict);
-  }
-
-  private async sendOutbound(
-    chatId: string,
-    message: Channel.OutboundMessage,
-    traceId: string,
-  ): Promise<string | undefined> {
-    if (!message.text) return undefined;
-    let lastMessageId: string | undefined;
-    const rendered = TELEGRAM_RENDER.renderMarkdown(message.text);
-    for (const chunk of chunkMarkdown(rendered, TELEGRAM_RENDER.messageLimit)) {
-      lastMessageId = (await this.client.sendMarkdown(chatId, chunk, traceId)) ?? lastMessageId;
-    }
-    return lastMessageId;
+    await (this.handler as Channel.MessageHandler)(inbound);
   }
 }

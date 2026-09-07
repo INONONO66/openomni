@@ -53,9 +53,7 @@ function providerRow<TCredentials, TId extends keyof typeof ChannelProviders>(
       return {
         surface: runtime.surface,
         ...(runtime.deliveryRoute === undefined ? {} : { deliveryRoute: runtime.deliveryRoute }),
-        ...(runtime.webhookHandler === undefined
-          ? {}
-          : { webhookHandler: runtime.webhookHandler }),
+        ...(runtime.webhookHandler === undefined ? {} : { webhookHandler: runtime.webhookHandler }),
       };
     },
   };
@@ -70,7 +68,7 @@ export function channelProfile(
 
   const telegramConfig = config.channels?.telegram;
   if (telegramConfig !== undefined) {
-    rows.push(providerRow(providers.telegram, { token: telegramConfig.token }, { triggers: [] }));
+    rows.push(providerRow(providers.telegram, { token: telegramConfig.token }, {}));
   }
 
   const githubConfig = config.channels?.github;
@@ -85,36 +83,18 @@ export function channelProfile(
             ? {}
             : { botUsername: githubConfig.botUsername }),
         },
-        { triggers: [{ type: "event", events: ["issue_comment.created", "issues.opened"] }] },
+        {},
       ),
     );
   }
 
   const discordConfig = config.channels?.discord;
   if (discordConfig !== undefined) {
-    rows.push(
-      providerRow(
-        providers.discord,
-        { token: discordConfig.token },
-        { triggers: [{ type: "mention" }] },
-      ),
-    );
+    rows.push(providerRow(providers.discord, { token: discordConfig.token }, {}));
   }
 
   return rows;
 }
-
-/**
- * Trigger policy per provider — identical to the env-config path above by
- * design (PR-B changes where credentials live, not how channels behave).
- * Per-instance trigger settings arrive with the runtime-administration PR.
- */
-const DECLARED_TRIGGERS: Record<keyof typeof ChannelProviders, Channel.Config["triggers"]> = {
-  telegram: [],
-  github: [{ type: "event", events: ["issue_comment.created", "issues.opened"] }],
-  discord: [{ type: "mention" }],
-  slack: [{ type: "mention" }],
-};
 
 type DeclaredChannelState =
   | "ready"
@@ -154,7 +134,7 @@ function credentialRow<TCredentials, TId extends keyof typeof ChannelProviders>(
     return { invalid: `credential payload is not JSON (${String(error)})` };
   }
   if (!parsed.success) return { invalid: parsed.error.message };
-  return providerRow(provider, parsed.data, { triggers: DECLARED_TRIGGERS[provider.id] });
+  return providerRow(provider, parsed.data, {});
 }
 
 function declaredRow(

@@ -1,380 +1,234 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, Ingress, type Gateway, type Wait } from "@openomni/protocol";
-import {
-  ActorRegistry,
-  ChannelGrantStore,
-  Storage,
-  SurfaceKey,
-  WaitStore,
-} from "@openomni/ledger";
+import { beforeEach, expect, test } from "bun:test";
+import { Channel, Ingress, type Ledger } from "@openomni/protocol";
+import { ActorRegistry, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
-import { IngressRoutingError } from "../../src/router/routing-resolution";
-import { WaitService } from "../../src/router/wait/index";
 import {
+  commits,
   createMappedOwnerSession,
-  deliveries,
   makeRouter,
   ownerEvent,
+  ownerFacts,
+  ownerSender,
   registerOwnerDm,
   resetRouterState,
   routingDecisions,
 } from "./_router-fixture";
 
 const streamId = () => Ingress.routeStreamId(ownerEvent);
+beforeEach(resetRouterState);
 
-function thrownCode(error: unknown): string | undefined {
-  if (!IngressRoutingError.isInstance(error)) return undefined;
-  const routed = error as IngressRoutingError;
-  expect(routed.toObject()).toMatchObject({
-    name: "IngressRoutingError",
-    data: { code: routed.code },
-  });
-  return routed.code;
-}
-
-describe("GatewayRouter durable routing resolution", () => {
-  beforeEach(resetRouterState);
-
-  test("records a schema-valid channel-scoped decision before delivery", async () => {
-    registerOwnerDm();
-    createMappedOwnerSession();
-    const observed: unknown[] = [];
-    const router = makeRouter({
-      deliver: async () => {
+test("records the channel-scoped decision before inbox commit", async () => {
+  registerOwnerDm();
+  createMappedOwnerSession();
+  const observed: Array<Ledger.RecordedFact | undefined> = [];
+  const router = makeRouter({
+    inbox: {
+      commit: (row) => {
         observed.push(Storage.get().ledger?.headFact(streamId()));
-        return {
-          mode: "direct",
-          target: { kind: "resident" },
-          sessionId: "owner-session",
-          result: { output: "ok", finishReason: "stop" },
-        };
+        return { ...row, status: "pending", consumedBy: null, consumedAt: null, ordinal: 1 };
       },
-    });
-
-    await router.ingest(ownerEvent);
-
-    expect(observed).toHaveLength(1);
-    expect(observed[0]).toMatchObject({ streamId: streamId(), seq: 1, type: "route.decided" });
+    },
   });
+  await router.ingest(ownerSender, ownerFacts);
+  expect(observed).toHaveLength(1);
+  expect(observed[0]).toMatchObject({ streamId: streamId(), seq: 1, type: "route.decided" });
+});
 
-  test("records blocked decisions before returning the typed rejection", async () => {
-    const router = makeRouter();
-    await expect(router.ingest(ownerEvent)).rejects.toMatchObject({ code: "route_blocked" });
-    expect(Storage.get().ledger?.headFact(streamId())).toMatchObject({
-      seq: 1,
-      type: "route.decided",
-      data: { outcome: "block" },
-    });
+test("blocked decisions are durable before returning the receipt", async () => {
+  expect(await makeRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+    status: "blocked_pre",
   });
-
-  test("executes a matched wait route and delivers its action context", async () => {
-    const event = {
-      ...ownerEvent,
-      id: "inbound-wait-resolution",
-      surface: "telegram",
-      workspace: undefined,
-      channel: "telegram:dm",
-      userId: "worker-external",
-      meta: {
-        correlation: {
-          endpointId: "telegram:worker-external",
-          channelId: "telegram:dm",
-          tokenHash: "wait-token",
-        } satisfies Wait.Correlation,
-      },
-    } satisfies Gateway.DeliveredEvent;
-    ActorRegistry.registerIdentity({
-      id: "worker-actor",
-      kind: "human",
-      trustTier: "assigned_worker",
-    });
-    ActorRegistry.registerEndpoint({
-      id: "telegram:worker-external",
-      actorId: "worker-actor",
-      channel: "telegram",
-      externalId: "worker-external",
-    });
-    ChannelGrantStore.put({
-      id: "grant-telegram-wait",
-      surface: "telegram",
-      channel: "telegram:dm",
-      kind: "trusted_channel",
-      createdBy: "actor-owner",
-    });
-    WaitService.open(
-      {
-        id: "wait-resolution",
-        ownerRef: { kind: "session", id: "wait-owner" },
-        originMessageId: "outbound-wait",
-        correlation: { channelId: "telegram:dm", tokenHash: "wait-token" },
-        allowedActions: ["report_result"],
-        expectedResponders: ["worker-actor"],
-        resolutionPolicy: "first_reply",
-        expiresAt: Number.MAX_SAFE_INTEGER,
-        followUpWindow: 60_000,
-      },
-      "trace-test",
-    );
-
-    const result = await makeRouter().ingest({
-      ...event,
-      payload: { action: "report_result", output: "complete" },
-    });
-
-    expect(result).toMatchObject({ sessionId: "wait-owner" });
-    expect(deliveries[0]?.waitContext).toEqual({
-      waitId: "wait-resolution",
-      allowedAction: "report_result",
-    });
-    expect(WaitStore.get("wait-resolution")).toMatchObject({ status: "resolved" });
+  expect(Storage.get().ledger?.headFact(streamId())).toMatchObject({
+    seq: 1,
+    type: "route.decided",
+    data: { outcome: "block" },
   });
+});
 
-  test("equivalent accepted redelivery re-delivers with exactly one route fact", async () => {
-    registerOwnerDm();
-    createMappedOwnerSession();
-    const router = makeRouter();
+test("equivalent redelivery uses one route fact and the same inbox id", async () => {
+  registerOwnerDm();
+  createMappedOwnerSession();
+  const router = makeRouter();
+  await router.ingest(ownerSender, ownerFacts);
+  await router.ingest(ownerSender, ownerFacts);
+  expect(commits).toHaveLength(2);
+  expect(commits[0]?.id).toBe(commits[1]?.id);
+  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+});
 
-    await router.ingest(ownerEvent);
-    await router.ingest(ownerEvent);
-
-    expect(deliveries).toHaveLength(2);
-    expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
-  });
-
-  test("redelivery against a pre-0025 legacy fact upcasts and re-delivers", async () => {
-    // Given — capture the modern decision this inbound produces today.
-    registerOwnerDm();
-    createMappedOwnerSession();
-    await makeRouter().ingest(ownerEvent);
-    const modern = Storage.get().ledger?.headFact(streamId())?.data as Record<string, unknown>;
-
-    // And — a fresh ledger whose recorded fact is the LEGACY shape: the same
-    // decision plus the dead runId/pendingInteractionId fields that the
-    // strict write schema rejects.
-    resetRouterState();
-    registerOwnerDm();
-    SurfaceKey.claim(extractSurfaceKey(ownerEvent), modern.sessionId as string);
-    const appended = Storage.get().ledger?.append(
+test("historical route facts upcast on redelivery without reconstructing another route", async () => {
+  registerOwnerDm();
+  const mapped = createMappedOwnerSession();
+  await makeRouter().ingest(ownerSender, ownerFacts);
+  const modern = Ingress.Events.RoutingDecision.schema.parse(
+    Storage.get().ledger?.headFact(streamId())?.data,
+  );
+  resetRouterState();
+  registerOwnerDm();
+  SurfaceKey.claim(
+    Channel.SurfaceKey.fromChannel({
+      surface: "discord",
+      namespace: "owner-workspace",
+      kind: "dm",
+      id: "owner-dm",
+    }),
+    mapped.id,
+  );
+  expect(
+    Storage.get().ledger?.append(
       {
         streamId: streamId(),
         type: "route.decided",
-        data: { ...modern, runId: "run-legacy", pendingInteractionId: "ask_legacy" },
+        data: { ...modern, runId: "legacy", pendingInteractionId: "legacy" },
       },
       0,
-    );
-    expect(appended).toMatchObject({ kind: "appended" });
+    ),
+  ).toMatchObject({ kind: "appended" });
+  await makeRouter().ingest(ownerSender, ownerFacts);
+  expect(commits).toHaveLength(1);
+  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+});
 
-    // When — the same inbound is redelivered after the upgrade.
-    await makeRouter().ingest(ownerEvent);
-
-    // Then — the recorded legacy fact upcasts, matches the fresh decision,
-    // and the redelivery proceeds without a second fact.
-    expect(deliveries).toHaveLength(1);
-    expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+test("a changed decision refuses redelivery before committing or observing", async () => {
+  const router = makeRouter();
+  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  registerOwnerDm();
+  createMappedOwnerSession();
+  const count = routingDecisions().length;
+  await expect(router.ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
+    code: "route_replay_divergent",
   });
+  expect(commits).toEqual([]);
+  expect(routingDecisions()).toHaveLength(count);
+  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+});
 
-  test("divergent redelivery refuses without action, fact, or projection", async () => {
-    const router = makeRouter();
-    await expect(router.ingest(ownerEvent)).rejects.toMatchObject({ code: "route_blocked" });
-    registerOwnerDm();
-    createMappedOwnerSession();
-    const projections = routingDecisions().length;
-
-    let thrown: unknown;
-    try {
-      await router.ingest(ownerEvent);
-    } catch (error) {
-      thrown = error;
-    }
-
-    expect(thrownCode(thrown)).toBe("route_replay_divergent");
-    expect(deliveries).toHaveLength(0);
-    expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
-    expect(routingDecisions()).toHaveLength(projections);
-  });
-
-  test.each([
-    [
-      "actorId",
-      () => {
-        ActorRegistry.registerIdentity({
-          id: "actor-replacement",
-          kind: "human",
-          trustTier: "owner",
-        });
-        ActorRegistry.registerEndpoint({
-          id: "endpoint-owner-dm",
-          actorId: "actor-replacement",
-          channel: ownerEvent.surface,
-          externalId: ownerEvent.userId,
-          workspace: ownerEvent.workspace,
-        });
-      },
-    ],
-    [
-      "trustTier",
-      () => {
-        ActorRegistry.registerIdentity({
-          id: "actor-owner",
-          kind: "human",
-          trustTier: "manager",
-        });
-      },
-    ],
-    [
-      "inboundTreatment",
-      () => {
-        ChannelGrantStore.put({
-          id: "grant-owner-dm",
-          surface: ownerEvent.surface,
-          workspace: ownerEvent.workspace,
-          channel: ownerEvent.channel,
-          kind: "trusted_channel",
-          inboundTreatment: "evidence_only",
-          createdBy: "actor-owner",
-        });
-      },
-    ],
-  ] as const)("redelivery with mutated %s authority refuses as divergent", async (_field, mutate) => {
-    registerOwnerDm();
-    createMappedOwnerSession();
-    const router = makeRouter();
-    await router.ingest(ownerEvent);
-    const projections = routingDecisions().length;
-
-    mutate();
-
-    let thrown: unknown;
-    try {
-      await router.ingest(ownerEvent);
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrownCode(thrown)).toBe("route_replay_divergent");
-    // The refusal must not disclose perimeter-resolved authority values
-    // (actor ids, trust tiers, treatments) to whoever triggered redelivery.
-    const message = thrown instanceof Error ? thrown.message : String(thrown);
-    for (const secret of ["actor-owner", "actor-replacement", "owner", "manager", "evidence_only"]) {
-      expect(message).not.toContain(secret);
-    }
-    expect(deliveries).toHaveLength(1);
-    expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
-    expect(routingDecisions()).toHaveLength(projections);
-  });
-
-  test("equivalent blocked redelivery repeats rejection without a second fact", async () => {
-    const router = makeRouter();
-    for (let delivery = 0; delivery < 2; delivery += 1) {
-      await expect(router.ingest(ownerEvent)).rejects.toMatchObject({ code: "route_blocked" });
-    }
-    expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
-  });
-
-  test("append failure returns route_record_failed without delivery or projection", async () => {
-    registerOwnerDm();
-    createMappedOwnerSession();
-    const adapter = Storage.get();
-    Storage.configure({
-      ...adapter,
-      transaction: adapter.transaction.bind(adapter),
-      ledger: {
-        append: () => {
-          throw new Error("ledger unavailable");
-        },
-        adoptStream: () => {
-          throw new Error("ledger unavailable");
-        },
-        headFact: () => undefined,
-        factsByType: () => [],
-      },
+test.each([
+  "actorId",
+  "trustTier",
+  "inboundTreatment",
+] as const)("mutated %s authority refuses redelivery without leaking the authority", async (field) => {
+  registerOwnerDm();
+  createMappedOwnerSession();
+  const router = makeRouter();
+  await router.ingest(ownerSender, ownerFacts);
+  const count = routingDecisions().length;
+  if (field === "actorId") {
+    ActorRegistry.registerIdentity({ id: "replacement", kind: "human", trustTier: "owner" });
+    ActorRegistry.registerEndpoint({
+      id: "endpoint-owner-dm",
+      actorId: "replacement",
+      channel: ownerSender.surface,
+      externalId: ownerSender.externalId,
+      workspace: ownerFacts.workspaceId,
     });
-    const router = makeRouter();
+  } else if (field === "trustTier") {
+    ActorRegistry.registerIdentity({ id: "actor-owner", kind: "human", trustTier: "manager" });
+  } else {
+    ChannelGrantStore.put({
+      id: "grant-owner-dm",
+      surface: "discord",
+      workspace: "owner-workspace",
+      channel: "owner-dm",
+      kind: "trusted_channel",
+      inboundTreatment: "evidence_only",
+      createdBy: "owner",
+    });
+  }
+  let caught: Error | undefined;
+  try {
+    await router.ingest(ownerSender, ownerFacts);
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    caught = error;
+  }
+  expect(caught).toMatchObject({ code: "route_replay_divergent" });
+  for (const value of ["actor-owner", "replacement", "manager", "evidence_only"])
+    expect(caught?.message).not.toContain(value);
+  expect(commits).toHaveLength(1);
+  expect(routingDecisions()).toHaveLength(count);
+});
 
-    await expect(router.ingest(ownerEvent)).rejects.toMatchObject({ code: "route_record_failed" });
-    expect(deliveries).toHaveLength(0);
-    expect(routingDecisions()).toHaveLength(0);
+test("equivalent blocked redelivery returns a refusal without another route fact", async () => {
+  const router = makeRouter();
+  for (let repeat = 0; repeat < 2; repeat += 1)
+    expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+});
+
+test.each([
+  "append_failure",
+  "absent",
+  "missing_conflict",
+  "corrupt_conflict",
+] as const)("ledger %s refuses before inbox commit or projection", async (fault) => {
+  registerOwnerDm();
+  createMappedOwnerSession();
+  const adapter = Storage.get();
+  const ledger = adapter.ledger;
+  if (ledger === undefined) throw new Error("missing ledger");
+  Storage.configure({
+    ...adapter,
+    transaction: adapter.transaction.bind(adapter),
+    ledger:
+      fault === "absent"
+        ? undefined
+        : {
+            ...ledger,
+            append: () => {
+              if (fault === "append_failure") throw new Error("ledger unavailable");
+              return { kind: "cas_conflict", currentHead: 1 };
+            },
+            headFact: () =>
+              fault === "corrupt_conflict"
+                ? {
+                    streamId: streamId(),
+                    seq: 1,
+                    type: "route.decided",
+                    data: { invalid: true },
+                    timeCreated: 1,
+                  }
+                : undefined,
+          },
   });
-
-  test("fails closed when the scoped ledger append port is absent", async () => {
-    registerOwnerDm();
-    createMappedOwnerSession();
-    const adapter = Storage.get();
-    Storage.configure({
-      ...adapter,
-      transaction: adapter.transaction.bind(adapter),
-      ledger: undefined,
-    });
-
-    await expect(makeRouter().ingest(ownerEvent)).rejects.toMatchObject({
-      code: "route_record_failed",
-    });
-    expect(deliveries).toEqual([]);
-    expect(routingDecisions()).toEqual([]);
+  await expect(makeRouter().ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
+    code: "route_record_failed",
   });
+  expect(commits).toEqual([]);
+  expect(routingDecisions()).toEqual([]);
+});
 
-  test.each(["missing", "corrupt"] as const)(
-    "fails closed when a route append conflicts with a %s recorded fact",
-    async (recorded) => {
-      registerOwnerDm();
-      createMappedOwnerSession();
-      const adapter = Storage.get();
-      const ledger = adapter.ledger;
-      if (ledger === undefined) throw new Error("ledger sub-adapter missing");
-      Storage.configure({
-        ...adapter,
-        transaction: adapter.transaction.bind(adapter),
-        ledger: {
-          ...ledger,
-          append: () => ({ kind: "cas_conflict", currentHead: 1 }),
-          headFact: () =>
-            recorded === "missing"
-              ? undefined
-              : ({
-                  streamId: streamId(),
-                  seq: 1,
-                  type: Ingress.ROUTE_DECIDED_FACT_TYPE,
-                  data: { invalid: true },
-                } as never),
-        },
-      });
+test("unconfigured actor delivery refuses without inbox commit", async () => {
+  expect(
+    await makeRouter().ingest(
+      { kind: "session", id: "sender" },
+      { to: { kind: "actor", actorId: "target" }, type: "message", content: "hello" },
+    ),
+  ).toMatchObject({ status: "blocked_pre", reasonCode: "message.resident.actor_grant" });
+  expect(commits).toEqual([]);
+});
 
-      await expect(makeRouter().ingest(ownerEvent)).rejects.toMatchObject({
-        code: "route_record_failed",
-      });
-      expect(deliveries).toEqual([]);
-      expect(routingDecisions()).toEqual([]);
-    },
-  );
-
-  test("keeps the unconfigured messaging port fail-closed", () => {
-    expect(() => makeRouter().messaging).toThrow();
+test("forged observations cannot choose a session", async () => {
+  registerOwnerDm();
+  const mapped = createMappedOwnerSession();
+  Bus.publish(Ingress.Events.RoutingDecision, {
+    inboundId: ownerEvent.id,
+    surface: ownerEvent.surface,
+    stage: "surface_default",
+    outcome: "route",
+    sessionId: "forged",
+    traceId: "trace",
+    time: 1,
+    reason: "forged",
+    mode: "direct",
+    factsUsed: [],
+    target: "resident",
   });
-
-  test("forged telemetry cannot authorize; the fresh owner fact controls delivery", async () => {
-    registerOwnerDm();
-    const mapped = createMappedOwnerSession();
-    Bus.publish(Ingress.Events.RoutingDecision, {
-      inboundId: ownerEvent.id,
-      surface: ownerEvent.surface,
-      stage: "surface_default",
-      outcome: "route",
-      sessionId: "forged-session",
-      traceId: ownerEvent.traceId,
-      time: 1,
-      reason: "forged telemetry",
-      mode: "direct",
-      factsUsed: [],
-      target: "resident",
-    });
-
-    await makeRouter().ingest(ownerEvent);
-
-    expect(deliveries).toHaveLength(1);
-    expect(deliveries[0]?.sessionId).toBe(mapped.id);
-    expect(Storage.get().ledger?.headFact(streamId())).toMatchObject({
-      seq: 1,
-      type: "route.decided",
-      data: { sessionId: mapped.id },
-    });
+  await makeRouter().ingest(ownerSender, ownerFacts);
+  expect(commits).toHaveLength(1);
+  expect(commits[0]?.sessionId).toBe(mapped.id);
+  expect(Storage.get().ledger?.headFact(streamId())).toMatchObject({
+    seq: 1,
+    data: { sessionId: mapped.id },
   });
 });

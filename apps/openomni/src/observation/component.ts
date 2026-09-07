@@ -19,18 +19,19 @@ interface ComponentIdentity extends TraceContext.Type {
 
 /** App-owned component observation sink behind the protocol port. */
 export function observeComponent(trace: ComponentIdentity): ObservedComponent {
-  const events = Bus.scope?.({
-    traceId: trace.traceId,
-    sessionId: trace.sessionId,
-    runId: trace.runId,
-    actorId: trace.actorId,
-    agentName: trace.agentName,
-    componentId: trace.componentId,
-    componentGeneration: trace.componentGeneration,
-    pluginName: trace.pluginName,
-    pluginVersion: trace.pluginVersion,
-    configRevision: trace.configRevision,
-  }) ?? Bus;
+  const events =
+    Bus.scope?.({
+      traceId: trace.traceId,
+      sessionId: trace.sessionId,
+      runId: trace.runId,
+      actorId: trace.actorId,
+      agentName: trace.agentName,
+      componentId: trace.componentId,
+      componentGeneration: trace.componentGeneration,
+      pluginName: trace.pluginName,
+      pluginVersion: trace.pluginVersion,
+      configRevision: trace.configRevision,
+    }) ?? Bus;
 
   return {
     events,

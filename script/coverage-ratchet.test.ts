@@ -2,11 +2,32 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { compareCoverage, parseLcovSummary } from "./check-coverage-ratchet";
+import {
+  compareCoverage,
+  coveragePct,
+  parseLcovSummary,
+  scriptSourceInventoryDrift,
+} from "./check-coverage-ratchet";
 import { coverageLanes } from "./topology";
 
 const record = (file = "src/covered.ts", found = "10000", hit = found) =>
   `SF:${file}\nLF:${found}\nLH:${hit}\nend_of_record\n`;
+
+test("script inventory distinguishes missing owned modules from tests and foreign imports", () => {
+  const report = ["owned.ts", "stale.ts", "nested/foreign.ts", "owned.test.ts", "types.spec.tsx"]
+    .map((file) => record(file))
+    .join("");
+  expect(scriptSourceInventoryDrift(report, ["owned.ts", "missing.ts"])).toEqual({
+    missing: ["missing.ts"],
+    unexpected: ["stale.ts"],
+  });
+  expect(scriptSourceInventoryDrift(record("owned.ts"), ["owned.ts"])).toEqual({
+    missing: [],
+    unexpected: [],
+  });
+  expect(coveragePct(0, 0)).toBe(100);
+  expect(coveragePct(3, 2)).toBe(66.67);
+});
 
 test("LCOV rejects malformed counts and incomplete records", () => {
   for (const [found, hit] of [
@@ -141,7 +162,10 @@ test("real Bun omission is rejected in check and update; type-only files are exe
     expect(report).not.toContain("SF:src/unimported.tsx");
     // Keep the historical denominator control independent of the omitted file.
     const baselinePath = join(root, "script/conformance/coverage-baseline.json");
-    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Record<string, { linesFound: number; linesHit: number; pct: number }>;
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Record<
+      string,
+      { linesFound: number; linesHit: number; pct: number }
+    >;
     baseline["packages/llm"] = { linesFound: 1, linesHit: 1, pct: 100 };
     writeFileSync(baselinePath, JSON.stringify(baseline));
     for (const args of [[], ["--update"], ["--lane", "packages/llm"]]) {

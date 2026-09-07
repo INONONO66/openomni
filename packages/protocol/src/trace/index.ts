@@ -1,4 +1,3 @@
-
 /** 32 lowercase hex characters (W3C trace id). */
 type TraceId = string;
 

@@ -11,8 +11,8 @@ export interface WebSocketConfig {
 interface WsConnectionData {
   surfaceKey: string;
   authenticated: boolean;
-  /** Present when the connection declared who it is (`?actor=<externalId>`). */
-  externalId?: string;
+  /** Declared actor address or a connection-local deliverable address. */
+  externalId: string;
 }
 
 interface WsConnection {
@@ -44,14 +44,21 @@ export class WebSocketHandler {
    * the client must echo back as `replyToId` — returning it lets the send
    * kernel re-key the Wait's correlation to it.
    */
-  push(externalId: string, body: string): { externalMessageId: string } {
+  push(
+    externalId: string,
+    body: string,
+    idempotencyKey: string,
+  ): {
+    value: "accepted";
+    externalMessageId: string;
+  } {
     const connection = this.connections.get(externalId);
     if (connection === undefined) {
       throw new Error(`no live websocket connection for actor ${externalId}`);
     }
-    const messageId = crypto.randomUUID();
+    const messageId = idempotencyKey;
     connection.send(JSON.stringify({ type: "message", messageId, text: body }));
-    return { externalMessageId: messageId };
+    return { value: "accepted", externalMessageId: messageId };
   }
 
   get ws() {
@@ -69,12 +76,10 @@ export class WebSocketHandler {
           msg: "websocket message received",
           context: { surfaceKey: ws.data.surfaceKey },
         });
-        void self.handleMessage(ws, raw, traceId);
+        void self.handleMessage(ws, raw);
       },
       open(ws: WsConnection) {
-        if (ws.data.externalId !== undefined) {
-          self.connections.set(ws.data.externalId, ws);
-        }
+        self.connections.set(ws.data.externalId, ws);
         self.publish(Operational.Events.Info, {
           traceId: newTraceId(),
           time: Date.now(),
@@ -85,7 +90,7 @@ export class WebSocketHandler {
       },
       close(ws: WsConnection) {
         const externalId = ws.data.externalId;
-        if (externalId !== undefined && self.connections.get(externalId) === ws) {
+        if (self.connections.get(externalId) === ws) {
           self.connections.delete(externalId);
         }
         self.publish(Operational.Events.Info, {
@@ -119,9 +124,10 @@ export class WebSocketHandler {
     // (delegated instructions are pushed to it, its replies settle Waits), so
     // it requires the shared token — unlike plain owner chat, which loopback
     // trust covers. On a tokenless bind the declaration is simply not taken.
-    const externalId = authenticated
+    const declaredId = authenticated
       ? new URL(req.url).searchParams.get("actor")?.trim()
       : undefined;
+    const externalId = declaredId || `connection:${crypto.randomUUID()}`;
     // Bun 1.3.6 writes an explicit response protocol twice. Narrow the offer
     // AFTER authentication so Bun negotiates only the selected, non-secret protocol.
     if (auth.protocol !== undefined) req.headers.set("sec-websocket-protocol", auth.protocol);
@@ -136,14 +142,14 @@ export class WebSocketHandler {
           id: crypto.randomUUID(),
         }),
         authenticated,
-        ...(externalId ? { externalId } : {}),
+        externalId,
       } satisfies WsConnectionData,
     });
     if (ok) return undefined;
     return new Response("WebSocket upgrade failed", { status: 400 });
   }
 
-  private async handleMessage(ws: WsConnection, raw: string, traceId: string): Promise<void> {
+  private async handleMessage(ws: WsConnection, raw: string): Promise<void> {
     try {
       const parsed = JSON.parse(raw) as {
         type?: string;
@@ -158,19 +164,27 @@ export class WebSocketHandler {
 
       const surfaceKey = ws.data.surfaceKey;
 
-      const result = await this.handler({
-        id: crypto.randomUUID(),
-        traceId,
-        surfaceKey,
-        text: parsed.text,
-        sender: { id: ws.data.externalId ?? "ws", name: ws.data.externalId ?? "WebSocket" },
-        ...(typeof parsed.replyToId === "string" && parsed.replyToId.length > 0
-          ? { replyToId: parsed.replyToId }
-          : {}),
-        raw: { websocket: { authenticated: ws.data.authenticated } },
+      await this.handler({
+        sender: {
+          kind: "external",
+          surface: "ws",
+          externalId: ws.data.externalId,
+        },
+        facts: {
+          eventId: crypto.randomUUID(),
+          surface: "ws",
+          channelId: surfaceKey,
+          addressees: [],
+          dm: true,
+          ...(typeof parsed.replyToId === "string" && parsed.replyToId.length > 0
+            ? { reply: { chain: [parsed.replyToId] } }
+            : {}),
+          payload: { websocket: { authenticated: ws.data.authenticated } },
+          render: parsed.text,
+        },
       });
 
-      ws.send(JSON.stringify({ type: "response", text: result?.text ?? "" }));
+      ws.send(JSON.stringify({ type: "receipt", status: "accepted" }));
     } catch (err) {
       ws.send(
         JSON.stringify({

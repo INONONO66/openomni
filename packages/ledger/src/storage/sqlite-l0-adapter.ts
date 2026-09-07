@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import {
   Alarm,
   Deadline,
+  Gateway,
   Inbox,
   LedgerAction,
   LedgerSession,
@@ -10,7 +11,13 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { alarmAppend, inboxAppend } from "./l0-action-builders.js";
+import {
+  alarmAppend,
+  inboxAppend,
+  messageAnswerAppend,
+  messageDeadlineArm,
+  messageTimeoutInbox,
+} from "./l0-action-builders.js";
 
 const actionRowSchema = LedgerAction.Node;
 const inboxRowSchema = Inbox.Row;
@@ -160,10 +167,11 @@ function createSessions(
         if (row === undefined) throw new Error("materialized session disappeared");
         return { created: true as const, row, receipt };
       });
-      if (result?.created === true) publishCommitted(observationSink, result.receipt);
+      if (result?.created === true) publishCommitted(db, observationSink, result.receipt);
       return result;
     },
     get: (id) => selectSession(db, id),
+    openChildCount: (parentId) => openChildCount(db, parentId),
     list() {
       const rows = db
         .query(`${sessionSelect} WHERE role IS NOT NULL ORDER BY id`)
@@ -247,7 +255,7 @@ function createSessions(
         else throw error;
       }
       if (outcome?.ok === true) {
-        for (const receipt of outcome.receipts) publishCommitted(observationSink, receipt);
+        for (const receipt of outcome.receipts) publishCommitted(db, observationSink, receipt);
       }
       return outcome;
     },
@@ -305,7 +313,7 @@ function createActions(
     append(input, expectedRevision) {
       const parsed = LedgerAction.Append.parse(input);
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
-      if (receipt !== undefined) publishCommitted(observationSink, receipt);
+      if (receipt !== undefined) publishCommitted(db, observationSink, receipt);
       return receipt;
     },
     tree(sessionId) {
@@ -436,6 +444,13 @@ function commitSession(
   if (updated.changes !== 1) {
     throw new SessionCommitRefused(refusedSessionCommit("stale", current));
   }
+  for (const delivery of request.deliveries ?? []) {
+    const committed = commitInbox(db, delivery);
+    if (committed === undefined) {
+      throw new SessionCommitRefused(refusedSessionCommit("inbox", current));
+    }
+    receipts.push(...committed.receipts);
+  }
   const row = selectSession(db, request.sessionId);
   if (row === undefined) throw new Error("committed session disappeared");
   return { ok: true, row, receipts };
@@ -499,6 +514,154 @@ function parentBelongsToSession(db: Database, parentId: string | null, sessionId
   return row?.session_id === sessionId;
 }
 
+function openChildCount(db: Database, parentId: string): number {
+  const row = db
+    .query<{ n: number | bigint }, [string]>(`
+		SELECT COUNT(*) AS n FROM session child WHERE child.parent_id = ? AND (
+			EXISTS (SELECT 1 FROM inbox i WHERE i.session_id = child.id AND i.status = 'pending')
+			OR EXISTS (SELECT 1 FROM action intent WHERE intent.session_id = child.id AND intent.kind = 'turn'
+				AND json_extract(intent.intent, '$.phase') = 'intent'
+				AND NOT EXISTS (SELECT 1 FROM action result WHERE result.id = json_extract(intent.intent, '$.resultId')))
+			OR COALESCE((SELECT json_extract(a.effect, '$.kind') FROM action a
+				WHERE a.session_id = child.id AND a.kind = 'turn' AND json_extract(a.effect, '$.phase') = 'terminal'
+				ORDER BY a.ordinal DESC LIMIT 1), 'open') NOT IN ('result', 'interrupted', 'error')
+		)`)
+    .get(parentId);
+  return Number(row?.n ?? 0);
+}
+
+interface InboxCommitResult {
+  readonly committed: Inbox.Row;
+  readonly receipts: LedgerAction.Receipt[];
+}
+
+function commitInbox(db: Database, row: Inbox.Commit): InboxCommitResult | undefined {
+  if (actionExists(db, row.id)) return undefined;
+  if (row.sender !== undefined) {
+    const sender = selectSession(db, row.sender.sessionId);
+    if (
+      sender === undefined ||
+      sender.leaseOwner !== row.sender.owner ||
+      sender.leaseFence !== row.sender.fence ||
+      sender.leaseExpiresAt === null ||
+      Deadline.isExpired(row.createdAt, sender.leaseExpiresAt)
+    )
+      return undefined;
+  }
+  const receipts: LedgerAction.Receipt[] = [];
+  const child = row.createSession;
+  if (child !== undefined) {
+    if (
+      (child.row.parentId !== null && child.row.parentId !== row.sender?.sessionId) ||
+      child.row.id !== row.sessionId ||
+      child.row.revision !== 0 ||
+      child.initialAction.sessionId !== row.sessionId ||
+      child.initialAction.parentId !== null ||
+      child.initialAction.kind !== "session.configure" ||
+      row.parentActionId !== null ||
+      actionExists(db, child.initialAction.id) ||
+      child.initialAction.id === row.id
+    )
+      return undefined;
+    if (child.row.parentId !== null) {
+      const limits = row.limits;
+      if (limits === undefined || openChildCount(db, child.row.parentId) >= limits.fanout)
+        return undefined;
+      let depth = 1;
+      let ancestor = selectSession(db, child.row.parentId);
+      while (ancestor?.parentId !== null) {
+        if (ancestor === undefined) throw new Error("session ancestry is missing");
+        depth += 1;
+        ancestor = selectSession(db, ancestor.parentId);
+      }
+      if (depth > limits.depth) return undefined;
+    }
+    if (!insertSession(db, child.row)) return undefined;
+    const configured = appendAction(db, child.initialAction, 0);
+    if (configured === undefined) throw new Error("child configuration refused");
+    receipts.push(configured);
+  }
+  const reply = Inbox.ReplyOrigin.safeParse(row.origin.value);
+  if (reply.success) {
+    const due = fireMessageDeadline(db, `${reply.data.sourceActionId}:deadline`, row.createdAt);
+    if (due !== undefined) receipts.push(...due.receipts);
+    const answer = claimMessageAnswer(db, {
+      sessionId: row.sessionId,
+      sourceActionId: reply.data.sourceActionId,
+      messageId: reply.data.messageId,
+      at: row.createdAt,
+      state: "answered",
+    });
+    if (answer !== undefined) receipts.push(answer);
+  }
+  const session = db.query("SELECT revision FROM session WHERE id = ?").get(row.sessionId) as {
+    revision: number;
+  } | null;
+  if (session === null) return undefined;
+  const receipt = appendAction(db, inboxAppend(row), session.revision);
+  if (receipt === undefined) {
+    if (receipts.length > 0) throw new Error("message inbox commit refused");
+    return undefined;
+  }
+  const ordinalRow = db
+    .query("SELECT COALESCE(MAX(ordinal), 0) + 1 AS ordinal FROM inbox WHERE session_id = ?")
+    .get(row.sessionId) as { ordinal: number };
+  const committed = Inbox.Row.parse({
+    id: row.id,
+    sessionId: row.sessionId,
+    kind: row.kind,
+    content: row.content,
+    origin: row.origin,
+    status: "pending",
+    consumedBy: null,
+    consumedAt: null,
+    createdAt: row.createdAt,
+    ordinal: ordinalRow.ordinal,
+  });
+  db.query(
+    `INSERT INTO inbox (
+             id, session_id, kind, content, origin, encoding_version, status,
+             consumed_by, consumed_at, time_created, ordinal
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    committed.id,
+    committed.sessionId,
+    committed.kind,
+    committed.content,
+    JSON.stringify(committed.origin.value),
+    committed.origin.encodingVersion,
+    committed.status,
+    committed.consumedBy,
+    committed.consumedAt,
+    committed.createdAt,
+    committed.ordinal,
+  );
+  receipts.push(receipt);
+  const origin = Inbox.MessageOrigin.safeParse(row.origin.value);
+  if (origin.success && origin.data.deadline !== undefined) {
+    const source = origin.data;
+    const sender = selectSession(db, source.senderSessionId);
+    if (sender === undefined) throw new Error("message deadline sender is missing");
+    const alarm = armAlarm(
+      db,
+      messageDeadlineArm(
+        {
+          messageId: source.messageId,
+          sessionId: source.senderSessionId,
+          sourceActionId: source.sourceActionId,
+          fireAt: origin.data.deadline,
+          createdAt: row.createdAt,
+          ...(source.replyTo === undefined ? {} : { replyTo: source.replyTo }),
+        },
+        sender,
+      ),
+    );
+    if (alarm === undefined) throw new Error("message deadline arm refused");
+    receipts.push(alarm.receipt);
+  }
+  return { committed, receipts };
+}
+
 function createInbox(
   db: Database,
   transaction: <T>(operation: () => T) => T,
@@ -507,52 +670,9 @@ function createInbox(
   return {
     commit(input) {
       const row = Inbox.Commit.parse(input);
-      const result = transaction(() => {
-        const session = db
-          .query("SELECT revision FROM session WHERE id = ?")
-          .get(row.sessionId) as {
-          revision: number;
-        } | null;
-        if (session === null) return undefined;
-        const receipt = appendAction(db, inboxAppend(row), session.revision);
-        if (receipt === undefined) return undefined;
-        const ordinalRow = db
-          .query("SELECT COALESCE(MAX(ordinal), 0) + 1 AS ordinal FROM inbox WHERE session_id = ?")
-          .get(row.sessionId) as { ordinal: number };
-        const committed = Inbox.Row.parse({
-          id: row.id,
-          sessionId: row.sessionId,
-          kind: row.kind,
-          content: row.content,
-          origin: row.origin,
-          status: "pending",
-          consumedBy: null,
-          consumedAt: null,
-          createdAt: row.createdAt,
-          ordinal: ordinalRow.ordinal,
-        });
-        db.query(
-          `INSERT INTO inbox (
-             id, session_id, kind, content, origin, encoding_version, status,
-             consumed_by, consumed_at, time_created, ordinal
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          committed.id,
-          committed.sessionId,
-          committed.kind,
-          committed.content,
-          JSON.stringify(committed.origin.value),
-          committed.origin.encodingVersion,
-          committed.status,
-          committed.consumedBy,
-          committed.consumedAt,
-          committed.createdAt,
-          committed.ordinal,
-        );
-        return { committed, receipt };
-      });
+      const result = transaction(() => commitInbox(db, row));
       if (result === undefined) return undefined;
-      publishCommitted(observationSink, result.receipt);
+      for (const receipt of result.receipts) publishCommitted(db, observationSink, receipt);
       return result.committed;
     },
     list(sessionId, status) {
@@ -568,6 +688,113 @@ function createInbox(
   };
 }
 
+function claimMessageAnswer(
+  db: Database,
+  input: Parameters<typeof messageAnswerAppend>[0],
+): LedgerAction.Receipt | undefined {
+  const action = messageAnswerAppend(input);
+  if (actionExists(db, action.id)) return undefined;
+  const source = db
+    .query("SELECT kind, session_id FROM action WHERE id = ?")
+    .get(input.sourceActionId) as { kind: string; session_id: string } | null;
+  if (source?.kind !== "message" || source.session_id !== input.sessionId) {
+    throw new Error("message reply source does not belong to its receiving session");
+  }
+  const session = selectSession(db, input.sessionId);
+  if (session === undefined) throw new Error("message sender session is missing");
+  const receipt = appendAction(db, action, session.revision);
+  if (receipt === undefined) throw new Error("message answer CAS refused");
+  return receipt;
+}
+
+function fireMessageDeadline(
+  db: Database,
+  id: string,
+  at: number,
+):
+  | {
+      readonly receipts: LedgerAction.Receipt[];
+      readonly committed?: Inbox.Row;
+    }
+  | undefined {
+  const raw = db
+    .query("SELECT * FROM alarm WHERE id = ? AND status = 'armed' AND fire_at <= ?")
+    .get(id, at) as AlarmSqlRow | null;
+  if (raw === null) return undefined;
+  const alarm = decodeAlarm(raw);
+  const parsed = Alarm.MessageDeadline.safeParse(alarm.spec?.value);
+  if (!parsed.success) return undefined;
+  const spec = parsed.data;
+  const session = selectSession(db, alarm.sessionId);
+  if (session === undefined) throw new Error("alarm session is missing");
+  const pinned = spec.generation;
+  const current =
+    session.toolsGeneration === pinned.toolsGeneration &&
+    session.systemHash === pinned.systemHash &&
+    session.policyGeneration === pinned.policyGeneration;
+  const receipt = appendAction(
+    db,
+    {
+      id: `${id}:fired`,
+      parentId: id,
+      sessionId: alarm.sessionId,
+      kind: current ? "alarm.fired" : "alarm.paused",
+      intent: { encodingVersion: 1, value: { alarmId: id, fireAt: alarm.fireAt } },
+      effect: { encodingVersion: 1, value: { generationMatched: current } },
+      ts: at,
+      irreversible: true,
+    },
+    session.revision,
+  );
+  if (receipt === undefined) throw new Error("message alarm commit refused");
+  db.query("UPDATE alarm SET status = ?, time_updated = ? WHERE id = ? AND status = 'armed'").run(
+    current ? "fired" : "paused",
+    at,
+    id,
+  );
+  const receipts = [receipt];
+  if (!current) return { receipts };
+  const answer = claimMessageAnswer(db, {
+    sessionId: alarm.sessionId,
+    sourceActionId: spec.sourceActionId,
+    messageId: spec.messageId,
+    at,
+    state: "timed_out",
+  });
+  if (answer === undefined) return { receipts };
+  receipts.push(answer);
+  const inbox = commitInbox(db, messageTimeoutInbox(alarm, spec, at));
+  if (inbox === undefined) throw new Error("message timeout inbox refused");
+  return { receipts: [...receipts, ...inbox.receipts], committed: inbox.committed };
+}
+
+function armAlarm(db: Database, parsed: Alarm.Arm) {
+  const session = selectSession(db, parsed.sessionId);
+  if (session === undefined) return undefined;
+  const receipt = appendAction(db, alarmAppend(parsed), session.revision);
+  if (receipt === undefined) return undefined;
+  const row = Alarm.Row.parse({
+    ...parsed,
+    status: "armed",
+    createdAt: parsed.fireAt,
+    updatedAt: parsed.fireAt,
+  });
+  db.query(`INSERT INTO alarm (
+		id, session_id, kind, fire_at, spec, encoding_version, status, time_created, time_updated
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    row.id,
+    row.sessionId,
+    row.kind,
+    row.fireAt,
+    row.spec === undefined ? null : JSON.stringify(row.spec.value),
+    row.spec?.encodingVersion ?? 1,
+    row.status,
+    row.createdAt,
+    row.updatedAt,
+  );
+  return { receipt, row };
+}
+
 function createAlarms(
   db: Database,
   transaction: <T>(operation: () => T) => T,
@@ -576,40 +803,16 @@ function createAlarms(
   return {
     arm(input) {
       const parsed = Alarm.Arm.parse(input);
-      const result = transaction(() => {
-        const session = db
-          .query("SELECT revision FROM session WHERE id = ? AND role IS NOT NULL")
-          .get(parsed.sessionId) as { revision: number } | null;
-        if (session === null) return undefined;
-        const receipt = appendAction(db, alarmAppend(parsed), session.revision);
-        if (receipt === undefined) return undefined;
-        const row = Alarm.Row.parse({
-          ...parsed,
-          status: "armed",
-          createdAt: parsed.fireAt,
-          updatedAt: parsed.fireAt,
-        });
-        db.query(
-          `INSERT INTO alarm (
-             id, session_id, kind, fire_at, spec, encoding_version, status,
-             time_created, time_updated
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          row.id,
-          row.sessionId,
-          row.kind,
-          row.fireAt,
-          row.spec === undefined ? null : JSON.stringify(row.spec.value),
-          row.spec?.encodingVersion ?? 1,
-          row.status,
-          row.createdAt,
-          row.updatedAt,
-        );
-        return { receipt, row };
-      });
+      const result = transaction(() => armAlarm(db, parsed));
       if (result === undefined) return undefined;
-      publishCommitted(observationSink, result.receipt);
+      publishCommitted(db, observationSink, result.receipt);
       return result.row;
+    },
+    fireMessage(id, at) {
+      const result = transaction(() => fireMessageDeadline(db, id, at));
+      if (result === undefined) return undefined;
+      for (const receipt of result.receipts) publishCommitted(db, observationSink, receipt);
+      return result.committed;
     },
     cancel(id, updatedAt) {
       const result = db
@@ -669,7 +872,11 @@ function createPolicies(db: Database): ProtocolStorage.PolicyRowSubAdapter {
   };
 }
 
-function publishCommitted(sink: ObservationSink, receipt: LedgerAction.Receipt): void {
+function publishCommitted(
+  db: Database,
+  sink: ObservationSink,
+  receipt: LedgerAction.Receipt,
+): void {
   try {
     sink.publish(L0Observation.ActionCommittedEvent, {
       id: receipt.action.id,
@@ -677,8 +884,48 @@ function publishCommitted(sink: ObservationSink, receipt: LedgerAction.Receipt):
       revision: receipt.revision,
       kind: receipt.action.kind,
     });
-  } catch {
-    // Observation is explicitly lossy and cannot alter a committed result.
+    publishMessageTerminal(db, sink, receipt.action);
+  } catch (error) {
+    console.warn("post-commit observation failed", {
+      actionId: receipt.action.id,
+      error: String(error),
+    });
+  }
+}
+
+function publishMessageTerminal(
+  db: Database,
+  sink: ObservationSink,
+  action: LedgerAction.Node,
+): void {
+  if (action.kind !== "prompt") return;
+  const scoped = sink.scope?.({ sessionId: action.sessionId }) ?? sink;
+  const reply = Inbox.ReplyOrigin.safeParse(action.intent.value);
+  if (reply.success) {
+    const source = db
+      .query("SELECT ts FROM action WHERE id = ? AND session_id = ?")
+      .get(reply.data.sourceActionId, action.sessionId) as { ts: number } | null;
+    if (source === null) throw new Error("committed reply source is missing");
+    scoped.publish(Gateway.MessageObserved, {
+      kind: "message.replied",
+      messageId: reply.data.messageId,
+      replyTo: reply.data.replyTo,
+      roundTripMs: Math.max(0, action.ts - source.ts),
+    });
+    return;
+  }
+  const origin = action.intent.value;
+  if (origin === null || typeof origin !== "object" || Array.isArray(origin)) return;
+  if (
+    origin.kind === "message_timeout" &&
+    typeof origin.messageId === "string" &&
+    typeof origin.waitedMs === "number"
+  ) {
+    scoped.publish(Gateway.MessageObserved, {
+      kind: "message.timed_out",
+      messageId: origin.messageId,
+      waitedMs: origin.waitedMs,
+    });
   }
 }
 

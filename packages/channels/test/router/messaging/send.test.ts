@@ -48,6 +48,7 @@ function messaging() {
   return createExistingAgentMessaging({
     deliver: (message) => {
       deliveries.push(message);
+      return { value: "accepted" as const };
     },
     grants: () => grants,
     publish: Bus.publish,
@@ -312,7 +313,7 @@ describe("awaited delivery", () => {
 describe("delivery receipt", () => {
   test("a platform message id from the owner re-keys the wait correlation to it", async () => {
     const withReceipt = createExistingAgentMessaging({
-      deliver: () => ({ externalMessageId: "platform:msg-77" }),
+      deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-77" }),
       grants: () => grants,
       publish: Bus.publish,
     });
@@ -330,12 +331,10 @@ describe("delivery receipt", () => {
     const stored = WaitStore.get("wait:test-awaited");
     expect(stored?.correlation.replyToMessageId).toBe("platform:msg-77");
     // Correlation now answers the platform id, not the internal message id.
-    expect(
-      WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-77" }),
-    ).toHaveLength(1);
-    expect(
-      WaitStore.findByCorrelation({ replyToMessageId: "message:test-awaited" }),
-    ).toHaveLength(0);
+    expect(WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-77" })).toHaveLength(1);
+    expect(WaitStore.findByCorrelation({ replyToMessageId: "message:test-awaited" })).toHaveLength(
+      0,
+    );
   });
 
   test("no receipt from the owner leaves the internal-id correlation unchanged", async () => {
@@ -352,7 +351,7 @@ describe("delivery receipt", () => {
 
   test("a fire-and-forget receipt records nothing — there is no wait to re-key", async () => {
     const withReceipt = createExistingAgentMessaging({
-      deliver: () => ({ externalMessageId: "platform:msg-88" }),
+      deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-88" }),
       grants: () => grants,
       publish: Bus.publish,
     });
@@ -396,6 +395,7 @@ describe("durable send admission faults", () => {
     const reentrant = createExistingAgentMessaging({
       deliver: (message) => {
         deliveries.push(message);
+        return { value: "accepted" as const };
       },
       grants: () => grants,
       budgets: () => {
@@ -435,6 +435,7 @@ describe("durable send admission faults", () => {
     const withoutLedger = createExistingAgentMessaging({
       deliver: (message) => {
         deliveries.push(message);
+        return { value: "accepted" as const };
       },
       grants: () => {
         Storage.configure({
@@ -581,7 +582,10 @@ async function probe(point: FaultPoint): Promise<Probe> {
       }
       const recorded = external.get(message.messageId);
       if (recorded !== undefined) return recorded;
-      const receipt = { externalMessageId: `platform:${message.messageId}` };
+      const receipt = {
+        value: "accepted" as const,
+        externalMessageId: `platform:${message.messageId}`,
+      };
       external.set(message.messageId, receipt);
       if (failAfterEffect) {
         failAfterEffect = false;

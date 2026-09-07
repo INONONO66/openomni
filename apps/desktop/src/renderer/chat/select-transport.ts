@@ -24,7 +24,11 @@ import { createGatewayChatTransport } from "./gateway-transport";
  */
 
 export type SelectedTransport =
-  | { readonly kind: "gateway"; readonly transport: ChatTransport<UIMessage>; readonly protocols?: readonly string[] }
+  | {
+      readonly kind: "gateway";
+      readonly transport: ChatTransport<UIMessage>;
+      readonly protocols?: readonly string[];
+    }
   | { readonly kind: "mock"; readonly transport: undefined; readonly protocols?: undefined };
 
 /**

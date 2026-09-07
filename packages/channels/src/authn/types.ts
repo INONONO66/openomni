@@ -1,4 +1,4 @@
-import type { Channel, Policy } from "@openomni/protocol";
+import type { Policy } from "@openomni/protocol";
 
 export type ChannelAuthnPolicyId = string;
 
@@ -24,14 +24,4 @@ export interface GitHubAuthResult {
   readonly verdict: Policy.PolicyDecision;
   readonly body?: string;
   readonly response?: Response;
-}
-
-export interface ChannelTriggerAuthResult {
-  readonly verdict: Policy.PolicyDecision;
-}
-
-export interface ChannelTriggerAuthInput {
-  readonly triggers: Channel.TriggerRule[];
-  readonly ctx: Channel.TriggerContext;
-  readonly onDecision?: ChannelAuthnDecisionObserver;
 }

@@ -70,6 +70,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       ...point,
       role: options.identity.role,
       sessionId: options.identity.sessionId,
+      ...(request.message === undefined ? {} : { message: request.message }),
       value,
     };
     const decision = options.policy.evaluate(input);
@@ -167,7 +168,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
               parentId: options.identity.parentActionId,
               kind: stage.kind,
               op: stage.request.op,
-              value: stage.request.intent,
+              value: stage.pre.value,
             });
       admitted.push({ ...stage, intent });
     }

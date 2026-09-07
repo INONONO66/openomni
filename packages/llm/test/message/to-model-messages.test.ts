@@ -65,7 +65,12 @@ describe("toModelMessages", () => {
 
   test("joins multiple text parts with a real LF", () => {
     const result = toModelMessages(
-      [{ ...userMessage(), parts: [textPart("msg-1", "first", "part-1"), textPart("msg-1", "second", "part-2")] }],
+      [
+        {
+          ...userMessage(),
+          parts: [textPart("msg-1", "first", "part-1"), textPart("msg-1", "second", "part-2")],
+        },
+      ],
       anthropicModel,
     );
     expect(result[0]?.content).toBe("first\nsecond");
@@ -268,7 +273,8 @@ describe("toModelMessages tool-name wire sanitization (all providers)", () => {
 
     const result = toModelMessages([message], openaiModel);
     const toolMessage = result.find((item) => item.role === "tool");
-    if (!toolMessage || !Array.isArray(toolMessage.content)) throw new Error("expected tool result");
+    if (!toolMessage || !Array.isArray(toolMessage.content))
+      throw new Error("expected tool result");
     expect(toolMessage.content[0]).toMatchObject({
       type: "tool-result",
       output: { type: "text", value: "Error: permission denied" },

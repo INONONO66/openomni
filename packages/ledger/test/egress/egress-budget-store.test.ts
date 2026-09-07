@@ -76,6 +76,39 @@ describe("EgressBudgetStore", () => {
     expect(observed).toEqual({ countInWindow: 0, notifyInWindow: 0, converseInWindow: 0 });
   });
 
+  test("read-only applicability sees committed window counts without charging ingress", () => {
+    expect(EgressBudgetStore.read("s", "t", NOW - WINDOW)).toEqual({
+      countInWindow: 0,
+      notifyInWindow: 0,
+      converseInWindow: 0,
+    });
+    EgressBudgetStore.claim(row("notify"), NOW - WINDOW, () => "allow");
+    EgressBudgetStore.claim(
+      row("converse", { class: "converse", at: NOW + 1 }),
+      NOW - WINDOW,
+      () => "allow",
+    );
+    const expected = {
+      countInWindow: 2,
+      notifyInWindow: 1,
+      converseInWindow: 1,
+      lastSendAt: NOW + 1,
+    };
+    expect(EgressBudgetStore.read("s", "t", NOW - WINDOW)).toEqual(expected);
+    expect(EgressBudgetStore.read("s", "t", NOW - WINDOW)).toEqual(expected);
+    expect(EgressBudgetStore.read("s", "other", NOW - WINDOW)).toEqual({
+      countInWindow: 0,
+      notifyInWindow: 0,
+      converseInWindow: 0,
+    });
+    expect(EgressBudgetStore.read("s", "t", NOW + 2)).toEqual({
+      countInWindow: 0,
+      notifyInWindow: 0,
+      converseInWindow: 0,
+      lastSendAt: NOW + 1,
+    });
+  });
+
   test("two contenders for the last SQLite window slot produce exactly one claim", () => {
     const adapter = Storage.get().egressBudget;
     if (adapter === undefined) throw new Error("egress budget adapter missing");

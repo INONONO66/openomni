@@ -1,5 +1,11 @@
 import { homedir } from "node:os";
-import { ActorRegistry, ChannelInstanceStore, PersonStore, SecretStore, Vault } from "@openomni/ledger";
+import {
+  ActorRegistry,
+  ChannelInstanceStore,
+  PersonStore,
+  SecretStore,
+  Vault,
+} from "@openomni/ledger";
 import { type CredentialReader, channelProfile, declaredChannelProfile } from "../channels";
 import type { OpenOmniConfig } from "../config";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";

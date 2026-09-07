@@ -7,7 +7,12 @@ import type { ChatAgentConfig } from "../../../src/core/types";
 
 // Legacy protocol metadata must not become a second admission authority.
 const tools: Tool.Spec[] = [
-  { name: "screen.capture", inputSchema: { type: "object" }, placement: "machine", requires: ["screen.read"] },
+  {
+    name: "screen.capture",
+    inputSchema: { type: "object" },
+    placement: "machine",
+    requires: ["screen.read"],
+  },
   { name: "network.fetch", inputSchema: { type: "object" } },
 ];
 
@@ -28,7 +33,9 @@ describe("tool calls reach the executor without target gating", () => {
         model: { provider: "test", id: "model" },
         tools,
         toolExecutor: execute,
-        ...(wave ? { toolWave: (calls: readonly Tool.Call[]) => Promise.all(calls.map(execute)) } : {}),
+        ...(wave
+          ? { toolWave: (calls: readonly Tool.Call[]) => Promise.all(calls.map(execute)) }
+          : {}),
         llm: {
           resolveModel: async () => ({ id: "model", name: "model", providerID: "test" }),
           run: async (input, sink) => {
@@ -36,22 +43,40 @@ describe("tool calls reach the executor without target gating", () => {
             const message = createAssistantMessage("completed", "", "session-tools");
             if (!requested) {
               requested = true;
-              message.parts.push({ id: "part", messageID: message.info.id, sessionID: "session-tools", type: "tool", callID: "call", tool: "screen.capture", state: { status: "pending", input: {} } });
+              message.parts.push({
+                id: "part",
+                messageID: message.info.id,
+                sessionID: "session-tools",
+                type: "tool",
+                callID: "call",
+                tool: "screen.capture",
+                state: { status: "pending", input: {} },
+              });
             }
             sink.onMessage(message);
             return { type: "stop" };
           },
         },
       };
-      await createTestAgent(config).run({ messages: [{ role: "user", content: "inspect" }], traceContext: { traceId: "trace-tools", sessionId: "session-tools", runId: "run-tools" } }, {
-        onMessage: () => undefined,
-        onToolCall: () => undefined,
-        onToolResult: (result) => results.push(result),
-      });
+      await createTestAgent(config).run(
+        {
+          messages: [{ role: "user", content: "inspect" }],
+          traceContext: { traceId: "trace-tools", sessionId: "session-tools", runId: "run-tools" },
+        },
+        {
+          onMessage: () => undefined,
+          onToolCall: () => undefined,
+          onToolResult: (result) => results.push(result),
+        },
+      );
       expect(catalogs.length).toBeGreaterThan(0);
-      expect(catalogs.every((catalog) => catalog.join(",") === "screen.capture,network.fetch")).toBe(true);
+      expect(
+        catalogs.every((catalog) => catalog.join(",") === "screen.capture,network.fetch"),
+      ).toBe(true);
       expect(executed).toEqual(["screen.capture"]);
-      expect(results).toMatchObject([{ toolCallId: "call", isError: true, output: "policy denied" }]);
+      expect(results).toMatchObject([
+        { toolCallId: "call", isError: true, output: "policy denied" },
+      ]);
     });
   }
 });

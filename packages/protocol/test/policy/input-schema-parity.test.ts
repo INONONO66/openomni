@@ -13,7 +13,6 @@ interface ParityCase {
   readonly candidates: readonly unknown[];
 }
 
-
 const parityCases: readonly ParityCase[] = [
   {
     name: "Tool.Spec",

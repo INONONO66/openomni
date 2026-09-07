@@ -130,8 +130,7 @@ export async function settleModelTools(
     if (part.type !== "tool" || !pending.includes(part)) return part;
     const result = byId.get(part.callID);
     if (result === undefined) throw new Error(`missing tool result: ${part.callID}`);
-    if (config.toolWave !== undefined)
-      state.budgetState = recordToolCall(state.budgetState, 0);
+    if (config.toolWave !== undefined) state.budgetState = recordToolCall(state.budgetState, 0);
     return {
       ...part,
       state: result.isError

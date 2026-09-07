@@ -104,7 +104,10 @@ describe("policy row compiler enforcement", () => {
       "invalid_match",
       atGeneration(draft("bad-match", "tool", "pre", { type: "allow" }, { match: { op: "" } }), 1),
     ],
-    ["invalid_verdict", atGeneration(draft("bad-verdict", "tool", "pre", { type: "unexpected" }), 1)],
+    [
+      "invalid_verdict",
+      atGeneration(draft("bad-verdict", "tool", "pre", { type: "unexpected" }), 1),
+    ],
   ] as const)("rejects malformed rows with %s", (code, badRow) => {
     const error = catchCompile(() =>
       compilePolicySnapshot({
@@ -123,10 +126,16 @@ describe("policy row compiler enforcement", () => {
       rows: [
         atGeneration(compaction, 1),
         atGeneration(
-          draft("approval", "tool", "pre", {
-            type: "require_approval",
-            reason: "operator",
-          }, { priority: 100 }),
+          draft(
+            "approval",
+            "tool",
+            "pre",
+            {
+              type: "require_approval",
+              reason: "operator",
+            },
+            { priority: 100 },
+          ),
           1,
         ),
         atGeneration(draft("allow-after", "tool", "pre", { type: "allow" }), 1),
@@ -156,7 +165,9 @@ describe("policy row compiler enforcement", () => {
       ],
     });
 
-    expect(snapshot.evaluate({ ...input, phase: "post", value: { secret: null, list: [] } }).value).toEqual({
+    expect(
+      snapshot.evaluate({ ...input, phase: "post", value: { secret: null, list: [] } }).value,
+    ).toEqual({
       secret: null,
       list: [],
     });

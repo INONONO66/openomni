@@ -1,5 +1,6 @@
 import {
   canonicalDigest,
+  Gateway,
   NamedError,
   type PlainObject,
   type PlainValue,
@@ -9,6 +10,7 @@ import {
   type Storage,
 } from "@openomni/protocol";
 import { z } from "zod";
+import { matchesMessage, type MessagePolicyContext } from "./message-match";
 
 const MANDATORY_RULE_NAMES = ["compaction"] as const;
 export type RuleName = (typeof MANDATORY_RULE_NAMES)[number];
@@ -17,7 +19,7 @@ const TRANSFORMER_NAMES = ["redact"] as const;
 const OBLIGATION_NAMES = ["budget_clamp"] as const;
 type ObligationName = (typeof OBLIGATION_NAMES)[number];
 
-const CORE_ACTION_KINDS = ["prompt", "turn", "llm", "tool"] as const;
+const CORE_ACTION_KINDS = ["prompt", "turn", "llm", "tool", "message"] as const;
 
 const CompileErrorCode = z.enum([
   "generation_mismatch",
@@ -99,6 +101,7 @@ const Match = z
     op: z.string().min(1).optional(),
     role: z.enum(["resident", "worker"]).optional(),
     sessionId: z.string().min(1).optional(),
+    message: z.union([Gateway.RuleTableA, Gateway.RuleTableB]).optional(),
   })
   .strict();
 type Match = z.infer<typeof Match>;
@@ -163,6 +166,7 @@ export interface PolicyEvaluationInput {
   readonly op?: string;
   readonly role?: "resident" | "worker";
   readonly sessionId?: string;
+  readonly message?: MessagePolicyContext;
   readonly value: PlainValue;
 }
 
@@ -172,12 +176,7 @@ interface CompiledObligation {
   readonly limit: number;
 }
 
-type EffectiveRowVerdict =
-  | "allow"
-  | "deny"
-  | "require_approval"
-  | "transform"
-  | "obligation";
+type EffectiveRowVerdict = "allow" | "deny" | "require_approval" | "transform" | "obligation";
 
 export interface PolicyEvaluation {
   readonly generation: number;
@@ -318,6 +317,21 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
       phase: row.phase,
     });
   }
+  if (
+    row.kind === "message" &&
+    match.data.op !== "assistant" &&
+    row.phase === "post" &&
+    verdict.data.type !== "allow" &&
+    verdict.data.type !== "obligation"
+  ) {
+    throw new PolicyCompileError({
+      code: "invalid_verdict",
+      generation,
+      ruleName: row.name,
+      kind: row.kind,
+      phase: row.phase,
+    });
+  }
   return Object.freeze({
     name: row.name,
     kind: row.kind,
@@ -373,7 +387,8 @@ function buildBuckets(rows: readonly CompiledRow[]): ReadonlyMap<string, BucketS
 function matches(row: CompiledRow, input: PolicyEvaluationInput): boolean {
   return (
     (row.match.role === undefined || row.match.role === input.role) &&
-    (row.match.sessionId === undefined || row.match.sessionId === input.sessionId)
+    (row.match.sessionId === undefined || row.match.sessionId === input.sessionId) &&
+    (row.match.message === undefined || matchesMessage(row.match.message, input.message))
   );
 }
 
@@ -428,10 +443,13 @@ function evaluateSnapshot(
   const effects: Policy.PolicyEffect[] = [];
   const obligations: CompiledObligation[] = [];
   let value = clonePlain(input.value);
-  let verdict: EffectiveRowVerdict = "allow";
-  let reason: string | undefined;
+  const missingMessageContext =
+    input.kind === "message" && input.op === "sendMessage" && input.message === undefined;
+  let verdict: EffectiveRowVerdict = missingMessageContext ? "deny" : "allow";
+  let reason: string | undefined = missingMessageContext ? "message_context_missing" : undefined;
 
   for (const compiled of selected) {
+    if (missingMessageContext) break;
     if (!matches(compiled, input)) continue;
     matchedRuleIds.push(compiled.name);
     const candidate = compiled.verdict;

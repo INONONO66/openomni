@@ -36,7 +36,12 @@ describe("selectModel", () => {
   }
 
   it("counts only the advancing classes in a mixed history", () => {
-    const selection = selectModel(chain, ["tool_error", "timeout", "context_overflow", "transient_error"]);
+    const selection = selectModel(chain, [
+      "tool_error",
+      "timeout",
+      "context_overflow",
+      "transient_error",
+    ]);
     expect(selection.index).toBe(2);
     expect(selection.exhausted).toBe(false);
   });

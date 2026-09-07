@@ -2,11 +2,12 @@ import { Chat } from "@ai-sdk/react";
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ServerWebSocket, Server } from "bun";
 import type { UIMessage, UIMessageChunk } from "ai";
+import { z } from "zod";
 import { createGatewayChatTransport } from "../src/renderer/chat/gateway-transport";
 
 /**
  * The wire is asserted against a REAL socket, not a stubbed WebSocket. What
- * this file has to prove is that the openomni frames (`response`, `message`,
+ * this file has to prove is that the openomni frames (`receipt`, `message`,
  * `error`) reduce to the exact chunk sequence the AI SDK reads — and a fake
  * wire would let a wrong sequence pass because it would mirror the
  * implementation. The lifecycle tests inject a controllable socket solely to
@@ -19,24 +20,24 @@ import { createGatewayChatTransport } from "../src/renderer/chat/gateway-transpo
  */
 
 /** What the server was asked, in order — the client half of the wire. */
-interface Received {
-  readonly text: string;
-  readonly replyToId?: string;
-}
+const receivedSchema = z.object({ text: z.string(), replyToId: z.string().optional() });
+type Received = z.infer<typeof receivedSchema>;
 
 /**
  * A server whose reply to each inbound frame is scripted: `script[n]` is sent
  * back for the nth message. Anything the script does not cover is answered with
- * an empty `response`, so a test that sends one more turn than it scripted fails
+ * an empty `message`, so a test that sends one more turn than it scripted fails
  * on the assertion rather than hanging.
  */
-function serveWire(script: readonly (readonly Record<string, unknown>[])[]) {
+function serveWire(script: readonly (readonly Readonly<Record<string, string>>[])[]) {
   const received: Received[] = [];
+  const protocols: (string | null)[] = [];
   let connectionCount = 0;
   let turn = 0;
   const server = Bun.serve({
     port: 0,
     fetch(request, self) {
+      protocols.push(request.headers.get("sec-websocket-protocol"));
       return self.upgrade(request)
         ? undefined
         : new Response("expected websocket", { status: 400 });
@@ -46,9 +47,12 @@ function serveWire(script: readonly (readonly Record<string, unknown>[])[]) {
         connectionCount += 1;
       },
       message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
-        const parsed: unknown = JSON.parse(typeof raw === "string" ? raw : raw.toString());
-        received.push(parseInbound(parsed));
-        const frames = script[turn] ?? [{ type: "response", text: "" }];
+        received.push(
+          receivedSchema.parse(JSON.parse(typeof raw === "string" ? raw : raw.toString())),
+        );
+        const frames = script[turn] ?? [
+          { type: "message", messageId: `message-${turn}`, text: "" },
+        ];
         turn += 1;
         for (const frame of frames) ws.send(JSON.stringify(frame));
       },
@@ -58,18 +62,9 @@ function serveWire(script: readonly (readonly Record<string, unknown>[])[]) {
   return {
     connectionCount: () => connectionCount,
     received,
+    protocols,
     url: `ws://127.0.0.1:${server.port}`,
   };
-}
-
-/** The client frame, parsed into a typed value rather than cast. */
-function parseInbound(value: unknown): Received {
-  if (typeof value !== "object" || value === null) throw new Error("client frame is not an object");
-  const record: Record<string, unknown> = { ...value };
-  const text = record.text;
-  const replyToId = record.replyToId;
-  if (typeof text !== "string") throw new Error("client frame carries no text");
-  return typeof replyToId === "string" ? { text, replyToId } : { text };
 }
 
 const servers: Server<undefined>[] = [];
@@ -115,9 +110,11 @@ class ControlledSocket {
   static readonly instances: ControlledSocket[] = [];
 
   readyState = 0;
+  readonly sent: Received[] = [];
   private readonly closeListeners: (() => void)[] = [];
   private readonly errorListeners: (() => void)[] = [];
-  private readonly messageListeners: ((event: { data: unknown }) => void)[] = [];
+  private readonly messageListeners: ((event: { data: string | ArrayBuffer | Blob }) => void)[] =
+    [];
   private readonly openListeners: (() => void)[] = [];
 
   constructor(_url: string, _protocols?: string | readonly string[]) {
@@ -127,16 +124,20 @@ class ControlledSocket {
   addEventListener(type: "open", listener: () => void): void;
   addEventListener(type: "close", listener: () => void): void;
   addEventListener(type: "error", listener: () => void): void;
-  addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
   addEventListener(
-    type: "open" | "close" | "error" | "message",
-    listener: (() => void) | ((event: { data: unknown }) => void),
+    type: "message",
+    listener: (event: { data: string | ArrayBuffer | Blob }) => void,
+  ): void;
+  addEventListener(
+    ...[type, listener]:
+      | [type: "open" | "close" | "error", listener: () => void]
+      | [type: "message", listener: (event: { data: string | ArrayBuffer | Blob }) => void]
   ): void {
-    if (type === "open") this.openListeners.push(listener as () => void);
-    if (type === "close") this.closeListeners.push(listener as () => void);
-    if (type === "error") this.errorListeners.push(listener as () => void);
+    if (type === "open") this.openListeners.push(listener);
+    if (type === "close") this.closeListeners.push(listener);
+    if (type === "error") this.errorListeners.push(listener);
     if (type === "message") {
-      this.messageListeners.push(listener as (event: { data: unknown }) => void);
+      this.messageListeners.push(listener);
     }
   }
 
@@ -159,12 +160,17 @@ class ControlledSocket {
   }
 
   respond(text: string): void {
-    const event = { data: JSON.stringify({ type: "response", text }) };
+    this.receive(JSON.stringify({ type: "message", messageId: `message-${text}`, text }));
+  }
+
+  receive(data: string | ArrayBuffer | Blob): void {
+    const event = { data };
     for (const listener of this.messageListeners) listener(event);
   }
 
-  send(_data: string): void {
+  send(data: string): void {
     if (this.readyState !== 1) throw new Error("socket is not open");
+    this.sent.push(receivedSchema.parse(JSON.parse(data)));
   }
 
   close(): void {
@@ -173,8 +179,14 @@ class ControlledSocket {
 }
 
 describe("createGatewayChatTransport", () => {
-  test("a server response becomes start / text-start / text-delta / text-end / finish", async () => {
-    const { received, url } = serveWire([[{ type: "response", text: "the ledger appended" }]]);
+  test("a server message becomes start / text-start / text-delta / text-end / finish", async () => {
+    const { received, url } = serveWire([
+      [
+        { type: "receipt", status: "accepted" },
+        { type: "message", messageId: "message-1", text: "the ledger appended" },
+        { type: "error", message: "turn already completed" },
+      ],
+    ]);
     const transport = createGatewayChatTransport({ url });
 
     const chunks = await collect(await send(transport, [userMessage("append it")]));
@@ -200,7 +212,12 @@ describe("createGatewayChatTransport", () => {
   });
 
   test("an error frame becomes one error chunk and closes the stream", async () => {
-    const { url } = serveWire([[{ type: "error", message: "text field required" }]]);
+    const { url } = serveWire([
+      [
+        { type: "receipt", status: "accepted" },
+        { type: "error", message: "text field required" },
+      ],
+    ]);
     const transport = createGatewayChatTransport({ url });
 
     const chunks = await collect(await send(transport, [userMessage("")]));
@@ -210,11 +227,8 @@ describe("createGatewayChatTransport", () => {
 
   test("an outstanding server message id is echoed as replyToId on the next turn", async () => {
     const { received, url } = serveWire([
-      [
-        { type: "message", messageId: "wait-7", text: "which branch?" },
-        { type: "response", text: "asked" },
-      ],
-      [{ type: "response", text: "done" }],
+      [{ type: "message", messageId: "wait-7", text: "which branch?" }],
+      [{ type: "message", messageId: "done", text: "done" }],
     ]);
     const transport = createGatewayChatTransport({ url });
 
@@ -225,23 +239,30 @@ describe("createGatewayChatTransport", () => {
   });
 
   test("reply ids stay with their chat when two turns share the socket", async () => {
-    const { received, url } = serveWire([
+    const { received, connectionCount, url } = serveWire([
+      [{ type: "receipt", status: "accepted" }],
       [
+        { type: "receipt", status: "accepted" },
         { type: "message", messageId: "wait-a", text: "answer A" },
-        { type: "response", text: "asked A" },
-      ],
-      [
         { type: "message", messageId: "wait-b", text: "answer B" },
-        { type: "response", text: "asked B" },
       ],
-      [{ type: "response", text: "done A" }],
-      [{ type: "response", text: "done B" }],
+      [{ type: "message", messageId: "done-a", text: "done A" }],
+      [{ type: "message", messageId: "done-b", text: "done B" }],
     ]);
     const transport = createGatewayChatTransport({ url });
 
     const first = send(transport, [userMessage("start A")], undefined, "chat-a");
     const second = send(transport, [userMessage("start B")], undefined, "chat-b");
-    await Promise.all([first.then(collect), second.then(collect)]);
+    const [firstChunks, secondChunks] = await Promise.all([
+      first.then(collect),
+      second.then(collect),
+    ]);
+    expect(
+      firstChunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta),
+    ).toEqual(["answer A"]);
+    expect(
+      secondChunks.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta),
+    ).toEqual(["answer B"]);
     await collect(await send(transport, [userMessage("reply A")], undefined, "chat-a"));
     await collect(await send(transport, [userMessage("reply B")], undefined, "chat-b"));
 
@@ -251,37 +272,117 @@ describe("createGatewayChatTransport", () => {
       { text: "reply A", replyToId: "wait-a" },
       { text: "reply B", replyToId: "wait-b" },
     ]);
+    expect(connectionCount()).toBe(1);
+  });
+
+  test("preserves subprotocol offers on the real socket", async () => {
+    const { protocols, url } = serveWire([
+      [{ type: "message", messageId: "authenticated", text: "connected" }],
+    ]);
+    const transport = createGatewayChatTransport({
+      url,
+      protocols: ["openomni", "bearer.test-token"],
+    });
+
+    await collect(await send(transport, [userMessage("connect")]));
+
+    expect(protocols).toEqual(["openomni, bearer.test-token"]);
+  });
+
+  test("ignores malformed frames and retains unsolicited reply correlation", async () => {
+    ControlledSocket.instances.length = 0;
+    const transport = createGatewayChatTransport({
+      url: "ws://controlled",
+      WebSocketImpl: ControlledSocket,
+    });
+    const sending = send(transport, [userMessage("first")]);
+    const controlled = ControlledSocket.instances[0];
+    if (controlled === undefined) throw new Error("socket was not constructed");
+    controlled.open();
+    const collected = collect(await sending);
+    for (const raw of [
+      "not-json",
+      "null",
+      "[]",
+      JSON.stringify({ type: "message", messageId: "missing-text" }),
+      JSON.stringify({ type: "message", text: "missing-id" }),
+      JSON.stringify({ type: "message", messageId: 3, text: "wrong-id" }),
+      JSON.stringify({ type: "receipt", status: "rejected" }),
+      JSON.stringify({ type: "error", message: 3 }),
+      JSON.stringify({ type: "future" }),
+      new ArrayBuffer(0),
+      new Blob(["binary"]),
+    ])
+      controlled.receive(raw);
+    controlled.respond("first");
+    expect(
+      (await collected).filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta),
+    ).toEqual(["first"]);
+
+    controlled.receive(
+      JSON.stringify({ type: "message", messageId: "unsolicited", text: "next question" }),
+    );
+    const reply = collect(await send(transport, [userMessage("answer")]));
+    controlled.respond("done");
+    await reply;
+    expect(controlled.sent).toEqual([
+      { text: "first" },
+      { text: "answer", replyToId: "unsolicited" },
+    ]);
+  });
+
+  test("cancelling a stream invalidates its socket and clears reply correlation", async () => {
+    ControlledSocket.instances.length = 0;
+    const transport = createGatewayChatTransport({
+      url: "ws://controlled",
+      WebSocketImpl: ControlledSocket,
+    });
+    const sending = send(transport, [userMessage("first")]);
+    const controlled = ControlledSocket.instances[0];
+    if (controlled === undefined) throw new Error("socket was not constructed");
+    controlled.open();
+    const first = collect(await sending);
+    controlled.respond("first");
+    await first;
+    const cancelled = await send(transport, [userMessage("cancel")]);
+    await cancelled.cancel();
+    expect(controlled.readyState).toBe(2);
+
+    const retry = send(transport, [userMessage("retry")]);
+    const replacement = ControlledSocket.instances[1];
+    if (replacement === undefined) throw new Error("replacement was not constructed");
+    replacement.open();
+    const result = collect(await retry);
+    replacement.respond("done");
+    await result;
+    expect(replacement.sent).toEqual([{ text: "retry" }]);
   });
 
   test("rejects regeneration instead of appending the historical prompt again", async () => {
-    const { received, url } = serveWire([[{ type: "response", text: "duplicate" }]]);
+    const { received, url } = serveWire([]);
     const transport = createGatewayChatTransport({ url });
 
-    let failure: unknown;
-    try {
-      await transport.sendMessages({
+    await expect(
+      transport.sendMessages({
         trigger: "regenerate-message",
         chatId: "chat-1",
         messageId: "assistant-1",
         messages: [userMessage("do not duplicate")],
         abortSignal: undefined,
-      });
-    } catch (error) {
-      failure = error;
-    }
-
-    if (!(failure instanceof Error)) throw new Error("regeneration did not reject");
-    expect(failure.message).toContain("does not support regeneration");
+      }),
+    ).rejects.toThrow("does not support regeneration");
     expect(received).toEqual([]);
   });
 
   test("an already-aborted turn never reaches the gateway", async () => {
-    const { received, url } = serveWire([[{ type: "response", text: "too late" }]]);
+    const { received, url } = serveWire([]);
     const transport = createGatewayChatTransport({ url });
     const controller = new AbortController();
     controller.abort();
 
-    const chunks = await collect(await send(transport, [userMessage("do not send")], controller.signal));
+    const chunks = await collect(
+      await send(transport, [userMessage("do not send")], controller.signal),
+    );
 
     expect(chunks).toEqual([]);
     expect(received).toEqual([]);
@@ -343,8 +444,8 @@ describe("createGatewayChatTransport", () => {
 
   test("a completed turn cannot later close the shared socket", async () => {
     const { connectionCount, url } = serveWire([
-      [{ type: "response", text: "first" }],
-      [{ type: "response", text: "second" }],
+      [{ type: "message", messageId: "first", text: "first" }],
+      [{ type: "message", messageId: "second", text: "second" }],
     ]);
     const transport = createGatewayChatTransport({ url });
     const firstController = new AbortController();
@@ -419,15 +520,14 @@ describe("createGatewayChatTransport", () => {
     const failedSend = send(transport, [userMessage("first")]);
     const failedSocket = ControlledSocket.instances[0];
     if (failedSocket === undefined) throw new Error("failed socket was not constructed");
+    const failure = failedSend.then(
+      () => {
+        throw new Error("opening failure unexpectedly succeeded");
+      },
+      (error: Error) => error,
+    );
     failedSocket.fail();
-    let failure: unknown;
-    try {
-      await failedSend;
-    } catch (error) {
-      failure = error;
-    }
-    if (!(failure instanceof Error)) throw new Error("opening failure did not reject the send");
-    expect(failure.message).toContain("gateway socket failed");
+    expect((await failure).message).toContain("gateway socket failed");
 
     const retry = send(transport, [userMessage("retry")]);
     const replacement = ControlledSocket.instances[1];
@@ -444,7 +544,12 @@ describe("createGatewayChatTransport", () => {
   });
 
   test("the SDK reduces the chunks into one assistant message", async () => {
-    const { url } = serveWire([[{ type: "response", text: "two files touched" }]]);
+    const { url } = serveWire([
+      [
+        { type: "receipt", status: "accepted" },
+        { type: "message", messageId: "sdk-message", text: "two files touched" },
+      ],
+    ]);
     let ids = 0;
     const chat = new Chat<UIMessage>({
       transport: createGatewayChatTransport({ url }),

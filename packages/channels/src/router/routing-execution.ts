@@ -48,12 +48,6 @@ function recordRouteNotDelivered(
 
 type RoutedDecision = Extract<Ingress.RoutingDecisionPayload, { readonly outcome: "route" }>;
 
-type BlacklistDropDecision = Extract<
-  Ingress.RoutingDecisionPayload,
-  { readonly stage: "blacklist"; readonly outcome: "drop" }
->;
-type AcceptedDecision = RoutedDecision | BlacklistDropDecision;
-
 function factValue(decision: Ingress.RoutingDecisionPayload, prefix: string): string | undefined {
   const fact = decision.factsUsed.find((candidate) => candidate.startsWith(prefix));
   return fact?.slice(prefix.length);
@@ -64,8 +58,7 @@ function terminalMessage(decision: Ingress.RoutingDecisionPayload): string {
     if (decision.factsUsed.includes("channel:missing")) return "channel_grant.missing";
     const kind = factValue(decision, "channel.kind:");
     const treatment = factValue(decision, "channel.treatment:");
-    if (kind !== undefined && treatment !== undefined)
-      return `channel_grant.${kind}.${treatment}`;
+    if (kind !== undefined && treatment !== undefined) return `channel_grant.${kind}.${treatment}`;
   }
   if (decision.stage === "actor_identity") {
     return "actor is not authorized to create top-level inbound work";
@@ -73,66 +66,25 @@ function terminalMessage(decision: Ingress.RoutingDecisionPayload): string {
   return decision.reason;
 }
 
-export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload): AcceptedDecision {
+export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload): RoutedDecision {
   if (decision.outcome === "route") return decision;
-  if (decision.stage === "blacklist" && decision.outcome === "drop") return decision;
   if (decision.outcome === "ambiguous") {
     throw new IngressRoutingError("route_ambiguous", decision.reason, decision);
   }
   throw new IngressRoutingError("route_blocked", terminalMessage(decision), decision);
 }
 
-function projectWaitOwnerEvent<Event extends Gateway.DeliveredEvent>(
-  event: Event,
-  ownerSessionId: string,
-): Omit<Event, "target"> & { readonly target?: never } {
-  const { target: _target, ...withoutTarget } = event;
-  const { target: _metaTarget, ...meta } = event.meta ?? {};
-  const { runId: _runId, ...activation } = event.activation ?? {};
-  return {
-    ...withoutTarget,
-    meta,
-    activation: { ...activation, durableSessionId: ownerSessionId },
-  } as Omit<Event, "target"> & { readonly target?: never };
-}
-
-export type WaitRouteExecution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
-  | Readonly<{
-      kind: "continue";
-      event: Event | (Omit<Event, "target"> & { readonly target?: never });
-      /**
-       * "required": routed pre-run authority must still run before delivery.
-       * "wait_precedence": a wait resumption — correlation is the admission,
-       * the pre-run is skipped (frozen behavior).
-       */
-      authority: "required" | "wait_precedence";
-    }>
-  | Readonly<{ kind: "handled"; result: Ingress.IngressResult }>;
-
-export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
+export function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
   trace: TraceContext.Type,
   resolution: KernelRouteResolution<Event>,
-  decision: AcceptedDecision,
-): Promise<WaitRouteExecution<Event>> {
-  if (decision.stage === "blacklist" && decision.outcome === "drop") {
-    return {
-      kind: "handled",
-      result: {
-        kind: "dropped",
-        mode: resolution.event.mode,
-        target: resolution.selectedTarget,
-        reason: decision.reason,
-      },
-    };
-  }
+  decision: RoutedDecision,
+  at = Date.now(),
+): void {
   const wait = resolution.waitExecution;
-  if (wait.kind === "none") {
-    return { kind: "continue", event: resolution.event, authority: "required" };
-  }
+  if (wait.kind === "none") return;
   // The matcher only returns candidates; the protocol fold decides
   // (duplicate / late / unknown / ambiguous / attach / resolve) and the
   // store persists the outcome before the owner session sees the reply.
-  const at = Date.now();
   const outcome = WaitService.attachReply(
     wait.record.id,
     {
@@ -148,19 +100,9 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
   );
   if (outcome.kind === "rejected") {
     if (outcome.code === "deadline_passed") {
-      // Lazy expiry: this late reply is the first observer of the passed
-      // deadline — fold the wait to expired (recording partial progress)
-      // before rejecting, so the ledger never keeps a dead open wait that
-      // the boot sweep alone would have to find. A concurrent ingest may
-      // have already folded the wait terminal (revision CAS conflict);
-      // the expiry is an optimization, so it must never replace the typed
-      // rejection below.
-      try {
-        WaitService.expire(wait.record.id, trace.traceId, at);
-      } catch {
-        // Already folded by a concurrent transition — the typed rejection
-        // below is still the correct outcome for this reply.
-      }
+      // Expire through the existing fold before rejecting. A storage fault
+      // must propagate rather than masquerading as a successful expiry.
+      WaitService.expire(wait.record.id, trace.traceId, at);
     }
     // Fix the ledger lie (batch ② commit 4): route.decided already recorded
     // outcome:route for this correlated reply, but the wait fold rejects it
@@ -175,10 +117,4 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
   // "already_resolved" (channel redelivery of the resolving reply) falls
   // through on purpose: the owner delivery repeats idempotently with the
   // recorded resolution — no state change, no revision bump.
-  // The matched Wait resumes its owning session.
-  return {
-    kind: "continue",
-    event: projectWaitOwnerEvent(resolution.event, wait.record.ownerRef.id),
-    authority: "wait_precedence",
-  };
 }

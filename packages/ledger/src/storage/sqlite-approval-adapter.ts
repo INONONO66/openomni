@@ -29,9 +29,9 @@ export function createSqliteApprovalAdapter(db: Database): ProtocolStorage.Appro
       return result.changes === 1;
     },
     get(id) {
-      const row = db.query("SELECT data FROM approval WHERE id = ?").get(id) as
-        | SqliteJsonDataRow
-        | null;
+      const row = db
+        .query("SELECT data FROM approval WHERE id = ?")
+        .get(id) as SqliteJsonDataRow | null;
       return row ? decodeApprovalData(row.data) : undefined;
     },
     list(state) {

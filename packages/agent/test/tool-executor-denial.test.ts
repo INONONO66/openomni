@@ -118,10 +118,7 @@ describe("cell-door executor propagation", () => {
       { executor },
     );
 
-    const result = await outer.execute(
-      { id: "call-outer", tool: "outer", input: {} },
-      context,
-    );
+    const result = await outer.execute({ id: "call-outer", tool: "outer", input: {} }, context);
 
     // A successful model-door result carries no isError key at all.
     expect(result.isError).toBeUndefined();

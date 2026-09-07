@@ -21,7 +21,9 @@ describe("timeline scenarios", () => {
     ).toBe(true);
     expect(
       messages.some((message) =>
-        message.parts.some((part) => part.type === "dynamic-tool" && part.state === "approval-requested"),
+        message.parts.some(
+          (part) => part.type === "dynamic-tool" && part.state === "approval-requested",
+        ),
       ),
     ).toBe(true);
     const codePart = messages

@@ -3,8 +3,17 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDispositionFixture, seedRetiredWait, snapshotDatabase } from "../packages/ledger/test/helpers/disposition-967";
-import { archiveAndVerify, archiveCli, disposeCli, manifestHash } from "../packages/ledger/test/helpers/disposition-967-cli";
+import {
+  createDispositionFixture,
+  seedRetiredWait,
+  snapshotDatabase,
+} from "../packages/ledger/test/helpers/disposition-967";
+import {
+  archiveAndVerify,
+  archiveCli,
+  disposeCli,
+  manifestHash,
+} from "../packages/ledger/test/helpers/disposition-967-cli";
 import { appendFileSync, copyFileSync, existsSync, readFileSync } from "node:fs";
 import {
   buildLedgerArchiveManifest,
@@ -12,26 +21,34 @@ import {
 } from "./generate-ledger-archive-manifest";
 import "./ledger-archive-fault.test";
 
-function fixture(): Database {
-  const db = new Database(":memory:");
-  db.run("CREATE TABLE _migrations (name TEXT NOT NULL)");
-  db.run("INSERT INTO _migrations VALUES ('0022_bus_event_payload_status/migration.sql')");
-  db.run("CREATE TABLE worker_run_state (run_id TEXT PRIMARY KEY, status TEXT NOT NULL)");
-  return db;
-}
-
 describe("967 archive and guarded disposal", () => {
   test("enumerates every target and protected table before disposal", () => {
     using fixture = createDispositionFixture();
     const tables = buildLedgerArchiveManifest(fixture.db).tables.map((entry) => entry.table);
-    for (const table of ["bus_event", "wait", "worker_run_state", "message", "part", "session", "action", "inbox", "alarm", "delegation", "ledger_event", "ledger_head", "event_chain"]) {
+    for (const table of [
+      "bus_event",
+      "wait",
+      "message",
+      "part",
+      "session",
+      "action",
+      "inbox",
+      "alarm",
+      "ledger_event",
+      "ledger_head",
+      "event_chain",
+    ]) {
       expect(tables).toContain(table);
     }
   });
 });
 
 describe("967 real CLI disposal matrix", () => {
-  test.each(["cancelled", "expired", "resolved"] as const)("disposes only archived eligible %s rows and is resumable", (status) => {
+  test.each([
+    "cancelled",
+    "expired",
+    "resolved",
+  ] as const)("disposes only archived eligible %s rows and is resumable", (status) => {
     using fixture = createDispositionFixture();
     seedRetiredWait(fixture.db, status);
     const before = snapshotDatabase(fixture.db);
@@ -40,9 +57,27 @@ describe("967 real CLI disposal matrix", () => {
     const manifest = readFileSync(fixture.manifest);
     expect(disposeCli(fixture).exitCode).toBe(0);
     const after = snapshotDatabase(fixture.db);
-    expect(after.tables.filter(({ name }) => !["bus_event", "wait", "_migrations", "sqlite_sequence"].includes(name))).toEqual(before.tables.filter(({ name }) => !["bus_event", "wait", "_migrations", "sqlite_sequence"].includes(name)));
+    const emptyRetiredTables = ["delegation", "worker_grant", "worker_run_state"];
+    for (const table of emptyRetiredTables) {
+      expect(before.tables.find(({ name }) => name === table)?.rows).toEqual([]);
+      expect(after.tables.some(({ name }) => name === table)).toBe(false);
+    }
+    expect(after.tables.find(({ name }) => name === "reply_grant")?.rows).toEqual([]);
+    const changedTables = [
+      "bus_event",
+      "wait",
+      "_migrations",
+      "sqlite_sequence",
+      "reply_grant",
+      ...emptyRetiredTables,
+    ];
+    expect(after.tables.filter(({ name }) => !changedTables.includes(name))).toEqual(
+      before.tables.filter(({ name }) => !changedTables.includes(name)),
+    );
     expect(fixture.db.query("SELECT id FROM wait WHERE owner_kind <> 'session'").all()).toEqual([]);
-    expect(after.tables.find(({ name }) => name === "wait")?.rows).toEqual(before.tables.find(({ name }) => name === "wait")?.rows.filter((row) => row.id !== "retired"));
+    expect(after.tables.find(({ name }) => name === "wait")?.rows).toEqual(
+      before.tables.find(({ name }) => name === "wait")?.rows.filter((row) => row.id !== "retired"),
+    );
     if (status === "cancelled") {
       console.log("967 raw SQLite before", Bun.inspect(before, { depth: 10, colors: false }));
       console.log("967 raw SQLite after", Bun.inspect(after, { depth: 10, colors: false }));
@@ -65,7 +100,7 @@ describe("967 real CLI disposal matrix", () => {
     "UPDATE wait SET partial = 1",
     "UPDATE wait SET reply_to_message_id = 'changed'",
     "UPDATE wait SET follow_up_until = 123",
-    "UPDATE wait SET data = replace(data, '\"id\":\"retired\"', '\"id\":\"other\",\"id\":\"retired\"')",
+    'UPDATE wait SET data = replace(data, \'"id":"retired"\', \'"id":"other","id":"retired"\')',
   ])("refuses protected or incoherent projection unchanged: %s", (sql) => {
     using fixture = createDispositionFixture();
     seedRetiredWait(fixture.db);
@@ -76,7 +111,13 @@ describe("967 real CLI disposal matrix", () => {
     expect(snapshotDatabase(fixture.db)).toEqual(before);
   });
 
-  test.each(["missing-hash", "wrong-hash", "manifest", "backup", "stale"])("refuses %s without source mutation", (fault) => {
+  test.each([
+    "missing-hash",
+    "wrong-hash",
+    "manifest",
+    "backup",
+    "stale",
+  ])("refuses %s without source mutation", (fault) => {
     using fixture = createDispositionFixture();
     seedRetiredWait(fixture.db);
     archiveAndVerify(fixture);
@@ -85,7 +126,14 @@ describe("967 real CLI disposal matrix", () => {
     if (fault === "backup") appendFileSync(fixture.archive, "X");
     if (fault === "stale") fixture.db.run("UPDATE message SET data = 'changed'");
     const before = snapshotDatabase(fixture.db);
-    const flags = fault === "missing-hash" ? ["--dispose-967"] : ["--dispose-967", "--approve-manifest-sha256", fault === "wrong-hash" ? "0".repeat(64) : hash];
+    const flags =
+      fault === "missing-hash"
+        ? ["--dispose-967"]
+        : [
+            "--dispose-967",
+            "--approve-manifest-sha256",
+            fault === "wrong-hash" ? "0".repeat(64) : hash,
+          ];
     expect(archiveCli(fixture, flags).exitCode).toBe(1);
     expect(snapshotDatabase(fixture.db)).toEqual(before);
   });
@@ -165,35 +213,6 @@ describe("ledger archive manifest", () => {
       expect(await readdir(directory)).toEqual(["ledger-archive-manifest.json"]);
     } finally {
       await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  test.each([["worker_run_state", "run_id"]] as const)("%s uses canonical id order, schema/range identity, deterministic sha256, and detects tampering", (table, idColumn) => {
-    const db = fixture();
-    try {
-      const insert = db.query(`INSERT INTO ${table} (${idColumn}, status) VALUES (?, ?)`);
-      insert.run("item-b", "open");
-      insert.run("item-c", "resolved");
-      insert.run("item-a", "cancelled");
-
-      const first = buildLedgerArchiveManifest(db).tables.find((entry) => entry.table === table);
-      if (!first) throw new Error(`manifest misses ${table}`);
-      expect(first).toMatchObject({
-        sourceSchemaVersion: "0022_bus_event_payload_status/migration.sql",
-        rowCount: 3,
-        idRange: { first: "item-a", last: "item-c" },
-      });
-      expect(first.integrityHash).toMatch(/^sha256:[0-9a-f]{64}$/);
-      expect(
-        buildLedgerArchiveManifest(db).tables.find((entry) => entry.table === table)?.integrityHash,
-      ).toBe(first.integrityHash);
-
-      db.query(`UPDATE ${table} SET status = 'tampered' WHERE ${idColumn} = 'item-b'`).run();
-      const tampered = buildLedgerArchiveManifest(db).tables.find((entry) => entry.table === table);
-      expect(tampered?.integrityHash).not.toBe(first.integrityHash);
-      expect(tampered?.rowCount).toBe(3);
-    } finally {
-      db.close();
     }
   });
 });

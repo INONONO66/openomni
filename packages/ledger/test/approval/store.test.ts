@@ -23,7 +23,12 @@ const BOUND = { windowMs: 600_000, maxPending: 2 };
 const promotion: Approval.Subject = { kind: "contact_promotion", actorId: "actor-1" };
 
 function requestOne(id = "approval-1", at = T0): Approval.Record {
-  return ApprovalStore.request({ id, subject: promotion, deadline: DEADLINE }, BOUND, "trace-req", at);
+  return ApprovalStore.request(
+    { id, subject: promotion, deadline: DEADLINE },
+    BOUND,
+    "trace-req",
+    at,
+  );
 }
 
 function captureStoreError(fn: () => unknown): InstanceType<typeof Approval.StoreError> {
@@ -118,9 +123,9 @@ describe("ApprovalStore", () => {
   });
 
   test("transitions on a missing approval fail closed with not_found", () => {
-    expect(captureStoreError(() => ApprovalStore.decide("nope", "approved", "t", T0)).data.code).toBe(
-      "not_found",
-    );
+    expect(
+      captureStoreError(() => ApprovalStore.decide("nope", "approved", "t", T0)).data.code,
+    ).toBe("not_found");
     expect(captureStoreError(() => ApprovalStore.decision("nope", T0)).data.code).toBe("not_found");
   });
 
@@ -140,7 +145,12 @@ describe("ApprovalStore", () => {
     Storage.configure({ ...adapter, ledger: undefined } as unknown as Storage.Adapter);
     expect(
       captureStoreError(() =>
-        ApprovalStore.request({ id: "approval-1", subject: promotion, deadline: DEADLINE }, BOUND, "t", T0),
+        ApprovalStore.request(
+          { id: "approval-1", subject: promotion, deadline: DEADLINE },
+          BOUND,
+          "t",
+          T0,
+        ),
       ).data.code,
     ).toBe("adapter_absent");
   });
@@ -193,7 +203,8 @@ describe("ApprovalStore", () => {
     });
     try {
       expect(
-        captureStoreError(() => ApprovalStore.decide("approval-1", "approved", "t", T0 + 1)).data.code,
+        captureStoreError(() => ApprovalStore.decide("approval-1", "approved", "t", T0 + 1)).data
+          .code,
       ).toBe("revision_conflict");
     } finally {
       Object.defineProperty(ledger, "append", { configurable: true, value: original });

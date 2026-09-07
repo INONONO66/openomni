@@ -12,7 +12,10 @@ const enrollment = {
 const offer = {
   machineId: "mac-0",
   offeredCapabilities: ["fs.read"],
-  exports: [{ name: "notes", path: "/notes" }, { name: "screenshots", path: "/screenshots" }],
+  exports: [
+    { name: "notes", path: "/notes" },
+    { name: "screenshots", path: "/screenshots" },
+  ],
   daemonVersion: "0.1.0",
   platform: "darwin-arm64",
   offeredAt: 2,
@@ -91,7 +94,10 @@ describe("Machine.Offer.exports", () => {
   test("rejects duplicate export names", () => {
     const result = Machine.Offer.safeParse({
       ...offer,
-      exports: [{ name: "notes", path: "/notes" }, { name: "notes", path: "/notes" }],
+      exports: [
+        { name: "notes", path: "/notes" },
+        { name: "notes", path: "/notes" },
+      ],
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -102,9 +108,10 @@ describe("Machine.Offer.exports", () => {
 
   test("requires a real absolute export root", () => {
     expect(Machine.Offer.safeParse({ ...offer, exports: [{ name: "notes" }] }).success).toBe(false);
-    expect(Machine.Offer.safeParse({ ...offer, exports: [{ name: "notes", path: "relative" }] }).success).toBe(false);
+    expect(
+      Machine.Offer.safeParse({ ...offer, exports: [{ name: "notes", path: "relative" }] }).success,
+    ).toBe(false);
   });
-
 });
 
 describe("machine wire compatibility", () => {
@@ -132,7 +139,10 @@ describe("machine wire compatibility", () => {
   });
 
   test("an AttachResult without an export ceiling fails closed", () => {
-    expect(Machine.AttachResult.safeParse({ status: "attached", effectiveCapabilities: ["fs.read"] }).success).toBe(false);
+    expect(
+      Machine.AttachResult.safeParse({ status: "attached", effectiveCapabilities: ["fs.read"] })
+        .success,
+    ).toBe(false);
   });
 
   test("attached carries the negotiated export set when present", () => {
@@ -187,7 +197,10 @@ describe("Machine.effectiveExports", () => {
 
   test("an offered export the Owner never allowed is excluded", () => {
     expect(
-      Machine.effectiveExports(enrollment, { ...offer, exports: [{ name: "screenshots", path: "/screenshots" }] }),
+      Machine.effectiveExports(enrollment, {
+        ...offer,
+        exports: [{ name: "screenshots", path: "/screenshots" }],
+      }),
     ).toEqual({ kind: "effective", machineId: "mac-0", exports: [] });
   });
 
@@ -418,16 +431,39 @@ describe("Machine.FsResult", () => {
 
 describe("write, exec and cancellation wire contracts", () => {
   test("write bytes are lossless base64 and malformed input is rejected", () => {
-    expect(Machine.FsRequest.parse({ op: "write", export: "notes", path: "binary", data: "AP+AQQ==" })).toEqual({ op: "write", export: "notes", path: "binary", data: "AP+AQQ==" });
-    expect(Machine.FsRequest.safeParse({ op: "write", export: "notes", path: "binary", data: "!invalid" }).success).toBe(false);
-    expect(Machine.FsResult.parse({ status: "completed", value: { op: "write", bytesWritten: 4 } })).toMatchObject({ value: { bytesWritten: 4 } });
+    expect(
+      Machine.FsRequest.parse({ op: "write", export: "notes", path: "binary", data: "AP+AQQ==" }),
+    ).toEqual({ op: "write", export: "notes", path: "binary", data: "AP+AQQ==" });
+    expect(
+      Machine.FsRequest.safeParse({
+        op: "write",
+        export: "notes",
+        path: "binary",
+        data: "!invalid",
+      }).success,
+    ).toBe(false);
+    expect(
+      Machine.FsResult.parse({ status: "completed", value: { op: "write", bytesWritten: 4 } }),
+    ).toMatchObject({ value: { bytesWritten: 4 } });
   });
   test("exec always requires a real absolute cwd and preserves terminals", () => {
     expect(Machine.ExecRequest.safeParse({ cmd: "pwd" }).success).toBe(false);
     expect(Machine.ExecRequest.safeParse({ cmd: "pwd", cwd: "relative" }).success).toBe(false);
     expect(Machine.ExecRequest.safeParse({ cmd: "pwd", cwd: "/a/../b" }).success).toBe(false);
-    expect(Machine.ExecResult.parse({ status: "completed", stdout: "AP8=", stderr: "", exitCode: null, signal: "SIGTERM", truncated: false })).toMatchObject({ stdout: "AP8=", signal: "SIGTERM" });
-    expect(Machine.CellResult.parse({ status: "cancelled", cellId: "cancel" })).toEqual({ status: "cancelled", cellId: "cancel" });
+    expect(
+      Machine.ExecResult.parse({
+        status: "completed",
+        stdout: "AP8=",
+        stderr: "",
+        exitCode: null,
+        signal: "SIGTERM",
+        truncated: false,
+      }),
+    ).toMatchObject({ stdout: "AP8=", signal: "SIGTERM" });
+    expect(Machine.CellResult.parse({ status: "cancelled", cellId: "cancel" })).toEqual({
+      status: "cancelled",
+      cellId: "cancel",
+    });
     expect(Machine.CancelCode.safeParse({ cellId: "" }).success).toBe(false);
   });
 });

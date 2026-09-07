@@ -1,10 +1,9 @@
 import { newTraceId } from "../../support/trace";
-import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
+import { type Channel, Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { Dedupe, type DedupeToken } from "../../support/dedupe";
 import { requireHandler } from "../../support/handler-frame";
 import { GitHubClient } from "./client";
-import { GitHubNormalizer } from "./normalizer";
 import {
   type GitHubEventContent,
   type GitHubIssuePayload,
@@ -12,6 +11,7 @@ import {
   GitHubWebhookPayloadSchemas,
 } from "./types";
 import type { PublishPort } from "../../types";
+import type { DeliveryReceipt } from "../../support/deliver";
 import {
   ChannelAuthnMiddleware,
   type ChannelAuthnDecisionObserver,
@@ -36,7 +36,6 @@ function issueContent(
   user: GitHubUser,
   payload: GitHubIssuePayload,
 ): GitHubEventContent | null {
-  if (user.type === "Bot") return null;
   return {
     text,
     sender: user.login,
@@ -83,7 +82,6 @@ export class GitHubAdapter implements Channel.Surface {
   readonly id = "github";
 
   private readonly client: GitHubClient;
-  private readonly normalizer: GitHubNormalizer;
   private readonly dedupe = new Dedupe();
   private handler: Channel.MessageHandler | null = null;
 
@@ -92,14 +90,35 @@ export class GitHubAdapter implements Channel.Surface {
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
     githubToken?: string,
-    private readonly botUsername?: string,
+    _botUsername?: string,
     private readonly authOptions: GitHubAuthOptions = {},
   ) {
     this.client = new GitHubClient(publish, githubToken);
-    this.normalizer = new GitHubNormalizer({
-      botUsername,
-      triggers: config.triggers,
-    });
+  }
+
+  async deliver(
+    externalId: string,
+    body: string,
+    idempotencyKey: string,
+  ): Promise<DeliveryReceipt> {
+    const target = /^([a-zA-Z0-9-]+\/[a-zA-Z0-9_.-]+)#([1-9][0-9]*)$/.exec(externalId);
+    if (target?.[1] === undefined || target[2] === undefined) return { value: "rejected" };
+    const issueNumber = Number(target[2]);
+    if (!Number.isSafeInteger(issueNumber) || target[1].endsWith("/.") || target[1].endsWith("/.."))
+      return { value: "rejected" };
+    const traceId = newTraceId();
+    try {
+      return await this.client.postComment(target[1], issueNumber, body, traceId, idempotencyKey);
+    } catch (error) {
+      this.publish(Operational.Events.Warn, {
+        traceId,
+        time: Date.now(),
+        component: "github",
+        msg: "GitHub delivery outcome is uncertain",
+        context: { error: String(error) },
+      });
+      return { value: "unknown" };
+    }
   }
 
   onMessage(handler: Channel.MessageHandler): void {
@@ -148,7 +167,7 @@ export class GitHubAdapter implements Channel.Surface {
     const event = request.headers.get("x-github-event");
     if (!event) return { response: new Response("Missing event", { status: 400 }) };
 
-    const raw: object = JSON.parse(body);
+    const raw = z.record(z.string(), z.json()).parse(JSON.parse(body));
     const eventKey = `${event}.${actionOf(raw)}`;
     this.publish(Operational.Events.Info, {
       traceId,
@@ -165,12 +184,33 @@ export class GitHubAdapter implements Channel.Surface {
       return { response: new Response("Unsupported event", { status: 200 }) };
     }
 
-    if (this.triggerBlocks(content, eventKey)) {
-      return { response: new Response("Filtered", { status: 200 }) };
-    }
-
-    const inbound = this.normalizer.normalize(content, eventKey, traceId, deliveryId ?? undefined);
-    if (!inbound) return { response: new Response("Filtered", { status: 200 }) };
+    if (deliveryId === null || deliveryId.length === 0)
+      return { response: new Response("Missing delivery id", { status: 400 }) };
+    const addressees = [
+      ...new Set(
+        [...content.text.matchAll(/@([a-zA-Z0-9][a-zA-Z0-9-]*)/g)]
+          .map((match) => match[1])
+          .filter((id): id is string => id !== undefined),
+      ),
+    ];
+    const inbound: Channel.InboundMessage = {
+      sender: { kind: "external", surface: "github", externalId: content.sender },
+      facts: {
+        eventId: deliveryId,
+        surface: "github",
+        workspaceId: content.repo,
+        channelId: `${content.issueKind}-${content.issueNumber}`,
+        addressees: addressees.map((externalId) => ({ externalId })),
+        dm: false,
+        reply: {
+          chain: [],
+          threadId: String(content.issueNumber),
+          externalConversationId: `github:${content.repo}:${content.issueKind}:${content.issueNumber}`,
+        },
+        payload: raw,
+        render: content.text,
+      },
+    };
 
     this.publish(Operational.Events.Debug, {
       traceId,
@@ -187,35 +227,10 @@ export class GitHubAdapter implements Channel.Surface {
     return { traceId, deliveryId, dedupeToken, content, inbound };
   }
 
-  private triggerBlocks(content: GitHubEventContent, eventKey: string): boolean {
-    const triggerAuth = ChannelAuthnMiddleware.authenticateGitHubTriggers({
-      triggers: this.config.triggers,
-      ctx: {
-        event: eventKey,
-        mentioned: this.botUsername ? content.text.includes(`@${this.botUsername}`) : false,
-        senderId: content.sender,
-        channelId: `${content.issueKind}-${content.issueNumber}`,
-        labels: content.labels,
-        text: content.text,
-      },
-      ...decisionOption(this.authOptions.onDecision),
-    });
-    return PolicyDecision.isBlocking(triggerAuth.verdict);
-  }
-
   /** The run-and-reply frame: a handler throw or comment failure releases the delivery claim and returns 500 so GitHub retries. */
   private async dispatchWebhook(prepared: PreparedWebhook): Promise<Response> {
     try {
-      const outbound = await (this.handler as Channel.MessageHandler)(prepared.inbound);
-      if (outbound?.text) {
-        await this.client.postComment(
-          prepared.content.repo,
-          prepared.content.issueNumber,
-          outbound.text,
-          prepared.traceId,
-          prepared.deliveryId ?? undefined,
-        );
-      }
+      await (this.handler as Channel.MessageHandler)(prepared.inbound);
     } catch (err) {
       this.publish(Operational.Events.Error, {
         traceId: prepared.traceId,

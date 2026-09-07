@@ -1,24 +1,16 @@
 # Architecture - Core Packages and One App
 
-This document maps [Core Model](core-model.md) onto the post-#792 codebase. [Implementation Status](implementation-status.md) is authoritative for what is wired; [#459](https://github.com/INONONO66/openomni/issues/459) owns delivery ordering.
+This document maps [Core Model](core-model.md) onto the post-#792 codebase. [Implementation Status](implementation-status.md) is authoritative for what is wired; [#930](https://github.com/INONONO66/openomni/issues/930) owns kernel delivery ordering.
 
 ## Communication
 
-External traffic enters through channel drivers and the channels gateway. The gateway resolves perimeter authority and physical context, records its route decision, then calls the `Gateway.Deliver` port injected by the sole app. Product execution and response rendering stay in the app. Observation is downstream of durable L0 action commits through an injected sink; the volatile bus is observation-only. Durable decisions use ledger store/append surfaces.
+External traffic and session tools enter the same `gateway.ingest(sender, envelope)` operation. Drivers supply raw facts; the gateway resolves perimeter identity, Wait correlation and surface routing. The injected L2 executor applies compiled message pre/post policy. Session delivery calls only the injected L1 `Inbox.Port.commit`; actor delivery uses the retained channel send kernel.
 
-```text
-surface event
-  -> packages/channels driver
-  -> packages/channels router (block -> wait -> channel -> actor -> surface)
-  -> apps/openomni delivery port
-  -> session.prompt() -> durable inbox -> fenced runner -> response
-```
-
-Resident and native workers enter the same session machine. The same-domain inline delegation driver remains the only deliberate in-process transport shortcut, but its worker is a normal parent-linked session with its own lease and revision. Process and channel delegations still pass through durable admission and the single settlement fold.
+`sendMessage` returns a handle without waiting for a child. New-session configuration and first inbox are atomic. Resident and worker roles share the same session-owned runner; an OS process carries the session id and committed-inbox notifications, not a separate completion authority. Observations follow durable action commits and do not authorize delivery.
 
 ## Ledger
 
-`packages/ledger` owns the one durable database and typed store surfaces. It stores facts but does not decide product meaning. A session's row, action tree, inbox, revision, lease fence, and generation pointers are durable; its live runner/controller is disposable `packages/agent` runtime state. Perimeter stores are consumed by the channels router, while the app composes delegation and session consumers. Cross-domain coupling happens through protocol IDs, not direct store reach-through.
+`packages/ledger` owns the one durable database and typed store surfaces. It stores facts but does not decide product meaning. A session's row, action tree, inbox, revision, lease fence, and generation pointers are durable; its live runner/controller is disposable `packages/agent` runtime state. Perimeter stores are consumed by the channels router, while the app composes messaging and session consumers. Cross-domain coupling happens through protocol IDs, not direct store reach-through.
 
 `bus.publish` remains observation, not authorization or persistence. L0 action append commits before its injected observation sink is called. Record-before-act paths must commit through a durable store or append surface before the external action. `session.get()` reads authoritative state without waking a runner; `session.watch()` is at-most-once notification, and a revision gap requires a fresh `get()`.
 
@@ -54,13 +46,9 @@ Each package depends only on the allowlist in `script/check-deps.ts`. The app co
 
 A machine is WHERE execution happens, never WHO is delegated to. `packages/machines` exposes list/get and raw fs/exec/runCode handles over protocol/IPC contracts. `packages/codemode` consumes only the structural machines port and protocol, owning machine object handles and per-tenant interpreters. The composition root injects the returned runner into a machine daemon; the brain facade does not spawn Python. Authorization occurs at kernel `tool.pre` and daemon offered/negotiated capability and export enforcement, not in an app VFS. The retained `run_code` adapter calls `cell.run` once. `openomni machine attach` supplies the production daemon composition.
 
-Delegation addresses WHO:
+Messages address WHO: an existing session, a new parent-linked child session, or a registered external actor. Native and process are session runner choices, not parallel message lifecycles. A send returns a handle; there is no synchronous child-join tool.
 
-- `inline`: same-domain volatile child, awaited in turn;
-- `process`: independent local process through the app's process driver;
-- `channel`: registered external actor through the gateway send/Wait path.
-
-The removed local worker manager is not part of the final topology. Process delegation in `apps/openomni/src/delegation/` is the live process path. Native Resident and worker execution is assembled once behind `@openomni/agent` session handles; app adapters provide role-specific tools, system text, and runner configuration.
+The removed local worker manager is not part of the final topology. Process session execution enters `apps/openomni/src/process-entry.ts`. Native Resident and worker execution is assembled once behind `@openomni/agent` session handles; app adapters provide role-specific tools, system text, and runner configuration.
 
 Band rules:
 
@@ -83,7 +71,7 @@ Band rules:
 `apps/openomni` owns:
 
 - Resident and worker role configuration;
-- delegation admission and settlement;
+- message policy rows, authenticated session projections and runner selection;
 - tool definitions and placement consumption;
 - channel registration and injected gateway ports.
 
@@ -93,7 +81,7 @@ The gateway never reads transcript content. The app does not re-derive platform 
 
 ## Session and Completion Contracts
 
-A native worker is represented by a normal session row with role `worker` and its parent Resident/worker session in `parentId`; there is no WorkItem/Attempt ownership layer. A turn records its intent and pre-minted result ID before runner entry, then seals exactly one `result | interrupted | error` terminal under the current fence. Cross-session terminal delivery remains delegated to the messaging slice; this session layer only establishes durable identity and execution.
+A native worker is represented by a normal session row with role `worker` and its parent Resident/worker session in `parentId`; there is no WorkItem/Attempt ownership layer. A turn records its intent and pre-minted result ID before runner entry, then seals exactly one `result | interrupted | error` terminal under the current fence. Child terminal mail is an atomic parent-inbox delivery. Gateway admission of that terminal path and live alarm integration remain verification items in Implementation Status.
 
 ## Historical Reconciliation
 

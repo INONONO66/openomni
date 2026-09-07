@@ -38,6 +38,15 @@ export function getSessionHandle(id: string, runtime: SessionRuntime): SessionHa
   return registries.get(runtime)?.get(id);
 }
 
+export function wakeSession(id: string, runner: SessionRunner, runtime: SessionRuntime) {
+  let registry = registries.get(runtime);
+  if (registry === undefined) {
+    registry = new SessionRegistry(runtime);
+    registries.set(runtime, registry);
+  }
+  return registry.wake(id, runner);
+}
+
 export async function sweepSessions(
   resolveRunner: (row: LedgerSession.Row) => SessionRunner,
   runtime: SessionRuntime,
@@ -77,6 +86,10 @@ class SessionRegistry {
 
   get(id: string): SessionHandle | undefined {
     return this.entries.get(id)?.controller.handle;
+  }
+
+  wake(id: string, runner: SessionRunner) {
+    return this.install(id, runner).controller.reconcile();
   }
 
   declare(options: SessionCreateOptions): SessionHandle {

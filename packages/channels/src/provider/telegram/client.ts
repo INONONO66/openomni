@@ -2,7 +2,12 @@ import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../../types";
-import { type TelegramUpdate, type TelegramUser, TelegramUpdateSchema, TelegramUserSchema } from "./types";
+import {
+  type TelegramUpdate,
+  type TelegramUser,
+  TelegramUpdateSchema,
+  TelegramUserSchema,
+} from "./types";
 
 /** Telegram error envelope carries the flood-wait hint the retry helper reads. */
 const RetryAfterSchema = z.object({
@@ -15,6 +20,16 @@ const EnvelopeSchema = z.object({ ok: z.boolean(), description: z.string().optio
 const SentMessageSchema = z.object({
   message_id: z.union([z.number(), z.string()]).optional(),
 });
+
+export class TelegramApiError extends Error {
+  constructor(
+    message: string,
+    readonly rejected = false,
+  ) {
+    super(message);
+    this.name = "TelegramApiError";
+  }
+}
 
 export class TelegramClient implements ChannelClient {
   private readonly baseUrl: string;
@@ -69,21 +84,6 @@ export class TelegramClient implements ChannelClient {
     return message.message_id === undefined ? undefined : String(message.message_id);
   }
 
-  async sendTyping(channelId: string, traceId: string): Promise<void> {
-    await this.api("sendChatAction", traceId, z.boolean(), {
-      chat_id: channelId,
-      action: "typing",
-    }).catch((e) =>
-      this.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "telegram typing indicator failed",
-        context: { err: String(e) },
-      }),
-    );
-  }
-
   async getMe(traceId: string): Promise<TelegramUser> {
     return this.api("getMe", traceId, TelegramUserSchema);
   }
@@ -131,7 +131,10 @@ export class TelegramClient implements ChannelClient {
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`Telegram API ${method} failed (${response.status}): ${body}`);
+      throw new TelegramApiError(
+        `Telegram API ${method} failed (${response.status}): ${body}`,
+        response.status >= 400 && response.status < 500,
+      );
     }
 
     const raw = (await response.json()) as object;
@@ -140,7 +143,10 @@ export class TelegramClient implements ChannelClient {
       throw new Error(`Telegram API ${method} returned a malformed envelope`);
     }
     if (!envelope.data.ok) {
-      throw new Error(`Telegram API ${method}: ${envelope.data.description ?? "Unknown error"}`);
+      throw new TelegramApiError(
+        `Telegram API ${method}: ${envelope.data.description ?? "Unknown error"}`,
+        true,
+      );
     }
     const result = schema.safeParse(Reflect.get(raw, "result"));
     if (!result.success) {

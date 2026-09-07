@@ -123,10 +123,9 @@ describe("provision output boundary", () => {
   test("rejects malformed output through the dispatcher", async () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port));
-    const result = await createDispatcher(
-      [{ ...tool, execute: async () => ({ op: "status" }) }],
-      { executor },
-    ).execute(
+    const result = await createDispatcher([{ ...tool, execute: async () => ({ op: "status" }) }], {
+      executor,
+    }).execute(
       {
         id: "provision-invalid-output",
         tool: "provision",

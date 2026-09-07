@@ -127,84 +127,85 @@
     "sequential": true
   },
   {
-    "name": "delegate",
-    "description": "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message.",
+    "name": "sendMessage",
+    "description": "Send a message, interrupt, or resume to a session; create a child session; or contact an actor. Returns a handle without waiting for a reply.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "instruction": {
+        "to": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "session"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["kind", "id"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "new_session"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": ["resident", "worker"]
+                },
+                "runner": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "parent": {
+                  "type": "string",
+                  "const": "me"
+                }
+              },
+              "required": ["kind", "role", "runner", "parent"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "actor"
+                },
+                "actorId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["kind", "actorId"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "type": {
           "type": "string",
-          "minLength": 1,
-          "description": "What the recipient must do, stated so it can stand alone."
+          "enum": ["message", "interrupt", "resume"]
         },
-        "operation": {
-          "type": "string",
-          "enum": ["notify", "ask", "assign"],
-          "description": "notify = send and do not expect a reply; ask = request an answer; assign = commission work."
+        "content": {
+          "type": "string"
         },
-        "scope": {
-          "description": "inline = volatile same-domain child; independent = isolated process.",
-          "type": "string",
-          "enum": ["inline", "independent"]
-        },
-        "actorId": {
-          "description": "Registered external actor; use instead of scope.",
-          "type": "string",
-          "minLength": 1
-        },
-        "acceptanceCriteria": {
-          "description": "Required for assign and forbidden for ask/notify.",
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "timeoutMs": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991,
-          "description": "How long the delegation may remain open."
-        }
-      },
-      "required": ["instruction", "operation", "timeoutMs"],
-      "additionalProperties": false
-    },
-    "safe": false
-  },
-  {
-    "name": "await_delegation",
-    "description": "Re-invoke a durable delegation by id. It returns its settlement when available, or says it is still open until the supplied wait limit.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "delegationId": {
-          "type": "string",
-          "minLength": 1
-        },
-        "timeoutMs": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
-        }
-      },
-      "required": ["delegationId"],
-      "additionalProperties": false
-    },
-    "safe": false
-  },
-  {
-    "name": "cancel_delegation",
-    "description": "Cancel open delegated work by id; cancelling settled work returns the existing settlement.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "delegationId": {
+        "replyTo": {
           "type": "string",
           "minLength": 1
+        },
+        "deadline": {
+          "type": "number",
+          "minimum": 0
         }
       },
-      "required": ["delegationId"],
+      "required": ["to", "type", "content"],
       "additionalProperties": false
     },
     "safe": false

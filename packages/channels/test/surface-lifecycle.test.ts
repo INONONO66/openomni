@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { Channel } from "@openomni/protocol";
 import { DiscordAdapter } from "../src/provider/discord/surface";
 import { GitHubAdapter } from "../src/provider/github/surface";
 import { TelegramClient } from "../src/provider/telegram/client";
 
-const config = { triggers: [] } satisfies Channel.Config;
+const config = {};
 const realFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -24,7 +23,7 @@ describe("GitHubAdapter lifecycle", () => {
     const adapter = new GitHubAdapter("secret", config, (_event, data) => {
       events.push(data);
     });
-    adapter.onMessage(async () => null);
+    adapter.onMessage(async () => undefined);
     await adapter.start("trace-gh-2");
     adapter.stop("trace-gh-2");
     expect(
@@ -40,9 +39,9 @@ describe("DiscordAdapter lifecycle", () => {
       events.push(data);
     });
     adapter.stop("trace-dc-1");
-    expect(
-      events.some((entry) => (entry as { msg?: unknown }).msg === "discord bot stopped"),
-    ).toBe(true);
+    expect(events.some((entry) => (entry as { msg?: string }).msg === "discord bot stopped")).toBe(
+      true,
+    );
   });
 });
 
@@ -64,19 +63,5 @@ describe("TelegramClient send result normalization", () => {
     globalThis.fetch = (() => Promise.resolve(jsonResponse({}))) as unknown as typeof fetch;
     const client = new TelegramClient("token", () => undefined);
     expect(await client.send("chat-1", "hi", "trace-1")).toBeUndefined();
-  });
-
-  it("swallows typing indicator failures as warnings", async () => {
-    const events: unknown[] = [];
-    globalThis.fetch = (() => Promise.reject(new Error("boom"))) as unknown as typeof fetch;
-    const client = new TelegramClient("token", (_event, data) => {
-      events.push(data);
-    });
-    await client.sendTyping("chat-1", "trace-2");
-    expect(
-      events.some(
-        (entry) => (entry as { msg?: unknown }).msg === "telegram typing indicator failed",
-      ),
-    ).toBe(true);
   });
 });

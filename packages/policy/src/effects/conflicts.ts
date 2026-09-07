@@ -5,7 +5,6 @@ import { flattenRecord, pathsOverlap, stableKey } from "./records";
 export function collectPreConflicts(entries: EffectEntry[]): Conflict[] {
   return [
     ...collectRecordRewriteConflicts(entries, "tool.rewrite_input"),
-    ...collectRecordRewriteConflicts(entries, "delegation.set_constraints"),
     ...collectSingleValueConflicts(entries, "prompt.replace", "prompt", "prompt.replace"),
     ...collectSingleValueConflicts(entries, "tool.rewrite_output", "output", "tool.rewrite_output"),
     ...collectSingleValueConflicts(
@@ -29,7 +28,7 @@ export function collectPreConflicts(entries: EffectEntry[]): Conflict[] {
 
 function collectRecordRewriteConflicts(
   entries: EffectEntry[],
-  effectType: "tool.rewrite_input" | "delegation.set_constraints",
+  effectType: "tool.rewrite_input",
 ): Conflict[] {
   const owners: FieldOwner[] = [];
   const conflicts: Conflict[] = [];
@@ -72,13 +71,10 @@ function highestPriorityOwner(
 
 function recordForEffect(
   effect: Policy.PolicyEffect,
-  effectType: "tool.rewrite_input" | "delegation.set_constraints",
+  effectType: "tool.rewrite_input",
 ): PlainObject | undefined {
   if (effectType === "tool.rewrite_input" && effect.type === "tool.rewrite_input") {
     return effect.input;
-  }
-  if (effectType === "delegation.set_constraints" && effect.type === "delegation.set_constraints") {
-    return effect.constraints;
   }
   return undefined;
 }

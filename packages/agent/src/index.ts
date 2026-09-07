@@ -3,7 +3,13 @@ export type { ChatAgentConfig } from "./core/types";
 export { failureFacts } from "./core/retry";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
-export { closeSessions, getSessionHandle, session, sweepSessions } from "./session-handle";
+export {
+  closeSessions,
+  getSessionHandle,
+  session,
+  sweepSessions,
+  wakeSession,
+} from "./session-handle";
 export { createExecutor, ExecutionApprovalError, UnregisteredExecutionKindError } from "./executor";
 export { SEEDED_POLICY_ROWS } from "@openomni/policy";
 export type {
@@ -35,6 +41,5 @@ export type {
   SessionHandle,
   SessionRunner,
   SessionRunnerInput,
-  SessionRunnerResult,
   SessionRuntime,
 } from "./session-handle";

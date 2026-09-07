@@ -107,7 +107,6 @@ describe("SqliteStorageAdapter", () => {
       expect(tables).toContain("surface_key");
       expect(tables).not.toContain("artifact");
       expect(tables).not.toContain("bus_event");
-      expect(tables).toContain("worker_run_state");
       expect(tables).toEqual(expect.arrayContaining(["action", "inbox", "alarm", "policy"]));
       expect(tables).toContain("_migrations");
       // Dead tables with no production readers or writers stay absent.
@@ -143,7 +142,9 @@ describe("SqliteStorageAdapter", () => {
       const before = snapshotDatabase(upgradedDb);
       expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
       expect(snapshotDatabase(upgradedDb)).toEqual(before);
-      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [{ name: "0030_drop_retired_tables/migration.sql" }]);
+      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [
+        { name: "0030_drop_retired_tables/migration.sql" },
+      ]);
       const retired = upgradedDb
         .query<{ name: string }, []>(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('conversation', 'lease', 'engagement') ORDER BY name",
@@ -187,21 +188,6 @@ describe("SqliteStorageAdapter", () => {
         "prev_hash",
         "time_created",
       ]);
-      expect(tableColumns(db, "worker_run_state")).toEqual([
-        "run_id",
-        "session_id",
-        "parent_session_id",
-        "agent_name",
-        "status",
-        "title",
-        "prompt",
-        "resume_count",
-        "assigned_step_id",
-        "error",
-        "time_created",
-        "time_updated",
-        "executor_kind",
-      ]);
     });
 
     test("observability indexes are created", () => {
@@ -223,56 +209,6 @@ describe("SqliteStorageAdapter", () => {
       expect(indexNames(db, "event_chain")).toEqual(
         expect.arrayContaining(["idx_event_chain_session", "idx_event_chain_hash"]),
       );
-      expect(indexNames(db, "worker_run_state")).toContain("idx_worker_run_state_session_time");
-    });
-
-    test("0005 migration backfills legacy worker run executor kind", () => {
-      adapter.close();
-      removeSqliteFiles(dbPath);
-
-      const legacyDb = new Database(dbPath);
-      applyMigrationFixture(legacyDb, "0001_initial/migration.sql");
-      applyMigrationFixture(legacyDb, "0002_communication_state/migration.sql");
-      applyMigrationFixture(legacyDb, "0003_communication_state_constraints/migration.sql");
-      legacyDb
-        .query(
-          `INSERT INTO session (id, data, time_created, time_updated)
-           VALUES (?, ?, ?, ?)`,
-        )
-        .run("legacy-session", JSON.stringify(makeSession("legacy-session", 1)), 1, 1);
-      legacyDb
-        .query(
-          `INSERT INTO worker_run_state (
-             run_id, session_id, parent_session_id, agent_name, status, title, prompt,
-             resume_count, assigned_step_id, error, time_created, time_updated
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          "legacy-run",
-          "legacy-session",
-          null,
-          "worker",
-          "queued",
-          "Legacy run",
-          "do it",
-          0,
-          null,
-          null,
-          1,
-          1,
-        );
-      expect(tableColumns(legacyDb, "worker_run_state")).not.toContain("executor_kind");
-      legacyDb.close();
-
-      expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
-      using upgradedDb = new Database(dbPath);
-      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [{ name: "0005_worker_run_executor_kind/migration.sql" }]);
-      expect(tableColumns(upgradedDb, "worker_run_state")).toContain("executor_kind");
-      expect(
-        upgradedDb
-          .query("SELECT executor_kind FROM worker_run_state WHERE run_id = ?")
-          .get("legacy-run"),
-      ).toEqual({ executor_kind: "internal_chat_agent" });
     });
 
     test("unsupported boot preserves artifacts before the historical drop is exercised explicitly", () => {
@@ -293,7 +229,9 @@ describe("SqliteStorageAdapter", () => {
       const before = snapshotDatabase(upgradedDb);
       expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
       expect(snapshotDatabase(upgradedDb)).toEqual(before);
-      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [{ name: "0030_drop_artifact/migration.sql" }]);
+      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [
+        { name: "0030_drop_artifact/migration.sql" },
+      ]);
       expect(tableColumns(upgradedDb, "artifact")).toEqual([]);
     });
 
@@ -318,7 +256,10 @@ describe("SqliteStorageAdapter", () => {
 
       expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
       using history = new Database(dbPath);
-      const successors = readdirSync(migrationRoot).filter((name) => name.startsWith("00") && name >= "0030").sort().map((name) => ({ name: `${name}/migration.sql` }));
+      const successors = readdirSync(migrationRoot)
+        .filter((name) => name.startsWith("00") && name >= "0030")
+        .sort()
+        .map((name) => ({ name: `${name}/migration.sql` }));
       Migration.applyOrdered(history, migrationRoot, successors);
       const upgraded = new SqliteStorageAdapter(dbPath);
       expect(
@@ -441,31 +382,6 @@ describe("SqliteStorageAdapter", () => {
       storageDb(adapter).query("DELETE FROM session WHERE id = 's1'").run();
 
       expect(adapter.surfaceKey?.lookup("channel:123")).toBe("s1");
-    });
-
-    test("historical session deletion cascades to observability tables", () => {
-      using historical = createDispositionFixture();
-      using db = new Database(historical.path);
-      db.run("PRAGMA foreign_keys = ON");
-      db.run("INSERT INTO session (id, data, time_created, time_updated) VALUES ('s1', '{}', 1, 1)");
-
-      db.query(
-        `INSERT INTO bus_event
-         (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run("s1", "run-1", "worker.run.started", "worker", "{}", "trace-1", 10, 100);
-      db.query(
-        `INSERT INTO worker_run_state
-         (run_id, session_id, parent_session_id, agent_name, status, title, prompt, resume_count, assigned_step_id, error, time_created, time_updated)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run("run-1", "s1", null, "worker", "running", "title", "prompt", 0, null, null, 100, 100);
-
-      db.query("DELETE FROM session WHERE id = 's1'").run();
-
-      expect(db.query("SELECT COUNT(*) AS count FROM bus_event WHERE session_id = 's1'").get()).toEqual({ count: 0 });
-      expect(db.query("SELECT COUNT(*) AS count FROM worker_run_state WHERE session_id = 's1'").get()).toEqual({
-        count: 0,
-      });
     });
   });
 

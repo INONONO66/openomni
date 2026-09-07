@@ -14,7 +14,11 @@ const mandatoryPolicyRow: PolicyRow.Row = {
 
 /** A compiled test policy with the mandatory row plus the supplied behavior rows. */
 export function compiledPolicy(rows: readonly PolicyRow.Row[] = []): CompiledPolicySnapshot {
-  return compilePolicySnapshot({ generation: 1, mandatory: [], rows: [mandatoryPolicyRow, ...rows] });
+  return compilePolicySnapshot({
+    generation: 1,
+    mandatory: [],
+    rows: [mandatoryPolicyRow, ...rows],
+  });
 }
 
 /** An "allow everything" compiled policy for tests. */
@@ -78,7 +82,6 @@ export function recordingExecutor(options: RecordingExecutorOptions = {}): {
   return { committed, executor };
 }
 
-
 /** A manually released commit boundary for deterministic record-before-publish tests. */
 export function actionCommitGate(expectedOpPhase: string): {
   readonly reached: Promise<void>;
@@ -97,7 +100,6 @@ export function actionCommitGate(expectedOpPhase: string): {
     },
   };
 }
-
 
 /** Records only tool lifecycle names while allowing exact-event test signals. */
 export function recordingToolObservations(onToolEvent?: (name: string) => void): {

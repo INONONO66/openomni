@@ -4,7 +4,8 @@ import { validateSideEffectRules } from "../lint-side-effects";
 const processorPath = "packages/llm/src/processor/index.ts";
 
 describe("side-effect ordering gate", () => {
-  const bind = "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);";
+  const bind =
+    "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);";
   test.each([
     `function unrelated() { ${bind} } function emit(sink) { sink.onMessage(message); }`,
     `${bind} function emit(sink) { sink.onMessage(message); }`,

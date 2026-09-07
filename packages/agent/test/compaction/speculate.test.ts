@@ -9,24 +9,63 @@ function message(role: "user" | "assistant", text: string): Message.WithParts {
   const id = `spec-${sequence}`;
   if (role === "user") {
     return {
-      info: { id, sessionID: "spec-session", role, time: { created: 1 }, agent: "test", model: { providerID: "", modelID: "" } },
+      info: {
+        id,
+        sessionID: "spec-session",
+        role,
+        time: { created: 1 },
+        agent: "test",
+        model: { providerID: "", modelID: "" },
+      },
       parts: [{ id: `${id}-text`, sessionID: "spec-session", messageID: id, type: "text", text }],
     };
   }
   return {
-    info: { id, sessionID: "spec-session", role, time: { created: 1 }, parentID: "", modelID: "m", providerID: "p", agent: "test", path: { cwd: "/", root: "/" }, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
-    parts: [{ id: `${id}-text`, sessionID: "spec-session", messageID: id, type: "text", text: `${text} ${"filler ".repeat(40)}` }],
+    info: {
+      id,
+      sessionID: "spec-session",
+      role,
+      time: { created: 1 },
+      parentID: "",
+      modelID: "m",
+      providerID: "p",
+      agent: "test",
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+    parts: [
+      {
+        id: `${id}-text`,
+        sessionID: "spec-session",
+        messageID: id,
+        type: "text",
+        text: `${text} ${"filler ".repeat(40)}`,
+      },
+    ],
   };
 }
 function history(): Message.WithParts[] {
-  return [message("user", "goal"), message("assistant", "work-1"), message("assistant", "work-2"), message("user", "tail"), message("assistant", "answer")];
+  return [
+    message("user", "goal"),
+    message("assistant", "work-1"),
+    message("assistant", "work-2"),
+    message("user", "tail"),
+    message("assistant", "answer"),
+  ];
 }
 const identity = { traceId: "trace", sessionId: "spec-session", runId: "run" };
 
 describe("run-scoped compaction speculation", () => {
   it("starts only at the prepare boundary", async () => {
     let calls = 0;
-    const session = new CompactionSession({ protectRecentMessages: 2, summarize: async () => { calls += 1; return "anchor"; } });
+    const session = new CompactionSession({
+      protectRecentMessages: 2,
+      summarize: async () => {
+        calls += 1;
+        return "anchor";
+      },
+    });
     session.prepare(history(), 59, 60, 1000);
     await session.settled();
     expect(calls).toBe(0);
@@ -38,7 +77,14 @@ describe("run-scoped compaction speculation", () => {
   it("is single-flight and retains one candidate", async () => {
     let calls = 0;
     const releases: Array<(summary: string) => void> = [];
-    const session = new CompactionSession({ protectRecentMessages: 2, summarize: () => new Promise((resolve) => { calls += 1; releases.push(resolve); }) });
+    const session = new CompactionSession({
+      protectRecentMessages: 2,
+      summarize: () =>
+        new Promise((resolve) => {
+          calls += 1;
+          releases.push(resolve);
+        }),
+    });
     const messages = history();
     session.prepare(messages, 70, 60, 1000);
     await session.started();
@@ -54,10 +100,29 @@ describe("run-scoped compaction speculation", () => {
   it("promotes a fresh candidate without another summary call", async () => {
     let calls = 0;
     const messages = history();
-    const session = new CompactionSession({ protectRecentMessages: 2, summarize: async () => { calls += 1; return "prepared"; } });
+    const session = new CompactionSession({
+      protectRecentMessages: 2,
+      summarize: async () => {
+        calls += 1;
+        return "prepared";
+      },
+    });
     session.prepare(messages, 70, 60, 1000);
     await session.settled();
-    const result = await Compaction.compact(messages, { contextWindowTokens: 1000, protectRecentMessages: 2, onSummarize: async () => { calls += 1; return "sync"; } }, identity, collector(), { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() });
+    const result = await Compaction.compact(
+      messages,
+      {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 2,
+        onSummarize: async () => {
+          calls += 1;
+          return "sync";
+        },
+      },
+      identity,
+      collector(),
+      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
+    );
     expect(result.candidate).toBe("promoted");
     expect(calls).toBe(1);
   });
@@ -65,14 +130,33 @@ describe("run-scoped compaction speculation", () => {
   it("discards a changed prefix and falls back synchronously", async () => {
     let calls = 0;
     const messages = history();
-    const session = new CompactionSession({ protectRecentMessages: 2, summarize: async () => { calls += 1; return "prepared"; } });
+    const session = new CompactionSession({
+      protectRecentMessages: 2,
+      summarize: async () => {
+        calls += 1;
+        return "prepared";
+      },
+    });
     session.prepare(messages, 70, 60, 1000);
     await session.settled();
     const changed = structuredClone(messages);
     const part = changed[1]?.parts[0];
     if (part?.type !== "text") throw new Error("expected text fixture");
     part.text = "changed";
-    const result = await Compaction.compact(changed, { contextWindowTokens: 1000, protectRecentMessages: 2, onSummarize: async () => { calls += 1; return "sync"; } }, identity, collector(), { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() });
+    const result = await Compaction.compact(
+      changed,
+      {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 2,
+        onSummarize: async () => {
+          calls += 1;
+          return "sync";
+        },
+      },
+      identity,
+      collector(),
+      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
+    );
     expect(result.candidate).toBe("discarded");
     expect(calls).toBe(2);
   });
@@ -106,9 +190,11 @@ describe("run-scoped compaction speculation", () => {
     );
     expect(result.candidate).toBe("promoted");
     expect(calls).toBe(1);
-    expect(result.messages.flatMap((entry) => entry.parts).some(
-      (part) => part.type === "text" && part.text.includes("late-q"),
-    )).toBe(true);
+    expect(
+      result.messages
+        .flatMap((entry) => entry.parts)
+        .some((part) => part.type === "text" && part.text.includes("late-q")),
+    ).toBe(true);
   });
 
   it("keeps a candidate valid when only a completed tool output changes", async () => {
@@ -345,7 +431,13 @@ describe("run-scoped compaction speculation", () => {
 
   it("aborts before the scheduled summary starts", async () => {
     let calls = 0;
-    const session = new CompactionSession({ protectRecentMessages: 2, summarize: async () => { calls += 1; return "late"; } });
+    const session = new CompactionSession({
+      protectRecentMessages: 2,
+      summarize: async () => {
+        calls += 1;
+        return "late";
+      },
+    });
     session.prepare(history(), 70, 60, 1000);
     session.abort();
     await session.settled();
@@ -375,7 +467,13 @@ describe("run-scoped compaction speculation", () => {
 
   it("stops preparing after two failures", async () => {
     let calls = 0;
-    const session = new CompactionSession({ protectRecentMessages: 2, summarize: async () => { calls += 1; throw new Error("provider down"); } });
+    const session = new CompactionSession({
+      protectRecentMessages: 2,
+      summarize: async () => {
+        calls += 1;
+        throw new Error("provider down");
+      },
+    });
     for (let attempt = 0; attempt < 3; attempt += 1) {
       session.prepare(history(), 70, 60, 1000);
       await session.settled();

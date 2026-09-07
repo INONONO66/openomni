@@ -107,6 +107,14 @@ export type SessionRunnerResult =
 export type SessionRunner = (input: SessionRunnerInput) => Promise<SessionRunnerResult>;
 
 export interface SessionRuntime {
+  /** L1 admits the terminal letter through gateway.ingest, then atomically commits it with this terminal. */
+  readonly commitTerminal?: (input: {
+    readonly commit: LedgerSession.Commit;
+    readonly reply: Inbox.Commit;
+    readonly policy: CompiledPolicySnapshot;
+  }) => Promise<LedgerSession.CommitResult>;
+  /** Direct post-commit doorbells, independent of the lossy observation bus. */
+  readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
   readonly openIntent?: (input: {
     sessionId: string;
     turnId: string;

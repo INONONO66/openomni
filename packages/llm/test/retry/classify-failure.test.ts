@@ -39,14 +39,18 @@ function runFailure(cause: unknown): Run.Failure {
 describe("Retry.classifyFailure", () => {
   test("classifies a typed APIError directly", () => {
     expect(
-      Retry.classifyFailure(new APIError({ message: "rate limited", isRetryable: true, statusCode: 429 })),
+      Retry.classifyFailure(
+        new APIError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
+      ),
     ).toBe("rate_limit");
   });
 
   test("coerces a raw AI SDK provider error", () => {
-    expect(Retry.classifyFailure(sdkError({ message: "rate limited", isRetryable: true, statusCode: 429 }))).toBe(
-      "rate_limit",
-    );
+    expect(
+      Retry.classifyFailure(
+        sdkError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
+      ),
+    ).toBe("rate_limit");
   });
 
   test("walks the cause chain of the package's own terminal failure", () => {
@@ -59,7 +63,9 @@ describe("Retry.classifyFailure", () => {
 
   test("walks a nested cause chain rather than stopping at the first wrapper", () => {
     const wrapped = new Error("agent run failed", {
-      cause: runFailure(sdkError({ message: "insufficient_quota", isRetryable: true, statusCode: 429 })),
+      cause: runFailure(
+        sdkError({ message: "insufficient_quota", isRetryable: true, statusCode: 429 }),
+      ),
     });
 
     expect(Retry.classifyFailure(wrapped)).toBe("billing");
@@ -112,7 +118,11 @@ describe("Retry content-policy classification", () => {
     },
     {
       name: "a moderation-blocked prose message",
-      input: { message: "The request was blocked by our content policy", isRetryable: false, statusCode: 400 },
+      input: {
+        message: "The request was blocked by our content policy",
+        isRetryable: false,
+        statusCode: 400,
+      },
     },
   ])("$name classifies as content_policy", ({ input }) => {
     expect(Retry.classifyFailure(new APIError(input))).toBe("content_policy");

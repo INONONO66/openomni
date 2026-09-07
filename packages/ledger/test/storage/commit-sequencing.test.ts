@@ -150,8 +150,6 @@ describe("decision-class commit sequencing (shared contract)", () => {
     expect(ledger().headFact(`wait:${wait.id}`)?.seq).toBe(headAfterCancel?.seq);
     expect(WaitStore.get(wait.id)?.revision).toBe(headAfterCancel?.seq);
   });
-
-
 });
 
 function captureThrown(fn: () => unknown): unknown {

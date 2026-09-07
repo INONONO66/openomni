@@ -5,9 +5,15 @@ import {
   LedgerAction,
   LedgerSession,
   PolicyRow,
+  SessionTurn,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { alarmAppend, inboxAppend } from "../../src/storage/l0-action-builders.js";
+import {
+  alarmAppend,
+  inboxAppend,
+  messageAnswerAppend,
+  messageTimeoutInbox,
+} from "../../src/storage/l0-action-builders.js";
 
 export interface MemoryL0Adapter {
   transaction<T>(operation: () => T): T;
@@ -45,6 +51,35 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     }
   };
 
+  function openChildCount(parentId: string): number {
+    return [...sessionRows.values()].filter((child) => {
+      if (child.parentId !== parentId) return false;
+      if (
+        [...inboxRows.values()].some(
+          (item) => item.sessionId === child.id && item.status === "pending",
+        )
+      )
+        return true;
+      const actions = [...actionRows.values()].filter(
+        (action) => action.sessionId === child.id && action.kind === "turn",
+      );
+      if (
+        actions.some((action) => {
+          const intent = SessionTurn.Intent.safeParse(action.intent.value);
+          return intent.success && !actionRows.has(intent.data.resultId);
+        })
+      )
+        return true;
+      const terminal = actions
+        .flatMap((action) => {
+          const parsed = SessionTurn.Terminal.safeParse(action.effect.value);
+          return parsed.success ? [parsed.data] : [];
+        })
+        .at(-1);
+      return terminal === undefined || terminal.kind === "waiting";
+    }).length;
+  }
+
   const sessions: ProtocolStorage.SessionLedgerSubAdapter = {
     create(row) {
       const parsed = LedgerSession.Row.parse(row);
@@ -74,6 +109,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
       });
     },
     get: (id) => sessionRows.get(id),
+    openChildCount,
     list: () => [...sessionRows.values()].sort((left, right) => left.id.localeCompare(right.id)),
     acquireLease(input) {
       const request = LedgerSession.AcquireLease.parse(input);
@@ -125,11 +161,41 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     },
     commit(input) {
       const request = LedgerSession.Commit.parse(input);
-      return transaction(() => commitMemorySession(sessionRows, actionRows, inboxRows, request));
+      return transaction(() => {
+        const result = commitMemorySession(sessionRows, actionRows, inboxRows, request);
+        if (result?.ok !== true) return result;
+        const receipts = [...result.receipts];
+        for (const delivery of request.deliveries ?? []) {
+          const before = new Set(actionRows.keys());
+          if (adapter.inbox.commit(delivery) === undefined) {
+            throw new Error("parent inbox commit refused");
+          }
+          for (const action of actionRows.values()) {
+            if (!before.has(action.id)) receipts.push({ action, revision: action.ordinal });
+          }
+        }
+        const row = sessionRows.get(request.sessionId);
+        if (row === undefined) throw new Error("committed session missing");
+        return { ok: true as const, row, receipts };
+      });
     },
   };
 
-  return {
+  function claimMessageAnswer(input: Parameters<typeof messageAnswerAppend>[0]): boolean {
+    const action = messageAnswerAppend(input);
+    if (actionRows.has(action.id)) return false;
+    const source = actionRows.get(input.sourceActionId);
+    const owner = sessionRows.get(input.sessionId);
+    if (source?.kind !== "message" || source.sessionId !== input.sessionId || owner === undefined) {
+      throw new Error("message reply source does not belong to its receiving session");
+    }
+    if (appendMemoryAction(sessionRows, actionRows, action, owner.revision) === undefined) {
+      throw new Error("message answer CAS refused");
+    }
+    return true;
+  }
+
+  const adapter: MemoryL0Adapter = {
     transaction,
     sessions,
     actions: {
@@ -152,6 +218,63 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
       commit(input) {
         const parsed = Inbox.Commit.parse(input);
         return transaction(() => {
+          if (actionRows.has(parsed.id)) return undefined;
+          if (parsed.sender !== undefined) {
+            const sender = sessionRows.get(parsed.sender.sessionId);
+            if (
+              sender === undefined ||
+              sender.leaseOwner !== parsed.sender.owner ||
+              sender.leaseFence !== parsed.sender.fence ||
+              sender.leaseExpiresAt === null ||
+              Deadline.isExpired(parsed.createdAt, sender.leaseExpiresAt)
+            )
+              return undefined;
+          }
+          const child = parsed.createSession;
+          if (child !== undefined) {
+            if (
+              (child.row.parentId !== null && child.row.parentId !== parsed.sender?.sessionId) ||
+              child.row.id !== parsed.sessionId ||
+              child.row.revision !== 0 ||
+              child.initialAction.sessionId !== parsed.sessionId ||
+              child.initialAction.parentId !== null ||
+              child.initialAction.kind !== "session.configure" ||
+              parsed.parentActionId !== null ||
+              sessionRows.has(parsed.sessionId) ||
+              actionRows.has(parsed.id) ||
+              actionRows.has(child.initialAction.id) ||
+              child.initialAction.id === parsed.id
+            )
+              return undefined;
+            if (child.row.parentId !== null) {
+              const limits = parsed.limits;
+              if (limits === undefined || openChildCount(child.row.parentId) >= limits.fanout)
+                return undefined;
+              let depth = 1;
+              let ancestor = sessionRows.get(child.row.parentId);
+              while (ancestor?.parentId !== null) {
+                if (ancestor === undefined) throw new Error("session ancestry is missing");
+                depth += 1;
+                ancestor = sessionRows.get(ancestor.parentId);
+              }
+              if (depth > limits.depth) return undefined;
+            }
+            sessionRows.set(child.row.id, child.row);
+            if (appendMemoryAction(sessionRows, actionRows, child.initialAction, 0) === undefined) {
+              throw new Error("child configuration refused");
+            }
+          }
+          const reply = Inbox.ReplyOrigin.safeParse(parsed.origin.value);
+          if (reply.success) {
+            adapter.alarms.fireMessage(`${reply.data.sourceActionId}:deadline`, parsed.createdAt);
+            claimMessageAnswer({
+              sessionId: parsed.sessionId,
+              sourceActionId: reply.data.sourceActionId,
+              messageId: reply.data.messageId,
+              at: parsed.createdAt,
+              state: "answered",
+            });
+          }
           const session = sessionRows.get(parsed.sessionId);
           if (session === undefined || inboxRows.has(parsed.id) || actionRows.has(parsed.id)) {
             return undefined;
@@ -162,7 +285,11 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
             inboxAppend(parsed),
             session.revision,
           );
-          if (receipt === undefined) return undefined;
+          if (receipt === undefined) {
+            if (child !== undefined || reply.success)
+              throw new Error("message inbox commit refused");
+            return undefined;
+          }
           const committed = Inbox.Row.parse({
             id: parsed.id,
             sessionId: parsed.sessionId,
@@ -212,6 +339,54 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           return row;
         });
       },
+      fireMessage(id, at) {
+        return transaction(() => {
+          const alarm = alarmRows.get(id);
+          if (alarm === undefined || alarm.status !== "armed" || at < alarm.fireAt)
+            return undefined;
+          const parsed = Alarm.MessageDeadline.safeParse(alarm.spec?.value);
+          if (!parsed.success) return undefined;
+          const spec = parsed.data;
+          const owner = sessionRows.get(alarm.sessionId);
+          if (owner === undefined) throw new Error("alarm session is missing");
+          const pinned = spec.generation;
+          const current =
+            owner.toolsGeneration === pinned.toolsGeneration &&
+            owner.systemHash === pinned.systemHash &&
+            owner.policyGeneration === pinned.policyGeneration;
+          const receipt = appendMemoryAction(
+            sessionRows,
+            actionRows,
+            {
+              id: `${id}:fired`,
+              parentId: id,
+              sessionId: alarm.sessionId,
+              kind: current ? "alarm.fired" : "alarm.paused",
+              intent: { encodingVersion: 1, value: { alarmId: id, fireAt: alarm.fireAt } },
+              effect: { encodingVersion: 1, value: { generationMatched: current } },
+              ts: at,
+              irreversible: true,
+            },
+            owner.revision,
+          );
+          if (receipt === undefined) throw new Error("message alarm commit refused");
+          alarmRows.set(id, { ...alarm, status: current ? "fired" : "paused", updatedAt: at });
+          if (
+            !current ||
+            !claimMessageAnswer({
+              sessionId: alarm.sessionId,
+              sourceActionId: spec.sourceActionId,
+              messageId: spec.messageId,
+              at,
+              state: "timed_out",
+            })
+          )
+            return undefined;
+          const inbox = adapter.inbox.commit(messageTimeoutInbox(alarm, spec, at));
+          if (inbox === undefined) throw new Error("message timeout inbox refused");
+          return inbox;
+        });
+      },
       cancel(id, updatedAt) {
         const row = alarmRows.get(id);
         if (row === undefined || row.status !== "armed") return undefined;
@@ -240,6 +415,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
       },
     },
   };
+  return adapter;
 }
 
 function restore<K, V>(target: Map<K, V>, snapshot: ReadonlyMap<K, V>): void {

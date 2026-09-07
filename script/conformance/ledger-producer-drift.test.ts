@@ -18,11 +18,15 @@ import {
 const repoRoot = join(import.meta.dir, "..", "..");
 const adapterBinding = "packages/ledger/src/storage/sqlite-storage.ts";
 
-
-
 describe("ledger producer drift", () => {
-  test.each(['"ledger_event"', '`ledger_event`', '[ledger_event]', 'main.ledger_event', '"main" . "ledger_event"', '[main].[ledger_event]'])
-  ("recognizes executable SQLite identifier %s in sources and migrations", (identifier) => {
+  test.each([
+    '"ledger_event"',
+    "`ledger_event`",
+    "[ledger_event]",
+    "main.ledger_event",
+    '"main" . "ledger_event"',
+    "[main].[ledger_event]",
+  ])("recognizes executable SQLite identifier %s in sources and migrations", (identifier) => {
     using db = new Database(":memory:");
     db.exec("CREATE TABLE ledger_event (id TEXT)");
     const sql = `INSERT INTO ${identifier} (id) VALUES ('writer')`;
@@ -37,13 +41,26 @@ describe("ledger producer drift", () => {
       mkdirSync(join(root, "apps/probe/src/__tests__"), { recursive: true });
       mkdirSync(join(root, "packages/probe/migration/0001"), { recursive: true });
       const write = 'db.exec(`UPDATE "main"."ledger_head" SET head = 1`)';
-      for (const name of ["writer.tsx", "ignored.spec.ts", "ignored.test.tsx", "__tests__/ignored.ts"]) {
+      for (const name of [
+        "writer.tsx",
+        "ignored.spec.ts",
+        "ignored.test.tsx",
+        "__tests__/ignored.ts",
+      ]) {
         writeFileSync(join(root, "apps/probe/src", name), write);
       }
-      writeFileSync(join(root, "apps/probe/src/read.ts"), 'db.exec(`SELECT * FROM "ledger_head"`); db.exec(`UPDATE "ledger_head_extra" SET head = 1`)');
-      writeFileSync(join(root, "packages/probe/migration/0001/migration.sql"), 'DELETE FROM [main].[worker_run_state];');
+      writeFileSync(
+        join(root, "apps/probe/src/read.ts"),
+        'db.exec(`SELECT * FROM "ledger_head"`); db.exec(`UPDATE "ledger_head_extra" SET head = 1`)',
+      );
+      writeFileSync(
+        join(root, "packages/probe/migration/0001/migration.sql"),
+        "DELETE FROM [main].[worker_run_state];",
+      );
       expect(await scanLedgerProducers(root)).toEqual({
-        appendCallSites: [], ledgerTableWriters: ["apps/probe/src/writer.tsx"], frozenTableWriters: [],
+        appendCallSites: [],
+        ledgerTableWriters: ["apps/probe/src/writer.tsx"],
+        frozenTableWriters: [],
         migrationSqlWriters: ["packages/probe/migration/0001/migration.sql"],
       });
     } finally {
@@ -93,21 +110,21 @@ describe("ledger producer drift", () => {
     expect(matchesLedgerWriteCall("adapter.adoptStream(\n streamId,\n head,\n genesis) ")).toBe(
       true,
     );
-    expect(matchesLedgerWriteCall("const write = ledger.append.bind(ledger); write(event, 0)")).toBe(
-      true,
-    );
+    expect(
+      matchesLedgerWriteCall("const write = ledger.append.bind(ledger); write(event, 0)"),
+    ).toBe(true);
     expect(matchesLedgerWriteCall('const write = ledger["append"]; write(event, 0)')).toBe(true);
     expect(matchesLedgerWriteCall("const write = (ledger).append; write(event, 0)")).toBe(true);
     expect(matchesLedgerWriteCall("const write = (ledger as Ledger).append; write(event, 0)")).toBe(
       true,
     );
     expect(matchesLedgerWriteCall("const write = (ledger satisfies Ledger).append")).toBe(true);
-    expect(matchesLedgerWriteCall("const { append: write } = adapter.ledger; write(event, 0)")).toBe(
-      true,
-    );
-    expect(matchesLedgerWriteCall("const { adoptStream } = adapter; adoptStream(id, 1, fact)")).toBe(
-      true,
-    );
+    expect(
+      matchesLedgerWriteCall("const { append: write } = adapter.ledger; write(event, 0)"),
+    ).toBe(true);
+    expect(
+      matchesLedgerWriteCall("const { adoptStream } = adapter; adoptStream(id, 1, fact)"),
+    ).toBe(true);
     expect(
       matchesMigrationTableWriteSql(
         "-- historical backfill\nUPDATE worker_run_state SET executor_kind = 'internal_chat_agent';",
@@ -149,12 +166,14 @@ describe("ledger producer drift", () => {
     }
   });
 
-  test("the archive includes frozen writers without inventing writers for retired targets", () => {
+  test("historical archives remain inspectable with no live frozen-table writers", () => {
     using fixture = createDispositionFixture();
     const archived = buildLedgerArchiveManifest(fixture.db).tables.map((entry) => entry.table);
     const writers = LEDGER_PRODUCER_MANIFEST.frozenTableWriters.map((entry) => entry.table);
-    expect(writers).toEqual(["worker_run_state"]);
-    expect(archived).toEqual(expect.arrayContaining([...writers, "bus_event", "wait", "message", "part"]));
+    expect(writers).toEqual([]);
+    expect(archived).toEqual(
+      expect.arrayContaining([...writers, "bus_event", "wait", "message", "part"]),
+    );
     expect(writers).not.toContain("bus_event");
     expect(writers).not.toContain("message");
     expect(writers).not.toContain("part");

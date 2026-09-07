@@ -107,15 +107,28 @@ function transportFingerprint(transport: Transport | undefined): string {
   return `${transport.baseUrl ?? ""}|${new Bun.CryptoHasher("sha256").update(canonicalHeaders).digest("hex")}`;
 }
 
-function sdkCacheKey(model: Provider.Model, auth: Auth.Info, transport: Transport | undefined): string {
+function sdkCacheKey(
+  model: Provider.Model,
+  auth: Auth.Info,
+  transport: Transport | undefined,
+): string {
   return `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${authFingerprint(auth)}:${transportFingerprint(transport)}`;
 }
 
-function providerOptions(model: Provider.Model, auth: Auth.Info, transport: Transport | undefined, custom: CustomLoaderResult | undefined): SdkOptions {
+function providerOptions(
+  model: Provider.Model,
+  auth: Auth.Info,
+  transport: Transport | undefined,
+  custom: CustomLoaderResult | undefined,
+): SdkOptions {
   const customOptions = custom?.options ?? {};
   const options: SdkOptions = {
     ...customOptions,
-    headers: { "user-agent": clientIdentity(), ...(customOptions.headers as Record<string, string> | undefined), ...transport?.headers },
+    headers: {
+      "user-agent": clientIdentity(),
+      ...(customOptions.headers as Record<string, string> | undefined),
+      ...transport?.headers,
+    },
   };
   if (model.api?.url) {
     options.baseURL = model.api.url;
@@ -135,8 +148,14 @@ function providerOptions(model: Provider.Model, auth: Auth.Info, transport: Tran
 
 function createUnbundledSDK(model: Provider.Model, npm: string, options: SdkOptions): ProviderSDK {
   const baseURL = options.baseURL ?? model.api?.url;
-  if (!baseURL) throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
-  return createOpenAI({ name: model.providerID, baseURL, apiKey: options.apiKey, headers: options.headers });
+  if (!baseURL)
+    throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
+  return createOpenAI({
+    name: model.providerID,
+    baseURL,
+    apiKey: options.apiKey,
+    headers: options.headers,
+  });
 }
 
 export function getSDK(model: Provider.Model, auth: Auth.Info, transport?: Transport): ProviderSDK {

@@ -21,10 +21,8 @@ const policyPointIds = [
   "connection.llm.post",
   "tool.native.pre",
   "tool.mcp.pre",
-  "delegation.worker.pre",
   "tool.native.post",
   "tool.mcp.post",
-  "delegation.worker.post",
   "run.turn.post",
   "run.completion.pre",
   "run.lifecycle.post",
@@ -105,13 +103,7 @@ const PolicyPointRegistry = Object.freeze({
     "pre",
     ["run"],
     ["actorId", "sessionId", "runId"],
-    [
-      "audit.annotate",
-      "run.abort",
-      "delegation.set_constraints",
-      "prompt.append_context",
-      "prompt.inject_message",
-    ],
+    ["audit.annotate", "run.abort", "prompt.append_context", "prompt.inject_message"],
     ...preBoundary,
   ),
   "run.turn.pre": contract(
@@ -199,14 +191,6 @@ const PolicyPointRegistry = Object.freeze({
     ],
     ...preBoundary,
   ),
-  "delegation.worker.pre": contract(
-    "delegation.worker.pre",
-    "pre",
-    ["worker"],
-    ["sessionId", "runId", "workerRunId", "workerProfile"],
-    ["delegation.set_constraints", "delegation.require_approval", "run.abort", "audit.annotate"],
-    ...preBoundary,
-  ),
   "tool.native.post": contract(
     "tool.native.post",
     "post",
@@ -221,14 +205,6 @@ const PolicyPointRegistry = Object.freeze({
     ["tool"],
     ["sessionId", "runId", "toolId", "mcpServerId", "toolResult"],
     ["audit.annotate", "run.abort", "tool.rewrite_output"],
-    ...postBoundary,
-  ),
-  "delegation.worker.post": contract(
-    "delegation.worker.post",
-    "post",
-    ["worker"],
-    ["sessionId", "runId", "workerRunId", "workerResult"],
-    ["audit.annotate"],
     ...postBoundary,
   ),
   "run.turn.post": contract(
@@ -295,7 +271,6 @@ const dispatchActor = z
     agentName: id.optional(),
     sessionId: id.optional(),
     runId: id.optional(),
-    workerRunId: id.optional(),
     workspaceRoot: id.optional(),
     labels: z.array(z.string()).optional(),
     trustTier: z
@@ -357,7 +332,6 @@ const toolResult = z.object({
   isError: z.boolean().optional(),
   settlement: z.enum(["settled", "unknown"]).optional(),
 });
-
 
 // Structural validator shape, written inline at every type position: a named
 // interface here either leaks a private name into the emitted declaration
@@ -431,26 +405,11 @@ const policyPointInputSchemas = Object.freeze({
       })
       .passthrough(),
   ),
-  "delegation.worker.pre": validator(
-    z
-      .object({
-        sessionId: id,
-        runId: id,
-        workerRunId: id,
-        workerProfile: z.object({ name: id }).passthrough(),
-      })
-      .passthrough(),
-  ),
   "tool.native.post": validator(
     z.object({ sessionId: id, runId: id, toolId: id, toolResult }).passthrough(),
   ),
   "tool.mcp.post": validator(
     z.object({ sessionId: id, runId: id, toolId: id, mcpServerId: id, toolResult }).passthrough(),
-  ),
-  "delegation.worker.post": validator(
-    z
-      .object({ sessionId: id, runId: id, workerRunId: id, workerResult: requiredValue })
-      .passthrough(),
   ),
   "run.turn.post": validator(
     z

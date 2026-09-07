@@ -69,7 +69,10 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     exec: (argv: readonly string[]): ExecResult => {
       const [command, ...rest] = argv;
       if (command === undefined) throw new Error("exec requires a command");
-      const result = spawnSync(command, rest, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
+      const result = spawnSync(command, rest, {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
       return { code: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
     },
     writeFile: (path: string, content: string): void => {
@@ -166,8 +169,15 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     async attachMachine(configPath) {
       const daemon = await attachConfiguredMachine(configPath);
       console.log(JSON.stringify(daemon.attachment));
-      if (daemon.attachment.status === "refused") { await daemon.close(); return 1; }
-      installShutdownHandlers({ stop: () => daemon.close(), exit: (code) => process.exit(code), on: (signal, handler) => process.once(signal, handler) });
+      if (daemon.attachment.status === "refused") {
+        await daemon.close();
+        return 1;
+      }
+      installShutdownHandlers({
+        stop: () => daemon.close(),
+        exit: (code) => process.exit(code),
+        on: (signal, handler) => process.once(signal, handler),
+      });
       await daemon.closed;
       return 0;
     },

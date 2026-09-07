@@ -26,7 +26,7 @@ export function initialize(options?: InitializeOptions): void {
   if (dbPath !== ":memory:") {
     mkdirSync(dirname(dbPath), { recursive: true });
   }
-Storage.configure(new SqliteStorageAdapter(dbPath, options?.observationSink));
+  Storage.configure(new SqliteStorageAdapter(dbPath, options?.observationSink));
   Storage.setInitializedDbPath(dbPath);
 }
 

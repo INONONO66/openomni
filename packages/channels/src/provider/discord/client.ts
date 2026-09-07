@@ -1,4 +1,3 @@
-import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../../types";
@@ -30,21 +29,6 @@ export class DiscordClient implements ChannelClient {
       CreatedMessageSchema,
     );
     return message.id;
-  }
-
-  async sendTyping(channelId: string, traceId: string): Promise<void> {
-    await fetch(`${BASE_URL}/channels/${channelId}/typing`, {
-      method: "POST",
-      headers: { Authorization: `Bot ${this.token}` },
-    }).catch((e) =>
-      this.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "discord typing indicator failed",
-        context: { err: String(e) },
-      }),
-    );
   }
 
   async createDmChannel(recipientId: string, traceId: string): Promise<string> {
@@ -114,6 +98,7 @@ export class DiscordClient implements ChannelClient {
       const text = await res.text();
       throw new DiscordApiError({
         message: `Discord API ${path} failed (${res.status}): ${text}`,
+        rejected: res.status >= 400 && res.status < 500,
       });
     }
 

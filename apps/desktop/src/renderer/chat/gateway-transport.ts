@@ -1,11 +1,12 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
+import { z } from "zod";
 
 /**
  * The openomni gateway, spoken as an AI SDK `ChatTransport`.
  *
  * The SDK's default transport is HTTP-shaped: one request, one SSE body, one
  * connection per turn. The gateway is neither — it is a single long-lived socket
- * carrying frames in both directions, and a turn is a `response` frame that
+ * carrying frames in both directions, and a turn is a `message` frame that
  * arrives on a connection opened long before the turn existed. So the adapter
  * lives here rather than in a `fetch` shim: what has to be translated is the
  * SHAPE of the conversation, not its transport headers.
@@ -33,13 +34,16 @@ interface SocketLike {
   addEventListener(type: "open", listener: () => void): void;
   addEventListener(type: "close", listener: () => void): void;
   addEventListener(type: "error", listener: () => void): void;
-  addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+  addEventListener(
+    type: "message",
+    listener: (event: { data: string | ArrayBuffer | Blob }) => void,
+  ): void;
   send(data: string): void;
   close(): void;
 }
 
 /** A `WebSocket` constructor: the global one unless a caller injects another. */
-type SocketConstructor = new (url: string, protocols?: string | readonly string[]) => SocketLike;
+type SocketConstructor = new (url: string, protocols?: string | string[]) => SocketLike;
 
 interface GatewayChatTransportOptions {
   /** `ws://host:port` — the gateway's WebSocket endpoint. */
@@ -57,44 +61,30 @@ interface GatewayChatTransportOptions {
 }
 
 /** The three frames the gateway sends, once parsed. */
-type ServerFrame =
-  | { readonly type: "response"; readonly text: string }
-  | { readonly type: "message"; readonly messageId: string }
-  | { readonly type: "error"; readonly message: string };
+const serverFrameSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("receipt"), status: z.literal("accepted") }),
+  z.object({ type: z.literal("message"), messageId: z.string(), text: z.string() }),
+  z.object({ type: z.literal("error"), message: z.string() }),
+]);
+
+type ServerFrame = z.infer<typeof serverFrameSchema>;
 
 /**
  * Parse a raw frame into one of the three known shapes.
  *
- * Anything else — an unknown `type`, a `response` with no text, a non-object —
+ * Anything else — an unrecognized `type`, a `message` with no text, a non-object —
  * is `undefined` and simply ignored. A gateway that grows a fourth frame must
  * not break a client that has not learned it yet, and the SDK has no chunk that
  * means "something arrived and I could not read it".
  */
-function parseFrame(raw: unknown): ServerFrame | undefined {
+function parseFrame(raw: string | ArrayBuffer | Blob): ServerFrame | undefined {
   if (typeof raw !== "string") return undefined;
-  let value: unknown;
   try {
-    value = JSON.parse(raw);
+    const result = serverFrameSchema.safeParse(JSON.parse(raw));
+    return result.success ? result.data : undefined;
   } catch {
     return undefined;
   }
-  if (typeof value !== "object" || value === null) return undefined;
-  const frame: Record<string, unknown> = { ...value };
-  const type = frame.type;
-  if (type === "response") {
-    return typeof frame.text === "string" ? { type: "response", text: frame.text } : undefined;
-  }
-  if (type === "message") {
-    return typeof frame.messageId === "string"
-      ? { type: "message", messageId: frame.messageId }
-      : undefined;
-  }
-  if (type === "error") {
-    return typeof frame.message === "string"
-      ? { type: "error", message: frame.message }
-      : undefined;
-  }
-  return undefined;
 }
 
 /**
@@ -142,13 +132,10 @@ function emptyStream(): ReadableStream<UIMessageChunk> {
 export function createGatewayChatTransport(
   options: GatewayChatTransportOptions,
 ): ChatTransport<UIMessage> {
-  const Socket: SocketConstructor =
-    options.WebSocketImpl ?? (globalThis.WebSocket as unknown as SocketConstructor);
+  const Socket: SocketConstructor = options.WebSocketImpl ?? globalThis.WebSocket;
 
   let socket: SocketLike | undefined;
-  let opening:
-    | { readonly socket: SocketLike; readonly promise: Promise<SocketLike> }
-    | undefined;
+  let opening: { readonly socket: SocketLike; readonly promise: Promise<SocketLike> } | undefined;
   /**
    * Turns in flight, oldest first. The gateway answers in order on one socket,
    * so the next terminal frame belongs to the head of this queue — which also
@@ -163,12 +150,13 @@ export function createGatewayChatTransport(
   const lastChatId = new WeakMap<SocketLike, string>();
 
   function settle(source: SocketLike, frame: ServerFrame): void {
+    if (frame.type === "receipt") return;
     if (frame.type === "message") {
-      const chatId = pending.find((turn) => turn.socket === source)?.chatId ?? lastChatId.get(source);
+      const chatId =
+        pending.find((turn) => turn.socket === source)?.chatId ?? lastChatId.get(source);
       if (chatId !== undefined) {
         outstanding.set(chatId, { id: frame.messageId, socket: source });
       }
-      return;
     }
     const index = pending.findIndex((turn) => turn.socket === source);
     if (index < 0) return;
@@ -219,10 +207,13 @@ export function createGatewayChatTransport(
     const next =
       options.protocols === undefined
         ? new Socket(options.url)
-        : new Socket(options.url, options.protocols);
+        : new Socket(
+            options.url,
+            typeof options.protocols === "string" ? options.protocols : [...options.protocols],
+          );
     socket = next;
     next.addEventListener("message", (event) => {
-      const frame = parseFrame(typeof event.data === "string" ? event.data : String(event.data));
+      const frame = parseFrame(event.data);
       if (frame !== undefined) settle(next, frame);
     });
     next.addEventListener("close", () => {
@@ -293,8 +284,7 @@ export function createGatewayChatTransport(
       if (live === undefined) return emptyStream();
 
       const outstandingMessage = outstanding.get(chatId);
-      const replyToId =
-        outstandingMessage?.socket === live ? outstandingMessage.id : undefined;
+      const replyToId = outstandingMessage?.socket === live ? outstandingMessage.id : undefined;
       if (outstandingMessage !== undefined && outstandingMessage.socket !== live) {
         outstanding.delete(chatId);
       }
@@ -356,7 +346,7 @@ export function createGatewayChatTransport(
       return stream;
     },
 
-    // The gateway has no resumable stream: a turn's `response` is one frame on a
+    // The gateway has no resumable stream: a turn's `message` is one frame on a
     // socket, so there is nothing to reconnect TO. Answering `null` is the SDK's
     // contract for "no active stream", not a stub.
     reconnectToStream() {

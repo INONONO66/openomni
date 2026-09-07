@@ -72,6 +72,18 @@ export namespace LedgerAction {
   export type Receipt = z.infer<typeof Receipt>;
 }
 
+const InboxWrite = z
+  .object({
+    id: Identifier,
+    sessionId: Identifier,
+    kind: z.enum(["prompt", "interrupt", "resume"]),
+    content: z.string(),
+    origin: EncodedPayload,
+    createdAt: EpochMs,
+    parentActionId: NullableIdentifier.default(null),
+  })
+  .strict();
+
 export namespace LedgerSession {
   export const Role = z.enum(["resident", "worker"]);
   export type Role = z.infer<typeof Role>;
@@ -181,6 +193,7 @@ export namespace LedgerSession {
       state: State,
       generation: GenerationPointers.optional(),
       releaseLease: z.boolean(),
+      deliveries: z.array(InboxWrite).optional(),
     })
     .strict();
   export type Commit = z.infer<typeof Commit>;
@@ -467,6 +480,30 @@ export namespace SessionTurn {
 }
 
 export namespace Inbox {
+  export const ReplyOrigin = z
+    .object({
+      kind: z.enum(["child_terminal", "external_reply"]),
+      messageId: Identifier,
+      sourceActionId: Identifier,
+      replyTo: Identifier,
+      childSessionId: Identifier.optional(),
+      terminalKind: SessionTurn.TerminalKind.optional(),
+    })
+    .strict();
+  export type ReplyOrigin = z.infer<typeof ReplyOrigin>;
+
+  export const MessageOrigin = z
+    .object({
+      kind: z.literal("message"),
+      messageId: Identifier,
+      senderSessionId: Identifier,
+      replyTo: Identifier.optional(),
+      deadline: EpochMs.optional(),
+      sourceActionId: Identifier,
+    })
+    .strict();
+  export type MessageOrigin = z.infer<typeof MessageOrigin>;
+
   export const Kind = z.enum(["prompt", "interrupt", "resume"]);
   export type Kind = z.infer<typeof Kind>;
 
@@ -495,9 +532,33 @@ export namespace Inbox {
     consumedBy: true,
     consumedAt: true,
     ordinal: true,
-  }).extend({
-    parentActionId: NullableIdentifier.default(null),
-  });
+  })
+    .extend({
+      parentActionId: NullableIdentifier.default(null),
+      sender: z
+        .object({
+          sessionId: Identifier,
+          owner: Identifier,
+          fence: z.number().int().positive(),
+        })
+        .strict()
+        .optional(),
+      createSession: LedgerSession.Materialize.optional(),
+      limits: z
+        .object({ fanout: z.number().int().nonnegative(), depth: z.number().int().nonnegative() })
+        .strict()
+        .optional(),
+    })
+    .refine(
+      (row) =>
+        row.createSession === undefined ||
+        row.createSession.row.parentId === null ||
+        row.limits !== undefined,
+      {
+        path: ["limits"],
+        message: "child materialization requires pinned admission limits",
+      },
+    );
   export type Commit = z.infer<typeof Commit>;
 
   export interface Port {
@@ -506,6 +567,18 @@ export namespace Inbox {
 }
 
 export namespace Alarm {
+  export const MessageDeadline = z
+    .object({
+      kind: z.literal("message_deadline"),
+      messageId: Identifier,
+      sourceActionId: Identifier,
+      replyTo: Identifier.optional(),
+      createdAt: EpochMs,
+      generation: LedgerSession.GenerationPointers,
+    })
+    .strict();
+  export type MessageDeadline = z.infer<typeof MessageDeadline>;
+
   export const Kind = z.enum(["at", "watch"]);
   export type Kind = z.infer<typeof Kind>;
 

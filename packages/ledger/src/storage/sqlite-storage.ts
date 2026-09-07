@@ -1,19 +1,17 @@
 import { Database } from "bun:sqlite";
 import { Ledger } from "../ledger-core/index";
-import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapter";
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
+import { createSqliteReplyGrantAdapter } from "./sqlite-reply-grant-adapter";
 import { createSqliteProvisioningAdapter } from "./sqlite-provisioning-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
-import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
 import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
 import { createSqliteL0Adapters } from "./sqlite-l0-adapter";
 import type { ObservationSink } from "@openomni/protocol";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
-import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
 import { productionStorageAdapterBrand, type Storage } from "./storage";
 
 export class SqliteStorageAdapter implements Storage.Adapter {
@@ -23,15 +21,14 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   private closed = false;
 
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
-  readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
   readonly approval: NonNullable<Storage.Adapter["approval"]>;
-  readonly delegation: NonNullable<Storage.Adapter["delegation"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
   readonly egressBudget: NonNullable<Storage.Adapter["egressBudget"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
   readonly blacklist: NonNullable<Storage.Adapter["blacklist"]>;
   readonly channelGrant: NonNullable<Storage.Adapter["channelGrant"]>;
+  readonly replyGrant: NonNullable<Storage.Adapter["replyGrant"]>;
   readonly provisioning: NonNullable<Storage.Adapter["provisioning"]>;
   readonly sessions: NonNullable<Storage.Adapter["sessions"]>;
   readonly actions: NonNullable<Storage.Adapter["actions"]>;
@@ -50,10 +47,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     }
 
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
-    this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
     this.approval = createSqliteApprovalAdapter(this.db);
-    this.delegation = createSqliteDelegationAdapter(this.db);
     // Decision-class append rides the adapter's own connection so append +
     // projection share one transaction (#510 phase B). The append core keeps
     // owning the SQL (raw prepared statements) — this is wiring only.
@@ -68,6 +63,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);
     this.blacklist = createSqliteBlacklistAdapter(this.db);
     this.channelGrant = createSqliteChannelGrantAdapter(this.db);
+    this.replyGrant = createSqliteReplyGrantAdapter(this.db);
     this.provisioning = createSqliteProvisioningAdapter(this.db);
     const l0 = createSqliteL0Adapters(
       this.db,

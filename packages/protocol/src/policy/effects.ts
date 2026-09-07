@@ -25,8 +25,6 @@ export namespace PolicyEffects {
     "run.continue_with_prompt",
     "run.retry_after",
     "run.replace_messages",
-    "delegation.set_constraints",
-    "delegation.require_approval",
     "audit.annotate",
     "writeback.rewrite",
     "writeback.suppress",
@@ -85,14 +83,6 @@ export namespace PolicyEffects {
     z.object({
       type: z.literal("run.replace_messages"),
       messages: JsonPlainArray,
-    }),
-    z.object({
-      type: z.literal("delegation.set_constraints"),
-      constraints: JsonPlainObject,
-    }),
-    z.object({
-      type: z.literal("delegation.require_approval"),
-      reason: z.string().optional(),
     }),
     z.object({
       type: z.literal("audit.annotate"),

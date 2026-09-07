@@ -438,48 +438,96 @@ describe("durable session handle", () => {
   });
 
   for (const sample of [
-    { name: "required counters", valid: true, usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 } },
-    { name: "optional counters", valid: true, usage: {
-      inputTokens: 4, outputTokens: 5, totalTokens: 9,
-      reasoningTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 1,
-    } },
+    {
+      name: "required counters",
+      valid: true,
+      usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 },
+    },
+    {
+      name: "optional counters",
+      valid: true,
+      usage: {
+        inputTokens: 4,
+        outputTokens: 5,
+        totalTokens: 9,
+        reasoningTokens: 2,
+        cacheReadTokens: 3,
+        cacheWriteTokens: 1,
+      },
+    },
     { name: "missing required counter", valid: false, usage: { inputTokens: 4, outputTokens: 5 } },
-    { name: "invalid optional counter", valid: false, usage: {
-      inputTokens: 4, outputTokens: 5, totalTokens: 9, reasoningTokens: "invalid",
-    } },
-    { name: "unknown counter", valid: false, usage: {
-      inputTokens: 4, outputTokens: 5, totalTokens: 9, unknownTokens: 1,
-    } },
+    {
+      name: "invalid optional counter",
+      valid: false,
+      usage: {
+        inputTokens: 4,
+        outputTokens: 5,
+        totalTokens: 9,
+        reasoningTokens: "invalid",
+      },
+    },
+    {
+      name: "unknown counter",
+      valid: false,
+      usage: {
+        inputTokens: 4,
+        outputTokens: 5,
+        totalTokens: 9,
+        unknownTokens: 1,
+      },
+    },
   ] as const) {
     test(`validates transformed session usage with ${sample.name}`, async () => {
       await Storage.withIsolation(async () => {
         Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-        seedPolicy([{
-          name: "transform-usage", kind: "turn", phase: "post",
-          match: { encodingVersion: 1, value: { op: "session" } },
-          verdict: { encodingVersion: 1, value: {
-            type: "transform", name: "redact", paths: ["result.usage"],
-            replacement: PlainValueSchema.parse(sample.usage),
-          } },
-          priority: 2_000,
-        }]);
+        seedPolicy([
+          {
+            name: "transform-usage",
+            kind: "turn",
+            phase: "post",
+            match: { encodingVersion: 1, value: { op: "session" } },
+            verdict: {
+              encodingVersion: 1,
+              value: {
+                type: "transform",
+                name: "redact",
+                paths: ["result.usage"],
+                replacement: PlainValueSchema.parse(sample.usage),
+              },
+            },
+            priority: 2_000,
+          },
+        ]);
         const isolatedRuntime = { ...runtime };
         try {
-          const handle = session(residentOptions("usage-transform", async () => ({
-            kind: "result", text: "result", finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-          })), isolatedRuntime);
+          const handle = session(
+            residentOptions("usage-transform", async () => ({
+              kind: "result",
+              text: "result",
+              finishReason: "stop",
+              usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+            })),
+            isolatedRuntime,
+          );
           const result = await bounded(handle.prompt("measure"), "transformed usage terminal");
           if (sample.valid) {
-            expect(result).toEqual({ kind: "result", text: "result", finishReason: "stop", usage: sample.usage });
+            expect(result).toEqual({
+              kind: "result",
+              text: "result",
+              finishReason: "stop",
+              usage: sample.usage,
+            });
           } else {
             expect(result).toMatchObject({
-              kind: "error", cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+              kind: "error",
+              cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
             });
           }
-          expect(SessionHandleStore.tree(handle.id)
-            .map(SessionHandleStore.turnTerminal).filter((value) => value !== undefined))
-            .toMatchObject([{ kind: sample.valid ? "result" : "error" }]);
+          expect(
+            SessionHandleStore.tree(handle.id)
+              .map(SessionHandleStore.turnTerminal)
+              .filter((value) => value !== undefined),
+          ).toMatchObject([{ kind: sample.valid ? "result" : "error" }]);
         } finally {
           await closeSessions(isolatedRuntime);
           Storage.reset();
@@ -1340,6 +1388,86 @@ describe("durable session handle", () => {
         .filter((item) => item.kind === "resume")
         .map((item) => item.content),
     ).toEqual([""]);
+  });
+
+  test.each([
+    "result",
+    "error",
+    "interrupted",
+  ] as const)("child %s terminal offers the original parent letter to the atomic commit port", async (kind) => {
+    const parent = session(
+      residentOptions("request-parent", async () => ({ kind: "result", text: "parent" })),
+      runtime,
+    );
+    expect(
+      Storage.get().actions?.append(
+        {
+          id: "original-send",
+          sessionId: parent.id,
+          parentId: null,
+          kind: "message",
+          intent: { encodingVersion: 1, value: { phase: "intent", messageId: "request" } },
+          effect: { encodingVersion: 1, value: { phase: "pending" } },
+          irreversible: true,
+          ts: now,
+        },
+        SessionHandleStore.row(parent.id).revision,
+      ),
+    ).toBeDefined();
+    let commits = 0;
+    runtime = {
+      ...runtime,
+      commitTerminal: async ({ commit, reply }) => {
+        commits += 1;
+        expect(
+          SessionHandleStore.tree(commit.sessionId).some(
+            (action) => SessionHandleStore.turnTerminal(action) !== undefined,
+          ),
+        ).toBe(false);
+        expect(SessionHandleStore.inboxRows(parent.id)).toEqual([]);
+        expect(reply.origin.value).toEqual({
+          kind: "child_terminal",
+          messageId: "request",
+          sourceActionId: "original-send",
+          replyTo: "original-binding",
+          childSessionId: "reply-child",
+          terminalKind: kind,
+        });
+        return SessionHandleStore.commit({ ...commit, deliveries: [reply] });
+      },
+    };
+    const worker = session(
+      {
+        id: "reply-child",
+        parentId: parent.id,
+        role: "worker",
+        tools: [],
+        system,
+        runner: async () => ({ kind, text: "terminal-text" }),
+      },
+      runtime,
+    );
+    await worker.prompt("work", {
+      encodingVersion: 1,
+      value: {
+        kind: "message",
+        messageId: "request",
+        senderSessionId: parent.id,
+        sourceActionId: "original-send",
+        replyTo: "original-binding",
+        deadline: now + 1000,
+      },
+    });
+    expect(commits).toBe(1);
+    expect(SessionHandleStore.inboxRows(parent.id).map((row) => row.content)).toEqual([
+      "terminal-text",
+    ]);
+    expect(
+      SessionHandleStore.tree(worker.id).flatMap((action) => {
+        const terminal = SessionHandleStore.turnTerminal(action);
+        return terminal === undefined ? [] : [terminal.kind];
+      }),
+    ).toEqual([kind]);
   });
 
   test("materializes a worker as a parent-linked session with an independent lease", async () => {

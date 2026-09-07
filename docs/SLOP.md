@@ -190,3 +190,33 @@ later naming amendment in parallel with the messaging worker.
 - **R3-3 (parked):** add a platform-specific `fchdir`/descriptor-backed cwd
   helper for exec so shell startup can inherit the pinned export directory.
   Current contract deliberately accepts the bounded pathname check/spawn TOCTOU.
+
+## #946 stage-2 cutover receipts
+
+Rebased onto `f9c02a66` (#991). This PR closes the implementation rows below; final gate receipts are in its PR body. Historical sections above are not rewritten as current gate evidence.
+
+| Rows | Closed by this cutover |
+| --- | --- |
+| A3, C4 | Retired continuation/settlement authority removed; child terminal mail crosses compiled message policy and the atomic session writer. |
+| A10 | Legacy delegation/await/cancel tools and their catalog entries removed; sendMessage returns a handle without joining. |
+| A17 | Separate delegation/worker-run adapters and exports removed; guarded migration 0035 drops only empty retired tables. |
+| B3, B10 | One two-argument ingest and injected inbox commit; facts-only drivers, no return-value writeback or trigger-rule admission. |
+| B4 | Message deadlines persist as alarm rows with answer/timeout CAS; startup owner tested before/at deadline and across restart. Live scheduling remains #947. |
+| B7 | Ledger stores channel-grant facts; channels alone resolves treatment. |
+| C5, C8 | No retired task eligibility or worker-run correlation; authenticated session/action/message identities are used. |
+| D3 | Indexed durable live reply-grant projection replaces full route-history boot replay. |
+
+Retained ownership, not a hidden alternate path:
+
+- #947: `apps/openomni/src/index.ts:344` invokes startup expiry; `packages/ledger/src/session/kernel.ts:127` is the due-dispatch consumer. Continuous live alarm dispatch/monitor scheduling remains #947.
+- #969: `packages/channels/src/router/routing-execution.ts:90` attaches correlated replies; `packages/channels/src/router/messaging/send.ts:359` opens the existing Wait and `:424` records platform reply identity. Wait lifecycle replacement is not part of this PR.
+- #969: `apps/openomni/src/index.ts:212-223` composes existing approval store operations. Typed executor approval evidence and its CAS remain with their existing owner.
+
+Source and test runtime-symbol census (each prints zero matches and exits 1):
+
+```bash
+rg -n 'DelegationKernel|Delegation\.|delegation\.settled|/delegation/|DELEGATE_TOOL_NAME|await_delegation|cancel_delegation|delegation_await|delegation_cancel|create(Await|Cancel)DelegationTool' apps/openomni/{src,test} packages/{agent,channels,ledger,protocol}/{src,test} -g '*.ts'
+rg -n 'deliverWake|settleFromReply|awaitDelegation|processWorkerRun|registerDelegationProcessEntry|registerDelegationChannelDriver|nextTimerDelay|respondUnderTyping|GitHubNormalizer|TriggerRule|WorkerRunStateStore|workerRunId|worker_run_state' apps/openomni/{src,test} packages/{agent,channels,ledger,protocol}/{src,test} -g '*.ts'
+```
+
+The immutable migration manifest still names historical migration 0023. The guarded SQL migrations and offline archive checks intentionally retain historical table names; they are not live adapters or producers. No coverage floor is lowered.

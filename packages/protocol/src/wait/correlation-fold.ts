@@ -51,7 +51,11 @@ export function waitPinsAllowClaim(
 
 export function waitTierLevels(correlation: Schema.Correlation): Schema.CorrelationQuery[] {
   const levels: Schema.CorrelationQuery[] = [];
-  if (correlation.replyToMessageId) levels.push({ replyToMessageId: correlation.replyToMessageId });
+  const replies = new Set([
+    ...(correlation.replyToMessageId === undefined ? [] : [correlation.replyToMessageId]),
+    ...(correlation.chain ?? []),
+  ]);
+  for (const replyToMessageId of replies) levels.push({ replyToMessageId });
   if (correlation.threadId) levels.push({ threadId: correlation.threadId });
   if (correlation.tokenHash) levels.push({ tokenHash: correlation.tokenHash });
   if (correlation.externalConversationId) {

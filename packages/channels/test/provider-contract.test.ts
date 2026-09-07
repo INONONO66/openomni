@@ -28,14 +28,12 @@ const cases: readonly ConformanceCase[] = [
   {
     provider: ChannelProviders.telegram,
     credential: { token: "tg-token" },
-    build: (publish) =>
-      ChannelProviders.telegram.create({ token: "tg-token" }, { triggers: [] }, publish),
+    build: (publish) => ChannelProviders.telegram.create({ token: "tg-token" }, {}, publish),
   },
   {
     provider: ChannelProviders.discord,
     credential: { token: "dc-token" },
-    build: (publish) =>
-      ChannelProviders.discord.create({ token: "dc-token" }, { triggers: [] }, publish),
+    build: (publish) => ChannelProviders.discord.create({ token: "dc-token" }, {}, publish),
   },
   {
     provider: ChannelProviders.github,
@@ -43,7 +41,7 @@ const cases: readonly ConformanceCase[] = [
     build: (publish) =>
       ChannelProviders.github.create(
         { secret: "hook-secret", token: "api", botUsername: "omni-bot" },
-        { triggers: [] },
+        {},
         publish,
       ),
   },
@@ -51,11 +49,7 @@ const cases: readonly ConformanceCase[] = [
     provider: ChannelProviders.slack,
     credential: { botToken: "xoxb-test", appToken: "xapp-test" },
     build: (publish) =>
-      ChannelProviders.slack.create(
-        { botToken: "xoxb-test", appToken: "xapp-test" },
-        { triggers: [] },
-        publish,
-      ),
+      ChannelProviders.slack.create({ botToken: "xoxb-test", appToken: "xapp-test" }, {}, publish),
   },
 ];
 
@@ -84,9 +78,9 @@ describe("provider conformance", () => {
         expect(kase.provider.credentials.safeParse(kase.credential).success).toBe(true);
         expect(kase.provider.credentials.safeParse({ bogus: "x" }).success).toBe(false);
         // strict: an extra key on a valid payload is refused, never silently dropped
-        expect(kase.provider.credentials.safeParse({ ...kase.credential, extra: "x" }).success).toBe(
-          false,
-        );
+        expect(
+          kase.provider.credentials.safeParse({ ...kase.credential, extra: "x" }).success,
+        ).toBe(false);
       });
 
       test("settings schema — no shipped knobs: empty accepted, any key refused", () => {

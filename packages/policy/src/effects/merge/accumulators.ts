@@ -31,7 +31,7 @@ export function appendReason(
 }
 
 export function approvalEffect(
-  type: "tool.require_approval" | "delegation.require_approval" | "writeback.suppress",
+  type: "tool.require_approval" | "writeback.suppress",
   accumulator: ApprovalAccumulator,
 ): Policy.PolicyEffect {
   const reason = accumulator.reasons.length > 0 ? accumulator.reasons.join("; ") : undefined;

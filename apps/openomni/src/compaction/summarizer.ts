@@ -48,7 +48,9 @@ function messageWithText(input: Message.WithParts[], text: string): Message.With
         agent: "compaction",
         model: { providerID: "", modelID: "" },
       },
-      parts: [{ id: crypto.randomUUID(), sessionID: "compaction", messageID: id, type: "text", text }],
+      parts: [
+        { id: crypto.randomUUID(), sessionID: "compaction", messageID: id, type: "text", text },
+      ],
     },
     ...input,
   ];
@@ -86,8 +88,7 @@ export function createCompactionSummarizer(
         return answer;
       } catch (error) {
         lastError = error;
-        const contextOverflow =
-          Run.FailureError.isInstance(error) && error.data.contextOverflow;
+        const contextOverflow = Run.FailureError.isInstance(error) && error.data.contextOverflow;
         if (contextOverflow && attempt < 2) {
           working = working.slice(1);
           continue;
@@ -98,7 +99,9 @@ export function createCompactionSummarizer(
         throw error;
       }
     }
-    throw new SummarizerError("overflow", `compaction summarizer context overflow: ${String(lastError)}`);
+    throw new SummarizerError(
+      "overflow",
+      `compaction summarizer context overflow: ${String(lastError)}`,
+    );
   };
 }
-

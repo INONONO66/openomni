@@ -43,9 +43,12 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0032_drop_dormant_tables/migration.sql" },
   { name: "0033_fenced_session_handles/migration.sql" },
   { name: U967_MIGRATION },
+  { name: "0035_drop_retired_delegation_tables/migration.sql" },
+  { name: "0036_reply_grant_projection/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
+  "reply_grant",
   "secret",
   "channel_instance",
   "person",
@@ -54,14 +57,11 @@ const CLEAR_ORDER = [
   "event_chain",
   "wait",
   "approval",
-  "delegation",
   "channel_grant",
   "blacklist",
   "actor_endpoint",
   "actor_identity",
   "egress_debit",
-  "worker_grant",
-  "worker_run_state",
 
   "surface_key",
   "part",
@@ -73,12 +73,19 @@ export function preflightSqliteDatabase(db: Database) {
   return preflight967(db, ORDERED_MIGRATIONS);
 }
 
-export function initializeSqliteDatabase(db: Database, prepare967?: Migration.Preparation967): void {
+export function initializeSqliteDatabase(
+  db: Database,
+  prepare967?: Migration.Preparation967,
+): void {
   const state = preflightSqliteDatabase(db);
   if (state === "pending" && prepare967 === undefined) {
     const projection = inspect967Projections(db, Date.now());
-    if (projection.blocked.length > 0 || projection.candidates.length > 0
-      || db.query("SELECT 1 FROM bus_event LIMIT 1").get()) throw new U967Error("approval_required");
+    if (
+      projection.blocked.length > 0 ||
+      projection.candidates.length > 0 ||
+      db.query("SELECT 1 FROM bus_event LIMIT 1").get()
+    )
+      throw new U967Error("approval_required");
   }
   // The primary connection owns every decision-class write (ledger appends +
   // projections share its transactions), so it runs at synchronous=FULL: a
