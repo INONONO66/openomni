@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { L0Observation, SessionTransition, SessionTurn } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -74,8 +75,9 @@ test("a child session terminal commits exactly one parent reply with the origina
     if (consumed && acknowledged) reply.resolve();
   });
   suite.defer(() => { clearTimeout(timer); unsubscribe(); });
+  const config = suite.config("message-child-", { wsToken: "token" });
   const app = await suite.boot({
-    config: suite.config("message-child-", { wsToken: "token" }),
+    config,
     llm: {
       resolveModel: fakeProviderModel,
       run: async (input, sink) => {
@@ -130,5 +132,17 @@ test("a child session terminal commits exactly one parent reply with the origina
     replyTo: "original-binding",
   });
   expect(rows[0]?.content).toContain("CHILD_SENTINEL");
-  expect(SessionHandleStore.outboundRows(child.id)[0]?.destinationReceipt?.id).toBe(rows[0]?.id);
+  const outbound = SessionHandleStore.outboundRows(child.id)[0];
+  const receipt = SessionHandleStore.tree(child.parentId).find(
+    (action) => action.id === outbound?.destinationReceipt?.id,
+  );
+  expect(receipt).toMatchObject({
+    kind: "reply",
+    effect: { value: { answer: { inputId: rows[0]?.id, outbound: rows[0]?.origin.value } } },
+  });
+  expect(rows[0]?.status).toBe("consumed");
+  expect("wait" in Storage.get()).toBe(false);
+  expect("approval" in Storage.get()).toBe(false);
+  using db = new Database(config.dbPath, { readonly: true });
+  expect(db.query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('wait','approval')").all()).toEqual([]);
 });

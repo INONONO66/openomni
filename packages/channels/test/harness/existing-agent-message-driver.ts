@@ -135,6 +135,7 @@ async function scenario(name: Scenario): Promise<PlainValue> {
     } else {
       const before = SessionHandleStore.requestById("request:qa:briefing");
       const replay = await answer("request:qa:briefing", "a", "reply-a", 20);
+      const replayUnchanged = JSON.stringify(before) === JSON.stringify(SessionHandleStore.requestById("request:qa:briefing"));
       const duplicate = await answer("request:qa:briefing", "a", "reply-a-new", 21);
       const claim = { endpointId: "endpoint", channelId: "room", replyToMessageId: "platform" };
       originalAction("second-request", "session:qa-owner");
@@ -160,10 +161,12 @@ async function scenario(name: Scenario): Promise<PlainValue> {
         at: 30,
       });
       const after = SessionHandleStore.requestById("request:qa:briefing");
-      const unchanged = JSON.stringify(before) === JSON.stringify(after);
+      const unchanged = before?.state === after?.state &&
+        before?.threshold === after?.threshold &&
+        JSON.stringify(before?.replies) === JSON.stringify(after?.replies);
       const allocationDelta = SessionHandleStore.listRows().length - baseline;
       const ok =
-        replay === "attached" && duplicate === "duplicate" &&
+        replay === "attached" && replayUnchanged && duplicate === "duplicate" &&
         ambiguous.kind === "ambiguous" &&
         denied.kind === "denied" &&
         denied.code === "target_ambiguous" &&
