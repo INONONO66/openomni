@@ -2,11 +2,32 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { compareCoverage, parseLcovSummary } from "./check-coverage-ratchet";
+import {
+  compareCoverage,
+  coveragePct,
+  parseLcovSummary,
+  scriptSourceInventoryDrift,
+} from "./check-coverage-ratchet";
 import { coverageLanes } from "./topology";
 
 const record = (file = "src/covered.ts", found = "10000", hit = found) =>
   `SF:${file}\nLF:${found}\nLH:${hit}\nend_of_record\n`;
+
+test("script inventory distinguishes missing owned modules from tests and foreign imports", () => {
+  const report = ["owned.ts", "stale.ts", "nested/foreign.ts", "owned.test.ts", "types.spec.tsx"]
+    .map((file) => record(file))
+    .join("");
+  expect(scriptSourceInventoryDrift(report, ["owned.ts", "missing.ts"])).toEqual({
+    missing: ["missing.ts"],
+    unexpected: ["stale.ts"],
+  });
+  expect(scriptSourceInventoryDrift(record("owned.ts"), ["owned.ts"])).toEqual({
+    missing: [],
+    unexpected: [],
+  });
+  expect(coveragePct(0, 0)).toBe(100);
+  expect(coveragePct(3, 2)).toBe(66.67);
+});
 
 test("LCOV rejects malformed counts and incomplete records", () => {
   for (const [found, hit] of [
