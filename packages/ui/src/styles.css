@@ -357,15 +357,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Shell density: a Unix-terminal reading of the SAME tokens. It re-points the
+/* Shell density: the console's compact reading of the SAME tokens. It re-points the
    type scale and the vertical rhythm only — the color system is untouched, so
    a surface cannot acquire a second palette by changing density.
 
-   The scale is MONO-FIRST and anchored on a 13px body, because the transcript
-   is a ledger of machine truth read in long columns, not prose: paths, tool
-   names, durations, and code are the majority of its glyphs, and setting them
-   in the sans ramp at prose leading is what made this surface read as a chat
-   client instead of a console.
+   The scale is anchored on a 13px sans body: the frame (tab strip, sidebar,
+   headers) and the transcript's prose are read as an application, not a
+   terminal, so they set in the sans face. Mono is opted into by the surfaces
+   that carry machine text (paths, code, tool rows) through `.font-mono`, and
+   never inherited from the density.
 
    Only three sizes exist here, and the steps between them are deliberate:
 
@@ -373,17 +373,10 @@ body {
      meta  12px  a tool row, a reason line, a second line — one step quieter
      micro 10px  ambient numerics (inherited): timestamps, durations
 
-   `title` is body + ONE step (14px), not the sans ramp's 15px display jump. A
-   session name is a label on the column it heads, not a headline: past one
-   step above body it stops ranking the header and starts shouting over the
-   content, which is the defect the owner reported. `heading` and `label` SHARE
-   the body size and rank by weight alone — in a mono column at this density a
-   size step below 13px reads as a different tier of information rather than a
-   heading, and the weight ramp (400/500/590) is already carrying rank.
-
-   Line heights are tight (1.3–1.45) because mono glyphs have uniform advance
-   and no descender relief to buy back: prose leading at 1.7 spends a third of
-   the column on air a ledger does not need. */
+   `title` is body + ONE step (14px). `heading` and `label` share the body size
+   and rank by weight alone. Line heights are tight (1.3–1.45) because the
+   shell is a control surface: prose leading at 1.7 spends a third of a row on
+   air a list does not need. */
 [data-density="shell"] {
   --text-display: 15px;
   --text-title: 14px;
@@ -400,8 +393,6 @@ body {
   --spacing-gutter: 8px;
   --spacing-section: 16px;
   --spacing-control-md: 24px;
-
-  font-family: var(--font-mono);
 }
 
 /* Custom window chrome: header rows drag the window, controls inside opt out. */
