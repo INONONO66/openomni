@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import type { PlainValue } from "@openomni/protocol";
-import { LedgerSession } from "@openomni/protocol";
-import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
 import { sqliteSchema } from "../../src/storage/u967-preflight";
 
@@ -47,28 +45,16 @@ function historical(spec: PlainValue) {
   const db = new Database(":memory:");
   // The frozen archive boundary creates the actual pre-watch schema, not a fake.
   initializeSqliteDatabase(db, () => undefined);
-  const adapter = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
-    publish: () => undefined,
-  });
-  adapter.sessions.create(
-    LedgerSession.Row.parse({
-      id: "legacy",
-      parentId: null,
-      role: "resident",
-      state: "idle",
-      revision: 0,
-      leaseOwner: null,
-      leaseFence: 0,
-      leaseExpiresAt: null,
-    }),
+  // Seed the historical schema directly, without coupling it to today's adapter
+  // or retaining Bun transaction-helper statements past this fixture's lifetime.
+  db.run(
+    "INSERT INTO session (id, data, time_created, time_updated, role) VALUES ('legacy', '{}', 0, 0, 'resident')",
   );
-  adapter.alarms.arm({
-    id: "legacy-watch",
-    sessionId: "legacy",
-    kind: "watch",
-    fireAt: 1000,
-    spec: { encodingVersion: 1, value: spec },
-  });
+  db.run(
+    `INSERT INTO alarm (id, session_id, kind, fire_at, spec, encoding_version, status, time_created, time_updated)
+     VALUES ('legacy-watch', 'legacy', 'watch', 1000, ?, 1, 'armed', 1000, 1000)`,
+    [JSON.stringify(spec)],
+  );
   return db;
 }
 

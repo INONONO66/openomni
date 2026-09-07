@@ -6,7 +6,13 @@ import {
   type ObservationSink,
   type Storage,
 } from "@openomni/protocol";
-import { AlarmSourceError, commandSource, pathSource, type AlarmSource } from "./alarm-sources";
+import {
+  AlarmSourceError,
+  assertAlarmRuntime,
+  commandSource,
+  pathSource,
+  type AlarmSource,
+} from "./alarm-sources";
 
 interface Running {
   readonly row: Alarm.Row;
@@ -22,6 +28,7 @@ export function createAlarmWorker(options: {
   readonly clock?: () => number;
   readonly schedule?: (tick: () => void) => () => void;
 }) {
+  assertAlarmRuntime();
   const now = options.clock ?? Date.now;
   const running = new Map<string, Running>();
   const settling = new Set<Promise<void>>();

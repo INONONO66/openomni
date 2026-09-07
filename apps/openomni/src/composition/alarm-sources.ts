@@ -3,6 +3,20 @@ import { basename, dirname } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { Alarm } from "@openomni/protocol";
 
+export class AlarmRuntimeError extends Error {
+  readonly requiredVersion = ">=1.4.0";
+
+  constructor() {
+    super("Alarm monitoring requires Bun >=1.4.0 with Bun.Terminal support");
+    this.name = "AlarmRuntimeError";
+  }
+}
+
+export function assertAlarmRuntime(): void {
+  if (Bun.Terminal === undefined || !Bun.semver.satisfies(Bun.version, ">=1.4.0"))
+    throw new AlarmRuntimeError();
+}
+
 /** Opaque throws are normalized to a typed boundary outcome, never cast to Error. */
 export class AlarmSourceError extends Error {
   constructor(
@@ -30,6 +44,7 @@ export function commandSource(
   exit: (code: number) => void,
   failure: (error: Error) => void,
 ): AlarmSource {
+  assertAlarmRuntime();
   const decoder = new StringDecoder("utf8");
   let pending = "";
   let closing = false;

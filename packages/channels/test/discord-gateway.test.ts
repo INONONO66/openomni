@@ -104,6 +104,7 @@ function createFakeGateway(options: {
   };
 
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(req, srv) {
       record("server.request", { url: req.url, key: req.headers.get("sec-websocket-key") });

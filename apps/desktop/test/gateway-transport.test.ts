@@ -35,6 +35,7 @@ function serveWire(script: readonly (readonly Record<string, unknown>[])[]) {
   let connectionCount = 0;
   let turn = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request, self) {
       return self.upgrade(request)

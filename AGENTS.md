@@ -120,7 +120,8 @@ ui <- apps/desktop
 
 CI selection and verification wiring inspected at `c4fb7748` (includes PR #983),
 2026-09-06. See `docs/ci.md` for dependency-aware PR lanes, full runs, and
-fail-closed completion checks.
+fail-closed completion checks. Use Bun 1.4.1 as pinned in `package.json`;
+alarm monitoring requires Bun >=1.4.0 for built-in PTY support.
 
 ```bash
 bun install

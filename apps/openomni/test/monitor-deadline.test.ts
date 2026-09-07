@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,8 +51,9 @@ for (const mode of ["line", "exit"] as const) {
     }));
 }
 
-test("native path callback at the absolute timeout cannot outrun the scan", () =>
+test("path notification callback at the absolute timeout cannot outrun the scan", () =>
   Storage.withIsolation(async () => {
+    const watch = spyOn(fs, "watch");
     const directory = mkdtempSync(join(tmpdir(), "monitor-path-deadline-"));
     const path = join(directory, "signal");
     writeFileSync(path, "initial");
@@ -64,13 +66,24 @@ test("native path callback at the absolute timeout cannot outrun the scan", () =
         timeout_ms: 50,
       });
       fixture.worker.start();
+      const subscription:
+        | readonly (fs.PathLike | fs.WatchOptions | fs.WatchListener<string>)[]
+        | undefined = watch.mock.calls[0];
+      if (typeof subscription?.[2] !== "function")
+        throw new Error("path notification source was not installed");
+      const notify = subscription[2];
+      // FSEvents registers asynchronously and can drop the first write. Drive the
+      // exact registered notification, retaining the real watcher, stat and ledger;
+      // the separate reconciliation test covers recovery from dropped OS events.
       const ready = fixture.next("deadline");
       writeFileSync(path, "first native event");
+      notify("change", "signal");
       await ready;
       const received = fixture.next("deadline");
       fixture.advance(1050);
       writeFileSync(path, "second native event at deadline");
-      const row = await received; // No tick: await the native event, not a scan.
+      notify("change", "signal");
+      const row = await received; // No tick: only the registered source callback runs.
       expect(row.createdAt).toBe(1050);
       expect(summary.decode(row.content)).toMatchObject({ reason: "timeout" });
       expect(fixture.storage.alarms.get("deadline")).toMatchObject({
@@ -79,6 +92,7 @@ test("native path callback at the absolute timeout cannot outrun the scan", () =
       });
       expect(fixture.rows()).toHaveLength(2);
     } finally {
+      watch.mockRestore();
       await fixture.close();
       rmSync(directory, { recursive: true, force: true });
     }
