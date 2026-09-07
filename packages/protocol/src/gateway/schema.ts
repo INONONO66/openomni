@@ -23,11 +23,11 @@ import { MessageContract } from "./message.js";
 
 /** Taint root for injection defense: where the content physically entered. */
 const OriginSchema = z
-	.object({
-		surface: z.string().min(1),
-		externalId: z.string().min(1),
-	})
-	.strict();
+  .object({
+    surface: z.string().min(1),
+    externalId: z.string().min(1),
+  })
+  .strict();
 
 /**
  * The perimeter verdict attached to every delivery. `actorId` is absent for
@@ -38,18 +38,18 @@ const OriginSchema = z
 const DeliveredTreatmentSchema = z.enum(["full_access", "evidence_only"]);
 
 const ActorContextSchema = z
-	.object({
-		actorId: z.string().min(1).optional(),
-		trustTier: Actor.TrustTier,
-		/**
-		 * Narrower than Actor.InboundTreatment on purpose: "drop" means the
-		 * message was never delivered, so a Deliver stamped drop must be
-		 * unrepresentable at this seam.
-		 */
-		inboundTreatment: DeliveredTreatmentSchema,
-		origin: OriginSchema,
-	})
-	.strict();
+  .object({
+    actorId: z.string().min(1).optional(),
+    trustTier: Actor.TrustTier,
+    /**
+     * Narrower than Actor.InboundTreatment on purpose: "drop" means the
+     * message was never delivered, so a Deliver stamped drop must be
+     * unrepresentable at this seam.
+     */
+    inboundTreatment: DeliveredTreatmentSchema,
+    origin: OriginSchema,
+  })
+  .strict();
 
 /**
  * Present iff this delivery resumed an open Wait. The expected-responder
@@ -58,11 +58,11 @@ const ActorContextSchema = z
  * perimeter's assertion that the sender may resume this wait.
  */
 const WaitContextSchema = z
-	.object({
-		waitId: z.string().min(1),
-		allowedAction: Wait.AllowedAction,
-	})
-	.strict();
+  .object({
+    waitId: z.string().min(1),
+    allowedAction: Wait.AllowedAction,
+  })
+  .strict();
 
 /**
  * The routed inbound event as it crosses the seam (#707 stage-2, measured at
@@ -92,15 +92,15 @@ const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
  *   route.decided fact — the brain parses all three at the seam.
  */
 const DeliverSchema = z
-	.object({
-		sessionId: z.string().min(1).optional(),
-		actorContext: ActorContextSchema.optional(),
-		waitContext: WaitContextSchema.optional(),
-		event: DeliveredEventSchema,
-		/** The recorded route.decided fact this delivery executes (record-before-act). */
-		decision: IngressEvents.RoutingDecision.schema,
-	})
-	.strict();
+  .object({
+    sessionId: z.string().min(1).optional(),
+    actorContext: ActorContextSchema.optional(),
+    waitContext: WaitContextSchema.optional(),
+    event: DeliveredEventSchema,
+    /** The recorded route.decided fact this delivery executes (record-before-act). */
+    decision: IngressEvents.RoutingDecision.schema,
+  })
+  .strict();
 
 // Outbound vocabulary — re-homed from the #215 messaging kernel verbatim
 // (openomni/messaging re-exports these until stage 2 moves the kernel).
@@ -125,54 +125,54 @@ const MessageClassSchema = z.enum(["notify", "converse"]);
  * denial.
  */
 const MessageTargetSchema = z
-	.object({
-		actorId: z.string().min(1),
-		endpointId: z.string().min(1).optional(),
-	})
-	.strict();
+  .object({
+    actorId: z.string().min(1),
+    endpointId: z.string().min(1).optional(),
+  })
+  .strict();
 
 const SenderTargetGrantSchema = z
-	.object({
-		id: z.string().min(1),
-		senderId: z.string().min(1),
-		targetActorId: z.string().min(1),
-		operations: z.array(MessageOperationSchema).min(1),
-		expiresAt: EpochMs.optional(),
-		/** Present iff this grant was materialized from a ReplyGrantRule — the provenance link that makes `maxLiveInstances` countable. */
-		ruleId: z.string().min(1).optional(),
-		/** Perimeter-fact scope of a materialized instance: replies stay inside the initiating container. */
-		replyScope: z
-			.object({ surfaceKey: z.string().min(1) })
-			.strict()
-			.optional(),
-	})
-	.strict()
-	.superRefine((grant, ctx) => {
-		// A rule-materialized instance is always bounded: containment + expiry
-		// are what distinguish it from an Owner-written standing grant.
-		if (grant.ruleId !== undefined) {
-			if (grant.replyScope === undefined) {
-				ctx.addIssue({
-					code: "custom",
-					message: "a rule-materialized grant requires replyScope (perimeter containment)",
-					path: ["replyScope"],
-				});
-			}
-			if (grant.expiresAt === undefined) {
-				ctx.addIssue({
-					code: "custom",
-					message: "a rule-materialized grant requires expiresAt (instanceTtlMs bound)",
-					path: ["expiresAt"],
-				});
-			}
-		} else if (grant.replyScope !== undefined) {
-			ctx.addIssue({
-				code: "custom",
-				message: "replyScope without ruleId — reply containment has no owning rule",
-				path: ["ruleId"],
-			});
-		}
-	});
+  .object({
+    id: z.string().min(1),
+    senderId: z.string().min(1),
+    targetActorId: z.string().min(1),
+    operations: z.array(MessageOperationSchema).min(1),
+    expiresAt: EpochMs.optional(),
+    /** Present iff this grant was materialized from a ReplyGrantRule — the provenance link that makes `maxLiveInstances` countable. */
+    ruleId: z.string().min(1).optional(),
+    /** Perimeter-fact scope of a materialized instance: replies stay inside the initiating container. */
+    replyScope: z
+      .object({ surfaceKey: z.string().min(1) })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((grant, ctx) => {
+    // A rule-materialized instance is always bounded: containment + expiry
+    // are what distinguish it from an Owner-written standing grant.
+    if (grant.ruleId !== undefined) {
+      if (grant.replyScope === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "a rule-materialized grant requires replyScope (perimeter containment)",
+          path: ["replyScope"],
+        });
+      }
+      if (grant.expiresAt === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "a rule-materialized grant requires expiresAt (instanceTtlMs bound)",
+          path: ["expiresAt"],
+        });
+      }
+    } else if (grant.replyScope !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "replyScope without ruleId — reply containment has no owning rule",
+        path: ["ruleId"],
+      });
+    }
+  });
 
 /**
  * Owner-written rule row from which the gateway mechanically materializes
@@ -182,20 +182,20 @@ const SenderTargetGrantSchema = z
  * `maxLiveInstances` bounds grant farming by mass first contact.
  */
 const ReplyGrantRuleSchema = z
-	.object({
-		id: z.string().min(1),
-		senderId: z.string().min(1),
-		surface: z.string().min(1),
-		workspace: z.string().min(1).optional(),
-		channel: z.string().min(1).optional(),
-		operations: z.array(MessageOperationSchema).min(1),
-		instanceTtlMs: z.number().int().positive(),
-		maxLiveInstances: z.number().int().positive(),
-		createdBy: z.string().min(1),
-		createdAt: EpochMs.optional(),
-		updatedAt: EpochMs.optional(),
-	})
-	.strict();
+  .object({
+    id: z.string().min(1),
+    senderId: z.string().min(1),
+    surface: z.string().min(1),
+    workspace: z.string().min(1).optional(),
+    channel: z.string().min(1).optional(),
+    operations: z.array(MessageOperationSchema).min(1),
+    instanceTtlMs: z.number().int().positive(),
+    maxLiveInstances: z.number().int().positive(),
+    createdBy: z.string().min(1),
+    createdAt: EpochMs.optional(),
+    updatedAt: EpochMs.optional(),
+  })
+  .strict();
 
 /**
  * Typed denial taxonomy — callers branch on `code`, never message text.
@@ -204,17 +204,17 @@ const ReplyGrantRuleSchema = z
  * awaited-delivery exactly-once rule surfacing as a denial.
  */
 const MessageDenialCodeSchema = z.enum([
-	"ungranted",
-	"target_missing",
-	"target_stale",
-	"target_ambiguous",
-	"wait_duplicate",
-	// #219 active-egress suppressions: a granted, resolvable send the social
-	// budget refuses — window/class cap hit (or no Owner-declared budget for a
-	// cold proactive send), within cooldown/quiet-hours, or do-not-contact.
-	"budget_exhausted",
-	"cooldown_suppressed",
-	"dnc_denied",
+  "ungranted",
+  "target_missing",
+  "target_stale",
+  "target_ambiguous",
+  "wait_duplicate",
+  // #219 active-egress suppressions: a granted, resolvable send the social
+  // budget refuses — window/class cap hit (or no Owner-declared budget for a
+  // cold proactive send), within cooldown/quiet-hours, or do-not-contact.
+  "budget_exhausted",
+  "cooldown_suppressed",
+  "dnc_denied",
 ]);
 
 /**
@@ -230,30 +230,30 @@ const MessageDenialCodeSchema = z.enum([
  * fail-safe default re-applies: cold proactive is capped at zero).
  */
 const SocialBudgetSchema = z
-	.object({
-		id: z.string().min(1),
-		targetActorId: z.string().min(1),
-		maxPerWindow: z.number().int().positive(),
-		windowMs: z.number().int().positive(),
-		cooldownMs: z.number().int().nonnegative(),
-		classCaps: z
-			.object({
-				notify: z.number().int().nonnegative().optional(),
-				converse: z.number().int().nonnegative().optional(),
-			})
-			.strict()
-			.optional(),
-		quietHours: z
-			.object({
-				startMinuteUtc: z.number().int().min(0).max(1439),
-				endMinuteUtc: z.number().int().min(0).max(1439),
-			})
-			.strict()
-			.optional(),
-		doNotContact: z.boolean().optional(),
-		expiresAt: EpochMs.optional(),
-	})
-	.strict();
+  .object({
+    id: z.string().min(1),
+    targetActorId: z.string().min(1),
+    maxPerWindow: z.number().int().positive(),
+    windowMs: z.number().int().positive(),
+    cooldownMs: z.number().int().nonnegative(),
+    classCaps: z
+      .object({
+        notify: z.number().int().nonnegative().optional(),
+        converse: z.number().int().nonnegative().optional(),
+      })
+      .strict()
+      .optional(),
+    quietHours: z
+      .object({
+        startMinuteUtc: z.number().int().min(0).max(1439),
+        endMinuteUtc: z.number().int().min(0).max(1439),
+      })
+      .strict()
+      .optional(),
+    doNotContact: z.boolean().optional(),
+    expiresAt: EpochMs.optional(),
+  })
+  .strict();
 
 /**
  * One durable debit row: an ADMITTED proactive send (#219). Recorded
@@ -262,14 +262,14 @@ const SocialBudgetSchema = z
  * survives a restart. The gateway router is the sole writer (perimeter domain).
  */
 const EgressDebitRowSchema = z
-	.object({
-		id: z.string().min(1),
-		senderId: z.string().min(1),
-		targetActorId: z.string().min(1),
-		class: MessageClassSchema,
-		at: EpochMs,
-	})
-	.strict();
+  .object({
+    id: z.string().min(1),
+    senderId: z.string().min(1),
+    targetActorId: z.string().min(1),
+    class: MessageClassSchema,
+    at: EpochMs,
+  })
+  .strict();
 
 /**
  * The read projection the store folds from the debit rows for one
@@ -278,13 +278,13 @@ const EgressDebitRowSchema = z
  * recent admitted send regardless of window).
  */
 const EgressDebitStateSchema = z
-	.object({
-		countInWindow: z.number().int().nonnegative(),
-		notifyInWindow: z.number().int().nonnegative(),
-		converseInWindow: z.number().int().nonnegative(),
-		lastSendAt: EpochMs.optional(),
-	})
-	.strict();
+  .object({
+    countInWindow: z.number().int().nonnegative(),
+    notifyInWindow: z.number().int().nonnegative(),
+    converseInWindow: z.number().int().nonnegative(),
+    lastSendAt: EpochMs.optional(),
+  })
+  .strict();
 
 /**
  * The Wait an awaited delivery opens. Quorum/resolution-policy coherence is
@@ -292,74 +292,74 @@ const EgressDebitStateSchema = z
  * enforcement layer for that invariant (#215 rule 4).
  */
 const AwaitSpecSchema = z
-	.object({
-		waitId: z.string().min(1),
-		ownerRef: Wait.OwnerRef,
-		allowedActions: z.array(Wait.AllowedAction).min(1),
-		expectedResponders: z.array(z.string().min(1)).min(1),
-		resolutionPolicy: Wait.ResolutionPolicy,
-		quorum: Wait.Quorum.optional(),
-		expiresAt: EpochMs,
-		followUpWindow: z.number().int().nonnegative(),
-		/** Extra correlation fields (threadId, channelId, …); endpointId and replyToMessageId are derived from the delivery itself. */
-		correlation: Wait.Correlation.optional(),
-	})
-	.strict();
+  .object({
+    waitId: z.string().min(1),
+    ownerRef: Wait.OwnerRef,
+    allowedActions: z.array(Wait.AllowedAction).min(1),
+    expectedResponders: z.array(z.string().min(1)).min(1),
+    resolutionPolicy: Wait.ResolutionPolicy,
+    quorum: Wait.Quorum.optional(),
+    expiresAt: EpochMs,
+    followUpWindow: z.number().int().nonnegative(),
+    /** Extra correlation fields (threadId, channelId, …); endpointId and replyToMessageId are derived from the delivery itself. */
+    correlation: Wait.Correlation.optional(),
+  })
+  .strict();
 
 const SendInputBase = z
-	.object({
-		/** Outbound message identity: doubles as the Wait's originMessageId, whose UNIQUE column pins "exactly one Wait per awaited message". */
-		messageId: z.string().min(1),
-		/** The sender flow's trace: every event this send leaves files under it. */
-		traceId: z.string().min(1),
-		senderId: z.string().min(1),
-		target: MessageTargetSchema,
-		operation: MessageOperationSchema,
-		body: z.string().min(1),
-		/** Injected timestamp — messaging never reads the wall clock. */
-		at: EpochMs,
-		waitSpec: AwaitSpecSchema.optional(),
-		/**
-		 * #219 policy-intent axis, additive-optional for backward compat. Absent →
-		 * defaults from `operation` (notify for fire_and_forget, converse for
-		 * awaited). Present → must stay coherent with `operation` (refined below).
-		 */
-		class: MessageClassSchema.optional(),
-	})
-	.strict();
+  .object({
+    /** Outbound message identity: doubles as the Wait's originMessageId, whose UNIQUE column pins "exactly one Wait per awaited message". */
+    messageId: z.string().min(1),
+    /** The sender flow's trace: every event this send leaves files under it. */
+    traceId: z.string().min(1),
+    senderId: z.string().min(1),
+    target: MessageTargetSchema,
+    operation: MessageOperationSchema,
+    body: z.string().min(1),
+    /** Injected timestamp — messaging never reads the wall clock. */
+    at: EpochMs,
+    waitSpec: AwaitSpecSchema.optional(),
+    /**
+     * #219 policy-intent axis, additive-optional for backward compat. Absent →
+     * defaults from `operation` (notify for fire_and_forget, converse for
+     * awaited). Present → must stay coherent with `operation` (refined below).
+     */
+    class: MessageClassSchema.optional(),
+  })
+  .strict();
 
 const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
-	if (input.operation === "awaited" && input.waitSpec === undefined) {
-		ctx.addIssue({
-			code: "custom",
-			message: "awaited operation requires a waitSpec",
-			path: ["waitSpec"],
-		});
-	}
-	if (input.operation === "fire_and_forget" && input.waitSpec !== undefined) {
-		ctx.addIssue({
-			code: "custom",
-			message: "fire_and_forget never opens a Wait — waitSpec is not allowed",
-			path: ["waitSpec"],
-		});
-	}
-	// The two axes stay coherent without collapsing: converse ⟺ awaited,
-	// notify ⟺ fire_and_forget. Absent class is inferred from operation, so
-	// only an explicitly-incoherent pairing is rejected.
-	if (input.class === "converse" && input.operation !== "awaited") {
-		ctx.addIssue({
-			code: "custom",
-			message: 'class "converse" requires operation "awaited" (a converse intends a reply loop)',
-			path: ["class"],
-		});
-	}
-	if (input.class === "notify" && input.operation !== "fire_and_forget") {
-		ctx.addIssue({
-			code: "custom",
-			message: 'class "notify" requires operation "fire_and_forget" (a notify awaits nothing)',
-			path: ["class"],
-		});
-	}
+  if (input.operation === "awaited" && input.waitSpec === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "awaited operation requires a waitSpec",
+      path: ["waitSpec"],
+    });
+  }
+  if (input.operation === "fire_and_forget" && input.waitSpec !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "fire_and_forget never opens a Wait — waitSpec is not allowed",
+      path: ["waitSpec"],
+    });
+  }
+  // The two axes stay coherent without collapsing: converse ⟺ awaited,
+  // notify ⟺ fire_and_forget. Absent class is inferred from operation, so
+  // only an explicitly-incoherent pairing is rejected.
+  if (input.class === "converse" && input.operation !== "awaited") {
+    ctx.addIssue({
+      code: "custom",
+      message: 'class "converse" requires operation "awaited" (a converse intends a reply loop)',
+      path: ["class"],
+    });
+  }
+  if (input.class === "notify" && input.operation !== "fire_and_forget") {
+    ctx.addIssue({
+      code: "custom",
+      message: 'class "notify" requires operation "fire_and_forget" (a notify awaits nothing)',
+      path: ["class"],
+    });
+  }
 });
 
 // Wait control — brain → gateway (§2b-1): the brain owns WHEN a wait should
@@ -368,146 +368,148 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
 const WaitControlActionSchema = z.enum(["cancel", "expire_now"]);
 
 const WaitControlSchema = z
-	.object({
-		waitId: z.string().min(1),
-		action: WaitControlActionSchema,
-		reason: z.string().min(1),
-	})
-	.strict();
+  .object({
+    waitId: z.string().min(1),
+    action: WaitControlActionSchema,
+    reason: z.string().min(1),
+  })
+  .strict();
 
 export namespace Gateway {
-	/** #946 stage 1: schemas only; consumers and legacy removal follow in stage 2. */
-	export const SendMessage = MessageContract.Send;
-	export type SendMessage = z.infer<typeof SendMessage>;
+  /** #946 stage 1: schemas only; consumers and legacy removal follow in stage 2. */
+  export const SendMessage = MessageContract.Send;
+  export type SendMessage = z.infer<typeof SendMessage>;
 
-	export const SendMessageHandle = MessageContract.Handle;
-	export type SendMessageHandle = z.infer<typeof SendMessageHandle>;
+  export const SendMessageHandle = MessageContract.Handle;
+  export type SendMessageHandle = z.infer<typeof SendMessageHandle>;
 
-	export const IngestSender = MessageContract.Sender;
-	export type IngestSender = z.infer<typeof IngestSender>;
+  export const IngestSender = MessageContract.Sender;
+  export type IngestSender = z.infer<typeof IngestSender>;
 
-	export const IngressFacts = MessageContract.IngressFacts;
-	export type IngressFacts = z.infer<typeof IngressFacts>;
+  export const IngressFacts = MessageContract.IngressFacts;
+  export type IngressFacts = z.infer<typeof IngressFacts>;
 
-	export const IngestResult = MessageContract.Result;
-	export type IngestResult = z.infer<typeof IngestResult>;
+  export const IngestResult = MessageContract.Result;
+  export type IngestResult = z.infer<typeof IngestResult>;
 
-	export const RuleTableA = MessageContract.RuleTableA;
-	export type RuleTableA = z.infer<typeof RuleTableA>;
+  export const RuleTableA = MessageContract.RuleTableA;
+  export type RuleTableA = z.infer<typeof RuleTableA>;
 
-	export const RuleTableB = MessageContract.RuleTableB;
-	export type RuleTableB = z.infer<typeof RuleTableB>;
+  export const RuleTableB = MessageContract.RuleTableB;
+  export type RuleTableB = z.infer<typeof RuleTableB>;
 
-	export const MessageObservation = MessageContract.Observation;
-	export type MessageObservation = z.infer<typeof MessageObservation>;
-	export const MessageObserved = BusEvent.define("message.observed", MessageObservation, { visibility: "ephemeral" });
+  export const MessageObservation = MessageContract.Observation;
+  export type MessageObservation = z.infer<typeof MessageObservation>;
+  export const MessageObserved = BusEvent.define("message.observed", MessageObservation, {
+    visibility: "ephemeral",
+  });
 
-	export const Origin = OriginSchema;
-	export type Origin = z.infer<typeof OriginSchema>;
+  export const Origin = OriginSchema;
+  export type Origin = z.infer<typeof OriginSchema>;
 
-	export const ActorContext = ActorContextSchema;
-	export type ActorContext = z.infer<typeof ActorContextSchema>;
+  export const ActorContext = ActorContextSchema;
+  export type ActorContext = z.infer<typeof ActorContextSchema>;
 
-	export const WaitContext = WaitContextSchema;
-	export type WaitContext = z.infer<typeof WaitContextSchema>;
+  export const WaitContext = WaitContextSchema;
+  export type WaitContext = z.infer<typeof WaitContextSchema>;
 
-	export const DeliveredEvent = DeliveredEventSchema;
-	export type DeliveredEvent = z.infer<typeof DeliveredEventSchema>;
+  export const DeliveredEvent = DeliveredEventSchema;
+  export type DeliveredEvent = z.infer<typeof DeliveredEventSchema>;
 
-	export const Deliver = DeliverSchema;
-	export type Deliver = z.infer<typeof DeliverSchema>;
+  export const Deliver = DeliverSchema;
+  export type Deliver = z.infer<typeof DeliverSchema>;
 
-	export const MessageOperation = MessageOperationSchema;
-	export type MessageOperation = z.infer<typeof MessageOperationSchema>;
+  export const MessageOperation = MessageOperationSchema;
+  export type MessageOperation = z.infer<typeof MessageOperationSchema>;
 
-	export const MessageClass = MessageClassSchema;
-	export type MessageClass = z.infer<typeof MessageClassSchema>;
+  export const MessageClass = MessageClassSchema;
+  export type MessageClass = z.infer<typeof MessageClassSchema>;
 
-	export const MessageTarget = MessageTargetSchema;
-	export type MessageTarget = z.infer<typeof MessageTargetSchema>;
+  export const MessageTarget = MessageTargetSchema;
+  export type MessageTarget = z.infer<typeof MessageTargetSchema>;
 
-	export const SenderTargetGrant = SenderTargetGrantSchema;
-	export type SenderTargetGrant = z.infer<typeof SenderTargetGrantSchema>;
+  export const SenderTargetGrant = SenderTargetGrantSchema;
+  export type SenderTargetGrant = z.infer<typeof SenderTargetGrantSchema>;
 
-	export const ReplyGrantRule = ReplyGrantRuleSchema;
-	export type ReplyGrantRule = z.infer<typeof ReplyGrantRuleSchema>;
+  export const ReplyGrantRule = ReplyGrantRuleSchema;
+  export type ReplyGrantRule = z.infer<typeof ReplyGrantRuleSchema>;
 
-	export const SocialBudget = SocialBudgetSchema;
-	export type SocialBudget = z.infer<typeof SocialBudgetSchema>;
+  export const SocialBudget = SocialBudgetSchema;
+  export type SocialBudget = z.infer<typeof SocialBudgetSchema>;
 
-	export const EgressDebitRow = EgressDebitRowSchema;
-	export type EgressDebitRow = z.infer<typeof EgressDebitRowSchema>;
+  export const EgressDebitRow = EgressDebitRowSchema;
+  export type EgressDebitRow = z.infer<typeof EgressDebitRowSchema>;
 
-	export const EgressDebitState = EgressDebitStateSchema;
-	export type EgressDebitState = z.infer<typeof EgressDebitStateSchema>;
+  export const EgressDebitState = EgressDebitStateSchema;
+  export type EgressDebitState = z.infer<typeof EgressDebitStateSchema>;
 
-	export const MessageDenialCode = MessageDenialCodeSchema;
-	export type MessageDenialCode = z.infer<typeof MessageDenialCodeSchema>;
+  export const MessageDenialCode = MessageDenialCodeSchema;
+  export type MessageDenialCode = z.infer<typeof MessageDenialCodeSchema>;
 
-	export const AwaitSpec = AwaitSpecSchema;
-	export type AwaitSpec = z.infer<typeof AwaitSpecSchema>;
+  export const AwaitSpec = AwaitSpecSchema;
+  export type AwaitSpec = z.infer<typeof AwaitSpecSchema>;
 
-	export const SendInput = SendInputSchema;
-	export type SendInput = z.infer<typeof SendInputSchema>;
+  export const SendInput = SendInputSchema;
+  export type SendInput = z.infer<typeof SendInputSchema>;
 
-	/** The one allocated delivery address a target resolves to. */
-	export type DeliveryTarget = Readonly<{
-		actorId: string;
-		endpointId: string;
-		channel: string;
-		externalId: string;
-	}>;
+  /** The one allocated delivery address a target resolves to. */
+  export type DeliveryTarget = Readonly<{
+    actorId: string;
+    endpointId: string;
+    channel: string;
+    externalId: string;
+  }>;
 
-	/**
-	 * Deterministic send receipt. `sent`/`denied` and the denial code are the
-	 * audit facts; a `wait` is present exactly when the operation was awaited.
-	 */
-	export type SendReceipt =
-		| Readonly<{
-			kind: "sent";
-			operation: "fire_and_forget";
-			delivery: "accepted" | "rejected" | "unknown";
-			messageId: string;
-			senderId: string;
-			grantId: string;
-			target: DeliveryTarget;
-			at: number;
-		}>
-		| Readonly<{
-			kind: "sent";
-			operation: "awaited";
-			delivery: "accepted" | "rejected" | "unknown";
-			messageId: string;
-			senderId: string;
-			grantId: string;
-			target: DeliveryTarget;
-			wait: Wait.Record;
-			at: number;
-		}>
-		| Readonly<{
-			kind: "denied";
-			code: MessageDenialCode;
-			messageId: string;
-			senderId: string;
-			targetActorId: string;
-			reason: string;
-			at: number;
-		}>;
+  /**
+   * Deterministic send receipt. `sent`/`denied` and the denial code are the
+   * audit facts; a `wait` is present exactly when the operation was awaited.
+   */
+  export type SendReceipt =
+    | Readonly<{
+        kind: "sent";
+        operation: "fire_and_forget";
+        delivery: "accepted" | "rejected" | "unknown";
+        messageId: string;
+        senderId: string;
+        grantId: string;
+        target: DeliveryTarget;
+        at: number;
+      }>
+    | Readonly<{
+        kind: "sent";
+        operation: "awaited";
+        delivery: "accepted" | "rejected" | "unknown";
+        messageId: string;
+        senderId: string;
+        grantId: string;
+        target: DeliveryTarget;
+        wait: Wait.Record;
+        at: number;
+      }>
+    | Readonly<{
+        kind: "denied";
+        code: MessageDenialCode;
+        messageId: string;
+        senderId: string;
+        targetActorId: string;
+        reason: string;
+        at: number;
+      }>;
 
-	export const WaitControlAction = WaitControlActionSchema;
-	export type WaitControlAction = z.infer<typeof WaitControlActionSchema>;
+  export const WaitControlAction = WaitControlActionSchema;
+  export type WaitControlAction = z.infer<typeof WaitControlActionSchema>;
 
-	export const WaitControl = WaitControlSchema;
-	export type WaitControl = z.infer<typeof WaitControlSchema>;
+  export const WaitControl = WaitControlSchema;
+  export type WaitControl = z.infer<typeof WaitControlSchema>;
 
-	/** Writes stay gateway-side; rejection is typed, never message text. */
-	export type WaitControlReceipt =
-		| Readonly<{ kind: "cancelled" | "expired"; waitId: string; at: number }>
-		| Readonly<{
-			kind: "rejected";
-			waitId: string;
-			code: "not_found" | "already_terminal";
-			reason: string;
-			at: number;
-		}>;
+  /** Writes stay gateway-side; rejection is typed, never message text. */
+  export type WaitControlReceipt =
+    | Readonly<{ kind: "cancelled" | "expired"; waitId: string; at: number }>
+    | Readonly<{
+        kind: "rejected";
+        waitId: string;
+        code: "not_found" | "already_terminal";
+        reason: string;
+        at: number;
+      }>;
 }

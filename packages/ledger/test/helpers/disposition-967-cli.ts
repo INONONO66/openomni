@@ -10,10 +10,26 @@ export function manifestHash(fixture: Fixture): string {
 }
 
 export function archiveCli(fixture: Fixture, flags: readonly string[] = [], report = true) {
-  const args = [process.execPath, "run", resolve(import.meta.dir, "../../../../script/generate-ledger-archive-manifest.ts"),
-    "--db", fixture.path, "--out", fixture.manifest, "--backup", fixture.archive, "--json", ...flags];
+  const args = [
+    process.execPath,
+    "run",
+    resolve(import.meta.dir, "../../../../script/generate-ledger-archive-manifest.ts"),
+    "--db",
+    fixture.path,
+    "--out",
+    fixture.manifest,
+    "--backup",
+    fixture.archive,
+    "--json",
+    ...flags,
+  ];
   const result = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe", timeout: 10_000 });
-  const receipt = { args, exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+  const receipt = {
+    args,
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
+  };
   if (report) console.log(JSON.stringify(receipt));
   return receipt;
 }
@@ -26,5 +42,9 @@ export function archiveAndVerify(fixture: Fixture) {
 }
 
 export function disposeCli(fixture: Fixture, report = true) {
-  return archiveCli(fixture, ["--dispose-967", "--approve-manifest-sha256", manifestHash(fixture)], report);
+  return archiveCli(
+    fixture,
+    ["--dispose-967", "--approve-manifest-sha256", manifestHash(fixture)],
+    report,
+  );
 }

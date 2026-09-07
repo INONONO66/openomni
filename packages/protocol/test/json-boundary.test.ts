@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  canonicalDigest,
-  canonicalKey,
-  isPlainValue,
-  PlainValueSchema,
-} from "../src/index.js";
+import { canonicalDigest, canonicalKey, isPlainValue, PlainValueSchema } from "../src/index.js";
 
 describe("plain JSON owner", () => {
   test("the typed key profile retains its established bytes", () => {

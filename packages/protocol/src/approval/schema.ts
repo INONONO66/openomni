@@ -88,7 +88,10 @@ export const Record = RecordBase.superRefine((record, ctx) => {
       path: ["decidedBy"],
     });
   }
-  if (record.state === "pending" && (record.decidedBy !== undefined || record.decidedAt !== undefined)) {
+  if (
+    record.state === "pending" &&
+    (record.decidedBy !== undefined || record.decidedAt !== undefined)
+  ) {
     ctx.addIssue({
       code: "custom",
       message: "a pending Approval cannot carry a settlement",

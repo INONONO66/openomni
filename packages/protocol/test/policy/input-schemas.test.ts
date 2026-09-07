@@ -226,5 +226,4 @@ describe("PolicyPoint executable input schemas", () => {
       expect(schema.safeParse(input).success).toBe(false);
     }
   });
-
 });

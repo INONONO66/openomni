@@ -21,14 +21,7 @@ type EffectFamily<Prefix extends string> = Extract<
   PolicyEffect,
   { readonly type: `${Prefix}.${string}` }
 >;
-type Family =
-  | "prompt"
-  | "model"
-  | "tool"
-  | "run"
-  | "writeback"
-  | "runtime"
-  | "audit";
+type Family = "prompt" | "model" | "tool" | "run" | "writeback" | "runtime" | "audit";
 
 const EFFECT_FAMILY = {
   "prompt.append_context": "prompt",

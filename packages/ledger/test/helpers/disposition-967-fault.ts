@@ -25,26 +25,37 @@ const nativeQuery = Database.prototype.query;
 Object.defineProperty(Database.prototype, "query", {
   configurable: true,
   value(this: Database, sql: string) {
-    const statement = nativeQuery.bind(this)<Record<string, SQLQueryBindings>, SQLQueryBindings[]>(sql);
+    const statement = nativeQuery.bind(this)<Record<string, SQLQueryBindings>, SQLQueryBindings[]>(
+      sql,
+    );
     if (decorated.has(statement)) return statement;
     decorated.add(statement);
     const get = statement.get.bind(statement);
     const run = statement.run.bind(statement);
-    Object.defineProperty(statement, "get", { value: (...parameters: SQLQueryBindings[]) => {
-      const result = get(...parameters);
-      if (sql === "SELECT 1 FROM _migrations WHERE name = ?" && parameters[0] === target && this.inTransaction) {
-        active = true;
-        signal("locked");
-      }
-      return result;
-    } });
-    Object.defineProperty(statement, "run", { value: (...parameters: SQLQueryBindings[]) => {
-      const result = run(...parameters);
-      if (sql.startsWith("DELETE FROM wait")) signal("after_wait_delete");
-      if (sql === "DELETE FROM bus_event") signal("after_bus_delete");
-      if (sql.startsWith("INSERT INTO _migrations") && parameters[0] === target) signal("after_marker");
-      return result;
-    } });
+    Object.defineProperty(statement, "get", {
+      value: (...parameters: SQLQueryBindings[]) => {
+        const result = get(...parameters);
+        if (
+          sql === "SELECT 1 FROM _migrations WHERE name = ?" &&
+          parameters[0] === target &&
+          this.inTransaction
+        ) {
+          active = true;
+          signal("locked");
+        }
+        return result;
+      },
+    });
+    Object.defineProperty(statement, "run", {
+      value: (...parameters: SQLQueryBindings[]) => {
+        const result = run(...parameters);
+        if (sql.startsWith("DELETE FROM wait")) signal("after_wait_delete");
+        if (sql === "DELETE FROM bus_event") signal("after_bus_delete");
+        if (sql.startsWith("INSERT INTO _migrations") && parameters[0] === target)
+          signal("after_marker");
+        return result;
+      },
+    });
     return statement;
   },
 });
@@ -66,7 +77,8 @@ Object.defineProperty(Database.prototype, "exec", {
   configurable: true,
   value(this: Database, ...parameters: Parameters<Database["exec"]>) {
     const sql = parameters[0];
-    if (active && sql === "ROLLBACK" && mode === "rollback-failure") throw new Error("injected_rollback_failure");
+    if (active && sql === "ROLLBACK" && mode === "rollback-failure")
+      throw new Error("injected_rollback_failure");
     if (active && sql === "COMMIT") signal("before_commit");
     const result = nativeExec.bind(this)(...parameters);
     if (active && sql === "COMMIT") signal("after_commit");

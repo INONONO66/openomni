@@ -6,16 +6,18 @@ export const RETIRED_TABLE_MIGRATION = "0035_drop_retired_delegation_tables/migr
 export const REPLY_GRANT_MIGRATION = "0036_reply_grant_projection/migration.sql";
 
 export class U967Error extends Error {
-	constructor(readonly code: string) {
-		super(code);
-		this.name = "U967Error";
-	}
+  constructor(readonly code: string) {
+    super(code);
+    this.name = "U967Error";
+  }
 }
 
 export function sqliteSchema(db: Database) {
-	return db.query<{ type: string; name: string; tbl_name: string; sql: string | null }, []>(
-		"SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name",
-	).all();
+  return db
+    .query<{ type: string; name: string; tbl_name: string; sql: string | null }, []>(
+      "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name",
+    )
+    .all();
 }
 
 // Fingerprints of the shipped immutable chain, captured from the existing
@@ -26,20 +28,33 @@ const SCHEMA_0035 = "sha256:7cc06095957973ceb27c8a1cd2eef1cecc01c04f4f8c7e5dca57
 const SCHEMA_0036 = "sha256:89e7677fe96971ec5ff5f8176504f42a478ae4fd8dfa84e4e18560077279e0ff";
 
 export function preflight967(db: Database, migrations: readonly { readonly name: string }[]) {
-	const schema = sqliteSchema(db);
-	if (schema.length === 0) return "fresh";
-	if (!schema.some((row) => row.name === "_migrations")) throw new U967Error("unsupported_upgrade");
-	const history = db.query<{ name: string }, []>("SELECT name FROM _migrations ORDER BY rowid").all();
-	const latest = history.at(-1)?.name;
-	const applied = latest === U967_MIGRATION || latest === RETIRED_TABLE_MIGRATION || latest === REPLY_GRANT_MIGRATION;
-	const latestIndex = latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
-	const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);
-	const schemaDigest = latest === REPLY_GRANT_MIGRATION ? SCHEMA_0036
-		: latest === RETIRED_TABLE_MIGRATION ? SCHEMA_0035
-			: applied ? SCHEMA_0034 : SCHEMA_0033;
-	if (canonicalDigest(history) !== canonicalDigest(expected)
-		|| canonicalDigest(schema) !== schemaDigest) {
-		throw new U967Error("unsupported_upgrade");
-	}
-	return applied ? "applied" : "pending";
+  const schema = sqliteSchema(db);
+  if (schema.length === 0) return "fresh";
+  if (!schema.some((row) => row.name === "_migrations")) throw new U967Error("unsupported_upgrade");
+  const history = db
+    .query<{ name: string }, []>("SELECT name FROM _migrations ORDER BY rowid")
+    .all();
+  const latest = history.at(-1)?.name;
+  const applied =
+    latest === U967_MIGRATION ||
+    latest === RETIRED_TABLE_MIGRATION ||
+    latest === REPLY_GRANT_MIGRATION;
+  const latestIndex =
+    latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
+  const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);
+  const schemaDigest =
+    latest === REPLY_GRANT_MIGRATION
+      ? SCHEMA_0036
+      : latest === RETIRED_TABLE_MIGRATION
+        ? SCHEMA_0035
+        : applied
+          ? SCHEMA_0034
+          : SCHEMA_0033;
+  if (
+    canonicalDigest(history) !== canonicalDigest(expected) ||
+    canonicalDigest(schema) !== schemaDigest
+  ) {
+    throw new U967Error("unsupported_upgrade");
+  }
+  return applied ? "applied" : "pending";
 }

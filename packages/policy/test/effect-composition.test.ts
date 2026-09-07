@@ -402,12 +402,8 @@ describe("policy effect composition conformance", () => {
 
   it("concatenates approval reasons", () => {
     const result = composeEffects([
-      d("policy.alpha", [
-        { type: "tool.require_approval", reason: "workspace write" },
-      ]),
-      d("policy.beta", [
-        { type: "tool.require_approval", reason: "network access" },
-      ]),
+      d("policy.alpha", [{ type: "tool.require_approval", reason: "workspace write" }]),
+      d("policy.beta", [{ type: "tool.require_approval", reason: "network access" }]),
     ]);
     expect(result.mergedEffects).toEqual(
       expect.arrayContaining([

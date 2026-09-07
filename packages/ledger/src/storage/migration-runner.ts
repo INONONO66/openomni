@@ -14,7 +14,12 @@ export namespace Migration {
 
   export type Preparation967 = (db: Database) => void;
 
-  export function applyOrdered(db: Database, migrationDir: string, migrations: Definition[], prepare967?: Preparation967): void {
+  export function applyOrdered(
+    db: Database,
+    migrationDir: string,
+    migrations: Definition[],
+    prepare967?: Preparation967,
+  ): void {
     db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY)");
 
     for (const migration of migrations.map((item) => Definition.parse(item))) {
@@ -41,7 +46,12 @@ function migrationStatements(sql: string): string[] {
     .filter((statement) => statement.length > 0);
 }
 
-function applyMigration(db: Database, migrationDir: string, migration: Migration.Definition, prepare967?: Migration.Preparation967): void {
+function applyMigration(
+  db: Database,
+  migrationDir: string,
+  migration: Migration.Definition,
+  prepare967?: Migration.Preparation967,
+): void {
   db.exec("BEGIN IMMEDIATE TRANSACTION");
   let committed = false;
   // Native disposal preserves both failures as SuppressedError if rollback
@@ -58,7 +68,8 @@ function applyMigration(db: Database, migrationDir: string, migration: Migration
         if (prepare967) prepare967(db);
         else {
           const projection = inspect967Projections(db, Date.now());
-          if (projection.blocked.length > 0 || projection.candidates.length > 0) throw new U967Error("approval_required");
+          if (projection.blocked.length > 0 || projection.candidates.length > 0)
+            throw new U967Error("approval_required");
         }
       }
       const sql = readFileSync(join(migrationDir, migration.name), "utf-8");

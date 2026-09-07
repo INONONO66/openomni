@@ -1,12 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  closeSync,
-  fsyncSync,
-  openSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { closeSync, fsyncSync, openSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { IdSource } from "@openomni/protocol";
 
@@ -29,10 +22,7 @@ export function replaceFileAtomically(
 ): void {
   const directory = dirname(path);
   const temporaryId = options.temporaryId ?? (() => randomUUID());
-  const temporaryPath = join(
-    directory,
-    `.${basename(path)}.${process.pid}.${temporaryId()}.tmp`,
-  );
+  const temporaryPath = join(directory, `.${basename(path)}.${process.pid}.${temporaryId()}.tmp`);
 
   try {
     const descriptor = openSync(temporaryPath, "wx", options.mode);

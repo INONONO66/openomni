@@ -75,12 +75,12 @@ describe("Approval fold", () => {
 
   test("the record schema rejects dishonest settlements", () => {
     const base = pending();
-    expect(() =>
-      Approval.Record.parse({ ...base, state: "approved", revision: 2 }),
-    ).toThrow(/must record its settlement/);
-    expect(() =>
-      Approval.Record.parse({ ...base, decidedBy: "owner", decidedAt: T0 }),
-    ).toThrow(/pending Approval cannot carry a settlement/);
+    expect(() => Approval.Record.parse({ ...base, state: "approved", revision: 2 })).toThrow(
+      /must record its settlement/,
+    );
+    expect(() => Approval.Record.parse({ ...base, decidedBy: "owner", decidedAt: T0 })).toThrow(
+      /pending Approval cannot carry a settlement/,
+    );
     expect(() =>
       Approval.Record.parse({
         ...base,

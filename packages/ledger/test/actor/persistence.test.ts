@@ -238,11 +238,7 @@ describe("ActorRegistry SQLite persistence", () => {
     // stable assertion surface across same-millisecond registrations).
     const ids = (endpoints: readonly { id: string }[]) =>
       endpoints.map((endpoint) => endpoint.id).sort();
-    expect(ids(ActorRegistry.listEndpoints())).toEqual([
-      "ep_collab_a",
-      "ep_owner_a",
-      "ep_owner_b",
-    ]);
+    expect(ids(ActorRegistry.listEndpoints())).toEqual(["ep_collab_a", "ep_owner_a", "ep_owner_b"]);
     expect(ids(ActorRegistry.listEndpoints("act_owner"))).toEqual(["ep_owner_a", "ep_owner_b"]);
     expect(ids(ActorRegistry.listEndpoints(undefined, "guild-a"))).toEqual([
       "ep_collab_a",

@@ -44,10 +44,12 @@ export const ExportName = z
   });
 export type ExportName = z.infer<typeof ExportName>;
 
-export const AbsolutePath = z.string().refine(
-  (path) => path.startsWith("/") && !path.includes("\0") && !path.split("/").includes(".."),
-  { message: "expected an absolute path without NUL or .. segments" },
-);
+export const AbsolutePath = z
+  .string()
+  .refine(
+    (path) => path.startsWith("/") && !path.includes("\0") && !path.split("/").includes(".."),
+    { message: "expected an absolute path without NUL or .. segments" },
+  );
 
 export const MachineId = z.string().min(1);
 export type MachineId = z.infer<typeof MachineId>;
@@ -219,7 +221,12 @@ export const CellResult = z.discriminatedUnion("status", [
     .strict(),
   z.object({ status: z.literal("timed_out"), cellId: z.string().min(1) }).strict(),
   z.object({ status: z.literal("cancelled"), cellId: z.string().min(1) }).strict(),
-  z.object({ status: z.literal("refused"), reason: z.enum(["machine_not_attached", "kernel_not_available"]) }).strict(),
+  z
+    .object({
+      status: z.literal("refused"),
+      reason: z.enum(["machine_not_attached", "kernel_not_available"]),
+    })
+    .strict(),
 ]);
 export type CellResult = z.infer<typeof CellResult>;
 
@@ -351,15 +358,27 @@ export type FsResult = z.infer<typeof FsResult>;
 export const ExecRequest = z.object({ cmd: z.string().min(1), cwd: AbsolutePath }).strict();
 export type ExecRequest = z.infer<typeof ExecRequest>;
 export const ExecResult = z.discriminatedUnion("status", [
-  z.object({
-    status: z.literal("completed"),
-    stdout: Base64,
-    stderr: Base64,
-    exitCode: z.number().int().nullable(),
-    signal: z.string().nullable(),
-    truncated: z.boolean(),
-  }).strict(),
-  z.object({ status: z.literal("refused"), reason: z.enum(["machine_not_attached", "exec_not_available", "path_escapes_export", "io_error"]) }).strict(),
+  z
+    .object({
+      status: z.literal("completed"),
+      stdout: Base64,
+      stderr: Base64,
+      exitCode: z.number().int().nullable(),
+      signal: z.string().nullable(),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("refused"),
+      reason: z.enum([
+        "machine_not_attached",
+        "exec_not_available",
+        "path_escapes_export",
+        "io_error",
+      ]),
+    })
+    .strict(),
   z.object({ status: z.enum(["timed_out", "cancelled"]) }).strict(),
 ]);
 export type ExecResult = z.infer<typeof ExecResult>;
