@@ -1101,6 +1101,44 @@ test("Electron renderer listeners require a real window load edge", () => {
   }
 }, 180_000);
 
+test("Electron window listeners credit window-manager events; first paint needs the load edge", () => {
+  const electron = dirname(
+    Bun.resolveSync("electron/package.json", resolve(import.meta.dir, "../apps/desktop")),
+  );
+  for (const loaded of [false, true]) {
+    using fixture = new Fixture({
+      "src/events.ts": protocol,
+      "src/main.ts": `import {BrowserWindow} from "electron";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const window=new BrowserWindow();window.on("resize",()=>sink.publish(Ready));window.once("ready-to-show",()=>sink.publish(Ready));${loaded ? 'await window.loadFile("index.html");' : ""}console.log(JSON.stringify(received));`,
+    });
+    fixture.write(
+      "node_modules/electron/package.json",
+      JSON.stringify({
+        name: "electron",
+        type: "module",
+        main: "index.js",
+        types: "electron.d.ts",
+      }),
+    );
+    fixture.write(
+      "node_modules/electron/electron.d.ts",
+      readFileSync(join(electron, "electron.d.ts"), "utf8"),
+    );
+    // The dependency double paints (ready-to-show) only after loading.
+    fixture.write(
+      "node_modules/electron/index.js",
+      'import {EventEmitter} from "node:events";export class BrowserWindow extends EventEmitter{loadFile(){this.emit("ready-to-show");return Promise.resolve()}}',
+    );
+    const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
+      timeout: 5000,
+    });
+    expect(actual.exitCode).toBe(0);
+    expect(actual.stdout.toString().trim()).toBe(loaded ? '["ready"]' : "[]");
+    const result = fixture.run("publisher");
+    expect(result.code).toBe(loaded ? 0 : 2);
+    if (!loaded) expect(result.output).toContain("unsupported_native_event_lifecycle");
+  }
+}, 180_000);
+
 test("forwarded CLI argument slices retain their filesystem input family", () => {
   using fixture = new Fixture({
     "src/main.ts": `async function read(path:string){return Bun.file(path).text()}
