@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788763232247,
+  "lastUpdate": 1788778138009,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -67059,6 +67059,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 947179,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6386ce645c282befe8f780dfdd899ebda0e414b9",
+          "message": "refactor(kernel): waiting and delivery as action state, delete Wait/Approval subsystems (#969) (#997)\n\n* wip(kernel): request waiting/delivery as action state checkpoint (#969)\n\n* fix(ledger): reserve migration 0038 for request cutover\n\n* test(kernel): verify canonical reply receipts and duplicate quorum\n\n* fix(kernel): make durable alarms the sole request deadline owner\n\n* fix(ledger): preserve archive verification across request and alarm upgrades\n\n* test(ledger): cover alarm schema defaults in migration fixtures\n\n* refactor(kernel): bound request admission and recovery complexity\n\n* style(kernel): format #969 touched files with biome",
+          "timestamp": "2026-09-07T19:47:53+09:00",
+          "tree_id": "0cdfaad0c453c4886588d59493215d023b1604c7",
+          "url": "https://github.com/INONONO66/openomni/commit/6386ce645c282befe8f780dfdd899ebda0e414b9"
+        },
+        "date": 1788778137641,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 3711,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 954379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 221266,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4331389,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 81,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 672,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 373,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 281713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1968,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12803,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 119318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 604454,
             "unit": "ns/op"
           }
         ]
