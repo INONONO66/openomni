@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788752066327,
+  "lastUpdate": 1788752920791,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66777,6 +66777,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 892877,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6b8844a5042ce3e7a6456785d546698676ec615",
+          "message": "feat(gateway): one sendMessage/ingest path, delete delegate/await/cancel and channel-send (#946) (#992)\n\n* wip(gateway): #946 stage-2 cutover checkpoint (not gate-verified)\n\n* wip(gateway): #946 stage-2 checkpoint 2 (router test migration in progress)\n\n* feat(gateway): finish sendMessage cutover and integration receipts\n\n* fix(gateway): preserve original terminal bounds and refuse denied socket admission\n\n* fix(channels): classify physical delivery refusal and uncertain receipts\n\n* fix(gateway): atomically bind deadlines and project complete ingress evidence\n\n* fix(channels): retain uncertainty after partial multi-chunk delivery\n\n* test(gateway): retain reviewed live table B admission boundaries\n\n* style(app): apply required formatter and preserve boundary types\n\n* style(channels): normalize the cutover without type churn\n\n* style(kernel): normalize ledger protocol and policy formatting\n\n* style(runtime): format runtime sources and type timer fixtures\n\n* style(workspace): clear inherited formatter gate failures\n\n* test(messaging): cover process replies and owned deadline budget projections\n\n* test(ipc): prevent stale socket collisions after process-id reuse\n\n* test(coverage): exercise script inventory and percentage boundaries\n\n* fix(channels): preserve chunk receipts and exhausted refusal evidence\n\nAccept logical sends only when every chunk has a receipt. Record accepted chunk indexes and IDs on partial delivery without fabricating a reply anchor.\n\nRetain the final HTTP response and attempt count in typed retry exhaustion; each physical provider classifies definitive 429 refusals. Exercise all three real drivers with captured retry signals and preserve network, server, and partial-send uncertainty.\n\n* fix(tests): close reply-grant connections safely on Bun 1.3.6",
+          "timestamp": "2026-09-07T03:47:27Z",
+          "tree_id": "c575744a7d8b0223862abb5bde59848977b1b3fd",
+          "url": "https://github.com/INONONO66/openomni/commit/d6b8844a5042ce3e7a6456785d546698676ec615"
+        },
+        "date": 1788752920389,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12962,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6828,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1760891,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 447448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 8151006,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 136,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1536,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 531524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3405,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 179213,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 893801,
             "unit": "ns/op"
           }
         ]
