@@ -10,8 +10,8 @@ import {
   Text,
   TreeRow,
 } from "@openomni/ui";
-import { Brain, Inbox, MessageSquare, Settings, Workflow } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useRef } from "react";
+import { Settings } from "lucide-react";
+import { useCallback, useMemo, useRef } from "react";
 import type { Boundary, Ordered } from "../attention";
 import { highlightRuns } from "../search";
 import type { FilteredSession } from "../search";
@@ -23,6 +23,7 @@ import {
   type Session,
   type SessionId,
 } from "../state/store";
+import { placeIcon } from "./place-icon";
 import { rowId, TREE_ID } from "./row-id";
 import { useSearch } from "./use-search";
 
@@ -51,6 +52,7 @@ export function SessionTree({
   onToggleProject,
   onSelect,
   onNavigate,
+  onSearchingChange,
   defaultSearching = false,
 }: {
   readonly ordered: Ordered;
@@ -58,7 +60,7 @@ export function SessionTree({
   readonly pendingChanges: number;
   readonly sessions: readonly Session[];
   readonly selectedId: SessionId | null;
-  readonly route: Route;
+  readonly route: Route | null;
   readonly collapsedProjectIds: ReadonlySet<ProjectId | null>;
   readonly onToggleProject: (id: ProjectId | null) => void;
   /**
@@ -68,6 +70,7 @@ export function SessionTree({
    */
   readonly onSelect: (id: SessionId, boundary?: Boundary | null) => void;
   readonly onNavigate: (route: Route) => void;
+  readonly onSearchingChange?: (searching: boolean) => void;
   /** Whether the section opens in search mode; uncontrolled after mount. */
   readonly defaultSearching?: boolean;
 }) {
@@ -86,8 +89,19 @@ export function SessionTree({
     if (selectedId !== null) rowRefs.current.get(selectedId)?.focus();
   }, [selectedId]);
 
-  const search = useSearch({ ordered, sessions, onSelect, focusSelectedRow, defaultSearching });
+  const search = useSearch({
+    ordered,
+    sessions,
+    onSelect,
+    focusSelectedRow,
+    defaultSearching,
+    onSearchingChange,
+  });
   const { filtered, state } = search;
+  const selectRow = useCallback(
+    (id: SessionId) => onSelect(id, search.searching ? null : "selection"),
+    [onSelect, search.searching],
+  );
 
   // Arrow keys travel the painted sequence, so they cross group boundaries the
   // way the eye does: down from a project's last row lands on the next one's
@@ -103,10 +117,10 @@ export function SessionTree({
       const next = filtered.sequence[index + delta];
       if (index === -1 || next === undefined) return;
 
-      onSelect(next);
+      selectRow(next);
       rowRefs.current.get(next)?.focus();
     },
-    [filtered.sequence, onSelect],
+    [filtered.sequence, selectRow],
   );
 
   return (
@@ -115,7 +129,7 @@ export function SessionTree({
         {ROUTES.map((destination) => (
           <NavItem
             active={destination === route}
-            icon={ROUTE_ICON[destination]}
+            icon={placeIcon({ kind: "route", route: destination })}
             key={destination}
             onClick={() => onNavigate(destination)}
           >
@@ -183,7 +197,7 @@ export function SessionTree({
                             entry={entry}
                             key={entry.id}
                             onKeyDown={onKeyDown}
-                            onSelect={onSelect}
+                            onSelect={selectRow}
                             registerRef={registerRef}
                             session={session}
                           />
@@ -205,13 +219,6 @@ export function SessionTree({
     </>
   );
 }
-
-const ROUTE_ICON: Record<Route, ReactNode> = {
-  sessions: <MessageSquare />,
-  inbox: <Inbox />,
-  automations: <Workflow />,
-  memory: <Brain />,
-};
 
 /**
  * A one-line row: the session's title, weighted where the query hit it.

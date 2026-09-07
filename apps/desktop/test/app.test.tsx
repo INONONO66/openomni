@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { consoleStore, INITIAL_CLIENT_STATE, newSessionTab } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
 
 /**
@@ -46,17 +46,17 @@ describe("empty routes", () => {
 
 describe("one session", () => {
   test("Given a created session, When the app renders, Then it is the header and the current row", () => {
-    createSession(1);
+    newSessionTab();
     const html = shell(null);
 
-    expect(html).toContain("Session 1");
+    expect(html).toContain(`aria-label="${consoleStore.state.sessions[0]?.title}"`);
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
     expect(html).toContain("No turns in this session yet.");
     expect(html).not.toContain("No sessions yet");
   });
 
   test("Given no gateway, When the app renders, Then the composer is disabled and says why", () => {
-    createSession(1);
+    newSessionTab();
     const html = shell(null);
     const field = html.slice(html.indexOf("<textarea"), html.indexOf("</textarea>"));
 
@@ -65,7 +65,7 @@ describe("one session", () => {
   });
 
   test("Given the endpoint still in flight, When the app renders, Then the composer waits without a verdict", () => {
-    createSession(1);
+    newSessionTab();
     const html = shell("pending");
     const field = html.slice(html.indexOf("<textarea"), html.indexOf("</textarea>"));
 

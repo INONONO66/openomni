@@ -12,9 +12,9 @@ import type { Session } from "../src/renderer/state/store";
  * runner here — and the store's own transitions are covered by store.test.ts.
  */
 const sessions: readonly Session[] = [
-  { id: "s1", title: "Session 1", projectId: "default", createdAt: 1 },
-  { id: "s2", title: "Session 2", projectId: "default", createdAt: 2 },
-  { id: "s3", title: "Session 3", projectId: "other", createdAt: 3 },
+  { id: "s1", title: "Session 1", titleSource: "prompt", projectId: "default", createdAt: 1 },
+  { id: "s2", title: "Session 2", titleSource: "prompt", projectId: "default", createdAt: 2 },
+  { id: "s3", title: "Session 3", titleSource: "prompt", projectId: "other", createdAt: 3 },
 ];
 
 const ordered = orderByAttention(sessions);

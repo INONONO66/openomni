@@ -39,6 +39,7 @@ export function useSearch({
   onSelect,
   focusSelectedRow,
   defaultSearching = false,
+  onSearchingChange,
 }: {
   readonly ordered: Ordered;
   readonly sessions: readonly Session[];
@@ -47,12 +48,15 @@ export function useSearch({
   readonly focusSelectedRow: () => void;
   /** The initial mode only; the hook owns it from then on. */
   readonly defaultSearching?: boolean;
+  readonly onSearchingChange?: ((searching: boolean) => void) | undefined;
 }): Search {
   const [state, setState] = useState<SearchState>(INITIAL);
   // The field exists only while searching, and it autofocuses on mount — so
   // "focus the field" is "open it", and the ref is for the already-open case.
   const [searching, setSearchingState] = useState(defaultSearching);
   const inputRef = useRef<HTMLInputElement>(null);
+  const stateRef = useRef(state);
+  const searchingRef = useRef(searching);
 
   /**
    * A row's searchable text: its own title, then its project's. Both are things
@@ -81,32 +85,34 @@ export function useSearch({
 
   const run = useCallback(
     (intent: Parameters<typeof reduce>[1]) => {
-      setState((previous) => {
-        const { state: next, effects } = reduce(previous, intent, sequenceRef.current);
-        for (const effect of effects) {
-          switch (effect.kind) {
-            case "focusField":
+      const { state: next, effects } = reduce(stateRef.current, intent, sequenceRef.current);
+      stateRef.current = next;
+      setState(next);
+      for (const effect of effects) {
+        switch (effect.kind) {
+          case "focusField":
+            if (!searchingRef.current) {
+              searchingRef.current = true;
+              onSearchingChange?.(true);
               setSearchingState(true);
-              inputRef.current?.focus();
-              break;
-            case "close":
-              setSearchingState(false);
-              focusSelectedRow();
-              break;
-            case "select":
-              // Not a boundary: the operator is still in the field, and
-              // reordering the results they are arrowing through is the reflow
-              // the stability rule exists to prevent.
-              onSelect(effect.id, null);
-              break;
-            default:
-              throw new Error(`unhandled search effect: ${JSON.stringify(effect)}`);
-          }
+            }
+            inputRef.current?.focus();
+            break;
+          case "close":
+            searchingRef.current = false;
+            onSearchingChange?.(false);
+            setSearchingState(false);
+            focusSelectedRow();
+            break;
+          case "select":
+            onSelect(effect.id, null);
+            break;
+          default:
+            throw new Error(`unhandled search effect: ${JSON.stringify(effect)}`);
         }
-        return next;
-      });
+      }
     },
-    [onSelect, focusSelectedRow],
+    [onSelect, focusSelectedRow, onSearchingChange],
   );
 
   /**
