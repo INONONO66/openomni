@@ -44,10 +44,12 @@ function createWindow(): void {
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light,
     // Custom chrome: the native title bar is hidden and the traffic lights sit
-    // in the 40px tab strip (`--shell-top`), which drags the window via
-    // `-webkit-app-region` (see `drag-region` / `no-drag` in @openomni/ui).
+    // in the 42px tab strip (`--shell-top` / `--spacing-shell-strip` in
+    // @openomni/ui), which drags the window via `-webkit-app-region` (see
+    // `drag-region` / `no-drag`). `y: 15` centres the 12px lights in 42;
+    // `x: 17` + the 52px cluster + 12 = the strip's 81px traffic safe zone.
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 12 },
+    trafficLightPosition: { x: 17, y: 15 },
     webPreferences: {
       preload: join(import.meta.dirname, "../preload/index.cjs"),
       contextIsolation: true,
