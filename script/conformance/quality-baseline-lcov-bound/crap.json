@@ -2,36 +2,9 @@
   {
     "gate": "crap",
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 53,
-    "endLine": 144,
+    "line": 45,
+    "endLine": 119,
     "symbol": "FunctionDeclaration:App",
-    "value": 110,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/src/renderer/attention/order.ts",
-    "line": 52,
-    "endLine": 91,
-    "symbol": "FunctionDeclaration:orderByAttention",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/src/renderer/attention/reason.ts",
-    "line": 20,
-    "endLine": 46,
-    "symbol": "FunctionDeclaration:reasonFor",
-    "value": 110,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 63,
-    "endLine": 81,
-    "symbol": "FunctionDeclaration:classify",
     "value": 90,
     "count": 1
   },
@@ -109,24 +82,6 @@
   },
   {
     "gate": "crap",
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 53,
-    "endLine": 67,
-    "symbol": "ArrowFunction:<anonymous@1700>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 14,
-    "endLine": 86,
-    "symbol": "FunctionDeclaration:createMockChatTransport",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
     "path": "apps/desktop/src/renderer/search/keyboard.ts",
     "line": 136,
     "endLine": 150,
@@ -155,126 +110,72 @@
   {
     "gate": "crap",
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 95,
-    "endLine": 106,
-    "symbol": "ArrowFunction:<anonymous@3707>",
+    "line": 89,
+    "endLine": 100,
+    "symbol": "ArrowFunction:<anonymous@3471>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 232,
-    "endLine": 308,
-    "symbol": "FunctionDeclaration:SessionRow",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/src/renderer/shell/use-search.ts",
-    "line": 57,
-    "endLine": 64,
-    "symbol": "ArrowFunction:<anonymous@2065>",
-    "value": 90,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/src/renderer/shell/use-search.ts",
-    "line": 81,
-    "endLine": 102,
-    "symbol": "ArrowFunction:<anonymous@2898>",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 226,
-    "endLine": 291,
-    "symbol": "ArrowFunction:<anonymous@10570>",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 302,
-    "endLine": 320,
-    "symbol": "ArrowFunction:<anonymous@13656>",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 65,
-    "endLine": 75,
-    "symbol": "ArrowFunction:<anonymous@3198>",
+    "line": 144,
+    "endLine": 177,
+    "symbol": "ArrowFunction:<anonymous@5612>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 168,
-    "endLine": 181,
-    "symbol": "ArrowFunction:<anonymous@7904>",
-    "value": 42,
+    "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
+    "line": 191,
+    "endLine": 236,
+    "symbol": "FunctionDeclaration:SessionRow",
+    "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 183,
-    "endLine": 196,
-    "symbol": "ArrowFunction:<anonymous@8538>",
+    "path": "apps/desktop/src/renderer/shell/use-search.ts",
+    "line": 55,
+    "endLine": 58,
+    "symbol": "ArrowFunction:<anonymous@1959>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/desktop/src/renderer/shell/use-search.ts",
+    "line": 75,
+    "endLine": 96,
+    "symbol": "ArrowFunction:<anonymous@2653>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/desktop/test/entry-wiring.test.ts",
-    "line": 4,
-    "endLine": 128,
-    "symbol": "ArrowFunction:<anonymous@233>",
+    "line": 7,
+    "endLine": 132,
+    "symbol": "ArrowFunction:<anonymous@350>",
     "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 182,
-    "endLine": 212,
-    "symbol": "ArrowFunction:<anonymous@5957>",
+    "line": 183,
+    "endLine": 213,
+    "symbol": "ArrowFunction:<anonymous@5984>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 131,
-    "endLine": 142,
+    "line": 132,
+    "endLine": 143,
     "symbol": "MethodDeclaration:addEventListener",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 16,
-    "endLine": 47,
-    "symbol": "ArrowFunction:<anonymous@680>",
-    "value": 56,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 91,
-    "endLine": 113,
-    "symbol": "ArrowFunction:<anonymous@3193>",
     "value": 30,
     "count": 1
   },
@@ -290,27 +191,18 @@
   {
     "gate": "crap",
     "path": "apps/desktop/test/search-filter.test.ts",
-    "line": 47,
-    "endLine": 54,
-    "symbol": "ArrowFunction:<anonymous@1320>",
-    "value": 90,
+    "line": 86,
+    "endLine": 101,
+    "symbol": "ArrowFunction:<anonymous@3513>",
+    "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/desktop/test/search-filter.test.ts",
-    "line": 183,
-    "endLine": 218,
-    "symbol": "ArrowFunction:<anonymous@6870>",
-    "value": 56,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/search-filter.test.ts",
-    "line": 261,
-    "endLine": 268,
-    "symbol": "ArrowFunction:<anonymous@9778>",
+    "line": 119,
+    "endLine": 125,
+    "symbol": "ArrowFunction:<anonymous@4977>",
     "value": 30,
     "count": 1
   },
@@ -326,36 +218,18 @@
   {
     "gate": "crap",
     "path": "apps/desktop/test/search-tree.test.tsx",
-    "line": 170,
-    "endLine": 179,
-    "symbol": "ArrowFunction:<anonymous@6953>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/search-tree.test.tsx",
-    "line": 189,
-    "endLine": 213,
-    "symbol": "ArrowFunction:<anonymous@7901>",
+    "line": 105,
+    "endLine": 121,
+    "symbol": "ArrowFunction:<anonymous@4635>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/desktop/test/selection.test.tsx",
-    "line": 67,
-    "endLine": 73,
-    "symbol": "ArrowFunction:<anonymous@2020>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/desktop/test/selection.test.tsx",
-    "line": 120,
-    "endLine": 128,
-    "symbol": "ArrowFunction:<anonymous@4065>",
+    "line": 22,
+    "endLine": 38,
+    "symbol": "ArrowFunction:<anonymous@941>",
     "value": 30,
     "count": 1
   },
@@ -523,6 +397,60 @@
   },
   {
     "gate": "crap",
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 126,
+    "endLine": 151,
+    "symbol": "FunctionDeclaration:killCommandGroup",
+    "value": 34.31497496586255,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 164,
+    "endLine": 176,
+    "symbol": "FunctionDeclaration:observe",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 75,
+    "endLine": 90,
+    "symbol": "MethodDeclaration:exit",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 60,
+    "endLine": 84,
+    "symbol": "FunctionDeclaration:deliver",
+    "value": 161.25770097670923,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 103,
+    "endLine": 156,
+    "symbol": "FunctionDeclaration:start",
+    "value": 306,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 158,
+    "endLine": 178,
+    "symbol": "FunctionDeclaration:tick",
+    "value": 155.36917009602195,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "apps/openomni/src/composition/codemode.ts",
     "line": 13,
     "endLine": 36,
@@ -542,27 +470,27 @@
   {
     "gate": "crap",
     "path": "apps/openomni/src/composition/message-session.ts",
-    "line": 90,
-    "endLine": 215,
-    "symbol": "ArrowFunction:<anonymous@2826>",
+    "line": 76,
+    "endLine": 201,
+    "symbol": "ArrowFunction:<anonymous@2290>",
     "value": 756,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/composition/message-session.ts",
-    "line": 95,
-    "endLine": 111,
-    "symbol": "ArrowFunction:<anonymous@3103>",
+    "line": 81,
+    "endLine": 97,
+    "symbol": "ArrowFunction:<anonymous@2567>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/composition/message-session.ts",
-    "line": 143,
-    "endLine": 164,
-    "symbol": "ArrowFunction:<anonymous@5028>",
+    "line": 129,
+    "endLine": 150,
+    "symbol": "ArrowFunction:<anonymous@4492>",
     "value": 272,
     "count": 1
   },
@@ -570,18 +498,36 @@
     "gate": "crap",
     "path": "apps/openomni/src/composition/message-session.ts",
     "line": 8,
-    "endLine": 36,
+    "endLine": 22,
     "symbol": "FunctionDeclaration:commitMessageInbox",
-    "value": 28.670553935860063,
+    "value": 39.826171875,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 22,
+    "endLine": 37,
+    "symbol": "ArrowFunction:<anonymous@833>",
+    "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 24,
-    "endLine": 47,
-    "symbol": "ArrowFunction:<anonymous@976>",
-    "value": 30,
+    "line": 69,
+    "endLine": 96,
+    "symbol": "ArrowFunction:<anonymous@2506>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 34,
+    "endLine": 58,
+    "symbol": "FunctionDeclaration:receive",
+    "value": 56.08414725770097,
     "count": 1
   },
   {
@@ -596,10 +542,10 @@
   {
     "gate": "crap",
     "path": "apps/openomni/src/composition/terminal-message.ts",
-    "line": 52,
-    "endLine": 93,
-    "symbol": "ArrowFunction:<anonymous@1949>",
-    "value": 156,
+    "line": 19,
+    "endLine": 26,
+    "symbol": "ArrowFunction:<anonymous@818>",
+    "value": 90,
     "count": 1
   },
   {
@@ -668,28 +614,28 @@
   {
     "gate": "crap",
     "path": "apps/openomni/src/index.ts",
-    "line": 101,
-    "endLine": 118,
-    "symbol": "ArrowFunction:<anonymous@3613>",
+    "line": 102,
+    "endLine": 119,
+    "symbol": "ArrowFunction:<anonymous@3740>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/index.ts",
-    "line": 121,
-    "endLine": 425,
-    "symbol": "FunctionDeclaration:startOpenOmni",
-    "value": 522.063915282203,
+    "line": 125,
+    "endLine": 136,
+    "symbol": "ArrowFunction:<anonymous@4680>",
+    "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/index.ts",
-    "line": 152,
-    "endLine": 163,
-    "symbol": "MethodDeclaration:authorizeApproval",
-    "value": 30,
+    "line": 122,
+    "endLine": 451,
+    "symbol": "FunctionDeclaration:startOpenOmni",
+    "value": 526.4077742189875,
     "count": 1
   },
   {
@@ -758,37 +704,19 @@
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 304,
-    "endLine": 314,
-    "symbol": "ArrowFunction:<anonymous@10854>",
-    "value": 56,
+    "line": 66,
+    "endLine": 93,
+    "symbol": "ArrowFunction:<anonymous@2732>",
+    "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 165,
-    "endLine": 182,
-    "symbol": "ArrowFunction:<anonymous@5774>",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 186,
-    "endLine": 212,
-    "symbol": "ArrowFunction:<anonymous@6513>",
-    "value": 72,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 65,
-    "endLine": 91,
-    "symbol": "FunctionDeclaration:subjectOf",
-    "value": 56,
+    "line": 33,
+    "endLine": 52,
+    "symbol": "FunctionDeclaration:authorityDomainRevisions",
+    "value": 90,
     "count": 1
   },
   {
@@ -803,10 +731,37 @@
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 34,
-    "endLine": 58,
+    "line": 35,
+    "endLine": 60,
     "symbol": "FunctionDeclaration:createTools",
-    "value": 37.85714285714286,
+    "value": 32.08800000000001,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/tools/core/request-domain-revisions.ts",
+    "line": 5,
+    "endLine": 27,
+    "symbol": "FunctionDeclaration:operationDomainRevisions",
+    "value": 110,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/tools/core/request-domain-revisions.ts",
+    "line": 29,
+    "endLine": 42,
+    "symbol": "FunctionDeclaration:personDomainRevisions",
+    "value": 110,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/tools/core/request-domain-revisions.ts",
+    "line": 45,
+    "endLine": 55,
+    "symbol": "FunctionDeclaration:requestDomainRevisions",
+    "value": 30.1171875,
     "count": 1
   },
   {
@@ -892,54 +847,81 @@
   },
   {
     "gate": "crap",
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 323,
-    "endLine": 360,
-    "symbol": "ArrowFunction:<anonymous@11182>",
-    "value": 156,
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 31,
+    "endLine": 50,
+    "symbol": "ArrowFunction:<anonymous@852>",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 68,
+    "endLine": 119,
+    "symbol": "MethodDeclaration:execute",
+    "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 392,
-    "endLine": 409,
-    "symbol": "ArrowFunction:<anonymous@13981>",
+    "line": 283,
+    "endLine": 300,
+    "symbol": "ArrowFunction:<anonymous@10515>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 570,
-    "endLine": 595,
-    "symbol": "ArrowFunction:<anonymous@20154>",
+    "line": 453,
+    "endLine": 481,
+    "symbol": "ArrowFunction:<anonymous@16520>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 596,
-    "endLine": 611,
-    "symbol": "ArrowFunction:<anonymous@21237>",
-    "value": 72,
+    "line": 482,
+    "endLine": 495,
+    "symbol": "ArrowFunction:<anonymous@17724>",
+    "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 243,
-    "endLine": 282,
-    "symbol": "ArrowFunction:<anonymous@8398>",
-    "value": 110,
+    "line": 497,
+    "endLine": 509,
+    "symbol": "ArrowFunction:<anonymous@18430>",
+    "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 151,
-    "endLine": 163,
+    "line": 144,
+    "endLine": 173,
+    "symbol": "ArrowFunction:<anonymous@5237>",
+    "value": 156,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 214,
+    "endLine": 251,
+    "symbol": "ArrowFunction:<anonymous@7716>",
+    "value": 156,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 117,
+    "endLine": 129,
     "symbol": "FunctionDeclaration:approvalRequirement",
     "value": 26.83333333333334,
     "count": 1
@@ -947,19 +929,28 @@
   {
     "gate": "crap",
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 210,
-    "endLine": 232,
-    "symbol": "FunctionDeclaration:consumeApproval",
-    "value": 33.729166666666664,
+    "line": 191,
+    "endLine": 211,
+    "symbol": "FunctionDeclaration:sealCredential",
+    "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 300,
-    "endLine": 320,
-    "symbol": "FunctionDeclaration:sealCredential",
-    "value": 56,
+    "path": "apps/openomni/test/alarm-message-deadline.test.ts",
+    "line": 9,
+    "endLine": 120,
+    "symbol": "ArrowFunction:<anonymous@440>",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 45,
+    "endLine": 64,
+    "symbol": "ArrowFunction:<anonymous@2013>",
+    "value": 30,
     "count": 1
   },
   {
@@ -967,7 +958,7 @@
     "path": "apps/openomni/test/boot-wiring.test.ts",
     "line": 404,
     "endLine": 434,
-    "symbol": "ArrowFunction:<anonymous@15576>",
+    "symbol": "ArrowFunction:<anonymous@15620>",
     "value": 56,
     "count": 1
   },
@@ -1012,7 +1003,7 @@
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
     "line": 256,
     "endLine": 271,
-    "symbol": "ArrowFunction:<anonymous@9448>",
+    "symbol": "ArrowFunction:<anonymous@9456>",
     "value": 30,
     "count": 1
   },
@@ -1054,10 +1045,28 @@
   },
   {
     "gate": "crap",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 1,
+    "endLine": 76,
+    "symbol": "module:<module>",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "apps/openomni/test/gateway-contracts.test.ts",
     "line": 134,
     "endLine": 159,
     "symbol": "ArrowFunction:<anonymous@5240>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 63,
+    "endLine": 70,
+    "symbol": "ArrowFunction:<anonymous@2191>",
     "value": 30,
     "count": 1
   },
@@ -1099,6 +1108,33 @@
   },
   {
     "gate": "crap",
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 49,
+    "endLine": 55,
+    "symbol": "MethodDeclaration:answer",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 83,
+    "endLine": 108,
+    "symbol": "ArrowFunction:<anonymous@3089>",
+    "value": 272,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 153,
+    "endLine": 168,
+    "symbol": "ArrowFunction:<anonymous@5381>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "apps/openomni/test/helpers/resident-suite.ts",
     "line": 43,
     "endLine": 69,
@@ -1126,47 +1162,83 @@
   },
   {
     "gate": "crap",
+    "path": "apps/openomni/test/message-alarm-boot.test.ts",
+    "line": 11,
+    "endLine": 125,
+    "symbol": "ArrowFunction:<anonymous@594>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 45,
-    "endLine": 96,
-    "symbol": "ArrowFunction:<anonymous@1233>",
+    "line": 39,
+    "endLine": 94,
+    "symbol": "ArrowFunction:<anonymous@1211>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 104,
-    "endLine": 110,
-    "symbol": "ArrowFunction:<anonymous@3412>",
+    "line": 98,
+    "endLine": 166,
+    "symbol": "ArrowFunction:<anonymous@3249>",
+    "value": 110,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
+    "line": 174,
+    "endLine": 184,
+    "symbol": "ArrowFunction:<anonymous@6041>",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
+    "line": 258,
+    "endLine": 315,
+    "symbol": "ArrowFunction:<anonymous@9246>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 182,
-    "endLine": 239,
-    "symbol": "ArrowFunction:<anonymous@6321>",
-    "value": 56,
+    "line": 1,
+    "endLine": 317,
+    "symbol": "module:<module>",
+    "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/message-mutation-killers.test.ts",
-    "line": 233,
-    "endLine": 288,
-    "symbol": "ArrowFunction:<anonymous@7793>",
-    "value": 56,
+    "line": 167,
+    "endLine": 222,
+    "symbol": "ArrowFunction:<anonymous@5744>",
+    "value": 90,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/message-mutation-killers.test.ts",
+    "line": 242,
+    "endLine": 329,
+    "symbol": "ArrowFunction:<anonymous@8236>",
+    "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/message-terminal-boundaries.test.ts",
     "line": 37,
-    "endLine": 153,
-    "symbol": "ArrowFunction:<anonymous@1523>",
-    "value": 90,
+    "endLine": 150,
+    "symbol": "ArrowFunction:<anonymous@1535>",
+    "value": 132,
     "count": 1
   },
   {
@@ -1174,8 +1246,62 @@
     "path": "apps/openomni/test/message-terminal-boundaries.test.ts",
     "line": 67,
     "endLine": 93,
-    "symbol": "ArrowFunction:<anonymous@2697>",
+    "symbol": "ArrowFunction:<anonymous@2709>",
     "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 70,
+    "endLine": 74,
+    "symbol": "ArrowFunction:<anonymous@2776>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 11,
+    "endLine": 96,
+    "symbol": "ArrowFunction:<anonymous@510>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 14,
+    "endLine": 51,
+    "symbol": "ArrowFunction:<anonymous@550>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 19,
+    "endLine": 146,
+    "symbol": "ArrowFunction:<anonymous@864>",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 22,
+    "endLine": 126,
+    "symbol": "ArrowFunction:<anonymous@821>",
+    "value": 306,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/monitor-tool-boundaries.test.ts",
+    "line": 38,
+    "endLine": 101,
+    "symbol": "ArrowFunction:<anonymous@1487>",
+    "value": 56,
     "count": 1
   },
   {
@@ -1190,19 +1316,10 @@
   {
     "gate": "crap",
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 101,
-    "endLine": 181,
-    "symbol": "ArrowFunction:<anonymous@3580>",
+    "line": 105,
+    "endLine": 193,
+    "symbol": "ArrowFunction:<anonymous@3764>",
     "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 149,
-    "endLine": 181,
-    "symbol": "ArrowFunction:<anonymous@4881>",
-    "value": 30,
     "count": 1
   },
   {
@@ -1221,6 +1338,60 @@
     "endLine": 116,
     "symbol": "ArrowFunction:<anonymous@3461>",
     "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 43,
+    "endLine": 67,
+    "symbol": "ArrowFunction:<anonymous@1811>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 19,
+    "endLine": 26,
+    "symbol": "ArrowFunction:<anonymous@849>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 276,
+    "endLine": 316,
+    "symbol": "ArrowFunction:<anonymous@10542>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 151,
+    "endLine": 274,
+    "symbol": "ArrowFunction:<anonymous@5022>",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 65,
+    "endLine": 78,
+    "symbol": "FunctionDeclaration:receive",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 99,
+    "endLine": 115,
+    "symbol": "MethodDeclaration:close",
+    "value": 30,
     "count": 1
   },
   {
@@ -1262,10 +1433,19 @@
   {
     "gate": "crap",
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 55,
-    "endLine": 123,
-    "symbol": "ArrowFunction:<anonymous@2002>",
-    "value": 56,
+    "line": 56,
+    "endLine": 173,
+    "symbol": "ArrowFunction:<anonymous@2088>",
+    "value": 110,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 69,
+    "endLine": 94,
+    "symbol": "ArrowFunction:<anonymous@2552>",
+    "value": 210,
     "count": 1
   },
   {
@@ -1316,54 +1496,54 @@
   {
     "gate": "crap",
     "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 349,
-    "endLine": 437,
-    "symbol": "ArrowFunction:<anonymous@11014>",
+    "line": 350,
+    "endLine": 438,
+    "symbol": "ArrowFunction:<anonymous@11083>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 576,
-    "endLine": 759,
-    "symbol": "ArrowFunction:<anonymous@19497>",
+    "line": 577,
+    "endLine": 760,
+    "symbol": "ArrowFunction:<anonymous@19566>",
     "value": 182,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 599,
-    "endLine": 629,
-    "symbol": "ArrowFunction:<anonymous@20564>",
+    "line": 600,
+    "endLine": 630,
+    "symbol": "ArrowFunction:<anonymous@20633>",
     "value": 156,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 764,
-    "endLine": 918,
-    "symbol": "ArrowFunction:<anonymous@27471>",
+    "line": 765,
+    "endLine": 919,
+    "symbol": "ArrowFunction:<anonymous@27540>",
     "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 922,
-    "endLine": 966,
-    "symbol": "ArrowFunction:<anonymous@34436>",
+    "line": 923,
+    "endLine": 967,
+    "symbol": "ArrowFunction:<anonymous@34505>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 262,
-    "endLine": 271,
-    "symbol": "ArrowFunction:<anonymous@7936>",
+    "line": 263,
+    "endLine": 272,
+    "symbol": "ArrowFunction:<anonymous@8005>",
     "value": 30,
     "count": 1
   },
@@ -1371,7 +1551,7 @@
     "gate": "crap",
     "path": "apps/openomni/test/session-wave-e2e.test.ts",
     "line": 1,
-    "endLine": 1086,
+    "endLine": 1095,
     "symbol": "module:<module>",
     "value": 42,
     "count": 1
@@ -1784,35 +1964,44 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 114,
-    "endLine": 138,
-    "symbol": "ArrowFunction:<anonymous@4101>",
-    "value": 30,
+    "line": 38,
+    "endLine": 56,
+    "symbol": "ArrowFunction:<anonymous@1297>",
+    "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 81,
-    "endLine": 156,
+    "line": 62,
+    "endLine": 70,
+    "symbol": "ArrowFunction:<anonymous@2382>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/executor-approval.ts",
+    "line": 99,
+    "endLine": 183,
     "symbol": "FunctionDeclaration:awaitApproval",
-    "value": 36.8655,
+    "value": 182,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 35,
-    "endLine": 78,
+    "line": 60,
+    "endLine": 97,
     "symbol": "MethodDeclaration:answer",
-    "value": 132,
+    "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/executor-attempts.ts",
     "line": 21,
-    "endLine": 107,
+    "endLine": 108,
     "symbol": "FunctionExpression:runAttempts",
     "value": 1190,
     "count": 1
@@ -1820,8 +2009,8 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/executor-record.ts",
-    "line": 36,
-    "endLine": 54,
+    "line": 37,
+    "endLine": 55,
     "symbol": "FunctionDeclaration:appendFailure",
     "value": 30,
     "count": 1
@@ -1829,8 +2018,8 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/executor-record.ts",
-    "line": 67,
-    "endLine": 89,
+    "line": 68,
+    "endLine": 90,
     "symbol": "FunctionDeclaration:publishToolTerminal",
     "value": 42,
     "count": 1
@@ -1847,26 +2036,35 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/executor.ts",
-    "line": 297,
-    "endLine": 317,
-    "symbol": "ArrowFunction:<anonymous@10785>",
+    "line": 381,
+    "endLine": 402,
+    "symbol": "ArrowFunction:<anonymous@14616>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/executor.ts",
-    "line": 176,
-    "endLine": 199,
-    "symbol": "ArrowFunction:<anonymous@6038>",
-    "value": 72,
+    "line": 204,
+    "endLine": 242,
+    "symbol": "ArrowFunction:<anonymous@7274>",
+    "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/executor.ts",
-    "line": 367,
-    "endLine": 384,
+    "line": 153,
+    "endLine": 176,
+    "symbol": "FunctionDeclaration:admitStage",
+    "value": 72.97376093294463,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/executor.ts",
+    "line": 464,
+    "endLine": 481,
     "symbol": "FunctionDeclaration:applyPostPolicy",
     "value": 41.41426611796982,
     "count": 1
@@ -1874,17 +2072,35 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/executor.ts",
-    "line": 144,
-    "endLine": 277,
+    "line": 178,
+    "endLine": 300,
     "symbol": "FunctionDeclaration:executeBatch",
-    "value": 476.55137499999995,
+    "value": 41.41426611796982,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/executor.ts",
-    "line": 417,
-    "endLine": 432,
+    "line": 302,
+    "endLine": 361,
+    "symbol": "FunctionDeclaration:finishStage",
+    "value": 336.72909432870375,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/executor.ts",
+    "line": 405,
+    "endLine": 415,
+    "symbol": "FunctionDeclaration:originalRequest",
+    "value": 82.9,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/executor.ts",
+    "line": 514,
+    "endLine": 529,
     "symbol": "FunctionDeclaration:resultFromEvaluation",
     "value": 26.83333333333334,
     "count": 1
@@ -1892,8 +2108,8 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/executor.ts",
-    "line": 106,
-    "endLine": 119,
+    "line": 107,
+    "endLine": 120,
     "symbol": "FunctionDeclaration:run",
     "value": 31.28395061728395,
     "count": 1
@@ -1901,10 +2117,19 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/executor.ts",
-    "line": 121,
-    "endLine": 142,
+    "line": 122,
+    "endLine": 143,
     "symbol": "FunctionDeclaration:runBatch",
     "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/executor.ts",
+    "line": 248,
+    "endLine": 291,
+    "symbol": "MethodDeclaration:run",
+    "value": 272,
     "count": 1
   },
   {
@@ -1946,8 +2171,17 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-admission.ts",
-    "line": 135,
-    "endLine": 178,
+    "line": 421,
+    "endLine": 477,
+    "symbol": "FunctionDeclaration:commitSessionRequest",
+    "value": 72.97376093294463,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-admission.ts",
+    "line": 137,
+    "endLine": 180,
     "symbol": "FunctionDeclaration:evaluatePromptPolicies",
     "value": 34.31497496586255,
     "count": 1
@@ -1955,8 +2189,8 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-admission.ts",
-    "line": 59,
-    "endLine": 133,
+    "line": 61,
+    "endLine": 135,
     "symbol": "FunctionDeclaration:startTurn",
     "value": 47.56144896611289,
     "count": 1
@@ -1964,19 +2198,28 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-admission.ts",
-    "line": 221,
-    "endLine": 245,
+    "line": 264,
+    "endLine": 288,
     "symbol": "MethodDeclaration:commit",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
+    "path": "packages/agent/src/session-admission.ts",
+    "line": 224,
+    "endLine": 238,
+    "symbol": "MethodDeclaration:validateRequest",
+    "value": 90,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 20,
-    "endLine": 78,
-    "symbol": "ArrowFunction:<anonymous@899>",
-    "value": 342,
+    "line": 21,
+    "endLine": 87,
+    "symbol": "ArrowFunction:<anonymous@951>",
+    "value": 380,
     "count": 1
   },
   {
@@ -1991,8 +2234,8 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-controller.ts",
-    "line": 21,
-    "endLine": 309,
+    "line": 23,
+    "endLine": 355,
     "symbol": "FunctionDeclaration:createController",
     "value": 30,
     "count": 1
@@ -2000,17 +2243,17 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-controller.ts",
-    "line": 258,
-    "endLine": 288,
+    "line": 292,
+    "endLine": 334,
     "symbol": "FunctionDeclaration:driveAvailable",
-    "value": 90,
+    "value": 110,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/session-controller.ts",
-    "line": 205,
-    "endLine": 243,
+    "line": 239,
+    "endLine": 277,
     "symbol": "FunctionDeclaration:enqueue",
     "value": 73.85313411078718,
     "count": 1
@@ -2018,17 +2261,26 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-controller.ts",
-    "line": 164,
-    "endLine": 202,
+    "line": 198,
+    "endLine": 236,
     "symbol": "MethodDeclaration:close",
     "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
+    "path": "packages/agent/src/session-controller.ts",
+    "line": 139,
+    "endLine": 168,
+    "symbol": "MethodDeclaration:transition",
+    "value": 156,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "packages/agent/src/session-handle.ts",
-    "line": 166,
-    "endLine": 189,
+    "line": 172,
+    "endLine": 195,
     "symbol": "FunctionDeclaration:assertDeclaration",
     "value": 132,
     "count": 1
@@ -2036,8 +2288,8 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-handle.ts",
-    "line": 95,
-    "endLine": 124,
+    "line": 96,
+    "endLine": 125,
     "symbol": "MethodDeclaration:declare",
     "value": 195.1475947521866,
     "count": 1
@@ -2045,10 +2297,10 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-handle.ts",
-    "line": 126,
-    "endLine": 136,
+    "line": 127,
+    "endLine": 142,
     "symbol": "MethodDeclaration:sweep",
-    "value": 32.244,
+    "value": 36.685480200273105,
     "count": 1
   },
   {
@@ -2071,11 +2323,29 @@
   },
   {
     "gate": "crap",
+    "path": "packages/agent/src/session-outbound.ts",
+    "line": 50,
+    "endLine": 89,
+    "symbol": "FunctionDeclaration:acknowledge",
+    "value": 90,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-outbound.ts",
+    "line": 92,
+    "endLine": 143,
+    "symbol": "FunctionDeclaration:dispatchSessionOutbound",
+    "value": 132,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "packages/agent/src/session-parent-reply.ts",
-    "line": 6,
-    "endLine": 37,
+    "line": 12,
+    "endLine": 33,
     "symbol": "FunctionDeclaration:parentReply",
-    "value": 56,
+    "value": 48.30320699708456,
     "count": 1
   },
   {
@@ -2116,6 +2386,132 @@
   },
   {
     "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 342,
+    "endLine": 364,
+    "symbol": "FunctionDeclaration:answerBindingMatches",
+    "value": 182,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 287,
+    "endLine": 333,
+    "symbol": "FunctionDeclaration:answerRequest",
+    "value": 103.10002465685874,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 374,
+    "endLine": 394,
+    "symbol": "FunctionDeclaration:closeRequest",
+    "value": 35.35648148148149,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 52,
+    "endLine": 86,
+    "symbol": "FunctionDeclaration:decideRequestTransition",
+    "value": 136.39261418853255,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 204,
+    "endLine": 240,
+    "symbol": "FunctionDeclaration:openRequest",
+    "value": 240,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 242,
+    "endLine": 258,
+    "symbol": "FunctionDeclaration:originalInvocationMatches",
+    "value": 132,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 88,
+    "endLine": 97,
+    "symbol": "FunctionDeclaration:ownsRequestRevision",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 170,
+    "endLine": 202,
+    "symbol": "FunctionDeclaration:receivingIntake",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 118,
+    "endLine": 168,
+    "symbol": "FunctionDeclaration:recordRequest",
+    "value": 37.85714285714286,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-request.ts",
+    "line": 99,
+    "endLine": 116,
+    "symbol": "FunctionDeclaration:repeatedInput",
+    "value": 41.41426611796982,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-requests.ts",
+    "line": 36,
+    "endLine": 56,
+    "symbol": "FunctionDeclaration:requestGeneration",
+    "value": 48.30320699708456,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-requests.ts",
+    "line": 109,
+    "endLine": 124,
+    "symbol": "FunctionDeclaration:timeout",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-requests.ts",
+    "line": 181,
+    "endLine": 196,
+    "symbol": "MethodDeclaration:answer",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/session-requests.ts",
+    "line": 128,
+    "endLine": 180,
+    "symbol": "MethodDeclaration:open",
+    "value": 110,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "packages/agent/src/session-stop-evidence.ts",
     "line": 42,
     "endLine": 63,
@@ -2144,26 +2540,26 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-turn.ts",
-    "line": 296,
-    "endLine": 311,
-    "symbol": "ArrowFunction:<anonymous@11299>",
+    "line": 297,
+    "endLine": 312,
+    "symbol": "ArrowFunction:<anonymous@11366>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/session-turn.ts",
-    "line": 172,
-    "endLine": 227,
-    "symbol": "ArrowFunction:<anonymous@5864>",
+    "line": 173,
+    "endLine": 228,
+    "symbol": "ArrowFunction:<anonymous@5931>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/session-turn.ts",
-    "line": 67,
-    "endLine": 314,
+    "line": 68,
+    "endLine": 315,
     "symbol": "FunctionDeclaration:runTurn",
     "value": 297.8833819241982,
     "count": 1
@@ -2171,10 +2567,10 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/session-turn.ts",
-    "line": 374,
-    "endLine": 433,
+    "line": 375,
+    "endLine": 432,
     "symbol": "FunctionDeclaration:seal",
-    "value": 154.39189386207903,
+    "value": 95.33333333333336,
     "count": 1
   },
   {
@@ -2189,26 +2585,44 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 189,
-    "endLine": 237,
-    "symbol": "ArrowFunction:<anonymous@6269>",
-    "value": 132,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 273,
-    "endLine": 294,
-    "symbol": "ArrowFunction:<anonymous@9550>",
+    "line": 322,
+    "endLine": 343,
+    "symbol": "ArrowFunction:<anonymous@11476>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 348,
-    "endLine": 398,
+    "line": 357,
+    "endLine": 366,
+    "symbol": "ArrowFunction:<anonymous@13018>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 439,
+    "endLine": 445,
+    "symbol": "ArrowFunction:<anonymous@16050>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 230,
+    "endLine": 278,
+    "symbol": "ArrowFunction:<anonymous@7741>",
+    "value": 132,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 474,
+    "endLine": 536,
     "symbol": "FunctionDeclaration:createTurnDispatcher",
     "value": 156,
     "count": 1
@@ -2216,19 +2630,55 @@
   {
     "gate": "crap",
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 139,
-    "endLine": 259,
-    "symbol": "FunctionDeclaration:prepare",
-    "value": 156,
+    "line": 302,
+    "endLine": 316,
+    "symbol": "FunctionDeclaration:dispatch",
+    "value": 60.034370370370375,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 439,
-    "endLine": 453,
+    "line": 148,
+    "endLine": 300,
+    "symbol": "FunctionDeclaration:prepare",
+    "value": 462,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 421,
+    "endLine": 457,
+    "symbol": "FunctionDeclaration:recoverableWaves",
+    "value": 226.9375,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 577,
+    "endLine": 591,
     "symbol": "FunctionDeclaration:truncate",
     "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 525,
+    "endLine": 533,
+    "symbol": "MethodDeclaration:recover",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/src/tool-dispatcher.ts",
+    "line": 353,
+    "endLine": 384,
+    "symbol": "MethodDeclaration:recover",
+    "value": 56,
     "count": 1
   },
   {
@@ -2342,28 +2792,37 @@
   {
     "gate": "crap",
     "path": "packages/agent/test/core/execution/llm-attempts.test.ts",
-    "line": 52,
-    "endLine": 57,
-    "symbol": "ArrowFunction:<anonymous@1466>",
+    "line": 55,
+    "endLine": 60,
+    "symbol": "ArrowFunction:<anonymous@1626>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/test/core/execution/llm-attempts.test.ts",
-    "line": 88,
-    "endLine": 93,
-    "symbol": "ArrowFunction:<anonymous@2763>",
+    "line": 91,
+    "endLine": 96,
+    "symbol": "ArrowFunction:<anonymous@2923>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/test/core/execution/llm-attempts.test.ts",
-    "line": 99,
-    "endLine": 104,
-    "symbol": "ArrowFunction:<anonymous@3136>",
+    "line": 102,
+    "endLine": 107,
+    "symbol": "ArrowFunction:<anonymous@3296>",
     "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/core/execution/llm-attempts.test.ts",
+    "line": 236,
+    "endLine": 293,
+    "symbol": "ArrowFunction:<anonymous@7707>",
+    "value": 72,
     "count": 1
   },
   {
@@ -2495,18 +2954,27 @@
   {
     "gate": "crap",
     "path": "packages/agent/test/executor-approval.test.ts",
-    "line": 102,
-    "endLine": 163,
-    "symbol": "ArrowFunction:<anonymous@2957>",
-    "value": 72,
+    "line": 89,
+    "endLine": 125,
+    "symbol": "ArrowFunction:<anonymous@2703>",
+    "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/agent/test/executor-approval.test.ts",
-    "line": 91,
-    "endLine": 99,
-    "symbol": "FunctionDeclaration:approvalOp",
+    "line": 231,
+    "endLine": 238,
+    "symbol": "FunctionDeclaration:expireApproval",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/executor-approval.test.ts",
+    "line": 30,
+    "endLine": 87,
+    "symbol": "FunctionDeclaration:fixture",
     "value": 30,
     "count": 1
   },
@@ -2526,6 +2994,15 @@
     "endLine": 54,
     "symbol": "FunctionDeclaration:providerFailure",
     "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/helpers/request-ledger.ts",
+    "line": 7,
+    "endLine": 129,
+    "symbol": "FunctionDeclaration:requestLedger",
+    "value": 56,
     "count": 1
   },
   {
@@ -2607,6 +3084,60 @@
     "endLine": 140,
     "symbol": "ArrowFunction:<anonymous@454>",
     "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/session-outbound.test.ts",
+    "line": 76,
+    "endLine": 176,
+    "symbol": "ArrowFunction:<anonymous@2607>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/session-request-controller.test.ts",
+    "line": 132,
+    "endLine": 142,
+    "symbol": "ArrowFunction:<anonymous@4810>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 64,
+    "endLine": 67,
+    "symbol": "ArrowFunction:<anonymous@2186>",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 104,
+    "endLine": 154,
+    "symbol": "ArrowFunction:<anonymous@3474>",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 155,
+    "endLine": 216,
+    "symbol": "ArrowFunction:<anonymous@5450>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/agent/test/session-request-recovery.test.ts",
+    "line": 165,
+    "endLine": 176,
+    "symbol": "MethodDeclaration:commit",
+    "value": 42,
     "count": 1
   },
   {
@@ -2856,7 +3387,7 @@
     "gate": "crap",
     "path": "packages/channels/src/router/external-message.ts",
     "line": 13,
-    "endLine": 111,
+    "endLine": 112,
     "symbol": "FunctionDeclaration:externalMessage",
     "value": 688.4581618655692,
     "count": 1
@@ -2864,17 +3395,26 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/index.ts",
-    "line": 107,
-    "endLine": 230,
-    "symbol": "ArrowFunction:<anonymous@4574>",
-    "value": 1722,
+    "line": 217,
+    "endLine": 289,
+    "symbol": "ArrowFunction:<anonymous@8568>",
+    "value": 110,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/channels/src/router/index.ts",
-    "line": 12,
-    "endLine": 272,
+    "line": 143,
+    "endLine": 161,
+    "symbol": "FunctionDeclaration:admitReplyGrant",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/index.ts",
+    "line": 87,
+    "endLine": 331,
     "symbol": "FunctionDeclaration:createGatewayRouter",
     "value": 56,
     "count": 1
@@ -2882,10 +3422,37 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/index.ts",
-    "line": 39,
-    "endLine": 270,
+    "line": 42,
+    "endLine": 85,
+    "symbol": "FunctionDeclaration:inboxAdmission",
+    "value": 182,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/index.ts",
+    "line": 114,
+    "endLine": 141,
+    "symbol": "FunctionDeclaration:projectMessage",
+    "value": 50.47200000000001,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/index.ts",
+    "line": 20,
+    "endLine": 40,
+    "symbol": "FunctionDeclaration:transformedContent",
+    "value": 109.3774814814815,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/index.ts",
+    "line": 164,
+    "endLine": 329,
     "symbol": "MethodDeclaration:ingest",
-    "value": 756,
+    "value": 462,
     "count": 1
   },
   {
@@ -2927,8 +3494,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/messaging/send.ts",
-    "line": 301,
-    "endLine": 343,
+    "line": 302,
+    "endLine": 344,
     "symbol": "FunctionDeclaration:admitSend",
     "value": 83.25776352237934,
     "count": 1
@@ -2936,8 +3503,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/messaging/send.ts",
-    "line": 260,
-    "endLine": 298,
+    "line": 261,
+    "endLine": 299,
     "symbol": "FunctionDeclaration:authorizeSend",
     "value": 35.269333333333336,
     "count": 1
@@ -2945,17 +3512,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/messaging/send.ts",
-    "line": 401,
-    "endLine": 434,
-    "symbol": "FunctionDeclaration:deliverSend",
-    "value": 48.30320699708456,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/channels/src/router/messaging/send.ts",
-    "line": 198,
-    "endLine": 218,
+    "line": 199,
+    "endLine": 219,
     "symbol": "FunctionDeclaration:existingAdmission",
     "value": 35.6630859375,
     "count": 1
@@ -2963,17 +3521,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/messaging/send.ts",
-    "line": 355,
-    "endLine": 398,
-    "symbol": "FunctionDeclaration:openSendWait",
-    "value": 72,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/channels/src/router/messaging/send.ts",
-    "line": 125,
-    "endLine": 169,
+    "line": 126,
+    "endLine": 170,
     "symbol": "FunctionDeclaration:resolveExistingTarget",
     "value": 47.85161815591288,
     "count": 1
@@ -2989,9 +3538,90 @@
   },
   {
     "gate": "crap",
+    "path": "packages/channels/src/router/request/correlation.ts",
+    "line": 29,
+    "endLine": 38,
+    "symbol": "ArrowFunction:<anonymous@1432>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/correlation.ts",
+    "line": 10,
+    "endLine": 53,
+    "symbol": "FunctionDeclaration:findRequestCandidates",
+    "value": 184.46919609316305,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 82,
+    "endLine": 96,
+    "symbol": "ArrowFunction:<anonymous@3351>",
+    "value": 110,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 69,
+    "endLine": 98,
+    "symbol": "FunctionDeclaration:ingressEvidence",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 37,
+    "endLine": 55,
+    "symbol": "FunctionDeclaration:matchesTarget",
+    "value": 82.9,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 112,
+    "endLine": 128,
+    "symbol": "FunctionDeclaration:targetsOfRequest",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/native.ts",
+    "line": 10,
+    "endLine": 47,
+    "symbol": "FunctionDeclaration:answerNativeRequest",
+    "value": 43.81442524417731,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/native.ts",
+    "line": 49,
+    "endLine": 76,
+    "symbol": "FunctionDeclaration:openNativeRequest",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/src/router/request/owner-answer.ts",
+    "line": 7,
+    "endLine": 78,
+    "symbol": "FunctionDeclaration:answerOwnerRequest",
+    "value": 240,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "packages/channels/src/router/resolve-route.ts",
-    "line": 161,
-    "endLine": 238,
+    "line": 165,
+    "endLine": 242,
     "symbol": "FunctionDeclaration:resolveChannelRoute",
     "value": 156,
     "count": 1
@@ -3000,8 +3630,8 @@
     "gate": "crap",
     "path": "packages/channels/src/router/resolve-route.ts",
     "line": 111,
-    "endLine": 159,
-    "symbol": "FunctionDeclaration:resolveWait",
+    "endLine": 163,
+    "symbol": "FunctionDeclaration:resolveRequest",
     "value": 42,
     "count": 1
   },
@@ -3009,9 +3639,9 @@
     "gate": "crap",
     "path": "packages/channels/src/router/routing-execution.ts",
     "line": 77,
-    "endLine": 120,
-    "symbol": "FunctionDeclaration:executeWaitRoute",
-    "value": 30,
+    "endLine": 126,
+    "symbol": "FunctionDeclaration:executeRequestRoute",
+    "value": 137.42857142857144,
     "count": 1
   },
   {
@@ -3035,8 +3665,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 194,
-    "endLine": 203,
+    "line": 196,
+    "endLine": 205,
     "symbol": "FunctionDeclaration:actorState",
     "value": 26.83333333333334,
     "count": 1
@@ -3044,8 +3674,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 217,
-    "endLine": 241,
+    "line": 219,
+    "endLine": 243,
     "symbol": "FunctionDeclaration:blacklistState",
     "value": 272,
     "count": 1
@@ -3053,8 +3683,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 153,
-    "endLine": 192,
+    "line": 155,
+    "endLine": 194,
     "symbol": "FunctionDeclaration:channelState",
     "value": 72,
     "count": 1
@@ -3062,8 +3692,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 309,
-    "endLine": 330,
+    "line": 318,
+    "endLine": 339,
     "symbol": "FunctionDeclaration:pinReplyGrantEndpoint",
     "value": 72,
     "count": 1
@@ -3071,8 +3701,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 332,
-    "endLine": 395,
+    "line": 341,
+    "endLine": 404,
     "symbol": "FunctionDeclaration:recordRouteDecided",
     "value": 269.91953645105616,
     "count": 1
@@ -3080,19 +3710,10 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 243,
-    "endLine": 300,
+    "line": 245,
+    "endLine": 309,
     "symbol": "FunctionDeclaration:resolveKernelRoute",
-    "value": 110,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/channels/src/router/wait/lifecycle.ts",
-    "line": 78,
-    "endLine": 103,
-    "symbol": "FunctionDeclaration:sweepExpired",
-    "value": 56,
+    "value": 210,
     "count": 1
   },
   {
@@ -3161,17 +3782,17 @@
   {
     "gate": "crap",
     "path": "packages/channels/src/websocket.ts",
-    "line": 152,
-    "endLine": 196,
+    "line": 157,
+    "endLine": 224,
     "symbol": "MethodDeclaration:handleMessage",
-    "value": 42,
+    "value": 240,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/channels/src/websocket.ts",
-    "line": 107,
-    "endLine": 150,
+    "line": 112,
+    "endLine": 155,
     "symbol": "MethodDeclaration:handleUpgrade",
     "value": 106.16977696859357,
     "count": 1
@@ -3242,8 +3863,8 @@
   {
     "gate": "crap",
     "path": "packages/channels/test/discord-gateway.test.ts",
-    "line": 127,
-    "endLine": 141,
+    "line": 128,
+    "endLine": 142,
     "symbol": "MethodDeclaration:message",
     "value": 56,
     "count": 1
@@ -3278,28 +3899,37 @@
   {
     "gate": "crap",
     "path": "packages/channels/test/harness/existing-agent-message-driver.ts",
-    "line": 373,
-    "endLine": 488,
-    "symbol": "FunctionDeclaration:runDuplicateAmbiguousScenario",
-    "value": 114.35200000000002,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/channels/test/harness/existing-agent-message-driver.ts",
-    "line": 524,
-    "endLine": 555,
+    "line": 214,
+    "endLine": 254,
     "symbol": "FunctionDeclaration:runExistingAgentMessageDriver",
-    "value": 90,
+    "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/channels/test/harness/existing-agent-message-driver.ts",
-    "line": 191,
-    "endLine": 356,
-    "symbol": "FunctionDeclaration:runRestartQuorumScenario",
-    "value": 552,
+    "line": 20,
+    "endLine": 212,
+    "symbol": "FunctionDeclaration:scenario",
+    "value": 2224.030091955104,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/helpers/requests.ts",
+    "line": 103,
+    "endLine": 147,
+    "symbol": "FunctionDeclaration:command",
+    "value": 25.01639941690962,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/helpers/requests.ts",
+    "line": 24,
+    "endLine": 72,
+    "symbol": "FunctionDeclaration:originalAction",
+    "value": 30,
     "count": 1
   },
   {
@@ -3313,10 +3943,37 @@
   },
   {
     "gate": "crap",
-    "path": "packages/channels/test/router/kernel-routing-waits.test.ts",
-    "line": 262,
-    "endLine": 311,
-    "symbol": "ArrowFunction:<anonymous@9218>",
+    "path": "packages/channels/test/router/_router-fixture.ts",
+    "line": 141,
+    "endLine": 149,
+    "symbol": "ArrowFunction:<anonymous@4190>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/router/_router-fixture.ts",
+    "line": 200,
+    "endLine": 234,
+    "symbol": "ArrowFunction:<anonymous@6038>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/router/kernel-routing-requests.test.ts",
+    "line": 308,
+    "endLine": 361,
+    "symbol": "ArrowFunction:<anonymous@10876>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/router/kernel-routing-requests.test.ts",
+    "line": 173,
+    "endLine": 211,
+    "symbol": "ArrowFunction:<anonymous@5974>",
     "value": 30,
     "count": 1
   },
@@ -3332,63 +3989,81 @@
   {
     "gate": "crap",
     "path": "packages/channels/test/router/message-ingest.test.ts",
-    "line": 95,
-    "endLine": 127,
-    "symbol": "ArrowFunction:<anonymous@2906>",
+    "line": 98,
+    "endLine": 130,
+    "symbol": "ArrowFunction:<anonymous@3015>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/channels/test/router/messaging/send.test.ts",
-    "line": 649,
-    "endLine": 660,
-    "symbol": "ArrowFunction:<anonymous@23215>",
+    "line": 669,
+    "endLine": 680,
+    "symbol": "ArrowFunction:<anonymous@23888>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/channels/test/router/messaging/send.test.ts",
-    "line": 569,
-    "endLine": 635,
+    "line": 585,
+    "endLine": 655,
     "symbol": "FunctionDeclaration:probe",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "packages/channels/test/router/raw-wait-action.test.ts",
+    "path": "packages/channels/test/router/raw-request-action.test.ts",
     "line": 29,
-    "endLine": 134,
-    "symbol": "ArrowFunction:<anonymous@905>",
+    "endLine": 133,
+    "symbol": "ArrowFunction:<anonymous@928>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/router/request-driver.test.ts",
+    "line": 25,
+    "endLine": 32,
+    "symbol": "ArrowFunction:<anonymous@1009>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/router/request-driver.test.ts",
+    "line": 68,
+    "endLine": 165,
+    "symbol": "ArrowFunction:<anonymous@2652>",
+    "value": 90,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/channels/test/router/request-state.test.ts",
+    "line": 14,
+    "endLine": 30,
+    "symbol": "ArrowFunction:<anonymous@535>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/channels/test/router/routing-resolution.test.ts",
-    "line": 48,
-    "endLine": 57,
-    "symbol": "ArrowFunction:<anonymous@1579>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/channels/test/router/routing-resolution.test.ts",
-    "line": 59,
-    "endLine": 90,
-    "symbol": "ArrowFunction:<anonymous@2014>",
+    "line": 67,
+    "endLine": 98,
+    "symbol": "ArrowFunction:<anonymous@2195>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/channels/test/router/routing-resolution.test.ts",
-    "line": 110,
-    "endLine": 150,
-    "symbol": "ArrowFunction:<anonymous@3651>",
+    "line": 118,
+    "endLine": 158,
+    "symbol": "ArrowFunction:<anonymous@3832>",
     "value": 56,
     "count": 1
   },
@@ -3538,15 +4213,6 @@
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/src/approval/index.ts",
-    "line": 155,
-    "endLine": 202,
-    "symbol": "FunctionDeclaration:decide",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
     "path": "packages/ledger/src/ledger-core/adopt.ts",
     "line": 35,
     "endLine": 70,
@@ -3566,8 +4232,8 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/session/kernel.ts",
-    "line": 431,
-    "endLine": 467,
+    "line": 451,
+    "endLine": 487,
     "symbol": "FunctionDeclaration:foldTurnTails",
     "value": 97.51541053669763,
     "count": 1
@@ -3575,8 +4241,8 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/session/kernel.ts",
-    "line": 343,
-    "endLine": 365,
+    "line": 363,
+    "endLine": 385,
     "symbol": "FunctionDeclaration:getSnapshot",
     "value": 42,
     "count": 1
@@ -3584,10 +4250,28 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/session/kernel.ts",
-    "line": 287,
-    "endLine": 341,
+    "line": 307,
+    "endLine": 361,
     "symbol": "FunctionDeclaration:openTurns",
     "value": 63.6634109691961,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 134,
+    "endLine": 145,
+    "symbol": "FunctionDeclaration:outboundRows",
+    "value": 32.244,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 118,
+    "endLine": 132,
+    "symbol": "FunctionDeclaration:requestRows",
+    "value": 90.06559766763849,
     "count": 1
   },
   {
@@ -3601,10 +4285,19 @@
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/src/storage/commit-coordinator.ts",
-    "line": 103,
-    "endLine": 115,
-    "symbol": "ArrowFunction:<anonymous@4419>",
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 185,
+    "endLine": 211,
+    "symbol": "ArrowFunction:<anonymous@4862>",
+    "value": 90,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 84,
+    "endLine": 124,
+    "symbol": "FunctionDeclaration:validateResolution",
     "value": 42,
     "count": 1
   },
@@ -3620,10 +4313,19 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/migration-runner.ts",
-    "line": 49,
-    "endLine": 84,
+    "line": 86,
+    "endLine": 133,
     "symbol": "FunctionDeclaration:applyMigration",
-    "value": 34.367392631793194,
+    "value": 76.9921875,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 40,
+    "endLine": 60,
+    "symbol": "FunctionDeclaration:migrationStatements",
+    "value": 34.82361516034986,
     "count": 1
   },
   {
@@ -3665,35 +4367,44 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 136,
-    "endLine": 169,
-    "symbol": "ArrowFunction:<anonymous@3197>",
+    "line": 137,
+    "endLine": 170,
+    "symbol": "ArrowFunction:<anonymous@3285>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 183,
-    "endLine": 232,
-    "symbol": "ArrowFunction:<anonymous@5204>",
+    "line": 1044,
+    "endLine": 1057,
+    "symbol": "ArrowFunction:<anonymous@34457>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 184,
+    "endLine": 233,
+    "symbol": "ArrowFunction:<anonymous@5292>",
     "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 332,
-    "endLine": 368,
+    "line": 333,
+    "endLine": 370,
     "symbol": "FunctionDeclaration:appendAction",
-    "value": 44.74247685185185,
+    "value": 36.685480200273105,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 771,
-    "endLine": 796,
+    "line": 841,
+    "endLine": 866,
     "symbol": "FunctionDeclaration:armAlarm",
     "value": 31.28395061728395,
     "count": 1
@@ -3701,8 +4412,8 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 481,
-    "endLine": 491,
+    "line": 549,
+    "endLine": 559,
     "symbol": "FunctionDeclaration:canConsumeInbox",
     "value": 28.670553935860063,
     "count": 1
@@ -3710,53 +4421,80 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 691,
-    "endLine": 708,
-    "symbol": "FunctionDeclaration:claimMessageAnswer",
-    "value": 45.539827036868466,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 538,
+    "line": 606,
     "endLine": 663,
     "symbol": "FunctionDeclaration:commitInbox",
-    "value": 1487.7264616862203,
+    "value": 109.3774814814815,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 377,
-    "endLine": 457,
+    "line": 405,
+    "endLine": 485,
     "symbol": "FunctionDeclaration:commitSession",
-    "value": 426.2613811728395,
+    "value": 431.9425333618423,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 710,
-    "endLine": 769,
-    "symbol": "FunctionDeclaration:fireMessageDeadline",
-    "value": 148.31086005830903,
+    "line": 918,
+    "endLine": 973,
+    "symbol": "FunctionDeclaration:controlAlarm",
+    "value": 87.02546296296295,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 896,
-    "endLine": 930,
+    "line": 975,
+    "endLine": 1036,
+    "symbol": "FunctionDeclaration:fireAlarm",
+    "value": 447.98582175925935,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 372,
+    "endLine": 396,
+    "symbol": "FunctionDeclaration:projectRequestDeadline",
+    "value": 63.263671875,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1117,
+    "endLine": 1153,
     "symbol": "FunctionDeclaration:publishMessageTerminal",
-    "value": 156,
+    "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 459,
-    "endLine": 479,
+    "line": 1155,
+    "endLine": 1177,
+    "symbol": "FunctionDeclaration:requestMessageIdentity",
+    "value": 60.00874635568515,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 487,
+    "endLine": 510,
+    "symbol": "FunctionDeclaration:sessionAuthorityRefusal",
+    "value": 48.30320699708456,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 527,
+    "endLine": 547,
     "symbol": "FunctionDeclaration:validActionBatch",
     "value": 50.875,
     "count": 1
@@ -3764,8 +4502,44 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 248,
-    "endLine": 261,
+    "line": 677,
+    "endLine": 695,
+    "symbol": "FunctionDeclaration:validInboxChild",
+    "value": 54.66666666666668,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 665,
+    "endLine": 675,
+    "symbol": "FunctionDeclaration:validInboxSender",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 512,
+    "endLine": 525,
+    "symbol": "FunctionDeclaration:validSessionInboxOwnership",
+    "value": 61.20000000000001,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 697,
+    "endLine": 712,
+    "symbol": "FunctionDeclaration:withinChildLimits",
+    "value": 44.74247685185185,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 249,
+    "endLine": 262,
     "symbol": "MethodDeclaration:commit",
     "value": 42,
     "count": 1
@@ -3773,8 +4547,8 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 126,
-    "endLine": 172,
+    "line": 127,
+    "endLine": 173,
     "symbol": "MethodDeclaration:materialize",
     "value": 56,
     "count": 1
@@ -3790,29 +4564,20 @@
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/src/storage/sqlite-wait-adapter.ts",
-    "line": 19,
-    "endLine": 32,
-    "symbol": "FunctionDeclaration:projectionBindings",
-    "value": 72,
+    "path": "packages/ledger/src/storage/sqlite-schema-lifecycle.ts",
+    "line": 77,
+    "endLine": 107,
+    "symbol": "FunctionDeclaration:initializeSqliteDatabase",
+    "value": 72.95200000000001,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/storage.ts",
-    "line": 156,
-    "endLine": 169,
+    "line": 149,
+    "endLine": 162,
     "symbol": "FunctionDeclaration:reset",
     "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/src/storage/timestamped-store.ts",
-    "line": 16,
-    "endLine": 24,
-    "symbol": "FunctionDeclaration:withCreateTimestamps",
-    "value": 30,
     "count": 1
   },
   {
@@ -3827,64 +4592,64 @@
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/u967-preflight.ts",
-    "line": 30,
-    "endLine": 60,
+    "line": 33,
+    "endLine": 65,
     "symbol": "FunctionDeclaration:preflight967",
-    "value": 170.92857142857144,
+    "value": 197.93333333333334,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/u967-projection.ts",
-    "line": 92,
-    "endLine": 99,
-    "symbol": "ArrowFunction:<anonymous@3286>",
+    "line": 89,
+    "endLine": 96,
+    "symbol": "ArrowFunction:<anonymous@3205>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/u967-projection.ts",
-    "line": 151,
-    "endLine": 190,
+    "line": 148,
+    "endLine": 186,
     "symbol": "FunctionDeclaration:inspect967Projections",
-    "value": 161.74298321759264,
+    "value": 137.2426746806912,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/src/storage/u967-projection.ts",
-    "line": 67,
-    "endLine": 149,
+    "line": 64,
+    "endLine": 146,
     "symbol": "FunctionDeclaration:terminalComplete",
     "value": 1560,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/src/wait/index.ts",
-    "line": 267,
-    "endLine": 341,
-    "symbol": "FunctionDeclaration:commit",
-    "value": 42,
+    "path": "packages/ledger/src/storage/u969-preflight.ts",
+    "line": 41,
+    "endLine": 98,
+    "symbol": "FunctionDeclaration:historicalRequestBlockers",
+    "value": 60.734375,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/src/wait/index.ts",
-    "line": 88,
-    "endLine": 128,
-    "symbol": "FunctionDeclaration:factOf",
+    "path": "packages/ledger/src/storage/u969-preflight.ts",
+    "line": 7,
+    "endLine": 39,
+    "symbol": "FunctionDeclaration:historicalRowComplete",
+    "value": 272,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/src/storage/u969-preflight.ts",
+    "line": 101,
+    "endLine": 146,
+    "symbol": "FunctionDeclaration:preflight969",
     "value": 72,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/src/wait/index.ts",
-    "line": 145,
-    "endLine": 188,
-    "symbol": "FunctionDeclaration:publishChange",
-    "value": 42,
     "count": 1
   },
   {
@@ -3929,6 +4694,15 @@
     "line": 78,
     "endLine": 86,
     "symbol": "MethodDeclaration:value",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 125,
+    "endLine": 149,
+    "symbol": "FunctionDeclaration:insertHistoricalWait",
     "value": 72,
     "count": 1
   },
@@ -3982,7 +4756,25 @@
     "path": "packages/ledger/test/session/kernel.test.ts",
     "line": 277,
     "endLine": 403,
-    "symbol": "ArrowFunction:<anonymous@6907>",
+    "symbol": "ArrowFunction:<anonymous@6910>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 26,
+    "endLine": 51,
+    "symbol": "ArrowFunction:<anonymous@1054>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 62,
+    "endLine": 80,
+    "symbol": "ArrowFunction:<anonymous@2247>",
     "value": 42,
     "count": 1
   },
@@ -4007,125 +4799,143 @@
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
-    "line": 49,
-    "endLine": 192,
+    "line": 46,
+    "endLine": 191,
     "symbol": "FunctionDeclaration:exerciseL0Contracts",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/test/storage/commit-sequencing.test.ts",
-    "line": 50,
-    "endLine": 65,
-    "symbol": "ArrowFunction:<anonymous@2023>",
-    "value": 30,
+    "path": "packages/ledger/test/storage/alarm-control.test.ts",
+    "line": 10,
+    "endLine": 87,
+    "symbol": "ArrowFunction:<anonymous@576>",
+    "value": 380,
     "count": 1
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/test/storage/commit-sequencing.test.ts",
-    "line": 67,
-    "endLine": 93,
-    "symbol": "ArrowFunction:<anonymous@2800>",
-    "value": 72,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/storage/commit-sequencing.test.ts",
-    "line": 141,
-    "endLine": 152,
-    "symbol": "ArrowFunction:<anonymous@5862>",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 320,
-    "endLine": 340,
-    "symbol": "ArrowFunction:<anonymous@11938>",
+    "path": "packages/ledger/test/storage/alarm.test.ts",
+    "line": 34,
+    "endLine": 83,
+    "symbol": "FunctionDeclaration:exercise",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 343,
-    "endLine": 388,
-    "symbol": "ArrowFunction:<anonymous@12689>",
-    "value": 240,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 55,
-    "endLine": 80,
-    "symbol": "ArrowFunction:<anonymous@1605>",
+    "line": 336,
+    "endLine": 357,
+    "symbol": "ArrowFunction:<anonymous@11891>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 116,
-    "endLine": 143,
-    "symbol": "ArrowFunction:<anonymous@4003>",
+    "line": 370,
+    "endLine": 391,
+    "symbol": "ArrowFunction:<anonymous@13195>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 404,
+    "endLine": 496,
+    "symbol": "ArrowFunction:<anonymous@14425>",
+    "value": 462,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 52,
+    "endLine": 77,
+    "symbol": "ArrowFunction:<anonymous@1594>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 506,
+    "endLine": 519,
+    "symbol": "ArrowFunction:<anonymous@18037>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 119,
+    "endLine": 146,
+    "symbol": "ArrowFunction:<anonymous@4064>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 147,
-    "endLine": 160,
-    "symbol": "ArrowFunction:<anonymous@5077>",
+    "line": 150,
+    "endLine": 163,
+    "symbol": "ArrowFunction:<anonymous@5138>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 164,
-    "endLine": 180,
-    "symbol": "ArrowFunction:<anonymous@5678>",
-    "value": 90,
+    "line": 168,
+    "endLine": 203,
+    "symbol": "ArrowFunction:<anonymous@5753>",
+    "value": 182,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 220,
-    "endLine": 307,
-    "symbol": "ArrowFunction:<anonymous@7808>",
-    "value": 1406,
+    "line": 212,
+    "endLine": 261,
+    "symbol": "ArrowFunction:<anonymous@7730>",
+    "value": 110,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 184,
-    "endLine": 196,
-    "symbol": "FunctionDeclaration:claimMessageAnswer",
-    "value": 42.721000000000004,
+    "line": 287,
+    "endLine": 332,
+    "symbol": "ArrowFunction:<anonymous@9959>",
+    "value": 156,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 441,
-    "endLine": 495,
+    "line": 599,
+    "endLine": 649,
+    "symbol": "FunctionDeclaration:appendMemoryAction",
+    "value": 119.1298828125,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 651,
+    "endLine": 702,
     "symbol": "FunctionDeclaration:commitMemorySession",
-    "value": 253.5956496928603,
+    "value": 175.4990234375,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 561,
-    "endLine": 569,
+    "line": 836,
+    "endLine": 844,
     "symbol": "FunctionDeclaration:comparePolicyRows",
     "value": 30,
     "count": 1
@@ -4133,8 +4943,26 @@
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 520,
-    "endLine": 535,
+    "line": 748,
+    "endLine": 770,
+    "symbol": "FunctionDeclaration:pendingRequestCount",
+    "value": 72,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 704,
+    "endLine": 725,
+    "symbol": "FunctionDeclaration:sessionAuthorityRefusal",
+    "value": 48.30320699708456,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 795,
+    "endLine": 810,
     "symbol": "FunctionDeclaration:validActionBatch",
     "value": 42.721000000000004,
     "count": 1
@@ -4142,8 +4970,44 @@
   {
     "gate": "crap",
     "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 90,
-    "endLine": 110,
+    "line": 553,
+    "endLine": 574,
+    "symbol": "FunctionDeclaration:validInboxChild",
+    "value": 72.07407407407409,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 538,
+    "endLine": 551,
+    "symbol": "FunctionDeclaration:validInboxSender",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 727,
+    "endLine": 740,
+    "symbol": "FunctionDeclaration:validSessionInboxOwnership",
+    "value": 61.20000000000001,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 576,
+    "endLine": 592,
+    "symbol": "FunctionDeclaration:withinChildLimits",
+    "value": 44.74247685185185,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 87,
+    "endLine": 113,
     "symbol": "MethodDeclaration:materialize",
     "value": 30,
     "count": 1
@@ -4159,47 +5023,29 @@
   },
   {
     "gate": "crap",
+    "path": "packages/ledger/test/storage/request-atomicity.test.ts",
+    "line": 56,
+    "endLine": 62,
+    "symbol": "MethodDeclaration:publish",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/ledger/test/storage/request-migration.test.ts",
+    "line": 45,
+    "endLine": 101,
+    "symbol": "ArrowFunction:<anonymous@2058>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
     "path": "packages/ledger/test/storage/u967-disposition-cases.ts",
-    "line": 114,
-    "endLine": 168,
-    "symbol": "ArrowFunction:<anonymous@3944>",
+    "line": 115,
+    "endLine": 169,
+    "symbol": "ArrowFunction:<anonymous@3991>",
     "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/wait/store.test.ts",
-    "line": 286,
-    "endLine": 335,
-    "symbol": "ArrowFunction:<anonymous@10307>",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/wait/store.test.ts",
-    "line": 73,
-    "endLine": 104,
-    "symbol": "ArrowFunction:<anonymous@2541>",
-    "value": 56,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/wait/store.test.ts",
-    "line": 209,
-    "endLine": 246,
-    "symbol": "ArrowFunction:<anonymous@7607>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/wait/store.test.ts",
-    "line": 248,
-    "endLine": 284,
-    "symbol": "ArrowFunction:<anonymous@9141>",
-    "value": 30,
     "count": 1
   },
   {
@@ -5060,8 +5906,8 @@
   {
     "gate": "crap",
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 588,
-    "endLine": 624,
+    "line": 589,
+    "endLine": 625,
     "symbol": "FunctionDeclaration:append",
     "value": 54.656000000000006,
     "count": 1
@@ -5069,8 +5915,8 @@
   {
     "gate": "crap",
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 358,
-    "endLine": 385,
+    "line": 359,
+    "endLine": 386,
     "symbol": "FunctionDeclaration:buildBuckets",
     "value": 25.32592592592593,
     "count": 1
@@ -5087,8 +5933,8 @@
   {
     "gate": "crap",
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 499,
-    "endLine": 522,
+    "line": 500,
+    "endLine": 523,
     "symbol": "FunctionDeclaration:compilePolicySnapshot",
     "value": 30,
     "count": 1
@@ -5096,8 +5942,8 @@
   {
     "gate": "crap",
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 432,
-    "endLine": 497,
+    "line": 433,
+    "endLine": 498,
     "symbol": "FunctionDeclaration:evaluateSnapshot",
     "value": 554.0283892365704,
     "count": 1
@@ -5105,8 +5951,8 @@
   {
     "gate": "crap",
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 387,
-    "endLine": 393,
+    "line": 388,
+    "endLine": 394,
     "symbol": "FunctionDeclaration:matches",
     "value": 42,
     "count": 1
@@ -5114,8 +5960,8 @@
   {
     "gate": "crap",
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 245,
-    "endLine": 343,
+    "line": 246,
+    "endLine": 344,
     "symbol": "FunctionDeclaration:parseRow",
     "value": 462,
     "count": 1
@@ -5123,8 +5969,8 @@
   {
     "gate": "crap",
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 403,
-    "endLine": 430,
+    "line": 404,
+    "endLine": 431,
     "symbol": "FunctionDeclaration:redact",
     "value": 182.04549999999998,
     "count": 1
@@ -5158,15 +6004,6 @@
   },
   {
     "gate": "crap",
-    "path": "packages/protocol/src/approval/schema.ts",
-    "line": 82,
-    "endLine": 108,
-    "symbol": "ArrowFunction:<anonymous@2786>",
-    "value": 90,
-    "count": 1
-  },
-  {
-    "gate": "crap",
     "path": "packages/protocol/src/channel/index.ts",
     "line": 120,
     "endLine": 145,
@@ -5186,9 +6023,9 @@
   {
     "gate": "crap",
     "path": "packages/protocol/src/gateway/schema.ts",
-    "line": 331,
-    "endLine": 363,
-    "symbol": "ArrowFunction:<anonymous@12852>",
+    "line": 330,
+    "endLine": 362,
+    "symbol": "ArrowFunction:<anonymous@12934>",
     "value": 90,
     "count": 1
   },
@@ -5197,7 +6034,7 @@
     "path": "packages/protocol/src/gateway/schema.ts",
     "line": 150,
     "endLine": 175,
-    "symbol": "ArrowFunction:<anonymous@6131>",
+    "symbol": "ArrowFunction:<anonymous@6214>",
     "value": 30,
     "count": 1
   },
@@ -5206,7 +6043,7 @@
     "path": "packages/protocol/src/ingress/index.ts",
     "line": 57,
     "endLine": 71,
-    "symbol": "ArrowFunction:<anonymous@2052>",
+    "symbol": "ArrowFunction:<anonymous@2080>",
     "value": 90,
     "count": 1
   },
@@ -5267,9 +6104,27 @@
   {
     "gate": "crap",
     "path": "packages/protocol/src/ledger/l0.ts",
-    "line": 369,
-    "endLine": 390,
-    "symbol": "ArrowFunction:<anonymous@10548>",
+    "line": 379,
+    "endLine": 400,
+    "symbol": "ArrowFunction:<anonymous@10847>",
+    "value": 56,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 606,
+    "endLine": 620,
+    "symbol": "ArrowFunction:<anonymous@17009>",
+    "value": 42,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "packages/protocol/src/ledger/session-transition.ts",
+    "line": 79,
+    "endLine": 112,
+    "symbol": "ArrowFunction:<anonymous@2323>",
     "value": 56,
     "count": 1
   },
@@ -5352,78 +6207,6 @@
     "endLine": 146,
     "symbol": "FunctionDeclaration:isAppendableInitialState",
     "value": 56,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/correlation-fold.ts",
-    "line": 35,
-    "endLine": 50,
-    "symbol": "FunctionDeclaration:waitPinsAllowClaim",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/correlation-fold.ts",
-    "line": 52,
-    "endLine": 68,
-    "symbol": "FunctionDeclaration:waitTierLevels",
-    "value": 59.24198250728863,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/fold.ts",
-    "line": 132,
-    "endLine": 154,
-    "symbol": "FunctionDeclaration:attachReply",
-    "value": 58.33773327264453,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/fold.ts",
-    "line": 156,
-    "endLine": 216,
-    "symbol": "FunctionDeclaration:matchAndAttach",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/matcher.ts",
-    "line": 92,
-    "endLine": 106,
-    "symbol": "ArrowFunction:<anonymous@3844>",
-    "value": 110,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/matcher.ts",
-    "line": 79,
-    "endLine": 108,
-    "symbol": "FunctionDeclaration:ingressEvidence",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/matcher.ts",
-    "line": 47,
-    "endLine": 65,
-    "symbol": "FunctionDeclaration:matchesTarget",
-    "value": 82.9,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/src/wait/schema.ts",
-    "line": 95,
-    "endLine": 135,
-    "symbol": "FunctionDeclaration:validateResolution",
-    "value": 42,
     "count": 1
   },
   {
@@ -5572,46 +6355,10 @@
   },
   {
     "gate": "crap",
-    "path": "packages/protocol/test/wait/fold.test.ts",
-    "line": 367,
-    "endLine": 379,
-    "symbol": "ArrowFunction:<anonymous@14957>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/test/wait/fold.test.ts",
-    "line": 85,
-    "endLine": 108,
-    "symbol": "ArrowFunction:<anonymous@3313>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/test/wait/fold.test.ts",
-    "line": 145,
-    "endLine": 159,
-    "symbol": "ArrowFunction:<anonymous@5870>",
-    "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/protocol/test/wait/fold.test.ts",
-    "line": 240,
-    "endLine": 258,
-    "symbol": "ArrowFunction:<anonymous@9730>",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
     "path": "packages/ui/src/composer.tsx",
-    "line": 251,
-    "endLine": 260,
-    "symbol": "ArrowFunction:<anonymous@10907>",
+    "line": 258,
+    "endLine": 267,
+    "symbol": "ArrowFunction:<anonymous@11199>",
     "value": 156,
     "count": 1
   },
@@ -5619,9 +6366,9 @@
     "gate": "crap",
     "path": "packages/ui/src/composer.tsx",
     "line": 190,
-    "endLine": 375,
+    "endLine": 382,
     "symbol": "FunctionDeclaration:Composer",
-    "value": 90,
+    "value": 156,
     "count": 1
   },
   {
@@ -5636,17 +6383,17 @@
   {
     "gate": "crap",
     "path": "packages/ui/src/console.tsx",
-    "line": 42,
-    "endLine": 140,
+    "line": 43,
+    "endLine": 131,
     "symbol": "FunctionDeclaration:Console",
-    "value": 30,
+    "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "packages/ui/src/primitives/disclosure.tsx",
-    "line": 64,
-    "endLine": 145,
+    "line": 72,
+    "endLine": 160,
     "symbol": "FunctionDeclaration:Disclosure",
     "value": 42,
     "count": 1
@@ -5807,9 +6554,18 @@
   {
     "gate": "crap",
     "path": "packages/ui/test/transcript-law.test.tsx",
-    "line": 169,
-    "endLine": 176,
-    "symbol": "ArrowFunction:<anonymous@7952>",
+    "line": 175,
+    "endLine": 182,
+    "symbol": "ArrowFunction:<anonymous@7963>",
+    "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "script/alarm-type-contract.test.ts",
+    "line": 37,
+    "endLine": 47,
+    "symbol": "ArrowFunction:<anonymous@1434>",
     "value": 30,
     "count": 1
   },
@@ -5915,207 +6671,216 @@
   {
     "gate": "crap",
     "path": "script/check-census.test.ts",
-    "line": 1042,
-    "endLine": 1076,
-    "symbol": "ArrowFunction:<anonymous@49071>",
+    "line": 1068,
+    "endLine": 1102,
+    "symbol": "ArrowFunction:<anonymous@51022>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2614,
-    "endLine": 2631,
-    "symbol": "ArrowFunction:<anonymous@100686>",
+    "line": 2601,
+    "endLine": 2621,
+    "symbol": "ArrowFunction:<anonymous@100043>",
+    "value": 182,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "script/check-census.ts",
+    "line": 2624,
+    "endLine": 2641,
+    "symbol": "ArrowFunction:<anonymous@101179>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2634,
-    "endLine": 2648,
-    "symbol": "ArrowFunction:<anonymous@101644>",
+    "line": 2644,
+    "endLine": 2658,
+    "symbol": "ArrowFunction:<anonymous@102137>",
     "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2653,
-    "endLine": 2664,
-    "symbol": "ArrowFunction:<anonymous@102590>",
+    "line": 2663,
+    "endLine": 2674,
+    "symbol": "ArrowFunction:<anonymous@103083>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2670,
-    "endLine": 2698,
-    "symbol": "ArrowFunction:<anonymous@103312>",
+    "line": 2680,
+    "endLine": 2708,
+    "symbol": "ArrowFunction:<anonymous@103805>",
     "value": 306,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2878,
-    "endLine": 2891,
-    "symbol": "ArrowFunction:<anonymous@111529>",
+    "line": 2888,
+    "endLine": 2901,
+    "symbol": "ArrowFunction:<anonymous@112022>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2901,
-    "endLine": 2910,
-    "symbol": "ArrowFunction:<anonymous@112532>",
+    "line": 2911,
+    "endLine": 2920,
+    "symbol": "ArrowFunction:<anonymous@113025>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2913,
-    "endLine": 2929,
-    "symbol": "ArrowFunction:<anonymous@113335>",
+    "line": 2923,
+    "endLine": 2939,
+    "symbol": "ArrowFunction:<anonymous@113828>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2920,
-    "endLine": 2924,
-    "symbol": "ArrowFunction:<anonymous@113721>",
+    "line": 2930,
+    "endLine": 2934,
+    "symbol": "ArrowFunction:<anonymous@114214>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2982,
-    "endLine": 2985,
-    "symbol": "ArrowFunction:<anonymous@116341>",
+    "line": 2992,
+    "endLine": 2995,
+    "symbol": "ArrowFunction:<anonymous@116834>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3034,
-    "endLine": 3045,
-    "symbol": "ArrowFunction:<anonymous@118449>",
+    "line": 3044,
+    "endLine": 3055,
+    "symbol": "ArrowFunction:<anonymous@118942>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3086,
-    "endLine": 3094,
-    "symbol": "ArrowFunction:<anonymous@120939>",
+    "line": 3096,
+    "endLine": 3104,
+    "symbol": "ArrowFunction:<anonymous@121432>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3155,
-    "endLine": 3174,
-    "symbol": "ArrowFunction:<anonymous@123624>",
+    "line": 3165,
+    "endLine": 3184,
+    "symbol": "ArrowFunction:<anonymous@124108>",
     "value": 156,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3178,
-    "endLine": 3247,
-    "symbol": "ArrowFunction:<anonymous@124539>",
+    "line": 3188,
+    "endLine": 3257,
+    "symbol": "ArrowFunction:<anonymous@125023>",
     "value": 420,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3201,
-    "endLine": 3232,
-    "symbol": "ArrowFunction:<anonymous@125588>",
+    "line": 3211,
+    "endLine": 3242,
+    "symbol": "ArrowFunction:<anonymous@126072>",
     "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3276,
-    "endLine": 3298,
-    "symbol": "ArrowFunction:<anonymous@128774>",
+    "line": 3286,
+    "endLine": 3308,
+    "symbol": "ArrowFunction:<anonymous@129258>",
     "value": 240,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3418,
-    "endLine": 3424,
-    "symbol": "ArrowFunction:<anonymous@134078>",
+    "line": 3428,
+    "endLine": 3434,
+    "symbol": "ArrowFunction:<anonymous@134562>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3488,
-    "endLine": 3506,
-    "symbol": "ArrowFunction:<anonymous@136893>",
+    "line": 3498,
+    "endLine": 3516,
+    "symbol": "ArrowFunction:<anonymous@137377>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3633,
-    "endLine": 3730,
-    "symbol": "ArrowFunction:<anonymous@142222>",
+    "line": 3643,
+    "endLine": 3740,
+    "symbol": "ArrowFunction:<anonymous@142706>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3642,
-    "endLine": 3728,
-    "symbol": "ArrowFunction:<anonymous@142599>",
+    "line": 3652,
+    "endLine": 3738,
+    "symbol": "ArrowFunction:<anonymous@143083>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3676,
-    "endLine": 3726,
-    "symbol": "ArrowFunction:<anonymous@143917>",
+    "line": 3686,
+    "endLine": 3736,
+    "symbol": "ArrowFunction:<anonymous@144401>",
     "value": 380,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3862,
-    "endLine": 3885,
-    "symbol": "ArrowFunction:<anonymous@151432>",
+    "line": 3872,
+    "endLine": 3895,
+    "symbol": "ArrowFunction:<anonymous@151916>",
     "value": 110,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3908,
-    "endLine": 3926,
-    "symbol": "ArrowFunction:<anonymous@153524>",
+    "line": 3918,
+    "endLine": 3936,
+    "symbol": "ArrowFunction:<anonymous@154008>",
     "value": 42,
     "count": 1
   },
@@ -6158,99 +6923,99 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1223,
-    "endLine": 1230,
-    "symbol": "ArrowFunction:<anonymous@47358>",
+    "line": 1224,
+    "endLine": 1231,
+    "symbol": "ArrowFunction:<anonymous@47380>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1314,
-    "endLine": 1320,
-    "symbol": "ArrowFunction:<anonymous@51403>",
+    "line": 1315,
+    "endLine": 1321,
+    "symbol": "ArrowFunction:<anonymous@51425>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1359,
-    "endLine": 1367,
-    "symbol": "ArrowFunction:<anonymous@53305>",
+    "line": 1360,
+    "endLine": 1368,
+    "symbol": "ArrowFunction:<anonymous@53327>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1417,
-    "endLine": 1445,
-    "symbol": "ArrowFunction:<anonymous@55304>",
+    "line": 1418,
+    "endLine": 1446,
+    "symbol": "ArrowFunction:<anonymous@55326>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1456,
-    "endLine": 1495,
-    "symbol": "ArrowFunction:<anonymous@56739>",
+    "line": 1457,
+    "endLine": 1496,
+    "symbol": "ArrowFunction:<anonymous@56761>",
     "value": 132,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1530,
-    "endLine": 1544,
-    "symbol": "ArrowFunction:<anonymous@59436>",
+    "line": 1531,
+    "endLine": 1545,
+    "symbol": "ArrowFunction:<anonymous@59458>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1549,
-    "endLine": 1567,
-    "symbol": "ArrowFunction:<anonymous@60173>",
+    "line": 1550,
+    "endLine": 1568,
+    "symbol": "ArrowFunction:<anonymous@60195>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1620,
-    "endLine": 1693,
-    "symbol": "ArrowFunction:<anonymous@62686>",
-    "value": 272,
+    "line": 1621,
+    "endLine": 1696,
+    "symbol": "ArrowFunction:<anonymous@62708>",
+    "value": 342,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1681,
-    "endLine": 1691,
-    "symbol": "ArrowFunction:<anonymous@65540>",
+    "line": 1684,
+    "endLine": 1694,
+    "symbol": "ArrowFunction:<anonymous@65731>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1727,
-    "endLine": 1743,
-    "symbol": "ArrowFunction:<anonymous@67150>",
+    "line": 1730,
+    "endLine": 1746,
+    "symbol": "ArrowFunction:<anonymous@67341>",
     "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1774,
-    "endLine": 1788,
-    "symbol": "ArrowFunction:<anonymous@68983>",
+    "line": 1777,
+    "endLine": 1791,
+    "symbol": "ArrowFunction:<anonymous@69174>",
     "value": 110,
     "count": 1
   },
@@ -6266,154 +7031,145 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1829,
-    "endLine": 1837,
-    "symbol": "ArrowFunction:<anonymous@70676>",
+    "line": 1832,
+    "endLine": 1840,
+    "symbol": "ArrowFunction:<anonymous@70867>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1859,
-    "endLine": 1880,
-    "symbol": "ArrowFunction:<anonymous@71769>",
+    "line": 1862,
+    "endLine": 1883,
+    "symbol": "ArrowFunction:<anonymous@71960>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1899,
-    "endLine": 1905,
-    "symbol": "ArrowFunction:<anonymous@73489>",
+    "line": 1902,
+    "endLine": 1908,
+    "symbol": "ArrowFunction:<anonymous@73680>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1916,
-    "endLine": 1921,
-    "symbol": "ArrowFunction:<anonymous@74140>",
+    "line": 1919,
+    "endLine": 1924,
+    "symbol": "ArrowFunction:<anonymous@74331>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1936,
-    "endLine": 1944,
-    "symbol": "ArrowFunction:<anonymous@75028>",
+    "line": 1939,
+    "endLine": 1947,
+    "symbol": "ArrowFunction:<anonymous@75219>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1995,
-    "endLine": 2009,
-    "symbol": "ArrowFunction:<anonymous@77213>",
+    "line": 1998,
+    "endLine": 2012,
+    "symbol": "ArrowFunction:<anonymous@77404>",
     "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2145,
-    "endLine": 2163,
-    "symbol": "ArrowFunction:<anonymous@82853>",
+    "line": 2155,
+    "endLine": 2173,
+    "symbol": "ArrowFunction:<anonymous@83346>",
     "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2164,
-    "endLine": 2173,
-    "symbol": "ArrowFunction:<anonymous@83665>",
+    "line": 2174,
+    "endLine": 2183,
+    "symbol": "ArrowFunction:<anonymous@84158>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2189,
-    "endLine": 2199,
-    "symbol": "ArrowFunction:<anonymous@84605>",
+    "line": 2199,
+    "endLine": 2209,
+    "symbol": "ArrowFunction:<anonymous@85098>",
     "value": 90,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2230,
-    "endLine": 2250,
-    "symbol": "ArrowFunction:<anonymous@86337>",
+    "line": 2240,
+    "endLine": 2260,
+    "symbol": "ArrowFunction:<anonymous@86830>",
     "value": 42,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2281,
-    "endLine": 2307,
-    "symbol": "ArrowFunction:<anonymous@88225>",
+    "line": 2291,
+    "endLine": 2317,
+    "symbol": "ArrowFunction:<anonymous@88718>",
     "value": 132,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2328,
-    "endLine": 2333,
-    "symbol": "ArrowFunction:<anonymous@89836>",
+    "line": 2338,
+    "endLine": 2343,
+    "symbol": "ArrowFunction:<anonymous@90329>",
     "value": 30,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2382,
-    "endLine": 2415,
-    "symbol": "ArrowFunction:<anonymous@91627>",
+    "line": 2392,
+    "endLine": 2425,
+    "symbol": "ArrowFunction:<anonymous@92120>",
     "value": 132,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2519,
-    "endLine": 2546,
-    "symbol": "ArrowFunction:<anonymous@96686>",
+    "line": 2529,
+    "endLine": 2556,
+    "symbol": "ArrowFunction:<anonymous@97179>",
     "value": 182,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2549,
-    "endLine": 2584,
-    "symbol": "ArrowFunction:<anonymous@97841>",
+    "line": 2559,
+    "endLine": 2594,
+    "symbol": "ArrowFunction:<anonymous@98334>",
     "value": 272,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2587,
-    "endLine": 2667,
-    "symbol": "ArrowFunction:<anonymous@99326>",
+    "line": 2597,
+    "endLine": 2677,
+    "symbol": "ArrowFunction:<anonymous@99819>",
     "value": 56,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "script/check-census.ts",
-    "line": 2591,
-    "endLine": 2611,
-    "symbol": "ArrowFunction:<anonymous@99550>",
-    "value": 182,
     "count": 1
   },
   {
@@ -6428,8 +7184,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 4126,
-    "endLine": 4146,
+    "line": 4136,
+    "endLine": 4156,
     "symbol": "FunctionDeclaration:attachBoundary",
     "value": 30,
     "count": 1
@@ -6437,8 +7193,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 4147,
-    "endLine": 4213,
+    "line": 4157,
+    "endLine": 4223,
     "symbol": "FunctionDeclaration:attachFamily",
     "value": 132,
     "count": 1
@@ -6446,8 +7202,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3956,
-    "endLine": 3969,
+    "line": 3966,
+    "endLine": 3979,
     "symbol": "FunctionDeclaration:censusInput",
     "value": 39.826171875,
     "count": 1
@@ -6455,8 +7211,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3970,
-    "endLine": 4322,
+    "line": 3980,
+    "endLine": 4332,
     "symbol": "FunctionDeclaration:censusMain",
     "value": 223.1323016234259,
     "count": 1
@@ -6464,8 +7220,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3746,
-    "endLine": 3757,
+    "line": 3756,
+    "endLine": 3767,
     "symbol": "FunctionDeclaration:commandProperty",
     "value": 61.20000000000001,
     "count": 1
@@ -6491,8 +7247,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3446,
-    "endLine": 3461,
+    "line": 3456,
+    "endLine": 3471,
     "symbol": "FunctionDeclaration:entries",
     "value": 110,
     "count": 1
@@ -6500,8 +7256,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 4236,
-    "endLine": 4285,
+    "line": 4246,
+    "endLine": 4295,
     "symbol": "FunctionDeclaration:exportResults",
     "value": 47.85161815591288,
     "count": 1
@@ -6509,8 +7265,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3300,
-    "endLine": 3319,
+    "line": 3310,
+    "endLine": 3329,
     "symbol": "FunctionDeclaration:followTypeLinks",
     "value": 56,
     "count": 1
@@ -6527,8 +7283,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3405,
-    "endLine": 3472,
+    "line": 3415,
+    "endLine": 3482,
     "symbol": "FunctionDeclaration:knipCensus",
     "value": 56,
     "count": 1
@@ -6572,8 +7328,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3348,
-    "endLine": 3364,
+    "line": 3358,
+    "endLine": 3374,
     "symbol": "FunctionDeclaration:originalDeclaration",
     "value": 44.74247685185185,
     "count": 1
@@ -6590,8 +7346,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3271,
-    "endLine": 3404,
+    "line": 3281,
+    "endLine": 3414,
     "symbol": "FunctionDeclaration:publicMap",
     "value": 145.3046875,
     "count": 1
@@ -6599,8 +7355,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3151,
-    "endLine": 3270,
+    "line": 3161,
+    "endLine": 3280,
     "symbol": "FunctionDeclaration:publisherCensus",
     "value": 111.87848565031548,
     "count": 1
@@ -6608,8 +7364,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3737,
-    "endLine": 3928,
+    "line": 3747,
+    "endLine": 3938,
     "symbol": "FunctionDeclaration:pythonCensus",
     "value": 78.447375,
     "count": 1
@@ -6617,8 +7373,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3769,
-    "endLine": 3787,
+    "line": 3779,
+    "endLine": 3797,
     "symbol": "FunctionDeclaration:pythonCommand",
     "value": 204.54475308641975,
     "count": 1
@@ -6626,8 +7382,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3788,
-    "endLine": 3804,
+    "line": 3798,
+    "endLine": 3814,
     "symbol": "FunctionDeclaration:pythonCwd",
     "value": 54.656000000000006,
     "count": 1
@@ -6635,8 +7391,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3805,
-    "endLine": 3827,
+    "line": 3815,
+    "endLine": 3837,
     "symbol": "FunctionDeclaration:recordEmbeddedPython",
     "value": 50.875,
     "count": 1
@@ -6644,8 +7400,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3366,
-    "endLine": 3383,
+    "line": 3376,
+    "endLine": 3393,
     "symbol": "FunctionDeclaration:recordFunctionUses",
     "value": 110,
     "count": 1
@@ -6653,8 +7409,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3828,
-    "endLine": 3861,
+    "line": 3838,
+    "endLine": 3871,
     "symbol": "FunctionDeclaration:recordPythonWords",
     "value": 97.51541053669763,
     "count": 1
@@ -6662,8 +7418,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3612,
-    "endLine": 3632,
+    "line": 3622,
+    "endLine": 3642,
     "symbol": "FunctionDeclaration:recordSqlWrite",
     "value": 90,
     "count": 1
@@ -6671,8 +7427,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3321,
-    "endLine": 3346,
+    "line": 3331,
+    "endLine": 3356,
     "symbol": "FunctionDeclaration:recordTypeLink",
     "value": 191.96859353664092,
     "count": 1
@@ -6680,8 +7436,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3571,
-    "endLine": 3611,
+    "line": 3581,
+    "endLine": 3621,
     "symbol": "FunctionDeclaration:recordUnresolvedStore",
     "value": 217.3509330905781,
     "count": 1
@@ -6698,8 +7454,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3537,
-    "endLine": 3570,
+    "line": 3547,
+    "endLine": 3580,
     "symbol": "FunctionDeclaration:storeOperation",
     "value": 152.251708984375,
     "count": 1
@@ -6707,8 +7463,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3508,
-    "endLine": 3526,
+    "line": 3518,
+    "endLine": 3536,
     "symbol": "FunctionDeclaration:storeReceiver",
     "value": 43.171875,
     "count": 1
@@ -6716,8 +7472,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 4084,
-    "endLine": 4234,
+    "line": 4094,
+    "endLine": 4244,
     "symbol": "FunctionDeclaration:storeResults",
     "value": 95.02697186178744,
     "count": 1
@@ -6725,8 +7481,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 4287,
-    "endLine": 4321,
+    "line": 4297,
+    "endLine": 4331,
     "symbol": "FunctionDeclaration:validateCallBoundaries",
     "value": 420,
     "count": 1
@@ -6743,8 +7499,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2257,
-    "endLine": 2310,
+    "line": 2267,
+    "endLine": 2320,
     "symbol": "MethodDeclaration:activateSpawnedSource",
     "value": 182,
     "count": 1
@@ -6770,8 +7526,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2703,
-    "endLine": 2728,
+    "line": 2713,
+    "endLine": 2738,
     "symbol": "MethodDeclaration:ambientCallStrings",
     "value": 272.83477469276295,
     "count": 1
@@ -6788,8 +7544,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1703,
-    "endLine": 1716,
+    "line": 1706,
+    "endLine": 1719,
     "symbol": "MethodDeclaration:callbackOwner",
     "value": 35.35648148148149,
     "count": 1
@@ -6797,8 +7553,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3105,
-    "endLine": 3136,
+    "line": 3115,
+    "endLine": 3146,
     "symbol": "MethodDeclaration:carries",
     "value": 272.5418381344307,
     "count": 1
@@ -6806,8 +7562,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2433,
-    "endLine": 2450,
+    "line": 2443,
+    "endLine": 2460,
     "symbol": "MethodDeclaration:collectSqlFamilies",
     "value": 72,
     "count": 1
@@ -6815,8 +7571,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2418,
-    "endLine": 2432,
+    "line": 2428,
+    "endLine": 2442,
     "symbol": "MethodDeclaration:collectTargetFamilies",
     "value": 56,
     "count": 1
@@ -6824,8 +7580,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2949,
-    "endLine": 2991,
+    "line": 2959,
+    "endLine": 3001,
     "symbol": "MethodDeclaration:commandArrays",
     "value": 411.168576,
     "count": 1
@@ -6833,8 +7589,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2822,
-    "endLine": 2857,
+    "line": 2832,
+    "endLine": 2867,
     "symbol": "MethodDeclaration:containerCallStrings",
     "value": 255.128662109375,
     "count": 1
@@ -6851,8 +7607,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3098,
-    "endLine": 3104,
+    "line": 3108,
+    "endLine": 3114,
     "symbol": "MethodDeclaration:defineCall",
     "value": 60.00874635568515,
     "count": 1
@@ -6860,8 +7616,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3142,
-    "endLine": 3149,
+    "line": 3152,
+    "endLine": 3159,
     "symbol": "MethodDeclaration:descriptor",
     "value": 30,
     "count": 1
@@ -6869,8 +7625,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1406,
-    "endLine": 1515,
+    "line": 1407,
+    "endLine": 1516,
     "symbol": "MethodDeclaration:dispatchEmission",
     "value": 153.89639731325056,
     "count": 1
@@ -6878,8 +7634,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1516,
-    "endLine": 1593,
+    "line": 1517,
+    "endLine": 1594,
     "symbol": "MethodDeclaration:dispatchExternal",
     "value": 132,
     "count": 1
@@ -6887,8 +7643,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1235,
-    "endLine": 1291,
+    "line": 1236,
+    "endLine": 1292,
     "symbol": "MethodDeclaration:eventContexts",
     "value": 177.40647262365152,
     "count": 1
@@ -6896,8 +7652,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1292,
-    "endLine": 1302,
+    "line": 1293,
+    "endLine": 1303,
     "symbol": "MethodDeclaration:eventOrder",
     "value": 44.74247685185185,
     "count": 1
@@ -6906,7 +7662,7 @@
     "gate": "crap",
     "path": "script/check-census.ts",
     "line": 1124,
-    "endLine": 1174,
+    "endLine": 1175,
     "symbol": "MethodDeclaration:externalEventOrigin",
     "value": 293.777759513438,
     "count": 1
@@ -6914,17 +7670,17 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2045,
-    "endLine": 2065,
+    "line": 2048,
+    "endLine": 2075,
     "symbol": "MethodDeclaration:flowAsyncStorage",
-    "value": 156,
+    "value": 210,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1948,
-    "endLine": 1977,
+    "line": 1951,
+    "endLine": 1980,
     "symbol": "MethodDeclaration:flowBindings",
     "value": 306,
     "count": 1
@@ -6932,8 +7688,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1979,
-    "endLine": 2013,
+    "line": 1982,
+    "endLine": 2016,
     "symbol": "MethodDeclaration:flowCollectionConstructor",
     "value": 110,
     "count": 1
@@ -6941,8 +7697,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2312,
-    "endLine": 2335,
+    "line": 2322,
+    "endLine": 2345,
     "symbol": "MethodDeclaration:flowComposedAbort",
     "value": 56,
     "count": 1
@@ -6959,8 +7715,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1854,
-    "endLine": 1909,
+    "line": 1857,
+    "endLine": 1912,
     "symbol": "MethodDeclaration:flowExpressions",
     "value": 116.97600000000001,
     "count": 1
@@ -6977,8 +7733,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1911,
-    "endLine": 1946,
+    "line": 1914,
+    "endLine": 1949,
     "symbol": "MethodDeclaration:flowMember",
     "value": 240,
     "count": 1
@@ -6986,8 +7742,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1747,
-    "endLine": 1790,
+    "line": 1750,
+    "endLine": 1793,
     "symbol": "MethodDeclaration:flowNativeContainers",
     "value": 257.94117647058823,
     "count": 1
@@ -6995,8 +7751,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1600,
-    "endLine": 1702,
+    "line": 1601,
+    "endLine": 1705,
     "symbol": "MethodDeclaration:flowNode",
     "value": 92.411430237644,
     "count": 1
@@ -7022,8 +7778,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2015,
-    "endLine": 2043,
+    "line": 2018,
+    "endLine": 2046,
     "symbol": "MethodDeclaration:flowSchemaCallbacks",
     "value": 151.65706447187927,
     "count": 1
@@ -7031,8 +7787,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2765,
-    "endLine": 2775,
+    "line": 2775,
+    "endLine": 2785,
     "symbol": "MethodDeclaration:globCreation",
     "value": 28.670553935860063,
     "count": 1
@@ -7049,8 +7805,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2776,
-    "endLine": 2789,
+    "line": 2786,
+    "endLine": 2799,
     "symbol": "MethodDeclaration:globStrings",
     "value": 35,
     "count": 1
@@ -7058,8 +7814,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2492,
-    "endLine": 2502,
+    "line": 2502,
+    "endLine": 2512,
     "symbol": "MethodDeclaration:importPath",
     "value": 39.826171875,
     "count": 1
@@ -7076,8 +7832,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2114,
-    "endLine": 2176,
+    "line": 2124,
+    "endLine": 2186,
     "symbol": "MethodDeclaration:invokeAiCallbacks",
     "value": 72,
     "count": 1
@@ -7085,8 +7841,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2076,
-    "endLine": 2088,
+    "line": 2086,
+    "endLine": 2098,
     "symbol": "MethodDeclaration:invokeBunCallbacks",
     "value": 56,
     "count": 1
@@ -7094,8 +7850,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2337,
-    "endLine": 2367,
+    "line": 2347,
+    "endLine": 2377,
     "symbol": "MethodDeclaration:invokeElectronHandler",
     "value": 210,
     "count": 1
@@ -7103,8 +7859,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2205,
-    "endLine": 2255,
+    "line": 2215,
+    "endLine": 2265,
     "symbol": "MethodDeclaration:invokeModuleFactory",
     "value": 342,
     "count": 1
@@ -7112,8 +7868,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2178,
-    "endLine": 2203,
+    "line": 2188,
+    "endLine": 2213,
     "symbol": "MethodDeclaration:invokeNativeCallbacks",
     "value": 42,
     "count": 1
@@ -7121,8 +7877,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2103,
-    "endLine": 2112,
+    "line": 2113,
+    "endLine": 2122,
     "symbol": "MethodDeclaration:invokeServerCallback",
     "value": 42,
     "count": 1
@@ -7130,8 +7886,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2089,
-    "endLine": 2102,
+    "line": 2099,
+    "endLine": 2112,
     "symbol": "MethodDeclaration:invokeServerProperties",
     "value": 42,
     "count": 1
@@ -7139,8 +7895,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1825,
-    "endLine": 1852,
+    "line": 1828,
+    "endLine": 1855,
     "symbol": "MethodDeclaration:invokeSourceTargets",
     "value": 65.88888888888889,
     "count": 1
@@ -7148,8 +7904,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2791,
-    "endLine": 2821,
+    "line": 2801,
+    "endLine": 2831,
     "symbol": "MethodDeclaration:iterableDeclarationStrings",
     "value": 188.30729166666666,
     "count": 1
@@ -7175,8 +7931,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1175,
-    "endLine": 1188,
+    "line": 1176,
+    "endLine": 1189,
     "symbol": "MethodDeclaration:memberEventOrigin",
     "value": 50.47200000000001,
     "count": 1
@@ -7202,8 +7958,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1303,
-    "endLine": 1382,
+    "line": 1304,
+    "endLine": 1383,
     "symbol": "MethodDeclaration:nativeEventContract",
     "value": 156,
     "count": 1
@@ -7229,8 +7985,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2745,
-    "endLine": 2764,
+    "line": 2755,
+    "endLine": 2774,
     "symbol": "MethodDeclaration:promiseBindingStrings",
     "value": 63.263671875,
     "count": 1
@@ -7238,8 +7994,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3028,
-    "endLine": 3062,
+    "line": 3038,
+    "endLine": 3072,
     "symbol": "MethodDeclaration:publisherValues",
     "value": 80.29101562500001,
     "count": 1
@@ -7256,8 +8012,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1792,
-    "endLine": 1823,
+    "line": 1795,
+    "endLine": 1826,
     "symbol": "MethodDeclaration:recordNativeEvents",
     "value": 182,
     "count": 1
@@ -7265,8 +8021,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1203,
-    "endLine": 1232,
+    "line": 1204,
+    "endLine": 1233,
     "symbol": "MethodDeclaration:rendererEventOrigin",
     "value": 42,
     "count": 1
@@ -7274,8 +8030,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 1189,
-    "endLine": 1202,
+    "line": 1190,
+    "endLine": 1203,
     "symbol": "MethodDeclaration:rendererReceiver",
     "value": 50.875,
     "count": 1
@@ -7301,8 +8057,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2859,
-    "endLine": 2933,
+    "line": 2869,
+    "endLine": 2943,
     "symbol": "MethodDeclaration:resolvedStrings",
     "value": 242.492416,
     "count": 1
@@ -7310,8 +8066,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2452,
-    "endLine": 2474,
+    "line": 2462,
+    "endLine": 2484,
     "symbol": "MethodDeclaration:role",
     "value": 255.128662109375,
     "count": 1
@@ -7319,8 +8075,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2992,
-    "endLine": 3027,
+    "line": 3002,
+    "endLine": 3037,
     "symbol": "MethodDeclaration:runtimeValues",
     "value": 311.6,
     "count": 1
@@ -7328,8 +8084,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 2503,
-    "endLine": 2702,
+    "line": 2513,
+    "endLine": 2712,
     "symbol": "MethodDeclaration:strings",
     "value": 149.3904629136086,
     "count": 1
@@ -7346,8 +8102,8 @@
   {
     "gate": "crap",
     "path": "script/check-census.ts",
-    "line": 3063,
-    "endLine": 3097,
+    "line": 3073,
+    "endLine": 3107,
     "symbol": "MethodDeclaration:values",
     "value": 297.06192129629625,
     "count": 1
@@ -7463,8 +8219,8 @@
   {
     "gate": "crap",
     "path": "script/check-deps.ts",
-    "line": 324,
-    "endLine": 374,
+    "line": 323,
+    "endLine": 373,
     "symbol": "FunctionDeclaration:channelsRouterLedgerViolations",
     "value": 110,
     "count": 1
@@ -7472,8 +8228,8 @@
   {
     "gate": "crap",
     "path": "script/check-deps.ts",
-    "line": 537,
-    "endLine": 569,
+    "line": 536,
+    "endLine": 568,
     "symbol": "FunctionDeclaration:checkDocFreshness",
     "value": 56,
     "count": 1
@@ -7490,8 +8246,8 @@
   {
     "gate": "crap",
     "path": "script/check-deps.ts",
-    "line": 295,
-    "endLine": 313,
+    "line": 294,
+    "endLine": 312,
     "symbol": "FunctionDeclaration:isChannelsDriverRouterEdge",
     "value": 90,
     "count": 1
@@ -7517,8 +8273,8 @@
   {
     "gate": "crap",
     "path": "script/check-deps.ts",
-    "line": 784,
-    "endLine": 825,
+    "line": 790,
+    "endLine": 831,
     "symbol": "FunctionDeclaration:main",
     "value": 63.6634109691961,
     "count": 1
@@ -7526,8 +8282,8 @@
   {
     "gate": "crap",
     "path": "script/check-deps.ts",
-    "line": 376,
-    "endLine": 406,
+    "line": 375,
+    "endLine": 405,
     "symbol": "FunctionDeclaration:validateChannelsIntraPackageBanding",
     "value": 72,
     "count": 1
@@ -7535,8 +8291,8 @@
   {
     "gate": "crap",
     "path": "script/check-deps.ts",
-    "line": 432,
-    "endLine": 455,
+    "line": 431,
+    "endLine": 454,
     "symbol": "FunctionDeclaration:validateDeepRelativeImports",
     "value": 42,
     "count": 1
@@ -7544,8 +8300,8 @@
   {
     "gate": "crap",
     "path": "script/check-deps.ts",
-    "line": 459,
-    "endLine": 506,
+    "line": 458,
+    "endLine": 505,
     "symbol": "FunctionDeclaration:validateGoldenPrinciples",
     "value": 77.87184720804784,
     "count": 1
@@ -8426,9 +9182,9 @@
   {
     "gate": "crap",
     "path": "script/generate-ledger-archive-manifest.ts",
-    "line": 255,
-    "endLine": 267,
-    "symbol": "ArrowFunction:<anonymous@9125>",
+    "line": 263,
+    "endLine": 275,
+    "symbol": "ArrowFunction:<anonymous@9369>",
     "value": 30,
     "count": 1
   },
@@ -8471,10 +9227,10 @@
   {
     "gate": "crap",
     "path": "script/generate-ledger-archive-manifest.ts",
-    "line": 198,
-    "endLine": 206,
+    "line": 204,
+    "endLine": 214,
     "symbol": "FunctionDeclaration:verifyDisposition",
-    "value": 30,
+    "value": 42,
     "count": 1
   },
   {
@@ -8500,7 +9256,7 @@
     "path": "script/ledger-archive-review-r2.test.ts",
     "line": 341,
     "endLine": 409,
-    "symbol": "ArrowFunction:<anonymous@14293>",
+    "symbol": "ArrowFunction:<anonymous@14325>",
     "value": 42,
     "count": 1
   },
@@ -8509,7 +9265,7 @@
     "path": "script/ledger-archive-review-r2.test.ts",
     "line": 420,
     "endLine": 468,
-    "symbol": "ArrowFunction:<anonymous@17136>",
+    "symbol": "ArrowFunction:<anonymous@17168>",
     "value": 210,
     "count": 1
   },
@@ -8518,7 +9274,7 @@
     "path": "script/ledger-archive-review-r2.test.ts",
     "line": 84,
     "endLine": 270,
-    "symbol": "ArrowFunction:<anonymous@2962>",
+    "symbol": "ArrowFunction:<anonymous@2991>",
     "value": 30,
     "count": 1
   },
@@ -8527,42 +9283,42 @@
     "path": "script/ledger-archive-review-r2.test.ts",
     "line": 155,
     "endLine": 211,
-    "symbol": "ArrowFunction:<anonymous@6113>",
+    "symbol": "ArrowFunction:<anonymous@6142>",
     "value": 72,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 35,
-    "endLine": 65,
-    "symbol": "ArrowFunction:<anonymous@1247>",
+    "line": 36,
+    "endLine": 66,
+    "symbol": "ArrowFunction:<anonymous@1330>",
     "value": 56,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 126,
-    "endLine": 139,
-    "symbol": "ArrowFunction:<anonymous@5153>",
-    "value": 132,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "script/ledger-archive-snapshot.ts",
-    "line": 69,
-    "endLine": 143,
-    "symbol": "FunctionDeclaration:assertArchiveEquality",
+    "line": 221,
+    "endLine": 246,
+    "symbol": "ArrowFunction:<anonymous@8077>",
     "value": 272,
     "count": 1
   },
   {
     "gate": "crap",
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 145,
-    "endLine": 177,
+    "line": 70,
+    "endLine": 118,
+    "symbol": "FunctionDeclaration:assertArchiveEquality",
+    "value": 210,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 252,
+    "endLine": 284,
     "symbol": "FunctionDeclaration:withRestoredArchive",
     "value": 30,
     "count": 1
@@ -8570,8 +9326,8 @@
   {
     "gate": "crap",
     "path": "script/ledger-producer-manifest.ts",
-    "line": 333,
-    "endLine": 341,
+    "line": 298,
+    "endLine": 306,
     "symbol": "FunctionDeclaration:ledgerCensusRole",
     "value": 65.88888888888889,
     "count": 1
@@ -8579,8 +9335,8 @@
   {
     "gate": "crap",
     "path": "script/ledger-producer-manifest.ts",
-    "line": 345,
-    "endLine": 357,
+    "line": 310,
+    "endLine": 322,
     "symbol": "FunctionDeclaration:ledgerCensusSchemaOrigins",
     "value": 33.729166666666664,
     "count": 1
@@ -8588,10 +9344,10 @@
   {
     "gate": "crap",
     "path": "script/ledger-producer-manifest.ts",
-    "line": 296,
-    "endLine": 323,
+    "line": 261,
+    "endLine": 288,
     "symbol": "FunctionDeclaration:scanLedgerProducers",
-    "value": 75.75162324319882,
+    "value": 62.25881482699104,
     "count": 1
   },
   {
@@ -10127,6 +10883,15 @@
   {
     "gate": "crap",
     "path": "script/quality-schema.ts",
+    "line": 50,
+    "endLine": 79,
+    "symbol": "FunctionDeclaration:importedBindings",
+    "value": 132,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "script/quality-schema.ts",
     "line": 10,
     "endLine": 36,
     "symbol": "FunctionDeclaration:literal",
@@ -10137,9 +10902,9 @@
     "gate": "crap",
     "path": "script/quality-schema.ts",
     "line": 37,
-    "endLine": 64,
-    "symbol": "FunctionDeclaration:migrationOrder",
-    "value": 72,
+    "endLine": 47,
+    "symbol": "FunctionDeclaration:topLevelBindings",
+    "value": 30.1171875,
     "count": 1
   },
   {
@@ -10158,6 +10923,33 @@
     "endLine": 103,
     "symbol": "FunctionDeclaration:main",
     "value": 30,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "script/request-authority-census.ts",
+    "line": 81,
+    "endLine": 107,
+    "symbol": "ArrowFunction:<anonymous@3514>",
+    "value": 156,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "script/request-authority-census.ts",
+    "line": 108,
+    "endLine": 129,
+    "symbol": "ArrowFunction:<anonymous@4548>",
+    "value": 182,
+    "count": 1
+  },
+  {
+    "gate": "crap",
+    "path": "script/request-authority-census.ts",
+    "line": 135,
+    "endLine": 224,
+    "symbol": "FunctionDeclaration:scanRequestAuthority",
+    "value": 116.23863636363637,
     "count": 1
   },
   {
@@ -10622,8 +11414,8 @@
   {
     "gate": "crap",
     "path": "script/topology.ts",
-    "line": 235,
-    "endLine": 248,
+    "line": 236,
+    "endLine": 249,
     "symbol": "FunctionDeclaration:assertTopologyComplete",
     "value": 30,
     "count": 1
@@ -10631,8 +11423,8 @@
   {
     "gate": "crap",
     "path": "script/topology.ts",
-    "line": 203,
-    "endLine": 232,
+    "line": 204,
+    "endLine": 233,
     "symbol": "FunctionDeclaration:topologyInventoryDrift",
     "value": 56,
     "count": 1

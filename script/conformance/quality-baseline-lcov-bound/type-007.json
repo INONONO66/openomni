@@ -1,5 +1,3469 @@
 [
   {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 14,
+    "symbol": "unknown:baseURL",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 149,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 146,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 46,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 9,
+    "symbol": "unknown:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 84,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 117,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 85,
+    "symbol": "unknown:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 93,
+    "symbol": "unknown:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 150,
+    "symbol": "unknown:readAuthFile",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 94,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 112,
+    "symbol": "unknown:resolve",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 8,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 11,
+    "symbol": "implicitAny:APIError",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 25,
+    "symbol": "implicitAny:ProviderError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 20,
+    "symbol": "implicitAny:aborted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 41,
+    "symbol": "implicitAny:coerceApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 21,
+    "symbol": "implicitAny:contextOverflow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 42,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 16,
+    "symbol": "implicitAny:isRetryable",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 14,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 19,
+    "symbol": "implicitAny:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 29,
+    "symbol": "implicitAny:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 18,
+    "symbol": "implicitAny:responseBody",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 17,
+    "symbol": "implicitAny:responseHeaders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 15,
+    "symbol": "implicitAny:statusCode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 60,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 11,
+    "symbol": "unknown:APIError",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 4,
+    "symbol": "unknown:NamedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 25,
+    "symbol": "unknown:ProviderError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 20,
+    "symbol": "unknown:aborted",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 45,
+    "symbol": "unknown:candidate",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 41,
+    "symbol": "unknown:coerceApiError",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 21,
+    "symbol": "unknown:contextOverflow",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 41,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 16,
+    "symbol": "unknown:isRetryable",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 14,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 19,
+    "symbol": "unknown:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 29,
+    "symbol": "unknown:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 18,
+    "symbol": "unknown:responseBody",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 17,
+    "symbol": "unknown:responseHeaders",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/error.ts",
+    "line": 15,
+    "symbol": "unknown:statusCode",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/index.ts",
+    "line": 7,
+    "symbol": "implicitAny:RunInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/index.ts",
+    "line": 7,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/index.ts",
+    "line": 7,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 95,
+    "symbol": "implicitAny:msg",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 146,
+    "symbol": "implicitAny:p",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 9,
+    "symbol": "unknown:AssistantContentBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 7,
+    "symbol": "unknown:AssistantMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 11,
+    "symbol": "unknown:AssistantReasoningBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 10,
+    "symbol": "unknown:AssistantTextBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 12,
+    "symbol": "unknown:AssistantToolCallBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 93,
+    "symbol": "unknown:AssistantWithParts",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 72,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 6,
+    "symbol": "unknown:SDKMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 8,
+    "symbol": "unknown:ToolMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 120,
+    "symbol": "unknown:assembleAssistantMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 99,
+    "symbol": "unknown:buildAssistantMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 24,
+    "symbol": "unknown:buildAssistantReasoningBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 38,
+    "symbol": "unknown:buildToolCallBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 80,
+    "symbol": "unknown:buildToolResult",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 38,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 127,
+    "symbol": "unknown:content",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 159,
+    "symbol": "unknown:coreMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 41,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 95,
+    "symbol": "unknown:isAssistantMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 142,
+    "symbol": "unknown:messageToSDK",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 156,
+    "symbol": "unknown:messagesWithParts",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 95,
+    "symbol": "unknown:msg",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 69,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 146,
+    "symbol": "unknown:p",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 25,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 93,
+    "symbol": "unknown:parts",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 80,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 69,
+    "symbol": "unknown:stringifyToolOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 155,
+    "symbol": "unknown:toModelMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/message/index.ts",
+    "line": 104,
+    "symbol": "unknown:toolCalls",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 63,
+    "symbol": "implicitAny:api",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 99,
+    "symbol": "implicitAny:cached",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 67,
+    "symbol": "implicitAny:entry",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 82,
+    "symbol": "implicitAny:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 109,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 52,
+    "symbol": "implicitAny:sanitized",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 110,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 89,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 97,
+    "symbol": "unknown:Data",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 23,
+    "symbol": "unknown:Provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 82,
+    "symbol": "unknown:_provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 40,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 130,
+    "symbol": "unknown:get",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 89,
+    "symbol": "unknown:isRecord",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 29,
+    "symbol": "unknown:models",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 58,
+    "symbol": "unknown:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 79,
+    "symbol": "unknown:rawModel",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 55,
+    "symbol": "unknown:rawProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 63,
+    "symbol": "unknown:rest",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 51,
+    "symbol": "unknown:sanitizeRemoteCatalog",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 75,
+    "symbol": "unknown:sanitizeRemoteModels",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 52,
+    "symbol": "unknown:sanitized",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 89,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 40,
+    "symbol": "unknown:writeCache",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/model/index.ts",
+    "line": 82,
+    "symbol": "unknown:{ provider: _provider, ...rest }",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/model/select.ts",
+    "line": 11,
+    "symbol": "unknown:selectModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 33,
+    "symbol": "implicitAny:ProcessorOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 29,
+    "symbol": "implicitAny:Stream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 37,
+    "symbol": "implicitAny:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 120,
+    "symbol": "implicitAny:closing",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 55,
+    "symbol": "implicitAny:create",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 42,
+    "symbol": "implicitAny:createStream",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 127,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 30,
+    "symbol": "implicitAny:fullStream",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 108,
+    "symbol": "implicitAny:iterator",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 111,
+    "symbol": "implicitAny:next",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 55,
+    "symbol": "implicitAny:options",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 127,
+    "symbol": "implicitAny:process",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 177,
+    "symbol": "implicitAny:publishInfo",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 65,
+    "symbol": "implicitAny:sink",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 107,
+    "symbol": "implicitAny:stream",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 148,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 29,
+    "symbol": "unknown:Stream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 202,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 120,
+    "symbol": "unknown:closing",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 183,
+    "symbol": "unknown:context",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 42,
+    "symbol": "unknown:createStream",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 89,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 147,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 89,
+    "symbol": "unknown:eventContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 72,
+    "symbol": "unknown:fact",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 68,
+    "symbol": "unknown:folded",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 30,
+    "symbol": "unknown:fullStream",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 235,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 108,
+    "symbol": "unknown:iterator",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 194,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 111,
+    "symbol": "unknown:next",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 89,
+    "symbol": "unknown:note",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 194,
+    "symbol": "unknown:onMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 202,
+    "symbol": "unknown:onToolCall",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 73,
+    "symbol": "unknown:outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 114,
+    "symbol": "unknown:process",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 170,
+    "symbol": "unknown:publishInfo",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 72,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 107,
+    "symbol": "unknown:stream",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/index.ts",
+    "line": 235,
+    "symbol": "unknown:summarizeRecord",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 63,
+    "symbol": "implicitAny:createStreamEventState",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 311,
+    "symbol": "implicitAny:extractSignature",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 65,
+    "symbol": "implicitAny:pendingTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 64,
+    "symbol": "implicitAny:reasoning",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 311,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 6,
+    "symbol": "unknown:StreamEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 8,
+    "symbol": "unknown:UnknownKeyword",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 270,
+    "symbol": "unknown:appendReasoning",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 153,
+    "symbol": "unknown:applyStreamEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 23,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 96,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 35
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 309,
+    "symbol": "unknown:extractSignature",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 21,
+    "symbol": "unknown:fact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 324,
+    "symbol": "unknown:finishReason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 282,
+    "symbol": "unknown:finishReasoning",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 319,
+    "symbol": "unknown:handleStepFinish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 95,
+    "symbol": "unknown:handleStreamEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 141,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 235,
+    "symbol": "unknown:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 112,
+    "symbol": "unknown:normalizeEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 100,
+    "symbol": "unknown:normalized",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 23,
+    "symbol": "unknown:note",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 271,
+    "symbol": "unknown:open",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 228,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 325,
+    "symbol": "unknown:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 126,
+    "symbol": "unknown:providerMetadata",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 287,
+    "symbol": "unknown:reasoningId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 21,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 278,
+    "symbol": "unknown:signature",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 252,
+    "symbol": "unknown:startReasoning",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 227,
+    "symbol": "unknown:startText",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 165,
+    "symbol": "unknown:text",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/stream-events.ts",
+    "line": 326,
+    "symbol": "unknown:usage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 150,
+    "symbol": "implicitAny:drainToolSettlements",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 151,
+    "symbol": "implicitAny:iterator",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 167,
+    "symbol": "implicitAny:next",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 167,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 9,
+    "symbol": "unknown:appendPart",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 39,
+    "symbol": "unknown:callID",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 150,
+    "symbol": "unknown:drainToolSettlements",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 33,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 152,
+    "symbol": "unknown:firstEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 32,
+    "symbol": "unknown:handleToolCall",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 61,
+    "symbol": "unknown:handleToolResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 38,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 68,
+    "symbol": "unknown:isError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 151,
+    "symbol": "unknown:iterator",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 165,
+    "symbol": "unknown:next",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 124,
+    "symbol": "unknown:normalizeOutputPayload",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 127,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 9,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 127,
+    "symbol": "unknown:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 125,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 167,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 51,
+    "symbol": "unknown:state",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 79,
+    "symbol": "unknown:synthetic",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 66,
+    "symbol": "unknown:toolCallId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/processor/tool-events.ts",
+    "line": 133,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 14,
+    "symbol": "implicitAny:Model",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 64,
+    "symbol": "implicitAny:ModelResolutionError",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 17,
+    "symbol": "implicitAny:api",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 28,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 25,
+    "symbol": "implicitAny:family",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 15,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 26,
+    "symbol": "implicitAny:limit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 67,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 69,
+    "symbol": "implicitAny:model",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 24,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 21,
+    "symbol": "implicitAny:npm",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 68,
+    "symbol": "implicitAny:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 16,
+    "symbol": "implicitAny:providerID",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 70,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 20,
+    "symbol": "implicitAny:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 14,
+    "symbol": "unknown:Model",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 64,
+    "symbol": "unknown:ModelResolutionError",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 17,
+    "symbol": "unknown:api",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 51,
+    "symbol": "unknown:catalogModels",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 97,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 28,
+    "symbol": "unknown:context",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 79,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 25,
+    "symbol": "unknown:family",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 34,
+    "symbol": "unknown:fromModelsDevModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 15,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 26,
+    "symbol": "unknown:limit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 128,
+    "symbol": "unknown:listModels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 67,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 69,
+    "symbol": "unknown:model",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 24,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 21,
+    "symbol": "unknown:npm",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 34,
+    "symbol": "unknown:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 16,
+    "symbol": "unknown:providerID",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 54,
+    "symbol": "unknown:rawModel",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 70,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 82,
+    "symbol": "unknown:resolveModel",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/index.ts",
+    "line": 20,
+    "symbol": "unknown:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 10,
+    "symbol": "implicitAny:ProxyModelsError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 64,
+    "symbol": "implicitAny:fetchProxyModels",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 48,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 44,
+    "symbol": "implicitAny:item",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 13,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 44,
+    "symbol": "implicitAny:readModelIds",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 62,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 15,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 14,
+    "symbol": "implicitAny:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 10,
+    "symbol": "unknown:ProxyModelsError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 79,
+    "symbol": "unknown:body",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 65,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 41,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 66,
+    "symbol": "unknown:fetchProxyModels",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 13,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 39,
+    "symbol": "unknown:readModelIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 15,
+    "symbol": "unknown:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 14,
+    "symbol": "unknown:url",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/proxy-models.ts",
+    "line": 39,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 232,
+    "symbol": "implicitAny:sdk",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 35,
+    "symbol": "unknown:BUNDLED_PROVIDERS",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 62,
+    "symbol": "unknown:CUSTOM_LOADERS",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 54,
+    "symbol": "unknown:CustomLoaderResult",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 8,
+    "symbol": "unknown:SdkOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 149,
+    "symbol": "unknown:createUnbundledSDK",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 122,
+    "symbol": "unknown:custom",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 166,
+    "symbol": "unknown:customLoader",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 124,
+    "symbol": "unknown:customOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 169,
+    "symbol": "unknown:factory",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 79,
+    "symbol": "unknown:getModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 35,
+    "symbol": "unknown:options",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 118,
+    "symbol": "unknown:providerOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/sdk.ts",
+    "line": 216,
+    "symbol": "unknown:resolveLanguageModel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 68,
+    "symbol": "implicitAny:msg",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 180,
+    "symbol": "implicitAny:part",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 15,
+    "symbol": "unknown:AssistantContentPart",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 14,
+    "symbol": "unknown:AssistantMessageContent",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 17,
+    "symbol": "unknown:NormalizableContentPart",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 10,
+    "symbol": "unknown:SDKMessageWithProviderOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 16,
+    "symbol": "unknown:ToolContentPart",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 98,
+    "symbol": "unknown:applyAnthropicCaching",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 164,
+    "symbol": "unknown:buildMessageWithContent",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 73,
+    "symbol": "unknown:content",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 103,
+    "symbol": "unknown:existing",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 104,
+    "symbol": "unknown:existingAnthropic",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 59,
+    "symbol": "unknown:filtered",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 171,
+    "symbol": "unknown:isAssistantContentPart",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 176,
+    "symbol": "unknown:isToolContentPart",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 47,
+    "symbol": "unknown:msg",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 20,
+    "symbol": "unknown:msgs",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 45,
+    "symbol": "unknown:normalizeAnthropic",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 19,
+    "symbol": "unknown:normalizeMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 59,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 11,
+    "symbol": "unknown:providerOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 46,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/llm/src/provider/transform.ts",
+    "line": 73,
+    "symbol": "unknown:sanitizeAssistantContentPart",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 221,
+    "symbol": "implicitAny:APIError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 303,
+    "symbol": "implicitAny:apiCause",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 215,
+    "symbol": "implicitAny:apiError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 324,
+    "symbol": "implicitAny:classify",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 414,
+    "symbol": "implicitAny:classifyErrorPayload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 215,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 43,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 43,
+    "symbol": "implicitAny:sleep",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 342,
+    "symbol": "implicitAny:sniffed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 350,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 221,
+    "symbol": "unknown:APIError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 51,
+    "symbol": "unknown:abortHandler",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 34,
+    "symbol": "unknown:api",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 303,
+    "symbol": "unknown:apiCause",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 306,
+    "symbol": "unknown:apiError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 30,
+    "symbol": "unknown:attemptReason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 423,
+    "symbol": "unknown:body",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 309,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 316,
+    "symbol": "unknown:classify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 434,
+    "symbol": "unknown:classifyErrorPayload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 299,
+    "symbol": "unknown:classifyFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 425,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 304,
+    "symbol": "unknown:current",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 127,
+    "symbol": "unknown:decide",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 6,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 30
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 430,
+    "symbol": "unknown:errorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 431,
+    "symbol": "unknown:errorMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 429,
+    "symbol": "unknown:errorType",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 220,
+    "symbol": "unknown:headerDelay",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 6,
+    "symbol": "unknown:isContextOverflow",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 84,
+    "symbol": "unknown:isInstantTransportFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 412,
+    "symbol": "unknown:json",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 426,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 86,
+    "symbol": "unknown:providerError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 214,
+    "symbol": "unknown:retryAfterMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 45,
+    "symbol": "unknown:sleep",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/retry/index.ts",
+    "line": 424,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/retry/telemetry.ts",
+    "line": 18,
+    "symbol": "implicitAny:observeRetry",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/retry/telemetry.ts",
+    "line": 18,
+    "symbol": "unknown:observeRetry",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 111,
+    "symbol": "implicitAny:Failure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 99,
+    "symbol": "implicitAny:FailureError",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 86,
+    "symbol": "implicitAny:FailureUsage",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 21,
+    "symbol": "implicitAny:RunInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 332,
+    "symbol": "implicitAny:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 179,
+    "symbol": "implicitAny:abortSignal",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 106,
+    "symbol": "implicitAny:aborted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 302,
+    "symbol": "implicitAny:adaptStream",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 217,
+    "symbol": "implicitAny:ai",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 90,
+    "symbol": "implicitAny:cacheReadTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 91,
+    "symbol": "implicitAny:cacheWriteTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 306,
+    "symbol": "implicitAny:chunk",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 107,
+    "symbol": "implicitAny:contextOverflow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 75,
+    "symbol": "implicitAny:createStream",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 319,
+    "symbol": "implicitAny:fullStream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 160,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 87,
+    "symbol": "implicitAny:inputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 102,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 88,
+    "symbol": "implicitAny:outputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 324,
+    "symbol": "implicitAny:processor",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 103,
+    "symbol": "implicitAny:providerErrorName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 89,
+    "symbol": "implicitAny:reasoningTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 104,
+    "symbol": "implicitAny:retryAfterMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 172,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 160,
+    "symbol": "implicitAny:serializePrompt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 184,
+    "symbol": "implicitAny:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 25,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 267,
+    "symbol": "implicitAny:stopWhen",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 260,
+    "symbol": "implicitAny:streamArgs",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 295,
+    "symbol": "implicitAny:streamResult",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 105,
+    "symbol": "implicitAny:usage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 108,
+    "symbol": "implicitAny:visibleOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 384,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 111,
+    "symbol": "unknown:Failure",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 99,
+    "symbol": "unknown:FailureError",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 86,
+    "symbol": "unknown:FailureUsage",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 113,
+    "symbol": "unknown:Outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 21,
+    "symbol": "unknown:RunInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 106,
+    "symbol": "unknown:aborted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 302,
+    "symbol": "unknown:adaptStream",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 217,
+    "symbol": "unknown:ai",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 385,
+    "symbol": "unknown:apiError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 133,
+    "symbol": "unknown:assignWireToolNames",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 90,
+    "symbol": "unknown:cacheReadTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 91,
+    "symbol": "unknown:cacheWriteTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 407,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 306,
+    "symbol": "unknown:chunk",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 107,
+    "symbol": "unknown:contextOverflow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 75,
+    "symbol": "unknown:createStream",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 434,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 384,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 116,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 431,
+    "symbol": "unknown:errorFacts",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 307,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 391,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 319,
+    "symbol": "unknown:fullStream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 160,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 167,
+    "symbol": "unknown:inputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 87,
+    "symbol": "unknown:inputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 102,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 22,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 227,
+    "symbol": "unknown:normalizedMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 278,
+    "symbol": "unknown:onError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 88,
+    "symbol": "unknown:outputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 327,
+    "symbol": "unknown:processor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 103,
+    "symbol": "unknown:providerErrorName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 58,
+    "symbol": "unknown:providerOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 89,
+    "symbol": "unknown:reasoningTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 442,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 104,
+    "symbol": "unknown:retryAfterMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 172,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 245,
+    "symbol": "unknown:sdkTools",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 160,
+    "symbol": "unknown:serializePrompt",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 386,
+    "symbol": "unknown:source",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 139,
+    "symbol": "unknown:spec",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 260,
+    "symbol": "unknown:streamArgs",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 295,
+    "symbol": "unknown:streamResult",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 233,
+    "symbol": "unknown:systemMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 23,
+    "symbol": "unknown:tools",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 105,
+    "symbol": "unknown:usage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 108,
+    "symbol": "unknown:visibleOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 278,
+    "symbol": "unknown:{ error }",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/run.ts",
+    "line": 195,
+    "symbol": "unknown:{ wireNames, originalByWire }",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/sink.ts",
+    "line": 21,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/sink.ts",
+    "line": 10,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/sink.ts",
+    "line": 10,
+    "symbol": "unknown:onMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/sink.ts",
+    "line": 21,
+    "symbol": "unknown:onToolCall",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 169,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 105,
+    "symbol": "unknown:cacheReadTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 114,
+    "symbol": "unknown:cacheWriteTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 164,
+    "symbol": "unknown:details",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 57,
+    "symbol": "unknown:extractUsage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 68,
+    "symbol": "unknown:inputDetails",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 169,
+    "symbol": "unknown:isRecord",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 152,
+    "symbol": "unknown:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 137,
+    "symbol": "unknown:numberField",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 69,
+    "symbol": "unknown:outputDetails",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 59,
+    "symbol": "unknown:providerMetadata",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 151,
+    "symbol": "unknown:providerMetadataNumber",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/token/index.ts",
+    "line": 162,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
     "path": "packages/llm/src/token/index.ts",
     "line": 162,
     "symbol": "unknown:rawReasoningTokens",
@@ -4534,3469 +7998,5 @@
     "gate": "type",
     "value": 1,
     "count": 6
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 176,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 157,
-    "symbol": "unknown:FunctionExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 177,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 156,
-    "symbol": "unknown:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 156,
-    "symbol": "unknown:ParenthesizedExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 70,
-    "symbol": "unknown:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 90,
-    "symbol": "unknown:RunInput",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 22,
-    "symbol": "unknown:StreamChunk",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 186,
-    "symbol": "unknown:TypeReference",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 17,
-    "symbol": "unknown:__openomniAiStreamArgs",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 20,
-    "symbol": "unknown:aiCapture",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 28,
-    "symbol": "unknown:args",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 76,
-    "symbol": "unknown:call",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 56,
-    "symbol": "unknown:capturedMessages",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 57,
-    "symbol": "unknown:capturedToolCalls",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 30,
-    "symbol": "unknown:chunks",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 163,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 179,
-    "symbol": "unknown:failure",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 32,
-    "symbol": "unknown:fullStream",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 450,
-    "symbol": "unknown:globalPublish",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 39,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 37,
-    "symbol": "unknown:jsonSchema",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 352,
-    "symbol": "unknown:lastMessage",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 73,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 28,
-    "symbol": "unknown:mockAiModule",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 24,
-    "symbol": "unknown:mockStreamChunks",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 73,
-    "symbol": "unknown:onMessage",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 76,
-    "symbol": "unknown:onToolCall",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 99,
-    "symbol": "unknown:outcome",
-    "gate": "type",
-    "value": 1,
-    "count": 34
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 354,
-    "symbol": "unknown:part",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 14,
-    "symbol": "unknown:run",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 37,
-    "symbol": "unknown:schema",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 421,
-    "symbol": "unknown:second",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 149,
-    "symbol": "unknown:source",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 38,
-    "symbol": "unknown:stepCountIs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 39,
-    "symbol": "unknown:steps",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 28,
-    "symbol": "unknown:streamText",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 354,
-    "symbol": "unknown:textParts",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/llm/test/run.test.ts",
-    "line": 221,
-    "symbol": "unknown:unsub",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/llm/test/token/token-tracker.test.ts",
-    "line": 107,
-    "symbol": "unknown:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/llm/test/token/token-tracker.test.ts",
-    "line": 13,
-    "symbol": "unknown:response",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/llm/test/token/token-tracker.test.ts",
-    "line": 11,
-    "symbol": "unknown:usageCases",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 187,
-    "symbol": "implicitAny:attachMachineDaemon",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 54,
-    "symbol": "implicitAny:cell",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 36,
-    "symbol": "implicitAny:cells",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 54,
-    "symbol": "implicitAny:close",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 151,
-    "symbol": "implicitAny:execution",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 34,
-    "symbol": "implicitAny:filesystem",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 35,
-    "symbol": "implicitAny:lifetime",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 11,
-    "symbol": "implicitAny:runCode",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 14,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 104,
-    "symbol": "unknown:attachMachineDaemon",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 61,
-    "symbol": "unknown:close",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 45,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 104,
-    "symbol": "unknown:onRequest",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 104,
-    "symbol": "unknown:params",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 45,
-    "symbol": "unknown:rejectClosed",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 96,
-    "symbol": "unknown:requireClient",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/daemon.ts",
-    "line": 104,
-    "symbol": "unknown:respond",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 12,
-    "symbol": "implicitAny:MachineCellError",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 4,
-    "symbol": "implicitAny:MachineCellErrorData",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 14,
-    "symbol": "implicitAny:MachineRefusalError",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 5,
-    "symbol": "implicitAny:code",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 9,
-    "symbol": "implicitAny:message",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 17,
-    "symbol": "implicitAny:reason",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 12,
-    "symbol": "unknown:MachineCellError",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 4,
-    "symbol": "unknown:MachineCellErrorData",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 14,
-    "symbol": "unknown:MachineRefusalError",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 5,
-    "symbol": "unknown:code",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 9,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/errors.ts",
-    "line": 17,
-    "symbol": "unknown:reason",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/exec.ts",
-    "line": 5,
-    "symbol": "implicitAny:execute",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/exec.ts",
-    "line": 7,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/exec.ts",
-    "line": 28,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/exec.ts",
-    "line": 11,
-    "symbol": "unknown:child",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/exec.ts",
-    "line": 26,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/machines/src/exec.ts",
-    "line": 46,
-    "symbol": "unknown:execute",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/machines/src/exec.ts",
-    "line": 30,
-    "symbol": "unknown:kill",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/fs.ts",
-    "line": 118,
-    "symbol": "implicitAny:result",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/fs.ts",
-    "line": 376,
-    "symbol": "unknown:directoryNames",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/fs.ts",
-    "line": 362,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/machines/src/fs.ts",
-    "line": 340,
-    "symbol": "unknown:openRoot",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 69,
-    "symbol": "implicitAny:detach",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 32,
-    "symbol": "implicitAny:runCode",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 124,
-    "symbol": "implicitAny:server",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 32,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 78,
-    "symbol": "unknown:_notify",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 258,
-    "symbol": "unknown:cancel",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 250,
-    "symbol": "unknown:cancellationError",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 143,
-    "symbol": "unknown:connection",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 69,
-    "symbol": "unknown:detach",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 258,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 194,
-    "symbol": "unknown:filesystem",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 165,
-    "symbol": "unknown:location",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 78,
-    "symbol": "unknown:params",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 78,
-    "symbol": "unknown:respond",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 242,
-    "symbol": "unknown:runCode",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/host.ts",
-    "line": 78,
-    "symbol": "unknown:server",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 1,
-    "symbol": "implicitAny:CodeRunner",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 2,
-    "symbol": "implicitAny:MachineCellError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 1,
-    "symbol": "implicitAny:MachineDaemon",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 3,
-    "symbol": "implicitAny:MachineHandle",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 3,
-    "symbol": "implicitAny:MachineHost",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 3,
-    "symbol": "implicitAny:MachineInfo",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 2,
-    "symbol": "implicitAny:MachineRefusalError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 2,
-    "symbol": "unknown:MachineCellError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/src/index.ts",
-    "line": 2,
-    "symbol": "unknown:MachineRefusalError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 217,
-    "symbol": "implicitAny:IpcRemoteError",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 20,
-    "symbol": "implicitAny:descriptor",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 20,
-    "symbol": "implicitAny:publish",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 101,
-    "symbol": "unknown:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 218,
-    "symbol": "unknown:AwaitExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 216,
-    "symbol": "unknown:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 217,
-    "symbol": "unknown:IpcRemoteError",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 171,
-    "symbol": "unknown:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 11,
-    "symbol": "unknown:RecordedEvent",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 289,
-    "symbol": "unknown:_params",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 67,
-    "symbol": "unknown:collector",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 64,
-    "symbol": "unknown:context",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 20,
-    "symbol": "unknown:descriptor",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 235,
-    "symbol": "unknown:detached",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 18,
-    "symbol": "unknown:event",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 16,
-    "symbol": "unknown:eventCollector",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 17,
-    "symbol": "unknown:events",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 36,
-    "symbol": "unknown:next",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 13,
-    "symbol": "unknown:payload",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 20,
-    "symbol": "unknown:publish",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 18,
-    "symbol": "unknown:resolve",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 289,
-    "symbol": "unknown:respond",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 289,
-    "symbol": "unknown:rogue",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 64,
-    "symbol": "unknown:run",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 254,
-    "symbol": "unknown:superseded",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/attach.test.ts",
-    "line": 62,
-    "symbol": "unknown:withHost",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/fs-wire.test.ts",
-    "line": 112,
-    "symbol": "implicitAny:MachineRefusalError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/fs-wire.test.ts",
-    "line": 112,
-    "symbol": "unknown:MachineRefusalError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/fs-wire.test.ts",
-    "line": 241,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/fs-wire.test.ts",
-    "line": 312,
-    "symbol": "unknown:_params",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/fs-wire.test.ts",
-    "line": 312,
-    "symbol": "unknown:host",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/fs-wire.test.ts",
-    "line": 312,
-    "symbol": "unknown:respond",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 111,
-    "symbol": "implicitAny:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 108,
-    "symbol": "implicitAny:parsed",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 296,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 110,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 111,
-    "symbol": "unknown:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 90,
-    "symbol": "unknown:child",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 496,
-    "symbol": "unknown:created",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 295,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 108,
-    "symbol": "unknown:parsed",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 270,
-    "symbol": "unknown:reopenFailure",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 94,
-    "symbol": "unknown:runFifoRequest",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/machines/test/fs.test.ts",
-    "line": 277,
-    "symbol": "unknown:thrown",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/policy/src/effects/merge/rules.ts",
-    "line": 65,
-    "symbol": "implicitAny:state",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/effects/merge/rules.ts",
-    "line": 65,
-    "symbol": "implicitAny:toolFilters",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/effects/merge/rules.ts",
-    "line": 22,
-    "symbol": "implicitAny:type",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/effects/records.ts",
-    "line": 40,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/index.ts",
-    "line": 4,
-    "symbol": "implicitAny:PolicyCompileError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/index.ts",
-    "line": 4,
-    "symbol": "unknown:PolicyCompileError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/index.ts",
-    "line": 13,
-    "symbol": "unknown:evaluatePermission",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/message-match.ts",
-    "line": 82,
-    "symbol": "unknown:exhaustive",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 112,
-    "symbol": "unknown:evaluateAllowConstraints",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 60,
-    "symbol": "unknown:evaluateInputRules",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 137,
-    "symbol": "unknown:evaluatePermission",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 82,
-    "symbol": "unknown:evaluateResourceRestrictions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 34,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 71,
-    "symbol": "unknown:inputMatch",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 33,
-    "symbol": "unknown:matchesInputField",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/permission-evaluate.ts",
-    "line": 62,
-    "symbol": "unknown:request",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 109,
-    "symbol": "implicitAny:AllowVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 125,
-    "symbol": "implicitAny:ApprovalVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 24,
-    "symbol": "implicitAny:CompileErrorCode",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 37,
-    "symbol": "implicitAny:CompileErrorData",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 51,
-    "symbol": "implicitAny:CompileErrorOptions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 119,
-    "symbol": "implicitAny:DenyVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 99,
-    "symbol": "implicitAny:Match",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 139,
-    "symbol": "implicitAny:ObligationVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 49,
-    "symbol": "implicitAny:PolicyCompileErrorBase",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 35,
-    "symbol": "implicitAny:PolicyCompileErrorCode",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 154,
-    "symbol": "implicitAny:RowVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 131,
-    "symbol": "implicitAny:TransformVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 39,
-    "symbol": "implicitAny:code",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 114,
-    "symbol": "implicitAny:effects",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 193,
-    "symbol": "implicitAny:error",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 575,
-    "symbol": "implicitAny:failure",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 40,
-    "symbol": "implicitAny:generation",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 43,
-    "symbol": "implicitAny:kind",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 151,
-    "symbol": "implicitAny:limit",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 264,
-    "symbol": "implicitAny:match",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 41,
-    "symbol": "implicitAny:message",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 143,
-    "symbol": "implicitAny:metric",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 45,
-    "symbol": "implicitAny:name",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 101,
-    "symbol": "implicitAny:op",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 135,
-    "symbol": "implicitAny:paths",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 44,
-    "symbol": "implicitAny:phase",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 112,
-    "symbol": "implicitAny:reason",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 113,
-    "symbol": "implicitAny:reasonCodes",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 136,
-    "symbol": "implicitAny:replacement",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 102,
-    "symbol": "implicitAny:role",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 42,
-    "symbol": "implicitAny:ruleName",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 103,
-    "symbol": "implicitAny:sessionId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 111,
-    "symbol": "implicitAny:type",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 274,
-    "symbol": "implicitAny:verdict",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 109,
-    "symbol": "unknown:AllowVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 125,
-    "symbol": "unknown:ApprovalVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 24,
-    "symbol": "unknown:CompileErrorCode",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 37,
-    "symbol": "unknown:CompileErrorData",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 51,
-    "symbol": "unknown:CompileErrorOptions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 119,
-    "symbol": "unknown:DenyVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 99,
-    "symbol": "unknown:Match",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 139,
-    "symbol": "unknown:ObligationVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 55,
-    "symbol": "unknown:PolicyCompileError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 49,
-    "symbol": "unknown:PolicyCompileErrorBase",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 35,
-    "symbol": "unknown:PolicyCompileErrorCode",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 154,
-    "symbol": "unknown:RowVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 131,
-    "symbol": "unknown:TransformVerdict",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 593,
-    "symbol": "unknown:append",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 39,
-    "symbol": "unknown:code",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 505,
-    "symbol": "unknown:compilePolicySnapshot",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 114,
-    "symbol": "unknown:effects",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 193,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 524,
-    "symbol": "unknown:failedSnapshot",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 577,
-    "symbol": "unknown:failure",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 40,
-    "symbol": "unknown:generation",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 43,
-    "symbol": "unknown:kind",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 151,
-    "symbol": "unknown:limit",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 264,
-    "symbol": "unknown:match",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 41,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 143,
-    "symbol": "unknown:metric",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 45,
-    "symbol": "unknown:name",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 101,
-    "symbol": "unknown:op",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 247,
-    "symbol": "unknown:parseRow",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 135,
-    "symbol": "unknown:paths",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 44,
-    "symbol": "unknown:phase",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 112,
-    "symbol": "unknown:reason",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 113,
-    "symbol": "unknown:reasonCodes",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 136,
-    "symbol": "unknown:replacement",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 102,
-    "symbol": "unknown:role",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 42,
-    "symbol": "unknown:ruleName",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 103,
-    "symbol": "unknown:sessionId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 111,
-    "symbol": "unknown:type",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 115,
-    "symbol": "unknown:value",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 274,
-    "symbol": "unknown:verdict",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/test/bucket-lookup.bench.ts",
-    "line": 49,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/bucket-lookup.bench.ts",
-    "line": 20,
-    "symbol": "unknown:_",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/bucket-lookup.bench.ts",
-    "line": 20,
-    "symbol": "unknown:unrelated",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/effect-composition.test.ts",
-    "line": 366,
-    "symbol": "implicitAny:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/test/effect-composition.test.ts",
-    "line": 41,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/test/engine-determinism.test.ts",
-    "line": 93,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/engine-determinism.test.ts",
-    "line": 134,
-    "symbol": "unknown:_",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/engine-determinism.test.ts",
-    "line": 134,
-    "symbol": "unknown:unrelated",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/message-rows.test.ts",
-    "line": 90,
-    "symbol": "implicitAny:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/permission-evaluate.test.ts",
-    "line": 18,
-    "symbol": "unknown:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 18
-  },
-  {
-    "path": "packages/policy/test/permission-evaluate.test.ts",
-    "line": 85,
-    "symbol": "unknown:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/test/permission-evaluate.test.ts",
-    "line": 10,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/policy/test/permission-evaluate.test.ts",
-    "line": 8,
-    "symbol": "unknown:request",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/policy/test/permission-evaluate.test.ts",
-    "line": 299,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 185,
-    "symbol": "implicitAny:BinaryExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 54,
-    "symbol": "implicitAny:body",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 185,
-    "symbol": "implicitAny:caught",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 25,
-    "symbol": "implicitAny:error",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 50,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 54,
-    "symbol": "unknown:body",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 20,
-    "symbol": "unknown:catchCompile",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 184,
-    "symbol": "unknown:caught",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/policy/test/point-enforcement.test.ts",
-    "line": 23,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 16
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 87,
-    "symbol": "implicitAny:BlacklistEntry",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 84,
-    "symbol": "implicitAny:BlacklistKind",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 212,
-    "symbol": "implicitAny:Budget",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 213,
-    "symbol": "implicitAny:BudgetThresholdInput",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 124,
-    "symbol": "implicitAny:ChannelGrant",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 99,
-    "symbol": "implicitAny:ChannelGrantKind",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 64,
-    "symbol": "implicitAny:Endpoint",
-    "gate": "type",
-    "value": 1,
-    "count": 16
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 52,
-    "symbol": "implicitAny:Identity",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 106,
-    "symbol": "implicitAny:InboundTreatment",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 16,
-    "symbol": "implicitAny:Kind",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 47,
-    "symbol": "implicitAny:Metadata",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 201,
-    "symbol": "implicitAny:Profile",
-    "gate": "type",
-    "value": 1,
-    "count": 15
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 161,
-    "symbol": "implicitAny:ProfileBudget",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 153,
-    "symbol": "implicitAny:ProfileBudgetThresholdInput",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 116,
-    "symbol": "implicitAny:ProvisionalMintPolicy",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 78,
-    "symbol": "implicitAny:ResolvedEndpoint",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 34,
-    "symbol": "implicitAny:Standing",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 37,
-    "symbol": "implicitAny:TrustTier",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 66,
-    "symbol": "implicitAny:actorId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 136,
-    "symbol": "implicitAny:allowedSenders",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 204,
-    "symbol": "implicitAny:blacklistEntryId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 209,
-    "symbol": "implicitAny:budget",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 144,
-    "symbol": "implicitAny:budgetLimit",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 151,
-    "symbol": "implicitAny:budgetThreshold",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 67,
-    "symbol": "implicitAny:channel",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 205,
-    "symbol": "implicitAny:channelGrantIds",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 59,
-    "symbol": "implicitAny:createdAt",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 93,
-    "symbol": "implicitAny:createdBy",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 130,
-    "symbol": "implicitAny:defaultTier",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 57,
-    "symbol": "implicitAny:displayName",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 80,
-    "symbol": "implicitAny:endpoint",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 92,
-    "symbol": "implicitAny:expiresAt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 68,
-    "symbol": "implicitAny:externalId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 53,
-    "symbol": "implicitAny:id",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 79,
-    "symbol": "implicitAny:identity",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 131,
-    "symbol": "implicitAny:inboundTreatment",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 54,
-    "symbol": "implicitAny:kind",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 119,
-    "symbol": "implicitAny:max",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 164,
-    "symbol": "implicitAny:maxToolCalls",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 171,
-    "symbol": "implicitAny:maxToolRuntimeMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 163,
-    "symbol": "implicitAny:maxTurns",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 165,
-    "symbol": "implicitAny:maxWallTimeMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 58,
-    "symbol": "implicitAny:metadata",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 208,
-    "symbol": "implicitAny:model",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 137,
-    "symbol": "implicitAny:provisionalMint",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 91,
-    "symbol": "implicitAny:reason",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 155,
-    "symbol": "implicitAny:reassuranceThreshold",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 56,
-    "symbol": "implicitAny:standing",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 126,
-    "symbol": "implicitAny:surface",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 206,
-    "symbol": "implicitAny:systemPrompt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 207,
-    "symbol": "implicitAny:tools",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 55,
-    "symbol": "implicitAny:trustTier",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 60,
-    "symbol": "implicitAny:updatedAt",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 90,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 72,
-    "symbol": "implicitAny:verifiedAt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 154,
-    "symbol": "implicitAny:warningThreshold",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 118,
-    "symbol": "implicitAny:windowMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 69,
-    "symbol": "implicitAny:workspace",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 87,
-    "symbol": "unknown:BlacklistEntry",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 84,
-    "symbol": "unknown:BlacklistKind",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 212,
-    "symbol": "unknown:Budget",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 213,
-    "symbol": "unknown:BudgetThresholdInput",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 124,
-    "symbol": "unknown:ChannelGrant",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 99,
-    "symbol": "unknown:ChannelGrantKind",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 64,
-    "symbol": "unknown:Endpoint",
-    "gate": "type",
-    "value": 1,
-    "count": 18
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 52,
-    "symbol": "unknown:Identity",
-    "gate": "type",
-    "value": 1,
-    "count": 14
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 106,
-    "symbol": "unknown:InboundTreatment",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 16,
-    "symbol": "unknown:Kind",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 47,
-    "symbol": "unknown:Metadata",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 201,
-    "symbol": "unknown:Profile",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 161,
-    "symbol": "unknown:ProfileBudget",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 153,
-    "symbol": "unknown:ProfileBudgetThresholdInput",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 116,
-    "symbol": "unknown:ProvisionalMintPolicy",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 78,
-    "symbol": "unknown:ResolvedEndpoint",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 34,
-    "symbol": "unknown:Standing",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 37,
-    "symbol": "unknown:TrustTier",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 66,
-    "symbol": "unknown:actorId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 136,
-    "symbol": "unknown:allowedSenders",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 204,
-    "symbol": "unknown:blacklistEntryId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 209,
-    "symbol": "unknown:budget",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 144,
-    "symbol": "unknown:budgetLimit",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 151,
-    "symbol": "unknown:budgetThreshold",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 67,
-    "symbol": "unknown:channel",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 205,
-    "symbol": "unknown:channelGrantIds",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 59,
-    "symbol": "unknown:createdAt",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 93,
-    "symbol": "unknown:createdBy",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 130,
-    "symbol": "unknown:defaultTier",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 57,
-    "symbol": "unknown:displayName",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 80,
-    "symbol": "unknown:endpoint",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 92,
-    "symbol": "unknown:expiresAt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 68,
-    "symbol": "unknown:externalId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 53,
-    "symbol": "unknown:id",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 79,
-    "symbol": "unknown:identity",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 131,
-    "symbol": "unknown:inboundTreatment",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 54,
-    "symbol": "unknown:kind",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 119,
-    "symbol": "unknown:max",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 164,
-    "symbol": "unknown:maxToolCalls",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 171,
-    "symbol": "unknown:maxToolRuntimeMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 163,
-    "symbol": "unknown:maxTurns",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 165,
-    "symbol": "unknown:maxWallTimeMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 58,
-    "symbol": "unknown:metadata",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 208,
-    "symbol": "unknown:model",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 137,
-    "symbol": "unknown:provisionalMint",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 91,
-    "symbol": "unknown:reason",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 155,
-    "symbol": "unknown:reassuranceThreshold",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 56,
-    "symbol": "unknown:standing",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 126,
-    "symbol": "unknown:surface",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 206,
-    "symbol": "unknown:systemPrompt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 207,
-    "symbol": "unknown:tools",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 55,
-    "symbol": "unknown:trustTier",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 60,
-    "symbol": "unknown:updatedAt",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 90,
-    "symbol": "unknown:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 72,
-    "symbol": "unknown:verifiedAt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 154,
-    "symbol": "unknown:warningThreshold",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 118,
-    "symbol": "unknown:windowMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/actor/index.ts",
-    "line": 69,
-    "symbol": "unknown:workspace",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 212,
-    "symbol": "implicitAny:Definition",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 26,
-    "symbol": "implicitAny:Detect",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 181,
-    "symbol": "implicitAny:Driver",
-    "gate": "type",
-    "value": 1,
-    "count": 13
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 20,
-    "symbol": "implicitAny:DriverInstallScope",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 161,
-    "symbol": "implicitAny:Evidence",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 8,
-    "symbol": "implicitAny:EvidenceEmitter",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 18,
-    "symbol": "implicitAny:InitialAutonomy",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 57,
-    "symbol": "implicitAny:Logs",
-    "gate": "type",
-    "value": 1,
-    "count": 14
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 202,
-    "symbol": "implicitAny:Profile",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 81,
-    "symbol": "implicitAny:QuestionBridge",
-    "gate": "type",
-    "value": 1,
-    "count": 19
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 112,
-    "symbol": "implicitAny:ReportSource",
-    "gate": "type",
-    "value": 1,
-    "count": 30
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 172,
-    "symbol": "implicitAny:Requires",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 35,
-    "symbol": "implicitAny:Spawn",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 24,
-    "symbol": "implicitAny:SubmitAck",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 22,
-    "symbol": "implicitAny:SubmitMode",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 194,
-    "symbol": "implicitAny:ack",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 29,
-    "symbol": "implicitAny:args",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 115,
-    "symbol": "implicitAny:artifactGlobs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 79,
-    "symbol": "implicitAny:bridgeResponseMode",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 175,
-    "symbol": "implicitAny:capabilities",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 122,
-    "symbol": "implicitAny:claimIndex",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 28,
-    "symbol": "implicitAny:command",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 5,
-    "symbol": "implicitAny:commandArgs",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 168,
-    "symbol": "implicitAny:completionReport",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 174,
-    "symbol": "implicitAny:credentials",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 123,
-    "symbol": "implicitAny:criterionIndex",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 40,
-    "symbol": "implicitAny:cwd",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 207,
-    "symbol": "implicitAny:defaultMaxAttempts",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 206,
-    "symbol": "implicitAny:defaultTimeoutMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 217,
-    "symbol": "implicitAny:description",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 218,
-    "symbol": "implicitAny:detect",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 222,
-    "symbol": "implicitAny:driver",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 163,
-    "symbol": "implicitAny:emits",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 41,
-    "symbol": "implicitAny:env",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 50,
-    "symbol": "implicitAny:eventTimeField",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 223,
-    "symbol": "implicitAny:evidence",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 114,
-    "symbol": "implicitAny:finalMessage",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 187,
-    "symbol": "implicitAny:hooks",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 214,
-    "symbol": "implicitAny:id",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 208,
-    "symbol": "implicitAny:initialAutonomy",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 184,
-    "symbol": "implicitAny:install",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 60,
-    "symbol": "implicitAny:kind",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 220,
-    "symbol": "implicitAny:logs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 130,
-    "symbol": "implicitAny:maxBodyBytes",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 51,
-    "symbol": "implicitAny:messageField",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 137,
-    "symbol": "implicitAny:method",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 193,
-    "symbol": "implicitAny:mode",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 215,
-    "symbol": "implicitAny:name",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 4,
-    "symbol": "implicitAny:nonEmptyString",
-    "gate": "type",
-    "value": 1,
-    "count": 29
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 197,
-    "symbol": "implicitAny:observedEvents",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 49,
-    "symbol": "implicitAny:path",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 176,
-    "symbol": "implicitAny:permissions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/app-connector/definition.ts",
-    "line": 188,
-    "symbol": "implicitAny:plugins",
-    "gate": "type",
-    "value": 1,
-    "count": 1
   }
 ]

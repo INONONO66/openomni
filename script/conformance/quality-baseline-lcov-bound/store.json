@@ -24,9 +24,17 @@
     "count": 1
   },
   {
-    "path": "packages/ledger/migration/0028_approval/migration.sql",
-    "line": 1,
-    "symbol": "approval",
+    "path": "packages/ledger/migration/0038_session_requests/migration.sql",
+    "line": 32,
+    "symbol": "archive_969_approval",
+    "gate": "store",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/migration/0038_session_requests/migration.sql",
+    "line": 3,
+    "symbol": "archive_969_wait",
     "gate": "store",
     "value": 1,
     "count": 1

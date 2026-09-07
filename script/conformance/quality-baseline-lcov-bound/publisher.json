@@ -56,22 +56,6 @@
     "count": 1
   },
   {
-    "path": "packages/protocol/src/approval/events.ts",
-    "line": 24,
-    "symbol": "approval.decided",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/approval/events.ts",
-    "line": 21,
-    "symbol": "approval.requested",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/protocol/src/event/component.ts",
     "line": 17,
     "symbol": "component.active",
@@ -297,7 +281,7 @@
   },
   {
     "path": "packages/protocol/src/gateway/schema.ts",
-    "line": 403,
+    "line": 392,
     "symbol": "message.observed",
     "gate": "publisher",
     "value": 1,
@@ -305,7 +289,7 @@
   },
   {
     "path": "packages/protocol/src/ledger/l0.ts",
-    "line": 617,
+    "line": 709,
     "symbol": "ledger.action.committed",
     "gate": "publisher",
     "value": 1,
@@ -323,54 +307,6 @@
     "path": "packages/protocol/src/machine/events.ts",
     "line": 20,
     "symbol": "machine.detached",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/events.ts",
-    "line": 35,
-    "symbol": "wait.cancelled",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/events.ts",
-    "line": 32,
-    "symbol": "wait.expired",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/events.ts",
-    "line": 17,
-    "symbol": "wait.opened",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/events.ts",
-    "line": 18,
-    "symbol": "wait.reply_attached",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/events.ts",
-    "line": 38,
-    "symbol": "wait.reply_rejected",
-    "gate": "publisher",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/events.ts",
-    "line": 29,
-    "symbol": "wait.resolved",
     "gate": "publisher",
     "value": 1,
     "count": 1

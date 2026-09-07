@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import ts from "typescript";
 import { Migration } from "../packages/ledger/src/storage/migration-runner";
 import { initializeSqliteDatabase } from "../packages/ledger/src/storage/sqlite-schema-lifecycle";
@@ -34,14 +34,7 @@ function literal(node: ts.Expression, bindings: Map<string, ts.Expression>): str
   }
   throw new InventoryError("schema", "", "unsupported native migration expression");
 }
-function migrationOrder(root: string): { name: string }[] {
-  const path = "packages/ledger/src/storage/sqlite-schema-lifecycle.ts";
-  const source = ts.createSourceFile(
-    path,
-    readFileSync(join(root, path), "utf8"),
-    ts.ScriptTarget.Latest,
-    true,
-  );
+function topLevelBindings(source: ts.SourceFile): Map<string, ts.Expression> {
   const bindings = new Map<string, ts.Expression>();
   for (const statement of source.statements) {
     if (!ts.isVariableStatement(statement)) continue;
@@ -50,6 +43,50 @@ function migrationOrder(root: string): { name: string }[] {
         bindings.set(declaration.name.text, declaration.initializer);
     }
   }
+  return bindings;
+}
+/** Migration names imported from sibling storage modules (`REQUEST_MIGRATION`,
+ * `U967_MIGRATION`, ...) resolve to the exported initializer of that module. */
+function importedBindings(
+  root: string,
+  path: string,
+  source: ts.SourceFile,
+  bindings: Map<string, ts.Expression>,
+): void {
+  for (const statement of source.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.moduleSpecifier.text.startsWith(".") ||
+      !statement.importClause?.namedBindings ||
+      !ts.isNamedImports(statement.importClause.namedBindings)
+    )
+      continue;
+    const target = join(dirname(path), `${statement.moduleSpecifier.text}.ts`);
+    const exported = topLevelBindings(
+      ts.createSourceFile(
+        target,
+        readFileSync(join(root, target), "utf8"),
+        ts.ScriptTarget.Latest,
+        true,
+      ),
+    );
+    for (const element of statement.importClause.namedBindings.elements) {
+      const value = exported.get((element.propertyName ?? element.name).text);
+      if (value) bindings.set(element.name.text, value);
+    }
+  }
+}
+function migrationOrder(root: string): { name: string }[] {
+  const path = "packages/ledger/src/storage/sqlite-schema-lifecycle.ts";
+  const source = ts.createSourceFile(
+    path,
+    readFileSync(join(root, path), "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const bindings = topLevelBindings(source);
+  importedBindings(root, path, source, bindings);
   const order = bindings.get("ORDERED_MIGRATIONS");
   if (!order || !ts.isArrayLiteralExpression(order))
     throw new InventoryError("schema", path, "native migration order missing");

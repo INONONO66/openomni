@@ -6,7 +6,6 @@
   "projects": [
     "apps/desktop/tsconfig.json",
     "apps/desktop/tsconfig.node.json",
-    "apps/desktop/tsconfig.probe.json",
     "apps/desktop/tsconfig.test.json",
     "apps/desktop/tsconfig.web.json",
     "apps/openomni/tsconfig.build.json",

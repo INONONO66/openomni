@@ -33,23 +33,31 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 53,
+    "line": 45,
     "symbol": "implicitAny:App",
     "gate": "type",
     "value": 1,
-    "count": 5
+    "count": 8
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 110,
+    "line": 113,
     "symbol": "implicitAny:Console",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 131,
+    "line": 115,
+    "symbol": "implicitAny:SessionConsole",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 97,
     "symbol": "implicitAny:SessionTree",
     "gate": "type",
     "value": 1,
@@ -57,7 +65,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 72,
+    "line": 160,
     "symbol": "implicitAny:chat",
     "gate": "type",
     "value": 1,
@@ -65,7 +73,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 162,
+    "line": 225,
     "symbol": "implicitAny:chatFor",
     "gate": "type",
     "value": 1,
@@ -73,7 +81,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 71,
+    "line": 159,
     "symbol": "implicitAny:chats",
     "gate": "type",
     "value": 1,
@@ -81,7 +89,15 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 171,
+    "line": 46,
+    "symbol": "implicitAny:consoleStore",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 233,
     "symbol": "implicitAny:created",
     "gate": "type",
     "value": 1,
@@ -89,7 +105,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 168,
+    "line": 230,
     "symbol": "implicitAny:existing",
     "gate": "type",
     "value": 1,
@@ -97,15 +113,47 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 130,
-    "symbol": "implicitAny:sidebar",
+    "line": 154,
+    "symbol": "implicitAny:options",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 155,
+    "symbol": "implicitAny:reconnectToStream",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 77,
+    "line": 154,
+    "symbol": "implicitAny:sendMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 96,
+    "symbol": "implicitAny:sidebar",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 154,
+    "symbol": "implicitAny:wire",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 162,
     "symbol": "implicitAny:{ messages, sendMessage, status, stop, addToolApprovalResponse }",
     "gate": "type",
     "value": 1,
@@ -113,31 +161,31 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 53,
-    "symbol": "unknown:App",
+    "line": 134,
+    "symbol": "implicitAny:{\n  session,\n  sidebar,\n  transport,\n  notice,\n}",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 110,
+    "line": 113,
     "symbol": "unknown:Console",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 56,
-    "symbol": "unknown:MOCK_TRANSPORT",
+    "line": 115,
+    "symbol": "unknown:SessionConsole",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 4
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 72,
+    "line": 160,
     "symbol": "unknown:chat",
     "gate": "type",
     "value": 1,
@@ -145,7 +193,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 162,
+    "line": 225,
     "symbol": "unknown:chatFor",
     "gate": "type",
     "value": 1,
@@ -153,7 +201,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 71,
+    "line": 159,
     "symbol": "unknown:chats",
     "gate": "type",
     "value": 1,
@@ -161,15 +209,31 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 171,
+    "line": 233,
     "symbol": "unknown:created",
     "gate": "type",
     "value": 1,
-    "count": 10
+    "count": 6
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 168,
+    "line": 213,
+    "symbol": "unknown:current",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 49,
+    "symbol": "unknown:endpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 230,
     "symbol": "unknown:existing",
     "gate": "type",
     "value": 1,
@@ -177,39 +241,79 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 77,
+    "line": 162,
     "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 154,
+    "symbol": "unknown:options",
     "gate": "type",
     "value": 1,
     "count": 4
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 173,
-    "symbol": "unknown:timelines",
+    "line": 155,
+    "symbol": "unknown:reconnectToStream",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 53,
-    "symbol": "unknown:transport",
+    "line": 60,
+    "symbol": "unknown:selected",
     "gate": "type",
     "value": 1,
-    "count": 11
+    "count": 7
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 56,
-    "symbol": "unknown:wire",
+    "line": 154,
+    "symbol": "unknown:sendMessages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 131,
+    "symbol": "unknown:sidebar",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 64,
+    "symbol": "unknown:transport",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 148,
+    "symbol": "unknown:transportRef",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 77,
+    "line": 152,
+    "symbol": "unknown:wire",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "apps/desktop/src/renderer/app.tsx",
+    "line": 162,
     "symbol": "unknown:{ messages, sendMessage, status, stop, addToolApprovalResponse }",
     "gate": "type",
     "value": 1,
@@ -217,7 +321,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 80,
+    "line": 164,
     "symbol": "unknown:{ nodes, costs, pending }",
     "gate": "type",
     "value": 1,
@@ -225,32 +329,8 @@
   },
   {
     "path": "apps/desktop/src/renderer/app.tsx",
-    "line": 53,
-    "symbol": "unknown:{ transport }",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/order.ts",
-    "line": 81,
-    "symbol": "implicitAny:facts",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/reason.ts",
-    "line": 74,
-    "symbol": "unknown:unreachable",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 108,
-    "symbol": "unknown:unreachable",
+    "line": 134,
+    "symbol": "unknown:{\n  session,\n  sidebar,\n  transport,\n  notice,\n}",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -656,80 +736,8 @@
     "count": 2
   },
   {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 24,
-    "symbol": "implicitAny:abortSignal",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 24,
-    "symbol": "implicitAny:sendMessages",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 31,
-    "symbol": "unknown:controller",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 14,
-    "symbol": "unknown:createMockChatTransport",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 67,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 24,
-    "symbol": "unknown:sendMessages",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 41,
-    "symbol": "unknown:start",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 40,
-    "symbol": "unknown:stream",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/mock-transport.ts",
-    "line": 41,
-    "symbol": "unknown:streamController",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
     "path": "apps/desktop/src/renderer/chat/select-transport.ts",
-    "line": 26,
+    "line": 13,
     "symbol": "unknown:SelectedTransport",
     "gate": "type",
     "value": 1,
@@ -737,15 +745,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/chat/select-transport.ts",
-    "line": 59,
-    "symbol": "unknown:authProtocols",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/chat/select-transport.ts",
-    "line": 66,
+    "line": 42,
     "symbol": "unknown:selectChatTransport",
     "gate": "type",
     "value": 1,
@@ -753,7 +753,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/chat/select-transport.ts",
-    "line": 29,
+    "line": 16,
     "symbol": "unknown:transport",
     "gate": "type",
     "value": 1,
@@ -761,7 +761,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 65,
+    "line": 18,
     "symbol": "implicitAny:App",
     "gate": "type",
     "value": 1,
@@ -769,15 +769,15 @@
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 64,
+    "line": 16,
     "symbol": "implicitAny:JsxElement",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 65,
+    "line": 18,
     "symbol": "implicitAny:JsxSelfClosingElement",
     "gate": "type",
     "value": 1,
@@ -785,27 +785,19 @@
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 64,
-    "symbol": "implicitAny:StrictMode",
+    "line": 17,
+    "symbol": "implicitAny:StateProvider",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 27,
-    "symbol": "implicitAny:desktop",
+    "line": 16,
+    "symbol": "implicitAny:StrictMode",
     "gate": "type",
     "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 52,
-    "symbol": "implicitAny:notice",
-    "gate": "type",
-    "value": 1,
-    "count": 3
+    "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
@@ -817,22 +809,6 @@
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 65,
-    "symbol": "unknown:App",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 69,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/main.tsx",
     "line": 8,
     "symbol": "unknown:NewExpression",
     "gate": "type",
@@ -841,79 +817,23 @@
   },
   {
     "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 64,
+    "line": 17,
+    "symbol": "unknown:StateProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/src/renderer/main.tsx",
+    "line": 16,
     "symbol": "unknown:StrictMode",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
-    "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 68,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 62,
-    "symbol": "unknown:transport",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/src/renderer/main.tsx",
-    "line": 62,
-    "symbol": "unknown:{ transport }",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/timelines.ts",
-    "line": 4,
-    "symbol": "unknown:TimelineMessage",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/timelines.ts",
-    "line": 211,
-    "symbol": "unknown:heldTimeline",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/timelines.ts",
-    "line": 198,
-    "symbol": "unknown:leaseTimeline",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/timelines.ts",
-    "line": 142,
-    "symbol": "unknown:ledgerTimeline",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/timelines.ts",
-    "line": 214,
-    "symbol": "unknown:timelines",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 23,
+    "line": 21,
     "symbol": "implicitAny:project",
     "gate": "type",
     "value": 1,
@@ -921,15 +841,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 23,
-    "symbol": "implicitAny:reason",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 23,
+    "line": 21,
     "symbol": "implicitAny:session",
     "gate": "type",
     "value": 1,
@@ -945,7 +857,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 142,
+    "line": 154,
     "symbol": "implicitAny:ChangeHint",
     "gate": "type",
     "value": 1,
@@ -953,15 +865,15 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 137,
+    "line": 145,
     "symbol": "implicitAny:Disclosure",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 270,
+    "line": 228,
     "symbol": "implicitAny:Highlight",
     "gate": "type",
     "value": 1,
@@ -969,7 +881,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 111,
+    "line": 105,
     "symbol": "implicitAny:Panel",
     "gate": "type",
     "value": 1,
@@ -977,7 +889,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 251,
+    "line": 210,
     "symbol": "implicitAny:Row",
     "gate": "type",
     "value": 1,
@@ -985,7 +897,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 129,
+    "line": 123,
     "symbol": "implicitAny:ScrollArea",
     "gate": "type",
     "value": 1,
@@ -993,7 +905,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 119,
+    "line": 113,
     "symbol": "implicitAny:SearchLine",
     "gate": "type",
     "value": 1,
@@ -1001,23 +913,23 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 149,
+    "line": 163,
     "symbol": "implicitAny:SessionRow",
     "gate": "type",
     "value": 1,
-    "count": 17
+    "count": 8
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 46,
+    "line": 41,
     "symbol": "implicitAny:SessionTree",
     "gate": "type",
     "value": 1,
-    "count": 27
+    "count": 22
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 118,
+    "line": 112,
     "symbol": "implicitAny:SidebarHeader",
     "gate": "type",
     "value": 1,
@@ -1025,15 +937,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 290,
-    "symbol": "implicitAny:StatusDot",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 301,
+    "line": 130,
     "symbol": "implicitAny:Text",
     "gate": "type",
     "value": 1,
@@ -1041,7 +945,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 95,
+    "line": 89,
     "symbol": "implicitAny:event",
     "gate": "type",
     "value": 1,
@@ -1049,7 +953,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 122,
+    "line": 116,
     "symbol": "implicitAny:inputRef",
     "gate": "type",
     "value": 1,
@@ -1057,7 +961,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 77,
+    "line": 72,
     "symbol": "implicitAny:node",
     "gate": "type",
     "value": 1,
@@ -1065,15 +969,15 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 94,
+    "line": 88,
     "symbol": "implicitAny:onKeyDown",
     "gate": "type",
     "value": 1,
-    "count": 13
+    "count": 11
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 260,
+    "line": 218,
     "symbol": "implicitAny:ref",
     "gate": "type",
     "value": 1,
@@ -1081,15 +985,15 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 77,
+    "line": 72,
     "symbol": "implicitAny:registerRef",
     "gate": "type",
     "value": 1,
-    "count": 12
+    "count": 10
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 76,
+    "line": 71,
     "symbol": "implicitAny:rowRefs",
     "gate": "type",
     "value": 1,
@@ -1097,7 +1001,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 87,
+    "line": 81,
     "symbol": "implicitAny:search",
     "gate": "type",
     "value": 1,
@@ -1105,7 +1009,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 142,
+    "line": 154,
     "symbol": "implicitAny:trailing",
     "gate": "type",
     "value": 1,
@@ -1113,15 +1017,15 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 137,
+    "line": 145,
     "symbol": "unknown:Disclosure",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 2
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 111,
+    "line": 105,
     "symbol": "unknown:Panel",
     "gate": "type",
     "value": 1,
@@ -1129,7 +1033,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 251,
+    "line": 210,
     "symbol": "unknown:Row",
     "gate": "type",
     "value": 1,
@@ -1137,7 +1041,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 129,
+    "line": 123,
     "symbol": "unknown:ScrollArea",
     "gate": "type",
     "value": 1,
@@ -1145,7 +1049,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 301,
+    "line": 130,
     "symbol": "unknown:Text",
     "gate": "type",
     "value": 1,
@@ -1177,7 +1081,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/use-search.ts",
-    "line": 113,
+    "line": 107,
     "symbol": "implicitAny:onDocumentKeyDown",
     "gate": "type",
     "value": 1,
@@ -1193,7 +1097,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/use-search.ts",
-    "line": 82,
+    "line": 76,
     "symbol": "implicitAny:state",
     "gate": "type",
     "value": 1,
@@ -1209,200 +1113,168 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/use-search.ts",
-    "line": 98,
+    "line": 92,
     "symbol": "unknown:run",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 27,
-    "symbol": "implicitAny:App",
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 24,
+    "symbol": "implicitAny:QueryClientProvider",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 159,
-    "symbol": "implicitAny:blockedChat",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 169,
-    "symbol": "implicitAny:chat",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 27,
-    "symbol": "implicitAny:html",
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 26,
+    "symbol": "implicitAny:ReactQueryDevtools",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 103,
-    "symbol": "implicitAny:live",
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 15,
+    "symbol": "implicitAny:StateProvider",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 5
   },
   {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 27,
-    "symbol": "unknown:App",
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 16,
+    "symbol": "implicitAny:children",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 5
   },
   {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 174,
-    "symbol": "unknown:after",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 288,
-    "symbol": "unknown:answer",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 170,
-    "symbol": "unknown:approval",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 308,
-    "symbol": "unknown:before",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 159,
-    "symbol": "unknown:blockedChat",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 169,
-    "symbol": "unknown:chat",
-    "gate": "type",
-    "value": 1,
-    "count": 21
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 281,
-    "symbol": "unknown:kept",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 296,
-    "symbol": "unknown:last",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 103,
-    "symbol": "unknown:live",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 162,
-    "symbol": "unknown:messages",
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 17,
+    "symbol": "implicitAny:client",
     "gate": "type",
     "value": 1,
     "count": 6
   },
   {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 298,
-    "symbol": "unknown:part",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 295,
-    "symbol": "unknown:streamedText",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 28,
-    "symbol": "unknown:timelines",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 103,
-    "symbol": "unknown:transport",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/app-chat.test.tsx",
-    "line": 260,
-    "symbol": "unknown:unsubscribe",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/attention-fixture.ts",
-    "line": 22,
-    "symbol": "implicitAny:lastReadAt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/attention-fixture.ts",
-    "line": 17,
-    "symbol": "implicitAny:signals",
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 13,
+    "symbol": "implicitAny:queryClient",
     "gate": "type",
     "value": 1,
     "count": 3
   },
   {
-    "path": "apps/desktop/test/attention-fixture.ts",
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 18,
+    "symbol": "implicitAny:{\n  children,\n  client = queryClient,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 26,
+    "symbol": "unknown:ReactQueryDevtools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 15,
+    "symbol": "unknown:StateProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 16,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/provider.tsx",
+    "line": 18,
+    "symbol": "unknown:{\n  children,\n  client = queryClient,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/queries.ts",
+    "line": 43,
+    "symbol": "implicitAny:desktop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/queries.ts",
+    "line": 33,
+    "symbol": "unknown:useGatewayEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 55,
+    "symbol": "implicitAny:consoleStore",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/test/app.test.tsx",
+    "line": 25,
+    "symbol": "implicitAny:App",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/app.test.tsx",
+    "line": 24,
+    "symbol": "implicitAny:StateProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/test/app.test.tsx",
     "line": 21,
-    "symbol": "implicitAny:snoozes",
+    "symbol": "implicitAny:client",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/desktop/test/app.test.tsx",
+    "line": 24,
+    "symbol": "implicitAny:shell",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/test/app.test.tsx",
+    "line": 24,
+    "symbol": "unknown:StateProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/test/app.test.tsx",
+    "line": 22,
+    "symbol": "unknown:shell",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -1433,7 +1305,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 453,
+    "line": 454,
     "symbol": "implicitAny:PropertyAccessExpression",
     "gate": "type",
     "value": 1,
@@ -1449,7 +1321,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 96,
+    "line": 97,
     "symbol": "implicitAny:abortSignal",
     "gate": "type",
     "value": 1,
@@ -1457,7 +1329,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 399,
+    "line": 400,
     "symbol": "implicitAny:aborted",
     "gate": "type",
     "value": 1,
@@ -1465,7 +1337,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 554,
+    "line": 555,
     "symbol": "implicitAny:chat",
     "gate": "type",
     "value": 1,
@@ -1473,7 +1345,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 384,
+    "line": 385,
     "symbol": "implicitAny:chunks",
     "gate": "type",
     "value": 1,
@@ -1481,7 +1353,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 380,
+    "line": 381,
     "symbol": "implicitAny:controller",
     "gate": "type",
     "value": 1,
@@ -1489,7 +1361,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 39,
+    "line": 40,
     "symbol": "implicitAny:fetch",
     "gate": "type",
     "value": 1,
@@ -1497,7 +1369,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 451,
+    "line": 452,
     "symbol": "implicitAny:firstController",
     "gate": "type",
     "value": 1,
@@ -1505,7 +1377,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 430,
+    "line": 431,
     "symbol": "implicitAny:firstSend",
     "gate": "type",
     "value": 1,
@@ -1513,7 +1385,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 133,
+    "line": 134,
     "symbol": "implicitAny:listener",
     "gate": "type",
     "value": 1,
@@ -1521,7 +1393,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 51,
+    "line": 52,
     "symbol": "implicitAny:message",
     "gate": "type",
     "value": 1,
@@ -1545,7 +1417,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 39,
+    "line": 40,
     "symbol": "implicitAny:request",
     "gate": "type",
     "value": 1,
@@ -1553,7 +1425,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 93,
+    "line": 94,
     "symbol": "implicitAny:send",
     "gate": "type",
     "value": 1,
@@ -1561,7 +1433,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 414,
+    "line": 415,
     "symbol": "implicitAny:stream",
     "gate": "type",
     "value": 1,
@@ -1577,7 +1449,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 133,
+    "line": 134,
     "symbol": "implicitAny:type",
     "gate": "type",
     "value": 1,
@@ -1585,7 +1457,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 235,
+    "line": 236,
     "symbol": "unknown:ArrayLiteralExpression",
     "gate": "type",
     "value": 1,
@@ -1593,7 +1465,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 195,
+    "line": 196,
     "symbol": "unknown:ArrowFunction",
     "gate": "type",
     "value": 1,
@@ -1601,7 +1473,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 235,
+    "line": 236,
     "symbol": "unknown:AwaitExpression",
     "gate": "type",
     "value": 1,
@@ -1609,7 +1481,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 235,
+    "line": 236,
     "symbol": "unknown:CallExpression",
     "gate": "type",
     "value": 1,
@@ -1617,7 +1489,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 203,
+    "line": 204,
     "symbol": "unknown:NewExpression",
     "gate": "type",
     "value": 1,
@@ -1625,7 +1497,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 366,
+    "line": 367,
     "symbol": "unknown:ObjectLiteralExpression",
     "gate": "type",
     "value": 1,
@@ -1641,7 +1513,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 256,
+    "line": 257,
     "symbol": "unknown:[firstChunks, secondChunks]",
     "gate": "type",
     "value": 1,
@@ -1649,7 +1521,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 399,
+    "line": 400,
     "symbol": "unknown:aborted",
     "gate": "type",
     "value": 1,
@@ -1657,7 +1529,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 347,
+    "line": 348,
     "symbol": "unknown:cancelled",
     "gate": "type",
     "value": 1,
@@ -1665,7 +1537,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 554,
+    "line": 555,
     "symbol": "unknown:chat",
     "gate": "type",
     "value": 1,
@@ -1673,7 +1545,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 195,
+    "line": 196,
     "symbol": "unknown:chunk",
     "gate": "type",
     "value": 1,
@@ -1681,7 +1553,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 78,
+    "line": 79,
     "symbol": "unknown:chunks",
     "gate": "type",
     "value": 1,
@@ -1689,7 +1561,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 77,
+    "line": 78,
     "symbol": "unknown:collect",
     "gate": "type",
     "value": 1,
@@ -1697,7 +1569,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 302,
+    "line": 303,
     "symbol": "unknown:collected",
     "gate": "type",
     "value": 1,
@@ -1705,7 +1577,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 94,
+    "line": 95,
     "symbol": "unknown:createGatewayChatTransport",
     "gate": "type",
     "value": 1,
@@ -1713,7 +1585,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 202,
+    "line": 203,
     "symbol": "unknown:delta",
     "gate": "type",
     "value": 1,
@@ -1721,7 +1593,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 206,
+    "line": 207,
     "symbol": "unknown:end",
     "gate": "type",
     "value": 1,
@@ -1729,7 +1601,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 527,
+    "line": 528,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
@@ -1737,7 +1609,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 520,
+    "line": 521,
     "symbol": "unknown:failedSend",
     "gate": "type",
     "value": 1,
@@ -1745,7 +1617,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 523,
+    "line": 524,
     "symbol": "unknown:failure",
     "gate": "type",
     "value": 1,
@@ -1753,7 +1625,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 254,
+    "line": 255,
     "symbol": "unknown:first",
     "gate": "type",
     "value": 1,
@@ -1761,7 +1633,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 256,
+    "line": 257,
     "symbol": "unknown:firstChunks",
     "gate": "type",
     "value": 1,
@@ -1769,7 +1641,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 430,
+    "line": 431,
     "symbol": "unknown:firstSend",
     "gate": "type",
     "value": 1,
@@ -1777,7 +1649,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 434,
+    "line": 435,
     "symbol": "unknown:firstStream",
     "gate": "type",
     "value": 1,
@@ -1785,7 +1657,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 565,
+    "line": 566,
     "symbol": "unknown:last",
     "gate": "type",
     "value": 1,
@@ -1793,7 +1665,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 95,
+    "line": 96,
     "symbol": "unknown:messages",
     "gate": "type",
     "value": 1,
@@ -1801,7 +1673,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 568,
+    "line": 569,
     "symbol": "unknown:part",
     "gate": "type",
     "value": 1,
@@ -1809,7 +1681,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 416,
+    "line": 417,
     "symbol": "unknown:read",
     "gate": "type",
     "value": 1,
@@ -1817,7 +1689,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 79,
+    "line": 80,
     "symbol": "unknown:reader",
     "gate": "type",
     "value": 1,
@@ -1833,7 +1705,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 325,
+    "line": 326,
     "symbol": "unknown:reply",
     "gate": "type",
     "value": 1,
@@ -1849,7 +1721,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 81,
+    "line": 82,
     "symbol": "unknown:result",
     "gate": "type",
     "value": 1,
@@ -1857,7 +1729,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 351,
+    "line": 352,
     "symbol": "unknown:retry",
     "gate": "type",
     "value": 1,
@@ -1865,7 +1737,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 255,
+    "line": 256,
     "symbol": "unknown:second",
     "gate": "type",
     "value": 1,
@@ -1873,7 +1745,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 256,
+    "line": 257,
     "symbol": "unknown:secondChunks",
     "gate": "type",
     "value": 1,
@@ -1881,7 +1753,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 498,
+    "line": 499,
     "symbol": "unknown:secondSend",
     "gate": "type",
     "value": 1,
@@ -1889,7 +1761,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 435,
+    "line": 436,
     "symbol": "unknown:secondStream",
     "gate": "type",
     "value": 1,
@@ -1897,7 +1769,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 93,
+    "line": 94,
     "symbol": "unknown:send",
     "gate": "type",
     "value": 1,
@@ -1905,7 +1777,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 298,
+    "line": 299,
     "symbol": "unknown:sending",
     "gate": "type",
     "value": 1,
@@ -1913,7 +1785,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 205,
+    "line": 206,
     "symbol": "unknown:start",
     "gate": "type",
     "value": 1,
@@ -1921,7 +1793,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 77,
+    "line": 78,
     "symbol": "unknown:stream",
     "gate": "type",
     "value": 1,
@@ -1937,7 +1809,7 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 94,
+    "line": 95,
     "symbol": "unknown:transport",
     "gate": "type",
     "value": 1,
@@ -1945,335 +1817,199 @@
   },
   {
     "path": "apps/desktop/test/gateway-transport.test.ts",
-    "line": 88,
+    "line": 89,
     "symbol": "unknown:userMessage",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 43,
-    "symbol": "implicitAny:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 50,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 18,
-    "symbol": "unknown:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 40,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 11,
-    "symbol": "unknown:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 29,
-    "symbol": "unknown:codePart",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 50,
-    "symbol": "unknown:isRecord",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 18,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 7,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 20,
-    "symbol": "unknown:part",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 10,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 7,
-    "symbol": "unknown:timelines",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/test/mock-timelines.test.ts",
-    "line": 50,
-    "symbol": "unknown:value",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 74,
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 35,
     "symbol": "implicitAny:CallExpression",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 74,
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 21,
+    "symbol": "implicitAny:Harness",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 31,
+    "symbol": "implicitAny:JsxSelfClosingElement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 33,
+    "symbol": "implicitAny:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 10,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 12,
     "symbol": "implicitAny:PropertyAccessExpression",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 24,
-    "symbol": "implicitAny:abortSignal",
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 18,
+    "symbol": "implicitAny:binding",
     "gate": "type",
     "value": 1,
     "count": 3
   },
   {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 62,
-    "symbol": "implicitAny:chunk",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 71,
-    "symbol": "implicitAny:controller",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 72,
-    "symbol": "implicitAny:removeEventListener",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 21,
-    "symbol": "implicitAny:send",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 99,
-    "symbol": "implicitAny:stream",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 86,
-    "symbol": "unknown:ArrayLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 86,
-    "symbol": "unknown:AwaitExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 86,
-    "symbol": "unknown:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 62,
-    "symbol": "unknown:chunk",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 12,
-    "symbol": "unknown:chunks",
-    "gate": "type",
-    "value": 1,
-    "count": 14
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 11,
-    "symbol": "unknown:collect",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 22,
-    "symbol": "unknown:createMockChatTransport",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 55,
-    "symbol": "unknown:first",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 23,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 108,
-    "symbol": "unknown:pendingDelta",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 13,
-    "symbol": "unknown:reader",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
+    "path": "apps/desktop/test/search-binding.test.tsx",
     "line": 15,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 56,
-    "symbol": "unknown:second",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 21,
-    "symbol": "unknown:send",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 11,
-    "symbol": "unknown:stream",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 59,
-    "symbol": "unknown:text",
+    "symbol": "implicitAny:container",
     "gate": "type",
     "value": 1,
     "count": 4
   },
   {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 57,
-    "symbol": "unknown:third",
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 52,
+    "symbol": "implicitAny:descriptor",
     "gate": "type",
     "value": 1,
-    "count": 11
+    "count": 3
   },
   {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 22,
-    "symbol": "unknown:transport",
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 9,
+    "symbol": "implicitAny:descriptors",
     "gate": "type",
     "value": 1,
-    "count": 17
+    "count": 7
   },
   {
-    "path": "apps/desktop/test/mock-transport.test.ts",
-    "line": 7,
-    "symbol": "unknown:user",
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 12,
+    "symbol": "implicitAny:document",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 41,
+    "symbol": "implicitAny:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 28,
+    "symbol": "implicitAny:onKeyDown",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 28,
+    "symbol": "implicitAny:ref",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 11,
+    "symbol": "implicitAny:value",
     "gate": "type",
     "value": 1,
     "count": 2
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 8,
+    "symbol": "implicitAny:window",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 33,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 10,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 12,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 12,
+    "symbol": "unknown:document",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 41,
+    "symbol": "unknown:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 11,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/test/search-binding.test.tsx",
+    "line": 8,
+    "symbol": "unknown:window",
+    "gate": "type",
+    "value": 1,
+    "count": 4
   },
   {
     "path": "apps/desktop/test/search-tree.test.tsx",
-    "line": 219,
+    "line": 127,
     "symbol": "implicitAny:Highlight",
     "gate": "type",
     "value": 1,
@@ -2281,7 +2017,7 @@
   },
   {
     "path": "apps/desktop/test/search-tree.test.tsx",
-    "line": 53,
+    "line": 29,
     "symbol": "implicitAny:SessionTree",
     "gate": "type",
     "value": 1,
@@ -2289,7 +2025,7 @@
   },
   {
     "path": "apps/desktop/test/search-tree.test.tsx",
-    "line": 219,
+    "line": 127,
     "symbol": "implicitAny:emphasised",
     "gate": "type",
     "value": 1,
@@ -2297,7 +2033,7 @@
   },
   {
     "path": "apps/desktop/test/search-tree.test.tsx",
-    "line": 53,
+    "line": 29,
     "symbol": "implicitAny:html",
     "gate": "type",
     "value": 1,
@@ -2305,7 +2041,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 103,
+    "line": 93,
     "symbol": "implicitAny:fetch",
     "gate": "type",
     "value": 1,
@@ -2313,7 +2049,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 103,
+    "line": 93,
     "symbol": "implicitAny:request",
     "gate": "type",
     "value": 1,
@@ -2321,15 +2057,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 63,
-    "symbol": "unknown:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 155,
+    "line": 145,
     "symbol": "unknown:AwaitExpression",
     "gate": "type",
     "value": 1,
@@ -2337,15 +2065,15 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 40,
+    "line": 27,
     "symbol": "unknown:CallExpression",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 4
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 126,
+    "line": 116,
     "symbol": "unknown:PROMPT",
     "gate": "type",
     "value": 1,
@@ -2353,7 +2081,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 25,
+    "line": 19,
     "symbol": "unknown:PropertyAccessExpression",
     "gate": "type",
     "value": 1,
@@ -2361,7 +2089,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 144,
+    "line": 134,
     "symbol": "unknown:messages",
     "gate": "type",
     "value": 1,
@@ -2369,7 +2097,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 19,
+    "line": 16,
     "symbol": "unknown:selected",
     "gate": "type",
     "value": 1,
@@ -2377,7 +2105,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 140,
+    "line": 130,
     "symbol": "unknown:sent",
     "gate": "type",
     "value": 1,
@@ -2385,7 +2113,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 133,
+    "line": 123,
     "symbol": "unknown:transport",
     "gate": "type",
     "value": 1,
@@ -2393,7 +2121,7 @@
   },
   {
     "path": "apps/desktop/test/select-transport.test.ts",
-    "line": 133,
+    "line": 123,
     "symbol": "unknown:{ transport }",
     "gate": "type",
     "value": 1,
@@ -2401,55 +2129,23 @@
   },
   {
     "path": "apps/desktop/test/selection.test.tsx",
-    "line": 68,
-    "symbol": "implicitAny:App",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/test/selection.test.tsx",
-    "line": 56,
+    "line": 28,
     "symbol": "implicitAny:SessionTree",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 1
   },
   {
     "path": "apps/desktop/test/selection.test.tsx",
-    "line": 68,
-    "symbol": "implicitAny:html",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/selection.test.tsx",
-    "line": 56,
+    "line": 28,
     "symbol": "implicitAny:tree",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
-    "path": "apps/desktop/test/selection.test.tsx",
-    "line": 68,
-    "symbol": "unknown:App",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/desktop/test/selection.test.tsx",
-    "line": 88,
-    "symbol": "unknown:timelines",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
     "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 26,
+    "line": 35,
     "symbol": "implicitAny:App",
     "gate": "type",
     "value": 1,
@@ -2457,15 +2153,31 @@
   },
   {
     "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 26,
-    "symbol": "implicitAny:SHELL",
+    "line": 34,
+    "symbol": "implicitAny:JsxElement",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 41,
+    "line": 35,
+    "symbol": "implicitAny:JsxSelfClosingElement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/test/shell-density.test.tsx",
+    "line": 34,
+    "symbol": "implicitAny:StateProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/desktop/test/shell-density.test.tsx",
+    "line": 72,
     "symbol": "implicitAny:Timeline",
     "gate": "type",
     "value": 1,
@@ -2473,7 +2185,7 @@
   },
   {
     "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 141,
+    "line": 161,
     "symbol": "implicitAny:html",
     "gate": "type",
     "value": 1,
@@ -2481,7 +2193,7 @@
   },
   {
     "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 41,
+    "line": 72,
     "symbol": "implicitAny:transcript",
     "gate": "type",
     "value": 1,
@@ -2489,40 +2201,16 @@
   },
   {
     "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 26,
-    "symbol": "unknown:App",
+    "line": 47,
+    "symbol": "unknown:MESSAGES",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 4
   },
   {
     "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 178,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 35,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 36,
-    "symbol": "unknown:nodesOf",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/test/shell-density.test.tsx",
-    "line": 35,
-    "symbol": "unknown:timelines",
+    "line": 34,
+    "symbol": "unknown:StateProvider",
     "gate": "type",
     "value": 1,
     "count": 2
@@ -3296,6 +2984,182 @@
     "count": 3
   },
   {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 6,
+    "symbol": "unknown:AlarmRuntimeError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 21,
+    "symbol": "unknown:AlarmSourceError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 6,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 17,
+    "symbol": "unknown:assertAlarmRuntime",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 41,
+    "symbol": "unknown:commandSource",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 72,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 45,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 84,
+    "symbol": "unknown:exit",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 45,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 143,
+    "symbol": "unknown:killCommandGroup",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 174,
+    "symbol": "unknown:observe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 153,
+    "symbol": "unknown:pathSource",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 104,
+    "symbol": "implicitAny:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 188,
+    "symbol": "implicitAny:start",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 104,
+    "symbol": "unknown:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 83,
+    "symbol": "unknown:deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 28,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 28,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 94,
+    "symbol": "unknown:sourceFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 143,
+    "symbol": "unknown:start",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 206,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/alarm-worker.ts",
+    "line": 46,
+    "symbol": "unknown:track",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/openomni/src/composition/chat-provider.ts",
     "line": 9,
     "symbol": "implicitAny:chatProviderConfig",
@@ -3577,7 +3441,7 @@
   },
   {
     "path": "apps/openomni/src/composition/message-session.ts",
-    "line": 138,
+    "line": 124,
     "symbol": "implicitAny:parsed",
     "gate": "type",
     "value": 1,
@@ -3585,15 +3449,15 @@
   },
   {
     "path": "apps/openomni/src/composition/message-session.ts",
-    "line": 13,
+    "line": 17,
     "symbol": "unknown:commitMessageInbox",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 1
   },
   {
     "path": "apps/openomni/src/composition/message-session.ts",
-    "line": 138,
+    "line": 124,
     "symbol": "unknown:parsed",
     "gate": "type",
     "value": 1,
@@ -3601,23 +3465,135 @@
   },
   {
     "path": "apps/openomni/src/composition/message-session.ts",
-    "line": 134,
+    "line": 120,
     "symbol": "unknown:prepareMessage",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
-    "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 4,
-    "symbol": "implicitAny:Doorbell",
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 29,
+    "symbol": "implicitAny:receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 35,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 47,
+    "symbol": "unknown:answer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 63,
+    "symbol": "unknown:close",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 7,
+    "symbol": "unknown:createProcessReplyChannel",
     "gate": "type",
     "value": 1,
     "count": 5
   },
   {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 15,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 18,
+    "symbol": "unknown:fail",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 7,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 8,
+    "symbol": "unknown:lines",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 15,
+    "symbol": "unknown:reject",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-replies.ts",
+    "line": 50,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 54,
+    "line": 5,
+    "symbol": "implicitAny:Doorbell",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 6,
+    "symbol": "implicitAny:ProcessOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 15,
+    "symbol": "implicitAny:ProcessReplyReceipt",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 11,
+    "symbol": "implicitAny:answer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 103,
     "symbol": "implicitAny:close",
     "gate": "type",
     "value": 1,
@@ -3625,15 +3601,63 @@
   },
   {
     "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 37,
-    "symbol": "implicitAny:done",
+    "line": 23,
+    "symbol": "implicitAny:error",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 4,
+    "line": 19,
+    "symbol": "implicitAny:inputId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 10,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 18,
+    "symbol": "implicitAny:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 35,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 47,
+    "symbol": "implicitAny:receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 20,
+    "symbol": "implicitAny:resolution",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 5,
     "symbol": "implicitAny:sessionIds",
     "gate": "type",
     "value": 1,
@@ -3641,15 +3665,47 @@
   },
   {
     "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 4,
+    "line": 5,
     "symbol": "unknown:Doorbell",
     "gate": "type",
     "value": 1,
-    "count": 5
+    "count": 6
   },
   {
     "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 42,
+    "line": 54,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 6,
+    "symbol": "unknown:ProcessOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 15,
+    "symbol": "unknown:ProcessReplyReceipt",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 11,
+    "symbol": "unknown:answer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 89,
     "symbol": "unknown:done",
     "gate": "type",
     "value": 1,
@@ -3657,7 +3713,63 @@
   },
   {
     "path": "apps/openomni/src/composition/process-session.ts",
-    "line": 4,
+    "line": 23,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 19,
+    "symbol": "unknown:inputId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 10,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 18,
+    "symbol": "unknown:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 47,
+    "symbol": "unknown:receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 46,
+    "symbol": "unknown:receive",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 20,
+    "symbol": "unknown:resolution",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/composition/process-session.ts",
+    "line": 5,
     "symbol": "unknown:sessionIds",
     "gate": "type",
     "value": 1,
@@ -3665,11 +3777,11 @@
   },
   {
     "path": "apps/openomni/src/composition/terminal-message.ts",
-    "line": 90,
-    "symbol": "implicitAny:commitTerminalMessage",
+    "line": 24,
+    "symbol": "implicitAny:answer",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 2
   },
   {
     "path": "apps/openomni/src/composition/terminal-message.ts",
@@ -3689,15 +3801,15 @@
   },
   {
     "path": "apps/openomni/src/composition/terminal-message.ts",
-    "line": 69,
-    "symbol": "unknown:Error",
+    "line": 24,
+    "symbol": "unknown:answer",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
     "path": "apps/openomni/src/composition/terminal-message.ts",
-    "line": 44,
+    "line": 60,
     "symbol": "unknown:commit",
     "gate": "type",
     "value": 1,
@@ -3705,27 +3817,11 @@
   },
   {
     "path": "apps/openomni/src/composition/terminal-message.ts",
-    "line": 66,
-    "symbol": "unknown:commitTerminalMessage",
+    "line": 78,
+    "symbol": "unknown:dispatchOutboundMessage",
     "gate": "type",
     "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/src/composition/terminal-message.ts",
-    "line": 68,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "apps/openomni/src/composition/terminal-message.ts",
-    "line": 53,
-    "symbol": "unknown:failures",
-    "gate": "type",
-    "value": 1,
-    "count": 4
+    "count": 2
   },
   {
     "path": "apps/openomni/src/config.ts",
@@ -4057,7 +4153,7 @@
   },
   {
     "path": "apps/openomni/src/gateway.ts",
-    "line": 115,
+    "line": 121,
     "symbol": "implicitAny:createResidentGateway",
     "gate": "type",
     "value": 1,
@@ -4065,7 +4161,7 @@
   },
   {
     "path": "apps/openomni/src/gateway.ts",
-    "line": 115,
+    "line": 121,
     "symbol": "unknown:createResidentGateway",
     "gate": "type",
     "value": 1,
@@ -4073,7 +4169,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 63,
+    "line": 64,
     "symbol": "implicitAny:AnyToolDefinition",
     "gate": "type",
     "value": 1,
@@ -4081,7 +4177,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 56,
+    "line": 57,
     "symbol": "implicitAny:StartOptions",
     "gate": "type",
     "value": 1,
@@ -4089,7 +4185,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 103,
+    "line": 104,
     "symbol": "implicitAny:bunServer",
     "gate": "type",
     "value": 1,
@@ -4097,7 +4193,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 97,
+    "line": 98,
     "symbol": "implicitAny:createHttpRoutes",
     "gate": "type",
     "value": 1,
@@ -4105,7 +4201,15 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 394,
+    "line": 174,
+    "symbol": "implicitAny:failures",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/index.ts",
+    "line": 413,
     "symbol": "implicitAny:fetch",
     "gate": "type",
     "value": 1,
@@ -4113,7 +4217,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 99,
+    "line": 100,
     "symbol": "implicitAny:githubWebhookHandler",
     "gate": "type",
     "value": 1,
@@ -4121,7 +4225,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 114,
+    "line": 115,
     "symbol": "implicitAny:handler",
     "gate": "type",
     "value": 1,
@@ -4129,7 +4233,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 62,
+    "line": 63,
     "symbol": "implicitAny:llm",
     "gate": "type",
     "value": 1,
@@ -4137,7 +4241,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 121,
+    "line": 122,
     "symbol": "implicitAny:options",
     "gate": "type",
     "value": 1,
@@ -4145,7 +4249,23 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 99,
+    "line": 174,
+    "symbol": "implicitAny:outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/index.ts",
+    "line": 173,
+    "symbol": "implicitAny:outcomes",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/index.ts",
+    "line": 100,
     "symbol": "implicitAny:request",
     "gate": "type",
     "value": 1,
@@ -4153,7 +4273,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 254,
+    "line": 260,
     "symbol": "implicitAny:resident",
     "gate": "type",
     "value": 1,
@@ -4161,7 +4281,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 394,
+    "line": 413,
     "symbol": "implicitAny:server",
     "gate": "type",
     "value": 1,
@@ -4169,15 +4289,15 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 121,
+    "line": 122,
     "symbol": "implicitAny:startOpenOmni",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 3
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 292,
+    "line": 298,
     "symbol": "implicitAny:supervisor",
     "gate": "type",
     "value": 1,
@@ -4185,7 +4305,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 63,
+    "line": 64,
     "symbol": "implicitAny:toolDefinitions",
     "gate": "type",
     "value": 1,
@@ -4193,7 +4313,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 328,
+    "line": 336,
     "symbol": "implicitAny:wake",
     "gate": "type",
     "value": 1,
@@ -4201,7 +4321,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 291,
+    "line": 297,
     "symbol": "implicitAny:webhookHandlers",
     "gate": "type",
     "value": 1,
@@ -4209,7 +4329,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 63,
+    "line": 64,
     "symbol": "unknown:AnyToolDefinition",
     "gate": "type",
     "value": 1,
@@ -4217,15 +4337,15 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 423,
+    "line": 176,
     "symbol": "unknown:Error",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 2
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 56,
+    "line": 57,
     "symbol": "unknown:StartOptions",
     "gate": "type",
     "value": 1,
@@ -4233,7 +4353,15 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 216,
+    "line": 390,
+    "symbol": "unknown:alarms",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/index.ts",
+    "line": 222,
     "symbol": "unknown:approvalPort",
     "gate": "type",
     "value": 1,
@@ -4241,23 +4369,39 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 160,
-    "symbol": "unknown:authorizeApproval",
+    "line": 133,
+    "symbol": "unknown:authenticateOwner",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 420,
+    "line": 392,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 9
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 217,
+    "line": 392,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/index.ts",
+    "line": 174,
+    "symbol": "unknown:failures",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "apps/openomni/src/index.ts",
+    "line": 223,
     "symbol": "unknown:getEndpoint",
     "gate": "type",
     "value": 1,
@@ -4265,7 +4409,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 216,
+    "line": 222,
     "symbol": "unknown:getIdentity",
     "gate": "type",
     "value": 1,
@@ -4273,7 +4417,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 189,
+    "line": 204,
     "symbol": "unknown:liveSupervisor",
     "gate": "type",
     "value": 1,
@@ -4281,7 +4425,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 62,
+    "line": 63,
     "symbol": "unknown:llm",
     "gate": "type",
     "value": 1,
@@ -4289,7 +4433,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 219,
+    "line": 225,
     "symbol": "unknown:mergeEndpoint",
     "gate": "type",
     "value": 1,
@@ -4297,7 +4441,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 177,
+    "line": 192,
     "symbol": "unknown:messages",
     "gate": "type",
     "value": 1,
@@ -4305,7 +4449,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 121,
+    "line": 122,
     "symbol": "unknown:options",
     "gate": "type",
     "value": 1,
@@ -4313,7 +4457,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 314,
+    "line": 322,
     "symbol": "unknown:processSessions",
     "gate": "type",
     "value": 1,
@@ -4321,7 +4465,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 218,
+    "line": 224,
     "symbol": "unknown:promote",
     "gate": "type",
     "value": 1,
@@ -4329,7 +4473,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 74,
+    "line": 75,
     "symbol": "unknown:registerActors",
     "gate": "type",
     "value": 1,
@@ -4337,7 +4481,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 254,
+    "line": 260,
     "symbol": "unknown:resident",
     "gate": "type",
     "value": 1,
@@ -4345,7 +4489,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 276,
+    "line": 282,
     "symbol": "unknown:routingHandler",
     "gate": "type",
     "value": 1,
@@ -4353,7 +4497,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 149,
+    "line": 164,
     "symbol": "unknown:sessionRuntime",
     "gate": "type",
     "value": 1,
@@ -4361,15 +4505,15 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 121,
+    "line": 122,
     "symbol": "unknown:startOpenOmni",
     "gate": "type",
     "value": 1,
-    "count": 7
+    "count": 8
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 63,
+    "line": 64,
     "symbol": "unknown:toolDefinitions",
     "gate": "type",
     "value": 1,
@@ -4377,7 +4521,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 319,
+    "line": 327,
     "symbol": "unknown:wake",
     "gate": "type",
     "value": 1,
@@ -4385,7 +4529,7 @@
   },
   {
     "path": "apps/openomni/src/index.ts",
-    "line": 281,
+    "line": 287,
     "symbol": "unknown:wsRoute",
     "gate": "type",
     "value": 1,
@@ -4489,15 +4633,15 @@
   },
   {
     "path": "apps/openomni/src/policy-seed.ts",
-    "line": 8,
+    "line": 9,
     "symbol": "unknown:seedKernelPolicyRows",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 1
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 103,
+    "line": 105,
     "symbol": "implicitAny:CallExpression",
     "gate": "type",
     "value": 1,
@@ -4505,7 +4649,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 19,
+    "line": 21,
     "symbol": "implicitAny:ProcessSessionRequest",
     "gate": "type",
     "value": 1,
@@ -4513,7 +4657,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 24,
+    "line": 26,
     "symbol": "implicitAny:apiKey",
     "gate": "type",
     "value": 1,
@@ -4521,7 +4665,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 27,
+    "line": 29,
     "symbol": "implicitAny:baseUrl",
     "gate": "type",
     "value": 1,
@@ -4529,7 +4673,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 22,
+    "line": 24,
     "symbol": "implicitAny:dbPath",
     "gate": "type",
     "value": 1,
@@ -4537,7 +4681,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 28,
+    "line": 30,
     "symbol": "implicitAny:headers",
     "gate": "type",
     "value": 1,
@@ -4545,7 +4689,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 23,
+    "line": 25,
     "symbol": "implicitAny:model",
     "gate": "type",
     "value": 1,
@@ -4553,7 +4697,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 87,
+    "line": 90,
     "symbol": "implicitAny:serveProcessSession",
     "gate": "type",
     "value": 1,
@@ -4561,7 +4705,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 21,
+    "line": 23,
     "symbol": "implicitAny:sessionId",
     "gate": "type",
     "value": 1,
@@ -4569,7 +4713,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 25,
+    "line": 27,
     "symbol": "implicitAny:transport",
     "gate": "type",
     "value": 1,
@@ -4577,7 +4721,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 19,
+    "line": 21,
     "symbol": "unknown:ProcessSessionRequest",
     "gate": "type",
     "value": 1,
@@ -4585,7 +4729,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 24,
+    "line": 26,
     "symbol": "unknown:apiKey",
     "gate": "type",
     "value": 1,
@@ -4593,7 +4737,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 27,
+    "line": 29,
     "symbol": "unknown:baseUrl",
     "gate": "type",
     "value": 1,
@@ -4601,7 +4745,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 22,
+    "line": 24,
     "symbol": "unknown:dbPath",
     "gate": "type",
     "value": 1,
@@ -4609,7 +4753,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 78,
+    "line": 81,
     "symbol": "unknown:gateway",
     "gate": "type",
     "value": 1,
@@ -4617,7 +4761,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 28,
+    "line": 30,
     "symbol": "unknown:headers",
     "gate": "type",
     "value": 1,
@@ -4625,7 +4769,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 23,
+    "line": 25,
     "symbol": "unknown:model",
     "gate": "type",
     "value": 1,
@@ -4633,7 +4777,15 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 85,
+    "line": 100,
+    "symbol": "unknown:replies",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/process-entry.ts",
+    "line": 88,
     "symbol": "unknown:serveProcessSession",
     "gate": "type",
     "value": 1,
@@ -4641,7 +4793,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 21,
+    "line": 23,
     "symbol": "unknown:sessionId",
     "gate": "type",
     "value": 1,
@@ -4649,7 +4801,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 25,
+    "line": 27,
     "symbol": "unknown:transport",
     "gate": "type",
     "value": 1,
@@ -5105,104 +5257,32 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 59,
-    "symbol": "implicitAny:ACT_INPUT",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 236,
+    "line": 13,
     "symbol": "implicitAny:ApprovalInput",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 16
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 224,
-    "symbol": "implicitAny:ApprovalOperation",
-    "gate": "type",
-    "value": 1,
-    "count": 20
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 255,
+    "line": 27,
     "symbol": "implicitAny:ApprovalOutput",
     "gate": "type",
     "value": 1,
-    "count": 26
+    "count": 14
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 237,
-    "symbol": "implicitAny:ApprovalSubject",
-    "gate": "type",
-    "value": 1,
-    "count": 19
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 52,
-    "symbol": "implicitAny:DECIDE_INPUT",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 34,
-    "symbol": "implicitAny:REQUEST_INPUT",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 37,
-    "symbol": "implicitAny:act",
+    "line": 16,
+    "symbol": "implicitAny:actorId",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 38,
-    "symbol": "implicitAny:actorId",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 54,
-    "symbol": "implicitAny:approvalId",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 283,
-    "symbol": "implicitAny:createApprovalTool",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 261,
-    "symbol": "implicitAny:deadline",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 269,
-    "symbol": "implicitAny:decidedBy",
+    "line": 65,
+    "symbol": "implicitAny:context",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -5210,70 +5290,54 @@
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
     "line": 55,
-    "symbol": "implicitAny:decision",
+    "symbol": "implicitAny:createApprovalTool",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 4
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 45,
+    "line": 20,
     "symbol": "implicitAny:endpointId",
     "gate": "type",
     "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/authority/approval.ts",
+    "line": 65,
+    "symbol": "implicitAny:execute",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/authority/approval.ts",
+    "line": 28,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
     "count": 2
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 243,
-    "symbol": "implicitAny:fromActorId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 259,
-    "symbol": "implicitAny:id",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 67,
+    "line": 35,
     "symbol": "implicitAny:input",
     "gate": "type",
     "value": 1,
-    "count": 6
+    "count": 2
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 238,
-    "symbol": "implicitAny:kind",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 251,
-    "symbol": "implicitAny:manifestDigest",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 225,
+    "line": 16,
     "symbol": "implicitAny:op",
     "gate": "type",
     "value": 1,
-    "count": 8
+    "count": 4
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 236,
+    "line": 15,
     "symbol": "implicitAny:operation",
     "gate": "type",
     "value": 1,
@@ -5281,7 +5345,7 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 294,
+    "line": 63,
     "symbol": "implicitAny:output",
     "gate": "type",
     "value": 1,
@@ -5289,55 +5353,15 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 250,
-    "symbol": "implicitAny:personId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 225,
-    "symbol": "implicitAny:request",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 268,
-    "symbol": "implicitAny:state",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 260,
-    "symbol": "implicitAny:subject",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 39,
-    "symbol": "implicitAny:timeoutMs",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 46,
+    "line": 21,
     "symbol": "implicitAny:toActorId",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 1
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 277,
+    "line": 28,
     "symbol": "implicitAny:trustTier",
     "gate": "type",
     "value": 1,
@@ -5345,199 +5369,55 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 270,
-    "symbol": "implicitAny:unchanged",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 59,
-    "symbol": "unknown:ACT_INPUT",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 236,
+    "line": 13,
     "symbol": "unknown:ApprovalInput",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 16
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 224,
-    "symbol": "unknown:ApprovalOperation",
-    "gate": "type",
-    "value": 1,
-    "count": 20
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 255,
+    "line": 27,
     "symbol": "unknown:ApprovalOutput",
     "gate": "type",
     "value": 1,
-    "count": 26
+    "count": 14
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 237,
-    "symbol": "unknown:ApprovalSubject",
-    "gate": "type",
-    "value": 1,
-    "count": 19
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 52,
-    "symbol": "unknown:DECIDE_INPUT",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 116,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 34,
-    "symbol": "unknown:REQUEST_INPUT",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 37,
-    "symbol": "unknown:act",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 38,
+    "line": 16,
     "symbol": "unknown:actorId",
     "gate": "type",
     "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 54,
-    "symbol": "unknown:approvalId",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 283,
-    "symbol": "unknown:createApprovalTool",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 261,
-    "symbol": "unknown:deadline",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 269,
-    "symbol": "unknown:decidedBy",
-    "gate": "type",
-    "value": 1,
-    "count": 1
+    "count": 2
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
     "line": 55,
-    "symbol": "unknown:decision",
+    "symbol": "unknown:createApprovalTool",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 7
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 77,
+    "line": 44,
     "symbol": "unknown:endpoint",
     "gate": "type",
     "value": 1,
-    "count": 6
+    "count": 7
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 45,
+    "line": 20,
     "symbol": "unknown:endpointId",
     "gate": "type",
     "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 113,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 133,
-    "symbol": "unknown:executeApprovalDecide",
-    "gate": "type",
-    "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 97,
-    "symbol": "unknown:executeApprovalRequest",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 168,
-    "symbol": "unknown:executeContactPromote",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 189,
-    "symbol": "unknown:executeEndpointMerge",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 243,
-    "symbol": "unknown:fromActorId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 22,
+    "line": 8,
     "symbol": "unknown:getEndpoint",
     "gate": "type",
     "value": 1,
@@ -5545,7 +5425,7 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 21,
+    "line": 7,
     "symbol": "unknown:getIdentity",
     "gate": "type",
     "value": 1,
@@ -5553,47 +5433,31 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 259,
+    "line": 28,
     "symbol": "unknown:id",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 2
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 70,
+    "line": 39,
     "symbol": "unknown:identity",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 67,
-    "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
     "count": 6
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 238,
-    "symbol": "unknown:kind",
+    "line": 35,
+    "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 2
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 251,
-    "symbol": "unknown:manifestDigest",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 24,
+    "line": 10,
     "symbol": "unknown:mergeEndpoint",
     "gate": "type",
     "value": 1,
@@ -5601,7 +5465,7 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 204,
+    "line": 91,
     "symbol": "unknown:merged",
     "gate": "type",
     "value": 1,
@@ -5609,15 +5473,15 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 225,
+    "line": 16,
     "symbol": "unknown:op",
     "gate": "type",
     "value": 1,
-    "count": 8
+    "count": 4
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 236,
+    "line": 15,
     "symbol": "unknown:operation",
     "gate": "type",
     "value": 1,
@@ -5625,7 +5489,7 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 294,
+    "line": 63,
     "symbol": "unknown:output",
     "gate": "type",
     "value": 1,
@@ -5633,15 +5497,7 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 250,
-    "symbol": "unknown:personId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 23,
+    "line": 9,
     "symbol": "unknown:promote",
     "gate": "type",
     "value": 1,
@@ -5649,40 +5505,8 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 225,
-    "symbol": "unknown:request",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 268,
-    "symbol": "unknown:state",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 260,
-    "symbol": "unknown:subject",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 79,
-    "symbol": "unknown:subjectOf",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 39,
-    "symbol": "unknown:timeoutMs",
+    "line": 78,
+    "symbol": "unknown:promoted",
     "gate": "type",
     "value": 1,
     "count": 2
@@ -5690,23 +5514,31 @@
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
     "line": 46,
-    "symbol": "unknown:toActorId",
+    "symbol": "unknown:source",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 3
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 277,
-    "symbol": "unknown:trustTier",
+    "line": 45,
+    "symbol": "unknown:target",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/tools/authority/approval.ts",
+    "line": 21,
+    "symbol": "unknown:toActorId",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 270,
-    "symbol": "unknown:unchanged",
+    "line": 28,
+    "symbol": "unknown:trustTier",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -5969,7 +5801,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 21,
+    "line": 22,
     "symbol": "implicitAny:ArrowFunction",
     "gate": "type",
     "value": 1,
@@ -5977,7 +5809,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 25,
+    "line": 26,
     "symbol": "implicitAny:TOOL_DEFINITIONS",
     "gate": "type",
     "value": 1,
@@ -5985,7 +5817,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 25,
+    "line": 26,
     "symbol": "implicitAny:definition",
     "gate": "type",
     "value": 1,
@@ -5993,7 +5825,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 44,
+    "line": 45,
     "symbol": "implicitAny:llm",
     "gate": "type",
     "value": 1,
@@ -6001,7 +5833,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 21,
+    "line": 22,
     "symbol": "implicitAny:tool",
     "gate": "type",
     "value": 1,
@@ -6009,7 +5841,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 21,
+    "line": 22,
     "symbol": "unknown:ArrowFunction",
     "gate": "type",
     "value": 1,
@@ -6017,7 +5849,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 31,
+    "line": 32,
     "symbol": "unknown:CallExpression",
     "gate": "type",
     "value": 1,
@@ -6025,7 +5857,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 25,
+    "line": 26,
     "symbol": "unknown:TOOL_DEFINITIONS",
     "gate": "type",
     "value": 1,
@@ -6033,7 +5865,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 25,
+    "line": 26,
     "symbol": "unknown:definition",
     "gate": "type",
     "value": 1,
@@ -6041,7 +5873,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 44,
+    "line": 45,
     "symbol": "unknown:llm",
     "gate": "type",
     "value": 1,
@@ -6049,7 +5881,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.test.ts",
-    "line": 21,
+    "line": 22,
     "symbol": "unknown:tool",
     "gate": "type",
     "value": 1,
@@ -6057,7 +5889,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 66,
+    "line": 68,
     "symbol": "implicitAny:TOOL_DEFINITIONS",
     "gate": "type",
     "value": 1,
@@ -6065,15 +5897,23 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 34,
+    "line": 35,
     "symbol": "implicitAny:createTools",
     "gate": "type",
     "value": 1,
-    "count": 13
+    "count": 14
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 53,
+    "line": 47,
+    "symbol": "implicitAny:monitorTool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/core/catalog.ts",
+    "line": 55,
     "symbol": "implicitAny:tool",
     "gate": "type",
     "value": 1,
@@ -6081,7 +5921,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 72,
+    "line": 74,
     "symbol": "implicitAny:toolSpec",
     "gate": "type",
     "value": 1,
@@ -6089,7 +5929,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 38,
+    "line": 39,
     "symbol": "implicitAny:tools",
     "gate": "type",
     "value": 1,
@@ -6097,7 +5937,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 52,
+    "line": 54,
     "symbol": "implicitAny:visible",
     "gate": "type",
     "value": 1,
@@ -6105,7 +5945,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 66,
+    "line": 68,
     "symbol": "unknown:TOOL_DEFINITIONS",
     "gate": "type",
     "value": 1,
@@ -6113,7 +5953,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 71,
+    "line": 73,
     "symbol": "unknown:collectToolSpecs",
     "gate": "type",
     "value": 1,
@@ -6121,15 +5961,23 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 34,
+    "line": 35,
     "symbol": "unknown:createTools",
     "gate": "type",
     "value": 1,
-    "count": 13
+    "count": 14
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 53,
+    "line": 47,
+    "symbol": "unknown:monitorTool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/core/catalog.ts",
+    "line": 55,
     "symbol": "unknown:tool",
     "gate": "type",
     "value": 1,
@@ -6137,7 +5985,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 72,
+    "line": 74,
     "symbol": "unknown:toolSpec",
     "gate": "type",
     "value": 1,
@@ -6145,7 +5993,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 38,
+    "line": 39,
     "symbol": "unknown:tools",
     "gate": "type",
     "value": 1,
@@ -6153,11 +6001,19 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 52,
+    "line": 54,
     "symbol": "unknown:visible",
     "gate": "type",
     "value": 1,
     "count": 5
+  },
+  {
+    "path": "apps/openomni/src/tools/core/request-domain-revisions.ts",
+    "line": 54,
+    "symbol": "unknown:requestDomainRevisions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
   },
   {
     "path": "apps/openomni/src/tools/execution/llm.ts",
@@ -7296,8 +7152,296 @@
     "count": 3
   },
   {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 53,
+    "symbol": "implicitAny:alarmId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 17,
+    "symbol": "implicitAny:command",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 31,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 52,
+    "symbol": "implicitAny:description",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 26,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 68,
+    "symbol": "implicitAny:execute",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 18,
+    "symbol": "implicitAny:filter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 57,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 16,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 8,
+    "symbol": "implicitAny:lifetime",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 59,
+    "symbol": "implicitAny:monitorTool",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 52,
+    "symbol": "implicitAny:op",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 51,
+    "symbol": "implicitAny:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 65,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 25,
+    "symbol": "implicitAny:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 9,
+    "symbol": "implicitAny:persistent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 12,
+    "symbol": "implicitAny:source",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 10,
+    "symbol": "implicitAny:timeout_ms",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 53,
+    "symbol": "unknown:alarmId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 17,
+    "symbol": "unknown:command",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 31,
+    "symbol": "unknown:context",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 52,
+    "symbol": "unknown:description",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 26,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 70,
+    "symbol": "unknown:execute",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 18,
+    "symbol": "unknown:filter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 57,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 16,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 8,
+    "symbol": "unknown:lifetime",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 59,
+    "symbol": "unknown:monitorTool",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 52,
+    "symbol": "unknown:op",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 51,
+    "symbol": "unknown:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 65,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 25,
+    "symbol": "unknown:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 9,
+    "symbol": "unknown:persistent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 12,
+    "symbol": "unknown:source",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/monitor.ts",
+    "line": 10,
+    "symbol": "unknown:timeout_ms",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 102,
+    "line": 84,
     "symbol": "implicitAny:CHANNEL_DECLARE_INPUT",
     "gate": "type",
     "value": 1,
@@ -7305,7 +7449,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 418,
+    "line": 309,
     "symbol": "implicitAny:ChannelProviders",
     "gate": "type",
     "value": 1,
@@ -7313,7 +7457,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 124,
+    "line": 106,
     "symbol": "implicitAny:EMPTY_INPUT",
     "gate": "type",
     "value": 1,
@@ -7321,7 +7465,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 115,
+    "line": 97,
     "symbol": "implicitAny:INSTANCE_INPUT",
     "gate": "type",
     "value": 1,
@@ -7329,7 +7473,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 61,
+    "line": 48,
     "symbol": "implicitAny:MANIFEST_INPUT",
     "gate": "type",
     "value": 1,
@@ -7337,7 +7481,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 126,
+    "line": 108,
     "symbol": "implicitAny:ManifestInput",
     "gate": "type",
     "value": 1,
@@ -7345,15 +7489,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 83,
+    "line": 70,
     "symbol": "implicitAny:PERSON_DECLARE_INPUT",
     "gate": "type",
     "value": 1,
-    "count": 7
+    "count": 6
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 100,
+    "line": 82,
     "symbol": "implicitAny:PERSON_REMOVE_INPUT",
     "gate": "type",
     "value": 1,
@@ -7361,15 +7505,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 485,
+    "line": 376,
     "symbol": "implicitAny:PersonDeclareResult",
     "gate": "type",
     "value": 1,
-    "count": 17
+    "count": 10
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 484,
+    "line": 375,
     "symbol": "implicitAny:ProvisionInput",
     "gate": "type",
     "value": 1,
@@ -7377,7 +7521,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 475,
+    "line": 366,
     "symbol": "implicitAny:ProvisionOperation",
     "gate": "type",
     "value": 1,
@@ -7385,7 +7529,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 504,
+    "line": 386,
     "symbol": "implicitAny:ProvisionOutput",
     "gate": "type",
     "value": 1,
@@ -7393,7 +7537,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 452,
+    "line": 343,
     "symbol": "implicitAny:ProvisionStatusOutput",
     "gate": "type",
     "value": 1,
@@ -7401,7 +7545,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 117,
+    "line": 99,
     "symbol": "implicitAny:SECRET_ROTATE_INPUT",
     "gate": "type",
     "value": 1,
@@ -7409,7 +7553,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 432,
+    "line": 323,
     "symbol": "implicitAny:Statuses",
     "gate": "type",
     "value": 1,
@@ -7417,7 +7561,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 413,
+    "line": 304,
     "symbol": "implicitAny:_input",
     "gate": "type",
     "value": 1,
@@ -7425,7 +7569,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 511,
+    "line": 393,
     "symbol": "implicitAny:action",
     "gate": "type",
     "value": 1,
@@ -7433,15 +7577,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 86,
-    "symbol": "implicitAny:approvalId",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 476,
+    "line": 367,
     "symbol": "implicitAny:args",
     "gate": "type",
     "value": 1,
@@ -7449,7 +7585,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 73,
+    "line": 60,
     "symbol": "implicitAny:channel",
     "gate": "type",
     "value": 1,
@@ -7457,15 +7593,23 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 552,
-    "symbol": "implicitAny:createProvisionTool",
+    "line": 453,
+    "symbol": "implicitAny:context",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 1
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 108,
+    "line": 434,
+    "symbol": "implicitAny:createProvisionTool",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 90,
     "symbol": "implicitAny:credential",
     "gate": "type",
     "value": 1,
@@ -7473,15 +7617,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 492,
-    "symbol": "implicitAny:deadline",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 448,
+    "line": 339,
     "symbol": "implicitAny:detail",
     "gate": "type",
     "value": 1,
@@ -7489,15 +7625,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 491,
-    "symbol": "implicitAny:digest",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 64,
+    "line": 51,
     "symbol": "implicitAny:displayName",
     "gate": "type",
     "value": 1,
@@ -7505,7 +7633,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 106,
+    "line": 88,
     "symbol": "implicitAny:enabled",
     "gate": "type",
     "value": 1,
@@ -7513,7 +7641,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 69,
+    "line": 56,
     "symbol": "implicitAny:endpoints",
     "gate": "type",
     "value": 1,
@@ -7521,7 +7649,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 74,
+    "line": 453,
+    "symbol": "implicitAny:execute",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 61,
     "symbol": "implicitAny:externalId",
     "gate": "type",
     "value": 1,
@@ -7529,7 +7665,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 63,
+    "line": 50,
     "symbol": "implicitAny:id",
     "gate": "type",
     "value": 1,
@@ -7537,7 +7673,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 243,
+    "line": 141,
     "symbol": "implicitAny:input",
     "gate": "type",
     "value": 1,
@@ -7545,7 +7681,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 115,
+    "line": 97,
     "symbol": "implicitAny:instanceId",
     "gate": "type",
     "value": 1,
@@ -7553,7 +7689,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 535,
+    "line": 417,
     "symbol": "implicitAny:kekId",
     "gate": "type",
     "value": 1,
@@ -7561,15 +7697,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 65,
+    "line": 52,
     "symbol": "implicitAny:kind",
     "gate": "type",
     "value": 1,
-    "count": 5
+    "count": 4
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 85,
+    "line": 72,
     "symbol": "implicitAny:manifest",
     "gate": "type",
     "value": 1,
@@ -7577,7 +7713,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 476,
+    "line": 367,
     "symbol": "implicitAny:op",
     "gate": "type",
     "value": 1,
@@ -7585,7 +7721,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 484,
+    "line": 375,
     "symbol": "implicitAny:operation",
     "gate": "type",
     "value": 1,
@@ -7593,7 +7729,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 568,
+    "line": 451,
     "symbol": "implicitAny:output",
     "gate": "type",
     "value": 1,
@@ -7601,7 +7737,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 100,
+    "line": 82,
     "symbol": "implicitAny:personId",
     "gate": "type",
     "value": 1,
@@ -7609,7 +7745,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 460,
+    "line": 351,
     "symbol": "implicitAny:preconditions",
     "gate": "type",
     "value": 1,
@@ -7617,7 +7753,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 105,
+    "line": 87,
     "symbol": "implicitAny:provider",
     "gate": "type",
     "value": 1,
@@ -7625,7 +7761,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 457,
+    "line": 348,
     "symbol": "implicitAny:reason",
     "gate": "type",
     "value": 1,
@@ -7633,15 +7769,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 489,
-    "symbol": "implicitAny:requirement",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 505,
+    "line": 387,
     "symbol": "implicitAny:result",
     "gate": "type",
     "value": 1,
@@ -7649,7 +7777,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 500,
+    "line": 382,
     "symbol": "implicitAny:revision",
     "gate": "type",
     "value": 1,
@@ -7657,7 +7785,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 119,
+    "line": 101,
     "symbol": "implicitAny:secretId",
     "gate": "type",
     "value": 1,
@@ -7665,7 +7793,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 107,
+    "line": 89,
     "symbol": "implicitAny:settings",
     "gate": "type",
     "value": 1,
@@ -7673,7 +7801,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 454,
+    "line": 345,
     "symbol": "implicitAny:source",
     "gate": "type",
     "value": 1,
@@ -7681,7 +7809,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 437,
+    "line": 328,
     "symbol": "implicitAny:state",
     "gate": "type",
     "value": 1,
@@ -7689,7 +7817,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 459,
+    "line": 350,
     "symbol": "implicitAny:statuses",
     "gate": "type",
     "value": 1,
@@ -7697,7 +7825,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 436,
+    "line": 327,
     "symbol": "implicitAny:surface",
     "gate": "type",
     "value": 1,
@@ -7705,7 +7833,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 460,
+    "line": 351,
     "symbol": "implicitAny:text",
     "gate": "type",
     "value": 1,
@@ -7713,7 +7841,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 91,
+    "line": 73,
     "symbol": "implicitAny:timeoutMs",
     "gate": "type",
     "value": 1,
@@ -7721,7 +7849,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 66,
+    "line": 53,
     "symbol": "implicitAny:trustTier",
     "gate": "type",
     "value": 1,
@@ -7729,7 +7857,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 463,
+    "line": 354,
     "symbol": "implicitAny:value",
     "gate": "type",
     "value": 1,
@@ -7737,7 +7865,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 455,
+    "line": 346,
     "symbol": "implicitAny:vault",
     "gate": "type",
     "value": 1,
@@ -7745,7 +7873,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 75,
+    "line": 62,
     "symbol": "implicitAny:workspace",
     "gate": "type",
     "value": 1,
@@ -7753,7 +7881,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 102,
+    "line": 84,
     "symbol": "unknown:CHANNEL_DECLARE_INPUT",
     "gate": "type",
     "value": 1,
@@ -7761,7 +7889,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 418,
+    "line": 309,
     "symbol": "unknown:ChannelProviders",
     "gate": "type",
     "value": 1,
@@ -7769,7 +7897,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 124,
+    "line": 106,
     "symbol": "unknown:EMPTY_INPUT",
     "gate": "type",
     "value": 1,
@@ -7777,15 +7905,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 206,
+    "line": 171,
     "symbol": "unknown:Error",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 2
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 115,
+    "line": 97,
     "symbol": "unknown:INSTANCE_INPUT",
     "gate": "type",
     "value": 1,
@@ -7793,7 +7921,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 61,
+    "line": 48,
     "symbol": "unknown:MANIFEST_INPUT",
     "gate": "type",
     "value": 1,
@@ -7801,7 +7929,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 126,
+    "line": 108,
     "symbol": "unknown:ManifestInput",
     "gate": "type",
     "value": 1,
@@ -7809,15 +7937,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 83,
+    "line": 70,
     "symbol": "unknown:PERSON_DECLARE_INPUT",
     "gate": "type",
     "value": 1,
-    "count": 7
+    "count": 6
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 100,
+    "line": 82,
     "symbol": "unknown:PERSON_REMOVE_INPUT",
     "gate": "type",
     "value": 1,
@@ -7825,15 +7953,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 485,
+    "line": 376,
     "symbol": "unknown:PersonDeclareResult",
     "gate": "type",
     "value": 1,
-    "count": 17
+    "count": 10
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 484,
+    "line": 375,
     "symbol": "unknown:ProvisionInput",
     "gate": "type",
     "value": 1,
@@ -7841,7 +7969,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 475,
+    "line": 366,
     "symbol": "unknown:ProvisionOperation",
     "gate": "type",
     "value": 1,
@@ -7849,7 +7977,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 504,
+    "line": 386,
     "symbol": "unknown:ProvisionOutput",
     "gate": "type",
     "value": 1,
@@ -7857,7 +7985,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 452,
+    "line": 343,
     "symbol": "unknown:ProvisionStatusOutput",
     "gate": "type",
     "value": 1,
@@ -7865,138 +7993,10 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 117,
+    "line": 99,
     "symbol": "unknown:SECRET_ROTATE_INPUT",
     "gate": "type",
     "value": 1,
     "count": 9
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 432,
-    "symbol": "unknown:Statuses",
-    "gate": "type",
-    "value": 1,
-    "count": 13
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 413,
-    "symbol": "unknown:_input",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 511,
-    "symbol": "unknown:action",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 86,
-    "symbol": "unknown:approvalId",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 476,
-    "symbol": "unknown:args",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 73,
-    "symbol": "unknown:channel",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 552,
-    "symbol": "unknown:createProvisionTool",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 108,
-    "symbol": "unknown:credential",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 492,
-    "symbol": "unknown:deadline",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 448,
-    "symbol": "unknown:detail",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 491,
-    "symbol": "unknown:digest",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 64,
-    "symbol": "unknown:displayName",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 106,
-    "symbol": "unknown:enabled",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 69,
-    "symbol": "unknown:endpoints",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 205,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 74,
-    "symbol": "unknown:externalId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
   }
 ]

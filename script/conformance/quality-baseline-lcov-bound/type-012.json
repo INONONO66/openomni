@@ -1,5 +1,2365 @@
 [
   {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 49,
+    "symbol": "implicitAny:linesHit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 50,
+    "symbol": "implicitAny:pct",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 633,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 634,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 210,
+    "symbol": "unknown:assertScriptSourceInventory",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 187,
+    "symbol": "unknown:assertWorkspaceSourceInventory",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 53,
+    "symbol": "unknown:baselineSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 327,
+    "symbol": "unknown:collectCurrentCoverage",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 45,
+    "symbol": "unknown:countSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 46,
+    "symbol": "unknown:coverageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 399,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 48,
+    "symbol": "unknown:linesFound",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 49,
+    "symbol": "unknown:linesHit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 568,
+    "symbol": "unknown:main",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 230,
+    "symbol": "unknown:parseLcovSummary",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 50,
+    "symbol": "unknown:pct",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 362,
+    "symbol": "unknown:readBaseline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 83,
+    "symbol": "implicitAny:collectMemberEntries",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 133,
+    "symbol": "implicitAny:config",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 83,
+    "symbol": "implicitAny:entries",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 63,
+    "symbol": "implicitAny:entry",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 63,
+    "symbol": "implicitAny:inner",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 208,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 165,
+    "symbol": "implicitAny:runKnip",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 98,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 336,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 337,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 29,
+    "symbol": "unknown:KnipFileRecord",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 34,
+    "symbol": "unknown:KnipReport",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 31,
+    "symbol": "unknown:UnknownKeyword",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 291,
+    "symbol": "unknown:[standardReport, entryExportReport]",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 136,
+    "symbol": "unknown:actual",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 54,
+    "symbol": "unknown:collectEntry",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 91,
+    "symbol": "unknown:collectIssueValue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 106,
+    "symbol": "unknown:collectRecordIssues",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 133,
+    "symbol": "unknown:config",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 298,
+    "symbol": "unknown:currentKeys",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 47,
+    "symbol": "unknown:entry",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 291,
+    "symbol": "unknown:entryExportReport",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 47,
+    "symbol": "unknown:entryName",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 336,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 219,
+    "symbol": "unknown:fixtureReport",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 35,
+    "symbol": "unknown:issues",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 49,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 114,
+    "symbol": "unknown:normalizeKnipIssues",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 106,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 114,
+    "symbol": "unknown:report",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 145,
+    "symbol": "unknown:runKnip",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 291,
+    "symbol": "unknown:standardReport",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 95,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 139,
+    "symbol": "unknown:verifyKnipWorkspaceInventory",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 244,
+    "symbol": "unknown:withNewIssue",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-dead-exports.ts",
+    "line": 134,
+    "symbol": "unknown:workspaces",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 75,
+    "symbol": "implicitAny:readJson",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 163,
+    "symbol": "implicitAny:scanRepositorySources",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 380,
+    "symbol": "implicitAny:validateChannelsIntraPackageBanding",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 413,
+    "symbol": "implicitAny:validateDeepImports",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 435,
+    "symbol": "implicitAny:validateDeepRelativeImports",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 461,
+    "symbol": "implicitAny:validateGoldenPrinciples",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 218,
+    "symbol": "implicitAny:validateSourceImportDirection",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 834,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 562,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 78,
+    "symbol": "unknown:collectOpenOmniDeps",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 561,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 531,
+    "symbol": "unknown:gitOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 78,
+    "symbol": "unknown:pkg",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 185,
+    "symbol": "unknown:pkgJson",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 66,
+    "symbol": "unknown:readJson",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "script/check-deps.ts",
+    "line": 82,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-import-cycles.ts",
+    "line": 50,
+    "symbol": "implicitAny:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-import-cycles.ts",
+    "line": 32,
+    "symbol": "implicitAny:workspaceFiles",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-import-cycles.ts",
+    "line": 212,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-import-cycles.ts",
+    "line": 211,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-import-cycles.ts",
+    "line": 29,
+    "symbol": "unknown:listSourceFiles",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-import-cycles.ts",
+    "line": 48,
+    "symbol": "unknown:workspaceEntryPoints",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 80,
+    "symbol": "implicitAny:drizzleKitApi",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 88,
+    "symbol": "implicitAny:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 92,
+    "symbol": "implicitAny:{ initializeSqliteDatabase }",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 48,
+    "symbol": "unknown:columns",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 81,
+    "symbol": "unknown:generateSQLiteDrizzleJson",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 82,
+    "symbol": "unknown:imports",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 88,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 71,
+    "symbol": "unknown:tableNames",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-ledger-schema-drift.ts",
+    "line": 58,
+    "symbol": "unknown:uniqueIndexes",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 124,
+    "symbol": "implicitAny:checkAllowedDependencies",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 124,
+    "symbol": "implicitAny:dependency",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 35,
+    "symbol": "implicitAny:json",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 107,
+    "symbol": "implicitAny:projectCount",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 87,
+    "symbol": "implicitAny:sourceCount",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 179,
+    "symbol": "unknown:baseline",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 73,
+    "symbol": "unknown:checkWorkspaceBoundary",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 34,
+    "symbol": "unknown:json",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 150,
+    "symbol": "unknown:knip",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 151,
+    "symbol": "unknown:knipConfig",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/check-topology.ts",
+    "line": 72,
+    "symbol": "unknown:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 249,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:coverage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 25,
+    "symbol": "implicitAny:dependencyReview",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:dir",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 23,
+    "symbol": "implicitAny:full",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:include",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 27,
+    "symbol": "implicitAny:matrix",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 201,
+    "symbol": "implicitAny:plan",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 21,
+    "symbol": "implicitAny:planSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 26,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 24,
+    "symbol": "implicitAny:verify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 30,
+    "symbol": "unknown:coverage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 25,
+    "symbol": "unknown:dependencyReview",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 30,
+    "symbol": "unknown:dir",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 23,
+    "symbol": "unknown:full",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 158,
+    "symbol": "unknown:git",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 29,
+    "symbol": "unknown:include",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 30,
+    "symbol": "unknown:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 27,
+    "symbol": "unknown:matrix",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 21,
+    "symbol": "unknown:planSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 26,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.test.ts",
+    "line": 24,
+    "symbol": "unknown:verify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.ts",
+    "line": 130,
+    "symbol": "implicitAny:sha",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci-plan.ts",
+    "line": 144,
+    "symbol": "unknown:main",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci-plan.ts",
+    "line": 27,
+    "symbol": "unknown:planChanges",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci-plan.ts",
+    "line": 130,
+    "symbol": "unknown:sha",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci-plan.ts",
+    "line": 89,
+    "symbol": "unknown:validateGraph",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 35,
+    "symbol": "implicitAny:if",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 33,
+    "symbol": "implicitAny:jobSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 157,
+    "symbol": "implicitAny:jobs",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 34,
+    "symbol": "implicitAny:needs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 42,
+    "symbol": "implicitAny:ref",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 38,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 36,
+    "symbol": "implicitAny:steps",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:uses",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 41,
+    "symbol": "implicitAny:with",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 225,
+    "symbol": "implicitAny:workflow",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 162,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 167,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 168,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 35,
+    "symbol": "unknown:if",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 167,
+    "symbol": "unknown:job",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 33,
+    "symbol": "unknown:jobSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 156,
+    "symbol": "unknown:jobs",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 34,
+    "symbol": "unknown:needs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 42,
+    "symbol": "unknown:ref",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 38,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 162,
+    "symbol": "unknown:step",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 36,
+    "symbol": "unknown:steps",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 40,
+    "symbol": "unknown:uses",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 41,
+    "symbol": "unknown:with",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.test.ts",
+    "line": 224,
+    "symbol": "unknown:workflow",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 114,
+    "symbol": "implicitAny:artifacts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 27,
+    "symbol": "implicitAny:coverage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 32,
+    "symbol": "implicitAny:ctx",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 20,
+    "symbol": "implicitAny:dependencyReview",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 26,
+    "symbol": "implicitAny:dir",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 18,
+    "symbol": "implicitAny:full",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 23,
+    "symbol": "implicitAny:include",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 25,
+    "symbol": "implicitAny:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 107,
+    "symbol": "implicitAny:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 22,
+    "symbol": "implicitAny:matrix",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 76,
+    "symbol": "implicitAny:needs",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 73,
+    "symbol": "implicitAny:plan",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 16,
+    "symbol": "implicitAny:planSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 69,
+    "symbol": "implicitAny:readPlan",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 21,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 78,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 107,
+    "symbol": "implicitAny:scripts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 19,
+    "symbol": "implicitAny:verify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 50,
+    "symbol": "unknown:CiError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 50,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 116,
+    "symbol": "unknown:artifacts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 27,
+    "symbol": "unknown:coverage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 32,
+    "symbol": "unknown:ctx",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 20,
+    "symbol": "unknown:dependencyReview",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 26,
+    "symbol": "unknown:dir",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 18,
+    "symbol": "unknown:full",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 98,
+    "symbol": "unknown:gate",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 23,
+    "symbol": "unknown:include",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 25,
+    "symbol": "unknown:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 157,
+    "symbol": "unknown:main",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 107,
+    "symbol": "unknown:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 22,
+    "symbol": "unknown:matrix",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 76,
+    "symbol": "unknown:needs",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 73,
+    "symbol": "unknown:plan",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 16,
+    "symbol": "unknown:planSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 21,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 78,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 64,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 107,
+    "symbol": "unknown:scripts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ci.ts",
+    "line": 19,
+    "symbol": "unknown:verify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/conformance/ledger-producer-drift.test.ts",
+    "line": 174,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/conformance/protocol-event-pairing.test.ts",
+    "line": 15,
+    "symbol": "implicitAny:protocolEventNames",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/conformance/request-authority-census.test.ts",
+    "line": 32,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "script/conformance/request-authority-census.test.ts",
+    "line": 72,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/conformance/request-authority-census.test.ts",
+    "line": 72,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/coverage-ratchet.test.ts",
+    "line": 165,
+    "symbol": "implicitAny:baseline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/coverage-source-inventory.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/coverage-source-inventory.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/coverage-source-inventory.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:ownedSources",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-agents-deps.ts",
+    "line": 40,
+    "symbol": "implicitAny:dependency",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/generate-agents-deps.ts",
+    "line": 40,
+    "symbol": "implicitAny:renderTopology",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-agents-deps.ts",
+    "line": 73,
+    "symbol": "unknown:replaceGeneratedSection",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.test.ts",
+    "line": 77,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.test.ts",
+    "line": 209,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 307,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 66,
+    "symbol": "implicitAny:DispositionCandidates",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 61,
+    "symbol": "implicitAny:Receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 41
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 308,
+    "symbol": "implicitAny:SuppressedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 90,
+    "symbol": "implicitAny:backup",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 67,
+    "symbol": "implicitAny:blocked",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 87,
+    "symbol": "implicitAny:bun",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 93,
+    "symbol": "implicitAny:bytes",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 66,
+    "symbol": "implicitAny:candidates",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 72,
+    "symbol": "implicitAny:columns",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 83,
+    "symbol": "implicitAny:device",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 310,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 310,
+    "symbol": "implicitAny:failures",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 76,
+    "symbol": "implicitAny:first",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 63,
+    "symbol": "implicitAny:generatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 85,
+    "symbol": "implicitAny:head",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 75,
+    "symbol": "implicitAny:idRange",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 84,
+    "symbol": "implicitAny:inode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 78,
+    "symbol": "implicitAny:integrityHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 73,
+    "symbol": "implicitAny:keys",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 76,
+    "symbol": "implicitAny:last",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 173,
+    "symbol": "implicitAny:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 62,
+    "symbol": "implicitAny:manifestVersion",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 65,
+    "symbol": "implicitAny:migrations",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 65,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 82,
+    "symbol": "implicitAny:path",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 74,
+    "symbol": "implicitAny:rowCount",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 64,
+    "symbol": "implicitAny:schemaHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 92,
+    "symbol": "implicitAny:sha256",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 81,
+    "symbol": "implicitAny:source",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 71,
+    "symbol": "implicitAny:sourceSchemaVersion",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 88,
+    "symbol": "implicitAny:sqlite",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 310,
+    "symbol": "implicitAny:suppressed",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 70,
+    "symbol": "implicitAny:table",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 68,
+    "symbol": "implicitAny:tables",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 86,
+    "symbol": "implicitAny:tree",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 307,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 307,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 66,
+    "symbol": "unknown:DispositionCandidates",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 310,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 61,
+    "symbol": "unknown:Receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 41
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 308,
+    "symbol": "unknown:SuppressedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 324,
+    "symbol": "unknown:U967Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 90,
+    "symbol": "unknown:backup",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 67,
+    "symbol": "unknown:blocked",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 32,
+    "symbol": "unknown:buildLedgerArchiveManifest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 87,
+    "symbol": "unknown:bun",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 93,
+    "symbol": "unknown:bytes",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 66,
+    "symbol": "unknown:candidates",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 72,
+    "symbol": "unknown:columns",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 83,
+    "symbol": "unknown:device",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 270,
+    "symbol": "unknown:dispose",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 307,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 309,
+    "symbol": "unknown:failures",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 76,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 63,
+    "symbol": "unknown:generatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 85,
+    "symbol": "unknown:head",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 75,
+    "symbol": "unknown:idRange",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 84,
+    "symbol": "unknown:inode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 78,
+    "symbol": "unknown:integrityHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 73,
+    "symbol": "unknown:keys",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 76,
+    "symbol": "unknown:last",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 62,
+    "symbol": "unknown:manifestVersion",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 65,
+    "symbol": "unknown:migrations",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 65,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 138,
+    "symbol": "unknown:parseCommand",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 82,
+    "symbol": "unknown:path",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 172,
+    "symbol": "unknown:readReceipt",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 120,
+    "symbol": "unknown:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 74,
+    "symbol": "unknown:rowCount",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 99,
+    "symbol": "unknown:safePath",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 64,
+    "symbol": "unknown:schemaHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 92,
+    "symbol": "unknown:sha256",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 81,
+    "symbol": "unknown:source",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 71,
+    "symbol": "unknown:sourceSchemaVersion",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 88,
+    "symbol": "unknown:sqlite",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 310,
+    "symbol": "unknown:suppressed",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 70,
+    "symbol": "unknown:table",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 68,
+    "symbol": "unknown:tables",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 86,
+    "symbol": "unknown:tree",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 210,
+    "symbol": "unknown:verifyDisposition",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-ledger-archive-manifest.ts",
+    "line": 192,
+    "symbol": "unknown:verifyReceipt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 10,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 10,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 16,
+    "symbol": "unknown:catalog",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 35,
+    "symbol": "unknown:env",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 33,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 49,
+    "symbol": "unknown:limit",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 20,
+    "symbol": "unknown:main",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 48,
+    "symbol": "unknown:model",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 26,
+    "symbol": "unknown:models",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 34,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/generate-models-snapshot.ts",
+    "line": 36,
+    "symbol": "unknown:npm",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "script/generate-models-snapshot.ts",
     "line": 48,
     "symbol": "unknown:projectModel",
@@ -209,7 +2569,15 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 48,
+    "line": 171,
+    "symbol": "implicitAny:current",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 49,
     "symbol": "implicitAny:ids",
     "gate": "type",
     "value": 1,
@@ -217,7 +2585,7 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 103,
+    "line": 170,
     "symbol": "implicitAny:marker",
     "gate": "type",
     "value": 1,
@@ -225,7 +2593,7 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 35,
+    "line": 36,
     "symbol": "implicitAny:name",
     "gate": "type",
     "value": 1,
@@ -233,7 +2601,7 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 86,
+    "line": 103,
     "symbol": "implicitAny:remaining",
     "gate": "type",
     "value": 1,
@@ -241,7 +2609,7 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 45,
+    "line": 46,
     "symbol": "implicitAny:rows",
     "gate": "type",
     "value": 1,
@@ -249,7 +2617,7 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 26,
+    "line": 27,
     "symbol": "implicitAny:statement",
     "gate": "type",
     "value": 1,
@@ -257,7 +2625,7 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 161,
+    "line": 268,
     "symbol": "unknown:[Symbol.dispose]",
     "gate": "type",
     "value": 1,
@@ -265,15 +2633,47 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 89,
-    "symbol": "unknown:assertArchiveEquality",
+    "line": 172,
+    "symbol": "unknown:addedMigrations",
     "gate": "type",
     "value": 1,
-    "count": 6
+    "count": 2
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 103,
+    "line": 104,
+    "symbol": "unknown:assertArchiveEquality",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 209,
+    "symbol": "unknown:assertArchivedRows",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 171,
+    "symbol": "unknown:current",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 123,
+    "symbol": "unknown:hasWatchUpgrade",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 170,
     "symbol": "unknown:marker",
     "gate": "type",
     "value": 1,
@@ -281,7 +2681,7 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 98,
+    "line": 103,
     "symbol": "unknown:remaining",
     "gate": "type",
     "value": 1,
@@ -289,7 +2689,15 @@
   },
   {
     "path": "script/ledger-archive-snapshot.ts",
-    "line": 150,
+    "line": 156,
+    "symbol": "unknown:removedEmptyTables",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/ledger-archive-snapshot.ts",
+    "line": 257,
     "symbol": "unknown:withRestoredArchive",
     "gate": "type",
     "value": 1,
@@ -297,7 +2705,7 @@
   },
   {
     "path": "script/ledger-producer-manifest.ts",
-    "line": 316,
+    "line": 281,
     "symbol": "implicitAny:migrationFiles",
     "gate": "type",
     "value": 1,
@@ -305,7 +2713,7 @@
   },
   {
     "path": "script/ledger-producer-manifest.ts",
-    "line": 301,
+    "line": 266,
     "symbol": "implicitAny:sourceFiles",
     "gate": "type",
     "value": 1,
@@ -1368,6 +3776,14 @@
     "count": 1
   },
   {
+    "path": "script/request-authority-census.ts",
+    "line": 196,
+    "symbol": "unknown:scanRequestAuthority",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
     "path": "script/summarize-benchmark-runs.ts",
     "line": 82,
     "symbol": "implicitAny:item",
@@ -1473,7 +3889,7 @@
   },
   {
     "path": "script/topology.ts",
-    "line": 207,
+    "line": 208,
     "symbol": "implicitAny:rootManifest",
     "gate": "type",
     "value": 1,
@@ -1481,7 +3897,7 @@
   },
   {
     "path": "script/topology.ts",
-    "line": 212,
+    "line": 213,
     "symbol": "implicitAny:topologyInventoryDrift",
     "gate": "type",
     "value": 1,
@@ -1489,7 +3905,7 @@
   },
   {
     "path": "script/topology.ts",
-    "line": 212,
+    "line": 213,
     "symbol": "implicitAny:workspace",
     "gate": "type",
     "value": 1,
@@ -1497,7 +3913,7 @@
   },
   {
     "path": "script/topology.ts",
-    "line": 241,
+    "line": 242,
     "symbol": "unknown:assertTopologyComplete",
     "gate": "type",
     "value": 1,
@@ -1505,7 +3921,7 @@
   },
   {
     "path": "script/topology.ts",
-    "line": 207,
+    "line": 208,
     "symbol": "unknown:rootManifest",
     "gate": "type",
     "value": 1,
@@ -1513,7 +3929,7 @@
   },
   {
     "path": "script/topology.ts",
-    "line": 211,
+    "line": 212,
     "symbol": "unknown:topologyInventoryDrift",
     "gate": "type",
     "value": 1,
@@ -1521,7 +3937,7 @@
   },
   {
     "path": "script/topology.ts",
-    "line": 208,
+    "line": 209,
     "symbol": "unknown:workspaces",
     "gate": "type",
     "value": 1,

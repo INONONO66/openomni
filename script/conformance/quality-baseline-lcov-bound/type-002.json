@@ -1,5 +1,2101 @@
 [
   {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 51,
+    "symbol": "implicitAny:fetch",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 55,
+    "symbol": "implicitAny:max_tokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "implicitAny:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 132,
+    "symbol": "implicitAny:probe",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 86,
+    "symbol": "implicitAny:received",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "implicitAny:reply",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 51,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 55,
+    "symbol": "implicitAny:stream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "implicitAny:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 13,
+    "symbol": "implicitAny:textResponse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 97,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 55,
+    "symbol": "unknown:body",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 55,
+    "symbol": "unknown:max_tokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "unknown:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "unknown:reply",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 55,
+    "symbol": "unknown:stream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "unknown:text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-loop-e2e.test.ts",
+    "line": 89,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 245,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 188,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 23,
+    "symbol": "implicitAny:Request",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "implicitAny:callId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 27,
+    "symbol": "implicitAny:content",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 130,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 120,
+    "symbol": "implicitAny:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 113,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 130,
+    "symbol": "implicitAny:execute",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 106,
+    "symbol": "implicitAny:fetch",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 127,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 24,
+    "symbol": "implicitAny:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 128,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 150,
+    "symbol": "implicitAny:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 113,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 106,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 101,
+    "symbol": "implicitAny:requests",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 41,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 26,
+    "symbol": "implicitAny:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 149,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 172,
+    "symbol": "implicitAny:sessionTool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 158,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 127,
+    "symbol": "implicitAny:slot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "implicitAny:terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 158,
+    "symbol": "implicitAny:toolWave",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 32,
+    "symbol": "implicitAny:tool_use_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 31,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 128,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 210,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 224,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 243,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 188,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 23,
+    "symbol": "unknown:Request",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 136,
+    "symbol": "unknown:aborted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 88,
+    "symbol": "unknown:bounded",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "unknown:callId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 158,
+    "symbol": "unknown:calls",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 154,
+    "symbol": "unknown:config",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 27,
+    "symbol": "unknown:content",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 120,
+    "symbol": "unknown:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 151,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 113,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 107,
+    "symbol": "unknown:fetch",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 219,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 127,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 24,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 128,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 150,
+    "symbol": "unknown:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 113,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 101,
+    "symbol": "unknown:requests",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 26,
+    "symbol": "unknown:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 149,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 172,
+    "symbol": "unknown:sessionTool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 127,
+    "symbol": "unknown:slot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 195,
+    "symbol": "unknown:terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 158,
+    "symbol": "unknown:toolWave",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 32,
+    "symbol": "unknown:tool_use_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 157,
+    "symbol": "unknown:tools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 31,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
+    "line": 128,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 938,
+    "symbol": "implicitAny:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 133,
+    "symbol": "implicitAny:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 560,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 560,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 120,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 139,
+    "symbol": "implicitAny:ProviderRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 218,
+    "symbol": "implicitAny:app",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "implicitAny:callId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 143,
+    "symbol": "implicitAny:content",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 181,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 521,
+    "symbol": "implicitAny:currentSignal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 188,
+    "symbol": "implicitAny:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 22
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 615,
+    "symbol": "implicitAny:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 169,
+    "symbol": "implicitAny:execute",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 82,
+    "symbol": "implicitAny:fetch",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 368,
+    "symbol": "implicitAny:hook",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 778,
+    "symbol": "implicitAny:inner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 178,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 609,
+    "symbol": "implicitAny:invoke",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 943,
+    "symbol": "implicitAny:messageIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 140,
+    "symbol": "implicitAny:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 940,
+    "symbol": "implicitAny:modelIntent",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 292,
+    "symbol": "implicitAny:nextApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 249,
+    "symbol": "implicitAny:op",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 179,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 252,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "implicitAny:phase",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 205,
+    "symbol": "implicitAny:probe",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 34,
+    "symbol": "implicitAny:providerResponse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 192,
+    "symbol": "implicitAny:received",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 197,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 131,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 610,
+    "symbol": "implicitAny:results",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 142,
+    "symbol": "implicitAny:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 190,
+    "symbol": "implicitAny:sessionRuntime",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 169,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 178,
+    "symbol": "implicitAny:slot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 263,
+    "symbol": "implicitAny:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "implicitAny:terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 220,
+    "symbol": "implicitAny:toolDefinitions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 249,
+    "symbol": "implicitAny:toolResults",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 148,
+    "symbol": "implicitAny:tool_use_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 634,
+    "symbol": "implicitAny:turnSignal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 147,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 943,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 187,
+    "symbol": "implicitAny:waveApp",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 167,
+    "symbol": "implicitAny:waveTool",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 973,
+    "symbol": "implicitAny:{ app, socket }",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 321,
+    "symbol": "implicitAny:{ app, socket, received }",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 632,
+    "symbol": "implicitAny:{ app, socket, received, cleanup }",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 800,
+    "symbol": "implicitAny:{ app, socket, received, dbPath, cleanup }",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 1032,
+    "symbol": "implicitAny:{ socket, received }",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 938,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 120,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 938,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 560,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 533,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 333,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 560,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 120,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 139,
+    "symbol": "unknown:ProviderRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 282,
+    "symbol": "unknown:activeRow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 218,
+    "symbol": "unknown:app",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 162,
+    "symbol": "unknown:bounded",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "unknown:callId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 143,
+    "symbol": "unknown:content",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 188,
+    "symbol": "unknown:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 615,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 532,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 120,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 1007,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 932,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 368,
+    "symbol": "unknown:hook",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 778,
+    "symbol": "unknown:inner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 178,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 609,
+    "symbol": "unknown:invoke",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 943,
+    "symbol": "unknown:messageIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 140,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 940,
+    "symbol": "unknown:modelIntent",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 292,
+    "symbol": "unknown:nextApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 249,
+    "symbol": "unknown:op",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 179,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 252,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "unknown:phase",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 192,
+    "symbol": "unknown:received",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 303,
+    "symbol": "unknown:requireBApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 610,
+    "symbol": "unknown:results",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 142,
+    "symbol": "unknown:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 933,
+    "symbol": "unknown:second",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 190,
+    "symbol": "unknown:sessionRuntime",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 178,
+    "symbol": "unknown:slot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 263,
+    "symbol": "unknown:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 244,
+    "symbol": "unknown:terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 261,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 220,
+    "symbol": "unknown:toolDefinitions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 249,
+    "symbol": "unknown:toolResults",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 148,
+    "symbol": "unknown:tool_use_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 147,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 943,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 187,
+    "symbol": "unknown:waveApp",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 167,
+    "symbol": "unknown:waveTool",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 1007,
+    "symbol": "unknown:worker",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 973,
+    "symbol": "unknown:{ app, socket }",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 321,
+    "symbol": "unknown:{ app, socket, received }",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 632,
+    "symbol": "unknown:{ app, socket, received, cleanup }",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 800,
+    "symbol": "unknown:{ app, socket, received, dbPath, cleanup }",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/session-wave-e2e.test.ts",
+    "line": 1032,
+    "symbol": "unknown:{ socket, received }",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/shutdown-hooks.test.ts",
+    "line": 26,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/shutdown-hooks.test.ts",
+    "line": 44,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/shutdown-hooks.test.ts",
+    "line": 44,
+    "symbol": "unknown:rejectStop",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 112,
+    "symbol": "implicitAny:candidate",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 115,
+    "symbol": "unknown:body",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 112,
+    "symbol": "unknown:candidate",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 87,
+    "symbol": "unknown:canonical",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 71,
+    "symbol": "unknown:canonicalPartContent",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 85,
+    "symbol": "unknown:canonicalPrefixFingerprint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 61,
+    "symbol": "unknown:cut",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 42,
+    "symbol": "unknown:isAnchorMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 57,
+    "symbol": "unknown:isWarmCandidateValid",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 100,
+    "symbol": "unknown:latestAnchorBody",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 49,
+    "symbol": "unknown:latestCompactionAnchorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 26,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 11,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 72,
+    "symbol": "unknown:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 45,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 89,
+    "symbol": "unknown:parts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 10,
+    "symbol": "unknown:planAnchoredCut",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 49,
+    "symbol": "unknown:span",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 80,
+    "symbol": "unknown:state",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 18,
+    "symbol": "unknown:summarizerInput",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/candidate.ts",
+    "line": 24,
+    "symbol": "unknown:toRemove",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 108,
+    "symbol": "implicitAny:boundedOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 39,
+    "symbol": "implicitAny:compact",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 49,
+    "symbol": "implicitAny:dispatch",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 91,
+    "symbol": "implicitAny:finish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 112,
+    "symbol": "implicitAny:onSummarize",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 51,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 137,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 108,
+    "symbol": "unknown:boundedOptions",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 39,
+    "symbol": "unknown:compact",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 83,
+    "symbol": "unknown:completed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 125,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 69,
+    "symbol": "unknown:finish",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 40,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 112,
+    "symbol": "unknown:onSummarize",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 86,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 70,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 80,
+    "symbol": "unknown:savedTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/compact.ts",
+    "line": 74,
+    "symbol": "unknown:summarizerError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 29,
+    "symbol": "implicitAny:onSummarize",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 33,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 96,
+    "symbol": "unknown:AnchoredCutAttempt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 63,
+    "symbol": "unknown:CompactionResult",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 82,
+    "symbol": "unknown:FinishCompaction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 90,
+    "symbol": "unknown:ReducedHistory",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 93,
+    "symbol": "unknown:completed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 97,
+    "symbol": "unknown:cut",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 30,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 29,
+    "symbol": "unknown:onSummarize",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 64,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 83,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 87,
+    "symbol": "unknown:summarizerError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/agent/src/compaction/contract.ts",
+    "line": 91,
+    "symbol": "unknown:working",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 187,
+    "symbol": "implicitAny:compactUnbracketed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 169,
+    "symbol": "implicitAny:cutoff",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 69,
+    "symbol": "unknown:attempt",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 108,
+    "symbol": "unknown:compactUnbracketed",
+    "gate": "type",
+    "value": 1,
+    "count": 26
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 240,
+    "symbol": "unknown:compacted",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 39,
+    "symbol": "unknown:completed",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 169,
+    "symbol": "unknown:cutoff",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 21,
+    "symbol": "unknown:finish",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 68,
+    "symbol": "unknown:finishAnchoredCut",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 47,
+    "symbol": "unknown:finishUnavailableCut",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 186,
+    "symbol": "unknown:firstRemoved",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 17,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 24
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 16,
+    "symbol": "unknown:reduceHistoryBeforeCut",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/agent/src/compaction/cut.ts",
+    "line": 25,
+    "symbol": "unknown:reduction",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
     "path": "packages/agent/src/compaction/cut.ts",
     "line": 76,
     "symbol": "unknown:result",
@@ -4025,15 +6121,7 @@
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 54,
-    "symbol": "implicitAny:answer",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/executor-approval.ts",
-    "line": 34,
+    "line": 58,
     "symbol": "implicitAny:approvals",
     "gate": "type",
     "value": 1,
@@ -4041,7 +6129,7 @@
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 81,
+    "line": 99,
     "symbol": "implicitAny:awaitApproval",
     "gate": "type",
     "value": 1,
@@ -4049,7 +6137,7 @@
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 12,
+    "line": 18,
     "symbol": "implicitAny:createExecutionApprovals",
     "gate": "type",
     "value": 1,
@@ -4057,7 +6145,7 @@
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 13,
+    "line": 18,
     "symbol": "implicitAny:options",
     "gate": "type",
     "value": 1,
@@ -4065,16 +6153,16 @@
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 36,
-    "symbol": "implicitAny:pending",
+    "line": 43,
+    "symbol": "implicitAny:parsed",
     "gate": "type",
     "value": 1,
-    "count": 7
+    "count": 2
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
     "line": 24,
-    "symbol": "implicitAny:pendingApprovals",
+    "symbol": "implicitAny:pending",
     "gate": "type",
     "value": 1,
     "count": 3
@@ -4085,11 +6173,27 @@
     "symbol": "implicitAny:signal",
     "gate": "type",
     "value": 1,
-    "count": 6
+    "count": 5
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 34,
+    "line": 46,
+    "symbol": "implicitAny:suspended",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/agent/src/executor-approval.ts",
+    "line": 65,
+    "symbol": "implicitAny:valid",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor-approval.ts",
+    "line": 58,
     "symbol": "implicitAny:value",
     "gate": "type",
     "value": 1,
@@ -4097,16 +6201,40 @@
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 45,
+    "line": 71,
     "symbol": "unknown:answer",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 4
   },
   {
     "path": "packages/agent/src/executor-approval.ts",
-    "line": 20,
+    "line": 169,
+    "symbol": "unknown:awaitApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor-approval.ts",
+    "line": 23,
     "symbol": "unknown:createExecutionApprovals",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor-approval.ts",
+    "line": 43,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/executor-approval.ts",
+    "line": 35,
+    "symbol": "unknown:transition",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -4137,7 +6265,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 79,
+    "line": 80,
     "symbol": "implicitAny:failure",
     "gate": "type",
     "value": 1,
@@ -4153,7 +6281,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 62,
+    "line": 63,
     "symbol": "unknown:Error",
     "gate": "type",
     "value": 1,
@@ -4169,7 +6297,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 88,
+    "line": 89,
     "symbol": "unknown:decision",
     "gate": "type",
     "value": 1,
@@ -4177,7 +6305,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 60,
+    "line": 61,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
@@ -4185,7 +6313,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 79,
+    "line": 80,
     "symbol": "unknown:failure",
     "gate": "type",
     "value": 1,
@@ -4193,7 +6321,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 58,
+    "line": 59,
     "symbol": "unknown:outcome",
     "gate": "type",
     "value": 1,
@@ -4201,7 +6329,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 82,
+    "line": 83,
     "symbol": "unknown:overflow",
     "gate": "type",
     "value": 1,
@@ -4209,7 +6337,7 @@
   },
   {
     "path": "packages/agent/src/executor-attempts.ts",
-    "line": 93,
+    "line": 94,
     "symbol": "unknown:recover",
     "gate": "type",
     "value": 1,
@@ -4241,7 +6369,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 174,
+    "line": 193,
     "symbol": "implicitAny:ExecutorOptions",
     "gate": "type",
     "value": 1,
@@ -4249,7 +6377,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 148,
+    "line": 167,
     "symbol": "implicitAny:control",
     "gate": "type",
     "value": 1,
@@ -4257,7 +6385,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 146,
+    "line": 165,
     "symbol": "implicitAny:runBatch",
     "gate": "type",
     "value": 1,
@@ -4265,7 +6393,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 175,
+    "line": 194,
     "symbol": "implicitAny:signal",
     "gate": "type",
     "value": 1,
@@ -4273,7 +6401,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 175,
+    "line": 194,
     "symbol": "implicitAny:waitRetry",
     "gate": "type",
     "value": 1,
@@ -4281,7 +6409,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 120,
+    "line": 138,
     "symbol": "unknown:Error",
     "gate": "type",
     "value": 1,
@@ -4289,7 +6417,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 120,
+    "line": 138,
     "symbol": "unknown:ExecutionApprovalError",
     "gate": "type",
     "value": 1,
@@ -4297,7 +6425,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 134,
+    "line": 152,
     "symbol": "unknown:ExecutionBatchResult",
     "gate": "type",
     "value": 1,
@@ -4305,7 +6433,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 149,
+    "line": 168,
     "symbol": "unknown:TypeOperator",
     "gate": "type",
     "value": 1,
@@ -4313,7 +6441,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 149,
+    "line": 168,
     "symbol": "unknown:TypeReference",
     "gate": "type",
     "value": 1,
@@ -4321,7 +6449,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 69,
+    "line": 85,
     "symbol": "unknown:decision",
     "gate": "type",
     "value": 1,
@@ -4329,7 +6457,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 68,
+    "line": 84,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
@@ -4337,7 +6465,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 69,
+    "line": 85,
     "symbol": "unknown:onRetry",
     "gate": "type",
     "value": 1,
@@ -4345,7 +6473,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 49,
+    "line": 58,
     "symbol": "unknown:outcome",
     "gate": "type",
     "value": 1,
@@ -4353,7 +6481,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 68,
+    "line": 84,
     "symbol": "unknown:recoverOverflow",
     "gate": "type",
     "value": 1,
@@ -4361,7 +6489,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 146,
+    "line": 165,
     "symbol": "unknown:runBatch",
     "gate": "type",
     "value": 1,
@@ -4369,7 +6497,7 @@
   },
   {
     "path": "packages/agent/src/executor-contract.ts",
-    "line": 49,
+    "line": 58,
     "symbol": "unknown:toolResult",
     "gate": "type",
     "value": 1,
@@ -4377,7 +6505,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 50,
+    "line": 51,
     "symbol": "implicitAny:appendFailure",
     "gate": "type",
     "value": 1,
@@ -4385,7 +6513,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 27,
+    "line": 28,
     "symbol": "implicitAny:commit",
     "gate": "type",
     "value": 1,
@@ -4393,7 +6521,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 21,
+    "line": 22,
     "symbol": "implicitAny:createExecutionRecord",
     "gate": "type",
     "value": 1,
@@ -4401,7 +6529,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 22,
+    "line": 23,
     "symbol": "implicitAny:options",
     "gate": "type",
     "value": 1,
@@ -4409,7 +6537,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 60,
+    "line": 61,
     "symbol": "implicitAny:publishToolStarted",
     "gate": "type",
     "value": 1,
@@ -4417,7 +6545,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 76,
+    "line": 77,
     "symbol": "implicitAny:publishToolTerminal",
     "gate": "type",
     "value": 1,
@@ -4425,7 +6553,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 44,
+    "line": 45,
     "symbol": "unknown:Error",
     "gate": "type",
     "value": 1,
@@ -4433,7 +6561,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 50,
+    "line": 51,
     "symbol": "unknown:appendFailure",
     "gate": "type",
     "value": 1,
@@ -4441,7 +6569,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 44,
+    "line": 45,
     "symbol": "unknown:caught",
     "gate": "type",
     "value": 1,
@@ -4449,7 +6577,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 27,
+    "line": 28,
     "symbol": "unknown:commit",
     "gate": "type",
     "value": 1,
@@ -4457,7 +6585,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 44,
+    "line": 45,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
@@ -4465,7 +6593,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 60,
+    "line": 61,
     "symbol": "unknown:publishToolStarted",
     "gate": "type",
     "value": 1,
@@ -4473,7 +6601,7 @@
   },
   {
     "path": "packages/agent/src/executor-record.ts",
-    "line": 76,
+    "line": 77,
     "symbol": "unknown:publishToolTerminal",
     "gate": "type",
     "value": 1,
@@ -4505,7 +6633,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 39,
+    "line": 40,
     "symbol": "implicitAny:ExecutorOptions",
     "gate": "type",
     "value": 1,
@@ -4513,7 +6641,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 51,
+    "line": 52,
     "symbol": "implicitAny:awaitApproval",
     "gate": "type",
     "value": 1,
@@ -4521,7 +6649,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 414,
+    "line": 511,
     "symbol": "implicitAny:clonePlainValue",
     "gate": "type",
     "value": 1,
@@ -4529,7 +6657,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 123,
+    "line": 124,
     "symbol": "implicitAny:control",
     "gate": "type",
     "value": 1,
@@ -4537,7 +6665,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 125,
+    "line": 126,
     "symbol": "implicitAny:controller",
     "gate": "type",
     "value": 1,
@@ -4545,7 +6673,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 42,
+    "line": 43,
     "symbol": "implicitAny:createExecutor",
     "gate": "type",
     "value": 1,
@@ -4553,7 +6681,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 197,
+    "line": 230,
     "symbol": "implicitAny:decisions",
     "gate": "type",
     "value": 1,
@@ -4561,7 +6689,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 144,
+    "line": 178,
     "symbol": "implicitAny:executeBatch",
     "gate": "type",
     "value": 1,
@@ -4569,7 +6697,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 126,
+    "line": 127,
     "symbol": "implicitAny:inherited",
     "gate": "type",
     "value": 1,
@@ -4577,7 +6705,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 42,
+    "line": 43,
     "symbol": "implicitAny:options",
     "gate": "type",
     "value": 1,
@@ -4585,7 +6713,23 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 110,
+    "line": 304,
+    "symbol": "implicitAny:outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 411,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 111,
     "symbol": "implicitAny:results",
     "gate": "type",
     "value": 1,
@@ -4593,7 +6737,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 316,
+    "line": 400,
     "symbol": "implicitAny:runAttempts",
     "gate": "type",
     "value": 1,
@@ -4601,7 +6745,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 121,
+    "line": 122,
     "symbol": "implicitAny:runBatch",
     "gate": "type",
     "value": 1,
@@ -4609,7 +6753,15 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 111,
+    "line": 304,
+    "symbol": "implicitAny:runWaveBodies",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 112,
     "symbol": "implicitAny:signal",
     "gate": "type",
     "value": 1,
@@ -4625,15 +6777,15 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 30,
+    "line": 31,
     "symbol": "unknown:ExecutionApprovalError",
     "gate": "type",
     "value": 1,
-    "count": 1
+    "count": 2
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 38,
+    "line": 39,
     "symbol": "unknown:ExecutionBatchResult",
     "gate": "type",
     "value": 1,
@@ -4649,31 +6801,47 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 257,
+    "line": 238,
+    "symbol": "unknown:decisions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 238,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 7
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 144,
+    "line": 178,
     "symbol": "unknown:executeBatch",
     "gate": "type",
     "value": 1,
-    "count": 11
+    "count": 6
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 220,
+    "line": 302,
+    "symbol": "unknown:finishStage",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 304,
     "symbol": "unknown:outcome",
     "gate": "type",
     "value": 1,
-    "count": 5
+    "count": 8
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 202,
+    "line": 245,
     "symbol": "unknown:outcomes",
     "gate": "type",
     "value": 1,
@@ -4681,7 +6849,15 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 394,
+    "line": 411,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 491,
     "symbol": "unknown:projectToolResult",
     "gate": "type",
     "value": 1,
@@ -4689,7 +6865,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 321,
+    "line": 418,
     "symbol": "unknown:registeredKind",
     "gate": "type",
     "value": 1,
@@ -4697,7 +6873,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 113,
+    "line": 114,
     "symbol": "unknown:result",
     "gate": "type",
     "value": 1,
@@ -4705,7 +6881,7 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 110,
+    "line": 111,
     "symbol": "unknown:results",
     "gate": "type",
     "value": 1,
@@ -4713,19 +6889,27 @@
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 114,
+    "line": 115,
     "symbol": "unknown:run",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 7
   },
   {
     "path": "packages/agent/src/executor.ts",
-    "line": 121,
+    "line": 122,
     "symbol": "unknown:runBatch",
     "gate": "type",
     "value": 1,
     "count": 7
+  },
+  {
+    "path": "packages/agent/src/executor.ts",
+    "line": 304,
+    "symbol": "unknown:runWaveBodies",
+    "gate": "type",
+    "value": 1,
+    "count": 1
   },
   {
     "path": "packages/agent/src/index.ts",
@@ -4737,7 +6921,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 42,
+    "line": 44,
     "symbol": "implicitAny:SessionRunner",
     "gate": "type",
     "value": 1,
@@ -4745,7 +6929,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 43,
+    "line": 45,
     "symbol": "implicitAny:SessionRunnerInput",
     "gate": "type",
     "value": 1,
@@ -4753,7 +6937,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 21,
+    "line": 23,
     "symbol": "implicitAny:createDispatcher",
     "gate": "type",
     "value": 1,
@@ -4761,7 +6945,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 13,
+    "line": 15,
     "symbol": "implicitAny:createExecutor",
     "gate": "type",
     "value": 1,
@@ -4769,7 +6953,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 5,
+    "line": 7,
     "symbol": "implicitAny:createSessionChatRunner",
     "gate": "type",
     "value": 1,
@@ -4777,7 +6961,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 22,
+    "line": 24,
     "symbol": "implicitAny:createTurnDispatcher",
     "gate": "type",
     "value": 1,
@@ -4785,7 +6969,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 25,
+    "line": 27,
     "symbol": "implicitAny:eraseTool",
     "gate": "type",
     "value": 1,
@@ -4793,7 +6977,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 27,
+    "line": 29,
     "symbol": "implicitAny:sessionTool",
     "gate": "type",
     "value": 1,
@@ -4801,7 +6985,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 10,
+    "line": 12,
     "symbol": "implicitAny:sweepSessions",
     "gate": "type",
     "value": 1,
@@ -4809,7 +6993,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 29,
+    "line": 31,
     "symbol": "implicitAny:toolInputSchema",
     "gate": "type",
     "value": 1,
@@ -4817,7 +7001,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 30,
+    "line": 32,
     "symbol": "implicitAny:toolSpec",
     "gate": "type",
     "value": 1,
@@ -4825,7 +7009,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 11,
+    "line": 13,
     "symbol": "implicitAny:wakeSession",
     "gate": "type",
     "value": 1,
@@ -4841,7 +7025,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 13,
+    "line": 15,
     "symbol": "unknown:ExecutionApprovalError",
     "gate": "type",
     "value": 1,
@@ -4849,7 +7033,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 26,
+    "line": 28,
     "symbol": "unknown:ExecutorContextError",
     "gate": "type",
     "value": 1,
@@ -4857,7 +7041,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 42,
+    "line": 44,
     "symbol": "unknown:SessionRunner",
     "gate": "type",
     "value": 1,
@@ -4865,7 +7049,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 43,
+    "line": 45,
     "symbol": "unknown:SessionRunnerInput",
     "gate": "type",
     "value": 1,
@@ -4873,7 +7057,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 28,
+    "line": 30,
     "symbol": "unknown:ToolRefused",
     "gate": "type",
     "value": 1,
@@ -4881,7 +7065,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 13,
+    "line": 15,
     "symbol": "unknown:UnregisteredExecutionKindError",
     "gate": "type",
     "value": 1,
@@ -4889,7 +7073,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 21,
+    "line": 23,
     "symbol": "unknown:createDispatcher",
     "gate": "type",
     "value": 1,
@@ -4897,7 +7081,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 5,
+    "line": 7,
     "symbol": "unknown:createSessionChatRunner",
     "gate": "type",
     "value": 1,
@@ -4905,7 +7089,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 22,
+    "line": 24,
     "symbol": "unknown:createTurnDispatcher",
     "gate": "type",
     "value": 1,
@@ -4913,7 +7097,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 25,
+    "line": 27,
     "symbol": "unknown:eraseTool",
     "gate": "type",
     "value": 1,
@@ -4921,7 +7105,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 3,
+    "line": 5,
     "symbol": "unknown:failureFacts",
     "gate": "type",
     "value": 1,
@@ -4929,7 +7113,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 27,
+    "line": 29,
     "symbol": "unknown:sessionTool",
     "gate": "type",
     "value": 1,
@@ -4937,7 +7121,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 10,
+    "line": 12,
     "symbol": "unknown:sweepSessions",
     "gate": "type",
     "value": 1,
@@ -4945,7 +7129,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 29,
+    "line": 31,
     "symbol": "unknown:toolInputSchema",
     "gate": "type",
     "value": 1,
@@ -4953,7 +7137,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 30,
+    "line": 32,
     "symbol": "unknown:toolSpec",
     "gate": "type",
     "value": 1,
@@ -4961,7 +7145,7 @@
   },
   {
     "path": "packages/agent/src/index.ts",
-    "line": 11,
+    "line": 13,
     "symbol": "unknown:wakeSession",
     "gate": "type",
     "value": 1,
@@ -5177,7 +7361,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 31,
+    "line": 33,
     "symbol": "implicitAny:createSessionAdmission",
     "gate": "type",
     "value": 1,
@@ -5185,7 +7369,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 34,
+    "line": 36,
     "symbol": "implicitAny:state",
     "gate": "type",
     "value": 1,
@@ -5193,7 +7377,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 229,
+    "line": 272,
     "symbol": "unknown:commit",
     "gate": "type",
     "value": 1,
@@ -5201,7 +7385,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 214,
+    "line": 216,
     "symbol": "unknown:commitSession",
     "gate": "type",
     "value": 1,
@@ -5209,7 +7393,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 31,
+    "line": 33,
     "symbol": "unknown:createSessionAdmission",
     "gate": "type",
     "value": 1,
@@ -5217,7 +7401,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 135,
+    "line": 137,
     "symbol": "unknown:evaluatePromptPolicies",
     "gate": "type",
     "value": 1,
@@ -5225,7 +7409,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 66,
+    "line": 68,
     "symbol": "unknown:promptRefusal",
     "gate": "type",
     "value": 1,
@@ -5233,7 +7417,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 140,
+    "line": 142,
     "symbol": "unknown:refusal",
     "gate": "type",
     "value": 1,
@@ -5241,7 +7425,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 53,
+    "line": 55,
     "symbol": "unknown:result",
     "gate": "type",
     "value": 1,
@@ -5249,7 +7433,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 300,
+    "line": 343,
     "symbol": "unknown:resumeInterrupted",
     "gate": "type",
     "value": 1,
@@ -5257,7 +7441,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 249,
+    "line": 292,
     "symbol": "unknown:resumeTurn",
     "gate": "type",
     "value": 1,
@@ -5265,7 +7449,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 42,
+    "line": 44,
     "symbol": "unknown:runTurn",
     "gate": "type",
     "value": 1,
@@ -5273,7 +7457,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 51,
+    "line": 53,
     "symbol": "unknown:seal",
     "gate": "type",
     "value": 1,
@@ -5281,7 +7465,7 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 59,
+    "line": 61,
     "symbol": "unknown:startTurn",
     "gate": "type",
     "value": 1,
@@ -5289,15 +7473,23 @@
   },
   {
     "path": "packages/agent/src/session-admission.ts",
-    "line": 34,
+    "line": 36,
     "symbol": "unknown:state",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
+    "path": "packages/agent/src/session-admission.ts",
+    "line": 248,
+    "symbol": "unknown:transition",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 8,
+    "line": 9,
     "symbol": "implicitAny:SessionChatRun",
     "gate": "type",
     "value": 1,
@@ -5305,7 +7497,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 9,
+    "line": 10,
     "symbol": "implicitAny:config",
     "gate": "type",
     "value": 1,
@@ -5313,7 +7505,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 19,
+    "line": 20,
     "symbol": "implicitAny:createSessionChatRunner",
     "gate": "type",
     "value": 1,
@@ -5321,7 +7513,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 38,
+    "line": 47,
     "symbol": "implicitAny:execute",
     "gate": "type",
     "value": 1,
@@ -5329,7 +7521,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 15,
+    "line": 16,
     "symbol": "implicitAny:input",
     "gate": "type",
     "value": 1,
@@ -5337,7 +7529,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 15,
+    "line": 16,
     "symbol": "implicitAny:prepare",
     "gate": "type",
     "value": 1,
@@ -5345,7 +7537,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 27,
+    "line": 28,
     "symbol": "implicitAny:prepared",
     "gate": "type",
     "value": 1,
@@ -5353,7 +7545,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 16,
+    "line": 17,
     "symbol": "implicitAny:reportError",
     "gate": "type",
     "value": 1,
@@ -5361,7 +7553,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 41,
+    "line": 50,
     "symbol": "implicitAny:signal",
     "gate": "type",
     "value": 1,
@@ -5369,7 +7561,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 57,
+    "line": 66,
     "symbol": "unknown:Error",
     "gate": "type",
     "value": 1,
@@ -5377,7 +7569,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 8,
+    "line": 9,
     "symbol": "unknown:SessionChatRun",
     "gate": "type",
     "value": 1,
@@ -5385,7 +7577,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 57,
+    "line": 66,
     "symbol": "unknown:cause",
     "gate": "type",
     "value": 1,
@@ -5393,7 +7585,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 9,
+    "line": 10,
     "symbol": "unknown:config",
     "gate": "type",
     "value": 1,
@@ -5401,7 +7593,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 19,
+    "line": 20,
     "symbol": "unknown:createSessionChatRunner",
     "gate": "type",
     "value": 1,
@@ -5409,7 +7601,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 16,
+    "line": 17,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
@@ -5417,15 +7609,15 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 37,
+    "line": 39,
     "symbol": "unknown:execute",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 6
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 37,
+    "line": 41,
     "symbol": "unknown:history",
     "gate": "type",
     "value": 1,
@@ -5433,7 +7625,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 15,
+    "line": 16,
     "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
@@ -5441,7 +7633,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 15,
+    "line": 16,
     "symbol": "unknown:prepare",
     "gate": "type",
     "value": 1,
@@ -5449,7 +7641,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 27,
+    "line": 28,
     "symbol": "unknown:prepared",
     "gate": "type",
     "value": 1,
@@ -5457,7 +7649,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 16,
+    "line": 17,
     "symbol": "unknown:reportError",
     "gate": "type",
     "value": 1,
@@ -5465,7 +7657,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 70,
+    "line": 79,
     "symbol": "unknown:result",
     "gate": "type",
     "value": 1,
@@ -5529,7 +7721,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 107,
+    "line": 111,
     "symbol": "implicitAny:SessionRunner",
     "gate": "type",
     "value": 1,
@@ -5537,7 +7729,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 44,
+    "line": 48,
     "symbol": "implicitAny:SessionRunnerInput",
     "gate": "type",
     "value": 1,
@@ -5545,7 +7737,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 124,
+    "line": 128,
     "symbol": "implicitAny:approvalTimeoutMs",
     "gate": "type",
     "value": 1,
@@ -5553,7 +7745,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 131,
+    "line": 134,
     "symbol": "implicitAny:authorizeApproval",
     "gate": "type",
     "value": 1,
@@ -5561,7 +7753,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 107,
+    "line": 111,
     "symbol": "implicitAny:input",
     "gate": "type",
     "value": 1,
@@ -5569,7 +7761,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 30,
+    "line": 31,
     "symbol": "implicitAny:runner",
     "gate": "type",
     "value": 1,
@@ -5577,15 +7769,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 125,
-    "symbol": "implicitAny:scheduleApprovalTimeout",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-contract.ts",
-    "line": 70,
+    "line": 74,
     "symbol": "implicitAny:signal",
     "gate": "type",
     "value": 1,
@@ -5593,7 +7777,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 54,
+    "line": 58,
     "symbol": "implicitAny:stopEvidence",
     "gate": "type",
     "value": 1,
@@ -5601,7 +7785,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 123,
+    "line": 127,
     "symbol": "implicitAny:waitRetry",
     "gate": "type",
     "value": 1,
@@ -5609,7 +7793,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 180,
+    "line": 195,
     "symbol": "unknown:Error",
     "gate": "type",
     "value": 1,
@@ -5617,7 +7801,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 196,
+    "line": 211,
     "symbol": "unknown:SessionCommitError",
     "gate": "type",
     "value": 1,
@@ -5625,7 +7809,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 180,
+    "line": 195,
     "symbol": "unknown:SessionLeaseError",
     "gate": "type",
     "value": 1,
@@ -5633,7 +7817,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 187,
+    "line": 202,
     "symbol": "unknown:SessionPolicyRefusal",
     "gate": "type",
     "value": 1,
@@ -5641,7 +7825,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 107,
+    "line": 111,
     "symbol": "unknown:SessionRunner",
     "gate": "type",
     "value": 1,
@@ -5649,7 +7833,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 44,
+    "line": 48,
     "symbol": "unknown:SessionRunnerInput",
     "gate": "type",
     "value": 1,
@@ -5657,7 +7841,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 79,
+    "line": 83,
     "symbol": "unknown:SessionRunnerResult",
     "gate": "type",
     "value": 1,
@@ -5665,7 +7849,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 172,
+    "line": 187,
     "symbol": "unknown:TypeReference",
     "gate": "type",
     "value": 1,
@@ -5673,7 +7857,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 103,
+    "line": 107,
     "symbol": "unknown:cause",
     "gate": "type",
     "value": 1,
@@ -5681,7 +7865,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 62,
+    "line": 66,
     "symbol": "unknown:history",
     "gate": "type",
     "value": 1,
@@ -5689,7 +7873,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 107,
+    "line": 111,
     "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
@@ -5697,7 +7881,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 172,
+    "line": 187,
     "symbol": "unknown:prompt",
     "gate": "type",
     "value": 1,
@@ -5705,7 +7889,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 206,
+    "line": 221,
     "symbol": "unknown:reconcile",
     "gate": "type",
     "value": 1,
@@ -5713,7 +7897,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 30,
+    "line": 31,
     "symbol": "unknown:runner",
     "gate": "type",
     "value": 1,
@@ -5721,7 +7905,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 54,
+    "line": 58,
     "symbol": "unknown:stopEvidence",
     "gate": "type",
     "value": 1,
@@ -5777,7 +7961,7 @@
   },
   {
     "path": "packages/agent/src/session-controller.ts",
-    "line": 21,
+    "line": 23,
     "symbol": "implicitAny:createController",
     "gate": "type",
     "value": 1,
@@ -5785,7 +7969,7 @@
   },
   {
     "path": "packages/agent/src/session-controller.ts",
-    "line": 23,
+    "line": 25,
     "symbol": "implicitAny:runner",
     "gate": "type",
     "value": 1,
@@ -5793,7 +7977,7 @@
   },
   {
     "path": "packages/agent/src/session-controller.ts",
-    "line": 32,
+    "line": 34,
     "symbol": "implicitAny:state",
     "gate": "type",
     "value": 1,
@@ -5801,7 +7985,7 @@
   },
   {
     "path": "packages/agent/src/session-controller.ts",
-    "line": 139,
+    "line": 173,
     "symbol": "unknown:answer",
     "gate": "type",
     "value": 1,
@@ -5809,2194 +7993,10 @@
   },
   {
     "path": "packages/agent/src/session-controller.ts",
-    "line": 77,
+    "line": 79,
     "symbol": "unknown:args",
     "gate": "type",
     "value": 1,
     "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 292,
-    "symbol": "unknown:awaitRetainedRunner",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 197,
-    "symbol": "unknown:close",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 21,
-    "symbol": "unknown:createController",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 258,
-    "symbol": "unknown:driveAvailable",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 205,
-    "symbol": "unknown:enqueue",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 58,
-    "symbol": "unknown:evaluatePromptPolicies",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 293,
-    "symbol": "unknown:failure",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 300,
-    "symbol": "unknown:hibernate",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 153,
-    "symbol": "unknown:interrupt",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 145,
-    "symbol": "unknown:prompt",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 245,
-    "symbol": "unknown:reconcile",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 93,
-    "symbol": "unknown:replacement",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 259,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 159,
-    "symbol": "unknown:resume",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 71,
-    "symbol": "unknown:resumeInterrupted",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 70,
-    "symbol": "unknown:resumeTurn",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 46,
-    "symbol": "unknown:runTurn",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 23,
-    "symbol": "unknown:runner",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 46,
-    "symbol": "unknown:seal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 187,
-    "symbol": "unknown:settled",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 66,
-    "symbol": "unknown:startTurn",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 32,
-    "symbol": "unknown:state",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 250,
-    "symbol": "unknown:work",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 58,
-    "symbol": "unknown:{ runTurn, seal }",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-controller.ts",
-    "line": 76,
-    "symbol": "unknown:{\n    startTurn,\n    evaluatePromptPolicies,\n    consumePolicyBlockedInbox,\n    createExecutionLedger,\n    resumeTurn,\n    resumeInterrupted,\n    consumeNoopInbox,\n  }",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 21,
-    "symbol": "implicitAny:SessionRunner",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 19,
-    "symbol": "implicitAny:SessionRunnerInput",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 101,
-    "symbol": "implicitAny:declare",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 133,
-    "symbol": "implicitAny:entry",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 145,
-    "symbol": "implicitAny:install",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 51,
-    "symbol": "implicitAny:resolveRunner",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 41,
-    "symbol": "implicitAny:runner",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 126,
-    "symbol": "implicitAny:sweep",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 50,
-    "symbol": "implicitAny:sweepSessions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 91,
-    "symbol": "implicitAny:wake",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 41,
-    "symbol": "implicitAny:wakeSession",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 16,
-    "symbol": "unknown:SessionCommitError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 21,
-    "symbol": "unknown:SessionRunner",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 19,
-    "symbol": "unknown:SessionRunnerInput",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 20,
-    "symbol": "unknown:SessionRunnerResult",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 173,
-    "symbol": "unknown:assertDeclaration",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 96,
-    "symbol": "unknown:declare",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 133,
-    "symbol": "unknown:entry",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 145,
-    "symbol": "unknown:install",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 51,
-    "symbol": "unknown:resolveRunner",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 41,
-    "symbol": "unknown:runner",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 126,
-    "symbol": "unknown:sweep",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 50,
-    "symbol": "unknown:sweepSessions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 91,
-    "symbol": "unknown:wake",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 41,
-    "symbol": "unknown:wakeSession",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 146,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 40,
-    "symbol": "unknown:existing",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 40,
-    "symbol": "unknown:index",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 72,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 38,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 10,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 62,
-    "symbol": "unknown:part",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 62,
-    "symbol": "unknown:parts",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 6,
-    "symbol": "unknown:sessionHistory",
-    "gate": "type",
-    "value": 1,
-    "count": 42
-  },
-  {
-    "path": "packages/agent/src/session-history.ts",
-    "line": 69,
-    "symbol": "unknown:state",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-message-observation.ts",
-    "line": 18,
-    "symbol": "implicitAny:observeDrained",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-message-observation.ts",
-    "line": 18,
-    "symbol": "unknown:observeDrained",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-parent-reply.ts",
-    "line": 14,
-    "symbol": "implicitAny:origin",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-parent-reply.ts",
-    "line": 12,
-    "symbol": "implicitAny:original",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/session-parent-reply.ts",
-    "line": 14,
-    "symbol": "unknown:origin",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-parent-reply.ts",
-    "line": 12,
-    "symbol": "unknown:original",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/session-parent-reply.ts",
-    "line": 6,
-    "symbol": "unknown:parentReply",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-parent-reply.ts",
-    "line": 9,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 321,
-    "symbol": "implicitAny:id",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 390,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 346,
-    "symbol": "unknown:SessionUsage",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 248,
-    "symbol": "unknown:cause",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 414,
-    "symbol": "unknown:generationForOpen",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 212,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 247,
-    "symbol": "unknown:policyRefusalResult",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 56,
-    "symbol": "unknown:requireCommit",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 217,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 289,
-    "symbol": "unknown:sessionRunnerResultFromValue",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 252,
-    "symbol": "unknown:sessionRunnerResultValue",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-record.ts",
-    "line": 212,
-    "symbol": "unknown:turnTerminalAction",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-stop-evidence.ts",
-    "line": 16,
-    "symbol": "implicitAny:sessionStopEvidence",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-stop-evidence.ts",
-    "line": 16,
-    "symbol": "unknown:sessionStopEvidence",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 36,
-    "symbol": "implicitAny:createSessionTurn",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 115,
-    "symbol": "implicitAny:execution",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 178,
-    "symbol": "implicitAny:outcome",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 78,
-    "symbol": "implicitAny:runTurn",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 38,
-    "symbol": "implicitAny:runner",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 117,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 40,
-    "symbol": "implicitAny:state",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 77,
-    "symbol": "implicitAny:turnController",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 116,
-    "symbol": "implicitAny:waitRetry",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 220,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 142,
-    "symbol": "unknown:aborted",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 221,
-    "symbol": "unknown:cause",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 36,
-    "symbol": "unknown:createSessionTurn",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 217,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 14
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 48,
-    "symbol": "unknown:evaluatePromptPolicies",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 200,
-    "symbol": "unknown:history",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 99,
-    "symbol": "unknown:interruptedRunner",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 176,
-    "symbol": "unknown:outcome",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 330,
-    "symbol": "unknown:promptRefusal",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 98,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 14
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 67,
-    "symbol": "unknown:runTurn",
-    "gate": "type",
-    "value": 1,
-    "count": 18
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 38,
-    "symbol": "unknown:runner",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 154,
-    "symbol": "unknown:runnerResult",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 153,
-    "symbol": "unknown:running",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 374,
-    "symbol": "unknown:seal",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 40,
-    "symbol": "unknown:state",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
-    "line": 391,
-    "symbol": "unknown:terminal",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 19,
-    "symbol": "implicitAny:PlainValueSchema",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 10,
-    "symbol": "implicitAny:ToolBodyOutcome",
-    "gate": "type",
-    "value": 1,
-    "count": 16
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 26,
-    "symbol": "implicitAny:context",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 69,
-    "symbol": "implicitAny:controller",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 65,
-    "symbol": "implicitAny:error",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 16,
-    "symbol": "implicitAny:errorKind",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 52,
-    "symbol": "implicitAny:executeDefinition",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 23,
-    "symbol": "implicitAny:executeToolBody",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 76,
-    "symbol": "implicitAny:execution",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 70,
-    "symbol": "implicitAny:forwardAbort",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 39,
-    "symbol": "implicitAny:jsonOutput",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 15,
-    "symbol": "implicitAny:message",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 19,
-    "symbol": "implicitAny:output",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 38,
-    "symbol": "implicitAny:parsedOutput",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 72,
-    "symbol": "implicitAny:scopedContext",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 72,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 11,
-    "symbol": "implicitAny:status",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 100,
-    "symbol": "unknown:CaughtValue",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 103,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 19,
-    "symbol": "unknown:PlainValueSchema",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 10,
-    "symbol": "unknown:ToolBodyOutcome",
-    "gate": "type",
-    "value": 1,
-    "count": 16
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 60,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 16,
-    "symbol": "unknown:errorKind",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 52,
-    "symbol": "unknown:executeDefinition",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 23,
-    "symbol": "unknown:executeToolBody",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 74,
-    "symbol": "unknown:execution",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 96,
-    "symbol": "unknown:isToolRefusal",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 39,
-    "symbol": "unknown:jsonOutput",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 15,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 29,
-    "symbol": "unknown:outcome",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 19,
-    "symbol": "unknown:output",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 38,
-    "symbol": "unknown:parsedOutput",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 11,
-    "symbol": "unknown:status",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 87,
-    "symbol": "unknown:timer",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-body.ts",
-    "line": 102,
-    "symbol": "unknown:toError",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 102,
-    "symbol": "implicitAny:$schema",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 65,
-    "symbol": "implicitAny:DispatchContext",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 316,
-    "symbol": "implicitAny:TurnDispatchInput",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 335,
-    "symbol": "implicitAny:approvalTimeoutMs",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 340,
-    "symbol": "implicitAny:authorizeApproval",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 354,
-    "symbol": "implicitAny:candidate",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 74,
-    "symbol": "implicitAny:context",
-    "gate": "type",
-    "value": 1,
-    "count": 21
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 112,
-    "symbol": "implicitAny:createDispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 348,
-    "symbol": "implicitAny:createTurnDispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 82,
-    "symbol": "implicitAny:defineTool",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 101,
-    "symbol": "implicitAny:definition",
-    "gate": "type",
-    "value": 1,
-    "count": 21
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 113,
-    "symbol": "implicitAny:definitions",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 261,
-    "symbol": "implicitAny:dispatch",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 93,
-    "symbol": "implicitAny:eraseTool",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 74,
-    "symbol": "implicitAny:execute",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 79,
-    "symbol": "implicitAny:executeCell",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 75,
-    "symbol": "implicitAny:executeWave",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 419,
-    "symbol": "implicitAny:executionContext",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 362,
-    "symbol": "implicitAny:executor",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 350,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 154,
-    "symbol": "implicitAny:issue",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 276,
-    "symbol": "implicitAny:item",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 127,
-    "symbol": "implicitAny:known",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 222,
-    "symbol": "implicitAny:output",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 152,
-    "symbol": "implicitAny:parsedInput",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 202,
-    "symbol": "implicitAny:parsedOutcome",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 386,
-    "symbol": "implicitAny:pinnedDefinitions",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 139,
-    "symbol": "implicitAny:prepare",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 141,
-    "symbol": "implicitAny:providedContext",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 280,
-    "symbol": "implicitAny:results",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 336,
-    "symbol": "implicitAny:scheduleApprovalTimeout",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 400,
-    "symbol": "implicitAny:sessionTool",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 68,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 101,
-    "symbol": "implicitAny:toolInputSchema",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 302,
-    "symbol": "implicitAny:toolSpec",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 217,
-    "symbol": "implicitAny:transformedOutput",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 334,
-    "symbol": "implicitAny:waitRetry",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 102,
-    "symbol": "implicitAny:{ $schema: _dialect, ...projected }",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 71,
-    "symbol": "unknown:Dispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 32,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 3,
-    "symbol": "unknown:ExecutorContextError",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 32,
-    "symbol": "unknown:ToolRefused",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 186,
-    "symbol": "unknown:body",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 74,
-    "symbol": "unknown:call",
-    "gate": "type",
-    "value": 1,
-    "count": 30
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 76,
-    "symbol": "unknown:calls",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 354,
-    "symbol": "unknown:candidate",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 112,
-    "symbol": "unknown:createDispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 348,
-    "symbol": "unknown:createTurnDispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 82,
-    "symbol": "unknown:defineTool",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 101,
-    "symbol": "unknown:definition",
-    "gate": "type",
-    "value": 1,
-    "count": 21
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 113,
-    "symbol": "unknown:definitions",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 261,
-    "symbol": "unknown:dispatch",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 93,
-    "symbol": "unknown:eraseTool",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 74,
-    "symbol": "unknown:execute",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 79,
-    "symbol": "unknown:executeCell",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 75,
-    "symbol": "unknown:executeWave",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 190,
-    "symbol": "unknown:execution",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 419,
-    "symbol": "unknown:executionContext",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 428,
-    "symbol": "unknown:failed",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 135,
-    "symbol": "unknown:finish",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 154,
-    "symbol": "unknown:issue",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 127,
-    "symbol": "unknown:known",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 222,
-    "symbol": "unknown:output",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 152,
-    "symbol": "unknown:parsedInput",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 202,
-    "symbol": "unknown:parsedOutcome",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 386,
-    "symbol": "unknown:pinnedDefinitions",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 139,
-    "symbol": "unknown:prepare",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 274,
-    "symbol": "unknown:prepared",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 197,
-    "symbol": "unknown:refusal",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 175,
-    "symbol": "unknown:request",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 136,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 280,
-    "symbol": "unknown:results",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 400,
-    "symbol": "unknown:sessionTool",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 73,
-    "symbol": "unknown:specs",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 101,
-    "symbol": "unknown:toolInputSchema",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 245,
-    "symbol": "unknown:toolResult",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 302,
-    "symbol": "unknown:toolSpec",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 217,
-    "symbol": "unknown:transformedOutput",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 102,
-    "symbol": "unknown:{ $schema: _dialect, ...projected }",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 67,
-    "symbol": "implicitAny:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 56,
-    "symbol": "implicitAny:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 60,
-    "symbol": "implicitAny:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 123,
-    "symbol": "implicitAny:YieldExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 32,
-    "symbol": "implicitAny:_input",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 18,
-    "symbol": "implicitAny:agent",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 243,
-    "symbol": "implicitAny:auth",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 114,
-    "symbol": "implicitAny:capturedContext",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 149,
-    "symbol": "implicitAny:context",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 55,
-    "symbol": "implicitAny:controller",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 67,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 247,
-    "symbol": "implicitAny:listing",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 213,
-    "symbol": "implicitAny:malformed",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 53,
-    "symbol": "implicitAny:observed",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 32,
-    "symbol": "implicitAny:result",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 18,
-    "symbol": "implicitAny:run",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 60,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 149,
-    "symbol": "implicitAny:toolExecutor",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 162,
-    "symbol": "implicitAny:unsubscribe",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 67,
-    "symbol": "unknown:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 69,
-    "symbol": "unknown:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 15
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 120,
-    "symbol": "unknown:FunctionExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 119,
-    "symbol": "unknown:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 119,
-    "symbol": "unknown:ParenthesizedExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 286,
-    "symbol": "unknown:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 32,
-    "symbol": "unknown:_input",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 18,
-    "symbol": "unknown:agent",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 243,
-    "symbol": "unknown:auth",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 149,
-    "symbol": "unknown:call",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 179,
-    "symbol": "unknown:configured",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 120,
-    "symbol": "unknown:fullStream",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 67,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 247,
-    "symbol": "unknown:listing",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 33,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 53,
-    "symbol": "unknown:observed",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 32,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 18,
-    "symbol": "unknown:run",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 119,
-    "symbol": "unknown:streamText",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 149,
-    "symbol": "unknown:toolExecutor",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/agent.test.ts",
-    "line": 162,
-    "symbol": "unknown:unsubscribe",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 33,
-    "symbol": "implicitAny:ArrayLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 33,
-    "symbol": "implicitAny:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 33,
-    "symbol": "implicitAny:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 6,
-    "symbol": "implicitAny:definition",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 33,
-    "symbol": "implicitAny:definitions",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 45,
-    "symbol": "implicitAny:dispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 6,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 20,
-    "symbol": "implicitAny:original",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 12,
-    "symbol": "implicitAny:output",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/captured-catalog.test.ts",
-    "line": 42,
-    "symbol": "implicitAny:tool",
-    "gate": "type",
-    "value": 1,
-    "count": 4
   }
 ]

@@ -1150,7 +1150,7 @@ class Provenance {
       const owner = this.nativeOwner(value),
         name = memberName(value.expression);
       if (
-        /\/(?:net|child_process|readline)\.d\.ts$/.test(owner) &&
+        /\/(?:net|child_process|readline|fs)\.d\.ts$/.test(owner) &&
         [
           "connect",
           "createConnection",
@@ -1159,6 +1159,7 @@ class Provenance {
           "execFile",
           "fork",
           "createInterface",
+          "watch",
         ].includes(name)
       )
         return value;
@@ -1646,8 +1647,10 @@ class Provenance {
           "replaceAll",
         ].includes(name);
       const scheduled =
-        /(?:(?:bun-types|@types\/node)\/|typescript\/lib\/lib\..*\.d\.ts$)/.test(file) &&
-        ["queueMicrotask", "setTimeout", "setInterval", "setImmediate"].includes(name);
+        (/(?:(?:bun-types|@types\/node)\/|typescript\/lib\/lib\..*\.d\.ts$)/.test(file) &&
+          ["queueMicrotask", "setTimeout", "setInterval", "setImmediate"].includes(name)) ||
+        // `fs.watch(path, options?, listener)` delivers to its listener from the event loop.
+        (/@types\/node\/fs\.d\.ts$/.test(file) && name === "watch");
       const eventCallback =
         /(?:@types\/node\/|electron\/electron\.d\.ts$|typescript\/lib\/lib\.dom\.d\.ts$|bun-types\/)/.test(
           file,
@@ -2061,6 +2064,13 @@ class Provenance {
       }
       if (name === "runInAsyncScope") this.invokeAsyncScope(node, arguments_);
       if (name === "getStore") this.flow(receiver, node);
+      // `AsyncResource.bind(fn)` and `resource.bind(fn)` return `fn` itself
+      // bound to that async scope; calling the result calls `fn`.
+      const bound = arguments_[0];
+      if (name === "bind" && bound) {
+        this.flow(bound, node);
+        this.registeredCallbacks.add(bound);
+      }
     }
   }
   private invokeAsyncScope(
@@ -3116,7 +3126,7 @@ class Provenance {
           argument &&
           this.path(call) &&
           this.targets.get(call)?.has(owner) &&
-          this.carries(argument, parameter, new Set(seen))
+          this.carries(argument, parameter, seen)
         )
           return true;
       }

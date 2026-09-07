@@ -37,7 +37,7 @@
       "ignoreDependencies": ["tailwindcss"]
     },
     "apps/openomni": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/fixtures/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/agent": {

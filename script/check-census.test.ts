@@ -1039,6 +1039,32 @@ test("AsyncResource invokes callbacks in its native synchronous scope", () => {
   assertPublication(fixture, true);
 }, 180_000);
 
+test("AsyncResource.bind hands back the callback bound to its native async scope", () => {
+  for (const invoked of [false, true]) {
+    using fixture = new Fixture({
+      "src/events.ts": protocol,
+      "src/main.ts": `import {AsyncResource} from "node:async_hooks";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};function tick(){sink.publish(Ready)}const evaluate=AsyncResource.bind(tick);${invoked ? "evaluate();" : ""}console.log(JSON.stringify(received));`,
+    });
+    assertPublication(fixture, invoked);
+  }
+}, 180_000);
+
+test("fs.watch listeners and watcher events have a native filesystem producer", () => {
+  using fixture = new Fixture({
+    "src/events.ts": protocol,
+    "src/main.ts": `import {watch,writeFileSync,mkdtempSync} from "node:fs";import {join} from "node:path";import {tmpdir} from "node:os";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const dir=mkdtempSync(join(tmpdir(),"census-watch-"));const seen=new Promise<void>((resolve)=>{const source=watch(dir,{recursive:false},()=>{sink.publish(Ready);source.close();resolve()});source.on("error",()=>{throw new Error("watch failed")})});writeFileSync(join(dir,"marker"),"1");await seen;console.log(JSON.stringify(received));`,
+  });
+  assertPublication(fixture, true);
+  // The watcher's own error event is a native producer; an empty handler is not.
+  for (const handled of [false, true]) {
+    using watcher = new Fixture({
+      "src/events.ts": protocol,
+      "src/main.ts": `import {watch} from "node:fs";import {Ready} from "./events";const sink={publish(event:{name:string}){console.log(event.name)}};const source=watch(".",()=>{});source.on("error",()=>{${handled ? "sink.publish(Ready);" : ""}});source.close();`,
+    });
+    expect(watcher.run("publisher").code).toBe(handled ? 0 : 1);
+  }
+}, 180_000);
+
 test("Electron renderer listeners require a real window load edge", () => {
   const electron = dirname(
     Bun.resolveSync("electron/package.json", resolve(import.meta.dir, "../apps/desktop")),

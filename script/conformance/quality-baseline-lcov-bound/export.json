@@ -16,8 +16,16 @@
     "count": 1
   },
   {
+    "path": "apps/desktop/src/preload/api.ts",
+    "line": 11,
+    "symbol": "GatewayEndpoint",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/desktop/src/renderer/attention/order.ts",
-    "line": 25,
+    "line": 10,
     "symbol": "Ordered",
     "gate": "export",
     "value": 1,
@@ -25,15 +33,15 @@
   },
   {
     "path": "apps/desktop/src/renderer/attention/order.ts",
-    "line": 30,
-    "symbol": "ProjectSessionFacts",
+    "line": 25,
+    "symbol": "SessionFacts",
     "gate": "export",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/desktop/src/renderer/attention/order.ts",
-    "line": 132,
+    "line": 78,
     "symbol": "changedSince",
     "gate": "export",
     "value": 1,
@@ -41,72 +49,8 @@
   },
   {
     "path": "apps/desktop/src/renderer/attention/order.ts",
-    "line": 52,
+    "line": 42,
     "symbol": "orderByAttention",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/reason.ts",
-    "line": 20,
-    "symbol": "reasonFor",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 22,
-    "symbol": "AttentionClass",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 13,
-    "symbol": "CLASS_RANK",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 4,
-    "symbol": "EpochMs",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 39,
-    "symbol": "SessionFacts",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 25,
-    "symbol": "Signals",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 63,
-    "symbol": "classify",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/attention/score.ts",
-    "line": 93,
-    "symbol": "score",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -160,6 +104,14 @@
     "count": 1
   },
   {
+    "path": "apps/desktop/src/renderer/chat/gateway-transport.ts",
+    "line": 132,
+    "symbol": "createGatewayChatTransport",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/desktop/src/renderer/chat/message.ts",
     "line": 67,
     "symbol": "OpenOmniUIMessage",
@@ -177,119 +129,23 @@
   },
   {
     "path": "apps/desktop/src/renderer/chat/select-transport.ts",
-    "line": 26,
+    "line": 13,
     "symbol": "SelectedTransport",
     "gate": "export",
     "value": 1,
     "count": 1
   },
   {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 9,
-    "symbol": "Project",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 5,
-    "symbol": "ProjectId",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 22,
-    "symbol": "Session",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 145,
-    "symbol": "lastReadAt",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 37,
-    "symbol": "now",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 143,
-    "symbol": "pins",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 44,
-    "symbol": "projects",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 135,
-    "symbol": "selectedSessionId",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 55,
-    "symbol": "sessions",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/console.ts",
-    "line": 144,
-    "symbol": "snoozes",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/mock/timelines.ts",
-    "line": 214,
-    "symbol": "timelines",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/run-state.ts",
-    "line": 28,
-    "symbol": "RUN_STATE_SHAPE",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/desktop/src/renderer/run-state.ts",
-    "line": 45,
-    "symbol": "RUN_STATE_TIER",
+    "path": "apps/desktop/src/renderer/chat/select-transport.ts",
+    "line": 42,
+    "symbol": "selectChatTransport",
     "gate": "export",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 49,
+    "line": 40,
     "symbol": "Filtered",
     "gate": "export",
     "value": 1,
@@ -297,7 +153,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 25,
+    "line": 23,
     "symbol": "FilteredSession",
     "gate": "export",
     "value": 1,
@@ -305,7 +161,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 153,
+    "line": 123,
     "symbol": "Run",
     "gate": "export",
     "value": 1,
@@ -313,7 +169,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 23,
+    "line": 21,
     "symbol": "SearchFields",
     "gate": "export",
     "value": 1,
@@ -321,7 +177,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 62,
+    "line": 53,
     "symbol": "filterOrdered",
     "gate": "export",
     "value": 1,
@@ -329,7 +185,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/search/filter.ts",
-    "line": 158,
+    "line": 128,
     "symbol": "highlightRuns",
     "gate": "export",
     "value": 1,
@@ -441,7 +297,7 @@
   },
   {
     "path": "apps/desktop/src/renderer/shell/session-tree.tsx",
-    "line": 46,
+    "line": 41,
     "symbol": "SessionTree",
     "gate": "export",
     "value": 1,
@@ -459,6 +315,110 @@
     "path": "apps/desktop/src/renderer/shell/use-search.ts",
     "line": 33,
     "symbol": "useSearch",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/queries.ts",
+    "line": 16,
+    "symbol": "queryKeys",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/queries.ts",
+    "line": 33,
+    "symbol": "useGatewayEndpoint",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 36,
+    "symbol": "ClientState",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 22,
+    "symbol": "DEFAULT_PROJECT_ID",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 48,
+    "symbol": "INITIAL_CLIENT_STATE",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 18,
+    "symbol": "ProjectId",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 28,
+    "symbol": "Session",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 19,
+    "symbol": "SessionId",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 55,
+    "symbol": "consoleStore",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 61,
+    "symbol": "createSession",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 79,
+    "symbol": "selectSession",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 92,
+    "symbol": "setDraft",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/desktop/src/renderer/state/store.ts",
+    "line": 83,
+    "symbol": "toggleProject",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -536,6 +496,14 @@
     "count": 1
   },
   {
+    "path": "apps/openomni/src/composition/alarm-sources.ts",
+    "line": 6,
+    "symbol": "AlarmRuntimeError",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/openomni/src/composition/chat-provider.ts",
     "line": 3,
     "symbol": "ChatProviderOptions",
@@ -592,6 +560,14 @@
     "count": 1
   },
   {
+    "path": "apps/openomni/src/message-policy.ts",
+    "line": 102,
+    "symbol": "MESSAGE_POLICY_ROWS",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/openomni/src/observation/component.ts",
     "line": 4,
     "symbol": "ObservedComponent",
@@ -609,7 +585,7 @@
   },
   {
     "path": "apps/openomni/src/process-entry.ts",
-    "line": 35,
+    "line": 37,
     "symbol": "PROCESS_SESSION_NO_REQUEST_EXIT",
     "gate": "export",
     "value": 1,
@@ -641,7 +617,7 @@
   },
   {
     "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 16,
+    "line": 6,
     "symbol": "ApprovalPort",
     "gate": "export",
     "value": 1,
@@ -657,7 +633,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 6,
+    "line": 7,
     "symbol": "CatalogOrigin",
     "gate": "export",
     "value": 1,
@@ -665,7 +641,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 24,
+    "line": 25,
     "symbol": "CatalogPorts",
     "gate": "export",
     "value": 1,
@@ -673,7 +649,7 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 66,
+    "line": 68,
     "symbol": "TOOL_DEFINITIONS",
     "gate": "export",
     "value": 1,
@@ -681,8 +657,16 @@
   },
   {
     "path": "apps/openomni/src/tools/core/catalog.ts",
-    "line": 71,
+    "line": 73,
     "symbol": "collectToolSpecs",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/core/request-domain-revisions.ts",
+    "line": 45,
+    "symbol": "requestDomainRevisions",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -761,16 +745,8 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 452,
+    "line": 343,
     "symbol": "ProvisionStatusOutput",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 131,
-    "symbol": "personManifestDigest",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -864,14 +840,6 @@
     "count": 1
   },
   {
-    "path": "packages/agent/src/executor-contract.ts",
-    "line": 120,
-    "symbol": "ExecutionApprovalError",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/agent/src/executor.ts",
     "line": 10,
     "symbol": "UnregisteredExecutionKindError",
@@ -913,7 +881,7 @@
   },
   {
     "path": "packages/agent/src/session-chat-runner.ts",
-    "line": 14,
+    "line": 15,
     "symbol": "SessionChatRunnerOptions",
     "gate": "export",
     "value": 1,
@@ -921,7 +889,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 26,
+    "line": 27,
     "symbol": "SessionCreateOptions",
     "gate": "export",
     "value": 1,
@@ -929,7 +897,7 @@
   },
   {
     "path": "packages/agent/src/session-contract.ts",
-    "line": 21,
+    "line": 22,
     "symbol": "SessionSystem",
     "gate": "export",
     "value": 1,
@@ -937,15 +905,7 @@
   },
   {
     "path": "packages/agent/src/session-handle.ts",
-    "line": 37,
-    "symbol": "getSessionHandle",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-handle.ts",
-    "line": 28,
+    "line": 29,
     "symbol": "session",
     "gate": "export",
     "value": 1,
@@ -968,6 +928,14 @@
     "count": 1
   },
   {
+    "path": "packages/agent/src/session-requests.ts",
+    "line": 17,
+    "symbol": "SessionRequestPort",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "packages/agent/src/tool-body.ts",
     "line": 23,
     "symbol": "executeToolBody",
@@ -977,7 +945,7 @@
   },
   {
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 71,
+    "line": 76,
     "symbol": "Dispatcher",
     "gate": "export",
     "value": 1,
@@ -985,7 +953,7 @@
   },
   {
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 58,
+    "line": 63,
     "symbol": "DispatcherOptions",
     "gate": "export",
     "value": 1,
@@ -993,7 +961,7 @@
   },
   {
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 32,
+    "line": 37,
     "symbol": "ToolRefused",
     "gate": "export",
     "value": 1,
@@ -1001,7 +969,7 @@
   },
   {
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 316,
+    "line": 404,
     "symbol": "TurnDispatchInput",
     "gate": "export",
     "value": 1,
@@ -1009,7 +977,7 @@
   },
   {
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 333,
+    "line": 460,
     "symbol": "TurnDispatchRuntime",
     "gate": "export",
     "value": 1,
@@ -1017,7 +985,7 @@
   },
   {
     "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 409,
+    "line": 547,
     "symbol": "toolSpec",
     "gate": "export",
     "value": 1,
@@ -1345,7 +1313,7 @@
   },
   {
     "path": "packages/channels/src/router/messaging/send.ts",
-    "line": 95,
+    "line": 96,
     "symbol": "ExistingAgentMessaging",
     "gate": "export",
     "value": 1,
@@ -1376,6 +1344,62 @@
     "count": 1
   },
   {
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 7,
+    "symbol": "ResponderTarget",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 18,
+    "symbol": "SenderEvidence",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 69,
+    "symbol": "ingressEvidence",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 57,
+    "symbol": "responderCandidates",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/request/matcher.ts",
+    "line": 112,
+    "symbol": "targetsOfRequest",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/request/native.ts",
+    "line": 10,
+    "symbol": "answerNativeRequest",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/channels/src/router/request/native.ts",
+    "line": 49,
+    "symbol": "openNativeRequest",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "packages/channels/src/router/resolve-route.ts",
     "line": 11,
     "symbol": "RouteInbound",
@@ -1386,7 +1410,7 @@
   {
     "path": "packages/channels/src/router/routing-execution.ts",
     "line": 77,
-    "symbol": "executeWaitRoute",
+    "symbol": "executeRequestRoute",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -1401,7 +1425,7 @@
   },
   {
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 53,
+    "line": 55,
     "symbol": "IngressRoutingError",
     "gate": "export",
     "value": 1,
@@ -1409,7 +1433,7 @@
   },
   {
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 26,
+    "line": 27,
     "symbol": "IngressRoutingErrorCode",
     "gate": "export",
     "value": 1,
@@ -1417,16 +1441,8 @@
   },
   {
     "path": "packages/channels/src/router/routing-resolution.ts",
-    "line": 82,
+    "line": 84,
     "symbol": "KernelRouteResolution",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/src/router/wait/matcher.ts",
-    "line": 13,
-    "symbol": "targetsOfWait",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -1568,14 +1584,6 @@
     "count": 1
   },
   {
-    "path": "packages/ledger/src/approval/index.ts",
-    "line": 83,
-    "symbol": "Record",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/ledger/src/egress/index.ts",
     "line": 14,
     "symbol": "ClaimResult",
@@ -1609,7 +1617,7 @@
   },
   {
     "path": "packages/ledger/src/session/kernel.ts",
-    "line": 20,
+    "line": 19,
     "symbol": "MaterializeInput",
     "gate": "export",
     "value": 1,
@@ -1617,7 +1625,7 @@
   },
   {
     "path": "packages/ledger/src/session/kernel.ts",
-    "line": 92,
+    "line": 91,
     "symbol": "commitInbox",
     "gate": "export",
     "value": 1,
@@ -1625,7 +1633,15 @@
   },
   {
     "path": "packages/ledger/src/session/kernel.ts",
-    "line": 367,
+    "line": 97,
+    "symbol": "commitReceivedMessage",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 387,
     "symbol": "watchSnapshot",
     "gate": "export",
     "value": 1,
@@ -1648,30 +1664,6 @@
     "count": 1
   },
   {
-    "path": "packages/ledger/src/storage/commit-coordinator.ts",
-    "line": 65,
-    "symbol": "CommitOutcome",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/storage/commit-coordinator.ts",
-    "line": 47,
-    "symbol": "CommitRequest",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/storage/commit-coordinator.ts",
-    "line": 86,
-    "symbol": "commitFact",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/ledger/src/storage/counted-window-claim.ts",
     "line": 1,
     "symbol": "CountedWindowClaimResult",
@@ -1689,7 +1681,7 @@
   },
   {
     "path": "packages/ledger/src/storage/l0-action-builders.ts",
-    "line": 96,
+    "line": 16,
     "symbol": "alarmAppend",
     "gate": "export",
     "value": 1,
@@ -1697,55 +1689,23 @@
   },
   {
     "path": "packages/ledger/src/storage/l0-action-builders.ts",
-    "line": 35,
+    "line": 3,
     "symbol": "inboxAppend",
     "gate": "export",
     "value": 1,
     "count": 1
   },
   {
-    "path": "packages/ledger/src/storage/l0-action-builders.ts",
-    "line": 48,
-    "symbol": "messageAnswerAppend",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/storage/l0-action-builders.ts",
-    "line": 3,
-    "symbol": "messageDeadlineArm",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/storage/l0-action-builders.ts",
-    "line": 67,
-    "symbol": "messageTimeoutInbox",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
-    "line": 4,
-    "symbol": "SqliteJsonDataTable",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
-    "line": 6,
-    "symbol": "SqliteStringEqualityColumn",
+    "path": "packages/ledger/src/storage/sqlite-busy.ts",
+    "line": 17,
+    "symbol": "isSqliteBusyError",
     "gate": "export",
     "value": 1,
     "count": 1
   },
   {
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
-    "line": 92,
+    "line": 93,
     "symbol": "SqliteL0Adapters",
     "gate": "export",
     "value": 1,
@@ -1753,7 +1713,7 @@
   },
   {
     "path": "packages/ledger/src/storage/sqlite-schema-lifecycle.ts",
-    "line": 99,
+    "line": 110,
     "symbol": "clearSqliteStorage",
     "gate": "export",
     "value": 1,
@@ -1761,16 +1721,16 @@
   },
   {
     "path": "packages/ledger/src/storage/storage.ts",
-    "line": 84,
+    "line": 77,
     "symbol": "ProductionCapability",
     "gate": "export",
     "value": 1,
     "count": 1
   },
   {
-    "path": "packages/ledger/src/storage/timestamped-store.ts",
-    "line": 16,
-    "symbol": "withCreateTimestamps",
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 79,
+    "symbol": "publishObservation",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -1778,14 +1738,6 @@
   {
     "path": "packages/ledger/src/storage/u967-preflight.ts",
     "line": 6,
-    "symbol": "REPLY_GRANT_MIGRATION",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/storage/u967-preflight.ts",
-    "line": 5,
     "symbol": "RETIRED_TABLE_MIGRATION",
     "gate": "export",
     "value": 1,
@@ -1793,16 +1745,8 @@
   },
   {
     "path": "packages/ledger/src/storage/u967-projection.ts",
-    "line": 12,
+    "line": 9,
     "symbol": "DispositionCandidates",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/wait/index.ts",
-    "line": 191,
-    "symbol": "Record",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -2329,7 +2273,7 @@
   },
   {
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 216,
+    "line": 217,
     "symbol": "CompilePolicySnapshotOptions",
     "gate": "export",
     "value": 1,
@@ -2353,7 +2297,7 @@
   },
   {
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 550,
+    "line": 551,
     "symbol": "PolicyCompiler",
     "gate": "export",
     "value": 1,
@@ -2361,7 +2305,7 @@
   },
   {
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 548,
+    "line": 549,
     "symbol": "PolicyRowDraft",
     "gate": "export",
     "value": 1,
@@ -2371,6 +2315,14 @@
     "path": "packages/policy/src/row-compiler.ts",
     "line": 16,
     "symbol": "RuleName",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/policy/src/row-compiler.ts",
+    "line": 649,
+    "symbol": "SEEDED_POLICY_ROWS",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -2387,22 +2339,6 @@
     "path": "packages/protocol/src/app-connector/index.ts",
     "line": 4,
     "symbol": "AppConnector",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/approval/events.ts",
-    "line": 20,
-    "symbol": "ApprovalEvents",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/approval/fold.ts",
-    "line": 12,
-    "symbol": "DecideOutcome",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -2552,32 +2488,8 @@
     "count": 1
   },
   {
-    "path": "packages/protocol/src/wait/matcher.ts",
-    "line": 17,
-    "symbol": "ResponderTarget",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/matcher.ts",
-    "line": 28,
-    "symbol": "SenderEvidence",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/wait/schema.ts",
-    "line": 5,
-    "symbol": "OwnerKind",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/ui/src/chrome.tsx",
-    "line": 169,
+    "line": 173,
     "symbol": "MainHeader",
     "gate": "export",
     "value": 1,
@@ -2633,8 +2545,16 @@
   },
   {
     "path": "packages/ui/src/console.tsx",
-    "line": 42,
+    "line": 43,
     "symbol": "Console",
+    "gate": "export",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 134,
+    "symbol": "ConsoleSession",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -2689,7 +2609,7 @@
   },
   {
     "path": "packages/ui/src/primitives/disclosure.tsx",
-    "line": 64,
+    "line": 72,
     "symbol": "Disclosure",
     "gate": "export",
     "value": 1,
@@ -2697,7 +2617,7 @@
   },
   {
     "path": "packages/ui/src/primitives/disclosure.tsx",
-    "line": 50,
+    "line": 58,
     "symbol": "DisclosureTone",
     "gate": "export",
     "value": 1,

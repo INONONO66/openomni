@@ -2,735 +2,6 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/cli.test.ts",
-    "line": 421,
-    "endLine": 425,
-    "symbol": "unproven-statement:72027a59be4578eb2c784e28e59b2fe85864d341f89b2e293441723d68a586d4",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 524,
-    "endLine": 529,
-    "symbol": "unproven-statement:734dc57cf1b63507667fa1256e26e3c008765f929685cd4e218f1ed4429a6511",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 389,
-    "endLine": 392,
-    "symbol": "unproven-statement:73b1d5c4027460eff318fa980c224c1b731fdee4871ea8a006f0927ff6d5d0ed",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 211,
-    "endLine": 211,
-    "symbol": "unproven-statement:73ec16754950e0436cc7d0c536ff2389fa69c6fb3b0666adb36db0d8e1003c7e",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 259,
-    "endLine": 259,
-    "symbol": "unproven-statement:753d9a11b897d1d138328da0734fced0e5602aed23d19d5ab4e7a9f4167501a4",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 110,
-    "endLine": 110,
-    "symbol": "unproven-statement:75493f606d0888a66ea669d486a129e6cb0837e3b1b2644cfcc0c773b8d007b4",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 98,
-    "endLine": 104,
-    "symbol": "unproven-statement:76883dcaf1d8fffa6a79061b94f9197a02f1d6a130b6964f2cfa3e69e9a703ca",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 354,
-    "endLine": 354,
-    "symbol": "unproven-statement:778c0b2d60281043d1e916668dbb8507e2bedf1f244f347aff65c3bff000665e",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 766,
-    "endLine": 766,
-    "symbol": "unproven-statement:77ab3d872850135e81c735642fbc4363c019b7bdb1c0acd61213242227a6d752",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 634,
-    "endLine": 634,
-    "symbol": "unproven-statement:77fd5ee71ec2ad9ef2f512417dc49d17972638de67aa75c1872390ffae36dcc6",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 95,
-    "endLine": 95,
-    "symbol": "unproven-statement:786b869c692e3b204bf2963e325a409c1c74325dad145a5a23d32dcafb46b6fc",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 167,
-    "endLine": 174,
-    "symbol": "unproven-statement:787229ebf246c7fb628338e1519983474cce77d33650c8369ca60671711ee4c2",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 525,
-    "endLine": 525,
-    "symbol": "unproven-statement:787a6fa80b8c9720b0d477071a042b7a1725827a49ce8f99e4da34ed8ba493af",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 499,
-    "endLine": 509,
-    "symbol": "unproven-statement:78ab485f7e72d377bc5631cd75835cc01fa9db774ec1c7d9d2f3e66629e24abe",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 543,
-    "endLine": 560,
-    "symbol": "unproven-statement:79ac482795f057a8f9f67ddfaab59301ad52f41ec2ff3c726cb751927cd81151",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 244,
-    "endLine": 244,
-    "symbol": "unproven-statement:7b70c60d70ae4964fb818f5e56f28b8ba6a948fefa52b7c294913e2d3c5cc8d1",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 246,
-    "endLine": 246,
-    "symbol": "unproven-statement:7b7fe7daf3aabdefa4015c02ecfa7764382a985bad41f2221964cb51c6185669",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 100,
-    "endLine": 100,
-    "symbol": "unproven-statement:7f4f706833e4cf83cbabf05789e292570d1c7724ef016cf3278eae1e7ef11e42",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 363,
-    "endLine": 384,
-    "symbol": "unproven-statement:804e24556d62c725a70a431f8986057b5c67fcb5254052aa3a348a671bc85821",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 219,
-    "endLine": 230,
-    "symbol": "unproven-statement:817fcede11e6846f7e9b3c8d888a8f1617c7a189d55c47b284e43222e8f5f9c6",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 684,
-    "endLine": 684,
-    "symbol": "unproven-statement:8209cbc4cebb1c2dc7e663ca0f4550081a67485afd1a4c24e007311bc6e25ab1",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 341,
-    "endLine": 341,
-    "symbol": "unproven-statement:8271824704a3e13adf1b22bb25b05265adf09eb45bad62523ee9e94ac2bbb3e8",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 467,
-    "endLine": 467,
-    "symbol": "unproven-statement:845e34af5aebf2ba63e38c884c5adecd8ffdbe6c43d4c0520cb7d50cf692288c",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 391,
-    "endLine": 391,
-    "symbol": "unproven-statement:84955be1f1bc62ccad88f5673180999a51423888f30412c196ff87ce004a26c0",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 172,
-    "endLine": 172,
-    "symbol": "unproven-statement:8697f01e9adfbb7921889ea4030f5c6647e25b3754c2474ae1281d8e16f872bc",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 429,
-    "endLine": 429,
-    "symbol": "unproven-statement:87c95b4ffb37e637e4c0c346712a3b1563088827e32de6179de381b09623dbab",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 78,
-    "endLine": 78,
-    "symbol": "unproven-statement:89a26686a7e7d043ec5eb18c8c5ef456b5d1212dc54193f1d6141b4d966860a5",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 696,
-    "endLine": 696,
-    "symbol": "unproven-statement:8a66d09c40de83fb1c79481fab555be7c4576d60599a6eb6ac2ea1a65d28edc1",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 258,
-    "endLine": 258,
-    "symbol": "unproven-statement:8ab461200d460ff1ba4004201065b9d665d0abc20de9d5dcbbe0b8637044f1d9",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 603,
-    "endLine": 603,
-    "symbol": "unproven-statement:8b11173b8384fba50d6ca2ed94c47a08adf17195e1d72d732c3f394e79527a15",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 375,
-    "endLine": 375,
-    "symbol": "unproven-statement:8baec99d8861a889ab8ae52f5965eed6c108eed0d6a1013c91b38196cffebcb0",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 79,
-    "endLine": 81,
-    "symbol": "unproven-statement:8ca4173df046bb618d13b7edbe1fdaa2caac162f93ccb8409a1b23a76ceed57b",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 676,
-    "endLine": 676,
-    "symbol": "unproven-statement:8d75a2f491853df42ad0f5b9268a5a57ddc4a767cc3e97a0610768121563eb37",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 693,
-    "endLine": 697,
-    "symbol": "unproven-statement:8d9f655afc92be11239bda86e710fdcc8b8d6164d4380ff7dcd1687ad6ce3f9a",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 73,
-    "endLine": 77,
-    "symbol": "unproven-statement:8daf8daf57477be5de93e34634849b055fe8603df359d6d5e5a51811c1158096",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 564,
-    "endLine": 571,
-    "symbol": "unproven-statement:8de0ab535ecab2a4356786bab97149d7b19174245733ef8f7dfb9f060234025e",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 609,
-    "endLine": 618,
-    "symbol": "unproven-statement:8e296686d1ef1523740e9fc125421fd191c17dd2f605deb7de7049af483606bd",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 239,
-    "endLine": 239,
-    "symbol": "unproven-statement:8e9c68de17b77b49afe4ce2a98eb9931cc38fe1429b3b2bf4f175be1736acb50",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 577,
-    "endLine": 577,
-    "symbol": "unproven-statement:8ffd2efdb9a5f2ec5382adb7cae5010b7b5f5a96379a0547781f0c53c6909d89",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 642,
-    "endLine": 642,
-    "symbol": "unproven-statement:903f9b45d4d2d4f8d3493a94c0bf37f9e353d7ff63a9d54802f08906dfbc22e9",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 194,
-    "endLine": 194,
-    "symbol": "unproven-statement:91364f4057041ba83f9f70927afd61133f3bb2f1536dd685c0a30796d604d13f",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 627,
-    "endLine": 627,
-    "symbol": "unproven-statement:920d6542e6fb07744d5bc7a707a0ed2582f11caec6dadac5fb268fc519fd0b6e",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 269,
-    "endLine": 269,
-    "symbol": "unproven-statement:9299f9cc4fc5cf134377d8810a1ce67f21479c07966ff4aea7d23591fe9d05a0",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 769,
-    "endLine": 769,
-    "symbol": "unproven-statement:92eebbde3838860c4cca546dea057ae2be709cfa14c8f1a331affc1b7827d4f8",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 724,
-    "endLine": 727,
-    "symbol": "unproven-statement:93335b223ecc3af0a8013d61ae9c962b5206b31c77ea7a69b4bcfd6fa3704509",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 545,
-    "endLine": 552,
-    "symbol": "unproven-statement:93d78c8ce46ce3e14401549ae21015ae70931a1fd29d1fbd4a7903c06a0a351c",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 305,
-    "endLine": 314,
-    "symbol": "unproven-statement:948584de3e086b92a3a4ec2736479bb8c647a938f84c51a72552df326debe57f",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 201,
-    "endLine": 201,
-    "symbol": "unproven-statement:94a009605051a5a5bb653a363eb11c1a115fcee669bcce5bf38f8596aa37133a",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 307,
-    "endLine": 307,
-    "symbol": "unproven-statement:94ecc3e929b8167a54299b3796b94d3ba1ccc6a4759505770d5492b961fede50",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 387,
-    "endLine": 443,
-    "symbol": "unproven-statement:953fafbbaf3e6e9d2630f714eaa832561f0da9954ab6adb603b524dfbcee576a",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 482,
-    "endLine": 490,
-    "symbol": "unproven-statement:9581b5cf4400c29fabd69a651a04ef8f954fb784f7f8fa25274402f1191f6321",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 572,
-    "endLine": 580,
-    "symbol": "unproven-statement:95c944de371ef9432ce13a38104c8b1ac5d480abb495d1fc91f79906d33a9ec3",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 368,
-    "endLine": 368,
-    "symbol": "unproven-statement:964f5a4774e66914ccb8a644fa6617684e47092d4da6236ebe35bec2698b4b92",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 704,
-    "endLine": 704,
-    "symbol": "unproven-statement:967c35df5a3da6a2232ff5d4f82321763c4751473913b1f8a8609f3242ccabb4",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 677,
-    "endLine": 677,
-    "symbol": "unproven-statement:97bca72d0d1587fd6fd8d690da77b81bd1f5f0e7255bf4272c144bf7d1f779d2",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 355,
-    "endLine": 355,
-    "symbol": "unproven-statement:97c4cb62e49572df6fb09154caa289b7f1633b8e71e9ef9dc89d94be4fdcc1fe",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 562,
-    "endLine": 589,
-    "symbol": "unproven-statement:97eb0ec50d99882c2baf3292cbedeb52ffef1d400de1ee58aed47aa0c9e1ce26",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 66,
-    "endLine": 66,
-    "symbol": "unproven-statement:98e9bbb3dbcc4fb2967ee3d166e73949a4735c396da72a430bd212f76ad42a58",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 266,
-    "endLine": 275,
-    "symbol": "unproven-statement:9b3ffafbb3b7e26847d03a22b915fd2ae084e6964198828092db51a555cd647e",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 611,
-    "endLine": 611,
-    "symbol": "unproven-statement:9c0ed3e14b71061f520b145fbdf8512eaa2a259996760a5e426332e858d099b2",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 752,
-    "endLine": 752,
-    "symbol": "unproven-statement:9e3858664a687971ec815ad6384cd78f1583c2de517d9201278dc492229b7e73",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 699,
-    "endLine": 728,
-    "symbol": "unproven-statement:9f5a13943f32891e9687359d21cd867113ce3de79bdb4e6f548b6b88a1616978",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 252,
-    "endLine": 252,
-    "symbol": "unproven-statement:9fecf9d8cba77baef5e9b80761177238239a62f103c5970986158b7da7cdfffc",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 663,
-    "endLine": 663,
-    "symbol": "unproven-statement:a11bb948c5d99d73a1be84934cd760082a5447a286eebab665bf1a643bb815c3",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 216,
-    "endLine": 216,
-    "symbol": "unproven-statement:a2502f5903ba776819515d34712ae6e4295b257923ba31dca2036bf6a8ddca9e",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 68,
-    "endLine": 68,
-    "symbol": "unproven-statement:a324ea8f9944df96c1b58e9674769fd794e052e79455dfb1bba193cea0b0ab87",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 331,
-    "endLine": 336,
-    "symbol": "unproven-statement:a354fd3561bb5f42f53734a811d46bd4842f05dad39ee9b6fd3f809ee00da88d",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 574,
-    "endLine": 574,
-    "symbol": "unproven-statement:a3844f7cef2385fa750d1db7c56e270b8aecf2b695b9539ed68814fa0c729296",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 206,
-    "endLine": 217,
-    "symbol": "unproven-statement:a3b8ee8849191b89f3e5c189a22632ab72b6acac9b65181cb525f8cf11eb3997",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 395,
-    "endLine": 410,
-    "symbol": "unproven-statement:a44e84da53a37e208e9ed9818c745d7014ffcd1ad6cefa4687fec2c8729dc6e8",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 616,
-    "endLine": 616,
-    "symbol": "unproven-statement:a4bc52fe676ddcb98abba42a46f988883908562207a602bb0432c1f960dceb96",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 236,
-    "endLine": 236,
-    "symbol": "unproven-statement:a4d97370e39f98b80f3f4b1714fdfbbf5c52ee955f9b00fcc6ca98cbe4a8ffeb",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 80,
-    "endLine": 80,
-    "symbol": "unproven-statement:a4fcc388d7d0871ccf2a10bfa386816d00c40db8b73091c4aace1fc895234d70",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 737,
-    "endLine": 737,
-    "symbol": "unproven-statement:a5583f9e94a0489028f2fcdfebcd843e720fde1ca90debfdfd12d2b1adad5529",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 346,
-    "endLine": 346,
-    "symbol": "unproven-statement:a5cbb6464e31ab07a1e34231ab457245cb7b0b5629be5e2be5fe775f7c146240",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 318,
-    "endLine": 322,
-    "symbol": "unproven-statement:a7520cf84a413e1c0e30a0f991c17fde94c239ed5d1814061e5869e4f6703671",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 284,
-    "endLine": 284,
-    "symbol": "unproven-statement:a917bf687a0b7929e651d99a992a639443f7950eba287a1c48d2a0f8a35cb3c9",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 238,
-    "endLine": 238,
-    "symbol": "unproven-statement:aaf19b16162ebb072ef07ca4a18abd939e13445349fbb4574b5f733b965aad4e",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 330,
-    "endLine": 330,
-    "symbol": "unproven-statement:adafa825888f29f8b8e0c2d9cec378a22ac6540255bd8481f5796d336ec1241f",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 190,
-    "endLine": 192,
-    "symbol": "unproven-statement:ae0829f052ed5f01b38fe1aec2be8c5537ad8f2c229caea1ca8308c88a45c7f6",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
-    "line": 768,
-    "endLine": 768,
-    "symbol": "unproven-statement:ae3b7b3a51527fe0a5eb11657474e6878e8e80eea03daa184a507acac6b753d9",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/cli.test.ts",
     "line": 229,
     "endLine": 229,
     "symbol": "unproven-statement:af2633bd9ecaf508fa162df38d59c90aee90bfe98d9083b8ad3e80ae98bce024",
@@ -1640,9 +911,18 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 323,
-    "endLine": 326,
+    "line": 324,
+    "endLine": 327,
     "symbol": "unproven-statement:0003ff3a2df746759f63b5aef52ecbafe6e083e2e4376b00feb16222a760296f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/code-mode-e2e.test.ts",
+    "line": 145,
+    "endLine": 243,
+    "symbol": "unproven-statement:05b35b1ae9dc3c93ad241ccf26cc8b313c8ca7cb5cec75489f424a2a409cc26d",
     "value": 1,
     "count": 1
   },
@@ -1658,8 +938,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 364,
-    "endLine": 364,
+    "line": 365,
+    "endLine": 365,
     "symbol": "unproven-statement:0b1af560a770fc49adefd3206d5d631ba66bc30186488fada855b78b1bffab51",
     "value": 1,
     "count": 2
@@ -1667,8 +947,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 497,
-    "endLine": 497,
+    "line": 498,
+    "endLine": 498,
     "symbol": "unproven-statement:0beb1190443107eb2020b22dedf975bc56e1e84b79cbfe0c5808b87dc5d9c738",
     "value": 1,
     "count": 1
@@ -1685,8 +965,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 429,
-    "endLine": 429,
+    "line": 430,
+    "endLine": 430,
     "symbol": "unproven-statement:0f0f20e8ec813f8dec6a1dd89dac49e2ff6c38c5a1e048e9f826688314bc2d79",
     "value": 1,
     "count": 1
@@ -1694,8 +974,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 541,
-    "endLine": 541,
+    "line": 542,
+    "endLine": 542,
     "symbol": "unproven-statement:0fc2d677871730840e10cabcc74f6e6aad963051f4b0f50f5c02cf11a6ead4bf",
     "value": 1,
     "count": 1
@@ -1703,8 +983,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 484,
-    "endLine": 493,
+    "line": 485,
+    "endLine": 494,
     "symbol": "unproven-statement:149857c1bd4c51bbe0602d561c32ad8ca87cda161f53a69c49aa3c9c80561502",
     "value": 1,
     "count": 1
@@ -1721,8 +1001,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 365,
-    "endLine": 365,
+    "line": 366,
+    "endLine": 366,
     "symbol": "unproven-statement:14d950ab125f37e459a5acd7dac8d8ac226989d14cbf1fb4983695abeb3d9a1e",
     "value": 1,
     "count": 1
@@ -1739,8 +1019,17 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 376,
-    "endLine": 376,
+    "line": 284,
+    "endLine": 296,
+    "symbol": "unproven-statement:16625724766988af1299c9f29a38aedd2e5fbc8d2869b13c1950e6345883f23a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/code-mode-e2e.test.ts",
+    "line": 377,
+    "endLine": 377,
     "symbol": "unproven-statement:16b0a7ba4a6370bce59080f39a4763dd2a8734f5980cfb8b379bf2c67fed362b",
     "value": 1,
     "count": 1
@@ -1757,8 +1046,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 313,
-    "endLine": 315,
+    "line": 314,
+    "endLine": 316,
     "symbol": "unproven-statement:19e3dad1bfd60ce4207d753b1425eaaa24b5b62acefcbdd166a27d038cfe785b",
     "value": 1,
     "count": 1
@@ -1766,8 +1055,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 316,
-    "endLine": 330,
+    "line": 317,
+    "endLine": 331,
     "symbol": "unproven-statement:1a40bdedf873bbe5bce23d49fe5029018c82c563c7ce76dc4a1a583638758143",
     "value": 1,
     "count": 1
@@ -1775,8 +1064,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 554,
-    "endLine": 554,
+    "line": 555,
+    "endLine": 555,
     "symbol": "unproven-statement:1bdd9368f9f7f9a16095554aafb79ad437a177e02701e746f1988842d457ebd2",
     "value": 1,
     "count": 1
@@ -1793,8 +1082,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 455,
-    "endLine": 455,
+    "line": 456,
+    "endLine": 456,
     "symbol": "unproven-statement:1cd582e8bc1627f6be55ca83f42fe083914fe7fc2c097290dea271482a924d45",
     "value": 1,
     "count": 1
@@ -1802,8 +1091,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 379,
-    "endLine": 379,
+    "line": 380,
+    "endLine": 380,
     "symbol": "unproven-statement:1ec6108b8c79a2f072e3ae09291fd710b2bcab40fcb47f4eed97c2805f166c3c",
     "value": 1,
     "count": 1
@@ -1820,8 +1109,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 477,
-    "endLine": 498,
+    "line": 478,
+    "endLine": 499,
     "symbol": "unproven-statement:231acad9a37515d3e5fb86807f52873f8e5d841aa3ea39d6976d63656d3bec39",
     "value": 1,
     "count": 1
@@ -1838,8 +1127,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 446,
-    "endLine": 446,
+    "line": 447,
+    "endLine": 447,
     "symbol": "unproven-statement:26d5a2c97beff339ab67e887cd708be03452fd92b7ed572fd2c711734e7690e0",
     "value": 1,
     "count": 1
@@ -1847,8 +1136,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 502,
-    "endLine": 502,
+    "line": 503,
+    "endLine": 503,
     "symbol": "unproven-statement:285587b3daa8c0bf5e45b8fe3a758fb2b0ebda7b362769726edbfe987f433bcd",
     "value": 1,
     "count": 1
@@ -1874,8 +1163,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 549,
-    "endLine": 555,
+    "line": 550,
+    "endLine": 556,
     "symbol": "unproven-statement:2bb14aeeac56b13513db86545bde23623c7289352b3f5cc7f5044e644434ff8f",
     "value": 1,
     "count": 1
@@ -1901,8 +1190,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 370,
-    "endLine": 370,
+    "line": 371,
+    "endLine": 371,
     "symbol": "unproven-statement:30b501413b829fc3304781bcc62dbeb9b62498bf2ac396fbe6f67375ea6a1893",
     "value": 1,
     "count": 1
@@ -1928,8 +1217,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 435,
-    "endLine": 449,
+    "line": 436,
+    "endLine": 450,
     "symbol": "unproven-statement:3317d87b6fe8ab46937bd1b514c3d890482d9d92dd1a304d8e3755dc8c90cada",
     "value": 1,
     "count": 1
@@ -1946,8 +1235,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 525,
-    "endLine": 525,
+    "line": 526,
+    "endLine": 526,
     "symbol": "unproven-statement:3366afcffc87c80795c019af47deb534fc7a058273e5b3ca33d538357201b503",
     "value": 1,
     "count": 1
@@ -1982,8 +1271,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 509,
-    "endLine": 509,
+    "line": 510,
+    "endLine": 510,
     "symbol": "unproven-statement:3fd52902b9851c0548d42694473dfb6eb610ecc8c2cf5615f304f487f45764f9",
     "value": 1,
     "count": 1
@@ -1991,8 +1280,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 381,
-    "endLine": 390,
+    "line": 382,
+    "endLine": 391,
     "symbol": "unproven-statement:418931104a9d25cb82964bbac3951c4de2fd14071678627611f7436267218066",
     "value": 1,
     "count": 1
@@ -2000,8 +1289,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 473,
-    "endLine": 473,
+    "line": 474,
+    "endLine": 474,
     "symbol": "unproven-statement:43fea110588f5e9671157a0891a45b5333187f0eb77263feca41e5782458b0c9",
     "value": 1,
     "count": 1
@@ -2018,8 +1307,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 360,
-    "endLine": 360,
+    "line": 361,
+    "endLine": 361,
     "symbol": "unproven-statement:479598c59505d59bcf491aaafd66cf88db508bc744f0a168d7913e205db43909",
     "value": 1,
     "count": 1
@@ -2063,8 +1352,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 519,
-    "endLine": 519,
+    "line": 520,
+    "endLine": 520,
     "symbol": "unproven-statement:4b539c2cdc6a5e33a96a121ad8485626f4f6385baed37673c271158c00cd5347",
     "value": 1,
     "count": 2
@@ -2072,8 +1361,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 441,
-    "endLine": 441,
+    "line": 442,
+    "endLine": 442,
     "symbol": "unproven-statement:4b54db11fde86a62e5024d4ad35f564e65baac0bd33ac13c522cdb05c82ddce9",
     "value": 1,
     "count": 1
@@ -2090,8 +1379,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 474,
-    "endLine": 474,
+    "line": 475,
+    "endLine": 475,
     "symbol": "unproven-statement:54c4882e60f5f7129478a6f167b436845e427a9a5a8ef06c412e4f843a42de4d",
     "value": 1,
     "count": 1
@@ -2099,8 +1388,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 392,
-    "endLine": 392,
+    "line": 393,
+    "endLine": 393,
     "symbol": "unproven-statement:55d375fda0185a5271201b458a6b60112c78c3c23af1121bdae75cc5af97fa9e",
     "value": 1,
     "count": 1
@@ -2117,8 +1406,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 556,
-    "endLine": 565,
+    "line": 557,
+    "endLine": 566,
     "symbol": "unproven-statement:5824ad302a2fd2318241bf185bed8d31c43695d2cdce434e3b063cbd18d0f85c",
     "value": 1,
     "count": 1
@@ -2126,8 +1415,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 327,
-    "endLine": 327,
+    "line": 328,
+    "endLine": 328,
     "symbol": "unproven-statement:5930ea28ff2c85c4abb8d402d42eb3747cd919e495b5cc85950a14671688ef97",
     "value": 1,
     "count": 1
@@ -2180,8 +1469,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 460,
-    "endLine": 470,
+    "line": 461,
+    "endLine": 471,
     "symbol": "unproven-statement:61c55585e00007a712ed54740ae0826dc6251f2b77fd9b923c209b7df136e056",
     "value": 1,
     "count": 1
@@ -2198,8 +1487,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 568,
-    "endLine": 568,
+    "line": 569,
+    "endLine": 569,
     "symbol": "unproven-statement:6445ab8269f9029b5a537767af2982240270370748af9c511f8a7d81e43279f3",
     "value": 1,
     "count": 1
@@ -2207,8 +1496,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 505,
-    "endLine": 505,
+    "line": 506,
+    "endLine": 506,
     "symbol": "unproven-statement:646e41d0eb673bb1433c003762a95e932fc952ab3f7a5268eff2efbe2b82080a",
     "value": 1,
     "count": 1
@@ -2216,8 +1505,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 380,
-    "endLine": 380,
+    "line": 381,
+    "endLine": 381,
     "symbol": "unproven-statement:65ef296f882426dfa50bb573db9fef7696235ad06760c3dd27aeb245c503f8de",
     "value": 1,
     "count": 1
@@ -2225,8 +1514,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 331,
-    "endLine": 340,
+    "line": 332,
+    "endLine": 341,
     "symbol": "unproven-statement:67781119b06b4c12428636b851d8c9da5bffaaf5d0f48b476184f27995661ee1",
     "value": 1,
     "count": 1
@@ -2234,8 +1523,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 425,
-    "endLine": 425,
+    "line": 426,
+    "endLine": 426,
     "symbol": "unproven-statement:68454f507abb1081ce8cea8f71d7c0664ed9f218fdee231ab9f4db9654fcc71a",
     "value": 1,
     "count": 2
@@ -2243,8 +1532,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 372,
-    "endLine": 372,
+    "line": 373,
+    "endLine": 373,
     "symbol": "unproven-statement:68927ecd2e5789aa91abbbd967d7a25239235e8a5ec9ec6fe5ccab59064fb4c9",
     "value": 1,
     "count": 1
@@ -2261,8 +1550,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 328,
-    "endLine": 328,
+    "line": 329,
+    "endLine": 329,
     "symbol": "unproven-statement:69c023cbe178bb5b811cdee656c1b5dd40c3e25d43fc4053e01e5060d5cc77a6",
     "value": 1,
     "count": 1
@@ -2270,8 +1559,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 318,
-    "endLine": 318,
+    "line": 319,
+    "endLine": 319,
     "symbol": "unproven-statement:6ba8be69f67179d93f32b5c4559aa250af7963c31e2a4c6992dbc5ab91f7214b",
     "value": 1,
     "count": 2
@@ -2279,8 +1568,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 426,
-    "endLine": 426,
+    "line": 427,
+    "endLine": 427,
     "symbol": "unproven-statement:6c8d209d97f44dd26c154fc7869597514b5be55dfa8ac6c39cfc13bbd7c4acfc",
     "value": 1,
     "count": 1
@@ -2288,8 +1577,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 437,
-    "endLine": 437,
+    "line": 438,
+    "endLine": 438,
     "symbol": "unproven-statement:6d9a8c240dc81eb8fc89d25a495168bf8acfcd2d74a367b8ded811f8931b22ca",
     "value": 1,
     "count": 1
@@ -2297,8 +1586,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 431,
-    "endLine": 431,
+    "line": 432,
+    "endLine": 432,
     "symbol": "unproven-statement:6d9dfe65d6df39b8bd78ee4086569d1942f0b1837d3268ae06a411141cc73da3",
     "value": 1,
     "count": 1
@@ -2333,8 +1622,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 324,
-    "endLine": 324,
+    "line": 325,
+    "endLine": 325,
     "symbol": "unproven-statement:75004b2d6a5365c26b21062f69bb6aa8102304980fc850f0bb8154609525c54e",
     "value": 1,
     "count": 1
@@ -2342,8 +1631,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 523,
-    "endLine": 523,
+    "line": 524,
+    "endLine": 524,
     "symbol": "unproven-statement:75e2ac74bdfd9edeb8f0ed54c88f7f458c8523ed794835508750d235cbb63df1",
     "value": 1,
     "count": 1
@@ -2360,8 +1649,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 348,
-    "endLine": 354,
+    "line": 349,
+    "endLine": 355,
     "symbol": "unproven-statement:77fa60fbd1a0888772020e04a5a9e5bd6d2c8d084b9bcbfc793767e72c383e5c",
     "value": 1,
     "count": 1
@@ -2369,8 +1658,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 452,
-    "endLine": 452,
+    "line": 453,
+    "endLine": 453,
     "symbol": "unproven-statement:78a64e963b9c03f1b0f8de8d2f1c1d7d5f86ea153072661c358274dc7c3997fa",
     "value": 1,
     "count": 1
@@ -2378,8 +1667,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 374,
-    "endLine": 374,
+    "line": 375,
+    "endLine": 375,
     "symbol": "unproven-statement:78daf84d0b2deb913618e72db9fdfc3c106f8e209ca6dedc7965ac4fa7c5b794",
     "value": 1,
     "count": 1
@@ -2405,8 +1694,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 453,
-    "endLine": 458,
+    "line": 454,
+    "endLine": 459,
     "symbol": "unproven-statement:7c140aba3e5f41c2b1a2745fbac7d2aa4d4a064baa1a43db5e1a5f34a4283c35",
     "value": 1,
     "count": 1
@@ -2414,8 +1703,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 406,
-    "endLine": 412,
+    "line": 407,
+    "endLine": 413,
     "symbol": "unproven-statement:7c2f8a6395f0d9d9210d4f282d73dc924af4d3c047a4bf18466b31890fc35007",
     "value": 1,
     "count": 1
@@ -2432,8 +1721,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 501,
-    "endLine": 501,
+    "line": 502,
+    "endLine": 502,
     "symbol": "unproven-statement:7dadba9eef79b984771be1ba2a20180aa0519a201582237ae08ab65cb6ec2fa0",
     "value": 1,
     "count": 1
@@ -2441,8 +1730,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 363,
-    "endLine": 394,
+    "line": 364,
+    "endLine": 395,
     "symbol": "unproven-statement:7e2b06e6f5b30baff5055dc2c6f50afb83f7a186e80c39c68061fd62e2b59739",
     "value": 1,
     "count": 1
@@ -2450,8 +1739,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 322,
-    "endLine": 322,
+    "line": 323,
+    "endLine": 323,
     "symbol": "unproven-statement:7ef68377e10d98f228d9761f439b574e8ef70da25c99d5bae5efeec8252bddfa",
     "value": 1,
     "count": 1
@@ -2468,8 +1757,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 526,
-    "endLine": 526,
+    "line": 527,
+    "endLine": 527,
     "symbol": "unproven-statement:8356513549352e1d2f61a16257dcf6e21590b75ada2cd7d0833fbffc0ff3c285",
     "value": 1,
     "count": 1
@@ -2477,8 +1766,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 378,
-    "endLine": 378,
+    "line": 379,
+    "endLine": 379,
     "symbol": "unproven-statement:84cf998bc233f437e3326fa2e223423c2d857064df20dd74cc02127fb9305806",
     "value": 1,
     "count": 1
@@ -2495,8 +1784,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 436,
-    "endLine": 436,
+    "line": 437,
+    "endLine": 437,
     "symbol": "unproven-statement:89c463156c30054488b8a026cd4c74c49523fe83724c8825b5f8b0e5b2af058f",
     "value": 1,
     "count": 2
@@ -2531,8 +1820,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 551,
-    "endLine": 551,
+    "line": 552,
+    "endLine": 552,
     "symbol": "unproven-statement:8d545e46c7979205f0c9d7aabc36b0bb506c82441c3a8f596ad4410b0cc45ccc",
     "value": 1,
     "count": 1
@@ -2549,8 +1838,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 305,
-    "endLine": 361,
+    "line": 306,
+    "endLine": 362,
     "symbol": "unproven-statement:8eef421c3a486d74377b346af5ad29a8313c29ed882bf277c8b6d7fbecb4e8a8",
     "value": 1,
     "count": 1
@@ -2558,8 +1847,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 504,
-    "endLine": 506,
+    "line": 505,
+    "endLine": 507,
     "symbol": "unproven-statement:8f04d58ec3c0e7c0b99c242685fe94b3f0fdc69ae39be03e31dc35271c02e239",
     "value": 1,
     "count": 1
@@ -2567,8 +1856,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 320,
-    "endLine": 320,
+    "line": 321,
+    "endLine": 321,
     "symbol": "unproven-statement:91cdde9a30b62feec18dd9b1ee686393673c526b509eeb270878dbf5a45b780b",
     "value": 1,
     "count": 3
@@ -2576,8 +1865,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 438,
-    "endLine": 438,
+    "line": 439,
+    "endLine": 439,
     "symbol": "unproven-statement:9397cd8f840ba32f999df0cc3016309c1b4651a6d378c8886c433be1a6d9452f",
     "value": 1,
     "count": 1
@@ -2603,8 +1892,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 542,
-    "endLine": 542,
+    "line": 543,
+    "endLine": 543,
     "symbol": "unproven-statement:96e239600944a31d98fe4f697903b14c27a6db7da869882af1e1d2eabeae463e",
     "value": 1,
     "count": 1
@@ -2612,8 +1901,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 478,
-    "endLine": 482,
+    "line": 479,
+    "endLine": 483,
     "symbol": "unproven-statement:99be8e96919b14d5f2f047eff6cce49684f773ec0a911e54990b31ac9d846733",
     "value": 1,
     "count": 1
@@ -2621,8 +1910,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 325,
-    "endLine": 325,
+    "line": 326,
+    "endLine": 326,
     "symbol": "unproven-statement:9ae9948baadb351af88ca7590e23264f58586ecd331c4f0aa845634d163589c7",
     "value": 1,
     "count": 1
@@ -2648,8 +1937,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 307,
-    "endLine": 307,
+    "line": 308,
+    "endLine": 308,
     "symbol": "unproven-statement:a0b4a9958cf7847e981c0d8bf6c2d8739e3f9e1bf149d95eaaa98ffc0e321fbd",
     "value": 1,
     "count": 1
@@ -2666,8 +1955,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 440,
-    "endLine": 440,
+    "line": 441,
+    "endLine": 441,
     "symbol": "unproven-statement:a38a2c3c85b7703e96d000d0838bc1b47d8169d68c111000822503c43c091ed7",
     "value": 1,
     "count": 1
@@ -2693,8 +1982,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 366,
-    "endLine": 366,
+    "line": 367,
+    "endLine": 367,
     "symbol": "unproven-statement:a704e8ca5d6d6cf686a05c65630ced3fd500e5d627732a290d1495167bc4b787",
     "value": 1,
     "count": 1
@@ -2713,15 +2002,15 @@
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
     "line": 218,
     "endLine": 220,
-    "symbol": "unproven-statement:a9613b087cda7a70cce5eb6376e8cffa209410d4d00c9726f4c824c2bbf26f1b",
+    "symbol": "unproven-statement:aaa959181b77ef9de029f42834f911c7695efca8792fdbb81908ee038dd422fc",
     "value": 1,
     "count": 1
   },
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 511,
-    "endLine": 511,
+    "line": 512,
+    "endLine": 512,
     "symbol": "unproven-statement:aadd2a38d5a061707ad98112a0c04af851dd66454fbc48ad08d018c189935511",
     "value": 1,
     "count": 2
@@ -2738,8 +2027,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 496,
-    "endLine": 496,
+    "line": 497,
+    "endLine": 497,
     "symbol": "unproven-statement:ac457097a6cc57d1cc4d0dfb380d90f1e5ebcef0b9234ffcc00e12fa120d489e",
     "value": 1,
     "count": 1
@@ -2747,8 +2036,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 507,
-    "endLine": 528,
+    "line": 508,
+    "endLine": 529,
     "symbol": "unproven-statement:ae6fb835145d5d7bce88c0f6ffc6a50f49bc7efbcf238faf2c2de8fabf96935c",
     "value": 1,
     "count": 1
@@ -2756,8 +2045,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 342,
-    "endLine": 347,
+    "line": 343,
+    "endLine": 348,
     "symbol": "unproven-statement:ae79f58c50c64ff800d28c9aa6b0f7aae25e14fccf77ac31e04f8b01270c74a7",
     "value": 1,
     "count": 1
@@ -2765,8 +2054,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 367,
-    "endLine": 393,
+    "line": 368,
+    "endLine": 394,
     "symbol": "unproven-statement:b1dc3333364f9d6d7153d9357162253922a1474283382a21db690c044ef62f8c",
     "value": 1,
     "count": 1
@@ -2792,8 +2081,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 530,
-    "endLine": 538,
+    "line": 531,
+    "endLine": 539,
     "symbol": "unproven-statement:bbca1d2777aa8c3d1680e475896fc44540f2545b3d519ee04dd3889c0d4d10c6",
     "value": 1,
     "count": 1
@@ -2801,8 +2090,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 568,
-    "endLine": 570,
+    "line": 569,
+    "endLine": 571,
     "symbol": "unproven-statement:bbec1ca96119bf7f07cb84bad2f412551a3636536d1a20490cfc8cd93a9bbfc1",
     "value": 1,
     "count": 1
@@ -2819,8 +2108,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 411,
-    "endLine": 411,
+    "line": 412,
+    "endLine": 412,
     "symbol": "unproven-statement:befb54c5f2c795d7dd8ece265333f2366269a74e133bd18625fad9338e73e5ea",
     "value": 1,
     "count": 1
@@ -2837,8 +2126,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 368,
-    "endLine": 368,
+    "line": 369,
+    "endLine": 369,
     "symbol": "unproven-statement:c200812fb07e8bd3a6a344f38f8388de025c11737e80ecc4cbebfa09a1e6dea9",
     "value": 1,
     "count": 1
@@ -2846,8 +2135,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 451,
-    "endLine": 475,
+    "line": 452,
+    "endLine": 476,
     "symbol": "unproven-statement:c4decf7dde493f0aab79a41aaae83a7ed1430a04cb545d065f4ce02090df3d0a",
     "value": 1,
     "count": 1
@@ -2864,8 +2153,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 495,
-    "endLine": 495,
+    "line": 496,
+    "endLine": 496,
     "symbol": "unproven-statement:c5bb670eac28a497f3faeef3c4b3d9c82fec9e0ee57f9b56c5951c6eef366ff0",
     "value": 1,
     "count": 1
@@ -2873,8 +2162,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 297,
-    "endLine": 297,
+    "line": 298,
+    "endLine": 298,
     "symbol": "unproven-statement:c6c4d9978a927f933477e782700fdf2fd59a8f4d8a279362ee7dc0b8afedb209",
     "value": 1,
     "count": 1
@@ -2900,8 +2189,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 515,
-    "endLine": 524,
+    "line": 516,
+    "endLine": 525,
     "symbol": "unproven-statement:ca85c39bd90f31e7aab62ee1b91e2faa0b20d83c4f99550a127b756aa49e8f20",
     "value": 1,
     "count": 1
@@ -2918,8 +2207,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 510,
-    "endLine": 510,
+    "line": 511,
+    "endLine": 511,
     "symbol": "unproven-statement:ccd57e3dad1e4d70b322734c08fb814bd1f1eddf4823cd561dfe8f70f45645b3",
     "value": 1,
     "count": 1
@@ -2927,8 +2216,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 516,
-    "endLine": 521,
+    "line": 517,
+    "endLine": 522,
     "symbol": "unproven-statement:cd8b63673bc3ba1348b1f53b626e1f1fc9e1f70591923fb6337945ef0469a8b5",
     "value": 1,
     "count": 1
@@ -2936,8 +2225,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 369,
-    "endLine": 369,
+    "line": 370,
+    "endLine": 370,
     "symbol": "unproven-statement:cddbc9047d7f6ec8c287c850ab883c343407454197a90ca0186b80d6df22b818",
     "value": 1,
     "count": 1
@@ -2945,8 +2234,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 396,
-    "endLine": 396,
+    "line": 397,
+    "endLine": 397,
     "symbol": "unproven-statement:cdef8401c12551f6916011893be7fb81842fbbe4875c1a459804907a7fa1ab00",
     "value": 1,
     "count": 1
@@ -2972,8 +2261,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 448,
-    "endLine": 448,
+    "line": 449,
+    "endLine": 449,
     "symbol": "unproven-statement:d0546c732712c9428ec72898e5420ff8cbdcbba0b7d5a98e5dfe2d77ae4bd9bf",
     "value": 1,
     "count": 1
@@ -2981,8 +2270,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 500,
-    "endLine": 543,
+    "line": 501,
+    "endLine": 544,
     "symbol": "unproven-statement:d0afeb9fc2f598dd5c2abef5ecb9716c653a0566df7b8f979a7da7bfc8d32205",
     "value": 1,
     "count": 1
@@ -2990,8 +2279,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 355,
-    "endLine": 355,
+    "line": 356,
+    "endLine": 356,
     "symbol": "unproven-statement:d2f7e006be354a2fb4afc84676753b0066f6e398a2b62a5aae409fddc9811ea0",
     "value": 1,
     "count": 1
@@ -2999,8 +2288,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 546,
-    "endLine": 571,
+    "line": 547,
+    "endLine": 572,
     "symbol": "unproven-statement:d4552aff579b6d87961489fb8e70d2d3880bf1259c2832afc5b6f911914cecaa",
     "value": 1,
     "count": 1
@@ -3008,8 +2297,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 359,
-    "endLine": 359,
+    "line": 360,
+    "endLine": 360,
     "symbol": "unproven-statement:d7f977bed9521244e41ce8a9fd9b67bdb088014a7e1d6090ad8b5889e3795f2e",
     "value": 1,
     "count": 1
@@ -3017,8 +2306,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 371,
-    "endLine": 377,
+    "line": 372,
+    "endLine": 378,
     "symbol": "unproven-statement:d8f1572100f554ebd999d5bcf2520f870f46d80728295f89782ae1288b1a508e",
     "value": 1,
     "count": 1
@@ -3026,8 +2315,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 456,
-    "endLine": 456,
+    "line": 457,
+    "endLine": 457,
     "symbol": "unproven-statement:d99ef5cffa01f49079e499cf9af8b5b4e37ac6a0d5ef86b6650cca69c45721a5",
     "value": 1,
     "count": 1
@@ -3035,9 +2324,18 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 314,
-    "endLine": 314,
+    "line": 315,
+    "endLine": 315,
     "symbol": "unproven-statement:d9f44674a52b2b62e0a4da6c9fb7d67a730acc1e78a8e56f6d57e6e038e5aaa1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/code-mode-e2e.test.ts",
+    "line": 245,
+    "endLine": 299,
+    "symbol": "unproven-statement:deec3d916ed5aea34732aedbd3de6bfb8caae0f11a4ebd1693de8e83b44c7406",
     "value": 1,
     "count": 1
   },
@@ -3062,15 +2360,6 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 145,
-    "endLine": 243,
-    "symbol": "unproven-statement:e810ef617b66f906d4608907f409b87be83a27732d0694105171de8415d3f798",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/code-mode-e2e.test.ts",
     "line": 230,
     "endLine": 230,
     "symbol": "unproven-statement:e84087b9663e2968a311be9fd6b005d809487663e63a8c716f698723b558293d",
@@ -3080,8 +2369,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 442,
-    "endLine": 442,
+    "line": 443,
+    "endLine": 443,
     "symbol": "unproven-statement:e904c2a8dadd34e3053cd13f34831f94c94097b227600e765e220ddc6c82c09c",
     "value": 1,
     "count": 1
@@ -3089,8 +2378,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 480,
-    "endLine": 480,
+    "line": 481,
+    "endLine": 481,
     "symbol": "unproven-statement:ee84ee55cfcfac883adda8f050b4d1da8d0a240160cd3f136b70d2e7ba9e3119",
     "value": 1,
     "count": 1
@@ -3098,8 +2387,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 447,
-    "endLine": 447,
+    "line": 448,
+    "endLine": 448,
     "symbol": "unproven-statement:eecc6556ba09301c6e6b40ef39be9d9014a06935bad06bc011f84052ba91dabd",
     "value": 1,
     "count": 1
@@ -3116,8 +2405,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 427,
-    "endLine": 432,
+    "line": 428,
+    "endLine": 433,
     "symbol": "unproven-statement:efbee060011bb329467c10b237c0b1bbcd05b4647e174d0248ee6dc20fe10c5f",
     "value": 1,
     "count": 1
@@ -3152,27 +2441,9 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 245,
-    "endLine": 298,
-    "symbol": "unproven-statement:f64fbbdee64f329f8fdc74d6d95d96ceb6478d4d6d4b3e55779e3f03563407eb",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/code-mode-e2e.test.ts",
     "line": 186,
     "endLine": 190,
     "symbol": "unproven-statement:f6684957b8bcc1d7dd6637bce078c15c8ad02a81d99c88adf5706a6d72248f55",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 284,
-    "endLine": 295,
-    "symbol": "unproven-statement:f716f5901d6874a04e7cd93445e6876082b7969fb11efc9bbc9c4b4bb4b860ad",
     "value": 1,
     "count": 1
   },
@@ -3206,8 +2477,8 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 424,
-    "endLine": 424,
+    "line": 425,
+    "endLine": 425,
     "symbol": "unproven-statement:f89dca385d97cb979a0d3e364fd78e45d17679191699ed3c88c270ea1212b363",
     "value": 1,
     "count": 1
@@ -7472,9 +6743,9 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/fixtures/message-admission-crash.ts",
-    "line": 15,
+    "line": 16,
     "endLine": 16,
-    "symbol": "unproven-statement:217a90e589933c2fb86ced8dd05d8852975bd21aa972240c2bb184360be4c615",
+    "symbol": "unproven-statement:193efc57c669d56df9523b9982dca934d966fcb5be68e2937164bf552e7fd153",
     "value": 1,
     "count": 1
   },
@@ -7501,16 +6772,7 @@
     "path": "apps/openomni/test/fixtures/message-admission-crash.ts",
     "line": 12,
     "endLine": 21,
-    "symbol": "unproven-statement:654d7eb65f4b131ca28b4429cb98f1f133ddc82838af792e7195e5c38b2ae888",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "apps/openomni/test/fixtures/message-admission-crash.ts",
-    "line": 14,
-    "endLine": 18,
-    "symbol": "unproven-statement:8624854dd285c5607e1a89f0a64a814a2bb14890410f1412af5da9bdf07a7ca1",
+    "symbol": "unproven-statement:86d6dbc58e2591a445403d82ef84121efe18c6778f4cabf777f4ade6c536876c",
     "value": 1,
     "count": 1
   },
@@ -7553,6 +6815,15 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/fixtures/message-admission-crash.ts",
+    "line": 14,
+    "endLine": 18,
+    "symbol": "unproven-statement:b6260b772b7da5192a4255715fa616d2813969320d5aea37dbf5ae7587eb2f33",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/message-admission-crash.ts",
     "line": 7,
     "endLine": 7,
     "symbol": "unproven-statement:cfb4ad50dd4a28e6352475404794573a4e3c7cb41e587427698d96cb671f66c7",
@@ -7562,9 +6833,216 @@
   {
     "gate": "coverage",
     "path": "apps/openomni/test/fixtures/message-admission-crash.ts",
-    "line": 16,
+    "line": 15,
     "endLine": 16,
-    "symbol": "unproven-statement:fe21a0806b70cd57cba8724e25f2dc5ef458351ef6ac654750faf1bc177a160f",
+    "symbol": "unproven-statement:d5096cff68e0a8641c8eed451b90568f3eaabaacd1ce88b0aea47a0b4e3063eb",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 49,
+    "endLine": 49,
+    "symbol": "unproven-statement:09b24ab28fa8e7f425211b25d96b2098fe02a40911557a95b90b710bb2be3569",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 75,
+    "endLine": 75,
+    "symbol": "unproven-statement:17323d72475e41c4f9343f336328489038724e5bfc1c7e80326a67bf26977956",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 72,
+    "endLine": 72,
+    "symbol": "unproven-statement:1a09f2bd7dfaaa8f3f8830acb22aba21ba034d3f72467baad616fe54902b00d7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 48,
+    "endLine": 48,
+    "symbol": "unproven-statement:1b84d32aeb6193fc274aea3fbef2a806477b00e11e44b85def77f5f153d042d2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 9,
+    "endLine": 9,
+    "symbol": "unproven-statement:24fac3d998a3295feb7e95f8ebcc8ee53da1570890221f1062406e566f9e70cb",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 51,
+    "endLine": 54,
+    "symbol": "unproven-statement:32612637697fe576bc0485c3369e831ec178619310be2fd8e6dc4a101518e63d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 66,
+    "endLine": 66,
+    "symbol": "unproven-statement:414db28148506fd159a1eb7a71835b02e2e8ed6599ab6aff45efb16c3da0f509",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 46,
+    "endLine": 46,
+    "symbol": "unproven-statement:53235f7c76248ee0362892317b06e4b4ce1f671e77c550d09b606da78d954b07",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 55,
+    "endLine": 58,
+    "symbol": "unproven-statement:5afa8195fbd8d3ac1dd1d463d53456326f7e5304fd6c25101254ee236d87e831",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 43,
+    "endLine": 73,
+    "symbol": "unproven-statement:5db553165c8552c30374e7c771df3869f2517dcd9bf97eb92eb454afbe6b8660",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 47,
+    "endLine": 50,
+    "symbol": "unproven-statement:6564d468d61832af693646793231edb47e65d48e2294b125a3cad4ec076be40e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 8,
+    "endLine": 8,
+    "symbol": "unproven-statement:6e4a68bcf13d43e1c0d819025783f654bf0ed855f84211ae5c4439180f83fd41",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 63,
+    "endLine": 63,
+    "symbol": "unproven-statement:7f98b0c8d5a09706b0b8f002a7f3652b0f1509c80f27041951afa5d0ac8d9224",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 12,
+    "endLine": 12,
+    "symbol": "unproven-statement:8ee7b7b9cd3c1b08f80b838a5d358e5fe6ec6cf76f171da0dd78d7b530492bd6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 13,
+    "endLine": 42,
+    "symbol": "unproven-statement:a22547838066b2fa89f04ee40d2e489f1a37607df46457b0ca7fd83fabfa888c",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 5,
+    "endLine": 5,
+    "symbol": "unproven-statement:a54d36d027bfccfa94ceca927f218bc19a412547fd87b54d064efef38efc5d29",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 10,
+    "endLine": 10,
+    "symbol": "unproven-statement:aed282b403b11997d8ef1f45c844a8bfbe4a286c65729bdbe225e91ec8e90da4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 56,
+    "endLine": 56,
+    "symbol": "unproven-statement:b086cf630c2f8bf9e8d8bb88210aab30bc4e5ba273cd332ab14f2c20d6551f23",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 62,
+    "endLine": 62,
+    "symbol": "unproven-statement:bf8a230dbe091e7896aa4e15c54db3618acd0871dd18a7a0a2cb83ad43a05c6a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 57,
+    "endLine": 57,
+    "symbol": "unproven-statement:cc35a5874e03ce570f66264220dcff76cd5ecd29f63935e2e1c231316e9d6c9e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 6,
+    "endLine": 6,
+    "symbol": "unproven-statement:eea1bd0ad896585efe921d9126a8271fbd1980e962a780d5d1e27134204839d0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 59,
+    "endLine": 59,
+    "symbol": "unproven-statement:f0a96ba2a1b39acb944bcc0843f82c39aa54d013348d7f26fd36b440ef8865c4",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 45,
+    "endLine": 45,
+    "symbol": "unproven-statement:fe941b9a33bba23659d83a2d6aebf51d2b5416e2ce2fb7881caffe8469bd436b",
     "value": 1,
     "count": 1
   },
@@ -8614,6 +8092,339 @@
   },
   {
     "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 15,
+    "endLine": 15,
+    "symbol": "unproven-statement:28edb861011f83f0d17c689d444368e53a0b8107f7ea35f9f3d257e2ad06d154",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 7,
+    "endLine": 14,
+    "symbol": "unproven-statement:423211a9686f26c8f43d5b2cfa2e1c6b500fcd73922d02c15a3fa7d62afc1b51",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 6,
+    "endLine": 6,
+    "symbol": "unproven-statement:897c117856862dc752b1fc165ead1e3167fee7bccc6c706b56057acc83491447",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 85,
+    "endLine": 85,
+    "symbol": "unproven-statement:042e4af4593ef6be91b7cf92defa92e6f35085cff567cb0a03d9d3c406ffdd78",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 32,
+    "endLine": 32,
+    "symbol": "unproven-statement:07822b94b05e444c3ff85fe6a00211c9e1da2958e0c974e5af455298545036ec",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 66,
+    "endLine": 66,
+    "symbol": "unproven-statement:0876090fcb53e7fabf45f74554a5067fcb82f63f2b65f30a18b031d8ab65bb1d",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 39,
+    "endLine": 45,
+    "symbol": "unproven-statement:14f3a439e7e841df891442ed5e43c9cd62423f804cfd25e64a0bb5344b8bb310",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 24,
+    "endLine": 24,
+    "symbol": "unproven-statement:1e4c37cd4d9b5bca1e1a815c22c32d01fafa34293ebc929aa1c50a8ba1aa6108",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 71,
+    "endLine": 71,
+    "symbol": "unproven-statement:3b81ffe8296a07de1242b913ad5315512e488455327f0a5856be60556a9c94d4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 54,
+    "endLine": 72,
+    "symbol": "unproven-statement:3bd0a289e0dba5ff242e55c8f8f2332f069853ff758f35ac2fbf7421aa2ae823",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 31,
+    "endLine": 31,
+    "symbol": "unproven-statement:404bdcbb59905b0dd4faddf7a69d523e3c340bc5ee9cb0b3d900a417b1946fd1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 87,
+    "endLine": 87,
+    "symbol": "unproven-statement:4f1076a73c2a6c592b1fe80455b61d491d60eaed8398dacb0c0c87ba1df9f7ba",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 59,
+    "endLine": 59,
+    "symbol": "unproven-statement:4f4c9c53b5032686003bf0cb1b2baafb0e28c51ae40e4af3d5a51ba16d9e6654",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 35,
+    "endLine": 35,
+    "symbol": "unproven-statement:54f5bf7ad4c5b2c3ed7aa46caf0923c3514b33c01fc087f106e6994dc525631b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 51,
+    "endLine": 51,
+    "symbol": "unproven-statement:55ea648d48173ab9337bf38ed37fa64f9d03ee7367af64bc416a21f1fedc5650",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 83,
+    "endLine": 83,
+    "symbol": "unproven-statement:5d0eea05103e4ac29de5184e4a76aa3df0d712567ccade31a96030d62d4462d1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 88,
+    "endLine": 88,
+    "symbol": "unproven-statement:6145344169fd2cb449795384bf8e5e24e392db0200ef64a3d9d30a4a011f25f0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 64,
+    "endLine": 64,
+    "symbol": "unproven-statement:6990f6bf2577166b2ac933d720b6856e8eb3d72ba48f38d3fb8832912d155924",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 29,
+    "endLine": 29,
+    "symbol": "unproven-statement:69dbdd082ddf20389d575adc2c949e7919cfae6426b7f6ea13dbbfbd6357a074",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 7,
+    "endLine": 7,
+    "symbol": "unproven-statement:71e0dae81f4130631eb258b627bf652670a4ee5c2415b456afb3e96014ab905f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 10,
+    "endLine": 22,
+    "symbol": "unproven-statement:754de2d55d0a89fdb69d33989f730c067443cb9c5cc68840d1a13ff9b7cad34d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 30,
+    "endLine": 30,
+    "symbol": "unproven-statement:780046f8121e5a4ec403803925eb045ef2a2652a1b85ef59950eb72d28600b5c",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 63,
+    "endLine": 70,
+    "symbol": "unproven-statement:899dbd248acb1f272eb60438c734a65d33dd7118c310cea606d812ea8b0f8131",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 8,
+    "endLine": 8,
+    "symbol": "unproven-statement:8d4a4e808dbd6577f727c9449732b2aaae6cfd2e04bed73e9b6f283e8df54353",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 23,
+    "endLine": 23,
+    "symbol": "unproven-statement:92d1a7f8bcb13ae581149a214609ccfc1a35e718482681639c5305036f3b19ac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 46,
+    "endLine": 46,
+    "symbol": "unproven-statement:95f3a9ca4f6c871bd4994137183025054ef37d60a3abc5744465b4738bd1cf85",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 53,
+    "endLine": 53,
+    "symbol": "unproven-statement:995424eb1468a828847a918caffb311472b193ea52173e943a19b4fd73aed01b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 69,
+    "endLine": 69,
+    "symbol": "unproven-statement:a571fe9c400b114c9a84111f412d983dd5f4581b981f10efcb9a077e51d8c93d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 25,
+    "endLine": 25,
+    "symbol": "unproven-statement:a82c382950b94ca1b38e450b9cfccf39360311c19b91522446034fdd36f80630",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 57,
+    "endLine": 61,
+    "symbol": "unproven-statement:b92b6c760869a4780763d16aef94b8d404a8d30641afa8ffd97fc146f28266e5",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 74,
+    "endLine": 90,
+    "symbol": "unproven-statement:c09effd76454d88c251ece84cd17216d654a86d7db802cf603db7f428802de3b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 68,
+    "endLine": 68,
+    "symbol": "unproven-statement:c2385792f13ccf437de5259a8222bf5a9d3d6bc3b360024510ebc9fcdde4d8e4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 34,
+    "endLine": 34,
+    "symbol": "unproven-statement:ca728c7a92e27c65b88e2650333d5a676af10975c1f7911160fa54788e155d64",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 26,
+    "endLine": 37,
+    "symbol": "unproven-statement:cdbd9a79560a689f4a475b3cf75facece8a1f2cb15c158a2f93a8a5eb055a900",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 56,
+    "endLine": 56,
+    "symbol": "unproven-statement:da7f4609fbcbb5b17ce471b6cf2e532489cd9cb267631518db8e8687a1fe0936",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 55,
+    "endLine": 62,
+    "symbol": "unproven-statement:e9db72f9fe69e636bc4fcc885ca8bcd2749bcfcb4c488bc8e3d9f432ea3b6465",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 65,
+    "endLine": 65,
+    "symbol": "unproven-statement:f7e63dc19c2941b59795efb5992d05441ebf7a1638b2db2a36f83f6551b274e0",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
     "path": "apps/openomni/test/helpers/assistant-message.test.ts",
     "line": 57,
     "endLine": 57,
@@ -8996,6 +8807,195 @@
     "line": 16,
     "endLine": 16,
     "symbol": "unproven-statement:fefe0adfdf82ff43bb21b61af6d4d4ce7e37ae86b7811b44e5dabf9297178cc7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 212,
+    "endLine": 212,
+    "symbol": "unproven-statement:02d85ac186b138f81e828b7c4ebbbe2c2a675291191812d819f3df90fd999aee",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 52,
+    "endLine": 64,
+    "symbol": "unproven-statement:05f6edf797b53ad17142409ef758ced511d355a28579544a2c31f98a9ffabbd8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 74,
+    "endLine": 74,
+    "symbol": "unproven-statement:145196b93ca9b858554c7a7af9b51c6ba3d7afe0ed9a68ef82b3856ba1405f0a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 138,
+    "endLine": 138,
+    "symbol": "unproven-statement:145b23a18d49e66da892d2cf39e00df2a7f4e7512e0a818558bc5b2d26238cb3",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 253,
+    "endLine": 257,
+    "symbol": "unproven-statement:15911cc75933c329ecc76b3de19e6cb4b8a0e5ff188bd414451048b3ebce4981",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 111,
+    "endLine": 111,
+    "symbol": "unproven-statement:172dc2ce31925e17c2fb064d3de2703bd4ea30cce9c309d3c3d8060042df721f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 151,
+    "endLine": 151,
+    "symbol": "unproven-statement:17b2e836b74843854648e63224c18b3ca09a47bef3cb765742a698153f200411",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 152,
+    "endLine": 152,
+    "symbol": "unproven-statement:1fd0e685f131f8e21e32db6e808a9c979d0dc88196c0a61dff51b47f10630924",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 192,
+    "endLine": 192,
+    "symbol": "unproven-statement:21b799a7d5d2220ade0dc8b45b9a6cb529053ea5cedc7b6f64e34c122c93372f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 99,
+    "endLine": 99,
+    "symbol": "unproven-statement:24f7ab6634c242d67520ff918fc12a6c3ffaf8d01bba773ca3f0ed3385a6391c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 247,
+    "endLine": 270,
+    "symbol": "unproven-statement:251343ebf8d151097cfb820b192763fd090686a738a52b87ae6b7769888424d9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 80,
+    "endLine": 86,
+    "symbol": "unproven-statement:281aeda331f89a9c13b6e2d48ce8c96560c7f6ea42a4d02e38ff0849d5b5d535",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 250,
+    "endLine": 250,
+    "symbol": "unproven-statement:2b013c878a61c3f5fb9d118e65b15a322fef3dcfef65cd89dc122bf2610953b0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 148,
+    "endLine": 148,
+    "symbol": "unproven-statement:2df128bd97f2cc6df888d592a2c1fde2838e741bb00d2f67118049b8f02ac21b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 145,
+    "endLine": 158,
+    "symbol": "unproven-statement:2dfc86e873e990a8a1d889b2e7de9cf5ef043bd2ea3b2799e308a944f9aa719b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 101,
+    "endLine": 101,
+    "symbol": "unproven-statement:305741d7c1f05e3486b64c8ddb80916b88b3b52bab90ab10d7a7c8d37b051bc0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 173,
+    "endLine": 173,
+    "symbol": "unproven-statement:30823c5502d196b29d4601e7a3a1912bd5c3fea9c440f9baaf905dc5164fa4ab",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 162,
+    "endLine": 162,
+    "symbol": "unproven-statement:33f6bbc038ac70487caf168b9bc092027db6826d0177bbef4a84e4fbb663adff",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 165,
+    "endLine": 165,
+    "symbol": "unproven-statement:346033693b667e910df03d97d258c3a7718edc918d0e75c78e5c514efceae443",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 188,
+    "endLine": 188,
+    "symbol": "unproven-statement:3466fa427089cb97cde28bc84209edfe12fce598f3a403fecc7c5f6da8bafe69",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "apps/openomni/test/helpers/fact-tap-surface.ts",
+    "line": 198,
+    "endLine": 198,
+    "symbol": "unproven-statement:38a6b9b7cf33c091e7042fe1e41b7b8976075b0bc04f1f8b1c7de9f385c9769e",
     "value": 1,
     "count": 1
   }

@@ -1,7 +1,111 @@
 [
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 63,
+    "line": 323,
+    "symbol": "unknown:Statuses",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 304,
+    "symbol": "unknown:_input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 393,
+    "symbol": "unknown:action",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 367,
+    "symbol": "unknown:args",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 60,
+    "symbol": "unknown:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 434,
+    "symbol": "unknown:createProvisionTool",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 90,
+    "symbol": "unknown:credential",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 339,
+    "symbol": "unknown:detail",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 51,
+    "symbol": "unknown:displayName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 88,
+    "symbol": "unknown:enabled",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 56,
+    "symbol": "unknown:endpoints",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 169,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 61,
+    "symbol": "unknown:externalId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/src/tools/mutation/provision.ts",
+    "line": 50,
     "symbol": "unknown:id",
     "gate": "type",
     "value": 1,
@@ -9,7 +113,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 243,
+    "line": 141,
     "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
@@ -17,7 +121,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 115,
+    "line": 97,
     "symbol": "unknown:instanceId",
     "gate": "type",
     "value": 1,
@@ -25,7 +129,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 535,
+    "line": 417,
     "symbol": "unknown:kekId",
     "gate": "type",
     "value": 1,
@@ -33,15 +137,15 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 65,
+    "line": 52,
     "symbol": "unknown:kind",
     "gate": "type",
     "value": 1,
-    "count": 5
+    "count": 4
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 85,
+    "line": 72,
     "symbol": "unknown:manifest",
     "gate": "type",
     "value": 1,
@@ -49,7 +153,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 476,
+    "line": 367,
     "symbol": "unknown:op",
     "gate": "type",
     "value": 1,
@@ -57,7 +161,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 484,
+    "line": 375,
     "symbol": "unknown:operation",
     "gate": "type",
     "value": 1,
@@ -65,7 +169,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 568,
+    "line": 451,
     "symbol": "unknown:output",
     "gate": "type",
     "value": 1,
@@ -73,7 +177,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 100,
+    "line": 82,
     "symbol": "unknown:personId",
     "gate": "type",
     "value": 1,
@@ -81,7 +185,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 460,
+    "line": 351,
     "symbol": "unknown:preconditions",
     "gate": "type",
     "value": 1,
@@ -89,7 +193,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 105,
+    "line": 87,
     "symbol": "unknown:provider",
     "gate": "type",
     "value": 1,
@@ -97,7 +201,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 457,
+    "line": 348,
     "symbol": "unknown:reason",
     "gate": "type",
     "value": 1,
@@ -105,7 +209,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 235,
+    "line": 132,
     "symbol": "unknown:refusal",
     "gate": "type",
     "value": 1,
@@ -113,15 +217,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 489,
-    "symbol": "unknown:requirement",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 505,
+    "line": 387,
     "symbol": "unknown:result",
     "gate": "type",
     "value": 1,
@@ -129,7 +225,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 500,
+    "line": 382,
     "symbol": "unknown:revision",
     "gate": "type",
     "value": 1,
@@ -137,7 +233,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 119,
+    "line": 101,
     "symbol": "unknown:secretId",
     "gate": "type",
     "value": 1,
@@ -145,7 +241,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 107,
+    "line": 89,
     "symbol": "unknown:settings",
     "gate": "type",
     "value": 1,
@@ -153,7 +249,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 454,
+    "line": 345,
     "symbol": "unknown:source",
     "gate": "type",
     "value": 1,
@@ -161,7 +257,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 437,
+    "line": 328,
     "symbol": "unknown:state",
     "gate": "type",
     "value": 1,
@@ -169,7 +265,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 459,
+    "line": 350,
     "symbol": "unknown:statuses",
     "gate": "type",
     "value": 1,
@@ -177,7 +273,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 436,
+    "line": 327,
     "symbol": "unknown:surface",
     "gate": "type",
     "value": 1,
@@ -185,7 +281,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 460,
+    "line": 351,
     "symbol": "unknown:text",
     "gate": "type",
     "value": 1,
@@ -193,7 +289,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 91,
+    "line": 73,
     "symbol": "unknown:timeoutMs",
     "gate": "type",
     "value": 1,
@@ -201,7 +297,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 66,
+    "line": 53,
     "symbol": "unknown:trustTier",
     "gate": "type",
     "value": 1,
@@ -209,7 +305,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 463,
+    "line": 354,
     "symbol": "unknown:value",
     "gate": "type",
     "value": 1,
@@ -217,7 +313,7 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 455,
+    "line": 346,
     "symbol": "unknown:vault",
     "gate": "type",
     "value": 1,
@@ -225,15 +321,127 @@
   },
   {
     "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 75,
+    "line": 62,
     "symbol": "unknown:workspace",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
+    "path": "apps/openomni/test/alarm-boot-durability.test.ts",
+    "line": 22,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/alarm-boot-durability.test.ts",
+    "line": 79,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/alarm-boot-durability.test.ts",
+    "line": 12,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/alarm-message-deadline.test.ts",
+    "line": 13,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/alarm-message-deadline.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/alarm-message-deadline.test.ts",
+    "line": 114,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/alarm-message-deadline.test.ts",
+    "line": 14,
+    "symbol": "unknown:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/alarm-message-deadline.test.ts",
+    "line": 10,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/alarm-message-deadline.test.ts",
+    "line": 16,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/alarm-runtime.test.ts",
+    "line": 18,
+    "symbol": "unknown:AlarmRuntimeError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/alarm-worker-boundaries.test.ts",
+    "line": 30,
+    "symbol": "unknown:AlarmSourceError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/alarm-worker-boundaries.test.ts",
+    "line": 77,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/alarm-worker-boundaries.test.ts",
+    "line": 29,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "apps/openomni/test/alarm-worker-boundaries.test.ts",
+    "line": 12,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 349,
+    "line": 40,
     "symbol": "implicitAny:ArrowFunction",
     "gate": "type",
     "value": 1,
@@ -241,31 +449,47 @@
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 349,
-    "symbol": "implicitAny:CallExpression",
+    "line": 23,
+    "symbol": "implicitAny:dispatcher",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 349,
-    "symbol": "implicitAny:entry",
+    "line": 46,
+    "symbol": "implicitAny:f",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 162,
+    "symbol": "implicitAny:ninth",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 345,
-    "symbol": "implicitAny:resident",
+    "line": 153,
+    "symbol": "implicitAny:pending",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 1
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 101,
+    "line": 153,
+    "symbol": "implicitAny:protectedDispatch",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 140,
     "symbol": "implicitAny:result",
     "gate": "type",
     "value": 1,
@@ -273,31 +497,15 @@
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 100,
+    "line": 22,
     "symbol": "implicitAny:tool",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 9
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 346,
-    "symbol": "implicitAny:worker",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 350,
-    "symbol": "implicitAny:workerNames",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 349,
+    "line": 40,
     "symbol": "unknown:ArrowFunction",
     "gate": "type",
     "value": 1,
@@ -305,7 +513,7 @@
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 57,
+    "line": 12,
     "symbol": "unknown:CallExpression",
     "gate": "type",
     "value": 1,
@@ -313,151 +521,63 @@
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 129,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 130,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
+    "line": 23,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/approval-adversarial.test.ts",
     "line": 46,
-    "symbol": "unknown:approvalDecide",
+    "symbol": "unknown:f",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 14
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 82,
-    "symbol": "unknown:approvalIdFrom",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 33,
-    "symbol": "unknown:approvalOp",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 44,
-    "symbol": "unknown:approvalRequest",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 48,
-    "symbol": "unknown:contactPromote",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 298,
-    "symbol": "unknown:decide",
+    "line": 162,
+    "symbol": "unknown:ninth",
     "gate": "type",
     "value": 1,
     "count": 2
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 50,
-    "symbol": "unknown:endpointMerge",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 349,
-    "symbol": "unknown:entry",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 302,
-    "symbol": "unknown:failing",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 24,
-    "symbol": "unknown:getEndpoint",
+    "line": 153,
+    "symbol": "unknown:pending",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 23,
-    "symbol": "unknown:getIdentity",
+    "line": 153,
+    "symbol": "unknown:protectedDispatch",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 39,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 26,
-    "symbol": "unknown:mergeEndpoint",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 41,
-    "symbol": "unknown:operation",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 23,
-    "symbol": "unknown:port",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 25,
-    "symbol": "unknown:promote",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 41,
-    "symbol": "unknown:request",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 345,
-    "symbol": "unknown:resident",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 101,
+    "line": 140,
     "symbol": "unknown:result",
     "gate": "type",
     "value": 1,
@@ -465,35 +585,19 @@
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 38,
-    "symbol": "unknown:run",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 100,
-    "symbol": "unknown:tool",
+    "line": 128,
+    "symbol": "unknown:source",
     "gate": "type",
     "value": 1,
     "count": 4
   },
   {
     "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 346,
-    "symbol": "unknown:worker",
+    "line": 22,
+    "symbol": "unknown:tool",
     "gate": "type",
     "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/approval-adversarial.test.ts",
-    "line": 350,
-    "symbol": "unknown:workerNames",
-    "gate": "type",
-    "value": 1,
-    "count": 1
+    "count": 9
   },
   {
     "path": "apps/openomni/test/boot-wiring.test.ts",
@@ -1353,7 +1457,7 @@
   },
   {
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 373,
+    "line": 374,
     "symbol": "unknown:error",
     "gate": "type",
     "value": 1,
@@ -1361,7 +1465,7 @@
   },
   {
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 426,
+    "line": 427,
     "symbol": "unknown:execute",
     "gate": "type",
     "value": 1,
@@ -1369,7 +1473,7 @@
   },
   {
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 366,
+    "line": 367,
     "symbol": "unknown:failure",
     "gate": "type",
     "value": 1,
@@ -1417,7 +1521,7 @@
   },
   {
     "path": "apps/openomni/test/code-mode-e2e.test.ts",
-    "line": 480,
+    "line": 481,
     "symbol": "unknown:{ run }",
     "gate": "type",
     "value": 1,
@@ -2264,6 +2368,54 @@
     "count": 1
   },
   {
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 6,
+    "symbol": "implicitAny:lines",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 12,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 72,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 6,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 6,
+    "symbol": "unknown:lines",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/fixtures/process-session-child.ts",
+    "line": 9,
+    "symbol": "unknown:next",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
     "path": "apps/openomni/test/gateway-contracts.test.ts",
     "line": 25,
     "symbol": "implicitAny:ResidentRun",
@@ -2515,6 +2667,254 @@
     "path": "apps/openomni/test/helpers/admitted-operation.ts",
     "line": 16,
     "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 9,
+    "symbol": "implicitAny:alarmId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 21,
+    "symbol": "implicitAny:alarmPathEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 17,
+    "symbol": "implicitAny:alarmSummary",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 6,
+    "symbol": "implicitAny:decodeJson",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 10,
+    "symbol": "implicitAny:epoch",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 15,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 12,
+    "symbol": "implicitAny:exitCode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 15,
+    "symbol": "implicitAny:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 15,
+    "symbol": "implicitAny:pathEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 11,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 7,
+    "symbol": "implicitAny:summary",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 9,
+    "symbol": "unknown:alarmId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 21,
+    "symbol": "unknown:alarmPathEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 17,
+    "symbol": "unknown:alarmSummary",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 10,
+    "symbol": "unknown:epoch",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 15,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 12,
+    "symbol": "unknown:exitCode",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 15,
+    "symbol": "unknown:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 15,
+    "symbol": "unknown:pathEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 11,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm-payload.ts",
+    "line": 7,
+    "symbol": "unknown:summary",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 53,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 63,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 58,
+    "symbol": "unknown:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 6,
+    "symbol": "unknown:alarmFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 46,
+    "symbol": "unknown:arm",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 32,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 24,
+    "symbol": "unknown:errors",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 32,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 63,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/alarm.ts",
+    "line": 32,
+    "symbol": "unknown:worker",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -3225,7 +3625,7 @@
   },
   {
     "path": "apps/openomni/test/helpers/message-fixture.ts",
-    "line": 92,
+    "line": 86,
     "symbol": "implicitAny:dispatcher",
     "gate": "type",
     "value": 1,
@@ -3233,15 +3633,39 @@
   },
   {
     "path": "apps/openomni/test/helpers/message-fixture.ts",
-    "line": 65,
-    "symbol": "unknown:commit",
+    "line": 67,
+    "symbol": "implicitAny:handle",
     "gate": "type",
     "value": 1,
     "count": 1
   },
   {
     "path": "apps/openomni/test/helpers/message-fixture.ts",
-    "line": 92,
+    "line": 67,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/message-fixture.ts",
+    "line": 69,
+    "symbol": "implicitAny:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/message-fixture.ts",
+    "line": 67,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/message-fixture.ts",
+    "line": 86,
     "symbol": "unknown:dispatcher",
     "gate": "type",
     "value": 1,
@@ -3249,8 +3673,120 @@
   },
   {
     "path": "apps/openomni/test/helpers/message-fixture.ts",
-    "line": 43,
-    "symbol": "unknown:messageFixture",
+    "line": 67,
+    "symbol": "unknown:handle",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/message-fixture.ts",
+    "line": 67,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/message-fixture.ts",
+    "line": 67,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/message-fixture.ts",
+    "line": 106,
+    "symbol": "unknown:send",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 61,
+    "symbol": "implicitAny:close",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 28,
+    "symbol": "implicitAny:controller",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 14,
+    "symbol": "implicitAny:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 39,
+    "symbol": "implicitAny:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 13,
+    "symbol": "implicitAny:protectedDispatch",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 42,
+    "symbol": "implicitAny:running",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 42,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 52,
+    "symbol": "unknown:answer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 14,
+    "symbol": "unknown:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 39,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/protected-dispatch.ts",
+    "line": 13,
+    "symbol": "unknown:protectedDispatch",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -3270,6 +3806,222 @@
     "gate": "type",
     "value": 1,
     "count": 4
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 63,
+    "symbol": "implicitAny:Command",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 74,
+    "symbol": "implicitAny:app",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 64,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 153,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 43,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 153,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 109,
+    "symbol": "implicitAny:serve",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 43,
+    "symbol": "implicitAny:snapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 74,
+    "symbol": "implicitAny:startOpenOmni",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 64,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 83,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 175,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 63,
+    "symbol": "unknown:Command",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 80,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 26,
+    "symbol": "unknown:ORIGINAL_CALL",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 74,
+    "symbol": "unknown:app",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 77,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 77,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 64,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 153,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 43,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 153,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 109,
+    "symbol": "unknown:serve",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 43,
+    "symbol": "unknown:snapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 74,
+    "symbol": "unknown:startOpenOmni",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 64,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/helpers/request-owner-process.ts",
+    "line": 83,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
   },
   {
     "path": "apps/openomni/test/helpers/resident-runner.ts",
@@ -4273,7 +5025,7 @@
   },
   {
     "path": "apps/openomni/test/message-alarm-boot.test.ts",
-    "line": 93,
+    "line": 102,
     "symbol": "implicitAny:stop",
     "gate": "type",
     "value": 1,
@@ -4321,7 +5073,7 @@
   },
   {
     "path": "apps/openomni/test/message-alarm-boot.test.ts",
-    "line": 93,
+    "line": 102,
     "symbol": "unknown:stop",
     "gate": "type",
     "value": 1,
@@ -4345,7 +5097,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 227,
+    "line": 303,
     "symbol": "implicitAny:CallExpression",
     "gate": "type",
     "value": 1,
@@ -4353,7 +5105,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 168,
+    "line": 243,
     "symbol": "implicitAny:dbPath",
     "gate": "type",
     "value": 1,
@@ -4361,7 +5113,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 185,
+    "line": 261,
     "symbol": "implicitAny:deliveryRoutes",
     "gate": "type",
     "value": 1,
@@ -4369,7 +5121,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 168,
+    "line": 243,
     "symbol": "implicitAny:directory",
     "gate": "type",
     "value": 1,
@@ -4377,7 +5129,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 168,
+    "line": 243,
     "symbol": "implicitAny:fixture",
     "gate": "type",
     "value": 1,
@@ -4385,7 +5137,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 104,
+    "line": 174,
     "symbol": "implicitAny:unsubscribe",
     "gate": "type",
     "value": 1,
@@ -4393,7 +5145,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 146,
+    "line": 220,
     "symbol": "unknown:CallExpression",
     "gate": "type",
     "value": 1,
@@ -4401,7 +5153,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 209,
+    "line": 285,
     "symbol": "unknown:NewExpression",
     "gate": "type",
     "value": 1,
@@ -4409,7 +5161,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 168,
+    "line": 243,
     "symbol": "unknown:dbPath",
     "gate": "type",
     "value": 1,
@@ -4417,7 +5169,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 168,
+    "line": 243,
     "symbol": "unknown:directory",
     "gate": "type",
     "value": 1,
@@ -4425,7 +5177,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 168,
+    "line": 243,
     "symbol": "unknown:fixture",
     "gate": "type",
     "value": 1,
@@ -4433,7 +5185,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 25,
+    "line": 19,
     "symbol": "unknown:registerPeer",
     "gate": "type",
     "value": 1,
@@ -4441,7 +5193,7 @@
   },
   {
     "path": "apps/openomni/test/message-ingress-boundaries.test.ts",
-    "line": 104,
+    "line": 174,
     "symbol": "unknown:unsubscribe",
     "gate": "type",
     "value": 1,
@@ -4449,7 +5201,7 @@
   },
   {
     "path": "apps/openomni/test/message-mutation-killers.test.ts",
-    "line": 142,
+    "line": 144,
     "symbol": "implicitAny:unsubscribe",
     "gate": "type",
     "value": 1,
@@ -4457,7 +5209,7 @@
   },
   {
     "path": "apps/openomni/test/message-mutation-killers.test.ts",
-    "line": 57,
+    "line": 58,
     "symbol": "unknown:CallExpression",
     "gate": "type",
     "value": 1,
@@ -4465,15 +5217,15 @@
   },
   {
     "path": "apps/openomni/test/message-mutation-killers.test.ts",
-    "line": 83,
+    "line": 85,
     "symbol": "unknown:NewExpression",
     "gate": "type",
     "value": 1,
-    "count": 3
+    "count": 5
   },
   {
     "path": "apps/openomni/test/message-mutation-killers.test.ts",
-    "line": 142,
+    "line": 144,
     "symbol": "unknown:unsubscribe",
     "gate": "type",
     "value": 1,
@@ -4696,6 +5448,902 @@
     "count": 6
   },
   {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 25,
+    "symbol": "implicitAny:app",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 67,
+    "symbol": "implicitAny:guard",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 25,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 25,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 70,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 58,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 68,
+    "symbol": "unknown:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 25,
+    "symbol": "unknown:app",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 25,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 25,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 70,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-app.test.ts",
+    "line": 50,
+    "symbol": "unknown:waitTimer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-budget.test.ts",
+    "line": 40,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-budget.test.ts",
+    "line": 8,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 31,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 69,
+    "symbol": "implicitAny:subscription",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 56,
+    "symbol": "implicitAny:watch",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 19,
+    "symbol": "implicitAny:writer",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 73,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 18,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-deadline.test.ts",
+    "line": 56,
+    "symbol": "unknown:watch",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 98,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 83,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 121,
+    "symbol": "implicitAny:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 62,
+    "symbol": "implicitAny:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 209,
+    "symbol": "implicitAny:guard",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 124,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 62,
+    "symbol": "implicitAny:monitorTool",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 124,
+    "symbol": "implicitAny:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 147,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 147,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 123,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 185,
+    "symbol": "implicitAny:sessionTool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 87,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 137,
+    "symbol": "implicitAny:toolWave",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 75,
+    "symbol": "unknown:ExecutorContextError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 100,
+    "symbol": "unknown:ToolRefused",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 210,
+    "symbol": "unknown:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 143,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 132,
+    "symbol": "unknown:config",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 121,
+    "symbol": "unknown:definitions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 62,
+    "symbol": "unknown:dispatcher",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 195,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 189,
+    "symbol": "unknown:errors",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 195,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 80,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 124,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 149,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 62,
+    "symbol": "unknown:monitorTool",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 124,
+    "symbol": "unknown:prepare",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 147,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 205,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 147,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 123,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 185,
+    "symbol": "unknown:sessionTool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 143,
+    "symbol": "unknown:toolExecutor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 137,
+    "symbol": "unknown:toolWave",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 136,
+    "symbol": "unknown:tools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 200,
+    "symbol": "unknown:wake",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 137,
+    "symbol": "unknown:wave",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-dispatcher.test.ts",
+    "line": 195,
+    "symbol": "unknown:worker",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-errors.test.ts",
+    "line": 32,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-errors.test.ts",
+    "line": 32,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-errors.test.ts",
+    "line": 70,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-errors.test.ts",
+    "line": 61,
+    "symbol": "unknown:errors",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-errors.test.ts",
+    "line": 21,
+    "symbol": "unknown:failed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-errors.test.ts",
+    "line": 26,
+    "symbol": "unknown:source",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-errors.test.ts",
+    "line": 22,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 87,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 91,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 46,
+    "symbol": "implicitAny:bound",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 91,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 49,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 35,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 73,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 94,
+    "symbol": "unknown:ToolRefused",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 47,
+    "symbol": "unknown:abort",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 12,
+    "symbol": "unknown:alarmStore",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 61,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 43,
+    "symbol": "unknown:errors",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 61,
+    "symbol": "unknown:failure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 61,
+    "symbol": "unknown:makeWorker",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-message-controls.test.ts",
+    "line": 49,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 94,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:group",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 12,
+    "symbol": "implicitAny:identity",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 15,
+    "symbol": "implicitAny:parent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 11,
+    "symbol": "implicitAny:parseJson",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 14,
+    "symbol": "implicitAny:pid",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:process",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 58,
+    "symbol": "implicitAny:writer",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 47,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 120,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 76,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 112,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 47,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 27,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 83,
+    "symbol": "unknown:gone",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 16,
+    "symbol": "unknown:group",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 12,
+    "symbol": "unknown:identity",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 82,
+    "symbol": "unknown:original",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 15,
+    "symbol": "unknown:parent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 77,
+    "symbol": "unknown:peer",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 28,
+    "symbol": "unknown:peers",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 14,
+    "symbol": "unknown:pid",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 30,
+    "symbol": "unknown:process",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 34,
+    "symbol": "unknown:server",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 29,
+    "symbol": "unknown:socket",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/monitor-process-group.test.ts",
+    "line": 53,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-tool-boundaries.test.ts",
+    "line": 78,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/monitor-tool-boundaries.test.ts",
+    "line": 31,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/monitor-tool-boundaries.test.ts",
+    "line": 11,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
     "path": "apps/openomni/test/npm-package.test.ts",
     "line": 81,
     "symbol": "implicitAny:manifest",
@@ -4784,8 +6432,120 @@
     "count": 1
   },
   {
+    "path": "apps/openomni/test/policy-seed.test.ts",
+    "line": 78,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/policy-seed.test.ts",
+    "line": 37,
+    "symbol": "unknown:policies",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 69,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 69,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 89,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 34,
+    "symbol": "unknown:[Symbol.dispose]",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 64,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 40,
+    "symbol": "unknown:f",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 24,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 25,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 96,
+    "symbol": "unknown:pending",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 62,
+    "symbol": "unknown:refused",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 80,
+    "symbol": "unknown:rejected",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "apps/openomni/test/process-replies.test.ts",
+    "line": 93,
+    "symbol": "unknown:unopened",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 104,
+    "line": 117,
     "symbol": "implicitAny:PropertyAccessExpression",
     "gate": "type",
     "value": 1,
@@ -4793,7 +6553,7 @@
   },
   {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 132,
+    "line": 145,
     "symbol": "implicitAny:app",
     "gate": "type",
     "value": 1,
@@ -4809,7 +6569,7 @@
   },
   {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 132,
+    "line": 145,
     "symbol": "implicitAny:input",
     "gate": "type",
     "value": 1,
@@ -4833,8 +6593,16 @@
   },
   {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 132,
+    "line": 145,
     "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 178,
+    "symbol": "unknown:AwaitExpression",
     "gate": "type",
     "value": 1,
     "count": 1
@@ -4849,7 +6617,7 @@
   },
   {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 104,
+    "line": 117,
     "symbol": "unknown:PropertyAccessExpression",
     "gate": "type",
     "value": 1,
@@ -4857,7 +6625,7 @@
   },
   {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 132,
+    "line": 145,
     "symbol": "unknown:app",
     "gate": "type",
     "value": 1,
@@ -4865,7 +6633,15 @@
   },
   {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 132,
+    "line": 113,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 145,
     "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
@@ -4873,11 +6649,67 @@
   },
   {
     "path": "apps/openomni/test/process-session-e2e.test.ts",
-    "line": 132,
+    "line": 111,
+    "symbol": "unknown:received",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 145,
     "symbol": "unknown:run",
     "gate": "type",
     "value": 1,
     "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-session-e2e.test.ts",
+    "line": 108,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-session-transport.test.ts",
+    "line": 25,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-session-transport.test.ts",
+    "line": 9,
+    "symbol": "unknown:answer",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "apps/openomni/test/process-session-transport.test.ts",
+    "line": 65,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/process-session-transport.test.ts",
+    "line": 65,
+    "symbol": "unknown:settled",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/process-session-transport.test.ts",
+    "line": 9,
+    "symbol": "unknown:transport",
+    "gate": "type",
+    "value": 1,
+    "count": 3
   },
   {
     "path": "apps/openomni/test/prompt.test.ts",
@@ -4889,7 +6721,23 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 516,
+    "line": 160,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "apps/openomni/test/provision-tools.test.ts",
+    "line": 169,
+    "symbol": "implicitAny:declare",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/provision-tools.test.ts",
+    "line": 443,
     "symbol": "implicitAny:entry",
     "gate": "type",
     "value": 1,
@@ -4897,7 +6745,15 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 516,
+    "line": 116,
+    "symbol": "implicitAny:f",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "apps/openomni/test/provision-tools.test.ts",
+    "line": 443,
     "symbol": "implicitAny:resident",
     "gate": "type",
     "value": 1,
@@ -4905,23 +6761,31 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 126,
+    "line": 91,
     "symbol": "implicitAny:result",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 6
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 125,
+    "line": 164,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/provision-tools.test.ts",
+    "line": 90,
     "symbol": "implicitAny:tool",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 10
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 526,
+    "line": 453,
     "symbol": "implicitAny:unwired",
     "gate": "type",
     "value": 1,
@@ -4929,7 +6793,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 524,
+    "line": 451,
     "symbol": "implicitAny:worker",
     "gate": "type",
     "value": 1,
@@ -4937,15 +6801,15 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 162,
+    "line": 335,
     "symbol": "unknown:NewExpression",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 1
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 28,
+    "line": 17,
     "symbol": "unknown:args",
     "gate": "type",
     "value": 1,
@@ -4953,7 +6817,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 33,
+    "line": 22,
     "symbol": "unknown:channelDeclare",
     "gate": "type",
     "value": 1,
@@ -4961,7 +6825,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 37,
+    "line": 26,
     "symbol": "unknown:channelDisable",
     "gate": "type",
     "value": 1,
@@ -4969,7 +6833,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 35,
+    "line": 24,
     "symbol": "unknown:channelEnable",
     "gate": "type",
     "value": 1,
@@ -4977,7 +6841,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 516,
+    "line": 443,
     "symbol": "unknown:entry",
     "gate": "type",
     "value": 1,
@@ -4985,15 +6849,15 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 332,
-    "symbol": "unknown:executor",
+    "line": 116,
+    "symbol": "unknown:f",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 10
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 28,
+    "line": 17,
     "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
@@ -5001,7 +6865,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 28,
+    "line": 17,
     "symbol": "unknown:operation",
     "gate": "type",
     "value": 1,
@@ -5009,7 +6873,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 30,
+    "line": 19,
     "symbol": "unknown:personDeclare",
     "gate": "type",
     "value": 1,
@@ -5017,7 +6881,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 32,
+    "line": 21,
     "symbol": "unknown:personRemove",
     "gate": "type",
     "value": 1,
@@ -5025,7 +6889,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 41,
+    "line": 30,
     "symbol": "unknown:provisionStatus",
     "gate": "type",
     "value": 1,
@@ -5033,7 +6897,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 25,
+    "line": 14,
     "symbol": "unknown:provisionTool",
     "gate": "type",
     "value": 1,
@@ -5041,7 +6905,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 516,
+    "line": 443,
     "symbol": "unknown:resident",
     "gate": "type",
     "value": 1,
@@ -5049,15 +6913,15 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 126,
+    "line": 91,
     "symbol": "unknown:result",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 6
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 26,
+    "line": 15,
     "symbol": "unknown:run",
     "gate": "type",
     "value": 1,
@@ -5065,7 +6929,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 39,
+    "line": 28,
     "symbol": "unknown:secretRotate",
     "gate": "type",
     "value": 1,
@@ -5073,15 +6937,15 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 125,
+    "line": 90,
     "symbol": "unknown:tool",
     "gate": "type",
     "value": 1,
-    "count": 4
+    "count": 10
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 526,
+    "line": 453,
     "symbol": "unknown:unwired",
     "gate": "type",
     "value": 1,
@@ -5089,7 +6953,7 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 524,
+    "line": 451,
     "symbol": "unknown:worker",
     "gate": "type",
     "value": 1,
@@ -5097,11 +6961,11 @@
   },
   {
     "path": "apps/openomni/test/provision-tools.test.ts",
-    "line": 629,
+    "line": 558,
     "symbol": "unknown:{ port }",
     "gate": "type",
     "value": 1,
-    "count": 2
+    "count": 1
   },
   {
     "path": "apps/openomni/test/provisioning.test.ts",
@@ -5174,6 +7038,150 @@
     "gate": "type",
     "value": 1,
     "count": 2
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 19,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 43,
+    "symbol": "implicitAny:app",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 43,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 43,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 106,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 19,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 43,
+    "symbol": "unknown:app",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 59,
+    "symbol": "unknown:hasAnswer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 43,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/request-channel-e2e.test.ts",
+    "line": 43,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-domain-cas.test.ts",
+    "line": 39,
+    "symbol": "implicitAny:running",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-domain-cas.test.ts",
+    "line": 19,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/request-domain-cas.test.ts",
+    "line": 29,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-domain-cas.test.ts",
+    "line": 39,
+    "symbol": "unknown:running",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 182,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 69,
+    "symbol": "unknown:receive",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 122,
+    "symbol": "unknown:requestOf",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/request-owner-e2e.test.ts",
+    "line": 62,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
   },
   {
     "path": "apps/openomni/test/resident-compaction.test.ts",
@@ -5713,7 +7721,7 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 39,
+    "line": 40,
     "symbol": "implicitAny:app",
     "gate": "type",
     "value": 1,
@@ -5721,7 +7729,15 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 39,
+    "line": 75,
+    "symbol": "implicitAny:delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 40,
     "symbol": "implicitAny:input",
     "gate": "type",
     "value": 1,
@@ -5729,7 +7745,15 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 39,
+    "line": 85,
+    "symbol": "implicitAny:outbound",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 40,
     "symbol": "implicitAny:run",
     "gate": "type",
     "value": 1,
@@ -5737,7 +7761,7 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 58,
+    "line": 69,
     "symbol": "implicitAny:unsubscribe",
     "gate": "type",
     "value": 1,
@@ -5745,7 +7769,23 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 106,
+    "line": 141,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 169,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 144,
     "symbol": "unknown:NewExpression",
     "gate": "type",
     "value": 1,
@@ -5753,7 +7793,7 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 39,
+    "line": 40,
     "symbol": "unknown:app",
     "gate": "type",
     "value": 1,
@@ -5761,7 +7801,31 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 39,
+    "line": 65,
+    "symbol": "unknown:completed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 75,
+    "symbol": "unknown:delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 67,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 40,
     "symbol": "unknown:input",
     "gate": "type",
     "value": 1,
@@ -5769,7 +7833,15 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 39,
+    "line": 85,
+    "symbol": "unknown:outbound",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 40,
     "symbol": "unknown:run",
     "gate": "type",
     "value": 1,
@@ -5777,7 +7849,15 @@
   },
   {
     "path": "apps/openomni/test/send-message-e2e.test.ts",
-    "line": 58,
+    "line": 62,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "apps/openomni/test/send-message-e2e.test.ts",
+    "line": 69,
     "symbol": "unknown:unsubscribe",
     "gate": "type",
     "value": 1,
@@ -5918,2085 +7998,5 @@
     "gate": "type",
     "value": 1,
     "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 51,
-    "symbol": "implicitAny:fetch",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 55,
-    "symbol": "implicitAny:max_tokens",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "implicitAny:messageId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 132,
-    "symbol": "implicitAny:probe",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 86,
-    "symbol": "implicitAny:received",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "implicitAny:reply",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 51,
-    "symbol": "implicitAny:request",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 55,
-    "symbol": "implicitAny:stream",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "implicitAny:text",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 13,
-    "symbol": "implicitAny:textResponse",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "implicitAny:type",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 97,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 55,
-    "symbol": "unknown:body",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 55,
-    "symbol": "unknown:max_tokens",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "unknown:messageId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "unknown:reply",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 55,
-    "symbol": "unknown:stream",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "unknown:text",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-loop-e2e.test.ts",
-    "line": 89,
-    "symbol": "unknown:type",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 245,
-    "symbol": "implicitAny:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "implicitAny:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "implicitAny:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 188,
-    "symbol": "implicitAny:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 23,
-    "symbol": "implicitAny:Request",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "implicitAny:callId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 27,
-    "symbol": "implicitAny:content",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 130,
-    "symbol": "implicitAny:context",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 120,
-    "symbol": "implicitAny:definitions",
-    "gate": "type",
-    "value": 1,
-    "count": 13
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 113,
-    "symbol": "implicitAny:event",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 130,
-    "symbol": "implicitAny:execute",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 106,
-    "symbol": "implicitAny:fetch",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 127,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 24,
-    "symbol": "implicitAny:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 128,
-    "symbol": "implicitAny:output",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 150,
-    "symbol": "implicitAny:prepare",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 113,
-    "symbol": "implicitAny:publish",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 106,
-    "symbol": "implicitAny:request",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 101,
-    "symbol": "implicitAny:requests",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 41,
-    "symbol": "implicitAny:response",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 26,
-    "symbol": "implicitAny:role",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 149,
-    "symbol": "implicitAny:runner",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 172,
-    "symbol": "implicitAny:sessionTool",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 158,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 127,
-    "symbol": "implicitAny:slot",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "implicitAny:terminal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 158,
-    "symbol": "implicitAny:toolWave",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 32,
-    "symbol": "implicitAny:tool_use_id",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 31,
-    "symbol": "implicitAny:type",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 128,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 210,
-    "symbol": "unknown:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 224,
-    "symbol": "unknown:AwaitExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "unknown:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 243,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "unknown:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 188,
-    "symbol": "unknown:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 23,
-    "symbol": "unknown:Request",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 136,
-    "symbol": "unknown:aborted",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 88,
-    "symbol": "unknown:bounded",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "unknown:callId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 158,
-    "symbol": "unknown:calls",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 154,
-    "symbol": "unknown:config",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 27,
-    "symbol": "unknown:content",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 120,
-    "symbol": "unknown:definitions",
-    "gate": "type",
-    "value": 1,
-    "count": 13
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 151,
-    "symbol": "unknown:dispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 113,
-    "symbol": "unknown:event",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 107,
-    "symbol": "unknown:fetch",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 219,
-    "symbol": "unknown:first",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 127,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 24,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 128,
-    "symbol": "unknown:output",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 150,
-    "symbol": "unknown:prepare",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 113,
-    "symbol": "unknown:publish",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 101,
-    "symbol": "unknown:requests",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 26,
-    "symbol": "unknown:role",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 149,
-    "symbol": "unknown:runner",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 172,
-    "symbol": "unknown:sessionTool",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 127,
-    "symbol": "unknown:slot",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 195,
-    "symbol": "unknown:terminal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 158,
-    "symbol": "unknown:toolWave",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 32,
-    "symbol": "unknown:tool_use_id",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 157,
-    "symbol": "unknown:tools",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 31,
-    "symbol": "unknown:type",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-tool-recovery-e2e.test.ts",
-    "line": 128,
-    "symbol": "unknown:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 937,
-    "symbol": "implicitAny:ArrayLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 132,
-    "symbol": "implicitAny:AwaitExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 559,
-    "symbol": "implicitAny:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 559,
-    "symbol": "implicitAny:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 119,
-    "symbol": "implicitAny:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 138,
-    "symbol": "implicitAny:ProviderRequest",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 217,
-    "symbol": "implicitAny:app",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "implicitAny:callId",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 142,
-    "symbol": "implicitAny:content",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 180,
-    "symbol": "implicitAny:context",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 520,
-    "symbol": "implicitAny:currentSignal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 187,
-    "symbol": "implicitAny:definitions",
-    "gate": "type",
-    "value": 1,
-    "count": 22
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 614,
-    "symbol": "implicitAny:dispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 168,
-    "symbol": "implicitAny:execute",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 81,
-    "symbol": "implicitAny:fetch",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 367,
-    "symbol": "implicitAny:hook",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 777,
-    "symbol": "implicitAny:inner",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 177,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 608,
-    "symbol": "implicitAny:invoke",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 942,
-    "symbol": "implicitAny:messageIds",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 139,
-    "symbol": "implicitAny:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 939,
-    "symbol": "implicitAny:modelIntent",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 291,
-    "symbol": "implicitAny:nextApproval",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 248,
-    "symbol": "implicitAny:op",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 178,
-    "symbol": "implicitAny:output",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 251,
-    "symbol": "implicitAny:parsed",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "implicitAny:phase",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 204,
-    "symbol": "implicitAny:probe",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 33,
-    "symbol": "implicitAny:providerResponse",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 191,
-    "symbol": "implicitAny:received",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 196,
-    "symbol": "implicitAny:request",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 130,
-    "symbol": "implicitAny:response",
-    "gate": "type",
-    "value": 1,
-    "count": 15
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "implicitAny:result",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 609,
-    "symbol": "implicitAny:results",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 141,
-    "symbol": "implicitAny:role",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 189,
-    "symbol": "implicitAny:sessionRuntime",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 168,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 177,
-    "symbol": "implicitAny:slot",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 262,
-    "symbol": "implicitAny:stop",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "implicitAny:terminal",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 219,
-    "symbol": "implicitAny:toolDefinitions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 248,
-    "symbol": "implicitAny:toolResults",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 147,
-    "symbol": "implicitAny:tool_use_id",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 633,
-    "symbol": "implicitAny:turnSignal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 146,
-    "symbol": "implicitAny:type",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 942,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 186,
-    "symbol": "implicitAny:waveApp",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 166,
-    "symbol": "implicitAny:waveTool",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 974,
-    "symbol": "implicitAny:{ app, socket }",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 320,
-    "symbol": "implicitAny:{ app, socket, received }",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 631,
-    "symbol": "implicitAny:{ app, socket, received, cleanup }",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 799,
-    "symbol": "implicitAny:{ app, socket, received, dbPath, cleanup }",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 1023,
-    "symbol": "implicitAny:{ socket, received }",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 937,
-    "symbol": "unknown:ArrayLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 119,
-    "symbol": "unknown:ArrowFunction",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 937,
-    "symbol": "unknown:AwaitExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 559,
-    "symbol": "unknown:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 532,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 332,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 559,
-    "symbol": "unknown:ObjectLiteralExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 119,
-    "symbol": "unknown:PropertyAccessExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 138,
-    "symbol": "unknown:ProviderRequest",
-    "gate": "type",
-    "value": 1,
-    "count": 17
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 281,
-    "symbol": "unknown:activeRow",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 217,
-    "symbol": "unknown:app",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 161,
-    "symbol": "unknown:bounded",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "unknown:callId",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 142,
-    "symbol": "unknown:content",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 187,
-    "symbol": "unknown:definitions",
-    "gate": "type",
-    "value": 1,
-    "count": 21
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 614,
-    "symbol": "unknown:dispatcher",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 531,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 119,
-    "symbol": "unknown:event",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 931,
-    "symbol": "unknown:first",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 367,
-    "symbol": "unknown:hook",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 777,
-    "symbol": "unknown:inner",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 177,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 608,
-    "symbol": "unknown:invoke",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 942,
-    "symbol": "unknown:messageIds",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 139,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 939,
-    "symbol": "unknown:modelIntent",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 291,
-    "symbol": "unknown:nextApproval",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 248,
-    "symbol": "unknown:op",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 178,
-    "symbol": "unknown:output",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 251,
-    "symbol": "unknown:parsed",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "unknown:phase",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 191,
-    "symbol": "unknown:received",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 302,
-    "symbol": "unknown:requireBApproval",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 609,
-    "symbol": "unknown:results",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 141,
-    "symbol": "unknown:role",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 932,
-    "symbol": "unknown:second",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 189,
-    "symbol": "unknown:sessionRuntime",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 177,
-    "symbol": "unknown:slot",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 262,
-    "symbol": "unknown:stop",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 243,
-    "symbol": "unknown:terminal",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 260,
-    "symbol": "unknown:timer",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 219,
-    "symbol": "unknown:toolDefinitions",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 248,
-    "symbol": "unknown:toolResults",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 147,
-    "symbol": "unknown:tool_use_id",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 146,
-    "symbol": "unknown:type",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 942,
-    "symbol": "unknown:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 186,
-    "symbol": "unknown:waveApp",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 166,
-    "symbol": "unknown:waveTool",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 974,
-    "symbol": "unknown:{ app, socket }",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 320,
-    "symbol": "unknown:{ app, socket, received }",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 631,
-    "symbol": "unknown:{ app, socket, received, cleanup }",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 799,
-    "symbol": "unknown:{ app, socket, received, dbPath, cleanup }",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/session-wave-e2e.test.ts",
-    "line": 1023,
-    "symbol": "unknown:{ socket, received }",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "apps/openomni/test/shutdown-hooks.test.ts",
-    "line": 26,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "apps/openomni/test/shutdown-hooks.test.ts",
-    "line": 44,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "apps/openomni/test/shutdown-hooks.test.ts",
-    "line": 44,
-    "symbol": "unknown:rejectStop",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 112,
-    "symbol": "implicitAny:candidate",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 115,
-    "symbol": "unknown:body",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 112,
-    "symbol": "unknown:candidate",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 87,
-    "symbol": "unknown:canonical",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 71,
-    "symbol": "unknown:canonicalPartContent",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 85,
-    "symbol": "unknown:canonicalPrefixFingerprint",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 61,
-    "symbol": "unknown:cut",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 42,
-    "symbol": "unknown:isAnchorMessage",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 57,
-    "symbol": "unknown:isWarmCandidateValid",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 100,
-    "symbol": "unknown:latestAnchorBody",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 49,
-    "symbol": "unknown:latestCompactionAnchorId",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 26,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 13
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 11,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 72,
-    "symbol": "unknown:metadata",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 45,
-    "symbol": "unknown:part",
-    "gate": "type",
-    "value": 1,
-    "count": 9
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 89,
-    "symbol": "unknown:parts",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 10,
-    "symbol": "unknown:planAnchoredCut",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 49,
-    "symbol": "unknown:span",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 80,
-    "symbol": "unknown:state",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 18,
-    "symbol": "unknown:summarizerInput",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/candidate.ts",
-    "line": 24,
-    "symbol": "unknown:toRemove",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 108,
-    "symbol": "implicitAny:boundedOptions",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 39,
-    "symbol": "implicitAny:compact",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 49,
-    "symbol": "implicitAny:dispatch",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 91,
-    "symbol": "implicitAny:finish",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 112,
-    "symbol": "implicitAny:onSummarize",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 51,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 137,
-    "symbol": "unknown:Error",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 108,
-    "symbol": "unknown:boundedOptions",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 39,
-    "symbol": "unknown:compact",
-    "gate": "type",
-    "value": 1,
-    "count": 8
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 83,
-    "symbol": "unknown:completed",
-    "gate": "type",
-    "value": 1,
-    "count": 6
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 125,
-    "symbol": "unknown:error",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 69,
-    "symbol": "unknown:finish",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 40,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 112,
-    "symbol": "unknown:onSummarize",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 86,
-    "symbol": "unknown:record",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 70,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 80,
-    "symbol": "unknown:savedTokens",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/compact.ts",
-    "line": 74,
-    "symbol": "unknown:summarizerError",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 29,
-    "symbol": "implicitAny:onSummarize",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 33,
-    "symbol": "implicitAny:signal",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 96,
-    "symbol": "unknown:AnchoredCutAttempt",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 63,
-    "symbol": "unknown:CompactionResult",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 82,
-    "symbol": "unknown:FinishCompaction",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 90,
-    "symbol": "unknown:ReducedHistory",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 93,
-    "symbol": "unknown:completed",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 97,
-    "symbol": "unknown:cut",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 30,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 29,
-    "symbol": "unknown:onSummarize",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 64,
-    "symbol": "unknown:record",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 83,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 87,
-    "symbol": "unknown:summarizerError",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/src/compaction/contract.ts",
-    "line": 91,
-    "symbol": "unknown:working",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 187,
-    "symbol": "implicitAny:compactUnbracketed",
-    "gate": "type",
-    "value": 1,
-    "count": 3
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 169,
-    "symbol": "implicitAny:cutoff",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 69,
-    "symbol": "unknown:attempt",
-    "gate": "type",
-    "value": 1,
-    "count": 7
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 108,
-    "symbol": "unknown:compactUnbracketed",
-    "gate": "type",
-    "value": 1,
-    "count": 26
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 240,
-    "symbol": "unknown:compacted",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 39,
-    "symbol": "unknown:completed",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 169,
-    "symbol": "unknown:cutoff",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 21,
-    "symbol": "unknown:finish",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 68,
-    "symbol": "unknown:finishAnchoredCut",
-    "gate": "type",
-    "value": 1,
-    "count": 21
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 47,
-    "symbol": "unknown:finishUnavailableCut",
-    "gate": "type",
-    "value": 1,
-    "count": 12
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 186,
-    "symbol": "unknown:firstRemoved",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 17,
-    "symbol": "unknown:messages",
-    "gate": "type",
-    "value": 1,
-    "count": 24
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 16,
-    "symbol": "unknown:reduceHistoryBeforeCut",
-    "gate": "type",
-    "value": 1,
-    "count": 11
-  },
-  {
-    "path": "packages/agent/src/compaction/cut.ts",
-    "line": 25,
-    "symbol": "unknown:reduction",
-    "gate": "type",
-    "value": 1,
-    "count": 5
   }
 ]

@@ -80,20 +80,22 @@ must contain no findings. Missing or incomplete measurements always fail.
 
 ### Initial measured admission baseline (#945)
 
-The baseline covers 875 owned source files. Native coverage is from CI run
-`34085755063`, Bun 1.3.6; its source inventory hash is
-`f9a083ee3a2f90723c1f4df67eeadb797b09728abacc9af977b5fde06dafadae`.
+The baseline covers 908 owned source files. It was re-measured after the
+merge of `main` (#969/#994/#996/#997 landed between the first measurement and
+admission) with the same pinned tooling: Bun 1.4.1, Python 3.12.12; its source
+inventory hash is
+`207f0b8f6a8165ff7210c74dd9b19e344e962121e98edfa3e594ce97442a4c6a`.
 The fragments preserve exact measured values and multiplicities, not padding.
 
 | Per-PR finding class | Measured findings |
 | --- | ---: |
-| Type census | 42,673 |
-| Publisher / export / store | 47 / 382 / 4 |
-| Cyclomatic / cognitive / Halstead | 20 / 14 / 0 |
-| CRAP upper bound | 1,192 |
-| Production clone occurrences | 54 (26 clusters) |
-| Test clone occurrences | 561 (271 clusters) |
-| Unproven original statements | 52,222 |
+| Type census | 43,363 |
+| Publisher / export / store | 39 / 372 / 5 |
+| Cyclomatic / cognitive / Halstead | 16 / 11 / 0 |
+| CRAP upper bound | 1,280 |
+| Production clone occurrences | 74 (36 clusters) |
+| Test clone occurrences | 560 (272 clusters) |
+| Unproven original statements | 54,335 |
 
 The script line floor increases from 34.11% to **55.71%** (7,519 of 13,497
 owned lines). First measured Linux floors are machines 90.49%, UI 92.93%, and
