@@ -1,5 +1,9 @@
 # packages/protocol
 
+2026-09-07, #969 Owner-answer ingress: `Gateway.RequestAnswer` carries a stable inputId, exact request binding, explicit approve/refuse decision, and transient credential. Authenticated principal and receipt time are gateway outputs, not caller-supplied wire fields.
+
+2026-09-07, #969 request cutover: `ledger/session-transition.ts` owns the original-action request schemas. Gateway and ingress use `requestId`, `requestSpec`, `requestContext`, and `request_correlation`. The old independent lifecycle schema/fold modules and gateway lifecycle control contract are removed. Physical matching lives in channels; durable transition decisions live in agent.
+
 Shared type foundation. Zero internal dependencies. All cross-package Zod schemas live here.
 
 Protocol defines schemas plus pure folds — no effects, storage, or I/O. It may describe communication, actor, dispatch, work, IPC, and storage contracts, but it must not decide routing, authority, lifecycle precedence, or execution policy. Product meaning belongs in `apps/openomni`; lower primitive behavior belongs in its owning package.
@@ -16,7 +20,7 @@ src/
 ├── cron/                 # Cron job schemas
 ├── error/                # NamedError factory and shared protocol errors
 ├── event/                # Ingress, LLM, MCP, operational, policy, and tool descriptors
-├── gateway/              # Gateway delivery/send/wait contracts and messaging events
+├── gateway/              # Gateway delivery/send/request contracts and messaging events
 ├── ingress/              # Inbound contracts plus payload, route-record, surface-key, and target helpers
 ├── ipc/                  # Version-2 generic envelopes plus machine wire method schemas
 ├── ledger/               # Append/adopt/chain contracts and frozen stream payload registry
@@ -29,8 +33,9 @@ src/
 ├── tool/                 # Tool.Spec / Call / Result / State
 ├── trace/                # TraceContext contract and pure UUID-to-trace-id codec
 ├── transcript/           # Transcript facts and pure fold
-├── wait/                 # Wait schemas, events, matching, and pure folds
 ```
+
+The #969 `SessionTransition` vocabulary maps to the existing Session and Action contract: Request/Answer/Command describe transitions of the original action, not a new standalone domain. Its reviewed schema snapshot replaces the deleted independent lifecycle schemas; this issue authorizes that removal, not compatibility aliases.
 
 Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfathered baseline with a no-new-violations ratchet against the core-model Tier-1/2 vocabulary, and the schema-snapshot lint flags field removals/renames (regenerate via `--update` — that diff is the review sign-off surface).
 
@@ -98,4 +103,4 @@ Keep these as protocol contracts only. Runtime policy and storage implementation
 
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._
 
-_2026-08-19: gateway stage 0 (#706) landed `gateway/` — `Gateway.Deliver`/`Send`/`WaitControl` contracts, `ReplyGrantRule`, perimeter/conduct trust vocabulary (docs/gateway-design.md §2–§3). `openomni/messaging/schema.ts` re-exports the Send vocabulary from here; grant EVALUATION stays above protocol (contract boundary). Wiring lands at gateway stage 2+._
+_2026-08-19: gateway stage 0 (#706) landed `gateway/` — `Gateway.Deliver`/`Send` contracts (the historical lifecycle-control contract was removed by #969), `ReplyGrantRule`, perimeter/conduct trust vocabulary (docs/gateway-design.md §2–§3). `openomni/messaging/schema.ts` re-exports the Send vocabulary from here; grant EVALUATION stays above protocol (contract boundary). The #969 request cutover above supersedes the original independent lifecycle control surface._

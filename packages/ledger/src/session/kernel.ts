@@ -1,5 +1,4 @@
 import {
-  Alarm,
   canonicalDigest,
   type Inbox,
   type LedgerAction,
@@ -7,11 +6,11 @@ import {
   L0Observation,
   type PolicyRow,
   SessionGeneration,
+  SessionTransition,
   SessionTurn,
   type ObservationSink,
 } from "@openomni/protocol";
 import { Storage } from "../storage/storage.js";
-import { messageDeadlineArm } from "../storage/l0-action-builders.js";
 
 export const LEASE_TTL_MS = 30_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -95,29 +94,13 @@ export function commitInbox(input: Inbox.Commit): Inbox.Row {
   return committed;
 }
 
-export function armMessageDeadline(input: {
-  readonly messageId: string;
-  readonly sessionId: string;
-  readonly sourceActionId: string;
-  readonly fireAt: number;
-  readonly createdAt: number;
-  readonly replyTo?: string;
-}): Alarm.Row {
-  const alarm = requiredAlarms().arm(messageDeadlineArm(input, row(input.sessionId)));
-  if (alarm === undefined) throw new Error(`message deadline arm refused: ${input.messageId}`);
-  return alarm;
-}
-
-/** Called by the alarm owner at a supplied instant, never a second timer loop. */
-export function expireMessageDeadlines(at: number): readonly string[] {
-  const sessions = new Set<string>();
-  const alarms = requiredAlarms();
-  for (const alarm of alarms.due(at)) {
-    if (!Alarm.MessageDeadline.safeParse(alarm.spec?.value).success) continue;
-    const timeout = alarms.fireMessage(alarm.id, at);
-    if (timeout !== undefined) sessions.add(timeout.sessionId);
-  }
-  return [...sessions];
+export function commitReceivedMessage(input: Inbox.Commit): {
+  row: Inbox.Row;
+  receipt: LedgerAction.Receipt;
+} {
+  const received = requiredInbox().receive(input);
+  if (received === undefined) throw new Error(`inbox receive refused: ${input.id}`);
+  return received;
 }
 
 export function pendingInbox(sessionId: string): Inbox.Row[] {
@@ -130,6 +113,42 @@ export function inboxRows(sessionId: string): Inbox.Row[] {
 
 export function tree(sessionId: string): LedgerAction.Node[] {
   return requiredActions().tree(sessionId);
+}
+
+export function requestRows(sessionId?: string): SessionTransition.Request[] {
+  const requests = new Map<string, SessionTransition.Request>();
+  const ids = sessionId === undefined ? listRows().map((item) => item.id) : [sessionId];
+  for (const id of ids) {
+    for (const action of tree(id)) {
+      if (action.kind !== "request" && action.kind !== "reply") continue;
+      const effect = action.effect.value;
+      if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
+      if (effect.phase !== "state") continue;
+      const request = SessionTransition.Request.parse(effect.request);
+      requests.set(request.requestId, request);
+    }
+  }
+  return [...requests.values()];
+}
+
+export function outboundRows(sessionId: string): SessionTransition.Outbound[] {
+  const outbound = new Map<string, SessionTransition.Outbound>();
+  for (const action of tree(sessionId)) {
+    if (action.kind !== "outbound") continue;
+    const effect = action.effect.value;
+    if (effect === null || typeof effect !== "object" || Array.isArray(effect)) throw new Error("invalid outbound action effect");
+    const value = SessionTransition.Outbound.parse(effect.outbound);
+    outbound.set(value.message.messageId, value);
+  }
+  return [...outbound.values()];
+}
+
+export function requestById(requestId: string): SessionTransition.Request | undefined {
+  return requestRows().find((request) => request.requestId === requestId);
+}
+
+export function commitRequestTransition(input: LedgerSession.Commit): LedgerSession.CommitResult {
+  return commit(input);
 }
 
 export function row(sessionId: string): LedgerSession.Row {
@@ -501,12 +520,6 @@ function requiredSessions() {
 function requiredActions() {
   const adapter = Storage.get().actions;
   if (adapter === undefined) throw new Error("L0 storage capability is unavailable: actions");
-  return adapter;
-}
-
-function requiredAlarms() {
-  const adapter = Storage.get().alarms;
-  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: alarms");
   return adapter;
 }
 

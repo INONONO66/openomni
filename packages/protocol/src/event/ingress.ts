@@ -28,17 +28,17 @@ function routingDecisionUnion(candidateId: z.ZodType<string, string>) {
       outcome: z.literal("drop"),
     }).strict(),
     RoutingDecisionBase.extend({
-      stage: z.literal("wait_correlation"),
+      stage: z.literal("request_correlation"),
       outcome: z.literal("route"),
       target: z.string(),
     }).strict(),
     RoutingDecisionBase.extend({
-      stage: z.literal("wait_correlation"),
+      stage: z.literal("request_correlation"),
       outcome: z.literal("ambiguous"),
       candidateInteractionIds: z.array(candidateId).min(2),
     }).strict(),
     RoutingDecisionBase.extend({
-      stage: z.literal("wait_correlation"),
+      stage: z.literal("request_correlation"),
       outcome: z.literal("block"),
     }).strict(),
     RoutingDecisionBase.extend({
@@ -57,7 +57,7 @@ function routingDecisionUnion(candidateId: z.ZodType<string, string>) {
   ]);
 }
 
-const RoutingDecisionPayloadSchema = routingDecisionUnion(z.string().regex(/^wait:.+/));
+const RoutingDecisionPayloadSchema = routingDecisionUnion(z.string().regex(/^request:.+/));
 
 export type RoutingDecisionPayload = z.infer<typeof RoutingDecisionPayloadSchema>;
 
@@ -72,7 +72,7 @@ export type RoutingDecisionPayload = z.infer<typeof RoutingDecisionPayloadSchema
 // decides how that fails closed. New writes go through
 // RoutingDecisionPayloadSchema and cannot produce these legacy shapes.
 const RecordedRoutingDecisionSchema = routingDecisionUnion(
-  z.string().regex(/^(?:wait|pending_ask|pending_interaction):.+/),
+  z.string().regex(/^(?:request|wait|pending_ask|pending_interaction):.+/),
 );
 
 const LegacyRetiredFieldsSchema = z.object({

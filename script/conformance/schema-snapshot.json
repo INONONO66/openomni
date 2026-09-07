@@ -57,14 +57,7 @@
   "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "Alarm.Arm": ["fireAt", "id", "kind", "sessionId", "spec"],
-  "Alarm.MessageDeadline": [
-    "createdAt",
-    "generation",
-    "kind",
-    "messageId",
-    "replyTo",
-    "sourceActionId"
-  ],
+  "Alarm.RequestDeadline": ["kind", "requestId"],
   "Alarm.Row": [
     "createdAt",
     "fireAt",
@@ -153,27 +146,6 @@
     "stallTimeoutMs",
     "timeoutMs"
   ],
-  "Approval.Create": ["deadline", "id", "subject"],
-  "Approval.Record": [
-    "createdAt",
-    "deadline",
-    "decidedAt",
-    "decidedBy",
-    "id",
-    "requestedBy",
-    "revision",
-    "state",
-    "subject",
-    "updatedAt"
-  ],
-  "Approval.Subject#contact_promotion": ["actorId", "kind"],
-  "Approval.Subject#endpoint_merge": [
-    "endpointId",
-    "fromActorId",
-    "kind",
-    "toActorId"
-  ],
-  "Approval.Subject#person_mutation": ["kind", "manifestDigest", "personId"],
   "BusEvent.Metadata": [
     "actorId",
     "agentName",
@@ -199,23 +171,12 @@
     "origin",
     "trustTier"
   ],
-  "Gateway.AwaitSpec": [
-    "allowedActions",
-    "correlation",
-    "expectedResponders",
-    "expiresAt",
-    "followUpWindow",
-    "ownerRef",
-    "quorum",
-    "resolutionPolicy",
-    "waitId"
-  ],
   "Gateway.Deliver": [
     "actorContext",
     "decision",
     "event",
-    "sessionId",
-    "waitContext"
+    "requestContext",
+    "sessionId"
   ],
   "Gateway.DeliveredEvent": [
     "activation",
@@ -314,6 +275,24 @@
     "updatedAt",
     "workspace"
   ],
+  "Gateway.RequestAnswer": [
+    "credential",
+    "decision",
+    "inputId",
+    "kind",
+    "request"
+  ],
+  "Gateway.RequestContext": ["allowedAction", "requestId"],
+  "Gateway.RequestSpec": [
+    "allowedActions",
+    "correlation",
+    "deadline",
+    "expectedResponders",
+    "requestId",
+    "resolution",
+    "sessionId",
+    "threshold"
+  ],
   "Gateway.RuleTableA": [
     "addressee",
     "check",
@@ -349,10 +328,10 @@
     "class",
     "messageId",
     "operation",
+    "requestSpec",
     "senderId",
     "target",
-    "traceId",
-    "waitSpec"
+    "traceId"
   ],
   "Gateway.SendMessage": ["content", "deadline", "replyTo", "to", "type"],
   "Gateway.SendMessageHandle": ["messageId", "target"],
@@ -367,8 +346,6 @@
     "targetActorId",
     "windowMs"
   ],
-  "Gateway.WaitContext": ["allowedAction", "waitId"],
-  "Gateway.WaitControl": ["action", "reason", "waitId"],
   "Inbox.Commit": [
     "content",
     "createdAt",
@@ -548,14 +525,16 @@
   ],
   "LedgerSession.Commit": [
     "actions",
+    "admit",
     "consumeInboxIds",
-    "deliveries",
     "expectedRevision",
     "fence",
     "generation",
     "now",
     "owner",
+    "receive",
     "releaseLease",
+    "requestCount",
     "sessionId",
     "state"
   ],
@@ -977,6 +956,105 @@
   ],
   "SessionGeneration.SystemBlock": ["content", "id", "source"],
   "SessionGeneration.Tool": ["category", "inputSchema", "name", "sequential"],
+  "SessionTransition.Answer": [
+    "allowedAction",
+    "bindingDigest",
+    "content",
+    "decision",
+    "domainRevisions",
+    "effectHash",
+    "generation",
+    "inputHash",
+    "inputId",
+    "outbound",
+    "principal",
+    "receivedAt",
+    "requestId",
+    "sessionId",
+    "toolsHash"
+  ],
+  "SessionTransition.Command": [
+    "at",
+    "authority",
+    "expectedRevision",
+    "inputId",
+    "payload",
+    "sessionId",
+    "version"
+  ],
+  "SessionTransition.Correlation": [
+    "chain",
+    "channelId",
+    "endpointId",
+    "externalConversationId",
+    "replyToMessageId",
+    "threadId",
+    "tokenHash"
+  ],
+  "SessionTransition.DeliveryReceipt": [
+    "at",
+    "externalMessageId",
+    "inputId",
+    "requestId",
+    "sessionId",
+    "sourceActionId",
+    "value"
+  ],
+  "SessionTransition.Outbound": ["destinationReceipt", "message", "state"],
+  "SessionTransition.OutboundMessage": [
+    "content",
+    "destinationSessionId",
+    "digest",
+    "messageId",
+    "replyTo",
+    "requestId",
+    "sourceActionId",
+    "sourceSessionId",
+    "terminal"
+  ],
+  "SessionTransition.Payload#request.answer": ["answer", "kind"],
+  "SessionTransition.Payload#request.cancel": [
+    "kind",
+    "principal",
+    "requestId"
+  ],
+  "SessionTransition.Payload#request.delivery": ["kind", "receipt"],
+  "SessionTransition.Payload#request.open": ["kind", "request"],
+  "SessionTransition.Payload#request.timeout": ["kind", "requestId"],
+  "SessionTransition.Principal": ["evidenceId", "kind", "principalId"],
+  "SessionTransition.Reply": [
+    "content",
+    "receivedAt",
+    "replyId",
+    "responderId"
+  ],
+  "SessionTransition.Request": [
+    "allowedActions",
+    "bindingDigest",
+    "callId",
+    "correlation",
+    "createdAt",
+    "deadline",
+    "domainRevisions",
+    "effectHash",
+    "expectedResponders",
+    "generation",
+    "inputHash",
+    "mode",
+    "outcome",
+    "parsedInput",
+    "replies",
+    "requestId",
+    "resolution",
+    "seenReplyIds",
+    "sessionId",
+    "state",
+    "systemHash",
+    "threshold",
+    "toolsGeneration",
+    "toolsHash",
+    "turnId"
+  ],
   "SessionTurn.Checkpoint": [
     "boundary",
     "boundaryActionId",
@@ -1119,62 +1197,5 @@
   "Transcript.PartTransition#error": ["at", "error", "to"],
   "Transcript.PartTransition#interrupted": ["at", "partialOutput", "to"],
   "Transcript.PartTransition#running": ["at", "to"],
-  "Transcript.Usage": ["cache", "input", "output", "reasoning"],
-  "Wait.Correlation": [
-    "chain",
-    "channelId",
-    "endpointId",
-    "externalConversationId",
-    "replyToMessageId",
-    "threadId",
-    "tokenHash"
-  ],
-  "Wait.CorrelationQuery": [
-    "chain",
-    "channelId",
-    "endpointId",
-    "externalConversationId",
-    "replyToMessageId",
-    "threadId",
-    "tokenHash"
-  ],
-  "Wait.Create": [
-    "allowedActions",
-    "correlation",
-    "createdAt",
-    "expectedResponders",
-    "expiresAt",
-    "followUpWindow",
-    "id",
-    "originMessageId",
-    "ownerRef",
-    "quorum",
-    "resolutionPolicy",
-    "updatedAt"
-  ],
-  "Wait.DeliveryReceiptInput": ["at", "externalMessageId"],
-  "Wait.OwnerRef": ["id", "kind"],
-  "Wait.Quorum": ["expected", "threshold"],
-  "Wait.Record": [
-    "allowedActions",
-    "cancelledAt",
-    "correlation",
-    "createdAt",
-    "expectedResponders",
-    "expiresAt",
-    "followUpWindow",
-    "id",
-    "originMessageId",
-    "ownerRef",
-    "partial",
-    "quorum",
-    "replies",
-    "resolutionPolicy",
-    "resolvedAt",
-    "revision",
-    "status",
-    "updatedAt"
-  ],
-  "Wait.Reply": ["messageId", "receivedAt", "replyKey", "responderId"],
-  "Wait.ReplyInput": ["at", "messageId", "replyKey", "responderCandidates"]
+  "Transcript.Usage": ["cache", "input", "output", "reasoning"]
 }

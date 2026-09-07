@@ -1,6 +1,6 @@
 # packages/ledger
 
-Durable state substrate. Depends only on `@openomni/protocol`; application composition and execution belong outside ledger. Session authority verified on `kernel/967-session`, 2026-09-06.
+Durable state substrate. Depends only on `@openomni/protocol`; application composition and execution belong outside ledger. Request-storage cutover updated on `kernel/969-delegation-inbox`, 2026-09-07.
 
 ## Ownership
 
@@ -23,8 +23,6 @@ src/
   channel-grant/            # Raw channel grants
   provisioning/             # Person/channel declarations and vault rows
   surface-key/              # Perimeter surface-to-session identity mapping
-  approval/                 # Existing approval store (separate convergence work)
-  wait/                     # Existing correlation/outcome store (retained until cutover)
   delegation/               # Durable delegation records
   egress/                   # Perimeter social-budget debits
   worker-run/               # Frozen historical worker-run archive
@@ -40,7 +38,9 @@ src/
 
 ## #967 archive cutover
 
-- Migration `0034_u967_archive_disposition` drops only empty `bus_event`; the existing runner's in-transaction preparation may first remove explicitly approved archived bus rows and eligible retired Wait projections. The Wait table is not rebuilt. Session-owned Wait delivery remains live until #969.
+- Migration `0034_u967_archive_disposition` drops only empty `bus_event`; the existing runner's in-transaction preparation may first remove explicitly approved archived bus rows and eligible retired Wait projections. The archive-disposition command stops at 0036; it does not authorize the request cutover.
+- Migration `0037_session_requests` extends action/policy kinds and retains terminal legacy rows indefinitely in immutable `archive_969_wait` and `archive_969_approval` tables before dropping the live tables. Original rowids, native values, action parents and immutable history survive. Unresolved, malformed, incoherent and follow-up-visible legacy rows refuse before connection PRAGMAs and again under the migration write lock. No original invocation is synthesized from old approval/correlation rows.
+- Historical archive validation owns frozen old formats under `storage/historical-request-format.ts`; it does not import removed live protocol/store APIs. Existing native archives remain verifiable against the retained 0037 archival rows.
 - The existing `script/generate-ledger-archive-manifest.ts` requires explicit `--db`, `--out`, and `--backup`. Archive and `--verify` do not authorize deletion. `--dispose-967 --approve-manifest-sha256 <sha256-of-manifest-bytes>` is the sole per-database confirmation. Stop writers before the operator procedure; never run this against an uninspected live database.
 - Native SQLite archives and manifests are retained indefinitely. Verification opens only an exclusive byte-identical disposable restore copy, compares native values and integrity/FKs, checks unchanged image hashes, then closes/finalizes handles before deleting that copy. The operator archive is never opened writable.
 - Normal boot accepts genuinely fresh or complete known schemas only; partial/older/tampered history refuses before connection pragmas or earlier destructive migrations. Nonempty retired targets need the explicit command; pending, malformed, incoherent, follow-up-visible and linked pending-wake rows refuse unchanged. Message/part and canonical/history/delegation data are preserved; final message/part disposition still waits for #937.
@@ -50,7 +50,7 @@ src/
 - `Storage.get()` before initialize/configure fails closed. Branded production adapters must pass `Storage.assertComplete`; narrow test fakes may omit unrelated capabilities, and each store fails closed when its required capability is absent.
 - Own adapter lifetime through every operation. `Storage.reset()` closes its adapter; close is idempotent. Close before replacing an adapter. Benchmarks run each measured task before resetting its connection.
 - `SurfaceKey` owns only the perimeter mapping, not session materialization. Routing, trust, admission, waiting precedence and product lifecycle decisions belong in their owning domains.
-- Wait correlation/delivery and frozen WorkerRun history remain retained consumers, not permission to revive WorkItem/Attempt or add another execution authority.
+- Request state is derived from canonical session action history, not a replacement standalone store. Frozen archival history cannot authorize execution.
 - Do not write ad-hoc delegated state beside canonical session actions. Do not add a second completion or terminal authority.
 
 ## Verification

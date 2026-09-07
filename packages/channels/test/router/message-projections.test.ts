@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { ActorRegistry, ChannelGrantStore } from "@openomni/ledger";
+import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouterPorts } from "../../src/router";
 import { commits, makeRouter, resetRouterState } from "./_router-fixture";
 
@@ -53,12 +53,8 @@ test.each([
 });
 
 test("session deadline is part of the inbox commit, never a second alarm write", async () => {
-  const armed: Array<Parameters<NonNullable<GatewayRouterPorts["armDeadline"]>>[0]> = [];
   const router = makeRouter({
     clock: () => 10,
-    armDeadline: (input) => {
-      armed.push(input);
-    },
   });
   const result = await router.ingest(
     { kind: "session", id: "sender" },
@@ -72,7 +68,8 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   );
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(armed).toEqual([]);
+  expect(SessionHandleStore.tree("sender").filter(action => action.kind === "alarm.arm")).toEqual([]);
+  expect(SessionHandleStore.requestRows("sender")).toMatchObject([{ deadline: 100, expectedResponders: ["child"] }]);
   expect(commits).toHaveLength(1);
   expect(commits[0]?.origin.value).toMatchObject({
     kind: "message",

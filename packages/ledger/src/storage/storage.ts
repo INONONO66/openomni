@@ -22,11 +22,6 @@ export namespace Storage {
     // it as required (SqliteStorageAdapter).
     surfaceKey?: ProtocolStorage.SurfaceKeySubAdapter;
 
-    // Optional here for test fakes only — WaitStore fails closed (typed
-    // adapter_absent error) when it is missing; production adapters wire it
-    // as required (SqliteStorageAdapter).
-    wait?: ProtocolStorage.WaitSubAdapter;
-    approval?: ProtocolStorage.ApprovalSubAdapter;
     // #510 phase B: decision-class ledger append on the SAME connection as
     // the projection sub-adapters, so a decision-class store can commit
     // append + projection inside one `transaction()` call. Optional for test
@@ -35,7 +30,7 @@ export namespace Storage {
     // Active-egress debit ledger (#219, perimeter domain). Optional for test
     // fakes only — EgressBudgetStore fails closed when it is missing;
     // production adapters wire it as required (SqliteStorageAdapter). Sole
-    // writer is the channels gateway router (S8), like the wait store.
+    // writer is the channels gateway router (S8).
     egressBudget?: ProtocolStorage.EgressBudgetSubAdapter;
     actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
     blacklist?: ProtocolStorage.BlacklistSubAdapter;
@@ -65,8 +60,6 @@ export namespace Storage {
   const requiredProductionCapabilities = [
     "surfaceKey",
 
-    "wait",
-    "approval",
     "ledger",
     "egressBudget",
     "actorRegistry",

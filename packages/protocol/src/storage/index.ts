@@ -2,8 +2,6 @@
 // adapter implements, grouped by semantic domain.
 import type { Actor } from "../actor/index.js";
 import type { Ledger } from "../ledger/index.js";
-import type { Approval } from "../approval/index.js";
-import type { Wait } from "../wait/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Provisioning } from "../provisioning/index.js";
 import type { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "../ledger/l0.js";
@@ -27,6 +25,7 @@ export namespace Storage {
 
   export interface InboxSubAdapter {
     commit(row: Inbox.Commit): Inbox.Row | undefined;
+    receive(row: Inbox.Commit): { row: Inbox.Row; receipt: LedgerAction.Receipt } | undefined;
     list(sessionId: string, status?: Inbox.Status): Inbox.Row[];
   }
 
@@ -34,8 +33,6 @@ export namespace Storage {
     arm(row: Alarm.Arm): Alarm.Row | undefined;
     cancel(id: string, updatedAt: number): Alarm.Row | undefined;
     due(at: number): Alarm.Row[];
-    /** Atomically records the message timeout CAS and its sender inbox prompt. */
-    fireMessage(id: string, at: number): Inbox.Row | undefined;
   }
 
   export interface PolicyRowSubAdapter {
@@ -145,27 +142,6 @@ export namespace Storage {
      * through {@link headFact} on the owner stream.
      */
     factsByType(type: string): Ledger.RecordedFact[];
-  }
-
-  export interface WaitSubAdapter {
-    /** INSERT receipt: false when id or originMessageId already exists. */
-    create(record: Wait.Record): boolean;
-    get(id: string): Wait.Record | undefined;
-    list(status?: Wait.Status[]): Wait.Record[];
-    findByCorrelation(query: Wait.CorrelationQuery): Wait.Record[];
-    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
-    compareAndSet(id: string, expectedRevision: number, record: Wait.Record): boolean;
-  }
-
-  export interface ApprovalSubAdapter {
-    /** INSERT receipt: false when the id already exists. */
-    create(record: Approval.Record): boolean;
-    get(id: string): Approval.Record | undefined;
-    list(state?: Approval.State[]): Approval.Record[];
-    /** Pending requests created at or after `since` — the §8.13 volume-bound read. */
-    countPendingSince(since: number): number;
-    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
-    compareAndSet(id: string, expectedRevision: number, record: Approval.Record): boolean;
   }
 
   /**

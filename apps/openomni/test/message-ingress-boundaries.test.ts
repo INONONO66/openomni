@@ -7,7 +7,6 @@ import {
   EgressBudgetStore,
   SessionHandleStore,
   Storage,
-  WaitStore,
 } from "@openomni/ledger";
 import { Gateway, L0Observation } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
@@ -83,12 +82,12 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
     });
     if (mode === "ambiguous") {
       expect(receipt.status).toBe("blocked_pre");
-      expect(SessionHandleStore.inboxRows("sender")).toEqual([]);
+      expect(SessionHandleStore.inboxRows("sender").some((row) => row.content === "ANSWER")).toBe(false);
       return;
     }
     expect(receipt).toMatchObject({ status: "executed", handle: { target: "sender" } });
     expect(SessionHandleStore.inboxRows("sender").at(-1)?.content).toBe("ANSWER");
-    const resolved = WaitStore.list().filter((wait) => wait.status === "resolved");
+    const resolved = SessionHandleStore.requestRows("sender").filter((request) => request.state === "resolved");
     expect(resolved).toHaveLength(1);
     expect(resolved[0]?.correlation.replyToMessageId).toBe(
       mode === "nearer" ? "platform-2" : "platform-1",
@@ -102,9 +101,9 @@ test("child admission observations see the inbox and deadline together on anothe
   using db = new Database(fixture.dbPath, { readonly: true });
   const visible: Array<{ inbox: number; alarm: number }> = [];
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.kind !== "prompt" && event.kind !== "alarm.arm") return;
+    if (event.kind !== "request" && !(event.kind === "prompt" && event.sessionId !== "sender")) return;
     visible.push({
-      inbox: db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM inbox").get()?.n ?? 0,
+      inbox: db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM inbox WHERE session_id != 'sender'").get()?.n ?? 0,
       alarm: db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM alarm").get()?.n ?? 0,
     });
   });
@@ -144,13 +143,14 @@ test("alarm insertion failure rolls back the child, configuration, inbox and ala
   expect(receipt.isError).toBe(true);
   expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toEqual([]);
   expect(db.query("SELECT id FROM alarm").all()).toEqual([]);
-  expect(db.query("SELECT id FROM inbox").all()).toEqual([]);
+  expect(db.query("SELECT id FROM inbox WHERE session_id != 'sender'").all()).toEqual([]);
+  expect(SessionHandleStore.requestRows("sender")).toEqual([]);
   expect(SessionHandleStore.tree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
     [],
   );
 });
 
-test("process loss between inbox and alarm insertion exposes neither after reopen", async () => {
+test("process loss between request and child inbox insertion exposes neither after reopen", async () => {
   const child = Bun.spawn(
     [process.execPath, new URL("./fixtures/message-admission-crash.ts", import.meta.url).pathname],
     {
@@ -169,12 +169,13 @@ test("process loss between inbox and alarm insertion exposes neither after reope
   directories.push(fixture.directory);
   Storage.initialize({ dbPath: fixture.dbPath });
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["gateway-ingress", "sender"]);
-  expect(SessionHandleStore.inboxRows("sender")).toEqual([]);
+  expect(SessionHandleStore.inboxRows("sender")).toHaveLength(1);
+  expect(SessionHandleStore.requestRows("sender")).toEqual([]);
   expect(SessionHandleStore.tree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
     [],
   );
   using db = new Database(fixture.dbPath);
-  expect(db.query("SELECT id FROM inbox").all()).toEqual([]);
+  expect(db.query("SELECT id FROM inbox WHERE session_id != 'sender'").all()).toEqual([]);
   expect(db.query("SELECT id FROM alarm").all()).toEqual([]);
 });
 

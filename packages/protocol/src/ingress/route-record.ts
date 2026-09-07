@@ -9,7 +9,7 @@ import type { RoutingDecisionPayload } from "../event/ingress.js";
  * `route.decided` recorders are hoisted here: both arms import these and do
  * their OWN durable append (each through its own scoped `LedgerAppend.port()`
  * and its own package-local typed error). Precedent: the #707 slice-1 wait
- * matcher fold hoist to `Wait`.
+ * physical request matcher in channels.
  */
 
 /** The minimal event scope the route owner-stream key is derived from. */

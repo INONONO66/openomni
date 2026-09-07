@@ -61,15 +61,14 @@ export function buildAwaitedSendInput(overrides: Partial<SendInput> = {}): SendI
   return buildSendInput({
     messageId: "message:test-awaited",
     operation: "awaited",
-    waitSpec: {
-      waitId: "wait:test-awaited",
-      ownerRef: { kind: "session", id: "session:owner" },
+    requestSpec: {
+      requestId: "request:test-awaited",
+      sessionId: "session:owner",
       allowedActions: ["report_result"],
       expectedResponders: ["actor:responder-1", "actor:responder-2", "actor:responder-3"],
-      resolutionPolicy: "quorum",
-      quorum: { expected: 3, threshold: 2 },
-      expiresAt: messagingNow + 600_000,
-      followUpWindow: 30_000,
+      resolution: "quorum",
+      threshold: 2,
+      deadline: messagingNow + 600_000,
     },
     ...overrides,
   });

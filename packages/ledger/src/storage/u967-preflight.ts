@@ -1,5 +1,6 @@
 import { canonicalDigest } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
+import { REQUEST_MIGRATION } from "./u969-preflight";
 
 export const U967_MIGRATION = "0034_u967_archive_disposition/migration.sql";
 export const RETIRED_TABLE_MIGRATION = "0035_drop_retired_delegation_tables/migration.sql";
@@ -26,6 +27,7 @@ const SCHEMA_0033 = "sha256:3a6ab3e2b91321743f5309a59cec69064f300b956e3a6237a2c4
 const SCHEMA_0034 = "sha256:47900a330291d08e53bf50a9a1dc34b5314aa13a1341f04a2fba95114416fa2d";
 const SCHEMA_0035 = "sha256:7cc06095957973ceb27c8a1cd2eef1cecc01c04f4f8c7e5dca57dc22f3250e14";
 const SCHEMA_0036 = "sha256:89e7677fe96971ec5ff5f8176504f42a478ae4fd8dfa84e4e18560077279e0ff";
+const SCHEMA_0037 = "sha256:a0ed3014c70649e8d2b5c36261ef347241baac99acf9ab98b601988f488e661b";
 
 export function preflight967(db: Database, migrations: readonly { readonly name: string }[]) {
   const schema = sqliteSchema(db);
@@ -38,12 +40,15 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
   const applied =
     latest === U967_MIGRATION ||
     latest === RETIRED_TABLE_MIGRATION ||
-    latest === REPLY_GRANT_MIGRATION;
+    latest === REPLY_GRANT_MIGRATION ||
+    latest === REQUEST_MIGRATION;
   const latestIndex =
     latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
   const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);
   const schemaDigest =
-    latest === REPLY_GRANT_MIGRATION
+    latest === REQUEST_MIGRATION
+      ? SCHEMA_0037
+      : latest === REPLY_GRANT_MIGRATION
       ? SCHEMA_0036
       : latest === RETIRED_TABLE_MIGRATION
         ? SCHEMA_0035

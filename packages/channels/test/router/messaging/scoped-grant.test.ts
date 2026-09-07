@@ -1,3 +1,4 @@
+import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
 import { ActorRegistry } from "@openomni/ledger";
@@ -96,6 +97,7 @@ describe("send kernel over reply-scoped instances", () => {
 
   function messaging() {
     return createExistingAgentMessaging({
+    requests: seededRequests(),
       deliver: (message) => {
         delivered.push(message.target.endpointId);
         return { value: "accepted" as const };

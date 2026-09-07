@@ -1,25 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  ApprovalStore,
-  ChannelInstanceStore,
-  PersonStore,
-  SecretStore,
-  Storage,
-  Vault,
-} from "@openomni/ledger";
+import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "@openomni/ledger";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { createTools } from "../src/tools/core/catalog";
 import { createDispatcher, eraseTool } from "@openomni/agent";
-import {
-  createProvisionTool,
-  personManifestDigest,
-  type ProvisionPort,
-} from "../src/tools/mutation/provision";
+import { createProvisionTool, type ProvisionPort } from "../src/tools/mutation/provision";
 import { executor } from "./helpers/executor";
+import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const NOW = 1_756_000_000_000;
-const TRACE = "00-11111111111111111111111111111111-2222222222222222-01";
 const RESIDENT = { role: "resident", depth: 0, sessionId: "provision-test" } as const;
 
 const provisionTool = (name: string, port: ProvisionPort, now: () => number = Date.now) => {
@@ -39,7 +28,6 @@ const channelDisable = (port: ProvisionPort, now?: () => number) =>
 const secretRotate = (port: ProvisionPort, now?: () => number) =>
   provisionTool("secret_rotate", port, now);
 const provisionStatus = (port: ProvisionPort) => provisionTool("provision_status", port);
-const BOUND = { windowMs: 3_600_000, maxPending: 8 } as const;
 const KEK = Vault.kekOf(new Uint8Array(32).fill(7));
 
 interface FakeSupervisor {
@@ -69,11 +57,6 @@ function portWith(overrides: Partial<ProvisionPort> = {}): {
       status: () => supervisor.statuses,
       source: () => "declared",
     },
-    approvals: {
-      request: ApprovalStore.request,
-      get: ApprovalStore.get,
-      decision: ApprovalStore.decision,
-    },
     materialize: () => {
       supervisor.calls.push("materialize");
     },
@@ -92,24 +75,6 @@ const MANAGER_MANIFEST = {
   trustTier: "manager" as const,
   endpoints: [{ channel: "telegram", externalId: "555" }],
 };
-
-function managerDigest(): string {
-  return personManifestDigest({ ...MANAGER_MANIFEST, displayName: "person:sunwoo" });
-}
-
-function approvePersonMutation(id: string, personId: string, digest: string, at: number): void {
-  ApprovalStore.request(
-    {
-      id,
-      subject: { kind: "person_mutation", personId, manifestDigest: digest },
-      deadline: at + 60_000,
-    },
-    BOUND,
-    TRACE,
-    at,
-  );
-  ApprovalStore.decide(id, "approved", TRACE, at + 1);
-}
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
@@ -145,97 +110,74 @@ describe("provision output boundary", () => {
   });
 });
 
-describe("person_declare approval lane (§8.5)", () => {
-  test("a raise above collaborator opens a digest-pinned approval instead of landing", async () => {
+describe("original Person invocation consent", () => {
+  test("a protected raise suspends then applies the exact original manifest once", async () => {
     const { port, supervisor } = portWith();
-    const result = await personDeclare(
-      port,
-      () => NOW,
-    )({
-      manifest: MANAGER_MANIFEST,
+    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
+      operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
     });
-    expect(result).toContain("requires Owner approval (§8.5)");
-    expect(result).toContain(`digest ${managerDigest()}`);
-    expect(PersonStore.get("person:sunwoo")).toBeUndefined();
-    expect(supervisor.calls).toEqual([]);
-    const match = /approval (approval:[0-9a-f-]+) opened/.exec(result);
-    if (!match?.[1]) throw new Error(`no approval id in: ${result}`);
-    expect(ApprovalStore.get(match[1])?.subject).toEqual({
-      kind: "person_mutation",
-      personId: "person:sunwoo",
-      manifestDigest: managerDigest(),
-    });
-
-    // The Owner answers; the SAME manifest re-run with the approvalId lands.
-    ApprovalStore.decide(match[1], "approved", TRACE, NOW + 1);
-    const landed = await personDeclare(
-      port,
-      () => NOW + 5,
-    )({
-      manifest: MANAGER_MANIFEST,
-      approvalId: match[1],
-    });
-    expect(landed).toBe("person person:sunwoo declared (tier manager, revision 0)");
-    expect(PersonStore.get("person:sunwoo")?.trustTier).toBe("manager");
-    expect(supervisor.calls).toEqual(["materialize"]);
+    try {
+      const request = await bounded(f.opened);
+      expect(request.parsedInput).toEqual({
+        operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
+      });
+      expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+      expect(supervisor.calls).toEqual([]);
+      expect((await f.answer()).isError).toBeUndefined();
+      expect(PersonStore.get(MANAGER_MANIFEST.id)?.trustTier).toBe("manager");
+      expect(PersonStore.get(MANAGER_MANIFEST.id)?.revision).toBe(0);
+      expect(supervisor.calls).toEqual(["materialize"]);
+    } finally {
+      await f.close();
+    }
   });
-
-  test("an approved, digest-matched mutation lands and materializes", async () => {
-    const { port, supervisor } = portWith();
-    approvePersonMutation("approval-1", "person:sunwoo", managerDigest(), NOW);
-    const result = await personDeclare(
-      port,
-      () => NOW + 5,
-    )({
-      manifest: MANAGER_MANIFEST,
-      approvalId: "approval-1",
-    });
-    expect(result).toBe("person person:sunwoo declared (tier manager, revision 0)");
-    expect(PersonStore.get("person:sunwoo")?.trustTier).toBe("manager");
-    expect(supervisor.calls).toEqual(["materialize"]);
-  });
-
-  test("an approval unanswered past its deadline reads as refused", async () => {
+  test("refusal leaves the Person unchanged and approvalId cannot mint authority", async () => {
     const { port } = portWith();
-    ApprovalStore.request(
-      {
-        id: "approval-stale",
-        subject: {
-          kind: "person_mutation",
-          personId: "person:sunwoo",
-          manifestDigest: managerDigest(),
-        },
-        deadline: NOW + 10,
-      },
-      BOUND,
-      TRACE,
-      NOW,
-    );
-    const result = await personDeclare(
-      port,
-      () => NOW + 20,
-    )({
-      manifest: MANAGER_MANIFEST,
-      approvalId: "approval-stale",
+    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
+      operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
     });
-    expect(result).toContain("unanswered reads as refused");
-    expect(PersonStore.get("person:sunwoo")).toBeUndefined();
+    try {
+      expect((await f.answer("refuse")).isError).toBe(true);
+      expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+      const forged = await personDeclare(port)({
+        manifest: MANAGER_MANIFEST,
+        approvalId: "invented",
+      });
+      expect(forged).toContain("Unrecognized key");
+      expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+    } finally {
+      await f.close();
+    }
   });
-
-  test("a collaborator-or-below declaration is direct — no approval consumed", async () => {
+  test("a collaborator declaration remains direct", async () => {
     const { port } = portWith();
-    const result = await personDeclare(
-      port,
-      () => NOW,
-    )({
-      manifest: { ...MANAGER_MANIFEST, trustTier: "collaborator" },
+    await personDeclare(port)({ manifest: { ...MANAGER_MANIFEST, trustTier: "collaborator" } });
+    expect(PersonStore.get(MANAGER_MANIFEST.id)?.trustTier).toBe("collaborator");
+  });
+  test("domain revision changes invalidate consent instead of applying a stale manifest", async () => {
+    const { port } = portWith();
+    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
+      operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } },
     });
-    expect(result).toContain("declared (tier collaborator");
-    expect(PersonStore.get("person:sunwoo")?.trustTier).toBe("collaborator");
+    try {
+      await bounded(f.opened);
+      PersonStore.put({
+        ...MANAGER_MANIFEST,
+        displayName: "Changed",
+        trustTier: "observer",
+        revision: 0,
+        createdBy: "resident",
+        updatedAt: NOW,
+      });
+      await expect(f.answer()).rejects.toMatchObject({ code: "stale_approval" });
+      expect(PersonStore.get(MANAGER_MANIFEST.id)?.trustTier).toBe("observer");
+    } finally {
+      await f.close();
+    }
   });
 });
 
-describe("owner-Person mutation guard (§8.6) and sole owner (§8.8)", () => {
+describe("owner Person protection and sole owner", () => {
   const ownerManifest = {
     id: "person:ino",
     displayName: "Ino",
@@ -243,99 +185,61 @@ describe("owner-Person mutation guard (§8.6) and sole owner (§8.8)", () => {
     trustTier: "owner" as const,
     endpoints: [{ channel: "telegram", externalId: "1" }],
   };
-
-  function putOwner(): void {
+  function putOwner() {
     PersonStore.put({ ...ownerManifest, revision: 0, createdBy: "openomni-init", updatedAt: NOW });
   }
-
-  test("even a same-tier endpoint edit on the owner Person requires approval", async () => {
+  test("same-tier owner endpoint edits suspend and apply only after consent", async () => {
     putOwner();
     const { port } = portWith();
     const edited = {
       ...ownerManifest,
-      endpoints: [
-        { channel: "telegram", externalId: "1" },
-        { channel: "discord", externalId: "2" },
-      ],
+      endpoints: [...ownerManifest.endpoints, { channel: "discord", externalId: "2" }],
     };
-    const refused = await personDeclare(port, () => NOW)({ manifest: edited });
-    expect(refused).toContain("any mutation of the owner Person requires Owner approval (§8.6)");
-    expect(PersonStore.get("person:ino")?.endpoints).toHaveLength(1);
-
-    approvePersonMutation("approval-owner", "person:ino", personManifestDigest(edited), NOW);
-    const landed = await personDeclare(
-      port,
-      () => NOW + 5,
-    )({
-      manifest: edited,
-      approvalId: "approval-owner",
+    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
+      operation: { op: "person_declare", args: { manifest: edited } },
     });
-    expect(landed).toContain("declared (tier owner, revision 1)");
-    expect(PersonStore.get("person:ino")?.endpoints).toHaveLength(2);
+    try {
+      await bounded(f.opened);
+      expect(PersonStore.get(ownerManifest.id)?.endpoints).toHaveLength(1);
+      expect((await f.answer()).isError).toBeUndefined();
+      expect(PersonStore.get(ownerManifest.id)?.endpoints).toHaveLength(2);
+      expect(PersonStore.get(ownerManifest.id)?.revision).toBe(1);
+    } finally {
+      await f.close();
+    }
   });
-
-  test("an approval for a different manifest digest is a refusal, not a fallback", async () => {
+  test("consent cannot bypass the sole-owner store invariant", async () => {
     putOwner();
     const { port } = portWith();
-    approvePersonMutation("approval-other", "person:ino", "0".repeat(64), NOW);
-    const result = await personDeclare(
-      port,
-      () => NOW + 5,
-    )({
-      manifest: ownerManifest,
-      approvalId: "approval-other",
+    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
+      operation: {
+        op: "person_declare",
+        args: { manifest: { ...ownerManifest, id: "person:second", endpoints: [] } },
+      },
     });
-    expect(result).toContain("approved a different manifest (digest mismatch)");
-    expect(PersonStore.get("person:ino")?.revision).toBe(0);
+    try {
+      expect((await f.answer()).isError).toBe(true);
+      expect(PersonStore.get("person:second")).toBeUndefined();
+      expect(PersonStore.get(ownerManifest.id)?.trustTier).toBe("owner");
+    } finally {
+      await f.close();
+    }
   });
-
-  test("§8.8 a second owner surfaces the store's typed owner_exists refusal", async () => {
-    putOwner();
-    const { port } = portWith();
-    const second = {
-      id: "person:evil",
-      kind: "human" as const,
-      trustTier: "owner" as const,
-      endpoints: [{ channel: "telegram", externalId: "666" }],
-    };
-    approvePersonMutation(
-      "approval-second",
-      "person:evil",
-      personManifestDigest({ ...second, displayName: "person:evil" }),
-      NOW,
-    );
-    const result = await personDeclare(
-      port,
-      () => NOW + 5,
-    )({
-      manifest: second,
-      approvalId: "approval-second",
-    });
-    expect(result).toContain("person_declare refused:");
-    expect(result).toContain("person:ino");
-    expect(PersonStore.get("person:evil")).toBeUndefined();
-  });
-
-  test("person_remove refuses the sole owner and removes anyone else", async () => {
+  test("person_remove refuses the owner and removes other people", async () => {
     putOwner();
     PersonStore.put({
-      id: "person:sunwoo",
+      ...MANAGER_MANIFEST,
       displayName: "Sunwoo",
-      kind: "human",
       trustTier: "collaborator",
-      endpoints: [],
       revision: 0,
       createdBy: "resident",
       updatedAt: NOW,
     });
     const { port, supervisor } = portWith();
-    const executor = personRemove(port);
-    expect(await executor({ personId: "person:ino" })).toContain(
-      "the sole owner Person cannot be removed",
-    );
-    expect(await executor({ personId: "person:ghost" })).toContain("does not exist");
-    expect(await executor({ personId: "person:sunwoo" })).toBe("person person:sunwoo removed");
-    expect(PersonStore.get("person:sunwoo")).toBeUndefined();
+    expect(await personRemove(port)({ personId: ownerManifest.id })).toContain("sole owner");
+    expect(await personRemove(port)({ personId: "person:ghost" })).toContain("does not exist");
+    await personRemove(port)({ personId: MANAGER_MANIFEST.id });
+    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
     expect(supervisor.calls).toEqual(["removeIdentity:person:sunwoo"]);
   });
 });
@@ -587,54 +491,39 @@ describe("refusal branches", () => {
     }
   });
 
-  test("an approval for another subject kind or another person refuses consumption", async () => {
+  test("foreign approval identifiers are invalid rather than reusable authority", async () => {
     const { port } = portWith();
-    ApprovalStore.request(
-      {
-        id: "approval:kind",
-        subject: { kind: "contact_promotion", actorId: "actor:a1" },
-        deadline: NOW + 60_000,
-      },
-      BOUND,
-      TRACE,
-      NOW,
-    );
-    ApprovalStore.decide("approval:kind", "approved", TRACE, NOW + 1);
-    expect(
-      await personDeclare(
-        port,
-        () => NOW + 2,
-      )({
-        manifest: MANAGER_MANIFEST,
-        approvalId: "approval:kind",
-      }),
-    ).toContain("approves a contact_promotion, not a person_mutation");
-
-    approvePersonMutation("approval:other", "person:other", managerDigest(), NOW);
-    expect(
-      await personDeclare(
-        port,
-        () => NOW + 2,
-      )({
-        manifest: MANAGER_MANIFEST,
-        approvalId: "approval:other",
-      }),
-    ).toContain("names person:other, not person:sunwoo");
+    const tool = eraseTool(createProvisionTool(port));
+    for (const approvalId of ["contact-approval", "another-person-approval"]) {
+      const result = await createDispatcher([tool], { executor }).execute(
+        {
+          id: approvalId,
+          tool: "provision",
+          input: {
+            operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST, approvalId } },
+          },
+        },
+        { sessionId: "test", turnId: "turn" },
+      );
+      expect(result.errorKind).toBe("invalid_input");
+    }
+    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 
-  test("an approval-lane open failure is a typed refusal, never a throw", async () => {
-    const { port } = portWith({
-      approvals: {
-        request: () => {
-          throw new Error("request bound exceeded");
-        },
-        get: ApprovalStore.get,
-        decision: ApprovalStore.decision,
+  test("missing request authority refuses instead of applying a protected mutation", async () => {
+    const { port } = portWith();
+    const result = await createDispatcher([eraseTool(createProvisionTool(port))], {
+      executor,
+    }).execute(
+      {
+        id: "no-authority",
+        tool: "provision",
+        input: { operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } } },
       },
-    });
-    expect(await personDeclare(port, () => NOW)({ manifest: MANAGER_MANIFEST })).toBe(
-      "person_declare refused: request bound exceeded",
+      { sessionId: "test", turnId: "turn" },
     );
+    expect(result.errorKind).toBe("precondition_failed");
+    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 
   test("a durable-write failure in channel_declare is a typed refusal", async () => {

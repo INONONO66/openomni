@@ -4,6 +4,7 @@ import { activeExecutor } from "./executor-context";
 import type { AgentResult, ChatAgentConfig } from "./core/types";
 import type { Executor } from "./executor";
 import type { SessionRunner, SessionRunnerInput, SessionRunnerResult } from "./session-handle";
+import { sessionHistory } from "./session-history";
 
 interface SessionChatRun {
   readonly config: ChatAgentConfig & { readonly executor: Executor };
@@ -28,13 +29,21 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
       if (prepared.config.executor === undefined)
         throw new Error("durable chat runner requires an executor");
       const executor = prepared.config.executor;
+      await executor.recover?.();
       if (executor.runAttempts === undefined || executor.judgeStop === undefined)
         throw new Error("durable chat runner requires session attempt and stop authority");
       const execution = { runAttempts: executor.runAttempts, judgeStop: executor.judgeStop };
       const execute = () =>
         activeExecutor.run(prepared.config.executor, () =>
           runAgent(
-            { messages, history: input.history, traceContext: prepared.traceContext },
+            {
+              messages,
+              history:
+                input.ledger.actions === undefined
+                  ? input.history
+                  : sessionHistory(input.sessionId, input.ledger.actions()),
+              traceContext: prepared.traceContext,
+            },
             {
               ...prepared.config,
               execution,

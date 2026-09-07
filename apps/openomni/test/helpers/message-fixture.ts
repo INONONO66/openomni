@@ -1,108 +1,54 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Bus, createDispatcher, createExecutor, eraseTool } from "@openomni/agent";
-import { initialize, SessionHandleStore } from "@openomni/ledger";
-import { compilePolicySnapshot } from "@openomni/policy";
-import { type Gateway, LedgerAction, type LedgerSession } from "@openomni/protocol";
+import { Bus, createDispatcher, createExecutor, createSessionRequests, eraseTool, session, type SessionRuntime } from "@openomni/agent";
+import { initialize } from "@openomni/ledger";
+import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
 import { createResidentGateway, type OutboundMessaging } from "../../src/gateway";
-import {
-  commitMessageInbox,
-  messageMaterialization,
-  prepareMessage,
-} from "../../src/composition/message-session";
+import { commitMessageInbox, messageMaterialization, prepareMessage } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { createSendMessageTool } from "../../src/tools/authority/send-message";
+import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
 
-export function messageFixture(
-  role: LedgerSession.Role = "resident",
-  messaging?: OutboundMessaging,
-) {
+export function messageFixture(role: LedgerSession.Role = "resident", messaging?: OutboundMessaging) {
   const directory = mkdtempSync(join(tmpdir(), "message-policy-"));
   const dbPath = join(directory, "test.sqlite");
   initialize({ dbPath, observationSink: Bus });
-  const generation = seedKernelPolicyRows();
+  seedKernelPolicyRows();
   const sessionId = "sender";
-  SessionHandleStore.materialize({
-    id: sessionId,
-    parentId: null,
-    role,
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: generation,
-    actionId: "configure",
-    at: 1,
-  });
-  const lease = SessionHandleStore.acquireLease({
-    sessionId,
-    owner: "test",
-    expectedFence: 0,
-    now: 100,
-    expiresAt: 100_000,
-  });
-  if (!lease.ok) throw new Error("fixture lease refused");
-  const executor = createExecutor({
-    identity: { sessionId, role, parentActionId: null },
-    policy: compilePolicySnapshot({
-      generation,
-      rows: SessionHandleStore.policyRows(generation),
-      kinds: LedgerAction.Kind.options,
-    }),
-    ledger: {
-      async commit(action) {
-        const receipt = SessionHandleStore.commit({
-          sessionId,
-          owner: "test",
-          fence: lease.fence,
-          now: 100,
-          expectedRevision: SessionHandleStore.row(sessionId).revision,
-          actions: [action],
-          consumeInboxIds: [],
-          state: "running",
-          releaseLease: false,
-        });
-        if (!receipt.ok || receipt.receipts[0] === undefined)
-          throw new Error("fixture commit refused");
-        return receipt.receipts[0];
-      },
+  const runtime: SessionRuntime = {
+    observations: Bus, clock: () => 100,
+    dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), () => 100),
+  };
+  const requests = createSessionRequests(runtime);
+  const gateway = createResidentGateway({
+    clock: runtime.clock, requests, inbox: { commit: commitMessageInbox },
+    prepare: prepareMessage((id, parentId, childRole, runner) => messageMaterialization({
+      id, parentId, role: childRole, runner, tools: [], preset: "", at: 100,
+    })),
+  }, messaging);
+  let result: Tool.Result | undefined;
+  const handle = session({
+    id: sessionId, role,
+    runner: async (input) => {
+      const payload = Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null"));
+      const executor = createExecutor({
+        identity: { sessionId, role, parentActionId: input.turnId, turnId: input.turnId, toolsHash: input.toolsHash, toolsGeneration: input.toolsGeneration },
+        ledger: input.ledger, policy: input.policy, observations: Bus,
+        clock: () => 100, entropy: () => crypto.randomUUID(),
+      });
+      const dispatcher = createDispatcher([eraseTool(createSendMessageTool(gateway))], { executor });
+      result = await dispatcher.execute({ id: crypto.randomUUID(), tool: "sendMessage", input: payload }, { sessionId, turnId: input.turnId });
+      return { kind: "result", text: result.output ?? "" };
     },
-    observations: Bus,
-    clock: () => 100,
-    entropy: () => crypto.randomUUID(),
-  });
-  const gateway = createResidentGateway(
-    {
-      clock: () => 100,
-      inbox: { commit: commitMessageInbox },
-      prepare: prepareMessage((id, parentId, childRole, runner) =>
-        messageMaterialization({
-          id,
-          parentId,
-          role: childRole,
-          runner,
-          tools: [],
-          preset: "",
-          at: 100,
-        }),
-      ),
-      armDeadline: SessionHandleStore.armMessageDeadline,
-    },
-    messaging,
-  );
-  const dispatcher = createDispatcher([eraseTool(createSendMessageTool(gateway))], { executor });
+  }, runtime);
   return {
-    directory,
-    dbPath,
-    gateway,
-    sessionId,
-    send: (input: Gateway.SendMessage) =>
-      dispatcher.execute(
-        {
-          id: crypto.randomUUID(),
-          tool: "sendMessage",
-          input,
-        },
-        { sessionId, turnId: "test-turn" },
-      ),
+    directory, dbPath, gateway, sessionId, requests,
+    async send(input: Gateway.SendMessage): Promise<Tool.Result> {
+      result = undefined;
+      await handle.prompt(JSON.stringify(input));
+      if (result === undefined) throw new Error("fixture tool did not execute");
+      return result;
+    },
   };
 }

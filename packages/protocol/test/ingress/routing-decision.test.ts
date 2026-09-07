@@ -22,7 +22,7 @@ const terminalCases: RoutingDecisionInput[] = [
   { ...baseDecision, stage: "blacklist", outcome: "drop" },
   {
     ...baseDecision,
-    stage: "wait_correlation",
+    stage: "request_correlation",
     outcome: "route",
     target: "resident",
     sessionId: "session-1",
@@ -34,13 +34,13 @@ const terminalCases: RoutingDecisionInput[] = [
   // refinements of the ambiguous arm.
   {
     ...baseDecision,
-    stage: "wait_correlation",
+    stage: "request_correlation",
     outcome: "ambiguous",
-    candidateInteractionIds: ["wait:wait-2", "wait:wait-3"],
+    candidateInteractionIds: ["request:request-2", "request:request-3"],
   },
-  // Fail-closed wait stage (#215): a matched wait whose owner has no ingress
+  // Fail-closed request stage (#215): a matched request whose owner has no ingress
   // delivery path blocks instead of falling through to surface routing.
-  { ...baseDecision, stage: "wait_correlation", outcome: "block" },
+  { ...baseDecision, stage: "request_correlation", outcome: "block" },
   { ...baseDecision, stage: "channel_ceiling", outcome: "block", inboundTreatment: "drop" },
   {
     ...baseDecision,
@@ -65,7 +65,7 @@ const invalidTerminalPairs = [
   ["blacklist", "route"],
   ["blacklist", "block"],
   ["blacklist", "ambiguous"],
-  ["wait_correlation", "drop"],
+  ["request_correlation", "drop"],
   ["channel_ceiling", "route"],
   ["channel_ceiling", "drop"],
   ["channel_ceiling", "ambiguous"],
@@ -154,7 +154,7 @@ describe("Ingress.Events.RoutingDecision", () => {
     // Given
     const input = {
       ...baseDecision,
-      stage: "wait_correlation",
+      stage: "request_correlation",
       outcome: "route",
       candidateInteractionIds: ["pi-1", "pi-2"],
     };
@@ -167,7 +167,7 @@ describe("Ingress.Events.RoutingDecision", () => {
     // Given
     const ambiguous = {
       ...baseDecision,
-      stage: "wait_correlation",
+      stage: "request_correlation",
       outcome: "ambiguous",
     };
 
@@ -175,13 +175,13 @@ describe("Ingress.Events.RoutingDecision", () => {
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
-        candidateInteractionIds: ["wait:wait-1"],
+        candidateInteractionIds: ["request:request-1"],
       }),
     ).toThrow(ZodError);
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
-        candidateInteractionIds: ["wait-1", "wait:wait-2"],
+        candidateInteractionIds: ["request-1", "request:request-2"],
       }),
     ).toThrow(ZodError);
   });
@@ -197,11 +197,11 @@ describe("Ingress.Events.RoutingDecision", () => {
 
 describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
   test("strips the dead runId/pendingInteractionId fields from pre-0025 facts", () => {
-    // Given — a persisted wait route recorded before the pending-stack
+    // Given — a persisted request route recorded before the pending-stack
     // deletion, carrying both dead optional fields the strict schema rejects.
     const legacyFact = {
       ...baseDecision,
-      stage: "wait_correlation",
+      stage: "request_correlation",
       outcome: "route",
       target: "resident",
       sessionId: "session-1",
@@ -217,7 +217,7 @@ describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
     // Then — the modern payload survives, minus the dead fields.
     expect(upcast).toEqual({
       ...baseDecision,
-      stage: "wait_correlation",
+      stage: "request_correlation",
       outcome: "route",
       target: "resident",
       sessionId: "session-1",
@@ -226,13 +226,13 @@ describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
   });
 
   test("reads legacy pending-prefixed ambiguous candidates verbatim", () => {
-    // Given — a pre-0025 ambiguous decision whose candidates mix wait and
-    // pending sources; the write schema's wait-only regex rejects it.
+    // Given — a pre-0025 ambiguous decision whose candidates mix request and
+    // pending sources; the write schema's request-only regex rejects it.
     const legacyAmbiguous = {
       ...baseDecision,
-      stage: "wait_correlation" as const,
+      stage: "request_correlation" as const,
       outcome: "ambiguous" as const,
-      candidateInteractionIds: ["wait:wait-1", "pending_ask:ask-1", "pending_interaction:pi-1"],
+      candidateInteractionIds: ["request:request-1", "pending_ask:ask-1", "pending_interaction:pi-1"],
     };
     expect(() => routingDecisionSchema.parse(legacyAmbiguous)).toThrow(ZodError);
 
@@ -281,7 +281,7 @@ describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
     expect(
       Ingress.recordedRoutingDecision({
         ...baseDecision,
-        stage: "wait_correlation",
+        stage: "request_correlation",
         outcome: "ambiguous",
         candidateInteractionIds: ["unqualified-1", "unqualified-2"],
       }),

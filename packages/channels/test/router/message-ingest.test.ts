@@ -3,6 +3,7 @@ import { Storage } from "@openomni/ledger";
 import type { Gateway, Inbox } from "@openomni/protocol";
 import { createGatewayRouter } from "../../src/router";
 import { resetStores } from "./_router-fixture";
+import { requestPort } from "../helpers/requests";
 
 beforeEach(resetStores);
 afterEach(() => Storage.reset());
@@ -10,6 +11,7 @@ afterEach(() => Storage.reset());
 test("session ingest commits once through the injected inbox without a channel driver", async () => {
   const commits: Inbox.Commit[] = [];
   const router = createGatewayRouter({
+    requests: requestPort(),
     sink: () => undefined,
     inbox: {
       commit: (row) => {
@@ -72,6 +74,7 @@ test.each([
 ] as const)("pre transform of %s is applied or refused before inbox commit", async (field) => {
   const commits: Inbox.Commit[] = [];
   const router = createGatewayRouter({
+    requests: requestPort(),
     sink: () => undefined,
     inbox: {
       commit: (row) => {

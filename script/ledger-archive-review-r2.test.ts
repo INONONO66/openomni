@@ -4,7 +4,7 @@ import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } f
 import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
 import { z } from "zod";
-import * as Wait from "../packages/protocol/src/wait/schema";
+import { HistoricalWait } from "../packages/ledger/src/storage/historical-request-format";
 import { SqliteStorageAdapter } from "../packages/ledger/src/storage/sqlite-storage";
 import { inspect967Projections } from "../packages/ledger/src/storage/u967-projection";
 import { U967_MIGRATION } from "../packages/ledger/src/storage/u967-preflight";
@@ -188,7 +188,7 @@ describe("967 review R2-1 literal CLI eligibility probes", () => {
         if (!row) throw new Error("Expected row with id='retired' not found");
         const historical = z
           .strictObject({
-            ...Wait.Record.shape,
+            ...HistoricalWait.shape,
             ownerRef: z.strictObject({
               kind: z.enum(["session", "workItem"]),
               id: z.string().min(1),

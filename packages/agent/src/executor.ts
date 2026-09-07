@@ -1,5 +1,5 @@
 import type { LedgerAction, PlainObject, PlainValue } from "@openomni/protocol";
-import { canonicalDigest } from "@openomni/protocol";
+import { canonicalDigest, SessionTransition } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 
 import { runWaveBodies, waveBodyScope, type WaveControl } from "./core/execution/tool-wave";
@@ -25,6 +25,7 @@ import type {
   ExecutorOptions,
 } from "./executor-contract";
 import { createExecutionApprovals } from "./executor-approval";
+import { ExecutionApprovalError } from "./executor-contract";
 import { createAttemptRunner } from "./executor-attempts";
 import { createStopJudge } from "./executor-stop";
 export { ExecutionApprovalError } from "./executor-contract";
@@ -48,7 +49,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     publishToolStarted,
     publishToolTerminal,
   } = createExecutionRecord(options);
-  const { approvals, awaitApproval } = createExecutionApprovals(options, commit);
+  const { approvals, awaitApproval } = createExecutionApprovals(options);
   const kinds = new Set([
     ...CORE_KINDS,
     ...(options.extensionKinds ?? []).map((registration) => registration.kind),
@@ -160,21 +161,49 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       stages.push({ item, request, kind, pre });
     }
     const admitted: ((typeof stages)[number] & { intent: LedgerAction.Receipt | undefined })[] = [];
+    const guardedWave = stages.some(
+      (stage) =>
+        stage.pre.verdict === "require_approval" ||
+        stage.request.approval?.required === true ||
+        stage.request.originalAction !== undefined,
+    );
     for (const stage of stages) {
       const intent =
         stage.pre.verdict === "deny"
           ? undefined
-          : await appendIntent({
-              parentId: options.identity.parentActionId,
-              kind: stage.kind,
-              op: stage.request.op,
-              value: stage.pre.value,
-            });
+          : stage.request.originalAction !== undefined
+            ? {
+                action: stage.request.originalAction,
+                revision: stage.request.originalAction.ordinal,
+              }
+            : await appendIntent({
+                parentId: options.identity.parentActionId,
+                kind: stage.kind,
+                op: stage.request.op,
+                value: stage.pre.value,
+                invocation: {
+                  effectHash: canonicalDigest(stage.request.effect),
+                  effect: stage.request.effect,
+                  callId: stage.request.toolObservation?.callId ?? stage.pre.receipt.action.id,
+                  turnId: options.identity.turnId ?? options.identity.parentActionId,
+                  waveId: stages[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id,
+                  sequential: stage.item.sequential ?? false,
+                  approvalRequired:
+                    stage.pre.verdict === "require_approval" ||
+                    stage.request.approval?.required === true,
+                  domainRevisions: { ...stage.request.approval?.domainRevisions },
+                },
+              });
       admitted.push({ ...stage, intent });
     }
     const decisions = await Promise.all(
       admitted.map(async (stage) => {
-        if (stage.pre.verdict !== "require_approval" || stage.intent === undefined)
+        if (
+          (stage.pre.verdict !== "require_approval" &&
+            stage.request.approval?.required !== true &&
+            originalRequest(stage.intent?.action.id) === undefined) ||
+          stage.intent === undefined
+        )
           return "approve" as const;
         return awaitApproval(
           {
@@ -195,7 +224,17 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             intent: stage.request.intent,
           },
           control.signal,
-        );
+          {
+            effect: stage.request.effect,
+            domainRevisions: stage.request.approval?.domainRevisions,
+            revisions: stage.request.domainRevisions,
+            timeoutMs: stage.request.approval?.timeoutMs,
+            original: originalRequest(stage.intent.action.id),
+          },
+        ).catch((error: Error) => {
+          if (error instanceof ExecutionApprovalError) return "refuse" as const;
+          throw error;
+        });
       }),
     );
     const started = new Map<number, number | undefined>();
@@ -209,6 +248,40 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             stage.intent === undefined
           )
             return null;
+          const captured = originalRequest(stage.intent.action.id);
+          if (
+            captured !== undefined &&
+            stage.request.domainRevisions !== undefined &&
+            canonicalDigest({ ...stage.request.domainRevisions() }) !==
+              canonicalDigest(captured.domainRevisions)
+          )
+            throw new Error("stale_domain_revision");
+          const applicationId = `${stage.intent.action.id}:application`;
+          if (options.ledger.actions?.().some((action) => action.id === applicationId))
+            throw new Error("outcome_unknown");
+          if (guardedWave)
+            await commit({
+              id: applicationId,
+              parentId: stage.intent.action.id,
+              sessionId: options.identity.sessionId,
+              kind: stage.kind,
+              intent: { encodingVersion: 1, value: { phase: "application", op: stage.request.op } },
+              effect: {
+                encodingVersion: 1,
+                value: { phase: "application", inputHash: canonicalDigest(stage.request.intent) },
+              },
+              ts: options.clock(),
+              irreversible: true,
+            });
+          if (
+            captured !== undefined &&
+            stage.request.domainRevisions !== undefined &&
+            canonicalDigest({ ...stage.request.domainRevisions() }) !==
+              canonicalDigest(captured.domainRevisions)
+          )
+            throw new Error("stale_domain_revision");
+          if (captured !== undefined && options.ledger.validateRequest?.(captured) === false)
+            throw new ExecutionApprovalError("stale_approval");
           started.set(index, publishToolStarted(stage.request));
           return stage.item.body(stage.intent);
         },
@@ -248,14 +321,21 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         results.push({ terminal: "blocked_pre", reason });
       } else if (intent === undefined) throw new Error("wave lost admitted intent");
       else if (outcome.status === "rejected") {
-        await appendFailure(
-          { kind: stage.kind, op: stage.request.op },
-          intent.action.id,
-          stage.request.effect,
-          outcome.error,
-          stage.request.toolObservation?.callId,
-          stage.request.toolResult?.({ terminal: "failed", error: outcome.error }),
-        );
+        if (outcome.error.message === "outcome_unknown") {
+          await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
+            phase: "result",
+            terminal: "outcome_unknown",
+            ...projectToolResult(stage.request, { terminal: "failed", error: outcome.error }),
+          });
+        } else
+          await appendFailure(
+            { kind: stage.kind, op: stage.request.op },
+            intent.action.id,
+            stage.request.effect,
+            outcome.error,
+            stage.request.toolObservation?.callId,
+            stage.request.toolResult?.({ terminal: "failed", error: outcome.error }),
+          );
         publishToolTerminal(stage.request, started.get(index), "error");
         results.push({ terminal: "failed", error: outcome.error });
       } else {
@@ -314,8 +394,21 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             : { toolsGeneration: options.identity.toolsGeneration }),
         },
         options.signal ?? waveBodyScope.getStore()?.signal ?? new AbortController().signal,
+        { effect: request.effect },
       ),
   );
+
+  function originalRequest(id: string | undefined): SessionTransition.Request | undefined {
+    if (id === undefined) return undefined;
+    let result: SessionTransition.Request | undefined;
+    for (const action of options.ledger.actions?.() ?? []) {
+      const effect = action.effect.value;
+      if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
+      const parsed = SessionTransition.Request.safeParse(effect.request);
+      if (parsed.success && parsed.data.requestId === id) result = parsed.data;
+    }
+    return result;
+  }
 
   function registeredKind(request: ExecutionRequest): LedgerAction.Kind {
     if (!kinds.has(request.kind)) throw new UnregisteredExecutionKindError(request.kind);

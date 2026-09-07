@@ -75,7 +75,7 @@ describe("Ingress.routeDecisionsEquivalent", () => {
   });
 
   test.each([
-    ["stage", { stage: "wait_correlation" as const }],
+    ["stage", { stage: "request_correlation" as const }],
     ["outcome", { outcome: "block" as const }],
     ["target", { target: "worker" }],
     ["sessionId", { sessionId: "s-2" }],

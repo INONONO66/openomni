@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Actor } from "../actor/index.js";
 import { LedgerSession, SessionTurn } from "../ledger/l0.js";
 import { EpochMs } from "../time.js";
-import { Wait } from "../wait/index.js";
+import { SessionTransition } from "../ledger/session-transition.js";
 
 const Id = z.string().min(1);
 const DurationMs = z.number().nonnegative();
@@ -35,6 +35,15 @@ const Send = z
   })
   .strict();
 
+// Credential is transient ingress material, never an action payload.
+const RequestAnswer = z.object({
+  kind: z.literal("request_answer"),
+  inputId: Id,
+  request: SessionTransition.Request,
+  decision: z.enum(["approve", "refuse"]),
+  credential: Id,
+}).strict();
+
 // target is the resolved session id (including new_session), or the actor id
 // for actor delivery. No fictitious session is allocated for an actor.
 const Handle = z.object({ messageId: Id, target: Id }).strict();
@@ -55,7 +64,7 @@ const IngressFacts = z
     channelId: Id,
     addressees: z.array(z.object({ externalId: Id }).strict()),
     dm: z.boolean(),
-    reply: Wait.Correlation.omit({ endpointId: true, channelId: true })
+    reply: SessionTransition.Correlation.omit({ endpointId: true, channelId: true })
       .extend({ chain: z.array(Id) })
       .strict()
       .optional(),
@@ -153,6 +162,7 @@ const Observation = z.discriminatedUnion("kind", [
 /** Internal schema assembly; public names are exposed through Gateway. */
 export const MessageContract = {
   Send,
+  RequestAnswer,
   Handle,
   Sender,
   IngressFacts,

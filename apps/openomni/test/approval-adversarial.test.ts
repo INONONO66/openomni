@@ -1,355 +1,152 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { ActorRegistry, ApprovalStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/agent";
+import { afterEach, beforeEach, expect, it } from "bun:test";
+import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
+import { createDispatcher, eraseTool } from "@openomni/agent";
 import { createApprovalTool, type ApprovalPort } from "../src/tools/authority/approval";
 import { createTools } from "../src/tools/core/catalog";
-import { createDispatcher, eraseTool } from "@openomni/agent";
 import { executor } from "./helpers/executor";
-import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
+import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 
-/**
- * Adversarial cases from docs/conversation-and-message-io.md against the
- * REAL stores: §8.4 (cross-channel identity spoofing — merging is an
- * Owner-approval act, never inferred), §8.12 (a provisional contact holds
- * no authority until promoted), §8.13 (approval fatigue — requests are
- * volume-bounded and the timeout default is refusal).
- */
-
-const port: ApprovalPort = {
-  request: ApprovalStore.request,
-  get: ApprovalStore.get,
-  decide: ApprovalStore.decide,
-  decision: ApprovalStore.decision,
-  getIdentity: ActorRegistry.getIdentity,
-  getEndpoint: ActorRegistry.getEndpoint,
-  promote: ActorRegistry.promote,
-  mergeEndpoint: ActorRegistry.mergeEndpoint,
-};
-
-const T0 = 1_000;
-const TIMEOUT = 60_000;
-const RESIDENT = { role: "resident", depth: 0, sessionId: "approval-test" } as const;
-
-const approvalOp = (
-  op: "request" | "decide" | "contact_promote" | "endpoint_merge",
-  approvalPort: ApprovalPort,
-  now: () => number,
-) => {
-  const run = modelToolOutput("approval", { approvals: approvalPort }, RESIDENT, now);
-  return (input: Record<string, unknown>) =>
-    run({
-      operation: op === "request" ? { op, request: input } : { op, ...input },
-    });
-};
-const approvalRequest = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  approvalOp("request", approvalPort, now);
-const approvalDecide = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  approvalOp("decide", approvalPort, now);
-const contactPromote = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  approvalOp("contact_promote", approvalPort, now);
-const endpointMerge = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  approvalOp("endpoint_merge", approvalPort, now);
-
+const port: ApprovalPort = ActorRegistry;
 beforeEach(() => {
-  Bus.reset();
-  Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
   ActorRegistry.mintProvisional(
-    {
-      id: "contact:whatsapp:mallory",
-      kind: "unknown",
-      trustTier: "observer",
-      standing: "provisional",
-    },
-    { id: "ep:whatsapp:mallory", channel: "whatsapp", externalId: "mallory-wa" },
+    { id: "contact:mallory", kind: "unknown", trustTier: "observer", standing: "provisional" },
+    { id: "ep:mallory", channel: "whatsapp", externalId: "mallory" },
   );
   ActorRegistry.registerIdentity({ id: "actor:alice", kind: "human", trustTier: "collaborator" });
-  ActorRegistry.registerEndpoint({
-    id: "ep:slack:alice",
-    actorId: "actor:alice",
-    channel: "slack",
-    externalId: "alice-slack",
-  });
+  ActorRegistry.registerIdentity({ id: "actor:bob", kind: "human", trustTier: "observer" });
 });
+afterEach(() => Storage.reset());
 
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-});
-
-function approvalIdFrom(text: string): string {
-  const match = /approval (approval:[0-9a-f-]+) pending/.exec(text);
-  if (!match?.[1]) throw new Error(`no approval id in: ${text}`);
-  return match[1];
-}
-
-async function requestPromotion(at = T0): Promise<string> {
-  const text = await approvalRequest(
-    port,
-    () => at,
-  )({
-    act: "contact_promotion",
-    actorId: "contact:whatsapp:mallory",
-    timeoutMs: TIMEOUT,
-  });
-  return approvalIdFrom(text);
-}
-
-describe("approval output boundary", () => {
-  it("rejects malformed output through the dispatcher", async () => {
-    const tool = eraseTool(createApprovalTool(port));
-    const result = await createDispatcher([{ ...tool, execute: async () => ({ op: "request" }) }], {
-      executor,
-    }).execute(
-      {
-        id: "approval-invalid-output",
-        tool: "approval",
-        input: {
-          operation: { op: "decide", approvalId: "approval:1", decision: "approved" },
-        },
-      },
-      { sessionId: "approval-session", turnId: "approval-turn" },
-    );
-
-    expect(result).toEqual({
-      toolCallId: "approval-invalid-output",
-      id: "approval-invalid-output",
-      toolName: "approval",
-      output: "approval produced invalid output",
-      isError: true,
-      errorKind: "invalid_output",
-    });
-  });
-});
-
-describe("§8.13 — the approval lane fails closed", () => {
-  it("an unanswered request refuses the act after its deadline", async () => {
-    const approvalId = await requestPromotion();
-
-    const early = await contactPromote(port, () => T0 + 1)({ approvalId });
-    expect(early).toContain("is pending");
-
-    const late = await contactPromote(port, () => T0 + TIMEOUT)({ approvalId });
-    expect(late).toContain("is refused");
-    expect(ActorRegistry.getIdentity("contact:whatsapp:mallory")?.standing).toBe("provisional");
-  });
-
-  it("the Owner cannot approve into the past — a late answer records the deadline's refusal", async () => {
-    const approvalId = await requestPromotion();
-
-    const text = await approvalDecide(
-      port,
-      () => T0 + TIMEOUT + 1,
-    )({
-      approvalId,
-      decision: "approved",
-    });
-
-    expect(text).toContain("refused by deadline");
-  });
-
-  it("a request storm hits the volume bound instead of burying the Owner", async () => {
-    const run = approvalRequest(port, () => T0);
-    for (let i = 0; i < 8; i += 1) {
-      expect(
-        await run({
-          act: "endpoint_merge",
-          endpointId: "ep:whatsapp:mallory",
-          toActorId: "actor:alice",
-          timeoutMs: TIMEOUT,
-        }),
-      ).toContain("pending");
-    }
-
-    const ninth = await run({
-      act: "endpoint_merge",
-      endpointId: "ep:whatsapp:mallory",
-      toActorId: "actor:alice",
-      timeoutMs: TIMEOUT,
-    });
-
-    expect(ninth).toContain("approval_request refused:");
-    expect(ninth).toContain("pending requests already opened");
-  });
-});
-
-describe("§8.12 — a provisional contact holds no authority until promoted", () => {
-  it("promotion executes only with the Owner's recorded approval", async () => {
-    const approvalId = await requestPromotion();
-    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
-
-    const text = await contactPromote(port, () => T0 + 2)({ approvalId });
-
-    expect(text).toContain("contact contact:whatsapp:mallory registered");
-    expect(ActorRegistry.getIdentity("contact:whatsapp:mallory")?.standing).toBe("registered");
-  });
-
-  it("a refused approval never promotes", async () => {
-    const approvalId = await requestPromotion();
-    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "refused" });
-
-    const text = await contactPromote(port, () => T0 + 2)({ approvalId });
-
-    expect(text).toContain("is refused");
-    expect(ActorRegistry.getIdentity("contact:whatsapp:mallory")?.standing).toBe("provisional");
-  });
-
-  it("requesting promotion of a registered or missing contact refuses upfront", async () => {
-    const run = approvalRequest(port, () => T0);
+it("the model cannot mint or decide Owner consent, and workers cannot see the authority tool", async () => {
+  const tool = eraseTool(createApprovalTool(port));
+  const dispatcher = createDispatcher([tool], { executor });
+  for (const operation of [
+    { op: "request", actorId: "contact:mallory" },
+    { op: "decide", approvalId: "invented", decision: "approved" },
+    { op: "contact_promote", approvalId: "invented" },
+  ]) {
     expect(
-      await run({ act: "contact_promotion", actorId: "actor:alice", timeoutMs: TIMEOUT }),
-    ).toContain("already registered");
-    expect(await run({ act: "contact_promotion", actorId: "ghost", timeoutMs: TIMEOUT })).toContain(
-      "does not exist",
-    );
-  });
-});
-
-describe("§8.4 — cross-channel merging is an explicit Owner act", () => {
-  async function requestMerge(at = T0): Promise<string> {
-    const text = await approvalRequest(
-      port,
-      () => at,
-    )({
-      act: "endpoint_merge",
-      endpointId: "ep:whatsapp:mallory",
-      toActorId: "actor:alice",
-      timeoutMs: TIMEOUT,
-    });
-    return approvalIdFrom(text);
+      (
+        await dispatcher.execute(
+          { id: "forged", tool: "approval", input: { operation } },
+          { sessionId: "test", turnId: "turn" },
+        )
+      ).errorKind,
+    ).toBe("invalid_input");
   }
-
-  it("identity stays per-endpoint: the same human on two channels is two contacts until merged", () => {
-    expect(ActorRegistry.resolveEndpoint("whatsapp", "mallory-wa")?.identity.id).toBe(
-      "contact:whatsapp:mallory",
-    );
-    expect(ActorRegistry.resolveEndpoint("slack", "alice-slack")?.identity.id).toBe("actor:alice");
-  });
-
-  it("a merge lands only with the Owner's approval and moves exactly the approved endpoint", async () => {
-    const approvalId = await requestMerge();
-
-    const unapproved = await endpointMerge(port, () => T0 + 1)({ approvalId });
-    expect(unapproved).toContain("is pending");
-
-    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
-    const text = await endpointMerge(port, () => T0 + 2)({ approvalId });
-
-    expect(text).toContain("merged into actor:alice");
-    expect(ActorRegistry.resolveEndpoint("whatsapp", "mallory-wa")?.identity.id).toBe(
-      "actor:alice",
-    );
-  });
-
-  it("an approval for one act never authorizes the other", async () => {
-    const approvalId = await requestPromotion();
-    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
-
-    const text = await endpointMerge(port, () => T0 + 2)({ approvalId });
-
-    expect(text).toContain("approves a contact_promotion, not a endpoint_merge");
-  });
-
-  it("a merge whose endpoint changed hands since the request refuses (anti-TOCTOU)", async () => {
-    const approvalId = await requestMerge();
-    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
-    // The endpoint moves elsewhere between request and act.
-    ActorRegistry.registerIdentity({ id: "actor:bob", kind: "human", trustTier: "collaborator" });
-    ActorRegistry.mergeEndpoint("ep:whatsapp:mallory", "actor:bob");
-
-    const text = await endpointMerge(port, () => T0 + 2)({ approvalId });
-
-    expect(text).toContain("no longer belongs to contact:whatsapp:mallory");
-    expect(ActorRegistry.resolveEndpoint("whatsapp", "mallory-wa")?.identity.id).toBe("actor:bob");
-  });
+  expect(
+    createTools({ approvals: port }, { role: "worker", sessionId: "worker", depth: 1 }).some(
+      (tool) => tool.name === "approval",
+    ),
+  ).toBe(false);
+  expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
 });
-
-describe("approval tool boundary failures", () => {
-  it("rejects malformed calls, invalid merge subjects, repeated decisions, and store failures", async () => {
-    for (const op of ["request", "decide", "contact_promote", "endpoint_merge"] as const) {
-      const result = await dispatchModelTool(
-        "approval",
-        { approvals: port },
-        RESIDENT,
-      )({ op, args: {} });
-      expect(result).toMatchObject({ isError: true, errorKind: "invalid_input" });
-      expect(result.output).toBeString();
-    }
-
-    const request = approvalRequest(port, () => T0);
-    expect(
-      await request({
-        act: "endpoint_merge",
-        endpointId: "ep:whatsapp:mallory",
-        toActorId: "missing",
-        timeoutMs: TIMEOUT,
-      }),
-    ).toBeString();
-    expect(
-      await request({
-        act: "endpoint_merge",
-        endpointId: "ep:slack:alice",
-        toActorId: "actor:alice",
-        timeoutMs: TIMEOUT,
-      }),
-    ).toBeString();
-
-    const approvalId = await requestPromotion();
-    const decide = approvalDecide(port, () => T0 + 1);
-    await decide({ approvalId, decision: "approved" });
-    expect(await decide({ approvalId, decision: "approved" })).toBeString();
-
-    const failing = {
-      ...port,
-      request: () => {
-        throw new Error("request failure");
-      },
-      decide: () => {
-        throw new Error("decide failure");
-      },
-      promote: () => {
-        throw new Error("promote failure");
-      },
-      mergeEndpoint: () => {
-        throw new Error("merge failure");
-      },
-    } as unknown as ApprovalPort;
-    expect(
-      await approvalRequest(failing)({
-        act: "contact_promotion",
-        actorId: "contact:whatsapp:mallory",
-        timeoutMs: 1,
-      }),
-    ).toBeString();
-    expect(await approvalDecide(failing)({ approvalId, decision: "approved" })).toBeString();
-    expect(await contactPromote(failing)({ approvalId })).toBeString();
-
-    const mergeText = await approvalRequest(
-      port,
-      () => T0 + 2,
-    )({
-      act: "endpoint_merge",
-      endpointId: "ep:whatsapp:mallory",
-      toActorId: "actor:alice",
-      timeoutMs: TIMEOUT,
+it("executes exactly the original promotion after authenticated consent", async () => {
+  const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
+    operation: { op: "contact_promote", actorId: "contact:mallory" },
+  });
+  try {
+    const request = await bounded(f.opened);
+    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
+    expect(request.parsedInput).toEqual({
+      operation: { op: "contact_promote", actorId: "contact:mallory" },
     });
-    const mergeId = approvalIdFrom(mergeText);
-    await approvalDecide(port, () => T0 + 3)({ approvalId: mergeId, decision: "approved" });
-    expect(await endpointMerge(failing)({ approvalId: mergeId })).toBeString();
-  });
+    expect((await f.answer()).isError).toBeUndefined();
+    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("registered");
+    expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("resolved");
+    expect(
+      f.ledger.actions?.().filter((action) => action.id === `${request.requestId}:application`),
+    ).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
 });
-
-describe("catalog gate — the approval lane is the Resident's alone", () => {
-  it("workers see none of the approval tools", () => {
-    const ports = { approvals: port };
-    const resident = createTools(ports, { role: "resident", depth: 0, sessionId: "s" });
-    const worker = createTools(ports, { role: "worker", depth: 1, sessionId: "s" });
-    const approvalTools = ["approval"];
-
-    expect(resident.map((entry) => entry.name)).toEqual(expect.arrayContaining(approvalTools));
-    const workerNames = worker.map((entry) => entry.name);
-    for (const name of approvalTools) {
-      expect(workerNames).not.toContain(name);
-    }
+it("Owner refusal never promotes a provisional contact", async () => {
+  const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
+    operation: { op: "contact_promote", actorId: "contact:mallory" },
   });
+  try {
+    expect((await f.answer("refuse")).isError).toBe(true);
+    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
+  } finally {
+    await f.close();
+  }
+});
+it("rejects an endpoint move after source or target changes, including same-clock edits", async () => {
+  const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
+    operation: { op: "endpoint_merge", endpointId: "ep:mallory", toActorId: "actor:alice" },
+  });
+  try {
+    await bounded(f.opened);
+    ActorRegistry.mergeEndpoint("ep:mallory", "actor:bob");
+    await expect(f.answer()).rejects.toMatchObject({ code: "stale_approval" });
+    expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("actor:bob");
+  } finally {
+    await f.close();
+  }
+});
+it("merges only the approved endpoint into the exact target", async () => {
+  const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
+    operation: { op: "endpoint_merge", endpointId: "ep:mallory", toActorId: "actor:alice" },
+  });
+  try {
+    expect((await f.answer()).isError).toBeUndefined();
+    expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("actor:alice");
+  } finally {
+    await f.close();
+  }
+});
+it("invalidates a merge when the source identity changes without moving its endpoint", async () => {
+  const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
+    operation: { op: "endpoint_merge", endpointId: "ep:mallory", toActorId: "actor:alice" },
+  });
+  try {
+    await bounded(f.opened);
+    const source = ActorRegistry.getIdentity("contact:mallory");
+    if (source === undefined) throw new Error("missing source identity");
+    ActorRegistry.registerIdentity({ ...source, trustTier: "manager" });
+    await expect(f.answer()).rejects.toMatchObject({ code: "stale_approval" });
+    expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
+  } finally {
+    await f.close();
+  }
+});
+it("refuses malformed output at the real dispatcher boundary", async () => {
+  const tool = eraseTool(createApprovalTool(port));
+  const result = await createDispatcher(
+    [{ ...tool, execute: async () => ({ op: "contact_promote" }) }],
+    { executor },
+  ).execute(
+    {
+      id: "bad-output",
+      tool: "approval",
+      input: { operation: { op: "contact_promote", actorId: "contact:mallory" } },
+    },
+    { sessionId: "test", turnId: "turn" },
+  );
+  expect(result.errorKind).toBe("invalid_output");
+});
+it("bounds pending Owner requests across sessions without applying a ninth act", async () => {
+  const pending: ReturnType<typeof protectedDispatch>[] = [];
+  try {
+    for (let index = 0; index < 8; index += 1) {
+      const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
+        operation: { op: "contact_promote", actorId: "contact:mallory" },
+      });
+      pending.push(f);
+      await bounded(f.opened);
+    }
+    const ninth = protectedDispatch(eraseTool(createApprovalTool(port)), {
+      operation: { op: "contact_promote", actorId: "contact:mallory" },
+    });
+    pending.push(ninth);
+    expect((await bounded(ninth.running)).errorKind).toBe("precondition_failed");
+    expect(
+      SessionHandleStore.requestRows().filter((request) => request.state === "open"),
+    ).toHaveLength(8);
+    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
+  } finally {
+    await Promise.all(pending.map((f) => f.close()));
+  }
 });

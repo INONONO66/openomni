@@ -31,6 +31,7 @@ import {
 } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { parentReply } from "./session-parent-reply";
+import { dispatchSessionOutbound, outboundOpen } from "./session-outbound";
 import { observeDrained } from "./session-message-observation";
 
 export function createSessionTurn(
@@ -399,36 +400,22 @@ export function createSessionTurn(
       at: clock(),
     });
     const nextState = result.kind === "interrupted" ? "interrupted" : "idle";
-    const commit: LedgerSession.Commit = {
+    const reply = parentReply(current, terminal, result);
+    const committed = SessionHandleStore.commit({
       sessionId,
       owner,
       fence: state.fence,
       now: clock(),
       expectedRevision: current.revision,
-      actions: [...deliveries, terminal],
+      actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
       consumeInboxIds: interrupts.map((item) => item.id),
       state: nextState,
-      releaseLease,
-    };
-    const reply = parentReply(current, terminal, result)[0];
-    let committed: LedgerSession.CommitResult;
-    if (reply === undefined) committed = SessionHandleStore.commit(commit);
-    else {
-      if (runtime.commitTerminal === undefined)
-        throw new Error("child terminal requires the gateway commit port");
-      committed = await runtime.commitTerminal({
-        commit,
-        reply,
-        policy: pinPolicy(open.policyGeneration),
-      });
-    }
+      releaseLease: reply === undefined && releaseLease,
+    });
     requireCommit(committed);
     observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations);
-    if (committed.ok) {
-      const inboxSessions = committed.receipts
-        .filter((receipt) => receipt.action.kind === "prompt")
-        .map((receipt) => receipt.action.sessionId);
-      if (inboxSessions.length > 0) runtime.onInboxCommitted?.(inboxSessions);
+    if (reply !== undefined) {
+      await dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, pinPolicy, releaseLease);
     }
   }
   return { runTurn, drainBoundary, seal };

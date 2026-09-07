@@ -3,7 +3,7 @@ import { BusEvent } from "../bus/index.js";
 import { Actor } from "../actor/index.js";
 import { Events as IngressEvents } from "../event/ingress.js";
 import { Ingress } from "../ingress/index.js";
-import { Wait } from "../wait/index.js";
+import { SessionTransition } from "../ledger/session-transition.js";
 import { EpochMs } from "../time.js";
 import { MessageContract } from "./message.js";
 
@@ -14,7 +14,7 @@ import { MessageContract } from "./message.js";
  * and app brain do not import each other; these schemas are the injected seam.
  *
  * Trust vocabulary (§3): *perimeter trust* — who may reach us / whom we may
- * reach (admission, grants, wait correlation, egress budget) — is
+ * reach (admission, grants, request correlation, egress budget) — is
  * gateway-owned and arrives in `ActorContext` as a verdict the brain consumes
  * verbatim. *Conduct trust* — what the agent may do once running (tool
  * policy, completion admission, evidence) — is brain-owned and never crosses
@@ -52,22 +52,22 @@ const ActorContextSchema = z
   .strict();
 
 /**
- * Present iff this delivery resumed an open Wait. The expected-responder
+ * Present iff this delivery resumed an open request. The expected-responder
  * gate (§2a-1) has already run perimeter-side: a correlated message from a
- * non-responder is delivered WITHOUT waitContext — attachment is itself the
- * perimeter's assertion that the sender may resume this wait.
+ * non-responder is delivered WITHOUT requestContext — attachment is itself the
+ * perimeter's assertion that the sender may resume this request.
  */
-const WaitContextSchema = z
+const RequestContextSchema = z
   .object({
-    waitId: z.string().min(1),
-    allowedAction: Wait.AllowedAction,
+    requestId: z.string().min(1),
+    allowedAction: SessionTransition.AllowedAction,
   })
   .strict();
 
 /**
  * The routed inbound event as it crosses the seam (#707 stage-2, measured at
  * cut): the driver-produced event AFTER perimeter routing (actor resolution,
- * channel-grant treatment stamping, wait/session pinning) MINUS the
+ * channel-grant treatment stamping, request/session pinning) MINUS the
  * brain-owned `agent` — the AgentDef is brain material and is resolved by the
  * brain's Deliver consumer, never embedded at the perimeter. This is the
  * execution-authoritative residue for this stage; the sibling `actorContext`
@@ -80,14 +80,14 @@ const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
  *
  * Stage-2 measurement corrections to the stage-0 draft (#707):
  * - `sessionId` is optional — it is the gateway's routed session label
- *   (wait-owner / surface-map / router-minted). Worker-target deliveries
+ *   (request-owner / surface-map / router-minted). Worker-target deliveries
  *   carry no label: work placement (child/worker session selection) is brain
  *   judgment (kernel-contract §8.5), so the brain resolves it from the
  *   pinned event.
  * - `actorContext` is optional — present for surface-default admissions
- *   (where the perimeter produced a tier verdict); absent for wait
+ *   (where the perimeter produced a tier verdict); absent for request
  *   resumptions (admission is the correlation itself, asserted via
- *   `waitContext`) and for legacy anonymous surfaces without an origin id.
+ *   `requestContext`) and for legacy anonymous surfaces without an origin id.
  * - `event` + `decision` carry the routed event residue and the recorded
  *   route.decided fact — the brain parses all three at the seam.
  */
@@ -95,7 +95,7 @@ const DeliverSchema = z
   .object({
     sessionId: z.string().min(1).optional(),
     actorContext: ActorContextSchema.optional(),
-    waitContext: WaitContextSchema.optional(),
+    requestContext: RequestContextSchema.optional(),
     event: DeliveredEventSchema,
     /** The recorded route.decided fact this delivery executes (record-before-act). */
     decision: IngressEvents.RoutingDecision.schema,
@@ -111,10 +111,10 @@ const MessageOperationSchema = z.enum(["fire_and_forget", "awaited"]);
 
 /**
  * Policy-intent axis of a send (#219), coherent with — but not collapsed into
- * — the Wait axis (`operation`). `converse` intends a reply loop (⟺ awaited);
+ * — the request axis (`operation`). `converse` intends a reply loop (⟺ awaited);
  * `notify` is a one-way ping (⟺ fire_and_forget). Kept a SEPARATE field so the
  * active-egress gate can reason about intent (class caps, future 봉수 rungs)
- * without overloading `operation`, whose only job is whether a Wait opens.
+ * without overloading `operation`, whose only job is whether a request opens.
  */
 const MessageClassSchema = z.enum(["notify", "converse"]);
 
@@ -200,7 +200,7 @@ const ReplyGrantRuleSchema = z
 /**
  * Typed denial taxonomy — callers branch on `code`, never message text.
  * Ungranted, missing, stale, and ambiguous targets all fail closed with an
- * unchanged allocation/authority surface. `wait_duplicate` is the
+ * unchanged allocation/authority surface. `request_duplicate` is the
  * awaited-delivery exactly-once rule surfacing as a denial.
  */
 const MessageDenialCodeSchema = z.enum([
@@ -208,7 +208,7 @@ const MessageDenialCodeSchema = z.enum([
   "target_missing",
   "target_stale",
   "target_ambiguous",
-  "wait_duplicate",
+  "request_duplicate",
   // #219 active-egress suppressions: a granted, resolvable send the social
   // budget refuses — window/class cap hit (or no Owner-declared budget for a
   // cold proactive send), within cooldown/quiet-hours, or do-not-contact.
@@ -287,28 +287,27 @@ const EgressDebitStateSchema = z
   .strict();
 
 /**
- * The Wait an awaited delivery opens. Quorum/resolution-policy coherence is
- * NOT re-refined here — `Wait.Record.parse` at WaitStore.create is the one
+ * The request an awaited delivery opens. Quorum/resolution-policy coherence is
+ * NOT re-refined here — `SessionTransition.Request.parse` in kernel authority is the one
  * enforcement layer for that invariant (#215 rule 4).
  */
-const AwaitSpecSchema = z
+const RequestSpecSchema = z
   .object({
-    waitId: z.string().min(1),
-    ownerRef: Wait.OwnerRef,
-    allowedActions: z.array(Wait.AllowedAction).min(1),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+    allowedActions: z.array(SessionTransition.AllowedAction).min(1),
     expectedResponders: z.array(z.string().min(1)).min(1),
-    resolutionPolicy: Wait.ResolutionPolicy,
-    quorum: Wait.Quorum.optional(),
-    expiresAt: EpochMs,
-    followUpWindow: z.number().int().nonnegative(),
+    resolution: z.enum(["first", "quorum", "all"]),
+    threshold: z.number().int().positive(),
+    deadline: EpochMs,
     /** Extra correlation fields (threadId, channelId, …); endpointId and replyToMessageId are derived from the delivery itself. */
-    correlation: Wait.Correlation.optional(),
+    correlation: SessionTransition.Correlation.optional(),
   })
   .strict();
 
 const SendInputBase = z
   .object({
-    /** Outbound message identity: doubles as the Wait's originMessageId, whose UNIQUE column pins "exactly one Wait per awaited message". */
+    /** Outbound message identity: is the stable physical idempotency key; requestId is the original action id. */
     messageId: z.string().min(1),
     /** The sender flow's trace: every event this send leaves files under it. */
     traceId: z.string().min(1),
@@ -318,7 +317,7 @@ const SendInputBase = z
     body: z.string().min(1),
     /** Injected timestamp — messaging never reads the wall clock. */
     at: EpochMs,
-    waitSpec: AwaitSpecSchema.optional(),
+    requestSpec: RequestSpecSchema.optional(),
     /**
      * #219 policy-intent axis, additive-optional for backward compat. Absent →
      * defaults from `operation` (notify for fire_and_forget, converse for
@@ -329,18 +328,18 @@ const SendInputBase = z
   .strict();
 
 const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
-  if (input.operation === "awaited" && input.waitSpec === undefined) {
+  if (input.operation === "awaited" && input.requestSpec === undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "awaited operation requires a waitSpec",
-      path: ["waitSpec"],
+      message: "awaited operation requires a requestSpec",
+      path: ["requestSpec"],
     });
   }
-  if (input.operation === "fire_and_forget" && input.waitSpec !== undefined) {
+  if (input.operation === "fire_and_forget" && input.requestSpec !== undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "fire_and_forget never opens a Wait — waitSpec is not allowed",
-      path: ["waitSpec"],
+      message: "fire_and_forget never opens a request — requestSpec is not allowed",
+      path: ["requestSpec"],
     });
   }
   // The two axes stay coherent without collapsing: converse ⟺ awaited,
@@ -362,23 +361,13 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
   }
 });
 
-// Wait control — brain → gateway (§2b-1): the brain owns WHEN a wait should
-// stop mattering; the gateway owns the rows and executes the write.
-
-const WaitControlActionSchema = z.enum(["cancel", "expire_now"]);
-
-const WaitControlSchema = z
-  .object({
-    waitId: z.string().min(1),
-    action: WaitControlActionSchema,
-    reason: z.string().min(1),
-  })
-  .strict();
-
 export namespace Gateway {
   /** #946 stage 1: schemas only; consumers and legacy removal follow in stage 2. */
   export const SendMessage = MessageContract.Send;
   export type SendMessage = z.infer<typeof SendMessage>;
+
+  export const RequestAnswer = MessageContract.RequestAnswer;
+  export type RequestAnswer = z.infer<typeof RequestAnswer>;
 
   export const SendMessageHandle = MessageContract.Handle;
   export type SendMessageHandle = z.infer<typeof SendMessageHandle>;
@@ -410,8 +399,8 @@ export namespace Gateway {
   export const ActorContext = ActorContextSchema;
   export type ActorContext = z.infer<typeof ActorContextSchema>;
 
-  export const WaitContext = WaitContextSchema;
-  export type WaitContext = z.infer<typeof WaitContextSchema>;
+  export const RequestContext = RequestContextSchema;
+  export type RequestContext = z.infer<typeof RequestContextSchema>;
 
   export const DeliveredEvent = DeliveredEventSchema;
   export type DeliveredEvent = z.infer<typeof DeliveredEventSchema>;
@@ -446,8 +435,8 @@ export namespace Gateway {
   export const MessageDenialCode = MessageDenialCodeSchema;
   export type MessageDenialCode = z.infer<typeof MessageDenialCodeSchema>;
 
-  export const AwaitSpec = AwaitSpecSchema;
-  export type AwaitSpec = z.infer<typeof AwaitSpecSchema>;
+  export const RequestSpec = RequestSpecSchema;
+  export type RequestSpec = z.infer<typeof RequestSpecSchema>;
 
   export const SendInput = SendInputSchema;
   export type SendInput = z.infer<typeof SendInputSchema>;
@@ -462,7 +451,7 @@ export namespace Gateway {
 
   /**
    * Deterministic send receipt. `sent`/`denied` and the denial code are the
-   * audit facts; a `wait` is present exactly when the operation was awaited.
+   * audit facts; a `request` is present exactly when the operation was awaited.
    */
   export type SendReceipt =
     | Readonly<{
@@ -483,7 +472,7 @@ export namespace Gateway {
         senderId: string;
         grantId: string;
         target: DeliveryTarget;
-        wait: Wait.Record;
+        request: SessionTransition.Request;
         at: number;
       }>
     | Readonly<{
@@ -496,20 +485,4 @@ export namespace Gateway {
         at: number;
       }>;
 
-  export const WaitControlAction = WaitControlActionSchema;
-  export type WaitControlAction = z.infer<typeof WaitControlActionSchema>;
-
-  export const WaitControl = WaitControlSchema;
-  export type WaitControl = z.infer<typeof WaitControlSchema>;
-
-  /** Writes stay gateway-side; rejection is typed, never message text. */
-  export type WaitControlReceipt =
-    | Readonly<{ kind: "cancelled" | "expired"; waitId: string; at: number }>
-    | Readonly<{
-        kind: "rejected";
-        waitId: string;
-        code: "not_found" | "already_terminal";
-        reason: string;
-        at: number;
-      }>;
 }

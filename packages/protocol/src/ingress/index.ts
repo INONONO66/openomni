@@ -9,7 +9,7 @@ import {
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
-import { Wait } from "../wait/index.js";
+import { SessionTransition } from "../ledger/session-transition.js";
 import * as RouteRecord from "./route-record.js";
 import { EpochMs } from "../time.js";
 
@@ -132,7 +132,7 @@ const MetaSchemaImpl = z
     threadId: z.string().optional(),
     replyToId: z.string().optional(),
     agentName: z.string().optional(),
-    correlation: Wait.Correlation.optional(),
+    correlation: SessionTransition.Correlation.optional(),
   })
   .catchall(z.unknown());
 

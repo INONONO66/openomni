@@ -5,11 +5,11 @@ import {
 } from "@openomni/channels";
 import { ChannelGrantStore } from "@openomni/ledger";
 import type { Actor, Gateway } from "@openomni/protocol";
-import { Bus, currentExecutor, scopeObservation } from "@openomni/agent";
+import { Bus, createSessionRequests, currentExecutor, scopeObservation } from "@openomni/agent";
 import { Gateway as GatewayProtocol } from "@openomni/protocol";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
-import { terminalMessage } from "./composition/terminal-message";
+import { outboundMessage } from "./composition/terminal-message";
 
 /**
  * The tier a named channel surface mounts with when no Owner decision
@@ -93,17 +93,20 @@ export interface OutboundMessaging {
 }
 
 export function createResidentGateway(
-  ports: Omit<Parameters<typeof createGatewayRouter>[0], "sink" | "run" | "messaging">,
+  ports: Omit<Parameters<typeof createGatewayRouter>[0], "sink" | "run" | "messaging" | "requests"> & {
+    readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
+  },
   messaging?: OutboundMessaging,
 ): GatewayRouter {
   registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
   const externalRun = createIngressExecutor(ports.clock ?? Date.now);
   return createGatewayRouter({
     ...ports,
+    requests: ports.requests ?? createSessionRequests({ observations: Bus, clock: ports.clock }),
     sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
     run: async (sender, request, body) => {
       if (sender.kind === "external") return externalRun(sender, request, body);
-      const result = await (terminalMessage.getStore()?.executor ?? currentExecutor()).run(
+      const result = await (outboundMessage.getStore()?.executor ?? currentExecutor()).run(
         request,
         body,
       );

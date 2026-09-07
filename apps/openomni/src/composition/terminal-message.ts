@@ -2,94 +2,68 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { Bus, createExecutor, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouter } from "@openomni/channels";
-import { Inbox, type LedgerSession } from "@openomni/protocol";
+import { SessionTransition, type LedgerAction } from "@openomni/protocol";
 
-type TerminalInput = Parameters<NonNullable<SessionRuntime["commitTerminal"]>>[0];
-interface TerminalContext {
-  readonly input: TerminalInput;
+type OutboundInput = Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0];
+interface OutboundContext {
+  readonly input: OutboundInput;
   readonly executor: ReturnType<typeof createExecutor>;
-  result?: LedgerSession.CommitResult;
+  receipt?: LedgerAction.Receipt;
 }
 
-export const terminalMessage = new AsyncLocalStorage<TerminalContext>();
+export const outboundMessage = new AsyncLocalStorage<OutboundContext>();
 
-export function commitTerminalMessage(
+function receivedOutbound(message: SessionTransition.OutboundMessage): LedgerAction.Receipt | undefined {
+  const action = SessionHandleStore.tree(message.destinationSessionId).find((candidate) => {
+    if (candidate.id === message.messageId && candidate.kind === "prompt") return true;
+    if (candidate.kind !== "reply") return false;
+    const effect = candidate.effect.value;
+    if (effect === null || typeof effect !== "object" || Array.isArray(effect)) return false;
+    const answer = SessionTransition.Answer.safeParse(effect.answer);
+    return answer.success && answer.data.outbound?.messageId === message.messageId;
+  });
+  return action === undefined ? undefined : { action, revision: action.ordinal };
+}
+
+/** The gateway admits recorded bytes; the receiver, not this source, owns its inbox. */
+export function dispatchOutboundMessage(
   ingest: GatewayRouter["ingest"],
   clock: () => number,
-): NonNullable<SessionRuntime["commitTerminal"]> {
+): NonNullable<SessionRuntime["dispatchOutbound"]> {
   return async (input) => {
-    const { commit, reply, policy } = input;
+    const { message, authority, policy } = input;
     const executor = createExecutor({
       identity: {
-        sessionId: commit.sessionId,
-        role: SessionHandleStore.row(commit.sessionId).role,
-        parentActionId: commit.actions[0]?.parentId ?? null,
+        sessionId: message.sourceSessionId,
+        role: SessionHandleStore.row(message.sourceSessionId).role,
+        parentActionId: `${message.sourceActionId}:outbound`,
       },
-      policy,
-      observations: Bus,
-      clock,
-      entropy: () => crypto.randomUUID(),
+      policy, observations: Bus, clock, entropy: () => crypto.randomUUID(),
       ledger: {
         async commit(action) {
-          const row = SessionHandleStore.row(commit.sessionId);
+          const row = SessionHandleStore.row(message.sourceSessionId);
           const result = SessionHandleStore.commit({
-            ...commit,
-            now: clock(),
-            expectedRevision: row.revision,
-            actions: [action],
-            consumeInboxIds: [],
-            state: row.state,
-            releaseLease: false,
+            sessionId: message.sourceSessionId, ...authority,
+            now: clock(), expectedRevision: row.revision,
+            actions: [action], consumeInboxIds: [], state: row.state, releaseLease: false,
           });
-          if (!result.ok) throw new Error(`terminal message action commit ${result.reason}`);
+          if (!result.ok) throw new Error(`outbound policy commit ${result.reason}`);
           const receipt = result.receipts[0];
-          if (receipt === undefined) throw new Error("terminal message action receipt missing");
+          if (receipt === undefined) throw new Error("outbound policy receipt missing");
           return receipt;
         },
       },
     });
-    const context: TerminalContext = { input, executor };
-    return terminalMessage.run(context, async () => {
-      const failures: Error[] = [];
-      try {
-        const origin = Inbox.ReplyOrigin.parse(reply.origin.value);
-        const admitted = await ingest(
-          { kind: "session", id: commit.sessionId },
-          {
-            to: { kind: "session", id: reply.sessionId },
-            type: "message",
-            content: reply.content,
-            replyTo: origin.replyTo,
-          },
-        );
-        if (admitted.status === "blocked_pre" || context.result === undefined) {
-          throw new Error("terminal gateway admission refused");
-        }
-      } catch (error) {
-        failures.push(error instanceof Error ? error : new Error(String(error)));
-      }
-      if (commit.releaseLease) {
-        try {
-          const row = SessionHandleStore.row(commit.sessionId);
-          const released = SessionHandleStore.commit({
-            ...commit,
-            now: clock(),
-            expectedRevision: row.revision,
-            actions: [],
-            consumeInboxIds: [],
-            state: row.state,
-            releaseLease: true,
-          });
-          if (!released.ok) throw new Error(`terminal message lease release ${released.reason}`);
-        } catch (error) {
-          failures.push(error instanceof Error ? error : new Error(String(error)));
-        }
-      }
-      if (failures.length === 1) throw failures[0];
-      if (failures.length > 1)
-        throw new AggregateError(failures, "terminal delivery and lease release failed");
-      if (context.result === undefined) throw new Error("terminal message receipt missing");
-      return context.result;
+    const context: OutboundContext = { input, executor };
+    return outboundMessage.run(context, async () => {
+      const admitted = await ingest(
+        { kind: "session", id: message.sourceSessionId },
+        { to: { kind: "session", id: message.destinationSessionId }, type: "message", content: message.content, replyTo: message.replyTo },
+      );
+      if (admitted.status === "blocked_pre") throw new Error("outbound gateway admission refused");
+      const receipt = context.receipt ?? receivedOutbound(message);
+      if (receipt === undefined) throw new Error("outbound receiving consumer did not commit a receipt");
+      return receipt;
     });
   };
 }

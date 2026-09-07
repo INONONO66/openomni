@@ -1,13 +1,22 @@
 import { z } from "zod";
+import { SessionTransition } from "@openomni/protocol";
 import type { ProcessSessionRequest } from "../process-entry";
 
 const Doorbell = z.object({ sessionIds: z.array(z.string().min(1)) }).strict();
+const ProcessOutput = z.union([Doorbell, z.object({
+  kind: z.literal("request_answer"), answer: SessionTransition.Answer,
+}).strict()]);
+export const ProcessReplyReceipt = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), inputId: z.string().min(1), resolution: SessionTransition.Resolution }).strict(),
+  z.object({ ok: z.literal(false), inputId: z.string().min(1), error: z.string() }).strict(),
+]);
 
 /** A process is only a transport for the same durable session runner. */
 export function createProcessSessionTransport(options: {
   readonly command: readonly string[];
   readonly worker: Omit<ProcessSessionRequest, "sessionId">;
   readonly committed: (sessionIds: readonly string[]) => void;
+  readonly answer: (answer: SessionTransition.Answer) => Promise<SessionTransition.Resolution>;
 }) {
   const children = new Map<string, { close: () => void; done: Promise<void> }>();
   return {
@@ -20,7 +29,6 @@ export function createProcessSessionTransport(options: {
         stderr: "inherit",
       });
       child.stdin.write(`${JSON.stringify({ ...options.worker, sessionId })}\n`);
-      child.stdin.end();
       const done = (async () => {
         const reader = child.stdout.getReader();
         const decoder = new TextDecoder();
@@ -34,7 +42,21 @@ export function createProcessSessionTransport(options: {
             while (end >= 0) {
               const line = buffer.slice(0, end);
               buffer = buffer.slice(end + 1);
-              options.committed(Doorbell.parse(JSON.parse(line)).sessionIds);
+              const output = ProcessOutput.parse(JSON.parse(line));
+              if ("sessionIds" in output) options.committed(output.sessionIds);
+              else {
+                const answer = output.answer;
+                if (answer.principal.kind !== "session" || answer.principal.principalId !== sessionId || answer.outbound?.sourceSessionId !== sessionId) {
+                  throw new Error("process answer principal does not match its authenticated child");
+                }
+                let receipt: z.infer<typeof ProcessReplyReceipt>;
+                try {
+                  receipt = { ok: true, inputId: answer.inputId, resolution: await options.answer(answer) };
+                } catch (error) {
+                  receipt = { ok: false, inputId: answer.inputId, error: error instanceof Error ? error.message : String(error) };
+                }
+                child.stdin.write(`${JSON.stringify(receipt)}\n`);
+              }
               end = buffer.indexOf("\n");
             }
           }
@@ -42,6 +64,8 @@ export function createProcessSessionTransport(options: {
           if (code !== 0) throw new Error(`session process exited ${code}: ${sessionId}`);
         } finally {
           reader.releaseLock();
+          if (child.exitCode === null) child.kill();
+          child.stdin.end();
           children.delete(sessionId);
         }
       })();

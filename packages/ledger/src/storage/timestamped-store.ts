@@ -12,13 +12,3 @@ export function withStoreTimestamps<
     updatedAt: existing === undefined ? (record.updatedAt ?? now) : now,
   };
 }
-
-export function withCreateTimestamps<
-  T extends { readonly createdAt?: number; readonly updatedAt?: number },
->(record: T, now = Date.now()): T {
-  return {
-    ...record,
-    createdAt: record.createdAt ?? now,
-    updatedAt: record.updatedAt ?? record.createdAt ?? now,
-  };
-}

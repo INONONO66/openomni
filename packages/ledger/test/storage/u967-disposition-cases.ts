@@ -81,8 +81,9 @@ describe("967 WAL rollback crash and resumability", () => {
         fixture.db.query("SELECT count(*) AS n FROM _migrations WHERE name LIKE '0034%'").get(),
       ).toEqual({ n: 1n });
       for (let reopen = 0; reopen < 2; reopen += 1) {
-        const adapter = new SqliteStorageAdapter(fixture.path);
-        adapter.close();
+        expect(() => new SqliteStorageAdapter(fixture.path)).toThrow(
+          "unresolved_legacy_requests:wait:preserved",
+        );
       }
     });
   }

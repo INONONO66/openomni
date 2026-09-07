@@ -227,7 +227,7 @@ test("root configuration and first inbox use the same atomic inbox port", () => 
   expect(SessionHandleStore.inboxRows("child")).toHaveLength(1);
 });
 
-test("a terminal and its parent inbox delivery roll back on the same fault", () => {
+test("a source terminal and its outbound obligation roll back on the same fault", () => {
   // Given an existing child holding its own fence.
   SessionHandleStore.commitInbox(childMessage());
   SessionHandleStore.acquireLease({
@@ -249,7 +249,7 @@ test("a terminal and its parent inbox delivery roll back on the same fault", () 
   };
   using raw = new Database(dbPath);
   raw.exec(
-    "CREATE TRIGGER refuse_parent BEFORE INSERT ON inbox WHEN NEW.session_id = 'parent' BEGIN SELECT RAISE(ABORT, 'parent fault'); END",
+    "CREATE TRIGGER refuse_obligation BEFORE INSERT ON action WHEN NEW.kind = 'outbound' BEGIN SELECT RAISE(ABORT, 'outbound fault'); END",
   );
   const request = {
     sessionId: "child",
@@ -257,25 +257,19 @@ test("a terminal and its parent inbox delivery roll back on the same fault", () 
     fence: 1,
     now: 40,
     expectedRevision: 2,
-    actions: [terminal],
+    actions: [terminal, {
+      id: "child:outbound", parentId: terminal.id, sessionId: "child", kind: "outbound" as const,
+      intent: { encodingVersion: 1 as const, value: { op: "open" } },
+      effect: { encodingVersion: 1 as const, value: { state: "pending" } },
+      irreversible: true as const, ts: 40,
+    }],
     consumeInboxIds: ["letter"],
     state: "idle" as const,
     releaseLease: true,
-    deliveries: [
-      {
-        id: "parent:reply",
-        sessionId: "parent",
-        kind: "prompt" as const,
-        content: "done",
-        createdAt: 40,
-        parentActionId: null,
-        origin: { encodingVersion: 1 as const, value: { replyTo: "request", kind: "result" } },
-      },
-    ],
   };
   // When the last write in the terminal unit fails.
   expect(() => SessionHandleStore.commit(request)).toThrow();
-  // Then terminal, consumption and parent inbox all remain uncommitted.
+  // Source history and consumption roll back; the parent was never part of this transaction.
   expect(SessionHandleStore.tree("child").map((action) => action.id)).toEqual([
     "child:configure",
     "letter",
