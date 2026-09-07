@@ -12,7 +12,7 @@ describe("DesktopApi contract", () => {
 
   test("Given the api, When the renderer asks for the gateway, Then it gets an endpoint or nothing", async () => {
     // `undefined` is a real answer, not a failure: it is how a build with no
-    // gateway configured tells the renderer to stay on the mock.
+    // gateway configured tells the renderer to keep its composer disabled.
     const configured: DesktopApi = {
       versions: { electron: "1", chrome: "2", node: "3" },
       gateway: () => Promise.resolve<GatewayEndpoint>({ url: "ws://127.0.0.1:3000/ws" }),

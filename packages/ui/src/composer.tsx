@@ -193,6 +193,7 @@ export function Composer({
   onSubmit,
   onStop,
   sending = false,
+  disabled = false,
   hint,
   meta,
   pending = [],
@@ -214,6 +215,12 @@ export function Composer({
   readonly onStop?: (() => void) | undefined;
   /** Locks the field and the send control while a turn is in flight. */
   readonly sending?: boolean;
+  /**
+   * Locks the field because there is nothing behind it — no wire to send on.
+   * Distinct from `sending`: a disabled composer offers no Stop, and the reason
+   * it is disabled is the surface's to print in `hint`.
+   */
+  readonly disabled?: boolean;
   /** Left meta: the model, the session — the surface's words, not ours. */
   readonly hint?: string | undefined;
   /** The line under the field: tokens, turn state. The surface's words. */
@@ -225,7 +232,7 @@ export function Composer({
   readonly placeholder?: string;
 }) {
   const field = useRef<HTMLTextAreaElement>(null);
-  const sendable = value.trim().length > 0 && !sending;
+  const sendable = value.trim().length > 0 && !sending && !disabled;
 
   // Auto-grow by MEASURING, not by counting newlines: a wrapped long line takes
   // two rows on screen and one in the string, and a field sized from the string
@@ -271,7 +278,7 @@ export function Composer({
             className="max-h-[calc(21px*8)] min-h-[21px] w-full flex-1 resize-none bg-transparent font-sans text-[14px]/[21px] text-fg outline-none selection:bg-accent selection:text-accent-fg placeholder:text-fg/40 disabled:opacity-50"
             data-composer
             data-ui={UI_NAMES.ComposerInput}
-            disabled={sending}
+            disabled={sending || disabled}
             onChange={(event) => {
               onValueChange(event.target.value);
               grow(event.currentTarget);
