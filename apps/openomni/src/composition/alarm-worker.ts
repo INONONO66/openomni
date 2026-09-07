@@ -53,17 +53,22 @@ export function createAlarmWorker(options: {
   function deliver(row: Alarm.Row, content: string, terminal: boolean, batchHash?: string) {
     if (stopped) return;
     const spec = row.kind === "watch" ? watchSpec.parse(row.spec?.value) : undefined;
+    const at = now();
+    const expired =
+      spec?.watch.timeout_ms !== undefined && at >= row.fireAt + spec.watch.timeout_ms;
     const fired = options.alarms.fire({
       id: row.id,
       epoch: row.epoch,
       fence: row.fence,
       actionId: crypto.randomUUID(),
       inboxId: crypto.randomUUID(),
-      at: now(),
-      content,
-      terminal,
+      at,
+      content: expired
+        ? JSON.stringify({ alarmId: row.id, epoch: row.epoch, reason: "timeout", exitCode: null })
+        : content,
+      terminal: terminal || expired,
       limit: spec?.notificationLimit ?? 1,
-      ...(batchHash === undefined ? {} : { batchHash }),
+      ...(expired || batchHash === undefined ? {} : { batchHash }),
     });
     if (fired === undefined) return;
     if (fired.row.status !== "armed") release(row.id);
