@@ -1,4 +1,7 @@
+import { Operational } from "@openomni/protocol";
+import type { PublishPort } from "../types";
 import type { DedupeWindow } from "./dedupe";
+import { PartialDeliveryError } from "./send-text";
 import { newTraceId } from "./trace";
 
 export interface DeliveryReceipt {
@@ -20,6 +23,7 @@ export function deliverKeyed(
   idempotencyKey: string,
   send: (traceId: string) => Promise<string | undefined>,
   isRejected: (error: Error) => boolean,
+  publish: PublishPort,
 ): Promise<DeliveryReceipt> {
   const attempt = async (): Promise<DeliveryReceipt> => {
     const traceId = newTraceId();
@@ -30,6 +34,23 @@ export function deliverKeyed(
         : { value: "accepted", externalMessageId };
     } catch (error) {
       if (!(error instanceof Error)) throw error;
+      if (error instanceof PartialDeliveryError) {
+        publish(Operational.Events.Warn, {
+          traceId,
+          time: Date.now(),
+          component: "server",
+          msg: "partial message delivery",
+          context: {
+            delivery: "partial",
+            idempotencyKey,
+            acceptedChunks: error.acceptedChunks,
+            attemptedChunks: error.attemptedChunks,
+            totalChunks: error.totalChunks,
+            reason: error.reason,
+          },
+        });
+        return { value: "unknown" };
+      }
       return { value: isRejected(error) ? "rejected" : "unknown" };
     }
   };

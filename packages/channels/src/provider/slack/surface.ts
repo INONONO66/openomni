@@ -2,6 +2,7 @@ import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../../support/dedupe";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { sendText } from "../../support/send-text";
+import { RetryExhaustedError } from "../../support/fetch-retry";
 import { SLACK_RENDER } from "./format";
 import type { PublishPort } from "../../types";
 import { SlackClient } from "./client";
@@ -97,7 +98,10 @@ export class SlackAdapter implements Channel.Surface {
           this.client.send(channelId, chunk, traceId),
         );
       },
-      (error) => error instanceof SlackApiError && error.data.rejected === true,
+      (error) =>
+        (error instanceof SlackApiError && error.data.rejected === true) ||
+        (error instanceof RetryExhaustedError && error.status === 429),
+      this.publish,
     );
   }
 

@@ -4,6 +4,7 @@ import { Dedupe, DedupeWindow } from "../../support/dedupe";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { requireHandler } from "../../support/handler-frame";
 import { sendText } from "../../support/send-text";
+import { RetryExhaustedError } from "../../support/fetch-retry";
 import { TELEGRAM_RENDER } from "./format";
 import { TelegramApiError, TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
@@ -110,7 +111,10 @@ export class TelegramAdapter implements Channel.Surface {
         sendText(body, TELEGRAM_RENDER, (chunk) =>
           this.client.sendMarkdown(externalId, chunk, traceId),
         ),
-      (error) => error instanceof TelegramApiError && error.rejected,
+      (error) =>
+        (error instanceof TelegramApiError && error.rejected) ||
+        (error instanceof RetryExhaustedError && error.status === 429),
+      this.publish,
     );
   }
 
