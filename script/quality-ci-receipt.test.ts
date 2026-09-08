@@ -36,7 +36,7 @@ test("native type findings retain identity and trigger growth and changed-file r
 	const native = { ...types, violations: [violation] };
 	const base = mergeMeasurements(identity.paths, [normalizeTypes(native, identity)]);
 	expect(base.findings[0]?.origin).toBe("owned");
-	const { origin: _origin, ...unlabelled } = violation;
+	const unlabelled = Object.fromEntries(Object.entries(violation).filter(([key]) => key !== "origin"));
 	expect(() => normalizeTypes({ ...types, violations: [unlabelled] }, identity)).toThrow();
 	expect(() => normalizeTypes({ ...types, violations: [{ ...violation, origin: "guessed" }] }, identity)).toThrow();
 	const doubled = mergeMeasurements(identity.paths, [normalizeTypes({ ...native, violations: [violation, violation] }, identity)]);

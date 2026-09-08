@@ -202,8 +202,11 @@ function commit(root: string, message: string) {
     expect(Bun.spawnSync(["git", ...args], { cwd: root }).exitCode).toBe(0);
   }
 }
-const lines = (count: number, prefix = "line") =>
-  `${Array.from({ length: count }, (_, i) => `export const ${prefix}${i} = ${i};`).join("\n")}\n`;
+const lines = (count: number, prefix = "line") => {
+  let text = "";
+  for (let index = 0; index < count; index++) text += `export const ${prefix}${index} = ${index};\n`;
+  return text;
+};
 
 test("Git changes are rename-aware and hunk-anchored; the CLI applies growth, not path identity", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-ratchet-git-"));
@@ -212,6 +215,7 @@ test("Git changes are rename-aware and hunk-anchored; the CLI applies growth, no
     writeFileSync(join(root, "script/old.ts"), lines(20));
     writeFileSync(join(root, "script/edited.ts"), lines(5, "edited"));
     writeFileSync(join(root, "script/gone.ts"), "export const gone = 1;\n");
+    writeFileSync(join(root, "script/schema.sql"), "create table fixture (id integer primary key);\n");
     writeFileSync(join(root, "script/tsconfig.json"), '{"compilerOptions":{"strict":true},"include":["*.ts"]}');
     writeFileSync(
       join(root, "contract.json"),
@@ -306,6 +310,13 @@ test("Git changes are rename-aware and hunk-anchored; the CLI applies growth, no
     expect(admit()).toBe(2);
     write({ ...initial, findings: [added, added] });
     expect(admit()).toBe(1);
+    // A store measurement's inventory also enumerates migration sources and the live schema.
+    const stored = { ...initial, analyzed: [...initial.analyzed, "store"], inventory: [...inventory, "script/schema.sql", "sqlite_schema"] };
+    writeFileSync(join(root, "stored.json"), JSON.stringify(stored));
+    write(stored);
+    expect(invoke(["--coverage", "evidence.json", "--baseline", "stored.json"])).toBe(0);
+    write({ ...stored, inventory });
+    expect(invoke(["--coverage", "evidence.json", "--baseline", "stored.json"])).toBe(2);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
