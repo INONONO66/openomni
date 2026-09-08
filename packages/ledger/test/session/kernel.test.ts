@@ -583,6 +583,49 @@ describe("session kernel folds", () => {
     expect(() => watch.subscribe(() => undefined)).toThrow("watch is unsubscribed");
   });
 
+  test("a dropped notification resynchronizes from the last revision through bounded pages without inventing events", async () => {
+    materialize("resync");
+    const watch = SessionHandleStore.watchSnapshot("resync", 1, sink);
+    const seen: LedgerAction.Node[] = [];
+    const gap = new Promise<SessionTurn.Observation>((resolve) => {
+      watch.subscribe((observation) => {
+        if (observation.kind === "gap") resolve(observation);
+      });
+    });
+
+    SessionHandleStore.commitInbox(prompt("resync-1", "resync", "one", "resync:configure"));
+    sink.dropNextCommit = true;
+    SessionHandleStore.commitInbox(prompt("resync-2", "resync", "two", "resync-1"));
+    SessionHandleStore.commitInbox(prompt("resync-3", "resync", "three", "resync-2"));
+    SessionHandleStore.commitInbox(prompt("resync-4", "resync", "four", "resync-3"));
+    const observed = await bounded(gap, "gap observation");
+    expect(observed).toEqual({ kind: "gap", sessionId: "resync", from: 2, to: 4 });
+    if (observed.kind !== "gap") throw new Error("gap expected");
+
+    let page = SessionHandleStore.historyPage("resync", { afterRevision: observed.from, limit: 2 });
+    expect(page).toMatchObject({ afterRevision: 2, headRevision: 5, nextRevision: 4 });
+    seen.push(...page.actions);
+    page = SessionHandleStore.historyPage("resync", { afterRevision: page.nextRevision ?? 0, limit: 2 });
+    expect(page.nextRevision).toBeNull();
+    seen.push(...page.actions);
+    expect(seen.map((action) => [action.id, action.ordinal])).toEqual([
+      ["resync-2", 3],
+      ["resync-3", 4],
+      ["resync-4", 5],
+    ]);
+    expect(seen).toEqual(SessionHandleStore.tree("resync").slice(2));
+    expect(SessionHandleStore.historyPage("resync", { afterRevision: 5 })).toEqual({
+      sessionId: "resync",
+      afterRevision: 5,
+      headRevision: 5,
+      actions: [],
+      nextRevision: null,
+    });
+    expect(() => SessionHandleStore.historyPage("resync", { limit: 0 })).toThrow();
+    expect(() => SessionHandleStore.historyPage("missing")).toThrow("session not found");
+    watch.unsubscribe();
+  });
+
   test("a failed initial watch snapshot releases its observation subscription", () => {
     let subscriptions = 0;
     const observations: ObservationSink = {

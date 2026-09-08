@@ -280,6 +280,11 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
         [...actionRows.values()]
           .filter((action) => action.sessionId === sessionId)
           .sort((left, right) => left.ordinal - right.ordinal),
+      range: (sessionId, afterRevision, limit) =>
+        [...actionRows.values()]
+          .filter((action) => action.sessionId === sessionId && action.ordinal > afterRevision)
+          .sort((left, right) => left.ordinal - right.ordinal)
+          .slice(0, limit),
     },
     inbox: {
       commit(input) {

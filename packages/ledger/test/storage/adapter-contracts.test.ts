@@ -180,6 +180,10 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(storage.policies.append(policy)).toBe(false);
   expect(storage.policies.rows()).toEqual([policy]);
   expect(storage.sessions.get(session.id)?.revision).toBe(7);
+  const whole = storage.actions.tree(session.id);
+  expect(storage.actions.range(session.id, 0, 3)).toEqual(whole.slice(0, 3));
+  expect(storage.actions.range(session.id, 3, 100)).toEqual(whole.slice(3));
+  expect(storage.actions.range(session.id, whole.length, 1)).toEqual([]);
 
   return {
     session: storage.sessions.get(session.id),

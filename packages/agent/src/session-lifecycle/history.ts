@@ -1,9 +1,14 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import { Message, Tool, type LedgerAction } from "@openomni/protocol";
-import { createAssistantMessage, createUserMessage, withMessageId } from "./core/message-factory";
+import { createAssistantMessage, createUserMessage, withMessageId } from "../core/message-factory";
 
-/** Canonical context projection; originals and each replaced projection remain append-only. */
-export function sessionHistory(
+/**
+ * Canonical model-context fold over committed actions: delivered prompts,
+ * assistant snapshots, positional tool settlements and compaction projections.
+ * Originals and each replaced projection remain append-only; bus ticks, policy
+ * decisions and diagnostics never enter model context.
+ */
+export function foldSessionHistory(
   sessionId: string,
   actions: readonly LedgerAction.Node[],
 ): Message.WithParts[] {
