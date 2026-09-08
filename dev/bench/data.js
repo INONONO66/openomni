@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788870695895,
+  "lastUpdate": 1788872963451,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -67529,6 +67529,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 890296,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7b85d9f229f1e428dda7f6397b2b6d1afc4630c6",
+          "message": "feat(kernel): expose action-based history and diagnostic projections (#972) (#1008)\n\n* feat(kernel): expose action-based history pages and diagnostic projections (#972)\n\n- SessionHistory protocol namespace: bounded revision Page, redacted causal\n  Transition/Cause/Outcome, PolicyDecision, Request and Compaction projections\n- actions.range storage read; SessionHandleStore.historyPage reads head revision\n  and slice in one transaction so a watch gap resynchronizes without invented events\n- session-lifecycle/history.ts owns foldSessionHistory (moved from\n  session-history.ts, deleted); session-lifecycle/inspect.ts derives transitions,\n  policy inspection and commissioned-child traversal purely from actions\n- SessionHandle.history()/inspect(); outcome_unknown stays distinct from failed\n- tests: real child/retry/refusal/approval/wake/compaction scenario, credential\n  non-leak, pure reads, page rebuild == canonical fold, gap resync, range contract\n\n* docs(kernel): record #972 history/inspection receipts and rename the ledger bench seeder\n\n- SLOP #972 receipt table: history pages, fold move, diagnostic and policy\n  projections, child traversal, compaction evidence, pure replay, deletion census\n- implementation-status and agent AGENTS.md point at session-lifecycle/*\n- lifecycle contract: landed locations for #972 symbols\n- packages/ledger/bench: sessionHistory seeder -> seedTurnHistory so the\n  moved fold's census grep is zero\n\n* test(protocol): pin SessionHistory page invariants, request defaults and projection shapes\n\nCovers the new protocol module inside its own lane so the protocol coverage\nratchet holds (CI: 99.98% -> 99.17% without it; 99.63% with it).\n\n* test(protocol): type the cause fixtures so check-types passes",
+          "timestamp": "2026-09-08T22:08:15+09:00",
+          "tree_id": "0cb1ab5f20ee6ae8e5aff4bac2661afc91229fbb",
+          "url": "https://github.com/INONONO66/openomni/commit/7b85d9f229f1e428dda7f6397b2b6d1afc4630c6"
+        },
+        "date": 1788872962986,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 850,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 5764,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1336590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 342811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6710105,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 146,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1102,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 677,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 509027,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3413,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18882,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 178331,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 927323,
             "unit": "ns/op"
           }
         ]
