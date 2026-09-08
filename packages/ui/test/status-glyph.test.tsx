@@ -37,6 +37,17 @@ test("every shape is an SVG with a crisp one-pixel stroke", () => {
   }
 });
 
+test("animated shapes have status keyframes and reduced-motion fallbacks", async () => {
+  const source = await Bun.file(new URL("../src/styles.css", import.meta.url)).text();
+  expect(source).toContain("@keyframes status-spin");
+  expect(source).toContain("@keyframes status-pulse");
+  expect(source).toContain("@keyframes status-entrance");
+  expect(source).toContain("@media (prefers-reduced-motion: reduce)");
+  expect(source).toContain(".status-spinner");
+  expect(source).toContain(".status-dot-pulse");
+  expect(source).toContain(".status-entrance");
+});
+
 test("status tokens may be declared in styles but consumed only by StatusGlyph", async () => {
   const violations: string[] = [];
   for (const root of ["../src", "../../../apps/desktop/src"]) {

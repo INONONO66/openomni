@@ -605,8 +605,37 @@ body {
   }
 }
 
+[data-ui="TreeRow"]:hover .status-glyph {
+  opacity: 1;
+}
+
+.status-spinner {
+  animation: status-spin 1s linear infinite;
+}
+
 .status-dot-pulse {
-  animation: status-pulse 2s ease-in-out infinite;
+  animation: status-pulse 1.6s ease-in-out infinite;
+}
+
+.status-entrance {
+  animation: status-entrance 160ms ease-out both;
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes status-entrance {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .streaming-caret {
@@ -658,6 +687,13 @@ body {
      tool goes live. */
   .spinner-dots circle:not([data-dot="0"]) {
     display: none;
+  }
+
+  .status-spinner,
+  .status-dot-pulse,
+  .status-entrance {
+    animation: none !important;
+    transform: none !important;
   }
 
   .spinner-dots circle[data-dot="0"] {

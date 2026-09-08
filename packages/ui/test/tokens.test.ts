@@ -418,7 +418,7 @@ describe("the motion budget", () => {
     // and the streaming caret. A fourth `@keyframes` is a decoration.
     const keyframes = [...CSS.matchAll(/@keyframes\s+([\w-]+)/g)].map(([, name]) => name);
 
-    expect(keyframes.sort()).toEqual(["caret-blink", "spinner-step", "status-pulse"]);
+    expect(keyframes.sort()).toEqual(["caret-blink", "spinner-step", "status-entrance", "status-pulse", "status-spin"]);
   });
 
   test("Given reduced motion, When requested, Then animation and transition are both disabled", () => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Highlight } from "@openomni/ui";
 import { renderToStaticMarkup } from "react-dom/server";
-import { orderByAttention } from "../src/renderer/attention";
+import { ATTENTION_LABEL, orderByAttention } from "../src/renderer/attention";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
 import { makeSession } from "./helpers/session";
@@ -47,6 +47,41 @@ const html = renderToStaticMarkup(
     sessions={sessions}
   />,
 );
+
+describe("attention kind headers disambiguate repeated projects", () => {
+  test("mixed kinds show non-collapsible labels above each project group", () => {
+    const mixed = [
+      makeSession({ id: "waiting", phase: "waiting_input", projectId: "default" }),
+      makeSession({ id: "running", phase: "running", projectId: "default" }),
+    ];
+    const mixedHtml = renderToStaticMarkup(
+      <SessionTree
+        collapsedProjectIds={new Set()}
+        onNavigate={() => undefined}
+        onSelect={() => undefined}
+        onToggleProject={() => undefined}
+        now={10}
+        ordered={orderByAttention(mixed, 10)}
+        pendingChanges={0}
+        route="sessions"
+        selectedId={null}
+        sessions={mixed}
+      />,
+    );
+    expect(mixedHtml).toContain(`>${ATTENTION_LABEL.demand}</span>`);
+    expect(mixedHtml).toContain(`>${ATTENTION_LABEL.watch}</span>`);
+    expect(mixedHtml.match(/data-ui="TreeRow"/g)).toHaveLength(4);
+    expect(
+      mixedHtml.match(/data-ui="TreeRow"[\s\S]*?data-ui="StatusGlyph"[\s\S]*?<\/button>/g),
+    ).toHaveLength(2);
+    expect(mixedHtml).not.toContain("Rest</span>");
+  });
+
+  test("rest-only sessions keep the plain project tree without a kind label", () => {
+    expect(html).not.toContain(`>${ATTENTION_LABEL.rest}</span>`);
+    expect(html.match(/data-ui="TreeRow"/g)).toHaveLength(5);
+  });
+});
 
 describe("the field is wired to the tree it filters", () => {
   test("Given the sidebar, When rendered, Then the field is a combobox over a real element", () => {

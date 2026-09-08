@@ -23,7 +23,7 @@ export function StatusGlyph(props: { readonly tone: Tone; readonly shape: Shape 
   return (
     <svg
       aria-hidden="true"
-      className={`size-3.5 shrink-0 ${props.shape === "spinner" ? "spinner" : props.shape === "dot-pulse" ? "status-dot-pulse" : ""}`}
+      className={`status-glyph size-3.5 shrink-0 ${props.shape === "spinner" ? "status-spinner" : props.shape === "dot-pulse" ? "status-dot-pulse" : props.shape === "check" || props.shape === "cross" ? "status-entrance" : ""}`}
       data-shape={props.shape}
       data-tone={props.tone}
       data-ui={UI_NAMES.StatusGlyph}

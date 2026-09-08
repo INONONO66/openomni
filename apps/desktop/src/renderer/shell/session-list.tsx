@@ -44,7 +44,6 @@ export function SessionList({
                       onClick={(event) => onSelect(id, "selection", event.metaKey || event.ctrlKey)}
                     >
                       <span className="flex w-full items-center gap-2">
-                        <StatusGlyph {...sessionGlyphProps(session.phase)} />
                         <span className="flex min-w-0 flex-1 flex-col">
                           <Text className="truncate" level="label">
                             {session.title}
@@ -63,6 +62,7 @@ export function SessionList({
                             {relativeTime(session.lastActivityAt, now)}
                           </time>
                         </Text>
+                        <StatusGlyph {...sessionGlyphProps(session.phase)} />
                       </span>
                     </TreeRow>
                   </li>

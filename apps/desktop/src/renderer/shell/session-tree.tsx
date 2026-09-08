@@ -14,6 +14,7 @@ import {
 import { sessionGlyphProps } from "./session-glyph";
 import { Settings } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
+import { ATTENTION_LABEL } from "../attention/order";
 import type { Boundary, Ordered } from "../attention";
 import { highlightRuns } from "../search";
 import type { FilteredSession } from "../search";
@@ -172,12 +173,17 @@ export function SessionTree({
               </Text>
             )}
             {filtered.groups.flatMap((attention) =>
-              attention.projects.map((group) => {
+              attention.projects.map((group, index) => {
                 // A query overrides a closed group: a result behind a collapsed
                 // row is a result nobody was shown.
                 const open = !filtered.unfiltered || !collapsedProjectIds.has(group.id);
                 return (
                   <div key={JSON.stringify([attention.kind, group.id])}>
+                    {filtered.groups.some((entry) => entry.kind !== "rest") && index === 0 ? (
+                      <Text className="px-2" level="meta" tone="faint">
+                        {ATTENTION_LABEL[attention.kind]}
+                      </Text>
+                    ) : null}
                     <TreeRow
                       expanded={open}
                       level={0}
@@ -269,12 +275,12 @@ function SessionRow({
           `fg` would make the highlight invisible on precisely the row the
           operator is standing on. */}
       <span className="flex w-full items-center gap-2">
-        <StatusGlyph {...sessionGlyphProps(session.phase)} />
         <Highlight
-          className="w-full"
+          className="min-w-0 flex-1"
           runs={highlightRuns(session.title, entry.spans)}
           tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
         />
+        <StatusGlyph {...sessionGlyphProps(session.phase)} />
       </span>
     </TreeRow>
   );
