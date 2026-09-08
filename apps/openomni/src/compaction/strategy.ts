@@ -2,7 +2,7 @@ import type { CompactionOptions } from "@openomni/agent";
 import type { OpenOmniConfig } from "../config";
 import { modelTransport } from "../config";
 import { createCompactionSummarizer } from "./summarizer";
-import type { LlmIo } from "../tools/execution/llm";
+import type { LlmIo } from "../tools/completion";
 
 /** Translate operator configuration into the callback-free run-scoped strategy. */
 export function configuredCompaction(config: OpenOmniConfig, io: LlmIo = {}): CompactionOptions {

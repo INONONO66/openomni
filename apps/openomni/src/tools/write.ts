@@ -1,6 +1,6 @@
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { z } from "zod";
-import { fileOperation, filesystem, type FilePorts } from "./endpoint";
+import { fileOperation, filesystem, type FilePorts } from "./core/filesystem";
 
 export function createWriteTool(ports: FilePorts) {
   return defineTool({

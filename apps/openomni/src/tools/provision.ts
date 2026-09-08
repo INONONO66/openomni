@@ -1,16 +1,17 @@
 import { ChannelProviders } from "@openomni/channels";
 import type { ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/ledger";
-import { Storage, Vault } from "@openomni/ledger";
-import type { Actor, Provisioning } from "@openomni/protocol";
+import { ActorRegistry, Storage, Vault } from "@openomni/ledger";
+import { type Actor, canonicalDigest, type PolicyRow, type Provisioning } from "@openomni/protocol";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "@openomni/agent";
+import { ContactOperation, ContactResult, contactDomainRevisions } from "./core/contact-mutations";
 import {
   isRegisteredProvider,
   validateProviderCredential,
   validateProviderSettings,
-} from "../../channels";
-import type { ChannelRuntimeStatus, ChannelSupervisor } from "../../provisioning/supervisor";
-import type { KekResolution } from "../../provisioning/vault-key";
+} from "../channels";
+import type { ChannelRuntimeStatus, ChannelSupervisor } from "../provisioning/supervisor";
+import type { KekResolution } from "../provisioning/vault-key";
 
 /**
  * Resident-gated provisioning administration
@@ -136,51 +137,69 @@ async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
   return port.supervisor.reconcile();
 }
 
+/**
+ * A store's thrown failure becomes this tool's refusal (§8.8: a second owner
+ * surfaces the store's typed owner_exists refusal); refusals pass through.
+ */
+function storeRefusal(tool: string, error: Error): never {
+  if (error instanceof ToolRefused) throw error;
+  return refusal(tool, error.message);
+}
+
+/** The declaration is stale when the manifest the Owner saw no longer matches the store. */
+function declarationIsStale(
+  existing: Provisioning.Person | undefined,
+  manifest: PersonManifest,
+  domainRevisions: Readonly<Record<string, number>> | undefined,
+): boolean {
+  if (domainRevisions === undefined) return approvalRequirement(existing, manifest) !== undefined;
+  return domainRevisions[manifest.id] !== (existing?.revision ?? -1);
+}
+
+function declarePerson(
+  port: ProvisionPort,
+  input: z.output<typeof PERSON_DECLARE_INPUT>,
+  domainRevisions: Readonly<Record<string, number>> | undefined,
+  now: () => number,
+) {
+  const { displayName, ...rest } = input.manifest;
+  const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
+  const existing = port.persons.get(manifest.id);
+  if (declarationIsStale(existing, manifest, domainRevisions))
+    return refusal("contact_add", "domain revision changed");
+  const person = port.persons.put({
+    ...manifest,
+    revision: (existing?.revision ?? -1) + 1,
+    createdBy: "resident",
+    updatedAt: now(),
+  });
+  port.materialize();
+  return {
+    kind: "declared" as const,
+    id: person.id,
+    trustTier: person.trustTier,
+    revision: person.revision,
+  };
+}
+
 function executePersonDeclare(port: ProvisionPort, now: () => number = Date.now) {
   return (
     input: z.output<typeof PERSON_DECLARE_INPUT>,
     domainRevisions?: Readonly<Record<string, number>>,
   ) =>
-    Storage.get().transaction(() => {
-      const { displayName, ...rest } = input.manifest;
-      const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
-      const existing = port.persons.get(manifest.id);
-      if (
-        (domainRevisions === undefined && approvalRequirement(existing, manifest) !== undefined) ||
-        (domainRevisions !== undefined &&
-          domainRevisions[manifest.id] !== (existing?.revision ?? -1))
-      ) {
-        return refusal("person_declare", "domain revision changed");
-      }
-      try {
-        const person = port.persons.put({
-          ...manifest,
-          revision: (existing?.revision ?? -1) + 1,
-          createdBy: "resident",
-          updatedAt: now(),
-        });
-        port.materialize();
-        return {
-          kind: "declared" as const,
-          id: person.id,
-          trustTier: person.trustTier,
-          revision: person.revision,
-        };
-      } catch (error) {
-        // §8.8: a second owner surfaces the store's typed owner_exists refusal.
-        return refusal("person_declare", error instanceof Error ? error.message : String(error));
-      }
-    });
+    Promise.resolve()
+      .then(() => Storage.get().transaction(() => declarePerson(port, input, domainRevisions, now)))
+      .catch((error: Error) => storeRefusal("contact_add", error));
 }
 
 function executePersonRemove(port: ProvisionPort) {
   return async (input: z.output<typeof PERSON_REMOVE_INPUT>) => {
     const existing = port.persons.get(input.personId);
     if (existing === undefined) {
-      return refusal("person_remove", `person ${input.personId} does not exist`);
+      return refusal("contact_remove", `person ${input.personId} does not exist`);
     }
     if (existing.trustTier === "owner") {
-      return refusal("person_remove", "the sole owner Person cannot be removed");
+      return refusal("contact_remove", "the sole owner Person cannot be removed");
     }
     port.persons.remove(existing.id);
     port.removeIdentity(existing.id);
@@ -214,13 +233,13 @@ function executeChannelDeclare(port: ProvisionPort, now: () => number = Date.now
   return async (input: z.output<typeof CHANNEL_DECLARE_INPUT>) => {
     // §4: knobs must parse under the provider's settings declaration before the row lands.
     const badSettings = validateProviderSettings(input.provider, input.settings);
-    if (badSettings !== undefined) return refusal("channel_declare", badSettings);
+    if (badSettings !== undefined) return refusal("channel_add", badSettings);
     const existing = port.instances.get(input.id);
     let credentialRef = existing?.credentialRef;
     if (input.credential !== undefined) {
       // §5: the provider schema gates BEFORE any row lands.
       const invalid = validateProviderCredential(input.provider, input.credential);
-      if (invalid !== undefined) return refusal("channel_declare", invalid);
+      if (invalid !== undefined) return refusal("channel_add", invalid);
       const secretId = credentialRef ?? `secret:${input.id.replaceAll(":", "-")}`;
       const sealed = sealCredential(
         port,
@@ -229,24 +248,24 @@ function executeChannelDeclare(port: ProvisionPort, now: () => number = Date.now
         port.secrets.get(secretId),
         now(),
       );
-      if (typeof sealed === "string") return refusal("channel_declare", sealed);
+      if (typeof sealed === "string") return refusal("channel_add", sealed);
       port.secrets.put(sealed);
       credentialRef = secretId;
     }
-    try {
-      port.instances.put({
-        id: input.id,
-        provider: input.provider,
-        enabled: input.enabled,
-        settings: input.settings,
-        ...(credentialRef === undefined ? {} : { credentialRef }),
-        revision: (existing?.revision ?? -1) + 1,
-        createdBy: "resident",
-        updatedAt: now(),
-      });
-    } catch (error) {
-      return refusal("channel_declare", error instanceof Error ? error.message : String(error));
-    }
+    await Promise.resolve()
+      .then(() =>
+        port.instances.put({
+          id: input.id,
+          provider: input.provider,
+          enabled: input.enabled,
+          settings: input.settings,
+          ...(credentialRef === undefined ? {} : { credentialRef }),
+          revision: (existing?.revision ?? -1) + 1,
+          createdBy: "resident",
+          updatedAt: now(),
+        }),
+      )
+      .catch((error: Error) => storeRefusal("channel_add", error));
     return { id: input.id, action: "declared" as const, statuses: await reconcile(port) };
   };
 }
@@ -364,9 +383,10 @@ function renderProvisionStatus(value: z.output<typeof ProvisionStatusOutput>): s
   ].join("\n");
 }
 const ProvisionOperation = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("person_declare"), args: PERSON_DECLARE_INPUT }).strict(),
-  z.object({ op: z.literal("person_remove"), args: PERSON_REMOVE_INPUT }).strict(),
-  z.object({ op: z.literal("channel_declare"), args: CHANNEL_DECLARE_INPUT }).strict(),
+  z.object({ op: z.literal("contact_add"), args: PERSON_DECLARE_INPUT }).strict(),
+  z.object({ op: z.literal("contact_remove"), args: PERSON_REMOVE_INPUT }).strict(),
+  ...ContactOperation.options,
+  z.object({ op: z.literal("channel_add"), args: CHANNEL_DECLARE_INPUT }).strict(),
   z.object({ op: z.literal("channel_enable"), args: INSTANCE_INPUT }).strict(),
   z.object({ op: z.literal("channel_disable"), args: INSTANCE_INPUT }).strict(),
   z.object({ op: z.literal("secret_rotate"), args: SECRET_ROTATE_INPUT }).strict(),
@@ -384,11 +404,12 @@ const PersonDeclareResult = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 const ProvisionOutput = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("person_declare"), result: PersonDeclareResult }).strict(),
-  z.object({ op: z.literal("person_remove"), id: z.string() }).strict(),
+  z.object({ op: z.literal("contact_add"), result: PersonDeclareResult }).strict(),
+  z.object({ op: z.literal("contact_remove"), id: z.string() }).strict(),
+  ...ContactResult.options,
   z
     .object({
-      op: z.literal("channel_declare"),
+      op: z.literal("channel_add"),
       id: z.string(),
       action: z.literal("declared"),
       statuses: Statuses,
@@ -431,62 +452,120 @@ function statusLines(statuses: readonly ChannelRuntimeStatus[]): string {
         .join("\n");
 }
 
-export function createProvisionTool(port: ProvisionPort) {
-  const executors = {
-    person_declare: executePersonDeclare(port),
-    person_remove: executePersonRemove(port),
-    channel_declare: executeChannelDeclare(port),
+type ContactMutation = z.output<typeof ContactOperation>;
+type ContactOutcome = z.output<typeof ContactResult>;
+
+function promoteContact(operation: ContactMutation & { op: "contact_promote" }): ContactOutcome {
+  const identity = ActorRegistry.getIdentity(operation.args.actorId);
+  if (identity?.standing !== "provisional")
+    throw new ToolRefused(operation.op, "contact is missing or already registered");
+  const promoted = ActorRegistry.promote(operation.args.actorId);
+  return { op: operation.op, id: promoted.id, trustTier: promoted.trustTier };
+}
+
+function mergeContactEndpoint(
+  operation: ContactMutation & { op: "contact_merge" },
+): ContactOutcome {
+  const { endpointId, toActorId } = operation.args;
+  const endpoint = ActorRegistry.getEndpoint(endpointId);
+  const bindable =
+    endpoint !== undefined &&
+    endpoint.actorId !== toActorId &&
+    ActorRegistry.getIdentity(toActorId) !== undefined;
+  if (!bindable)
+    throw new ToolRefused(operation.op, "endpoint or target is missing, or already bound");
+  const merged = ActorRegistry.mergeEndpoint(endpointId, toActorId);
+  return { op: operation.op, id: merged.id, actorId: merged.actorId };
+}
+
+/**
+ * Body-entry domain CAS inside one transaction. Consent itself is the kernel
+ * request the `require_approval` policy row opened; this layer only refuses to
+ * spend it on rows that changed since the Owner saw them.
+ */
+function mutateContact(
+  operation: ContactMutation,
+  revisions: Readonly<Record<string, number>> | undefined,
+): ContactOutcome {
+  return Storage.get().transaction(() => {
+    const seen = revisions === undefined ? undefined : canonicalDigest({ ...revisions });
+    if (seen !== canonicalDigest(contactDomainRevisions(operation)))
+      throw new ToolRefused(operation.op, "domain revision changed");
+    return operation.op === "contact_promote"
+      ? promoteContact(operation)
+      : mergeContactEndpoint(operation);
+  });
+}
+
+function provisionExecutors(port: ProvisionPort) {
+  return {
+    contact_add: executePersonDeclare(port),
+    contact_remove: executePersonRemove(port),
+    channel_add: executeChannelDeclare(port),
     channel_enable: executeChannelEnable(port),
     channel_disable: executeChannelDisable(port),
     secret_rotate: executeSecretRotate(port),
     status: executeProvisionStatus(port),
   };
+}
+
+/** The catalog is static: without a composed provisioning port the tool exists and refuses. */
+export function createProvisionTool(port: ProvisionPort | undefined) {
+  const composed = port === undefined ? undefined : provisionExecutors(port);
+  const executors = () => composed ?? refusal("provision", "provisioning is not composed");
   return defineTool(
     {
       name: "provision",
       category: "mutation",
       description:
-        "Administer people, channels, credentials, and provisioning status. Use op=person_declare|person_remove|channel_declare|channel_enable|channel_disable|secret_rotate|status.",
+        "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|contact_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and contact_merge suspend for Owner consent.",
       input: ProvisionInput,
       output: ProvisionOutput,
       visibility: { model: ["resident"], cell: ["resident"] },
       execute: async ({ operation }, context) => {
+        if (operation.op === "contact_promote" || operation.op === "contact_merge")
+          return mutateContact(operation, context.domainRevisions);
+        const run = executors();
         switch (operation.op) {
-          case "person_declare":
+          case "contact_add":
             return {
               op: operation.op,
-              result: executors.person_declare(operation.args, context.domainRevisions),
+              result: await run.contact_add(operation.args, context.domainRevisions),
             };
-          case "person_remove":
-            return { op: operation.op, ...(await executors.person_remove(operation.args)) };
-          case "channel_declare":
-            return { op: operation.op, ...(await executors.channel_declare(operation.args)) };
+          case "contact_remove":
+            return { op: operation.op, ...(await run.contact_remove(operation.args)) };
+          case "channel_add":
+            return { op: operation.op, ...(await run.channel_add(operation.args)) };
           case "channel_enable":
             return {
               op: operation.op,
-              ...(await executors.channel_enable(operation.args)),
+              ...(await run.channel_enable(operation.args)),
               action: "enabled" as const,
             };
           case "channel_disable":
             return {
               op: operation.op,
-              ...(await executors.channel_disable(operation.args)),
+              ...(await run.channel_disable(operation.args)),
               action: "disabled" as const,
             };
           case "secret_rotate":
-            return { op: operation.op, ...(await executors.secret_rotate(operation.args)) };
+            return { op: operation.op, ...(await run.secret_rotate(operation.args)) };
           case "status":
-            return { op: operation.op, ...(await executors.status(operation.args)) };
+            return { op: operation.op, ...(await run.status(operation.args)) };
         }
       },
       render: (_args, value) => {
         if (value.op === "status") return renderProvisionStatus(value);
-        if (value.op === "person_declare") {
+        if (value.op === "contact_add") {
           return `person ${value.result.id} declared (tier ${value.result.trustTier}, revision ${value.result.revision})`;
         }
-        if (value.op === "person_remove") return `person ${value.id} removed`;
+        if (value.op === "contact_remove") return `person ${value.id} removed`;
+        if (value.op === "contact_promote")
+          return `contact ${value.id} registered (tier ${value.trustTier})`;
+        if (value.op === "contact_merge")
+          return `endpoint ${value.id} merged into ${value.actorId}`;
         if (
-          value.op === "channel_declare" ||
+          value.op === "channel_add" ||
           value.op === "channel_enable" ||
           value.op === "channel_disable"
         )
@@ -495,7 +574,10 @@ export function createProvisionTool(port: ProvisionPort) {
       },
     },
     ({ operation }) => {
-      if (operation.op !== "person_declare") return { required: false, domainRevisions: {} };
+      if (operation.op === "contact_promote" || operation.op === "contact_merge")
+        return { required: false, domainRevisions: contactDomainRevisions(operation) };
+      if (operation.op !== "contact_add" || port === undefined)
+        return { required: false, domainRevisions: {} };
       const manifest = {
         ...operation.args.manifest,
         displayName: operation.args.manifest.displayName ?? operation.args.manifest.id,
@@ -509,3 +591,23 @@ export function createProvisionTool(port: ProvisionPort) {
     },
   );
 }
+
+/**
+ * Owner consent for address-book authority is policy, not a tool: these rows
+ * make the executor open the kernel request for the original invocation, and
+ * the Owner's answer re-admits exactly that action (§3.4 `require_approval`).
+ */
+export const PROVISION_POLICY_ROWS: readonly Omit<PolicyRow.Row, "generation">[] = [
+  "contact_promote",
+  "contact_merge",
+].map((operation) => ({
+  name: `provision-${operation.replace("_", "-")}-consent`,
+  kind: "tool",
+  phase: "pre",
+  priority: 1_000,
+  match: { encodingVersion: 1, value: { op: "provision", operation } },
+  verdict: {
+    encodingVersion: 1,
+    value: { type: "require_approval", reason: `provision.${operation} requires Owner consent` },
+  },
+}));

@@ -365,6 +365,9 @@ export namespace Gateway {
   /** #946 stage 1: schemas only; consumers and legacy removal follow in stage 2. */
   export const SendMessage = MessageContract.Send;
   export type SendMessage = z.infer<typeof SendMessage>;
+  /** The `to` variants a model may address by session; the actor variant stays gateway-only. */
+  export const SessionTarget = MessageContract.SessionTarget;
+  export const NewSessionTarget = MessageContract.NewSessionTarget;
 
   export const RequestAnswer = MessageContract.RequestAnswer;
   export type RequestAnswer = z.infer<typeof RequestAnswer>;

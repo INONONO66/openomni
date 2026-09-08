@@ -11,7 +11,7 @@ import { composeCodemode } from "../src/composition/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { socketPath } from "./helpers/socket-path";
 
-test("machine attach CLI composes real runners; run_code pipelines two machine handles", async () => {
+test("machine attach CLI composes real runners; eval pipelines two machine handles", async () => {
   const base = mkdtempSync(join(tmpdir(), "om-cli-machine-"));
   const rootA = join(base, "a");
   const rootB = join(base, "b");
@@ -107,18 +107,18 @@ test("machine attach CLI composes real runners; run_code pipelines two machine h
       "(ids, list(readback), written['bytesWritten'], shell['stdout'], shell['stderr'], shell['exitCode'], nested['value'])",
     ].join("\n");
     const run = modelToolOutput(
-      "run_code",
+      "eval",
       { cells },
       { role: "resident", depth: 0, sessionId: "qa-one" },
     );
-    const result = await run({ code, timeoutMs: 10_000 });
+    const result = await run({ operation: { op: "run", code, timeout: 10 } });
     expect(result).toBe("(['A', 'B'], [0, 255, 128, 65], 4, b'out', b'err', 7, '42')");
-    expect(await run({ code: "state + 1", timeoutMs: 1000 })).toBe("42");
+    expect(await run({ operation: { op: "run", code: "state + 1", timeout: 1 } })).toBe("42");
     const other = await modelToolOutput(
-      "run_code",
+      "eval",
       { cells },
       { role: "resident", depth: 0, sessionId: "qa-two" },
-    )({ code: "state", timeoutMs: 1000 });
+    )({ operation: { op: "run", code: "state", timeout: 1 } });
     expect(other).toContain("NameError");
     const write = await host
       .get("B")

@@ -111,11 +111,12 @@ Python reads and shell outputs contain bytes, and writes accept bytes.
 
 Only a daemon's injected `createCodemode().runner` starts Python, lazily on
 its first request. Codemode owns the interpreter map, per-tenant persistence,
-parallel helper, llm helper, callId routing and cell bindings. Different tenants
+parallel helper, `completion(prompt)` helper, callId routing and cell bindings. Different tenants
 never share an interpreter. Nested handle `run` uses a nested tenant to avoid
 queuing behind its calling interpreter. The brain facade never spawns Python.
-The app captures its executor and tool catalog at cell entry; `run_code` is
-metadata/render plus one `cell.run` call. Machine-handle calls pass through the
+The app captures its executor and tool catalog at cell entry; `eval`
+(`operation: { op: "run", code, timeout? }`) is metadata/render plus one
+`cell.run` call. Machine-handle calls pass through the
 captured executor's `tool.pre`, without manufacturing model tool definitions.
 
 A call is accepted only from the connection with that live cell in flight.
@@ -146,7 +147,7 @@ from `openomni daemon`, which still manages the Resident service. Example:
 
 ## 3. Session messaging contracts
 
-The model and cell catalog exposes one `sendMessage({to, type, content, replyTo?, deadline?})` tool. Targets are an existing session, a new parent-linked session, or an existing actor. Message types are `message | interrupt | resume`; a committed message becomes a prompt in the recipient inbox. The returned `{messageId, target}` is a handle, not a synchronous join.
+The model and cell catalog exposes one `send_message({to, message, kind?, reply_to?, deadline_ms?})` tool. Targets are an existing session (`to.kind: session`), a new parent-linked session (`new_session`), or an existing contact (`contact`; the protocol keeps `actor` internally). `kind` is `prompt | interrupt | resume` and defaults to `prompt`; a committed prompt becomes a letter in the recipient inbox. The returned `{messageId, target}` is a handle, not a synchronous join.
 
 Every request enters `gateway.ingest(sender, envelope)`. External drivers provide authenticated sender coordinates and raw `Gateway.IngressFacts`; session tools supply their executor-bound session identity. Compiled message pre-policy selects external table A or session table B. Worker actor sends and worker allocation are denied by the default rows. The gateway reads perimeter facts and uses the injected L1 inbox writer; it does not query session state.
 

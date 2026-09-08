@@ -78,10 +78,10 @@ const fullEnrollment = (): Machine.Enrollment => ({
 
 /**
  * The payoff, end to end and with a real daemon: one cell makes three
- * sendMessage calls and gets three child handles inside the cell rather
+ * send_message calls and gets three child handles inside the cell rather
  * than joining the children's completion in the model turn.
  */
-test("app root runs machine read write shell and code through one run_code cell", async () => {
+test("app root runs machine read write shell and code through one eval cell", async () => {
   const directory = mkdtempSync(join(tmpdir(), "om-app-machine-"));
   const root = join(directory, "data");
   mkdirSync(root);
@@ -99,17 +99,20 @@ test("app root runs machine read write shell and code through one run_code cell"
       run: async (input: RunInput, sink: Sink) => {
         const call = requestToolStep(input, sink, {
           id: "machine-cell",
-          tool: "run_code",
+          tool: "eval",
           input: {
-            code: [
-              `m = codemode.getMachine('${MACHINE_ID}')`,
-              `m.write(${JSON.stringify(join(root, "value"))}, bytes([0, 255, 128, 65]))`,
-              `readback = list(m.read(${JSON.stringify(join(root, "value"))})['data'])`,
-              `shell = m.shell('printf shell; exit 7', ${JSON.stringify(root)})`,
-              `code = m.run('6 * 7')`,
-              "(readback, shell['stdout'], shell['exitCode'], code['value'])",
-            ].join("\n"),
-            timeoutMs: 15_000,
+            operation: {
+              op: "run",
+              code: [
+                `m = codemode.getMachine('${MACHINE_ID}')`,
+                `m.write(${JSON.stringify(join(root, "value"))}, bytes([0, 255, 128, 65]))`,
+                `readback = list(m.read(${JSON.stringify(join(root, "value"))})['data'])`,
+                `shell = m.shell('printf shell; exit 7', ${JSON.stringify(root)})`,
+                `code = m.run('6 * 7')`,
+                "(readback, shell['stdout'], shell['exitCode'], code['value'])",
+              ].join("\n"),
+              timeout: 15,
+            },
           },
         });
         if (call === undefined) return { type: "stop" };
@@ -142,7 +145,7 @@ test("app root runs machine read write shell and code through one run_code cell"
   rmSync(directory, { recursive: true, force: true });
 }, 30_000);
 
-test("a cell creates three child sessions through sendMessage", async () => {
+test("a cell creates three child sessions through send_message", async () => {
   const socketPath = testSocketPath();
   const residentTurns: string[] = [];
 
@@ -170,16 +173,19 @@ test("a cell creates three child sessions through sendMessage", async () => {
         const offered = (input.tools ?? []).map((tool) => tool.name).sort();
         const executed = requestToolStep(input, sink, {
           id: "call-1",
-          tool: "run_code",
+          tool: "eval",
           input: {
-            code: [
-              "answers = [",
-              "  tool.sendMessage(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, type='message', content=f'check {name}')['target']",
-              "  for name in ('lint', 'types', 'tests')",
-              "]",
-              "len(set(answers))",
-            ].join("\n"),
-            timeoutMs: 20_000,
+            operation: {
+              op: "run",
+              code: [
+                "answers = [",
+                "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}')['target']",
+                "  for name in ('lint', 'types', 'tests')",
+                "]",
+                "len(set(answers))",
+              ].join("\n"),
+              timeout: 20,
+            },
           },
         });
         if (executed === undefined) return { type: "stop" };
@@ -216,7 +222,7 @@ test("a cell creates three child sessions through sendMessage", async () => {
 
   // The catalog is stable; the daemon enforces machine availability at execution.
   expect(answer).toContain(
-    "offered=[approval,bash,edit,list,monitor,provision,read,run_code,search,sendMessage,write]",
+    "offered=[bash,edit,eval,find,grep,ls,monitor,provision,read,send_message,write]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
@@ -258,8 +264,8 @@ test("the catalog remains available while machine execution refuses without atta
         // Availability is an endpoint precondition, not a second catalog gate.
         const forced = requestToolStep(input, sink, {
           id: "call-1",
-          tool: "run_code",
-          input: { code: "1", timeoutMs: 1000 },
+          tool: "eval",
+          input: { operation: { op: "run", code: "1", timeout: 1 } },
         });
         if (forced === undefined) return { type: "stop" };
         sink.onMessage(
@@ -285,14 +291,14 @@ test("the catalog remains available while machine execution refuses without atta
     "read",
     "write",
     "edit",
-    "list",
-    "search",
+    "ls",
+    "find",
+    "grep",
     "bash",
+    "eval",
     "monitor",
-    "sendMessage",
-    "approval",
+    "send_message",
     "provision",
-    "run_code",
   ]);
   // The raw machine endpoint reports live attachment failure.
   expect(answer).toContain("kernel_not_available");
@@ -349,7 +355,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
   const forging = await host.get(MACHINE_ID).runCode({
     cellId: "BBB",
     // The call carries no id of its own; naming one changes nothing.
-    code: "tool.sendMessage(cellId='AAA', instruction='borrow')",
+    code: "tool.send_message(cellId='AAA', instruction='borrow')",
     timeoutMs: 15_000,
     tenant: "tenant-two",
   });
@@ -357,7 +363,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
 
   // Completion itself proves the overlap: on one interpreter AAA's hold would
   // wait forever for a BBB that cannot start until AAA settles.
-  expect([...served].sort()).toEqual(["hold@AAA", "sendMessage@BBB"]);
+  expect([...served].sort()).toEqual(["hold@AAA", "send_message@BBB"]);
   expect(forging.status).toBe("completed");
 }, 40_000);
 
@@ -397,7 +403,7 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
 const CELL_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
 
 /**
- * A real host+daemon pair whose cells go through the production run_code
+ * A real host+daemon pair whose cells go through the production eval
  * executor, with the catalog's ports swapped for fakes — the same seam
  * startOpenOmni wires at boot, exercised without booting the app.
  */
@@ -424,12 +430,18 @@ async function startCellHarness(ports: CatalogPorts) {
   expect(daemon.attachment.status).toBe("attached");
   cells = composeCodemode(host);
   suite.defer(() => cells.close());
-  const execute = modelToolOutput("run_code", { ...ports, cells }, CELL_ORIGIN);
+  const execute = modelToolOutput("eval", { ...ports, cells }, CELL_ORIGIN);
   return {
     socketPath,
-    run: (code: string) => execute({ code, timeoutMs: 15_000 }),
+    run: (code: string, timeout = 15) => execute({ operation: { op: "run", code, timeout } }),
     runWith: (origin: CatalogOrigin, code: string) =>
-      modelToolOutput("run_code", { ...ports, cells }, origin)({ code, timeoutMs: 15_000 }),
+      modelToolOutput(
+        "eval",
+        { ...ports, cells },
+        origin,
+      )({
+        operation: { op: "run", code, timeout: 15 },
+      }),
   };
 }
 
@@ -449,7 +461,13 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(otherSession).toContain("NameError");
 }, 40_000);
 
-test("a cell rejects legacy scalar llm input and preserves canonical arrays", async () => {
+test("a cell over its deadline reports the timeout it was given", async () => {
+  const { run } = await startCellHarness({ llm: async () => "ok" });
+  const output = await run("import time\nwhile True: time.sleep(0.05)", 1);
+  expect(output).toBe("the cell did not finish within 1s");
+}, 40_000);
+
+test("a cell rejects legacy batched completion input and serves one prompt", async () => {
   const prompts: string[] = [];
   const { run } = await startCellHarness({
     llm: async (prompt) => {
@@ -461,31 +479,31 @@ test("a cell rejects legacy scalar llm input and preserves canonical arrays", as
   const output = await run(
     [
       "try:",
-      "    tool.llm(prompt='x')",
+      "    tool.completion(prompts=['x'])",
       "    legacy = 'accepted'",
       "except ToolError:",
       "    legacy = 'invalid_input'",
-      "canonical = tool.llm(prompts=['x'])",
+      "canonical = completion('x')",
       "{'legacy': legacy, 'canonical': canonical}",
     ].join("\n"),
   );
 
   // The cell sees the dispatcher refusal as ToolError and does not invoke the port.
-  expect(output).toBe("{'legacy': 'invalid_input', 'canonical': ['answered: x']}");
+  expect(output).toBe("{'legacy': 'invalid_input', 'canonical': 'answered: x'}");
   expect(prompts).toEqual(["x"]);
 }, 40_000);
 
-test("a failing llm call raises ToolError inside the cell instead of returning failure text", async () => {
+test("a failing completion call raises ToolError inside the cell instead of returning failure text", async () => {
   const { run } = await startCellHarness({
     llm: async () => {
-      throw new Error("llm failed: provider on fire");
+      throw new Error("completion failed: provider on fire");
     },
   });
 
   const output = await run(
     [
       "try:",
-      "    llm(['doomed'])",
+      "    completion('doomed')",
       "    outcome = 'returned as data'",
       "except ToolError as error:",
       "    outcome = 'raised: ' + str(error)",
@@ -494,7 +512,7 @@ test("a failing llm call raises ToolError inside the cell instead of returning f
   );
 
   expect(output).toContain("raised: ");
-  expect(output).toContain("llm failed: provider on fire");
+  expect(output).toContain("completion failed: provider on fire");
   expect(output).not.toContain("returned as data");
 }, 40_000);
 
@@ -531,8 +549,8 @@ test("parallel() runs independent tool calls concurrently and returns both resul
   const output = await run(
     [
       "results = parallel([",
-      "  lambda: llm(['first'])[0],",
-      "  lambda: llm(['second'])[0],",
+      "  lambda: completion('first'),",
+      "  lambda: completion('second'),",
       "])",
       "'; '.join(results)",
     ].join("\n"),
@@ -565,7 +583,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
     },
   });
 
-  // Without kernel.py in the effective set, run_code stays unofferable.
+  // Without kernel.py in the effective set, eval stays unofferable.
   expect(host.list().find((entry) => entry.machineId === MACHINE_ID)?.capabilities).toEqual([
     "fs.read",
   ]);

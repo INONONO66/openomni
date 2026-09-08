@@ -2,8 +2,9 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
 import { ActorRegistry, PersonStore, Storage } from "@openomni/ledger";
 import { Tool } from "@openomni/protocol";
-import { createApprovalTool } from "../src/tools/authority/approval";
+import { createProvisionTool } from "../src/tools/provision";
 import { protectedDispatch } from "./helpers/protected-dispatch";
+import { provisionPort } from "./helpers/provision-port";
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
@@ -36,9 +37,9 @@ test("an endpoint changed at body entry cannot spend consent for its old binding
     },
   };
   const running = protectedDispatch(
-    createApprovalTool(ActorRegistry),
+    createProvisionTool(provisionPort()),
     {
-      operation: { op: "endpoint_merge", endpointId: "endpoint", toActorId: "target" },
+      operation: { op: "contact_merge", args: { endpointId: "endpoint", toActorId: "target" } },
     },
     observations,
   );

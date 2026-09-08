@@ -1,6 +1,6 @@
 # Conversation and message IO
 
-Messages cross one boundary: `sendMessage({to, type, content, replyTo?, deadline?})` and `gateway.ingest(sender, envelope)`. [Gateway Design](gateway-design.md) describes the implementation ownership; [Kernel Contract](kernel-contract.md) is normative. [Implementation Status](implementation-status.md) separates shipped behavior from proposals.
+Messages cross one boundary: `send_message({to, message, kind?, reply_to?, deadline_ms?})` and `gateway.ingest(sender, envelope)`. [Gateway Design](gateway-design.md) describes the implementation ownership; [Kernel Contract](kernel-contract.md) is normative. [Implementation Status](implementation-status.md) separates shipped behavior from proposals.
 
 The former Conversation, Lease and engagement lifecycles were removed without replacement. Their design history remains in git, not as an alternate message path.
 
@@ -32,4 +32,4 @@ Deadlines are durable alarm rows. Answer and timeout compete on one source-actio
 
 The existing executor consumes typed authenticated approval answers bound to the captured request, input hash and generation. Gateway authentication transports evidence; it does not execute a protected body or invent a policy verdict. Free prose is not approval evidence.
 
-The current approval tool/store and generic channel Wait lifecycle remain until #969. This PR does not implement unified lifecycle replacement, broader contact promotion automation, a new negotiation budget, or a new conversation store. Additional rendering/disclosure UX and first-contact autonomy require their own approved policy changes.
+#969 unified the request lifecycle and #949 removed the approval tool: Owner consent is a `require_approval` policy row on `provision.contact_promote`/`contact_merge`. That work did not implement unified lifecycle replacement, broader contact promotion automation, a new negotiation budget, or a new conversation store. Additional rendering/disclosure UX and first-contact autonomy require their own approved policy changes.

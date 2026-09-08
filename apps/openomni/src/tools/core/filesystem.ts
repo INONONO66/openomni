@@ -48,7 +48,7 @@ export function filesystem(path: string, ports: FilePorts) {
     async list() {
       if (remote !== undefined) {
         const value = await remote.fs.list(locus.path);
-        if (value.truncated) throw new ToolRefused("list", "directory exceeds daemon entry limit");
+        if (value.truncated) throw new ToolRefused("ls", "directory exceeds daemon entry limit");
         return value.entries.map(({ name, kind }) => ({ name, kind }));
       }
       const entries = await readdir(locus.path, { withFileTypes: true });
@@ -79,7 +79,40 @@ export function filesystem(path: string, ports: FilePorts) {
   };
 }
 
-export function childPath(locus: Locus, name: string): string {
+type Endpoint = ReturnType<typeof filesystem>;
+type EntryKind = "file" | "dir";
+/** Called once per visited path; false stops the walk. Readers open the path themselves. */
+type Visit = (path: string, kind: EntryKind) => Promise<boolean>;
+
+/**
+ * Depth-first walk in name order without following symlinks: regular files
+ * and directories are the only entries visited. Bound to the ports once so a
+ * tool builds its walker when it is constructed.
+ */
+export function walker(ports: FilePorts) {
+  async function step(path: string, signal: AbortSignal, visit: Visit): Promise<boolean> {
+    signal.throwIfAborted();
+    const endpoint = filesystem(path, ports);
+    const kind = await entryKind(endpoint);
+    if (!(await visit(path, kind))) return false;
+    return kind === "file" || descend(endpoint, signal, visit);
+  }
+  async function descend(endpoint: Endpoint, signal: AbortSignal, visit: Visit): Promise<boolean> {
+    const entries = await endpoint.list();
+    for (const entry of entries.filter((entry) => entry.kind === "file" || entry.kind === "dir"))
+      if (!(await step(childPath(endpoint.locus, entry.name), signal, visit))) return false;
+    return true;
+  }
+  return step;
+}
+
+async function entryKind(endpoint: Endpoint): Promise<EntryKind> {
+  const kind = await endpoint.kind();
+  if (kind === "file" || kind === "dir") return kind;
+  throw new ToolRefused("walk", "expected a regular file or directory");
+}
+
+function childPath(locus: Locus, name: string): string {
   const path = join(locus.path, name);
   if (locus.kind === "machine") return `${locus.machine}:${path}`;
   // join removes './'; restore the local escape before a child is parsed again.

@@ -38,7 +38,7 @@ export function composeCodemode(machines: MachineHost) {
     tools(tenant) {
       const dispatcher = createDispatcher(
         (catalogs.get(tenant) ?? []).filter(
-          (tool) => tool.name !== "run_code" && tool.visibility.cell.length > 0,
+          (tool) => tool.name !== "eval" && tool.visibility.cell.length > 0,
         ),
         { executor: currentExecutor() },
       );

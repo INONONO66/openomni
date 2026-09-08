@@ -44,12 +44,11 @@ test("real external WebSocket reply wakes its original idle request owner withou
         if (!sent) {
           const result = requestToolStep(input, sink, {
             id: "external-request",
-            tool: "sendMessage",
+            tool: "send_message",
             input: {
-              to: { kind: "actor", actorId: "peer" },
-              type: "message",
-              content: "QUESTION_SENTINEL",
-              deadline: 1000,
+              to: { kind: "contact", id: "peer" },
+              message: "QUESTION_SENTINEL",
+              deadline_ms: 900,
             },
           });
           if (result === undefined) return { type: "stop" };

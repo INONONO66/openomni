@@ -219,6 +219,19 @@ daemon capability refusal. Completion is promise settlement, with no sleep or
 polling. The explicit stage-one naming is retained rather than implementing the
 later naming amendment in parallel with the messaging worker.
 
+## #949 stage 2 receipt (2026-09-07)
+
+Stage 2 seals the catalog on the KERNEL §3.5 names. Greps below are against the
+merge HEAD of the stage-2 PR, production `.ts` only (tests, `dist/` excluded).
+
+| Row | Stage-two disposition | Evidence |
+| --- | --- | --- |
+| B17 | CLOSED: the `approval` tool ({request,decide,contact_promote,endpoint_merge}) and its hourly pending cap are deleted. `contact_promote`/`contact_merge` are `provision` ops whose Owner consent is a `require_approval` policy row (`PROVISION_POLICY_ROWS`) resolved by the #969 request path; the policy `Match` gained an inner `operation` field to scope a row to one op. No model-callable `decide` exists. | `apps/openomni/src/tools/provision.ts`, `apps/openomni/src/tools/core/contact-mutations.ts`, `apps/openomni/test/provision-consent.test.ts` (forged `request`/`decide`/`approvalId` ops are `invalid_input`; consent flows through the kernel request and re-admits the exact captured invocation) |
+| B18 | CLOSED: flat `apps/openomni/src/tools/<tool_name>.ts` plus `locus.ts` and `core/`; no `tools/{query,mutation,authority,execution}` or target-axis directories. `category` remains a `defineTool` field only. | `ls apps/openomni/src/tools` |
+| E8 / E9 | CLOSED: model door == `{read,write,edit,ls,find,grep,bash,eval,monitor,send_message,provision}`, cell-only `completion`; snake_case; one discriminator `op` under `operation` for eval/monitor/provision; `contact` is the single model noun (`Actor` stays protocol-internal); `command` not `cmd`; `completion(prompt)` with `parallel()` for batching. Residue: codemode machine-handle methods still mirror the raw endpoint names (`read/write/list/stat/shell/run`); `eval.op` is sealed at `run` until the cell runtime grows a background cell for `peek`/`stop`. | `apps/openomni/src/tools/core/catalog.ts`, `catalog.test.ts` (literal pin, op sets, retired-name refusal), `script/lint-tools.ts` (snake_case ratchet), `script/conformance/tool-schema-snapshot.json` (12 specs) |
+| G-H8 | CLOSED: the nested Proxy fake port is gone; `createTools` constructs every tool regardless of wired ports and a tool whose port is absent refuses at execution (`ToolRefused`). | `apps/openomni/src/tools/core/catalog.ts` |
+| A11, A12, B12, E6 | Reconfirmed zero: no `fs_read/fs_list/fs_stat/machines`, `delegate*`, `work_items`, `converse`, `memory`, `artifacts`, `run_code`, `llm`/`llm_batched`, `list`/`search`, or `sendMessage` tool definitions in production. | `rg -n 'name: "(fs_read\|fs_list\|fs_stat\|machines\|delegate\|await_delegation\|cancel_delegation\|work_items\|converse\|memory\|artifacts\|approval\|run_code\|llm\|llm_batched\|list\|search\|sendMessage)"' apps packages -g '*.ts' -g '!*.test.ts' -g '!dist/**'` → 0 |
+
 ## #938 follow-up
 
 - **R3-3 (parked):** add a platform-specific `fchdir`/descriptor-backed cwd

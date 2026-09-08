@@ -70,8 +70,8 @@ test("a resident tool call is executed and observed through the durable executor
       run: async (input: RunInput, sink: Sink) => {
         const result = requestToolStep(input, sink, {
           id: "call-1",
-          tool: "run_code",
-          input: { code: "1", timeoutMs: 1000 },
+          tool: "eval",
+          input: { operation: { op: "run", code: "1", timeout: 1 } },
         });
         if (result === undefined) return { type: "stop" };
         sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
@@ -99,7 +99,7 @@ test("a resident tool call is executed and observed through the durable executor
   expect(toolResult?.parentId).toBe(toolIntent?.id);
   const core = decisions.filter(
     (action) =>
-      ["chat", "session", "run_code"].includes(String(field(action.intent.value, "op"))) ||
+      ["chat", "session", "eval"].includes(String(field(action.intent.value, "op"))) ||
       String(field(action.intent.value, "hook")).startsWith("prompt."),
   );
   expect(core.map((action) => field(action.intent.value, "hook")).sort()).toEqual([

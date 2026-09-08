@@ -44,7 +44,10 @@ export interface ResidentOptions {
 /** Resident and worker use the same session-owned runner and dispatcher. */
 export function createResident(options: ResidentOptions) {
   const definitionsFor = (id: string, role: LedgerSession.Role) => [
-    ...createTools(options.tools, { sessionId: id, role, depth: role === "resident" ? 0 : 1 }),
+    ...createTools(
+      { ...options.tools, clock: options.sessionRuntime.clock ?? Date.now },
+      { sessionId: id, role, depth: role === "resident" ? 0 : 1 },
+    ),
     ...(options.toolDefinitions ?? []),
   ];
   const runnerFor =
@@ -137,11 +140,10 @@ export function createResident(options: ResidentOptions) {
           await dispatcher.execute(
             {
               id: crypto.randomUUID(),
-              tool: "sendMessage",
+              tool: "send_message",
               input: {
-                to: { kind: "actor", actorId: origin.actorId },
-                type: "message",
-                content: result.text,
+                to: { kind: "contact", id: origin.actorId },
+                message: result.text,
               },
             },
             { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },

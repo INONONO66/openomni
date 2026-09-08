@@ -209,7 +209,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         sender,
         {
           kind: "message",
-          op: "sendMessage",
+          op: "send_message",
           intent: { messageId, sender, ...send },
           effect: { type: "message", target: prepared.target },
           message,

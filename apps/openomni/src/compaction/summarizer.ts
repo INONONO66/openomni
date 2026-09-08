@@ -1,7 +1,7 @@
 import type { CompactionOptions } from "@openomni/agent";
 import { Run, type RunInput } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
-import { runResolvedText, type LlmIo } from "../tools/execution/llm";
+import { runResolvedText, type LlmIo } from "../tools/completion";
 
 export type SummarizerErrorKind = "empty" | "overflow";
 

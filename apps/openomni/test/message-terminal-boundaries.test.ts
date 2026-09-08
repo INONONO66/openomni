@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
 import { ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway, SessionTransition } from "@openomni/protocol";
-import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
+import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
 
@@ -75,14 +75,8 @@ for (const kind of ["result", "error", "interrupted"] as const) {
           if (!commissioned) {
             const output = requestToolStep(input, sink, {
               id: "commission",
-              tool: "sendMessage",
-              input: {
-                to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
-                type: "message",
-                content: "work",
-                deadline: 1000,
-                replyTo: "ORIGINAL",
-              },
+              tool: "send_message",
+              input: commissionInput({ message: "work", deadline_ms: 900, reply_to: "ORIGINAL" }),
             });
             if (output === undefined) return { type: "stop" };
             expect(output.isError).not.toBe(true);

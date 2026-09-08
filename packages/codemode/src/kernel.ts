@@ -119,8 +119,8 @@ def parallel(thunks, max_workers=8):
         return [_future.result() for _future in _futures]
 
 
-def llm(prompts):
-    return tool.llm(prompts=prompts)
+def completion(prompt):
+    return tool.completion(prompt=prompt)
 
 
 class _Machine:
@@ -169,7 +169,7 @@ _scope = {
     "tool": tool,
     "ToolError": ToolError,
     "parallel": parallel,
-    "llm": llm,
+    "completion": completion,
     "codemode": _Codemode(),
 }
 threading.Thread(target=_read_stdin, name="driver-stdin", daemon=True).start()

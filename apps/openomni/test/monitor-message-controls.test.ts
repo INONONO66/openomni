@@ -4,7 +4,7 @@ import { Bus, createSessionRequests, ToolRefused } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
-import { monitorTool } from "../src/tools/mutation/monitor";
+import { monitorTool } from "../src/tools/monitor";
 import { messageFixture } from "./helpers/message-fixture";
 
 function alarmStore() {
@@ -83,7 +83,7 @@ for (const status of ["armed", "fired"] as const) {
           const inbox = SessionHandleStore.inboxRows("sender");
           await expect(
             monitorTool.execute(
-              { operation: { op, alarmId: alarm.id } },
+              { operation: { op, id: alarm.id } },
               {
                 sessionId: "sender",
                 turnId: "turn",

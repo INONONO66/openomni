@@ -1,28 +1,14 @@
-import { ActorRegistry, PersonStore } from "@openomni/ledger";
+import { PersonStore } from "@openomni/ledger";
 import type { PlainValue, SessionTransition } from "@openomni/protocol";
-import { authorityDomainRevisions } from "../authority/approval";
+import { ContactOperation, contactDomainRevisions } from "./contact-mutations";
 
 function operationDomainRevisions(
   operation: PlainValue | undefined,
 ): Readonly<Record<string, number>> | undefined {
   if (operation !== null && typeof operation === "object" && !Array.isArray(operation)) {
-    if (operation.op === "contact_promote" && typeof operation.actorId === "string")
-      return authorityDomainRevisions(ActorRegistry, {
-        operation: { op: operation.op, actorId: operation.actorId },
-      });
-    if (
-      operation.op === "endpoint_merge" &&
-      typeof operation.endpointId === "string" &&
-      typeof operation.toActorId === "string"
-    )
-      return authorityDomainRevisions(ActorRegistry, {
-        operation: {
-          op: operation.op,
-          endpointId: operation.endpointId,
-          toActorId: operation.toActorId,
-        },
-      });
-    if (operation.op === "person_declare") return personDomainRevisions(operation.args);
+    const contact = ContactOperation.safeParse(operation);
+    if (contact.success) return contactDomainRevisions(contact.data);
+    if (operation.op === "contact_add") return personDomainRevisions(operation.args);
   }
 }
 

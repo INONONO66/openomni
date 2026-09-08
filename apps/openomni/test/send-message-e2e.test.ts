@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { L0Observation, SessionTransition, SessionTurn } from "@openomni/protocol";
-import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
+import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
 
@@ -109,16 +109,11 @@ test("a child session terminal commits exactly one parent reply with the origina
         if (!commissioned) {
           const output = requestToolStep(input, sink, {
             id: "commission",
-            tool: "sendMessage",
-            input: {
-              to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
-              type: "message",
-              content: "child request",
-              replyTo: "original-binding",
-            },
+            tool: "send_message",
+            input: commissionInput({ message: "child request", reply_to: "original-binding" }),
           });
           if (output === undefined) return { type: "stop" };
-          expect(output.isError).not.toBe(true);
+          expect(output.isError).toBeUndefined();
           commissioned = true;
         }
         sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));

@@ -8,6 +8,7 @@ import type {
 import { compiledPolicy } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { bounded, requestLedger } from "../../../../packages/agent/test/helpers/request-ledger";
 import { requestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
+import { PROVISION_POLICY_ROWS } from "../../src/tools/provision";
 
 export { bounded };
 export function protectedDispatch(
@@ -28,7 +29,7 @@ export function protectedDispatch(
   const controller = new AbortController();
   const executor = createExecutor({
     ...recording,
-    policy: compiledPolicy(),
+    policy: compiledPolicy(PROVISION_POLICY_ROWS.map((row) => ({ ...row, generation: 1 }))),
     observations,
     authorizeApproval: async () => ({
       kind: "owner",

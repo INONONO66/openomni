@@ -46,9 +46,9 @@ const manifest = {
   endpoints: [] as { channel: string; externalId: string }[],
 };
 
-test("person_declare reads back the live Person revision, absent as -1", () => {
+test("contact_add reads back the live Person revision, absent as -1", () => {
   const declare = request(
-    { operation: { op: "person_declare", args: { manifest } } },
+    { operation: { op: "contact_add", args: { manifest } } },
     { [manifest.id]: -1 },
   );
   expect(requestDomainRevisions(declare)).toEqual({ [manifest.id]: -1 });
@@ -71,7 +71,7 @@ test("a request without domain preconditions reads back nothing", () => {
 test("domain preconditions on an unrecognized operation fail closed", () => {
   const inputs: PlainValue[] = [
     { operation: { op: "channel_declare", args: {} } },
-    { operation: { op: "person_declare", args: { manifest: "not-a-manifest" } } },
+    { operation: { op: "contact_add", args: { manifest: "not-a-manifest" } } },
     "not-an-input",
   ];
   for (const parsedInput of inputs) {

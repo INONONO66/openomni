@@ -10,7 +10,7 @@ import { createGatewayRouter } from "@openomni/channels";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
-import { createLlmToolPort } from "./tools/execution/llm";
+import { createCompletionPort } from "./tools/completion";
 import { createResident } from "./resident";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
@@ -59,7 +59,7 @@ export async function serveProcessSession(
     sessionRuntime: runtime,
     tools: {
       messages,
-      llm: createLlmToolPort(
+      llm: createCompletionPort(
         {
           ...request.model,
           apiKey: request.apiKey,

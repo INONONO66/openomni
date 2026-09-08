@@ -45,7 +45,7 @@ export function vaultCredentialReader(
  * What the supervisor should be running right now (`declared` iff at least
  * one ChannelInstance row exists — env config is shadowed then, §8.1). The
  * bounce key folds the declaration revision with the secret's rotation epoch,
- * so `channel_declare` edits and `secret_rotate` both bounce exactly the
+ * so `channel_add` edits and `secret_rotate` both bounce exactly the
  * stages they touch (§8.7) while everything else keeps running.
  */
 export function desiredChannels(
