@@ -75,7 +75,7 @@ jobs:
   desktop-smoke:
     name: Desktop production smoke
     needs: [plan, prepare]
-    if: needs.plan.outputs.verify == 'true' && (contains(needs.plan.outputs.matrix, 'desktopApp') || contains(needs.plan.outputs.matrix, '"key":"ui"'))
+    if: needs.plan.outputs.verify == 'true' && (contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'desktopApp') || contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'ui'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

@@ -68,7 +68,7 @@ test("docs-only planning keeps both final statuses successful while work is inte
 });
 
 for (const job of [
-  "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+  "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
   "dependency-review", "scripts-contracts", "scripts-coverage",
 ]) {
   for (const status of ["failure", "cancelled", "skipped", "missing"]) {
@@ -96,6 +96,36 @@ for (const job of [
     });
   }
 }
+
+for (const path of ["README.md", "apps/desktop/src/main/index.ts", "packages/ui/src/index.ts", "packages/ledger/src/index.ts", "script/ci.ts"]) {
+  test(`desktop smoke follows selected v2 lanes for ${path}`, () => {
+    const plan = planChanges([path]);
+    const selected = plan.matrix.include.some((lane) => lane.key === "desktopApp" || lane.key === "ui");
+    const needs = {
+      plan: { result: "success" }, prepare: { result: "success" },
+      "scripts-contracts": { result: "success" },
+      "scripts-coverage": { result: plan.toolingTests ? "success" : "skipped" },
+      ...Object.fromEntries(["tests", "static", "deps"].map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
+      ...Object.fromEntries(QUALITY_JOBS.map((job) => [job, { result: "skipped" }])),
+      "dependency-review": { result: plan.dependencyReview ? "success" : "skipped" },
+    };
+    for (const status of ["success", "skipped", "failure", "cancelled"]) {
+      const result = cli(["gate"], {
+        CI_PLAN: JSON.stringify(plan), CI_EVENT: "pull_request",
+        CI_NEEDS: JSON.stringify({ ...needs, "desktop-smoke": { result: status } }),
+      });
+      expect(result.exitCode === 0).toBe(status === (selected ? "success" : "skipped"));
+    }
+  });
+}
+
+test("desktop smoke uses exact selected lane keys and joins the final gate", () => {
+  const jobs = z.object({ jobs: z.record(z.string(), jobSchema) }).parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  expect(jobs["desktop-smoke"]?.needs).toEqual(["plan", "prepare"]);
+  expect(jobs["desktop-smoke"]?.if).toBe("needs.plan.outputs.verify == 'true' && (contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'desktopApp') || contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'ui'))");
+  expect(jobs["desktop-smoke"]?.steps.some((step) => step.run === "xvfb-run -a bun run test:e2e")).toBe(true);
+  for (const job of ["desktop-smoke", "scripts-contracts", "scripts-coverage"]) expect(jobs.ci?.needs).toContain(job);
+});
 
 test("full gate executes the required quality jobs in process", () => {
   const plan = planChanges([], true);

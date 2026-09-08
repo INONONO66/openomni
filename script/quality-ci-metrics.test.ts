@@ -6,6 +6,7 @@ import { fingerprint, readDocument } from "./quality-ci-input";
 import { joinBounds, measureStatic } from "./quality-ci-metrics";
 import { parseStatic } from "./quality-ci-legs";
 import { InventoryError } from "./quality-inventory";
+import { toolReceipts } from "./quality-metrics/tool";
 
 test("static pinned analyzers survive JSON transfer and join conservative bounds", async () => {
 	const root = mkdtempSync(join(tmpdir(), "quality-bound-native-"));
@@ -20,6 +21,9 @@ test("static pinned analyzers survive JSON transfer and join conservative bounds
 		const identity = fingerprint(root, "contract.json");
 		const inventory = join(root, "inventory.json");
 		writeFileSync(inventory, JSON.stringify(identity.inventory));
+		// Other tests invoke these analyzers in the same process. Own the receipt
+		// boundary before measurement rather than depending on shard file order.
+		toolReceipts();
 		const collected = await measureStatic({ root, inventory });
 		writeFileSync(join(root, "static.json"), JSON.stringify(collected));
 		const document = parseStatic(readDocument(join(root, "static.json")));

@@ -1145,7 +1145,9 @@ test("AsyncResource.bind hands back the callback bound to its native async scope
 test("fs.watch listeners and watcher events have a native filesystem producer", () => {
   using fixture = new Fixture({
     "src/events.ts": protocol,
-    "src/main.ts": `import {watch,writeFileSync,mkdtempSync} from "node:fs";import {join} from "node:path";import {tmpdir} from "node:os";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const dir=mkdtempSync(join(tmpdir(),"census-watch-"));const seen=new Promise<void>((resolve)=>{const source=watch(dir,{recursive:false},()=>{sink.publish(Ready);source.close();resolve()});source.on("error",()=>{throw new Error("watch failed")})});writeFileSync(join(dir,"marker"),"1");await seen;console.log(JSON.stringify(received));`,
+    // Watch an existing file: macOS directory watches can miss creation before
+    // their native stream starts. File watches register before watch() returns.
+    "src/main.ts": `import {watch,writeFileSync,mkdtempSync,rmSync} from "node:fs";import {join} from "node:path";import {tmpdir} from "node:os";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const dir=mkdtempSync(join(tmpdir(),"census-watch-"));const marker=join(dir,"marker");writeFileSync(marker,"0");const seen=new Promise<void>((resolve,reject)=>{const source=watch(marker,{recursive:false},()=>{sink.publish(Ready);source.close();resolve()});source.on("error",(error)=>{source.close();reject(error)})});try{writeFileSync(marker,"1");await seen;console.log(JSON.stringify(received))}finally{rmSync(dir,{recursive:true,force:true})}`, 
   });
   assertPublication(fixture, true);
   // The watcher's own error event is a native producer; an empty handler is not.
