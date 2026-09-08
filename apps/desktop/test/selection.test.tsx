@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { orderByAttention } from "../src/renderer/attention";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
+import { makeSession } from "./helpers/session";
 
 /**
  * The tree's render contract over store sessions: PROJECT → SESSION, exactly
@@ -12,12 +13,12 @@ import type { Session } from "../src/renderer/state/store";
  * runner here — and the store's own transitions are covered by store.test.ts.
  */
 const sessions: readonly Session[] = [
-  { id: "s1", title: "Session 1", titleSource: "prompt", projectId: "default", createdAt: 1 },
-  { id: "s2", title: "Session 2", titleSource: "prompt", projectId: "default", createdAt: 2 },
-  { id: "s3", title: "Session 3", titleSource: "prompt", projectId: "other", createdAt: 3 },
+  makeSession({ id: "s1", title: "Session 1", projectId: "default", createdAt: 1 }),
+  makeSession({ id: "s2", title: "Session 2", projectId: "default", createdAt: 2 }),
+  makeSession({ id: "s3", title: "Session 3", projectId: "other", createdAt: 3 }),
 ];
 
-const ordered = orderByAttention(sessions);
+const ordered = orderByAttention(sessions, 10);
 
 const tree = (
   selectedId: string | null,
@@ -30,7 +31,8 @@ const tree = (
       onNavigate={() => undefined}
       onSelect={() => undefined}
       onToggleProject={() => undefined}
-      ordered={orderByAttention(list)}
+      now={10}
+      ordered={orderByAttention(list, 10)}
       pendingChanges={options.pendingChanges ?? 0}
       route="sessions"
       selectedId={selectedId}
@@ -61,8 +63,11 @@ describe("the sidebar is project groups over sessions", () => {
   const html = tree("s1");
 
   test("Given the ordered groups, When the tree renders, Then every project is a disclosure header", () => {
-    for (const group of ordered.projects) expect(html).toContain(group.id ?? "no project");
-    expect(html.match(/aria-expanded="true"/g)).toHaveLength(ordered.projects.length);
+    for (const group of ordered.groups.flatMap((kind) => kind.projects))
+      expect(html).toContain(group.id ?? "no project");
+    expect(html.match(/aria-expanded="true"/g)).toHaveLength(
+      ordered.groups.flatMap((kind) => kind.projects).length,
+    );
   });
 
   test("Given every row, When the tree renders, Then it is one line: the title", () => {

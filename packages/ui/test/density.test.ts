@@ -51,14 +51,13 @@ const ROLES = [
   { role: "body", size: 13, why: "the transcript's own text" },
   { role: "label", size: 13, why: "a row's own name" },
   { role: "heading", size: 13, why: "ranks by weight, not by size" },
-  { role: "meta", size: 12, why: "a tool row, a reason line, a second line" },
+  { role: "meta", size: 11, why: "a reason line, a second line" },
   { role: "title", size: 14, why: "the session name heading the column" },
 ] as const;
 
 describe("the shell density type scale", () => {
   test("Given the shell block, When each role is read, Then it is on its contracted size", () => {
-    // 13px body / 12px meta is the density the reference capture was taken at.
-    // A step either way is four rows of transcript per screen.
+    // Shell rows are 13px; secondary metadata is 11px. Prose owns its sizes.
     for (const { role, size, why } of ROLES) {
       expect(px(SHELL, role), `--text-${role} (${why})`).toBe(size);
     }
@@ -68,7 +67,7 @@ describe("the shell density type scale", () => {
     // The second line of a row must read as supporting the first, not as a
     // second first line. One step is the whole mechanism — there is no tone
     // change and no indent to carry it.
-    expect(px(SHELL, "body") - px(SHELL, "meta")).toBe(1);
+    expect(px(SHELL, "body") - px(SHELL, "meta")).toBe(2);
   });
 
   test("Given the shell block, When the header is compared to body, Then it is at most one step larger", () => {

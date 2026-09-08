@@ -1,4 +1,5 @@
 import type { Ordered } from "../attention";
+import type { AttentionKind } from "../attention/order";
 import type { ProjectId, SessionId } from "../state/store";
 import { type MatchSpan, scoreFields } from "./score";
 
@@ -31,14 +32,17 @@ export interface FilteredSession {
   readonly spans: MatchSpan;
 }
 
-/** Not exported: callers reach it through `Filtered.projects`, not by name. */
+/** A project's matched rows within one attention kind. */
 interface FilteredProject {
   readonly id: ProjectId | null;
   readonly sessions: readonly FilteredSession[];
 }
 
 export interface Filtered {
-  readonly projects: readonly FilteredProject[];
+  readonly groups: readonly {
+    readonly kind: AttentionKind;
+    readonly projects: readonly FilteredProject[];
+  }[];
   /** Every visible session id, in painted order — the arrow-key sequence. */
   readonly sequence: readonly SessionId[];
   readonly total: number;
@@ -56,32 +60,24 @@ export function filterOrdered(
   fieldsFor: (id: SessionId) => SearchFields,
 ): Filtered {
   const trimmed = query.trim();
-
-  if (trimmed.length === 0) {
-    const projects = ordered.projects.map((group) => ({
-      id: group.id,
-      sessions: group.sessions.map((id) => ({ id, spans: EMPTY })),
-    }));
-    return {
-      projects,
-      sequence: projects.flatMap((group) => group.sessions.map((entry) => entry.id)),
-      total: projects.reduce((count, group) => count + group.sessions.length, 0),
-      unfiltered: true,
-    };
-  }
-
-  const projects: FilteredProject[] = [];
-
-  for (const group of ordered.projects) {
-    const sessions = matching(group.sessions, trimmed, fieldsFor);
-    // A header with no matching child is a row spent on nothing.
-    if (sessions.length === 0) continue;
-    projects.push({ id: group.id, sessions });
-  }
-
-  const sequence = projects.flatMap((group) => group.sessions.map((entry) => entry.id));
-
-  return { projects, sequence, total: sequence.length, unfiltered: false };
+  const unfiltered = trimmed.length === 0;
+  const groups = ordered.groups
+    .map((group) => ({
+      kind: group.kind,
+      projects: group.projects
+        .map((project) => ({
+          id: project.id,
+          sessions: unfiltered
+            ? project.sessions.map((id) => ({ id, spans: EMPTY }))
+            : matching(project.sessions, trimmed, fieldsFor),
+        }))
+        .filter((project) => project.sessions.length > 0),
+    }))
+    .filter((group) => group.projects.length > 0);
+  const sequence = groups.flatMap((group) =>
+    group.projects.flatMap((project) => project.sessions.map((entry) => entry.id)),
+  );
+  return { groups, sequence, total: sequence.length, unfiltered };
 }
 
 const EMPTY: MatchSpan = [];

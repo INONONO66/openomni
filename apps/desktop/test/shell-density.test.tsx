@@ -227,13 +227,16 @@ describe("the transcript sets exactly three voices", () => {
 });
 
 describe("the sidebar row keeps its own rank", () => {
-  test("Given a session row, When rendered, Then the row is label and the section title is meta", () => {
-    // Both levels have to be NAMED: the title used to inherit 16px, which put a
-    // session title above the transcript's own prose. Rows are ONE line at the
-    // label size; the section title above them is the smaller meta step.
+  test("Given a session row, When rendered, Then the row is label and the section title is semibold label", () => {
+    // The header shares the 13px row size and gains rank through weight.
     const nav = SHELL.slice(SHELL.indexOf('data-ui="Sidebar"'), SHELL.indexOf("<main"));
     expect(nav).toContain("text-label");
-    expect(nav).toContain("text-meta");
+    const header = nav.slice(
+      nav.indexOf('data-ui="SectionHeader"'),
+      nav.indexOf('data-ui="SectionHeader.Toggle"'),
+    );
+    expect(header).toContain("text-label");
+    expect(header).toContain("font-semibold");
   });
 
   test("Given the navigator, When scanned, Then no element sets a raw font size", () => {

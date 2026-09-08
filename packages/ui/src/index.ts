@@ -24,3 +24,4 @@ export type { PendingApproval, TranscriptNode, TurnCost } from "./timeline/model
 export { Timeline } from "./timeline/timeline";
 export { segmentTurns } from "./timeline/turns";
 export { TreeRow } from "./tree-row";
+export { StatusGlyph } from "./status-glyph";
