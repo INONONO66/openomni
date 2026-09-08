@@ -150,6 +150,21 @@ const db = new Database(":memory:"); db.exec("CREATE TABLE item (id INTEGER PRIM
 export function read() { return db.query("SELECT * FROM item").all(); }
 export function write() { return db.query("INSERT INTO item VALUES (1)").run(); }`;
 
+test("scoped census retains resolver inputs but reports only affected sources", () => {
+  using fixture = new Fixture({
+    "src/main.ts": 'import { Ready } from "./events"; console.log(Ready.name);',
+    "src/events.ts": protocol,
+    "src/api.ts": "export const unused = 7;",
+  });
+  fixture.write("plan.json", JSON.stringify({ version: 2, class: "desktop", qualityScope: ["src/main.ts"], projects: ["tsconfig.json"] }));
+  expect(fixture.run("publisher").code).toBe(1);
+  expect(fixture.run("publisher", ["--plan", "plan.json"]).code).toBe(0);
+  expect(fixture.run("export", ["--plan", "plan.json"]).code).toBe(0);
+  fixture.write("plan.json", JSON.stringify({ version: 2, class: "desktop", qualityScope: ["src/main.ts", "src/events.ts", "src/api.ts"], projects: ["tsconfig.json"] }));
+  expect(fixture.run("publisher", ["--plan", "plan.json"]).code).toBe(1);
+  expect(fixture.run("export", ["--plan", "plan.json"]).code).toBe(1);
+}, 60_000);
+
 test("test-only consumption fails through the existing Knip owner", () => {
   using fixture = new Fixture({
     "src/main.ts": "console.log('root');",

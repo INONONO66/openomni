@@ -15,11 +15,17 @@ import { planChanges } from "./ci-plan";
 import { TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 const keys = (paths: readonly string[], topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
-  planChanges(paths, false, topology).matrix.include.map((row) => row.key);
+  planChanges(paths, false, topology).lanes;
 const allKeys = [...TOPOLOGY.map((workspace) => workspace.key), "scripts"];
 const cli = join(import.meta.dir, "ci-plan.ts");
 const planSchema = z
   .object({
+    version: z.literal(2),
+    class: z.enum(["docs", "desktop", "kernel", "tooling", "global"]),
+    lanes: z.array(z.string()),
+    qualityScope: z.array(z.string()),
+    projects: z.array(z.string()),
+    toolingTests: z.boolean(),
     full: z.boolean(),
     verify: z.boolean(),
     dependencyReview: z.boolean(),
@@ -33,6 +39,33 @@ const planSchema = z
       .strict(),
   })
   .strict();
+
+test.each([
+  [["docs/nested/guide.md"], "docs", false],
+  [["apps/desktop/src/main/index.ts"], "desktop", false],
+  [["packages/ui/src/index.ts"], "desktop", false],
+  [["packages/ledger/src/index.ts"], "kernel", false],
+  [["script/ci.ts"], "tooling", true],
+  [["packages/protocol/src/index.ts"], "global", true],
+  [["mystery/file.ts"], "global", true],
+  [["packages/ui/../ledger/src/index.ts"], "global", true],
+  [["README.md", "packages/ui/src/index.ts", "script/ci.ts"], "tooling", true],
+] as const)("v2 classifies %j as %s", (paths, changeClass, toolingTests) => {
+  expect(planChanges(paths)).toMatchObject({ class: changeClass, toolingTests });
+});
+
+test("v2 scopes desktop quality to its workspace and never kernel projects", () => {
+  const plan = planChanges(["packages/ui/src/index.ts"]);
+  expect(plan.qualityScope.length).toBeGreaterThan(0);
+  expect(plan.qualityScope.every((path) => path.startsWith("packages/ui/") || path.startsWith("apps/desktop/"))).toBe(true);
+  expect(plan.projects.length).toBeGreaterThan(0);
+  expect(plan.projects.every((path) => path.startsWith("packages/ui/") || path.startsWith("apps/desktop/"))).toBe(true);
+  expect(plan.lanes).toEqual(["ui", "desktopApp", "scripts"]);
+  const full = planChanges(undefined, true);
+  expect(full.class).toBe("global");
+  expect(full.qualityScope).toContain("script/ci.ts");
+  expect(full.projects).toContain("script/tsconfig.json");
+});
 
 test("skips executable jobs when only root documentation changes", () => {
   // Given explicitly supplied documentation paths.
@@ -68,8 +101,7 @@ test.each([
   "package.json",
   "bun.lock",
   "tsconfig.base.json",
-  "script/check-deps.ts",
-  "script/README.md",
+  "script/conformance/quality-contract.json",
   ".github/workflows/ci.yml",
   ".github/actions/setup/action.yml",
   "packages/new/package.json",
@@ -170,6 +202,10 @@ function fixture() {
       JSON.stringify({ name: workspace.packageName }),
     );
   }
+  mkdirSync(join(root, "script/conformance"), { recursive: true });
+  writeFileSync(join(root, "script/fixture.ts"), "export const fixture = 1;\n");
+  writeFileSync(join(root, "script/tsconfig.json"), '{"include":["*.ts"]}');
+  writeFileSync(join(root, "script/conformance/quality-contract.json"), JSON.stringify({ version: 1, typescript: "5.9.2", roots: ["script", "packages", "apps"], projects: ["script/tsconfig.json"], topology: false }));
   const snapshot = () => {
     git("add", "--all");
     return git("commit-tree", git("write-tree"), "-m", "isolated fixture");
@@ -199,7 +235,7 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
   // Then both old and new owners propagate, with machine-only output fields.
   expect(result.exitCode).toBe(0);
   const plan = planSchema.parse(JSON.parse(result.stdout.toString()));
-  expect(plan.matrix.include.map((row) => row.key)).toEqual([
+  expect(plan.lanes).toEqual([
     "ledger",
     "agent",
     "channels",
@@ -214,12 +250,16 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
     "verify",
     "dependencyReview",
     "matrix",
+    "class",
+    "toolingTests",
   ]);
   expect(lines).toEqual([
     `full=${plan.full}`,
     `verify=${plan.verify}`,
     `dependencyReview=${plan.dependencyReview}`,
     `matrix=${JSON.stringify(plan.matrix)}`,
+    `class=${plan.class}`,
+    `toolingTests=${plan.toolingTests}`,
   ]);
   expect(existsSync(join(repo.root, "PWNED"))).toBe(false);
 });
@@ -241,7 +281,7 @@ test("fails the actual CLI when PR input is absent", () => {
   expect(result.stdout.toString()).toBe("");
 });
 
-test.each(["push", "workflow_dispatch", "schedule"])("forces full for the %s event", (event) => {
+test.each(["push", "workflow_dispatch", "schedule", "merge_group"])("forces full for the %s event", (event) => {
   // Given a non-PR event without diff input, when invoked, then every gate runs.
   using repo = fixture();
   const result = repo.run([], { GITHUB_EVENT_NAME: event });

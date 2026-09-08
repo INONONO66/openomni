@@ -156,10 +156,11 @@ export function cliOptions() {
       root: { type: "string", default: process.cwd() },
       contract: { type: "string", default: "script/conformance/quality-contract.json" },
       inventory: { type: "string" },
+      plan: { type: "string" },
     },
     strict: true,
   });
-  return { root: resolve(values.root), contract: values.contract, inventory: values.inventory };
+  return { root: resolve(values.root), contract: values.contract, inventory: values.inventory, plan: values.plan };
 }
 const skipped = new Set(["node_modules", "dist", "coverage", ".git", ".turbo"]);
 const languages = new Map<string, Inventory["files"][number]["language"]>([

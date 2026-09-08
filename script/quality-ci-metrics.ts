@@ -52,12 +52,12 @@ function cloneFindings(duplication: Awaited<ReturnType<typeof detectClones>>, so
 	}
 	return findings;
 }
-export async function measureStatic(options: { root: string; inventory: string }) {
+export async function measureStatic(options: { root: string; inventory: string; scope?: readonly string[] }) {
 	requireMeasurement(["1.3.6", "1.4.1"].includes(Bun.version), "unsupported Bun runtime");
 	const tools = metricPins();
 	const inventory = loadInventory(options.root, options.inventory);
 	const sources = [...inventory.files.filter((source) => qualitySource(source.path)), ...inventory.embedded.filter((source) => source.hostPath && qualitySource(source.hostPath))];
-	const measured = sources.map((source) => {
+	const measured = sources.filter((source) => options.scope === undefined || options.scope.includes(source.hostPath ?? source.path)).map((source) => {
 		const analysis = source.language === "python" ? analyzePython(source) : {
 			units: analyzeJavascript(source), prepared: prepare(source), receipt: null,
 		};
@@ -71,6 +71,7 @@ export async function measureStatic(options: { root: string; inventory: string }
 		pythonProcesses: measured.flatMap((row) => row.analysis.receipt ? [row.analysis.receipt] : []),
 		sources: sources.map((row) => ({ path: row.path, sha256: row.sha256 })),
 		hosts: inventory.files, measured, duplication,
+		...(options.scope === undefined ? {} : { cloneSources: sources }),
 	};
 }
 export type StaticDocument = Awaited<ReturnType<typeof measureStatic>>;
@@ -112,7 +113,7 @@ export function joinBounds(document: StaticDocument, options: {
 			});
 		}
 	}
-	findings.push(...cloneFindings(duplication, sources, hosts));
+	findings.push(...cloneFindings(duplication, document.cloneSources ?? sources, hosts));
 	const measurement: Measurement = {
 		analyzed: ["cyclomatic", "cognitive", "halstead", "crap", "productionClones", "testClones", "coverage"],
 		findings,

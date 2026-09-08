@@ -173,6 +173,7 @@ export function runProductionKnip(options: {
   readonly root: string;
   readonly executable: string;
   readonly config: string;
+  readonly cache?: boolean;
 }): { ok: true; stdout: string } | { ok: false; code: string; message: string } {
   const version = Bun.spawnSync([process.execPath, options.executable, "--version"], {
     cwd: options.root, timeout: 30_000,
@@ -183,7 +184,7 @@ export function runProductionKnip(options: {
     process.execPath, options.executable, "--config", options.config,
     "--reporter", "json", "--no-exit-code", "--include-entry-exports",
     "--include", "files,exports,nsExports,types,nsTypes,enumMembers,namespaceMembers,unresolved",
-    "--no-progress",
+    "--no-progress", ...(options.cache ? ["--cache"] : []),
   ], { cwd: options.root, timeout: 120_000 });
   if (result.exitCode !== 0)
     return { ok: false, code: "knip_failure", message: result.stderr.toString().slice(0, 2000) };

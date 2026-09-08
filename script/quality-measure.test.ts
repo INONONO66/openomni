@@ -58,6 +58,27 @@ test("subcommand admission rejects absent flags in process and at the CLI withou
 	}
 }, 30_000);
 
+test("scoped collect measures selected metrics and types while retaining full resolver identity", async () => {
+  const root = fixture();
+  try {
+    writeFileSync(join(root, "script/b.ts"), "export function other(): number { return 2; }\n");
+    const plan = { version: 2, class: "desktop", qualityScope: ["script/a.ts"], projects: ["script/tsconfig.json"] };
+    writeFileSync(join(root, "plan.json"), JSON.stringify(plan));
+    expect(await measureMain(["collect", "--root", root, "--contract", "contract.json", "--leg", "metrics", "--plan", "plan.json", "--output", "scoped"])).toBe(0);
+    const document = parseStatic(readDocument(join(root, "scoped/metrics.json")));
+    expect(document.measured.map((row) => row.source.path)).toEqual(["script/a.ts"]);
+    expect(document.sources.map((row) => row.path)).toEqual(["script/a.ts", "script/b.ts"]);
+    const identity = fingerprint(root, "contract.json");
+    expect(document.inventoryHash).toBe(identity.inventoryHash);
+    writeFileSync(join(root, "inventory.json"), JSON.stringify(identity.inventory));
+    const child = Bun.spawnSync([process.execPath, join(import.meta.dir, "check-types-census.ts"), "--root", root, "--contract", "contract.json", "--inventory", "inventory.json", "--plan", "plan.json"], { timeout: 30_000 });
+    expect(child.exitCode).toBe(0);
+    expect(decodeJson(child.stdout.toString())).toMatchObject({ measured: ["script/a.ts"], semanticMeasured: ["script/a.ts"], projects: plan.projects });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test("metrics collect writes transferable static evidence without coverage and reports its phase", async () => {
 	const root = fixture();
 	try {
@@ -115,7 +136,8 @@ for (const key of leg === "export" ? ["knip"] : leg === "store" ? ["schema", "up
   assert.equal(hash(readFileSync(resolve(root, args.get("--" + key)))), args.get("--" + key + "-sha256"));
 }
 if (leg === "store") assert.equal(args.get("--python"), options.python);
-const measured = inventory.files.filter((row) => row.language === "typescript").map((row) => row.path);
+const scope = args.has("--plan") ? JSON.parse(readFileSync(resolve(root, args.get("--plan")))).qualityScope : inventory.files.map((row) => row.path);
+const measured = inventory.files.filter((row) => row.language === "typescript" && scope.includes(row.path)).map((row) => row.path);
 const common = { version: 1, complete: true, inventoryHash: hash(bytes), errors: [] };
 console.log(JSON.stringify(leg === "types"
   ? { ...common, tool: "typescript@5.9.2", measured, semanticMeasured: measured, violations: [] }
@@ -170,7 +192,7 @@ test("native collectors transfer receipts and finish joins fresh coverage throug
 			...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement,
 		]);
 		writeFileSync(join(root, "baseline.json"), JSON.stringify(current));
-		writeFileSync(join(root, "plan.json"), JSON.stringify({ matrix: { include: [{ dir: "script", coverage: true }] } }));
+		writeFileSync(join(root, "plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"], matrix: { include: [{ dir: "script", coverage: true }] } }));
 		mkdirSync(join(root, "coverage"));
 		writeFileSync(join(root, "coverage/script.json"), JSON.stringify({ version: 1, complete: true, lane: "script", run, runtime: Bun.version, inventoryHash: identity.inventoryHash, lcovHash: digest(lcov), lcov, files }));
 		const args = ["finish", "--legs", "legs", "--base", "FETCH_HEAD", "--baseline", "baseline.json", "--plan", "plan.json", "--run", run, "--coverage-directory", "coverage"];
@@ -204,6 +226,56 @@ test("native collectors transfer receipts and finish joins fresh coverage throug
 		rmSync(root, { recursive: true, force: true });
 	}
 }, 30_000);
+
+test("finish preserves full-tier bytes and carries only hash-proven scoped debt", async () => {
+  const root = fixture();
+  try {
+    nativeFixture(root);
+    writeFileSync(join(root, "adapter-options.json"), JSON.stringify({ python: process.env.D945_PYTHON ?? "python3", exitCode: 1 }));
+    git(root, ["init", "-q"]);
+    git(root, ["add", "script", "contract.json", "adapter.mjs", "adapter-options.json"]);
+    git(root, ["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture"]);
+    const identity = fingerprint(root, "contract.json");
+    const matrix = { include: [{ dir: "script", coverage: true }] };
+    const plan = { version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"], matrix };
+    writeFileSync(join(root, "plan.json"), JSON.stringify(plan));
+    const lcov = "SF:a.ts\nDA:2,1\nDA:3,0\nLF:2\nLH:1\nend_of_record\n";
+    const files = parseNativeLcov(lcov, "script");
+    const lines = new Map(files.map((file) => [file.path, new Map(file.lines.map((row) => [row.line, row.hits]))]));
+    mkdirSync(join(root, "coverage"));
+    writeFileSync(join(root, "coverage/script.json"), JSON.stringify({ version: 1, complete: true, lane: "script", run: "equivalent", runtime: Bun.version, inventoryHash: identity.inventoryHash, lcovHash: digest(lcov), lcov, files }));
+    for (const leg of legs) expect(await measureMain(["collect", "--root", root, "--leg", leg, "--output", "legacy"])).toBe(0);
+    const native = (leg: string) => jsonObject(readDocument(join(root, "legacy", `${leg}.json`))).document ?? null;
+    const metrics = joinBounds(parseStatic(readDocument(join(root, "legacy/metrics.json"))), { identity, lines, selectedLanes: ["script"] });
+    const before = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [normalizeTypes(native("types"), identity), ...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement]);
+    const baseline = { ...before, sha256: Object.fromEntries(identity.inventory.files.map((row) => [row.path, row.sha256])) };
+    writeFileSync(join(root, "baseline.json"), JSON.stringify(baseline));
+    const finish = (directory: string, output: string) => ["finish", "--root", root, "--legs", directory, "--base", "HEAD", "--baseline", "baseline.json", "--plan", "plan.json", "--run", "equivalent", "--coverage-directory", "coverage", "--output", output];
+    expect(await measureMain(finish("legacy", "before"))).toBe(0);
+    for (const leg of legs) expect(await measureMain(["collect", "--root", root, "--leg", leg, "--plan", "plan.json", "--output", "global"])).toBe(0);
+    expect(await measureMain(finish("global", "after"))).toBe(0);
+    expect(await Bun.file(join(root, "before/current.json")).text()).toBe(await Bun.file(join(root, "after/current.json")).text());
+    const beforeSha256 = digest(JSON.stringify(before));
+    const afterSha256 = digest(await Bun.file(join(root, "after/current.json")).text());
+    expect(afterSha256).toBe(beforeSha256);
+    console.info(JSON.stringify({ equivalence: "full-tier", beforeSha256, afterSha256 }));
+    const completeMetrics = jsonObject(readDocument(join(root, "global/metrics.json")));
+    writeFileSync(join(root, "global/metrics.json"), JSON.stringify({ ...completeMetrics, measured: [] }));
+    await expect(measureMain(finish("global", "missing-metrics"))).rejects.toMatchObject({ code: "measurement" });
+    writeFileSync(join(root, "global/metrics.json"), JSON.stringify(completeMetrics));
+    writeFileSync(join(root, "plan.json"), JSON.stringify({ ...plan, class: "desktop", qualityScope: ["script/a.ts"] }));
+    for (const leg of legs) expect(await measureMain(["collect", "--root", root, "--leg", leg, "--plan", "plan.json", "--output", "scoped"])).toBe(0);
+    expect(await measureMain(finish("scoped", "carried"))).toBe(0);
+    writeFileSync(join(root, "baseline.json"), JSON.stringify({ ...baseline, sha256: { ...baseline.sha256, "script/check-census.ts": "0".repeat(64) } }));
+    await expect(measureMain(finish("scoped", "tampered"))).rejects.toMatchObject({ message: "unchanged proof mismatch: script/check-census.ts" });
+    const child = await childMain(root, finish("scoped", "cli-tampered"));
+    expect(child.exitCode).not.toBe(0);
+    expect(child.stderr).toContain("script/check-census.ts");
+    console.info(JSON.stringify({ scopedFinish: 0, tamperedFinish: child.exitCode, rejectedPath: "script/check-census.ts" }));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 60_000);
 
 test("finish admits every leg identity before coverage and fails closed on missing or stale evidence", async () => {
 	const root = fixture();

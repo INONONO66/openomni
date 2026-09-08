@@ -1,9 +1,20 @@
 import { appendFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import ts from "typescript";
+import { buildInventory, readContract } from "./quality-inventory";
+import { scriptPartitions } from "./scripts-lanes";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
+export const changeClasses = ["docs", "desktop", "kernel", "tooling", "global"] as const;
 export interface CiPlan {
+  readonly version: 2;
+  readonly class: (typeof changeClasses)[number];
+  readonly lanes: readonly string[];
+  readonly qualityScope: readonly string[];
+  readonly projects: readonly string[];
+  readonly toolingTests: boolean;
   readonly full: boolean;
   readonly verify: boolean;
   readonly dependencyReview: boolean;
@@ -21,26 +32,56 @@ export function planChanges(
   paths: readonly string[] | undefined,
   full = false,
   topology: readonly WorkspaceTopology[] = TOPOLOGY,
+  root = resolve(import.meta.dir, ".."),
 ): CiPlan {
   validateGraph(topology);
-  if (full) return fullPlan(topology, "full-requested");
+  const finish = (plan: Selection, changeClass: CiPlan["class"]): CiPlan => {
+    const contract = readContract(resolve(root, "script/conformance/quality-contract.json"));
+    const inventory = buildInventory(root, contract);
+    const whole = changeClass === "tooling" || changeClass === "global";
+    const dirs = plan.matrix.include.filter((row) => row.dir !== "script").map((row) => row.dir);
+    const qualityScope = inventory.files.filter((row) => whole || dirs.some((dir) => row.path.startsWith(`${dir}/`)) || paths?.includes(row.path)).map((row) => row.path);
+    const membership = new Set(qualityScope.map((path) => resolve(root, path)));
+    const projects = contract.projects.filter((project) => {
+      if (whole) return true;
+      const path = resolve(root, project);
+      const config = ts.readConfigFile(path, ts.sys.readFile);
+      if (config.error) throw new Error(`invalid project: ${project}`);
+      const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(path));
+      if (parsed.errors.length) throw new Error(`invalid project: ${project}`);
+      return parsed.fileNames.some((file) => membership.has(file));
+    });
+    const matrix = { include: [...plan.matrix.include.filter((row) => row.dir !== "script"), ...(whole ? scriptPartitions.filter((key) => key !== "scripts-contracts").map((key) => ({ key, dir: "script", coverage: true })) : [])] };
+    return { ...plan, matrix, version: 2, class: changeClass, lanes: plan.matrix.include.map((row) => row.key), qualityScope, projects, toolingTests: whole };
+  };
+  if (full) return finish(fullPlan(topology, "full-requested"), "global");
   if (paths === undefined) throw new Error("PR planning requires discovered changed paths");
 
   const selected = new Set<string>();
+  let changeClass: CiPlan["class"] = "docs";
   for (const path of paths) {
-    if (/^(README\.md|CONTRIBUTING\.md|docs\/[^/]+\.md)$/.test(path)) continue;
+    if (path.split("/").some((part) => part === ".." || part === "." || part === "") || path.includes("\\")) {
+      return finish(fullPlan(topology, "global-or-unowned-path"), "global");
+    }
+    if (/^(?:[^/]+\.md|docs\/.*)$/.test(path)) continue;
     if (/(^|\/)(package\.json|bun\.lockb?)$/.test(path)) {
-      return fullPlan(topology, "dependency-manifest-change");
+      return finish(fullPlan(topology, "dependency-manifest-change"), "global");
+    }
+    if (path.startsWith("script/") && !path.startsWith("script/conformance/")) {
+      changeClass = "tooling";
+      continue;
     }
     const owner = topology.find((workspace) => path.startsWith(`${workspace.dir}/`));
     if (!owner || path.split("/").some((part) => part === ".." || part === "." || part === "")) {
-      return fullPlan(topology, "global-or-unowned-path");
+      return finish(fullPlan(topology, "global-or-unowned-path"), "global");
     }
     // Protocol contracts also feed repository-wide conformance gates. Keep
     // this policy conservative even for lanes with no product import edge.
     if (owner.packageName === "@openomni/protocol") {
-      return fullPlan(topology, "shared-contract-change");
+      return finish(fullPlan(topology, "shared-contract-change"), "global");
     }
+    const next = owner.dir === "apps/desktop" || owner.dir === "packages/ui" ? "desktop" : "kernel";
+    if (changeClasses.indexOf(next) > changeClasses.indexOf(changeClass)) changeClass = next;
     selected.add(owner.packageName);
   }
 
@@ -54,8 +95,8 @@ export function planChanges(
     }
   }
   const workspaces = topology.filter((workspace) => selected.has(workspace.packageName));
-  const verify = workspaces.length > 0;
-  return {
+  const verify = workspaces.length > 0 || changeClass === "tooling";
+  return finish({
     full: false,
     verify,
     dependencyReview: false,
@@ -65,7 +106,7 @@ export function planChanges(
       : paths.length === 0
         ? "empty-diff"
         : "root-documentation-only",
-  };
+  }, changeClass);
 }
 
 function rows(topology: readonly WorkspaceTopology[]) {
@@ -75,7 +116,8 @@ function rows(topology: readonly WorkspaceTopology[]) {
   ];
 }
 
-function fullPlan(topology: readonly WorkspaceTopology[], reason: string): CiPlan {
+type Selection = Pick<CiPlan, "full" | "verify" | "dependencyReview" | "matrix" | "reason">;
+function fullPlan(topology: readonly WorkspaceTopology[], reason: string): Selection {
   return {
     full: true,
     verify: true,
@@ -147,12 +189,12 @@ function main(): void {
       throw new Error("git diff output is not NUL terminated");
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
-  const plan = planChanges(paths, full);
+  const plan = planChanges(paths, full, TOPOLOGY, process.cwd());
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
     appendFileSync(
       outputPath,
-      `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\n`,
+      `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\nclass=${plan.class}\ntoolingTests=${plan.toolingTests}\n`,
     );
   }
   process.stdout.write(`${JSON.stringify(plan)}\n`);

@@ -23,7 +23,8 @@ import {
 import { knipWorkspaces } from "./topology";
 import { qualitySource } from "./quality-source";
 import { CensusPrograms, readProject } from "./census-program";
-import { decodeJson, parseEntry } from "./quality-inventory";
+import { decodeJson, inventorySchema, parseEntry } from "./quality-inventory";
+import { qualityPlan } from "./quality-plan";
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 type CensusClass = "publisher" | "export" | "store";
@@ -3597,11 +3598,14 @@ function knipCensus(
   roots: Map<string, Locus>,
   executable: string,
   topology: boolean,
+  scope?: ReturnType<typeof qualityPlan>,
 ) {
   const dir = mkdtempSync(join(tmpdir(), "census-knip-"));
   try {
     const workspaces: Record<string, { entry: string[]; project: string[] }> = {};
-    const dirs = topology ? [".", ...knipWorkspaces().map((row) => row.dir)] : ["."];
+    const dirs = topology
+      ? scope && !scope.whole ? scope.workspaces : [".", ...knipWorkspaces().map((row) => row.dir)]
+      : ["."];
     for (const dir of dirs) {
       const owned = files.filter(
         (row) =>
@@ -3627,7 +3631,7 @@ function knipCensus(
         ignore: files.filter((row) => !eligible(row)).map((row) => row.path),
       }),
     );
-    const result = runProductionKnip({ root, executable, config });
+    const result = runProductionKnip({ root, executable, config, cache: scope !== undefined });
     if (!result.ok) fail(result.code, executable, result.message);
     const report = object(decode(result.stdout));
     const findings: Finding[] = [];
@@ -4130,6 +4134,7 @@ function censusOptions(argv: string[]) {
       json: { type: "boolean" },
       root: { type: "string", default: process.cwd() },
       class: { type: "string" },
+      plan: { type: "string" },
       inventory: { type: "string" },
       "inventory-sha256": { type: "string" },
       contract: { type: "string" },
@@ -4173,6 +4178,7 @@ export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms
     if (ts.version !== "5.9.2") fail("tool_version", "typescript", "requires 5.9.2");
     const values = censusOptions(argv);
     const { root, selected, input } = censusInput(values);
+    const scope = values.plan ? qualityPlan(root, values.contract ?? "", inventorySchema.parse(decodeJson(readFileSync(sourcePath(root, values.inventory ?? ""), "utf8"))), values.plan) : undefined;
     const program = makeProgram(root, input.files, input.projects, shared);
     const roots = productionRoots(root, input.files, input.topology);
     const graph = new Provenance(root, program, input.files, roots.entries, input.topology);
@@ -4185,9 +4191,10 @@ export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms
       findings = result.findings;
       map = { schemas: result.records };
     }
-    ({ findings, map } = exportResults(selected, values, root, input, roots, findings, graph, map));
+    ({ findings, map } = exportResults(selected, values, root, input, roots, findings, graph, map, scope));
     ({ findings, map } = storeResults(selected, values, root, graph, input, findings, map));
     findings = [...new Map(findings.map((row) => [JSON.stringify(row), row])).values()];
+    if (scope && !scope.whole) findings = findings.filter((row) => scope.paths.includes(row.path) || row.path === "sqlite_schema");
     findings.sort((a, b) => bytewise(a.class, b.class) || locationOrder(a, b));
     graph.errors.sort((a, b) => locationOrder(a, b) || bytewise(a.code, b.code));
     const complete = graph.errors.length === 0;
@@ -4449,6 +4456,7 @@ export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms
     previousFindings: Finding[],
     graph: Provenance,
     previousMap: object,
+    scope?: ReturnType<typeof qualityPlan>,
   ) {
     let findings = previousFindings;
     let map = previousMap;
@@ -4463,6 +4471,7 @@ export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms
         roots.entries,
         resolve(values.knip),
         input.topology,
+        scope,
       );
       findings = result.findings;
       graph.errors.push(...result.errors);
