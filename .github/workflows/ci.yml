@@ -269,14 +269,99 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  quality:
-    name: Quality
-    needs: [plan, prepare, tests]
+  quality-static:
+    name: Quality Static (${{ matrix.leg }})
+    needs: [plan, prepare]
     # Quality ratchets run on main pushes, schedules and manual dispatch only
     # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
     if: needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: ${{ matrix.leg == 'metrics' && 45 || 35 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [types, publisher, export, store, metrics]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12.12"
+      - name: Pinned quality Python tools
+        run: |
+          python -m pip install --requirement script/conformance/quality-python-requirements.txt
+          echo "D945_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+          echo "PYTHONDONTWRITEBYTECODE=1" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.19.0"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: workspace-dist
+      - run: bun run ci restore
+      - name: Collect static quality leg
+        env:
+          LEG: ${{ matrix.leg }}
+        run: bun run script/quality-measure.ts collect --leg "$LEG" --output quality-legs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quality-leg-${{ matrix.leg }}
+          path: quality-legs/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+  quality-gates:
+    name: Quality Gates
+    needs: [plan, prepare]
+    # Quality ratchets run on main pushes, schedules and manual dispatch only
+    # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
+    if: needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.19.0"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: workspace-dist
+      - run: bun run ci restore
+      - name: Ratchet self-tests (discrimination bench)
+        run: |
+          bun run script/check-coverage-ratchet.ts --self-test
+          bun run script/check-dead-exports.ts --self-test
+          bun run script/check-import-cycles.ts --self-test
+          bun run script/check-deps.ts --self-test
+      - run: bun run script/check-dead-exports.ts
+      - run: bun run script/check-import-cycles.ts
+      - run: bun run script/verify-tsconfig-inheritance.ts
+      - run: bun run script/verify-ledger-rename.ts
+      - run: bun run script/check-ledger-schema-drift.ts
+      - run: bun run script/report-source-metrics.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: source-metrics
+          path: source-metrics.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  quality:
+    name: Quality
+    needs: [plan, prepare, tests, quality-static]
+    # Quality ratchets run on main pushes, schedules and manual dispatch only
+    # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
+    if: needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -298,22 +383,15 @@ jobs:
         with:
           name: workspace-dist
       - run: bun run ci restore
-      - name: Ratchet self-tests (discrimination bench)
-        run: |
-          bun run script/check-coverage-ratchet.ts --self-test
-          bun run script/check-dead-exports.ts --self-test
-          bun run script/check-import-cycles.ts --self-test
-          bun run script/check-deps.ts --self-test
-      - run: bun run script/check-dead-exports.ts
-      - run: bun run script/check-import-cycles.ts
-      - run: bun run script/verify-tsconfig-inheritance.ts
-      - run: bun run script/verify-ledger-rename.ts
-      - run: bun run script/check-ledger-schema-drift.ts
-      - run: bun run script/report-source-metrics.ts
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: quality-receipt-*
           path: quality-receipts
+          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: quality-leg-*
+          path: quality-legs
           merge-multiple: true
       - name: Fail-closed measured quality ratchet
         env:
@@ -323,22 +401,15 @@ jobs:
         run: |
           printf '%s\n' "$CI_PLAN" > quality-plan.json
           bun run script/check-quality-python.ts
-          bun run script/quality-measure.ts --base "$QUALITY_BASE" --baseline script/conformance/quality-baseline-lcov-bound.json --plan quality-plan.json --run "$QUALITY_RUN" --coverage-directory quality-receipts
+          bun run script/quality-measure.ts finish --legs quality-legs --base "$QUALITY_BASE" --baseline script/conformance/quality-baseline-lcov-bound.json --plan quality-plan.json --run "$QUALITY_RUN" --coverage-directory quality-receipts --output quality-results
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: quality-measurements
           path: |
             quality-results/
-            quality-mutation-results/
+            quality-legs/
             quality-plan.json
-          if-no-files-found: warn
-          retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: source-metrics
-          path: source-metrics.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -361,7 +432,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [plan, prepare, tests, static, deps, quality, dependency-review]
+    needs: [plan, prepare, tests, static, deps, quality-static, quality-gates, quality, dependency-review]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

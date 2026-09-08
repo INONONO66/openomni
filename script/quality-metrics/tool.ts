@@ -2,9 +2,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decode, fail, object, sha, text, type Json } from "./input";
+import { analyze } from "./tool-runner.mjs";
 const receipts: {
-  pid: number;
-  exitCode: number;
+  transport: "in-process" | "process";
+  pid?: number;
+  exitCode?: number;
   operation: string;
   inputHash: string;
   outputHash: string;
@@ -13,12 +15,26 @@ export function toolReceipts() {
   return receipts.splice(0);
 }
 
+function analyzerResult(response: string, exitCode = 0): Json {
+  const output = object(decode(response));
+  if (exitCode !== 0 || output.ok !== true) fail("analyzer", "", text(output.message));
+  if (output.result === undefined) fail("analyzer", "", "missing analyzer result");
+  return output.result;
+}
+
 /** Native analyzer objects cross only the validated JSON boundary. File-backed
  * transfer avoids Bun 1.3.6 synchronous-pipe truncation for large source maps. */
 export function invokeTool(request: Json): Json {
+  const operation = text(object(request).operation);
+  const input = JSON.stringify(request);
+  if (operation !== "clones") {
+    const response = `${JSON.stringify(analyze(request))}\n`;
+    const result = analyzerResult(response);
+    receipts.push({ operation, inputHash: sha(input), outputHash: sha(response), transport: "in-process" });
+    return result;
+  }
   const directory = mkdtempSync(join(tmpdir(), "quality-analyzer-"));
   try {
-    const input = JSON.stringify(request);
     const requestPath = join(directory, "request.json"), responsePath = join(directory, "response.json");
     writeFileSync(requestPath, input, { flag: "wx" });
     const child = Bun.spawnSync([process.execPath, join(import.meta.dir, "tool-runner.mjs"), requestPath, responsePath], {
@@ -28,11 +44,9 @@ export function invokeTool(request: Json): Json {
     if (child.signalCode || stderr || ![0, 2].includes(child.exitCode))
       fail("analyzer", "", `analyzer process exit ${child.exitCode}: ${stderr}`);
     const response = readFileSync(responsePath, "utf8");
-    const output = object(decode(response));
-    if (child.exitCode !== 0 || output.ok !== true) fail("analyzer", "", text(output.message));
-    if (output.result === undefined) fail("analyzer", "", "missing analyzer result");
-    receipts.push({ pid: child.pid, exitCode: child.exitCode, operation: text(object(request).operation), inputHash: sha(input), outputHash: sha(response) });
-    return output.result;
+    const result = analyzerResult(response, child.exitCode);
+    receipts.push({ pid: child.pid, exitCode: child.exitCode, operation, inputHash: sha(input), outputHash: sha(response), transport: "process" });
+    return result;
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
