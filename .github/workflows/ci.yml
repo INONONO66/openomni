@@ -400,8 +400,8 @@ jobs:
   quality-static:
     name: Quality Static (${{ matrix.leg }})
     needs: [plan, prepare]
-    # Quality ratchets run on main pushes, schedules and manual dispatch only
-    # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
+    # Quality runs on every verifying event: scoped to the plan on pull requests,
+    # full on merge_group/main/schedule/dispatch (docs/ci.md, "CI tiers and merge queue").
     if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -452,8 +452,8 @@ jobs:
   quality-gates:
     name: Quality Gates
     needs: [plan, prepare]
-    # Quality ratchets run on main pushes, schedules and manual dispatch only
-    # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
+    # Quality runs on every verifying event: scoped to the plan on pull requests,
+    # full on merge_group/main/schedule/dispatch (docs/ci.md, "CI tiers and merge queue").
     if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -493,9 +493,12 @@ jobs:
   quality:
     name: Quality
     needs: [plan, prepare, tests, scripts-contracts, scripts-coverage, quality-static]
-    # Quality ratchets run on main pushes, schedules and manual dispatch only
-    # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
-    if: needs.plan.outputs.verify == 'true' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')
+    # Quality runs on every verifying event: scoped to the plan on pull requests,
+    # full on merge_group/main/schedule/dispatch (docs/ci.md, "CI tiers and merge queue").
+    # scripts-coverage is skipped on non-tooling plans; a skipped need skips this job
+    # unless the condition carries a status-check function, so each other need is
+    # required explicitly.
+    if: "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

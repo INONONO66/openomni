@@ -241,7 +241,12 @@ test("workflow restores the one build before every executable consumer", () => {
   expect(workflow.concurrency["cancel-in-progress"]).toBe(`\${{ github.event_name == 'pull_request' }}`);
   expect(jobs["quality-static"]?.if).toBe("needs.plan.outputs.verify == 'true'");
   expect(jobs["quality-gates"]?.if).toBe("needs.plan.outputs.verify == 'true'");
-  expect(jobs.quality?.if).toContain("needs.plan.outputs.verify == 'true'");
+  // A skipped need (scripts-coverage on non-tooling PRs) skips a dependent job
+  // unless its condition carries a status-check function; without `!cancelled()`
+  // the `skipped` branch below is unreachable and the fan-in is skipped.
+  expect(jobs.quality?.if).toBe(
+    "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')",
+  );
 });
 
 test("v2 workflow carries scope as an artifact and always runs repository contracts", () => {
