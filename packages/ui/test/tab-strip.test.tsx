@@ -80,6 +80,13 @@ test("tab keyboard navigation wraps, updates panel ownership and scrolls selecti
     const dimmed = (id: string) => node(`#tab-${id}`).closest('[data-ui="Tab"]')?.className.includes("opacity-70");
     expect(dimmed("a")).toBe(false);
     expect(dimmed("b")).toBe(true);
+    // ...but an unselected tab still reads as a box: its edge and fill stay drawn.
+    const boxed = (id: string) => {
+      const cls = node(`#tab-${id}`).closest('[data-ui="Tab"]')?.className ?? "";
+      return cls.includes("border-line-surface") && !cls.includes("border-transparent");
+    };
+    expect(boxed("a")).toBe(true);
+    expect(boxed("b")).toBe(true);
     expect(document.activeElement === node('[data-ui="Tab.Close"]')).toBe(true);
   } finally {
     scroll.mockRestore();
