@@ -5,6 +5,15 @@ import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
 import { createMemoryL0Adapter } from "./memory-l0-adapter";
 
+const watchSpec = {
+  encodingVersion: 1 as const,
+  value: {
+    watch: { command: "true", description: "control", persistent: true },
+    notificationLimit: 1,
+    policyGeneration: 1,
+  },
+};
+
 for (const backend of ["sqlite", "memory"] as const) {
   for (const op of ["cancel", "rearm"] as const) {
     test(`${backend} alarm ${op} admits only the calling session's armed/paused watches`, () => {
@@ -35,27 +44,35 @@ for (const backend of ["sqlite", "memory"] as const) {
       expect(adapter.alarms[op]("missing", "owner", 100)).toBeUndefined();
       for (const kind of Alarm.Kind.options) {
         for (const status of Alarm.Status.options) {
-          // Deadline cancellation is not an admitted transition, even during setup.
-          if (kind === "at" && status === "cancelled") continue;
+          // Deadline cancellation and pause are not admitted transitions, even during setup.
+          if (kind === "at" && (status === "cancelled" || status === "paused")) continue;
           for (const sessionId of ["owner", "foreign"]) {
             const id = `${kind}-${status}-${sessionId}`;
-            expect(adapter.alarms.arm({ id, sessionId: "owner", kind, fireAt: 100 })).toBeDefined();
+            expect(
+              adapter.alarms.arm({
+                id,
+                sessionId: "owner",
+                kind,
+                fireAt: 100,
+                ...(kind === "watch" ? { spec: watchSpec } : {}),
+              }),
+            ).toBeDefined();
             if (status === "cancelled") {
               expect(adapter.alarms.cancel(id, "owner", 101)?.status).toBe("cancelled");
             } else if (status !== "armed") {
-              expect(
+              const fire = (sourceKey: string) =>
                 adapter.alarms.fire({
                   id,
                   epoch: 1,
                   fence: 0,
-                  actionId: `${id}-fire`,
-                  inboxId: `${id}-inbox`,
+                  sourceKey,
                   at: 101,
                   content: "event",
-                  limit: 0,
                   terminal: status === "fired",
-                })?.row.status,
-              ).toBe(status);
+                })?.row.status;
+              // The persisted budget of one admits a single match; the next one pauses.
+              if (status === "paused") expect(fire("first")).toBe("armed");
+              expect(fire("second")).toBe(status);
             }
             const before = adapter.alarms.get(id);
             const session = adapter.sessions.get("owner");
