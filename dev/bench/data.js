@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788883171438,
+  "lastUpdate": 1788886846062,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -68187,6 +68187,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 883276,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "646e5d51be162a8e22b3ea99eef8d90382019c55",
+          "message": "test(kernel): prove unified lifecycle and semantic deletion at final convergence (#1019)\n\n* test(kernel): add unified lifecycle conformance harness with six named vectors (#973)\n\nrunLifecycleTrace drives the real SessionHandleStore, session controller,\nexecutor waves, request port, outbound path and alarm rows through the\nsection 6 vectors, checks append-only/causal/terminal/input invariants\nafter every step and proves effect-free replay from the reopened image.\n\n* docs(kernel): record #973 lifecycle conformance disposition and HEAD receipts\n\n* test(kernel): kill misroute and previouslySeen mutants in request authority (#973)\n\n- session-request.test.ts: answer addressed to another request (same session)\n  or to a request owned by another session is rejected with no actions; a seen\n  reply id replayed by a different responder is one duplicate record and never\n  a second reply\n- conformance totality: misrouted answer leaves the destination row's revision,\n  action count and seenReplyIds unchanged; the winning input id replayed by an\n  impostor principal is a record-free rejected; product sessions hold exactly\n  one duplicate and never a rejected record\n- docs: state where each invariant is enforced; SLOP mutation-probe row; cite\n  the moved totality span",
+          "timestamp": "2026-09-09T01:59:36+09:00",
+          "tree_id": "de72d44a9d9140ad20409ee0f08c960fdb3e0c9e",
+          "url": "https://github.com/INONONO66/openomni/commit/646e5d51be162a8e22b3ea99eef8d90382019c55"
+        },
+        "date": 1788886844935,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 829,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 5267,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1259434,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 347281,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6563266,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 121,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1088,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 498042,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 176759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 887296,
             "unit": "ns/op"
           }
         ]
