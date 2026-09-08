@@ -103,7 +103,9 @@ jobs:
       - name: Install Electron binary
         env:
           electron_config_cache: /home/runner/.cache/electron
-        run: cd apps/desktop/node_modules/.bun/electron@*/node_modules/electron && node install.js
+        run: |
+          ELECTRON_DIR="$(cd apps/desktop && bun -e 'console.log(require("node:path").dirname(require.resolve("electron/package.json")))')"
+          (cd "$ELECTRON_DIR" && node install.js)
       - name: Run Electron smoke
         working-directory: apps/desktop
         env:

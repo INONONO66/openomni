@@ -16,3 +16,17 @@
 - `bun test script/ci.test.ts script/ci-plan.test.ts`: pass (81 tests).
 
 No Linux/Xvfb execution was available locally; CI job uses ubuntu-24.04 and xvfb-run.
+
+## CI 34228790020 follow-up
+
+The run failed because Ultracite rejected the empty Playwright fixture pattern and
+missing strict mode in `startup.cjs`; fixed with `test.info()` and line-1
+`"use strict"`. The smoke also assumed Electron lived under the desktop package;
+CI's root Bun store disproved that. The install step now resolves
+`electron/package.json` with Bun before running `install.js`. The same resolver
+was verified locally and returned `node_modules/.bun/electron@44.1.1/...`.
+
+After rebasing onto main `7b85d9f2`, Ultracite passes with zero errors, the
+macOS smoke passes in 3.0s, and all changed-file diagnostics are clean. The
+rerun gate chain is blocked by a pre-existing unrelated `packages/agent` type
+error: `session-inspection.test.ts:259` supplies unsupported `actionId`.

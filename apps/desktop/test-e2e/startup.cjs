@@ -1,3 +1,5 @@
+"use strict";
+
 const { appendFileSync } = require("node:fs");
 const { app } = require("electron");
 

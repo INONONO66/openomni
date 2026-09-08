@@ -8,7 +8,8 @@ const require = createRequire(import.meta.url);
 const electronExecutable = require("electron") as string;
 const startupScript = join(import.meta.dirname, "startup.cjs");
 
-test("production desktop shell boots with its bridge and CSP", async ({}, testInfo) => {
+test("production desktop shell boots with its bridge and CSP", async () => {
+  const testInfo = test.info();
   const profile = await mkdtemp(join(tmpdir(), "openomni-desktop-smoke-"));
   const errorsFile = join(profile, "startup-errors.jsonl");
   const environment = Object.fromEntries(
