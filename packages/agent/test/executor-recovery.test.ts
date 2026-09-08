@@ -26,6 +26,10 @@ function harness() {
   return { actions, options };
 }
 
+function record(value: PlainValue): PlainObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
 function effect(action: LedgerAction.Node): PlainObject {
   const value = action.effect.value;
   if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -68,6 +72,24 @@ function openIntent(
   };
 }
 
+/** The chat result row that settles the open intent `intentId`. */
+function settledResult(
+  intentId: string,
+  kind: LedgerAction.Kind,
+  effect: PlainObject,
+): LedgerAction.Append {
+  return {
+    id: `${intentId}-result`,
+    parentId: intentId,
+    sessionId: "session",
+    kind,
+    ts: 2,
+    intent: { encodingVersion: 1, value: { phase: "result", op: "chat" } },
+    effect: { encodingVersion: 1, value: { phase: "result", ...effect } },
+    irreversible: true,
+  };
+}
+
 const toolRequest = {
   kind: "tool",
   op: "write",
@@ -82,25 +104,22 @@ describe("completion recovery", () => {
       const { actions, options } = harness();
       const commit = options.ledger.commit;
       let injected = false;
+      // Lose the executed terminal's commit once, before or after it persisted.
+      const lose = async (action: LedgerAction.Append) => {
+        injected = true;
+        if (site === "after_persist") await commit(action);
+        throw new Error("storage_lost");
+      };
       const executor = createExecutor({
         ...options,
         ledger: {
           ...options.ledger,
-          async commit(action) {
-            const value = action.effect.value;
-            const terminal =
-              action.kind === "tool" &&
-              value !== null &&
-              typeof value === "object" &&
-              !Array.isArray(value) &&
-              value.terminal === "executed";
-            if (terminal && !injected) {
-              injected = true;
-              if (site === "after_persist") await commit(action);
-              throw new Error("storage_lost");
-            }
-            return commit(action);
-          },
+          commit: (action) =>
+            !injected &&
+            action.kind === "tool" &&
+            record(action.effect.value).terminal === "executed"
+              ? lose(action)
+              : commit(action),
         },
       });
       let bodies = 0;
@@ -184,14 +203,7 @@ describe("completion recovery", () => {
       ledger: {
         ...options.ledger,
         async commit(action) {
-          const value = action.intent.value;
-          if (
-            action.kind === "policy.decision" &&
-            value !== null &&
-            typeof value === "object" &&
-            !Array.isArray(value) &&
-            value.hook === "tool.post"
-          )
+          if (action.kind === "policy.decision" && record(action.intent.value).hook === "tool.post")
             throw new Error("decision_lost");
           return commit(action);
         },
@@ -207,6 +219,69 @@ describe("completion recovery", () => {
       terminal: "failed",
       disposition: "irreversible",
       recovery: { site: "post_policy", proof: "applied" },
+    });
+  });
+
+  test("a blocked_post terminal lost after persistence is projected back from the ledger, not re-decided", async () => {
+    const { actions, options } = harness();
+    const deny: Parameters<typeof compiledPolicy>[0] = [
+      {
+        name: "deny-write-post",
+        kind: "tool",
+        phase: "post",
+        match: { encodingVersion: 1, value: { op: "write" } },
+        verdict: { encodingVersion: 1, value: { type: "deny", reason: "post_denied" } },
+        priority: 500,
+        generation: 1,
+      },
+    ];
+    const commit = options.ledger.commit;
+    let injected = false;
+    const executor = createExecutor({
+      ...options,
+      policy: compiledPolicy(deny),
+      ledger: {
+        ...options.ledger,
+        async commit(action) {
+          const receipt = await commit(action);
+          if (
+            action.kind === "tool" &&
+            effect(receipt.action).terminal === "blocked_post" &&
+            !injected
+          ) {
+            injected = true;
+            throw new Error("storage_lost");
+          }
+          return receipt;
+        },
+      },
+    });
+    let reverted = 0;
+    const results = await executor.runBatch(
+      [
+        {
+          request: {
+            ...toolRequest,
+            revert: () => {
+              reverted += 1;
+            },
+          },
+          body: async () => ({ status: "success" }),
+        },
+      ],
+      { signal: new AbortController().signal },
+    );
+    expect(reverted).toBe(1);
+    expect(results[0]).toEqual({
+      terminal: "blocked_post",
+      disposition: "reverted",
+      reason: "post_denied",
+    });
+    const terminals = resultsOf(actions, "tool");
+    expect(terminals).toHaveLength(1);
+    expect(effect(nth(terminals, 0))).toMatchObject({
+      terminal: "blocked_post",
+      disposition: "reverted",
     });
   });
 
@@ -379,16 +454,7 @@ describe("crash-open recovery", () => {
       }),
     );
     await options.ledger.commit(openIntent("done", "llm", "turn", { op: "chat", value: {} }));
-    await options.ledger.commit({
-      id: "done-result",
-      parentId: "done",
-      sessionId: "session",
-      kind: "llm",
-      ts: 2,
-      intent: { encodingVersion: 1, value: { phase: "result", op: "chat" } },
-      effect: { encodingVersion: 1, value: { phase: "result", terminal: "executed", effect: {} } },
-      irreversible: true,
-    });
+    await options.ledger.commit(settledResult("done", "llm", { terminal: "executed", effect: {} }));
     await createExecutor(options).recover();
     expect(actions).toHaveLength(3);
   });
@@ -429,19 +495,13 @@ describe("crash-open recovery", () => {
     await options.ledger.commit(
       openIntent("attempt-2", "attempt", "llm-2", { op: "chat", value: { attempt: 1 } }),
     );
-    await options.ledger.commit({
-      id: "attempt-2-result",
-      parentId: "attempt-2",
-      sessionId: "session",
-      kind: "attempt",
-      ts: 2,
-      intent: { encodingVersion: 1, value: { phase: "result", op: "chat" } },
-      effect: {
-        encodingVersion: 1,
-        value: { phase: "result", terminal: "failed", effect: {}, error: { name: "APIError" } },
-      },
-      irreversible: true,
-    });
+    await options.ledger.commit(
+      settledResult("attempt-2", "attempt", {
+        terminal: "failed",
+        effect: {},
+        error: { name: "APIError" },
+      }),
+    );
     await createExecutor(options).recover();
     expect(actions).toHaveLength(5);
     expect(actions[4]).toMatchObject({ kind: "llm", parentId: "llm-2" });

@@ -369,7 +369,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     // The body has settled: a completion exception is recovered from that
     // evidence, never by running the body again or inventing a post verdict.
     let site: RecoverySite = "post_policy";
-    try {
+    const complete = async (): Promise<ExecutionBatchResult> => {
       const post = await decide(stage.request, "post", {
         intent: stage.request.intent,
         effect: stage.request.effect,
@@ -378,16 +378,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       site = "reverter";
       const settled = await settlePost(stage.request, post, value);
       site = "result_commit";
-      return await finishRun(
-        stage.request,
-        stage.kind,
-        intent.action.id,
-        startedAt,
-        value,
-        settled,
-      );
-    } catch (caught) {
-      const error = caught instanceof Error ? caught : new Error(String(caught));
+      return finishRun(stage.request, stage.kind, intent.action.id, startedAt, value, settled);
+    };
+    return complete().catch(async (error: Error) => {
       const recovered = await recovery.recoverCompletion(
         intent.action.id,
         stage.request,
@@ -397,7 +390,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       );
       publishToolTerminal(stage.request, startedAt, "error");
       return recovered;
-    }
+    });
   }
 
   async function runExisting<T extends PlainValue>(

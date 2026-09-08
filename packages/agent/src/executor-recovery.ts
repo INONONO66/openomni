@@ -37,13 +37,16 @@ function object(value: PlainValue | undefined): PlainObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function isClassification(value: PlainValue | undefined): value is RecoveryClassification {
-  return (
-    value === "local_transactional" ||
-    value === "endpoint_idempotent" ||
-    value === "read_back_reconcilable" ||
-    value === "ambiguous_no_replay"
-  );
+const classifications: readonly RecoveryClassification[] = [
+  "local_transactional",
+  "endpoint_idempotent",
+  "read_back_reconcilable",
+  "ambiguous_no_replay",
+];
+
+/** The classification the intent recorded, or undefined when it recorded none it can be held to. */
+function recordedClassification(value: PlainValue | undefined): RecoveryClassification | undefined {
+  return classifications.find((classification) => classification === value);
 }
 
 /** The ledger itself is the read-back for a kernel-local transaction: no terminal means nothing happened. */
@@ -58,10 +61,9 @@ function localAbsent(receipt: LedgerAction.Node): RecoveryVerdict {
 
 /** Without external read-back, only an absent local transaction is decisive. */
 function crashVerdict(action: LedgerAction.Node): RecoveryVerdict {
-  const recorded = object(action.intent.value).recovery;
-  const classification = isClassification(recorded)
-    ? recorded
-    : recoveryClassification({ kind: action.kind });
+  const classification =
+    recordedClassification(object(action.intent.value).recovery) ??
+    recoveryClassification({ kind: action.kind });
   if (classification === "local_transactional") return localAbsent(action);
   return {
     terminal: "outcome_unknown",

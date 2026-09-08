@@ -2,30 +2,27 @@ import { Message, PlainValueSchema, type LedgerAction, type PlainValue } from "@
 import { z } from "zod";
 import type { ExecutionRequest } from "../executor-contract";
 import { sessionHistory } from "../session-history";
-import { restoreCompactionProjection } from "./durable";
+import { type CompactionRecord, restoreCompactionProjection } from "./durable";
 
-/** The evidence one executed compaction left behind, including its reconstruction recipe. */
-const RecordedCompaction = z
+const DiscardedRange = z
   .object({
-    summary: z.string(),
-    firstKeptEntryId: z.string(),
-    tokensBefore: z.number(),
-    discarded: z
-      .object({
-        firstEntryId: z.string(),
-        lastEntryId: z.string(),
-        count: z.number().int(),
-        sha256: z.string(),
-      })
-      .strict(),
-    revert: z
-      .object({
-        removedEntries: z.array(Message.WithParts),
-        priorAnchorEntryId: z.string().nullable(),
-      })
-      .strict(),
+    firstEntryId: z.string(),
+    lastEntryId: z.string(),
+    count: z.number().int(),
+    sha256: z.string(),
   })
-  .loose();
+  .strict();
+const RevertRecipe = z
+  .object({ removedEntries: z.array(Message.WithParts), priorAnchorEntryId: z.string().nullable() })
+  .strict();
+/** The evidence one executed compaction left behind, including its reconstruction recipe. */
+const RecordedCompaction: z.ZodType<CompactionRecord> = z.object({
+  summary: z.string(),
+  firstKeptEntryId: z.string(),
+  tokensBefore: z.number(),
+  discarded: DiscardedRange,
+  revert: RevertRecipe,
+});
 
 export class ContextRestoreError extends Error {
   readonly code = "context_restore_refused";
@@ -46,13 +43,11 @@ export function restoreContextRequest(compactionId: string): ExecutionRequest {
   };
 }
 
-export type RecordedCompaction = z.infer<typeof RecordedCompaction>;
-
 /** The executed record of `compactionId`; throws when it is unknown or never executed. */
 export function recordedCompaction(
   actions: readonly LedgerAction.Node[],
   compactionId: string,
-): RecordedCompaction {
+): CompactionRecord {
   const intent = actions.find((action) => action.id === compactionId);
   if (intent === undefined || intent.kind !== "compaction")
     throw new ContextRestoreError("unknown_compaction");
@@ -75,7 +70,7 @@ export function restoredContextProjection(
   sessionId: string,
   actions: readonly LedgerAction.Node[],
   compactionId: string,
-  record: RecordedCompaction,
+  record: CompactionRecord,
 ): PlainValue {
   const projection = restoreCompactionProjection(sessionHistory(sessionId, actions), record);
   return PlainValueSchema.parse({

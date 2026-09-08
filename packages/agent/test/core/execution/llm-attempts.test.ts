@@ -4,7 +4,7 @@ import { bounded, requestLedger } from "../../helpers/request-ledger";
 import { Run } from "@openomni/llm";
 import { createExecutor, type ExecutorOptions } from "../../../src/executor";
 import { compiledPolicy, recordingLedger } from "../../helpers/compiled-policy";
-import type { LedgerAction } from "@openomni/protocol";
+import type { LedgerAction, PlainObject } from "@openomni/protocol";
 afterEach(() => Storage.reset());
 
 const usage = {
@@ -50,6 +50,16 @@ function harness(overrides: Partial<ExecutorOptions> = {}) {
   });
   return { ...record, executor, waits };
 }
+function effectRecord(action: LedgerAction.Append): PlainObject {
+  const value = action.effect.value;
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
+}
+
+/** The attempt result rows whose recorded terminal is `terminal`. */
+function attemptResults(actions: readonly LedgerAction.Append[], terminal: string) {
+  return actions.filter((a) => a.kind === "attempt" && effectRecord(a).terminal === terminal);
+}
+
 function intents(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kind) {
   return actions.filter(
     (a) =>
@@ -87,14 +97,7 @@ test("executor admits ordered retry children and retains every failed billed usa
   const attempts = intents(committed, "attempt");
   expect(parents).toHaveLength(1);
   expect(attempts.map((a) => a.parentId)).toEqual(new Array(3).fill(parents[0]?.id));
-  const failed = committed.filter(
-    (a) =>
-      a.kind === "attempt" &&
-      typeof a.effect.value === "object" &&
-      a.effect.value !== null &&
-      !Array.isArray(a.effect.value) &&
-      a.effect.value.terminal === "failed",
-  );
+  const failed = attemptResults(committed, "failed");
   expect(failed).toHaveLength(2);
   for (const result of failed) expect(result.effect.value).toMatchObject({ failure: { usage } });
   expect(
@@ -134,14 +137,7 @@ test("every attempt pins its ordinal, cap and retry reason; the settled one pins
     { attempt: 1, maxAttempts: 3, retryReason: null },
     { attempt: 2, maxAttempts: 3, retryReason: "transient_error" },
   ]);
-  const executed = committed.filter(
-    (a) =>
-      a.kind === "attempt" &&
-      typeof a.effect.value === "object" &&
-      a.effect.value !== null &&
-      !Array.isArray(a.effect.value) &&
-      a.effect.value.terminal === "executed",
-  );
+  const executed = attemptResults(committed, "executed");
   expect(executed.map((a) => a.effect.value)).toEqual([
     { phase: "result", terminal: "executed", effect: {}, evidence },
   ]);

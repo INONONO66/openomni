@@ -90,6 +90,15 @@ function bounded<T>(promise: Promise<T>): Promise<T> {
   ]).finally(() => clearTimeout(timer));
 }
 
+// The second slot of a two-tool wave that never completed: a lost process is
+// settled from evidence as outcome_unknown, never dressed up as a cancel.
+const lostSlot = {
+  "partial-wave": "Error: tool execution cancelled",
+  "crash-window": "Error: B outcome unknown: the process was lost before a result was recorded",
+  "after-wave": "Error: tool execution cancelled",
+  "error-window": "Error: tool execution cancelled",
+} as const;
+
 for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"] as const) {
   test(`real SDK ${mode} preserves committed rendered tool slots without replay`, async () => {
     const directory = mkdtempSync(join(tmpdir(), "937-tool-recovery-"));
@@ -260,14 +269,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         content: "ACTUAL_COMPLETED_RESULT:A",
       });
       if (names.length === 2)
-        expect(results?.[1]).toMatchObject({
-          tool_use_id: "call-B",
-          // A lost process is settled from evidence as outcome_unknown, never dressed up as a cancel.
-          content:
-            mode === "crash-window"
-              ? "Error: B outcome unknown: the process was lost before a result was recorded"
-              : "Error: tool execution cancelled",
-        });
+        expect(results?.[1]).toMatchObject({ tool_use_id: "call-B", content: lostSlot[mode] });
       expect(requests).toHaveLength(2);
       expect(bodies).toEqual(names);
     } finally {

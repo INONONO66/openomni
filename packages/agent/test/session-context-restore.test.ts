@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { PlainValueSchema, type LedgerAction, type PolicyRow } from "@openomni/protocol";
+import {
+  PlainValueSchema,
+  type LedgerAction,
+  type PlainObject,
+  type PolicyRow,
+} from "@openomni/protocol";
 import { createCompactionPlan } from "../src/compaction/durable";
 import { ContextRestoreError } from "../src/compaction/restore";
 import { createAssistantMessage } from "../src/core/message-factory";
@@ -66,26 +71,39 @@ const compactingRunner: SessionRunner = async (input) => {
   return { kind: "result", text: "answer", finishReason: "stop" };
 };
 
+function intentRecord(action: LedgerAction.Node): PlainObject {
+  const value = action.intent.value;
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
 function compactionIntent(actions: readonly LedgerAction.Node[]): LedgerAction.Node {
   const found = actions.find(
     (action) =>
       action.kind === "compaction" &&
-      action.intent.value !== null &&
-      typeof action.intent.value === "object" &&
-      !Array.isArray(action.intent.value) &&
-      action.intent.value.phase === "intent" &&
-      action.intent.value.op === "compact",
+      intentRecord(action).phase === "intent" &&
+      intentRecord(action).op === "compact",
   );
   if (found === undefined) throw new Error("missing compaction intent");
   return found;
 }
 
+function nth(actions: readonly LedgerAction.Node[], index: number): LedgerAction.Node {
+  const action = actions[index];
+  if (action === undefined) throw new Error(`missing action ${index}`);
+  return action;
+}
+
+/** One prompted session whose first turn compacted; `before` is its action tree at rest. */
+async function compactedSession() {
+  const handle = session({ id: "ctx", role: "resident", runner: compactingRunner }, runtime);
+  await handle.prompt("hello");
+  return { handle, before: SessionHandleStore.tree("ctx") };
+}
+
 describe("restore_context_projection", () => {
   test("appends the typed compensation, restores the prior projection and leaves the compaction intact", async () => {
     seed();
-    const handle = session({ id: "ctx", role: "resident", runner: compactingRunner }, runtime);
-    await handle.prompt("hello");
-    const before = SessionHandleStore.tree("ctx");
+    const { handle, before } = await compactedSession();
     const compaction = compactionIntent(before);
     expect(sessionHistory("ctx", before).map((entry) => entry.info.role)).toEqual(["assistant"]);
 
@@ -99,18 +117,18 @@ describe("restore_context_projection", () => {
       ["policy.decision", compaction.id],
       ["compaction", compaction.id],
       ["policy.decision", compaction.id],
-      ["compaction", appended[1]?.id ?? null],
+      ["compaction", nth(appended, 1).id],
     ]);
-    expect(appended[0]?.intent.value).toMatchObject({
+    expect(nth(appended, 0).intent.value).toMatchObject({
       hook: "turn.post",
       op: "restore_context_projection",
     });
-    expect(appended[1]?.intent.value).toMatchObject({
+    expect(nth(appended, 1).intent.value).toMatchObject({
       op: "restore_context_projection",
       value: { compactionId: compaction.id },
       recovery: "local_transactional",
     });
-    expect(appended[3]?.effect.value).toMatchObject({
+    expect(nth(appended, 3).effect.value).toMatchObject({
       terminal: "executed",
       result: { restored: { compactionId: compaction.id, discarded: { count: 1 } } },
     });
@@ -131,9 +149,7 @@ describe("restore_context_projection", () => {
         priority: 500,
       },
     ]);
-    const handle = session({ id: "ctx", role: "resident", runner: compactingRunner }, runtime);
-    await handle.prompt("hello");
-    const before = SessionHandleStore.tree("ctx");
+    const { handle, before } = await compactedSession();
 
     const outcome = await handle.restoreContext(compactionIntent(before).id);
 
@@ -145,9 +161,7 @@ describe("restore_context_projection", () => {
 
   test("an unknown or unexecuted compaction is refused before anything is recorded", async () => {
     seed();
-    const handle = session({ id: "ctx", role: "resident", runner: compactingRunner }, runtime);
-    await handle.prompt("hello");
-    const before = SessionHandleStore.tree("ctx");
+    const { handle, before } = await compactedSession();
     const compaction = compactionIntent(before);
 
     await expect(handle.restoreContext("nope")).rejects.toBeInstanceOf(ContextRestoreError);

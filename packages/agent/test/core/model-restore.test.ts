@@ -5,7 +5,7 @@ import { runAgent } from "../../src/core/execution/run";
 import { createAssistantMessage } from "../../src/core/message-factory";
 import { createExecutor } from "../../src/executor";
 import { compiledPolicy, opPhaseOf, recordingLedger } from "../helpers/compiled-policy";
-import { createStopOutcome, type MockLlmFn } from "../helpers/mock-llm";
+import { createStopOutcome } from "../helpers/mock-llm";
 import { modelFixture } from "../helpers/model-fixture";
 import { runInput } from "../helpers/run-input";
 
@@ -38,10 +38,6 @@ async function turn(options: {
 }) {
   const recording = recordingLedger();
   const resolved: Model.Ref[] = [];
-  const run: MockLlmFn = async (_input, sink: Sink) => {
-    sink.onMessage(createAssistantMessage("done", "", "session"));
-    return createStopOutcome();
-  };
   const executor = createExecutor({
     policy: compiledPolicy(options.rows),
     ledger: recording.ledger,
@@ -63,7 +59,10 @@ async function turn(options: {
     ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
     ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
     llm: {
-      run: modelFixture(run),
+      run: modelFixture(async (_input, sink: Sink) => {
+        sink.onMessage(createAssistantMessage("done", "", "session"));
+        return createStopOutcome();
+      }),
       resolveModel: async (model: Model.Ref) => {
         resolved.push(model);
         return { id: model.id, name: model.id, providerID: model.provider };

@@ -13,6 +13,7 @@ import {
   noopSink,
   session,
   type Executor,
+  type SessionHandle,
   type SessionRunnerInput,
   type SessionRuntime,
 } from "../src/index";
@@ -79,13 +80,23 @@ function config(run: MockLlmFn, executor: Executor = testExecutor(), fallbacks?:
     executor,
     model: { provider: "anthropic", id: mockProviderModel.id },
     ...(fallbacks === undefined ? {} : { modelFallbacks: fallbacks }),
-    llm: createMockLlmConfig({
-      getModels: async () => mockProviderData,
-      fromModelsDevModel: () => mockProviderModel,
-      run,
-    }),
+    llm: {
+      ...createMockLlmConfig({
+        getModels: async () => mockProviderData,
+        fromModelsDevModel: () => mockProviderModel,
+        run,
+      }),
+      // With fallbacks, echo the selected ref so the recorded chat names the model that answered.
+      ...(fallbacks === undefined ? {} : { resolveModel: echoModel }),
+    },
   };
 }
+
+const echoModel = async (model: Model.Ref) => ({
+  id: model.id,
+  name: model.id,
+  providerID: model.provider,
+});
 
 const traceContext = { traceId: "trace-1", sessionId: "session-1", runId: "run-1" };
 
@@ -100,9 +111,16 @@ function actionPhase(action: LedgerAction.Node): string | undefined {
   return typeof value.phase === "string" ? value.phase : undefined;
 }
 
+async function promptTurns(handle: SessionHandle, turns: number): Promise<void> {
+  for (let prompt = 0; prompt < turns; prompt += 1) {
+    const result = await handle.prompt(`run durable turn ${prompt + 1}`);
+    if (result?.kind !== "result") throw new Error("durable chat did not return a result");
+  }
+}
+
 async function runDurably(
   run: MockLlmFn,
-  options: { readonly prompts?: number; readonly fallbacks?: Model.Ref[] } = {},
+  { prompts = 1, fallbacks }: { readonly prompts?: number; readonly fallbacks?: Model.Ref[] } = {},
 ): Promise<DurableRun> {
   return Storage.withIsolation(async () => {
     Bus.reset();
@@ -120,27 +138,8 @@ async function runDurably(
     for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
     const chatRunner = createSessionChatRunner({
       prepare: (input) => {
-        const base = config(
-          run,
-          createTurnDispatcher([], input, runtime).executor,
-          options.fallbacks,
-        );
         return {
-          config:
-            options.fallbacks === undefined
-              ? base
-              : {
-                  ...base,
-                  llm: {
-                    ...base.llm,
-                    // Echo the selected ref so the recorded chat names the model that answered.
-                    resolveModel: async (model: Model.Ref) => ({
-                      id: model.id,
-                      name: model.id,
-                      providerID: model.provider,
-                    }),
-                  },
-                },
+          config: config(run, createTurnDispatcher([], input, runtime).executor, fallbacks),
           traceContext,
         };
       },
@@ -151,10 +150,7 @@ async function runDurably(
     );
 
     try {
-      for (let prompt = 0; prompt < (options.prompts ?? 1); prompt += 1) {
-        const result = await handle.prompt(`run durable turn ${prompt + 1}`);
-        if (result?.kind !== "result") throw new Error("durable chat did not return a result");
-      }
+      await promptTurns(handle, prompts);
       return {
         actions: SessionHandleStore.tree(handle.id),
         inboxIds: SessionHandleStore.inboxRows(handle.id).map((row) => row.id),
