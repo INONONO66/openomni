@@ -22,6 +22,7 @@ import {
 } from "./ledger-producer-manifest";
 import { knipWorkspaces } from "./topology";
 import { qualitySource } from "./quality-source";
+import { CensusPrograms, readProject } from "./census-program";
 import { decodeJson, parseEntry } from "./quality-inventory";
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
@@ -286,7 +287,7 @@ function memberName(node: ts.Node): string {
   if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) return node.text;
   return "";
 }
-function makeProgram(root: string, files: Entry[], projects: string[]) {
+function makeProgram(root: string, files: Entry[], projects: string[], shared: CensusPrograms) {
   const paths: Record<string, string[]> = {};
   for (const workspace of knipWorkspaces())
     paths[workspace.packageName] = [join(root, workspace.dir, "src/index.ts")];
@@ -309,38 +310,21 @@ function makeProgram(root: string, files: Entry[], projects: string[]) {
   };
   const membership = new Set(files.map((row) => resolve(root, row.path)));
   for (const project of projects) {
-    const host = ts.createWatchCompilerHost(
-      resolve(root, project),
-      {},
-      {
-        ...ts.sys,
-        watchFile: () => ({ close: () => undefined }),
-        watchDirectory: () => ({ close: () => undefined }),
-      },
-      ts.createSemanticDiagnosticsBuilderProgram,
-      () => fail("configuration", project, "invalid TS project"),
-      () => undefined,
-    );
-    host.afterProgramCreate = () => undefined;
-    host.onUnRecoverableConfigFileDiagnostic = () =>
-      fail("configuration", project, "unreadable TS project");
-    const watch = ts.createWatchProgram(host);
+    let config: ReturnType<typeof readProject>;
     try {
-      const config = watch.getProgram().getProgram();
-      if (config.getConfigFileParsingDiagnostics().length)
-        fail("configuration", project, "invalid TS project");
-      for (const path of config.getRootFileNames())
-        if (!membership.has(resolve(path)))
-          fail(
-            "incomplete_inventory",
-            relative(root, path),
-            "project source omitted from inventory",
-          );
-    } finally {
-      watch.close();
+      config = readProject(root, project);
+    } catch {
+      return fail("configuration", project, "invalid TS project");
     }
+    for (const path of config.fileNames)
+      if (!membership.has(resolve(path)))
+        fail(
+          "incomplete_inventory",
+          relative(root, path),
+          "project source omitted from inventory",
+        );
   }
-  const program = ts.createProgram(
+  const program = shared.program(
     files
       .filter((row) => ["typescript", "javascript"].includes(row.language))
       .map((row) => resolve(root, row.path)),
@@ -4155,14 +4139,24 @@ function censusInput(values: ReturnType<typeof censusOptions>): {
   const input = loadInput(root, values.inventory, values["inventory-sha256"], values.contract);
   return { root, selected, input };
 }
-export function censusMain(argv = Bun.argv.slice(2)): number {
+export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms()): number {
+  const selection = argv.indexOf("--class");
+  if (selection >= 0 && argv[selection + 1] === "all") {
+    let status = 0;
+    for (const selected of ["publisher", "export", "store"]) {
+      const args = [...argv];
+      args[selection + 1] = selected;
+      status = Math.max(status, censusMain(args, shared));
+    }
+    return status;
+  }
   lastFailure = undefined;
   const jsonMode = argv.includes("--json");
   try {
     if (ts.version !== "5.9.2") fail("tool_version", "typescript", "requires 5.9.2");
     const values = censusOptions(argv);
     const { root, selected, input } = censusInput(values);
-    const program = makeProgram(root, input.files, input.projects);
+    const program = makeProgram(root, input.files, input.projects, shared);
     const roots = productionRoots(root, input.files, input.topology);
     const graph = new Provenance(root, program, input.files, roots.entries, input.topology);
     if (input.topology) validateApplications(root, roots, graph);
