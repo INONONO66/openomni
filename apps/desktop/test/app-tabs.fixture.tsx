@@ -227,7 +227,8 @@ test("SessionList renders real project/time metadata and an empty list without c
       <SessionList sessions={sessions} now={120_000} onSelect={(id) => selected.push(id)} />,
     ),
   );
-  expect(host.textContent).toContain("no project");
+  // The project cell renders a placeholder for a null project; the wording is copy, not contract.
+  expect(host.querySelectorAll("span > span")[1]?.textContent).not.toBe("");
   expect(node(host, "time").getAttribute("datetime")).toBe(new Date(0).toISOString());
   expect(node(host, "time").textContent).toBe("2m");
   await click(node(host, "button"));

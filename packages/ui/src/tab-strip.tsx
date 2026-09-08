@@ -208,6 +208,10 @@ function Tab({
       className={`group/tab no-drag flex h-tab-height w-56 min-w-24 max-w-56 shrink select-none items-center rounded-card border-[0.5px] pr-0.5 font-medium text-label ${tab.active ? "border-line-surface bg-raised text-fg" : "border-transparent text-fg-muted hover:bg-hover"}`}
       data-ui={UI_NAMES.Tab}
       onAuxClick={onAuxClick}
+      onPointerDown={(event) => {
+        // The default middle press would focus a tab that is about to close.
+        if (event.button === 1) event.preventDefault();
+      }}
     >
       <button
         aria-controls={tab.active ? `tab-panel-${tab.id}` : undefined}

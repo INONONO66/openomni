@@ -127,6 +127,22 @@ test("activation, auxiliary close and close-button actions remain distinct", asy
   const press = new browser.PointerEvent("pointerdown", { bubbles: true, cancelable: true });
   await act(() => close.dispatchEvent(press));
   expect(press.defaultPrevented).toBe(true);
+  // A middle press on the tab body is cancelled so the browser's default focus
+  // never moves to a tab that is about to close; a left press still activates.
+  const middlePress = new browser.PointerEvent("pointerdown", {
+    bubbles: true,
+    button: 1,
+    cancelable: true,
+  });
+  await act(() => tab.dispatchEvent(middlePress));
+  expect(middlePress.defaultPrevented).toBe(true);
+  const leftPress = new browser.PointerEvent("pointerdown", {
+    bubbles: true,
+    button: 0,
+    cancelable: true,
+  });
+  await act(() => tab.dispatchEvent(leftPress));
+  expect(leftPress.defaultPrevented).toBe(false);
   await act(() => close.click());
   expect(closed).toEqual(["b", "b", "b"]);
   expect(activated).toEqual(["b"]);
