@@ -50,7 +50,7 @@ import { useSearch } from "./use-search";
 export function SessionTree({
   ordered,
   pendingChanges,
-  now = Date.now(),
+  now,
   sessions,
   selectedId,
   route,
@@ -62,7 +62,7 @@ export function SessionTree({
   defaultSearching = false,
 }: {
   readonly ordered: Ordered;
-  readonly now?: number;
+  readonly now: number;
   /** Rows that moved since this order was adopted; held until a boundary. */
   readonly pendingChanges: number;
   readonly sessions: readonly Session[];

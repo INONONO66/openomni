@@ -62,6 +62,7 @@ if (import.meta.env?.DEV) {
 
 export function App({ platform, storage }: AppEnvironment) {
   const state = useStore(consoleStore);
+  const now = Date.now();
   const { sessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
   const tab = activeTab(state);
   const place = activePlace(state);
@@ -70,7 +71,7 @@ export function App({ platform, storage }: AppEnvironment) {
   const search = useRef({ searching: false, invokingTabId: state.activeTabId });
   const focusRecovery = useRef<"panel" | "tab" | null>(null);
   const [held, setHeld] = useState<Held>(() => ({
-    shown: idealOrder(sessions),
+    shown: idealOrder(sessions, now),
     pendingChanges: 0,
   }));
 
@@ -135,7 +136,7 @@ export function App({ platform, storage }: AppEnvironment) {
     setHeld((previous) =>
       applyAtBoundary(
         previous,
-        idealOrder(consoleStore.state.sessions),
+        idealOrder(consoleStore.state.sessions, Date.now()),
         searching ? null : boundary,
       ),
     );
@@ -246,7 +247,7 @@ export function App({ platform, storage }: AppEnvironment) {
     history: {
       entries: historyMenuEntries(state),
       currentId: history === undefined ? null : String(history.cursor),
-      now: Date.now(),
+      now,
       canBack: history !== undefined && canGoBack(history),
       canForward: history !== undefined && canGoForward(history),
       onBack: () => travel(back),
@@ -271,6 +272,7 @@ export function App({ platform, storage }: AppEnvironment) {
       route={place?.kind === "route" ? place.route : null}
       selectedId={place?.kind === "session" ? place.sessionId : null}
       sessions={sessions}
+      now={now}
     />
   );
   const session =
@@ -288,12 +290,7 @@ export function App({ platform, storage }: AppEnvironment) {
         key={tab?.id ?? "empty"}
       >
         {place?.kind === "route" && place.route === "sessions" ? (
-          <SessionList
-            now={Date.now()}
-            onSelect={select}
-            ordered={held.shown}
-            sessions={sessions}
-          />
+          <SessionList now={now} onSelect={select} ordered={held.shown} sessions={sessions} />
         ) : undefined}
       </ConsoleContent>
     ) : (
@@ -423,6 +420,6 @@ function phaseForPlace(place: import("./state/store").Place, sessions: readonly 
     : "idle";
 }
 
-function idealOrder(sessions: readonly Session[]) {
-  return orderByAttention(sessions, Date.now());
+function idealOrder(sessions: readonly Session[], now: number) {
+  return orderByAttention(sessions, now);
 }
