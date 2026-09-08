@@ -89,7 +89,11 @@ describe("interpreter bridge ownership", () => {
         return kill(signal);
       }) as typeof child.kill;
 
-      await expect(running).resolves.toEqual({ status: "timed_out", cellId: "timeout-in-flight" });
+      await expect(running).resolves.toEqual({
+        status: "timed_out",
+        cellId: "timeout-in-flight",
+        output: { stdout: "", stderr: "" },
+      });
       expect(signals).toContain("SIGKILL");
       toolAnswer.reject(new Error("late tool failure"));
       await Promise.all(callbacks);
@@ -132,7 +136,11 @@ describe("interpreter bridge ownership", () => {
           throw new Error(`cell terminated before tool entry: ${result.status}`);
         }),
       ]);
-      await expect(firstPending).resolves.toEqual({ status: "timed_out", cellId: "one" });
+      await expect(firstPending).resolves.toEqual({
+        status: "timed_out",
+        cellId: "one",
+        output: { stdout: "", stderr: "" },
+      });
 
       // Timeout replaced the interpreter. The successor completes before the
       // old callback is released, so its result cannot depend on scheduler luck.

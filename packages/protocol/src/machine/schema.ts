@@ -59,6 +59,7 @@ export const WireMethod = {
   Attach: "machine.attach",
   RunCode: "machine.run_code",
   CancelCode: "machine.cancel_code",
+  PeekCode: "machine.peek_code",
   Exec: "machine.exec",
   CallTool: "machine.call_tool",
   FsOp: "machine.fs_op",
@@ -169,12 +170,13 @@ export const CellRequest = z
   .strict();
 export type CellRequest = z.infer<typeof CellRequest>;
 
-const CellOutput = z
+export const CellOutput = z
   .object({
     stdout: z.string(),
     stderr: z.string(),
   })
   .strict();
+export type CellOutput = z.infer<typeof CellOutput>;
 
 /**
  * A `tool.<name>(...)` call made from inside a running cell, travelling back to
@@ -201,7 +203,34 @@ export const ToolCallResult = z.discriminatedUnion("status", [
 ]);
 export type ToolCallResult = z.infer<typeof ToolCallResult>;
 
-/** Honest Python cell terminals: deadline expiry is never collapsed into a raise. */
+/**
+ * The cell's `completion(prompt, {model?, system?, schema?})` call as it reaches
+ * the host: one prompt, an optional model id on the brain's configured
+ * provider, an optional system instruction, and an optional JSON Schema the
+ * answer must satisfy (the host returns the validated JSON text).
+ */
+export const CompletionRequest = z
+  .object({
+    prompt: z.string().min(1).describe("One complete instruction for a stateless sub-model call."),
+    model: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("A model id on the configured provider; the default model when omitted."),
+    system: z.string().min(1).optional().describe("System text for the sub-model call."),
+    // z.json(), not PlainValueSchema: this object is also the tool's wire input schema.
+    schema: z
+      .record(z.string(), z.json())
+      .optional()
+      .describe("A JSON Schema the answer must satisfy; the validated JSON text is returned."),
+  })
+  .strict();
+export type CompletionRequest = z.infer<typeof CompletionRequest>;
+
+/**
+ * Honest Python cell terminals: deadline expiry is never collapsed into a
+ * raise, and an interrupted cell still reports the output it produced first.
+ */
 export const CellResult = z.discriminatedUnion("status", [
   z
     .object({
@@ -219,8 +248,12 @@ export const CellResult = z.discriminatedUnion("status", [
       error: z.string(),
     })
     .strict(),
-  z.object({ status: z.literal("timed_out"), cellId: z.string().min(1) }).strict(),
-  z.object({ status: z.literal("cancelled"), cellId: z.string().min(1) }).strict(),
+  z
+    .object({ status: z.literal("timed_out"), cellId: z.string().min(1), output: CellOutput })
+    .strict(),
+  z
+    .object({ status: z.literal("cancelled"), cellId: z.string().min(1), output: CellOutput })
+    .strict(),
   z
     .object({
       status: z.literal("refused"),
@@ -229,6 +262,19 @@ export const CellResult = z.discriminatedUnion("status", [
     .strict(),
 ]);
 export type CellResult = z.infer<typeof CellResult>;
+
+/**
+ * What a cell looks like from the outside: settled, or still running with the
+ * output it has produced so far. `eval run` answers with this once its wait
+ * elapses; `eval peek`/`eval stop` answer with it by cell id.
+ */
+export const CellState = z.discriminatedUnion("status", [
+  ...CellResult.options,
+  z
+    .object({ status: z.literal("running"), cellId: z.string().min(1), output: CellOutput })
+    .strict(),
+]);
+export type CellState = z.infer<typeof CellState>;
 
 /**
  * Ceilings for one fs op, owned here so host, daemon, and tool surface quote
@@ -384,3 +430,6 @@ export const ExecResult = z.discriminatedUnion("status", [
 export type ExecResult = z.infer<typeof ExecResult>;
 export const CancelCode = z.object({ cellId: z.string().min(1) }).strict();
 export const CancelResult = z.object({ cancelled: z.boolean() }).strict();
+/** Machine host → machine daemon: the output a live cell has produced so far. */
+export const PeekCode = z.object({ cellId: z.string().min(1) }).strict();
+export const PeekResult = z.object({ running: z.boolean(), output: CellOutput }).strict();

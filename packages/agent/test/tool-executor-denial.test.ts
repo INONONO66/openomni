@@ -94,7 +94,7 @@ describe("cell-door executor propagation", () => {
     const executor = durableExecutor(allowAll, committed);
 
     // The inner dispatcher is built with NO executor option, exactly as the
-    // production cell door does in apps/openomni/src/tools/execution/run-code.ts.
+    // production cell door does in apps/openomni/src/composition/codemode.ts.
     const inner = createDispatcher([echoTool(() => undefined)]);
     const outer = createDispatcher(
       [

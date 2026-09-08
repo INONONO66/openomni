@@ -32,7 +32,7 @@ function definition(
 function located(item: AnyToolDefinition, directory = item.category): LocatedDefinition {
   return {
     definition: item,
-    filePath: `apps/openomni/src/tools/${directory}/${item.name}.ts`,
+    filePath: `apps/openomni/src/tools/${directory}/${item.name.replaceAll("_", "-")}.ts`,
   };
 }
 
@@ -131,13 +131,31 @@ describe("lint-tools definition invariants", () => {
   });
 
   test("category is independent of the target directory", () => {
-    const item = definition("file_query");
+    const item = definition("read");
     expect(
       definitionInvariantViolations(
         [item],
         [{ definition: item, filePath: "apps/openomni/src/tools/fs/read.ts" }],
       ),
     ).toEqual([]);
+  });
+
+  test("the file name is the tool name in kebab-case (KERNEL 3.5)", () => {
+    const item = definition("send_message");
+    expect(
+      definitionInvariantViolations(
+        [item],
+        [{ definition: item, filePath: "apps/openomni/src/tools/send-message.ts" }],
+      ),
+    ).toEqual([]);
+    for (const filePath of [
+      "apps/openomni/src/tools/send_message.ts",
+      "apps/openomni/src/tools/messaging.ts",
+    ]) {
+      expect(messages([item], [{ definition: item, filePath }])).toContainEqual(
+        expect.stringContaining("[tool-file-name]"),
+      );
+    }
   });
 
   test("every catalog definition must map to a source file", () => {

@@ -428,7 +428,12 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
         socketPath: socketPath(),
         offer: offer("/tmp"),
         runner: {
-          runCode: async (request) => ({ status: "cancelled", cellId: request.cellId }),
+          runCode: async (request) => ({
+            status: "cancelled",
+            cellId: request.cellId,
+            output: { stdout: "", stderr: "" },
+          }),
+          peekCode: () => undefined,
           close: async () => {
             closed += 1;
           },

@@ -24,6 +24,9 @@ export namespace Machine {
   export const CancelCode = Schema.CancelCode;
   export const CancelResult = Schema.CancelResult;
   export type CancelResult = import("zod").infer<typeof Schema.CancelResult>;
+  export const PeekCode = Schema.PeekCode;
+  export const PeekResult = Schema.PeekResult;
+  export type PeekResult = import("zod").infer<typeof Schema.PeekResult>;
   export const FS_WRITE_MAX_BYTES = Schema.FS_WRITE_MAX_BYTES;
   export const EXEC_MAX_BYTES = Schema.EXEC_MAX_BYTES;
   export const EXEC_TIMEOUT_MS = Schema.EXEC_TIMEOUT_MS;
@@ -37,6 +40,11 @@ export namespace Machine {
   export type CellRequest = Schema.CellRequest;
   export const CellResult = Schema.CellResult;
   export type CellResult = Schema.CellResult;
+  export type CellOutput = Schema.CellOutput;
+  export const CellState = Schema.CellState;
+  export type CellState = Schema.CellState;
+  export const CompletionRequest = Schema.CompletionRequest;
+  export type CompletionRequest = Schema.CompletionRequest;
   export const ToolCall = Schema.ToolCall;
   export type ToolCall = Schema.ToolCall;
   export const ToolCallResult = Schema.ToolCallResult;

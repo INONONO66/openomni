@@ -117,6 +117,7 @@ describe("machine attach handshake", () => {
                   value: id,
                   output: { stdout: "", stderr: "" },
                 }),
+                peekCode: () => undefined,
                 close: async () => undefined,
               },
             });
@@ -153,6 +154,69 @@ describe("machine attach handshake", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("peekCode answers not-running locally for an unknown cell and forwards a live one to the daemon", async () => {
+    let releaseCell!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseCell = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const peeked: string[] = [];
+    await withHost(
+      () => ({ ...enrollment, allowedCapabilities: ["kernel.py"] }),
+      async ({ host, path }) => {
+        const daemon = await attachMachineDaemon({
+          socketPath: path,
+          offer: offer({ offeredCapabilities: ["kernel.py"] }),
+          runner: {
+            runCode: async (request) => {
+              entered();
+              await held;
+              return {
+                status: "completed",
+                cellId: request.cellId,
+                output: { stdout: "done\n", stderr: "" },
+              };
+            },
+            peekCode: (cellId) => {
+              peeked.push(cellId);
+              return { stdout: "so far\n", stderr: "warn\n" };
+            },
+            close: async () => undefined,
+          },
+        });
+        try {
+          const handle = host.get("mac-studio");
+          // Not in flight: answered by the host without a wire round trip.
+          expect(await handle.peekCode("nobody")).toEqual({
+            running: false,
+            output: { stdout: "", stderr: "" },
+          });
+          expect(peeked).toEqual([]);
+          const running = handle.runCode({ cellId: "live", code: "x", timeoutMs: 5000 });
+          await started;
+          expect(await handle.peekCode("live")).toEqual({
+            running: true,
+            output: { stdout: "so far\n", stderr: "warn\n" },
+          });
+          expect(peeked).toEqual(["live"]);
+          releaseCell();
+          expect(await running).toMatchObject({ status: "completed", cellId: "live" });
+          expect(await handle.peekCode("live")).toEqual({
+            running: false,
+            output: { stdout: "", stderr: "" },
+          });
+          expect(peeked).toEqual(["live"]);
+        } finally {
+          releaseCell();
+          await daemon.close();
+        }
+      },
+    );
   });
 
   test("enrolled daemon attaches with the enrollment∩offer effective set and the attached event", async () => {
