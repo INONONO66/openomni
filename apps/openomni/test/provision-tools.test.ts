@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "@openomni/ledger";
+import { type PlainObject, Provisioning } from "@openomni/protocol";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { createTools } from "../src/tools/core/catalog";
 import { createDispatcher, eraseTool } from "@openomni/agent";
@@ -14,7 +15,7 @@ const RESIDENT = { role: "resident", depth: 0, sessionId: "provision-test" } as 
 const provisionTool = (name: string, port: ProvisionPort, now: () => number = Date.now) => {
   const run = modelToolOutput("provision", { provisioning: port }, RESIDENT, now);
   const op = name === "provision_status" ? "status" : name;
-  return (input: Record<string, unknown>) => run({ operation: { op, args: input } });
+  return (input: PlainObject) => run({ operation: { op, args: input } });
 };
 const personDeclare = (port: ProvisionPort, now?: () => number) =>
   provisionTool("contact_add", port, now);
@@ -110,12 +111,17 @@ describe("provision output boundary", () => {
   });
 });
 
+/** Open the Owner-consent request for declaring one manifest through the protected dispatcher. */
+function consentedDeclare(port: ProvisionPort, manifest: PlainObject) {
+  return protectedDispatch(eraseTool(createProvisionTool(port)), {
+    operation: { op: "contact_add", args: { manifest } },
+  });
+}
+
 describe("original Person invocation consent", () => {
   test("a protected raise suspends then applies the exact original manifest once", async () => {
     const { port, supervisor } = portWith();
-    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
-    });
+    const f = consentedDeclare(port, MANAGER_MANIFEST);
     try {
       const request = await bounded(f.opened);
       expect(request.parsedInput).toEqual({
@@ -133,9 +139,7 @@ describe("original Person invocation consent", () => {
   });
   test("refusal leaves the Person unchanged and approvalId cannot mint authority", async () => {
     const { port } = portWith();
-    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
-    });
+    const f = consentedDeclare(port, MANAGER_MANIFEST);
     try {
       expect((await f.answer("refuse")).isError).toBe(true);
       expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
@@ -179,9 +183,7 @@ describe("original Person invocation consent", () => {
   });
   test("domain revision changes invalidate consent instead of applying a stale manifest", async () => {
     const { port } = portWith();
-    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
-    });
+    const f = consentedDeclare(port, MANAGER_MANIFEST);
     try {
       await bounded(f.opened);
       PersonStore.put({
@@ -218,9 +220,7 @@ describe("owner Person protection and sole owner", () => {
       ...ownerManifest,
       endpoints: [...ownerManifest.endpoints, { channel: "discord", externalId: "2" }],
     };
-    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: { op: "contact_add", args: { manifest: edited } },
-    });
+    const f = consentedDeclare(port, edited);
     try {
       await bounded(f.opened);
       expect(PersonStore.get(ownerManifest.id)?.endpoints).toHaveLength(1);
@@ -234,12 +234,7 @@ describe("owner Person protection and sole owner", () => {
   test("consent cannot bypass the sole-owner store invariant", async () => {
     putOwner();
     const { port } = portWith();
-    const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
-      operation: {
-        op: "contact_add",
-        args: { manifest: { ...ownerManifest, id: "person:second", endpoints: [] } },
-      },
-    });
+    const f = consentedDeclare(port, { ...ownerManifest, id: "person:second", endpoints: [] });
     try {
       expect((await f.answer()).isError).toBe(true);
       expect(PersonStore.get("person:second")).toBeUndefined();
@@ -315,6 +310,26 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     expect(supervisor.calls).toEqual([]);
   });
 
+  test("a store refusal while landing the row surfaces as the tool's refusal, not a crash", async () => {
+    const { port, supervisor } = portWith({
+      instances: {
+        ...ChannelInstanceStore,
+        put: () => {
+          throw new Provisioning.StoreError({
+            message: "instance store is read-only during migration",
+            code: "adapter_absent",
+          });
+        },
+      },
+    });
+    const result = await channelDeclare(
+      port,
+      () => NOW,
+    )({ id: "channel:telegram:main", provider: "telegram", credential: { token: "tg-token" } });
+    expect(result).toBe("channel_add refused: instance store is read-only during migration");
+    expect(supervisor.calls).toEqual([]);
+  });
+
   test("a valid declaration seals the credential, lands the row, and reconciles", async () => {
     const { port, supervisor } = portWith();
     supervisor.statuses = [{ id: "channel:telegram:main", surface: "telegram", state: "mounted" }];
@@ -350,6 +365,22 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     });
     expect(result).toContain("vault is locked (no OPENOMNI_VAULT_KEY)");
     expect(ChannelInstanceStore.get("channel:telegram:main")).toBeUndefined();
+  });
+
+  test("a locked vault refuses to rotate — the sealed secret stays as it was", async () => {
+    const { port, supervisor } = portWith();
+    await channelDeclare(
+      port,
+      () => NOW,
+    )({ id: "channel:telegram:main", provider: "telegram", credential: { token: "old-token" } });
+    const locked = portWith({ kek: { kind: "locked", reason: "no OPENOMNI_VAULT_KEY" } }).port;
+    const result = await secretRotate(
+      locked,
+      () => NOW + 10,
+    )({ secretId: "secret:channel-telegram-main", credential: { token: "new-token" } });
+    expect(result).toContain("secret_rotate refused: vault is locked (no OPENOMNI_VAULT_KEY)");
+    expect(SecretStore.get("secret:channel-telegram-main")?.rotatedAt).toBeUndefined();
+    expect(supervisor.calls).toEqual(["reconcile"]);
   });
 
   test("enable re-arms the breaker then reconciles; disable just reconciles", async () => {
@@ -502,20 +533,22 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
 describe("refusal branches", () => {
   test("malformed inputs refuse with the tool's typed refusal", async () => {
     const { port } = portWith();
-    for (const [name, input] of [
-      ["contact_add", {}],
-      ["contact_remove", {}],
-      ["channel_add", {}],
-      ["channel_enable", {}],
-      ["secret_rotate", {}],
-      ["provision_status", "nope"],
-    ] as const) {
+    // Bare operations missing the envelope, and an envelope whose operation is not an object.
+    const malformed: PlainObject[] = [
+      { op: "contact_add", args: {} },
+      { op: "contact_remove", args: {} },
+      { op: "channel_add", args: {} },
+      { op: "channel_enable", args: {} },
+      { op: "secret_rotate", args: {} },
+      { operation: "nope" },
+    ];
+    for (const input of malformed) {
       const result = await dispatchModelTool(
         "provision",
         { provisioning: port },
         RESIDENT,
         () => NOW,
-      )(typeof input === "object" ? { op: name, args: input } : input);
+      )(input);
       expect(result).toMatchObject({ isError: true, errorKind: "invalid_input" });
       expect(result.output).toContain("provision refused");
     }

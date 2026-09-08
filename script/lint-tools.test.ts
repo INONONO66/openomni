@@ -7,6 +7,7 @@ import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/t
 import {
   definitionInvariantViolations,
   diffToolSchemaSnapshots,
+  lintToolSurface,
   type LocatedDefinition,
 } from "./lint-tools";
 
@@ -73,6 +74,31 @@ async function deletedSymbolViolations(): Promise<string[]> {
   }
   return violations.sort((left, right) => left.localeCompare(right));
 }
+
+describe("tool surface lint (#949 sealed catalog grammar)", () => {
+  test("camelCase names, including the retired sendMessage spelling, fail the tool-name rule", () => {
+    for (const name of ["sendMessage", "DoThingNowFastPlease"]) {
+      expect(
+        lintToolSurface({ name, description: "x", inputSchema: { type: "object" } }).map(
+          (failure) => failure.rule,
+        ),
+      ).toEqual(["tool-name"]);
+    }
+  });
+  test("seven public fields is the sealed budget; an eighth is over", () => {
+    const surface = (count: number) => {
+      const properties: Record<string, object> = {};
+      for (let index = 0; index < count; index++) properties[`f${index}`] = {};
+      return lintToolSurface({
+        name: "grep",
+        description: "x",
+        inputSchema: { type: "object", properties },
+      }).map((failure) => failure.rule);
+    };
+    expect(surface(7)).toEqual([]);
+    expect(surface(8)).toEqual(["tool-max-fields"]);
+  });
+});
 
 describe("deleted surface census", () => {
   test("deleted production symbols stay absent", async () => {

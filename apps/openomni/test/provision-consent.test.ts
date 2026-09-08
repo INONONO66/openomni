@@ -70,7 +70,9 @@ it("executes exactly the original promotion after authenticated consent", async 
     const request = await bounded(f.opened);
     expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
     expect(request.parsedInput).toEqual({ operation: PROMOTE });
-    expect((await f.answer()).isError).toBeUndefined();
+    const registered = await f.answer();
+    expect(registered.isError).toBeUndefined();
+    expect(registered.output).toMatch(/^contact contact:mallory registered \(tier \w+\)$/);
     expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("registered");
     expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("resolved");
     expect(
@@ -103,7 +105,9 @@ it("rejects an endpoint move after source or target changes, including same-cloc
 it("merges only the approved endpoint into the exact target", async () => {
   const f = protectedDispatch(provision(), { operation: MERGE });
   try {
-    expect((await f.answer()).isError).toBeUndefined();
+    const merged = await f.answer();
+    expect(merged.isError).toBeUndefined();
+    expect(merged.output).toBe("endpoint ep:mallory merged into actor:alice");
     expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("actor:alice");
   } finally {
     await f.close();

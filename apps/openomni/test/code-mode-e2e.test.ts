@@ -433,9 +433,13 @@ async function startCellHarness(ports: CatalogPorts) {
   const execute = modelToolOutput("eval", { ...ports, cells }, CELL_ORIGIN);
   return {
     socketPath,
-    run: (code: string) => execute({ operation: { op: "run", code, timeout: 15 } }),
+    run: (code: string, timeout = 15) => execute({ operation: { op: "run", code, timeout } }),
     runWith: (origin: CatalogOrigin, code: string) =>
-      modelToolOutput("eval", { ...ports, cells }, origin)({
+      modelToolOutput(
+        "eval",
+        { ...ports, cells },
+        origin,
+      )({
         operation: { op: "run", code, timeout: 15 },
       }),
   };
@@ -455,6 +459,12 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(sameSession).toContain("mine");
   expect(otherSession).toContain("the cell raised");
   expect(otherSession).toContain("NameError");
+}, 40_000);
+
+test("a cell over its deadline reports the timeout it was given", async () => {
+  const { run } = await startCellHarness({ llm: async () => "ok" });
+  const output = await run("import time\nwhile True: time.sleep(0.05)", 1);
+  expect(output).toBe("the cell did not finish within 1s");
 }, 40_000);
 
 test("a cell rejects legacy batched completion input and serves one prompt", async () => {

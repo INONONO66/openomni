@@ -165,6 +165,10 @@ for (const remote of [false, true]) {
           bytes: 11,
         });
         expect((await model("read", { path: file })).output).toBe("alpha\nbeta\n");
+        expect((await cell("read", { path: file, offset: 2, limit: 1 })).output).toEqual({
+          content: "beta",
+          bytes: 11,
+        });
         expect(
           (await cell("edit", { path: file, edits: [{ oldText: "beta", newText: "gamma" }] }))
             .output,
@@ -184,6 +188,11 @@ for (const remote of [false, true]) {
         expect((await cell("find", { path: path("."), pattern: "*", limit: 1 })).output).toEqual({
           paths: [file],
           truncated: true,
+        });
+        // A walk root must itself be a regular file or directory; symlinks are never followed.
+        expect(await model("find", { path: path("loop"), pattern: "*" })).toMatchObject({
+          isError: true,
+          errorKind: "precondition_failed",
         });
         expect((await cell("grep", { path: path("."), pattern: "gamma" })).output).toEqual({
           matches: [
@@ -208,6 +217,9 @@ for (const remote of [false, true]) {
           matches: [{ path: file, line: 1, text: "alpha", before: [], after: [] }],
           truncated: false,
         });
+        const malformed = await model("grep", { path: file, pattern: "(" });
+        expect(malformed.errorKind).toBe("precondition_failed");
+        expect(malformed.output).toContain("invalid regular expression: (");
       });
     });
     test("binary encoding, exact edit conflict, missing files, and full cell output", async () => {
@@ -314,7 +326,13 @@ test.each([
     expect(absolute.output).toEqual({
       matches: [
         { path: join(root, "a:b"), line: 1, text: "needle in file", before: [], after: [] },
-        { path: join(root, "d:e", "f:g"), line: 1, text: "needle in directory", before: [], after: [] },
+        {
+          path: join(root, "d:e", "f:g"),
+          line: 1,
+          text: "needle in directory",
+          before: [],
+          after: [],
+        },
       ],
       truncated: false,
     });
