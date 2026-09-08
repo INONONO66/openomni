@@ -174,7 +174,7 @@ const languages = new Map<string, Inventory["files"][number]["language"]>([
   [".py", "python"],
   [".sql", "sql"],
 ]);
-function category(path: string): Inventory["files"][number]["category"] {
+export function category(path: string): Inventory["files"][number]["category"] {
   const parts = path.split("/");
   if (path.endsWith(".sql")) return "migration";
   if (parts.some((part) => /fixtures?/.test(part))) return "fixture";

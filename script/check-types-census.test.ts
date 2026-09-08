@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeJson, inventorySchema } from "./quality-inventory";
-import { resultSchema } from "./check-types-census";
+import { buildInventory, decodeJson, inventorySchema, readContract } from "./quality-inventory";
+import { census, resultSchema } from "./check-types-census";
 
 function run(files: Record<string, string>, mutate?: (root: string) => void) {
   const root = mkdtempSync(join(tmpdir(), "openomni-census-"));
@@ -483,4 +483,100 @@ test("native TypeScript projects accept JSONC without weakening strict receipt J
   expect(result.status).toBe(0);
   expect(result.output.complete).toBe(true);
   expect(result.output.errors).toEqual([]);
+});
+
+// In-process census: the same fixture layout as `run`, measured directly so
+// origin attribution is exercised by this lane's own native coverage.
+function measure(files: Record<string, string>, complete = true) {
+  const root = mkdtempSync(join(tmpdir(), "openomni-census-origin-"));
+  try {
+    for (const [path, text] of Object.entries({
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { strict: true, target: "ES2022", module: "ESNext", moduleResolution: "Bundler", types: [] },
+        include: ["**/*.ts"],
+      }),
+      "contract.json": JSON.stringify({ version: 1, typescript: "5.9.2", roots: ["."], projects: ["tsconfig.json"], topology: false }),
+      ...files,
+    })) {
+      mkdirSync(join(root, path, ".."), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    const contract = readContract(join(root, "contract.json"));
+    const result = census(root, contract, buildInventory(root, contract));
+    expect(result.complete).toBe(complete);
+    expect(result.errors.length > 0).toBe(!complete);
+    return result.violations.map((v) => `${v.kind}:${v.symbol}:${v.origin}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("top types are owned when written, declared or inferred in owned source, foreign when reached only through dependency declarations", () => {
+  const found = measure({
+    "node_modules/dep/index.d.ts": [
+      "export interface Boxed<T> { value: T }",
+      "export type Aliased<T> = { inner: T }",
+      "export declare function make(): { nested: unknown; cause: any }",
+      "export declare const loose: any;",
+      "export declare function call(): unknown;",
+      "export declare const dictionary: { [key: string]: unknown };",
+      "export declare class Failure { readonly detail: unknown }",
+      "export type Anything = unknown;",
+    ].join("\n"),
+    "a.ts": [
+      'import { make, loose, call, dictionary, Failure, type Anything, type Boxed, type Aliased } from "dep";',
+      "export const reached = make();",
+      "export const direct = loose;",
+      "export const called = loose();",
+      "export const result = call();",
+      "export const awaited = async () => await call();",
+      "export const indexed = dictionary;",
+      'export const element = dictionary["key"];',
+      "export const failure = new Failure();",
+      "export const viaAlias: Anything = 1;",
+      "export const either: Own | Boxed<string> = { data: 1 };",
+      "export const written: unknown = 1;",
+      "export function own(parameter: unknown) { return parameter; }",
+      "export const boxed: Boxed<unknown> = { value: 1 };",
+      "export const aliased: Aliased<unknown> = { inner: 1 };",
+      "export interface Own { data: unknown }",
+      "export function use(value: Own) { return value.data; }",
+      'export function pick<T extends Own>(item: T): T["data"] { return item.data; }',
+      "export const inferred = JSON.parse('{}');",
+      "try { throw 1; } catch (caught) { console.log(caught); }",
+    ].join("\n"),
+  });
+  const of = (symbol: string) => [...new Set(found.filter((f) => f.split(":")[1] === symbol).map((f) => f.split(":")[2]))];
+  for (const symbol of ["reached", "awaited", "indexed", "failure", "loose", "dictionary"]) expect(of(symbol)).toEqual(["foreign"]);
+  expect(found.filter((f) => f.includes(":element:"))).toEqual(["unknown:element:owned"]);
+  // The foreign alias is the dependency's; the binding annotated with it is owned.
+  expect(found.filter((f) => f.includes(":viaAlias:"))).toEqual(["unknown:viaAlias:owned", "unknown:viaAlias:foreign"]);
+  expect(of("either")).toEqual(["owned"]);
+  for (const symbol of ["written", "own", "parameter", "use", "value", "caught", "Own", "data"]) expect(of(symbol)).toEqual(["owned"]);
+  // A binding that stores a directly top-typed foreign result without narrowing is owned;
+  // the producing expression is the dependency's.
+  expect(found.filter((f) => f.includes(":direct:"))).toEqual(["implicitAny:direct:owned"]);
+  expect(found.filter((f) => f.includes(":called:"))).toEqual(["implicitAny:called:owned", "implicitAny:called:foreign"]);
+  expect(of("pick")).toEqual(["owned"]);
+  expect(found.filter((f) => f.includes(":result:"))).toEqual(["unknown:result:owned", "unknown:result:foreign"]);
+  expect(found.filter((f) => f.includes(":inferred:"))).toEqual(["implicitAny:inferred:owned", "implicitAny:inferred:foreign"]);
+  // A written `unknown` argument of a foreign generic is owned once (the keyword); its propagation is the dependency's.
+  for (const symbol of ["boxed", "aliased"]) {
+    expect(found.filter((f) => f === `unknown:${symbol}:owned`)).toHaveLength(1);
+    expect(found.filter((f) => f === `unknown:${symbol}:foreign`)).toHaveLength(2);
+  }
+  // Mutation: owning the declaration flips every reach to owned.
+  const owned = measure({
+    "b.ts": "export interface Boxed<T> { value: T }\nexport function make(): { nested: unknown } { return { nested: 1 }; }\nexport const reached = make();\nexport const boxed: Boxed<unknown> = { value: 1 };",
+  });
+  expect(owned.filter((f) => f.startsWith("unknown:reached:"))).toEqual(["unknown:reached:owned", "unknown:reached:owned"]);
+  expect(owned.filter((f) => f.startsWith("unknown:boxed:"))).toHaveLength(3);
+  expect(owned.some((f) => f.endsWith(":foreign"))).toBe(false);
+  // Compiler ABI brands stay measured metadata, attributed like any other reach.
+  const compiler = measure({
+    "a.ts": `import ts from ${compilerImport}; declare module ${compilerImport} { interface SourceFile { payload: { nested: unknown } } } export function name(source: ts.SourceFile) { return source.fileName; }`,
+  });
+  expect(compiler.filter((f) => f.includes(":source:"))).toEqual(["unknown:source:owned", "unknown:source:owned"]);
+  // An unresolved project measures nothing, so it attributes nothing.
+  expect(measure({ "u.ts": 'import { value } from "missing-package"; export const result = value;' }, false)).toEqual([]);
 });

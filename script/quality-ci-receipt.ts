@@ -1,7 +1,8 @@
 import {
-	InventoryError, jsonArray, jsonBoolean, jsonLiteral, jsonNumber,
+	InventoryError, jsonArray, jsonBoolean, jsonChoice, jsonLiteral, jsonNumber,
 	jsonObject, jsonString, type Json,
 } from "./quality-inventory";
+import { origins, type Origin } from "./check-types-census";
 export const gates = ["type", "publisher", "export", "store", "cyclomatic", "cognitive", "halstead", "crap", "productionClones", "testClones", "coverage", "mutation"] as const;
 export type Gate = typeof gates[number];
 export type Finding = {
@@ -11,6 +12,8 @@ export type Finding = {
 	symbol: string;
 	value: number;
 	endLine?: number;
+	/** Type census only: whether the top type is attributable to owned source. */
+	origin?: Origin;
 };
 export type Receipt = {
 	version: 1;
@@ -68,7 +71,10 @@ export function normalizeTypes(value: Json, identity: Identity): Measurement {
 		findings: jsonArray(row.violations, (entry) => {
 			const violation = jsonObject(entry);
 			const site = location(entry);
-			return { ...site, gate: "type", symbol: `${jsonString(violation.kind)}:${site.symbol}`, value: 1 };
+			return {
+				...site, gate: "type", symbol: `${jsonString(violation.kind)}:${site.symbol}`, value: 1,
+				origin: jsonChoice(violation.origin, origins),
+			};
 		}),
 	};
 }
