@@ -590,35 +590,44 @@ body {
    pulsing in the sidebar for an hour costs no layout and no paint, and a caret
    blinking under a streaming token never competes with the text arriving. */
 
-/* 2s, and slow is the whole point. A fast pulse is a WARNING — it demands the
-   eye and pulls attention off the transcript. A 2s breath at partial opacity
-   reads as ongoing rather than as urgent: legible when looked at, ignorable
-   when not. It never reaches 0 — the dot must not disappear, or the status
-   column flickers empty and the row's shape blinks. */
+/* Status motion reports progress, attention, or a newly settled result. */
 @keyframes status-pulse {
   0%,
   100% {
-    opacity: 1;
+    opacity: 0.45;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.45;
+    opacity: 1;
+    transform: scale(1.25);
   }
+}
+
+.status-glyph {
+  --motion-status-spin: status-spin 1s linear infinite;
+  --motion-status-pulse: status-pulse 1.6s ease-in-out infinite;
+  --motion-status-entrance: status-entrance 160ms ease-out both;
+  transform-origin: center;
+}
+
+[data-ui="TreeRow"] .status-glyph[data-shape="hollow"] {
+  opacity: 0.45;
 }
 
 [data-ui="TreeRow"]:hover .status-glyph {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .status-spinner {
-  animation: status-spin 1s linear infinite;
+  animation: var(--motion-status-spin);
 }
 
 .status-dot-pulse {
-  animation: status-pulse 1.6s ease-in-out infinite;
+  animation: var(--motion-status-pulse);
 }
 
 .status-entrance {
-  animation: status-entrance 160ms ease-out both;
+  animation: var(--motion-status-entrance);
 }
 
 @keyframes status-spin {

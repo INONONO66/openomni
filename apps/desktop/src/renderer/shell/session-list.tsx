@@ -1,9 +1,10 @@
-import { relativeTime, StatusGlyph, Text, TreeRow } from "@openomni/ui";
+import { StatusGlyph, Text, TreeRow } from "@openomni/ui";
 import type { Boundary, Ordered } from "../attention";
 import { ATTENTION_LABEL, orderByAttention } from "../attention/order";
-import { sessionReason } from "../attention/reason";
+import { rowDensity } from "../attention/reason";
 import type { Session, SessionId } from "../state/store";
 import { sessionGlyphProps } from "./session-glyph";
+import { SessionSecondary } from "./session-secondary";
 
 export function SessionList({
   sessions,
@@ -40,27 +41,20 @@ export function SessionList({
                   <li key={id}>
                     <TreeRow
                       aria-label={session.title}
-                      multiline
+                      secondary={
+                        rowDensity(session) === "double" ? (
+                          <SessionSecondary
+                            session={session}
+                            now={now}
+                            project={session.projectId ?? "no project"}
+                          />
+                        ) : undefined
+                      }
                       onClick={(event) => onSelect(id, "selection", event.metaKey || event.ctrlKey)}
                     >
                       <span className="flex w-full items-center gap-2">
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <Text className="truncate" level="label">
-                            {session.title}
-                          </Text>
-                          <span className="flex min-w-0 items-center gap-2">
-                            <Text className="max-w-24 truncate" level="meta" tone="faint">
-                              {session.projectId ?? "no project"}
-                            </Text>
-                            <Text className="truncate" level="meta" tone="faint">
-                              {sessionReason(session, now)}
-                            </Text>
-                          </span>
-                        </span>
-                        <Text className="shrink-0" level="meta" numeric tone="faint">
-                          <time dateTime={new Date(session.lastActivityAt).toISOString()}>
-                            {relativeTime(session.lastActivityAt, now)}
-                          </time>
+                        <Text className="min-w-0 flex-1 truncate" level="label">
+                          {session.title}
                         </Text>
                         <StatusGlyph {...sessionGlyphProps(session.phase)} />
                       </span>

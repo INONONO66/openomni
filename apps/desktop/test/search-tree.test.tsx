@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Highlight } from "@openomni/ui";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ATTENTION_LABEL, orderByAttention } from "../src/renderer/attention";
+import { Window } from "happy-dom";
+import { ATTENTION_LABEL, orderByAttention } from "../src/renderer/attention/order";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
 import { makeSession } from "./helpers/session";
@@ -53,6 +54,7 @@ describe("attention kind headers disambiguate repeated projects", () => {
     const mixed = [
       makeSession({ id: "waiting", phase: "waiting_input", projectId: "default" }),
       makeSession({ id: "running", phase: "running", projectId: "default" }),
+      makeSession({ id: "rest", phase: "idle", projectId: "default" }),
     ];
     const mixedHtml = renderToStaticMarkup(
       <SessionTree
@@ -68,13 +70,24 @@ describe("attention kind headers disambiguate repeated projects", () => {
         sessions={mixed}
       />,
     );
-    expect(mixedHtml).toContain(`>${ATTENTION_LABEL.demand}</span>`);
-    expect(mixedHtml).toContain(`>${ATTENTION_LABEL.watch}</span>`);
-    expect(mixedHtml.match(/data-ui="TreeRow"/g)).toHaveLength(4);
-    expect(
-      mixedHtml.match(/data-ui="TreeRow"[\s\S]*?data-ui="StatusGlyph"[\s\S]*?<\/button>/g),
-    ).toHaveLength(2);
-    expect(mixedHtml).not.toContain("Rest</span>");
+    const document = new Window().document;
+    document.body.innerHTML = mixedHtml;
+    const groups = [...document.querySelectorAll('[role="tree"] > div')];
+    expect(groups).toHaveLength(3);
+    expect(groups.map((group) => group.firstElementChild?.textContent)).toEqual([
+      ATTENTION_LABEL.demand,
+      ATTENTION_LABEL.watch,
+      ATTENTION_LABEL.rest,
+    ]);
+    for (const group of groups) {
+      const header = group.firstElementChild;
+      expect(header?.tagName).toBe("SPAN");
+      expect(header?.classList.contains("text-meta")).toBe(true);
+      expect(header?.classList.contains("text-fg-faint")).toBe(true);
+      expect(header?.hasAttribute("aria-expanded")).toBe(false);
+      expect(header?.nextElementSibling?.getAttribute("data-level")).toBe("0");
+      expect(group.querySelectorAll('[data-ui="TreeRow"]')).toHaveLength(2);
+    }
   });
 
   test("rest-only sessions keep the plain project tree without a kind label", () => {

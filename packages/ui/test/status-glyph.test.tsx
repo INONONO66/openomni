@@ -20,7 +20,7 @@ test("glyph tones resolve only to their designated tokens", () => {
   }
 });
 
-test("every shape is an SVG with a crisp one-pixel stroke", () => {
+test("every shape is an SVG with a crisp stroke", () => {
   for (const shape of [
     "spinner",
     "ring",
@@ -32,8 +32,19 @@ test("every shape is an SVG with a crisp one-pixel stroke", () => {
   ] as const) {
     const html = renderToStaticMarkup(<StatusGlyph tone="muted" shape={shape} />);
     expect(html).toContain(`data-shape="${shape}"`);
-    expect(html).toContain('stroke-width="1"');
+    expect(html).toContain('stroke-width="1.5"');
     expect(html).toContain("<svg");
+  }
+});
+
+test("glyph sizes are named and bounded", () => {
+  for (const [size, box] of [
+    ["regular", "size-4"],
+    ["compact", "size-3.5"],
+  ] as const) {
+    const html = renderToStaticMarkup(<StatusGlyph shape="hollow" tone="muted" size={size} />);
+    expect(html).toContain(`data-size="${size}"`);
+    expect(html).toContain(box);
   }
 });
 
@@ -46,6 +57,17 @@ test("animated shapes have status keyframes and reduced-motion fallbacks", async
   expect(source).toContain(".status-spinner");
   expect(source).toContain(".status-dot-pulse");
   expect(source).toContain(".status-entrance");
+  expect(source).toContain("transform: scale(1.25)");
+  expect(source).toMatch(/\.status-glyph\[data-shape="hollow"\]\s*\{\s*opacity: 0\.45;/);
+  expect(source).toMatch(/:hover \.status-glyph\s*\{\s*opacity: 1 !important;/);
+  for (const [shape, animation] of [
+    ["spinner", "status-spinner"],
+    ["dot-pulse", "status-dot-pulse"],
+    ["check", "status-entrance"],
+    ["cross", "status-entrance"],
+  ] as const) {
+    expect(renderToStaticMarkup(<StatusGlyph shape={shape} tone="muted" />)).toContain(animation);
+  }
 });
 
 test("status tokens may be declared in styles but consumed only by StatusGlyph", async () => {

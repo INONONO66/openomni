@@ -1,6 +1,10 @@
 import { relativeTime } from "@openomni/ui";
 import type { Session } from "../state/store";
 
+export function rowDensity(session: Pick<Session, "titleSource" | "phase">): "single" | "double" {
+  return session.titleSource === "placeholder" && session.phase === "idle" ? "single" : "double";
+}
+
 export function sessionReason(session: Session, now: number): string {
   switch (session.phase) {
     case "waiting_approval":

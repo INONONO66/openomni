@@ -456,7 +456,7 @@ test("real Chat and gateway keep in-flight messages across switch, close and reo
   await act(async () => setDraft(id, "next draft"));
   await key(node(host, "textarea"), "Enter");
   expect(consoleStore.state.drafts[id]).toBe("next draft");
-  expect(node(host, `#session-row-${id}`).textContent).toBe(
+  expect(node(host, `#session-row-${id} [data-ui="Highlight"]`).textContent).toBe(
     consoleStore.state.sessions[0]?.title ?? "",
   );
   await command("new-tab");

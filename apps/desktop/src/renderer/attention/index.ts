@@ -12,4 +12,4 @@
 export type { Boundary, Held } from "./stability";
 export { applyAtBoundary, IDLE_BOUNDARY_MS, idleBoundaryReached } from "./stability";
 export type { Ordered } from "./order";
-export { ATTENTION_LABEL, changedSince, orderByAttention } from "./order";
+export { changedSince, orderByAttention } from "./order";

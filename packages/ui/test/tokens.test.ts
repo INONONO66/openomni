@@ -412,13 +412,17 @@ describe("the motion budget", () => {
     }
   });
 
-  test("Given the animations, When counted, Then only the declared three run at rest", () => {
-    // Motion answers input. The three exceptions each report that something is
-    // happening WITHOUT the reader: the tool spinner, the running status dot,
-    // and the streaming caret. A fourth `@keyframes` is a decoration.
+  test("Given the animations, When counted, Then only declared status and transcript motion exists", () => {
+    // Status motion includes progress, waiting, and one-shot result entrances.
     const keyframes = [...CSS.matchAll(/@keyframes\s+([\w-]+)/g)].map(([, name]) => name);
 
-    expect(keyframes.sort()).toEqual(["caret-blink", "spinner-step", "status-entrance", "status-pulse", "status-spin"]);
+    expect(keyframes.sort()).toEqual([
+      "caret-blink",
+      "spinner-step",
+      "status-entrance",
+      "status-pulse",
+      "status-spin",
+    ]);
   });
 
   test("Given reduced motion, When requested, Then animation and transition are both disabled", () => {

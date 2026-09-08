@@ -223,7 +223,10 @@ export function App({ platform, storage }: AppEnvironment) {
       title: tabTitle(entry, state),
       icon:
         entry.place.kind === "session" ? (
-          <StatusGlyph {...sessionGlyphProps(phaseForPlace(entry.place, sessions))} />
+          <StatusGlyph
+            {...sessionGlyphProps(phaseForPlace(entry.place, sessions))}
+            size="compact"
+          />
         ) : (
           placeIcon(entry.place)
         ),

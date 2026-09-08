@@ -1,6 +1,8 @@
 import { beforeEach, expect, test } from "bun:test";
+import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { attentionKind, attentionScore, orderByAttention } from "../src/renderer/attention/order";
+import { rowDensity } from "../src/renderer/attention/reason";
 import { SessionList } from "../src/renderer/shell/session-list";
 import { sessionGlyphProps } from "../src/renderer/shell/session-glyph";
 import {
@@ -47,8 +49,51 @@ for (const [phase, kind, tone, shape] of cases) {
     );
     expect(list).toContain(`data-tone="${tone}"`);
     expect(list).toContain(`data-shape="${shape}"`);
+    const document = new Window().document;
+    document.body.innerHTML = html + list;
+    const tabIcon = document.querySelector('[data-ui="Tab.Icon"]');
+    expect(tabIcon?.firstElementChild?.getAttribute("data-ui")).toBe("StatusGlyph");
+    expect(tabIcon?.firstElementChild?.getAttribute("data-size")).toBe("compact");
+    expect(tabIcon?.parentElement?.firstElementChild === tabIcon).toBe(true);
+    const rows = document.querySelectorAll('[data-ui="TreeRow"] [data-ui="StatusGlyph"]');
+    expect(rows).toHaveLength(2);
+    for (const glyph of rows) {
+      expect(glyph.parentElement?.lastElementChild).toBe(glyph);
+      expect(glyph.parentElement?.firstElementChild).not.toBe(glyph);
+      expect(glyph.getAttribute("data-shape")).toBe(shape);
+      expect(glyph.getAttribute("data-tone")).toBe(tone);
+    }
   });
 }
+
+test("row density follows content on both surfaces", () => {
+  for (const [titleSource, phase, density] of [
+    ["placeholder", "idle", "single"],
+    ["prompt", "idle", "double"],
+    ["placeholder", "running", "double"],
+    ["placeholder", "waiting_input", "double"],
+    ["placeholder", "completed", "double"],
+    ["prompt", "failed", "double"],
+  ] as const) {
+    const session = makeSession({ titleSource, phase, title: "New Session" });
+    expect(rowDensity(session)).toBe(density);
+    consoleStore.setState((state) => ({ ...state, sessions: [session] }));
+    const document = new Window().document;
+    document.body.innerHTML =
+      renderShell() +
+      renderToStaticMarkup(
+        <SessionList sessions={[session]} now={now} onSelect={() => undefined} />,
+      );
+    const glyphs = document.querySelectorAll('[data-ui="TreeRow"] [data-ui="StatusGlyph"]');
+    expect(glyphs).toHaveLength(2);
+    for (const glyph of glyphs) {
+      const row = glyph.closest('[data-ui="TreeRow"]');
+      expect(row?.getAttribute("data-density")).toBe(density);
+      expect(row?.querySelectorAll("[data-secondary]")).toHaveLength(density === "single" ? 0 : 1);
+      expect(glyph.getAttribute("data-size")).toBe("regular");
+    }
+  }
+});
 
 test("unread terminals report; snooze overrides demand; pin overrides snooze", () => {
   for (const phase of ["completed", "failed"] as const) {

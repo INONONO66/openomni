@@ -15,6 +15,8 @@ import { sessionGlyphProps } from "./session-glyph";
 import { Settings } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { ATTENTION_LABEL } from "../attention/order";
+import { rowDensity } from "../attention/reason";
+import { SessionSecondary } from "./session-secondary";
 import type { Boundary, Ordered } from "../attention";
 import { highlightRuns } from "../search";
 import type { FilteredSession } from "../search";
@@ -48,6 +50,7 @@ import { useSearch } from "./use-search";
 export function SessionTree({
   ordered,
   pendingChanges,
+  now = Date.now(),
   sessions,
   selectedId,
   route,
@@ -207,6 +210,7 @@ export function SessionTree({
                             <SessionRow
                               active={entry.id === state.activeId}
                               current={entry.id === selectedId}
+                              now={now}
                               entry={entry}
                               key={entry.id}
                               onKeyDown={onKeyDown}
@@ -243,6 +247,7 @@ export function SessionTree({
  */
 function SessionRow({
   session,
+  now,
   entry,
   current,
   active,
@@ -251,6 +256,7 @@ function SessionRow({
   registerRef,
 }: {
   readonly session: Session;
+  readonly now: number;
   readonly entry: FilteredSession;
   readonly current: boolean;
   readonly active: boolean;
@@ -264,6 +270,11 @@ function SessionRow({
       current={current || active}
       id={rowId(session.id)}
       level={1}
+      secondary={
+        rowDensity(session) === "double" ? (
+          <SessionSecondary session={session} now={now} />
+        ) : undefined
+      }
       onClick={(event) => onSelect(session.id, event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => onKeyDown(event, session.id)}
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}

@@ -19,19 +19,26 @@ const SHAPE: Record<Shape, ReactNode> = {
   pause: <path d="M5 3v8m4-8v8" />,
   hollow: <circle cx="7" cy="7" r="3" />,
 };
-export function StatusGlyph(props: { readonly tone: Tone; readonly shape: Shape }) {
+export function StatusGlyph(props: {
+  readonly tone: Tone;
+  readonly shape: Shape;
+  readonly size?: "regular" | "compact";
+}) {
   return (
     <svg
       aria-hidden="true"
-      className={`status-glyph size-3.5 shrink-0 ${props.shape === "spinner" ? "status-spinner" : props.shape === "dot-pulse" ? "status-dot-pulse" : props.shape === "check" || props.shape === "cross" ? "status-entrance" : ""}`}
+      className={`status-glyph shrink-0 ${props.size === "compact" ? "size-3.5" : "size-4"} ${props.shape === "spinner" ? "status-spinner" : props.shape === "dot-pulse" ? "status-dot-pulse" : props.shape === "check" || props.shape === "cross" ? "status-entrance" : ""}`}
+      data-size={props.size ?? "regular"}
       data-shape={props.shape}
       data-tone={props.tone}
       data-ui={UI_NAMES.StatusGlyph}
       fill="none"
+      key={props.shape}
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeWidth={1}
+      strokeWidth={1.5}
+      vectorEffect="non-scaling-stroke"
       style={{ color: COLOR[props.tone] }}
       viewBox="0 0 14 14"
     >
