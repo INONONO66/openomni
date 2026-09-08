@@ -11,6 +11,7 @@ import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
 import { consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { installGlobals } from "./helpers";
 
 test("mounted shell restores preferences, navigates, creates and searches sessions", async () => {
   const window = new Window({ url: "http://localhost" });
@@ -26,11 +27,7 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
-  const descriptors = new Map(
-    Object.keys(replacements).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-  );
-  for (const [key, value] of Object.entries(replacements))
-    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  const restoreGlobals = installGlobals(replacements);
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -160,10 +157,7 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     client.clear();
     consoleStore.setState(() => INITIAL_CLIENT_STATE);
     host.remove();
-    for (const [key, descriptor] of descriptors) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
+    restoreGlobals();
     await window.happyDOM.close();
   }
 });

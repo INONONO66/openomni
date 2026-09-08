@@ -10,10 +10,10 @@ import { Glob } from "bun";
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const BARREL = join(ROOT, "packages", "ui", "src", "index.ts");
 
-/** Every exported name in the barrel, type or value. */
-function exportedNames(barrel: string): string[] {
+/** The bare names inside every `{ ... }` specifier list that `pattern` captures. */
+function specifierNames(text: string, pattern: RegExp): string[] {
   const names: string[] = [];
-  for (const block of barrel.matchAll(/export (?:type )?\{([^}]+)\}/g)) {
+  for (const block of text.matchAll(pattern)) {
     for (const entry of block[1]?.split(",") ?? []) {
       const name = entry
         .trim()
@@ -25,21 +25,19 @@ function exportedNames(barrel: string): string[] {
   return names;
 }
 
+/** Every exported name in the barrel, type or value. */
+function exportedNames(barrel: string): string[] {
+  return specifierNames(barrel, /export (?:type )?\{([^}]+)\}/g);
+}
+
 /** The names this app imports from the barrel, across src and test. */
 async function importedNames(): Promise<Set<string>> {
   const names = new Set<string>();
   const glob = new Glob("{src,test}/**/*.{ts,tsx}");
   for await (const path of glob.scan({ cwd: join(ROOT, "apps", "desktop"), absolute: true })) {
     const text = await Bun.file(path).text();
-    for (const block of text.matchAll(/import (?:type )?\{([^}]+)\} from "@openomni\/ui"/g)) {
-      for (const entry of block[1]?.split(",") ?? []) {
-        const name = entry
-          .trim()
-          .replace(/^type /, "")
-          .replace(/ as .*$/, "");
-        if (name.length > 0) names.add(name);
-      }
-    }
+    for (const name of specifierNames(text, /import (?:type )?\{([^}]+)\} from "@openomni\/ui"/g))
+      names.add(name);
   }
   return names;
 }

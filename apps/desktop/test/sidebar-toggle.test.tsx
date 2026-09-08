@@ -1,9 +1,4 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
-import { renderToStaticMarkup } from "react-dom/server";
-import { App } from "../src/renderer/app";
-import { StateProvider } from "../src/renderer/state/provider";
-import { queryKeys } from "../src/renderer/state/queries";
 import {
   consoleStore,
   createSession,
@@ -11,6 +6,7 @@ import {
   setSidebarFloating,
   toggleSidebar,
 } from "../src/renderer/state/store";
+import { renderShell, tag } from "./helpers";
 
 /**
  * The sidebar toggle as the WINDOW renders it, from the store: one button in
@@ -22,22 +18,7 @@ beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
 });
 
-function shell() {
-  const client = new QueryClient();
-  client.setQueryData(queryKeys.gatewayEndpoint, null);
-  return renderToStaticMarkup(
-    <StateProvider client={client}>
-      <App platform="darwin" storage={null} />
-    </StateProvider>,
-  );
-}
-
-/** The element carrying a `data-ui` name, as its opening tag. */
-function tag(html: string, name: string): string {
-  const match = html.match(new RegExp(`<[a-z]+[^>]*data-ui="${name.replace(".", "\\.")}"[^>]*>`));
-  if (match === null) throw new Error(`no element named ${name}`);
-  return match[0];
-}
+const shell = () => renderShell(null);
 
 describe("the one toggle", () => {
   test("Given the sidebar open, When rendered, Then the toggle leads the strip's zone and says it will collapse", () => {

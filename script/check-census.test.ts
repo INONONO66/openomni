@@ -1065,87 +1065,17 @@ test("fs.watch listeners and watcher events have a native filesystem producer", 
   }
 }, 180_000);
 
-test("Electron renderer listeners require a real window load edge", () => {
+/** A fixture whose `electron` dependency carries the real `electron.d.ts` types over a
+ * runtime double (`index` is evaluated with the fixture root bound as `root`). Returns the
+ * fixture plus the trimmed stdout of running `src/main.ts`, which must exit 0. */
+function electronFixture(
+  files: Record<string, string>,
+  index: (root: string) => string,
+): { fixture: Fixture; stdout: string } {
   const electron = dirname(
     Bun.resolveSync("electron/package.json", resolve(import.meta.dir, "../apps/desktop")),
   );
-  for (const loaded of [false, true]) {
-    using fixture = new Fixture({
-      "src/events.ts": protocol,
-      "src/main.ts": `import {BrowserWindow} from "electron";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};function attach(window:BrowserWindow){const {webContents}=window;webContents.on("console-message",()=>sink.publish(Ready))}const window=new BrowserWindow();attach(window);${loaded ? 'await window.loadFile("index.html");' : ""}console.log(JSON.stringify(received));`,
-    });
-    fixture.write(
-      "node_modules/electron/package.json",
-      JSON.stringify({
-        name: "electron",
-        type: "module",
-        main: "index.js",
-        types: "electron.d.ts",
-      }),
-    );
-    fixture.write(
-      "node_modules/electron/electron.d.ts",
-      readFileSync(join(electron, "electron.d.ts"), "utf8"),
-    );
-    // The dependency double delivers the documented event only after loading.
-    fixture.write(
-      "node_modules/electron/index.js",
-      'import {EventEmitter} from "node:events";export class BrowserWindow{webContents=new EventEmitter();loadFile(){this.webContents.emit("console-message",{});return Promise.resolve()}}',
-    );
-    const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-      timeout: 5000,
-    });
-    expect(actual.exitCode).toBe(0);
-    expect(actual.stdout.toString().trim()).toBe(loaded ? '["ready"]' : "[]");
-    expect(fixture.run("publisher").code).toBe(loaded ? 0 : 2);
-  }
-}, 180_000);
-
-test("Electron window listeners credit window-manager events; first paint needs the load edge", () => {
-  const electron = dirname(
-    Bun.resolveSync("electron/package.json", resolve(import.meta.dir, "../apps/desktop")),
-  );
-  for (const loaded of [false, true]) {
-    using fixture = new Fixture({
-      "src/events.ts": protocol,
-      "src/main.ts": `import {BrowserWindow} from "electron";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const window=new BrowserWindow();window.on("resize",()=>sink.publish(Ready));window.once("ready-to-show",()=>sink.publish(Ready));${loaded ? 'await window.loadFile("index.html");' : ""}console.log(JSON.stringify(received));`,
-    });
-    fixture.write(
-      "node_modules/electron/package.json",
-      JSON.stringify({
-        name: "electron",
-        type: "module",
-        main: "index.js",
-        types: "electron.d.ts",
-      }),
-    );
-    fixture.write(
-      "node_modules/electron/electron.d.ts",
-      readFileSync(join(electron, "electron.d.ts"), "utf8"),
-    );
-    // The dependency double paints (ready-to-show) only after loading.
-    fixture.write(
-      "node_modules/electron/index.js",
-      'import {EventEmitter} from "node:events";export class BrowserWindow extends EventEmitter{loadFile(){this.emit("ready-to-show");return Promise.resolve()}}',
-    );
-    const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-      timeout: 5000,
-    });
-    expect(actual.exitCode).toBe(0);
-    expect(actual.stdout.toString().trim()).toBe(loaded ? '["ready"]' : "[]");
-    const result = fixture.run("publisher");
-    expect(result.code).toBe(loaded ? 0 : 2);
-    if (!loaded) expect(result.output).toContain("unsupported_native_event_lifecycle");
-  }
-}, 180_000);
-
-test("Electron app.getPath roots a durable file family like homedir does", () => {
-  const electron = dirname(
-    Bun.resolveSync("electron/package.json", resolve(import.meta.dir, "../apps/desktop")),
-  );
-  using fixture = new Fixture({
-    "src/main.ts": `import {app} from "electron";import {readFileSync,writeFileSync} from "node:fs";import {join} from "node:path";const file=()=>join(app.getPath("userData"),"window-bounds.json");writeFileSync(file(),"sentinel");console.log(readFileSync(file(),"utf8"));`,
-  });
+  const fixture = new Fixture(files);
   fixture.write(
     "node_modules/electron/package.json",
     JSON.stringify({ name: "electron", type: "module", main: "index.js", types: "electron.d.ts" }),
@@ -1154,16 +1084,63 @@ test("Electron app.getPath roots a durable file family like homedir does", () =>
     "node_modules/electron/electron.d.ts",
     readFileSync(join(electron, "electron.d.ts"), "utf8"),
   );
-  // The dependency double resolves the per-user directory to the fixture root.
-  fixture.write(
-    "node_modules/electron/index.js",
-    `export const app={getPath(){return ${JSON.stringify(fixture.root)}}};`,
-  );
+  fixture.write("node_modules/electron/index.js", index(fixture.root));
   const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
     timeout: 5000,
   });
   expect(actual.exitCode).toBe(0);
-  expect(actual.stdout.toString().trim()).toBe("sentinel");
+  return { fixture, stdout: actual.stdout.toString().trim() };
+}
+
+const ELECTRON_SINK = `import {BrowserWindow} from "electron";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};`;
+const ELECTRON_REPORT = "console.log(JSON.stringify(received));";
+
+test("Electron renderer listeners require a real window load edge", () => {
+  for (const loaded of [false, true]) {
+    // The dependency double delivers the documented event only after loading.
+    const run = electronFixture(
+      {
+        "src/events.ts": protocol,
+        "src/main.ts": `${ELECTRON_SINK}function attach(window:BrowserWindow){const {webContents}=window;webContents.on("console-message",()=>sink.publish(Ready))}const window=new BrowserWindow();attach(window);${loaded ? 'await window.loadFile("index.html");' : ""}${ELECTRON_REPORT}`,
+      },
+      () =>
+        'import {EventEmitter} from "node:events";export class BrowserWindow{webContents=new EventEmitter();loadFile(){this.webContents.emit("console-message",{});return Promise.resolve()}}',
+    );
+    using fixture = run.fixture;
+    expect(run.stdout).toBe(loaded ? '["ready"]' : "[]");
+    expect(fixture.run("publisher").code).toBe(loaded ? 0 : 2);
+  }
+}, 180_000);
+
+test("Electron window listeners credit window-manager events; first paint needs the load edge", () => {
+  for (const loaded of [false, true]) {
+    // The dependency double paints (ready-to-show) only after loading.
+    const run = electronFixture(
+      {
+        "src/events.ts": protocol,
+        "src/main.ts": `${ELECTRON_SINK}const window=new BrowserWindow();window.on("resize",()=>sink.publish(Ready));window.once("ready-to-show",()=>sink.publish(Ready));${loaded ? 'await window.loadFile("index.html");' : ""}${ELECTRON_REPORT}`,
+      },
+      () =>
+        'import {EventEmitter} from "node:events";export class BrowserWindow extends EventEmitter{loadFile(){this.emit("ready-to-show");return Promise.resolve()}}',
+    );
+    using fixture = run.fixture;
+    expect(run.stdout).toBe(loaded ? '["ready"]' : "[]");
+    const result = fixture.run("publisher");
+    expect(result.code).toBe(loaded ? 0 : 2);
+    if (!loaded) expect(result.output).toContain("unsupported_native_event_lifecycle");
+  }
+}, 180_000);
+
+test("Electron app.getPath roots a durable file family like homedir does", () => {
+  // The dependency double resolves the per-user directory to the fixture root.
+  const run = electronFixture(
+    {
+      "src/main.ts": `import {app} from "electron";import {readFileSync,writeFileSync} from "node:fs";import {join} from "node:path";const file=()=>join(app.getPath("userData"),"window-bounds.json");writeFileSync(file(),"sentinel");console.log(readFileSync(file(),"utf8"));`,
+    },
+    (root) => `export const app={getPath(){return ${JSON.stringify(root)}}};`,
+  );
+  using fixture = run.fixture;
+  expect(run.stdout).toBe("sentinel");
   const result = fixture.run("store", fixture.schema());
   expect(result.output).not.toContain("dynamic_store_boundary");
   expect(result.output).toContain('"family":"$electron.userData/window-bounds.json"');

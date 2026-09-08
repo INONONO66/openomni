@@ -7,6 +7,31 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 const realClient = { createRoot, hydrateRoot };
 import { GATEWAY_CHANNEL, type DesktopApi, type GatewayEndpoint } from "../src/preload/api";
 
+type Globals = { document?: object; window?: object; desktop?: DesktopApi };
+const ENVIRONMENT = ["OPENOMNI_WS_URL", "OPENOMNI_WS_TOKEN", "ELECTRON_RENDERER_URL"] as const;
+
+/** Snapshot the browser globals and gateway env the entries touch; returns the restorer. */
+function snapshotHost(globals: Globals): () => void {
+  const previous = { ...globals };
+  const environment = ENVIRONMENT.map((key) => [key, process.env[key]] as const);
+  const restore = (target: Record<string, unknown>, key: string, value: unknown) => {
+    if (value === undefined) delete target[key];
+    else target[key] = value;
+  };
+  return () => {
+    for (const key of ["document", "window", "desktop"] as const) restore(globals, key, previous[key]);
+    for (const [key, value] of environment) restore(process.env, key, value);
+  };
+}
+
+type DebugCall = readonly [string, (...args: unknown[]) => void];
+/** Fire the webContents debug listener registered under `name` with `args`. */
+function fireDebug(calls: readonly DebugCall[] | undefined, name: string, ...args: unknown[]): void {
+  const call = calls?.find(([registered]) => registered === name);
+  expect(call).toBeDefined();
+  call?.[1](...args);
+}
+
 test("desktop entries register IPC before window creation and render without awaiting the gateway", async () => {
   const ready = Promise.withResolvers<void>();
   const userData = mkdtempSync(join(tmpdir(), "desktop-entry-"));
@@ -17,12 +42,8 @@ test("desktop entries register IPC before window creation and render without awa
   const order: string[] = [];
   const rendered: object[] = [];
   const element = {};
-  const globals = globalThis as { document?: object; window?: object; desktop?: DesktopApi };
-  const previousDocument = globals.document;
-  const previousWindow = globals.window;
-  const previousDesktop = globals.desktop;
-  const environment = ["OPENOMNI_WS_URL", "OPENOMNI_WS_TOKEN", "ELECTRON_RENDERER_URL"] as const;
-  const previousEnvironment = environment.map((key) => process.env[key]);
+  const globals = globalThis as Globals;
+  const restoreHost = snapshotHost(globals);
   let exposed: DesktopApi | undefined;
 
   class WindowDouble {
@@ -159,17 +180,9 @@ test("desktop entries register IPC before window creation and render without awa
     const log = spyOn(console, "log").mockImplementation(() => undefined);
     const error = spyOn(console, "error").mockImplementation(() => undefined);
     const debug = windows[0]?.webContents.on.mock.calls;
-    debug?.find(([name]) => name === "console-message")?.[1]({
-      level: 1,
-      message: "fixture",
-      sourceId: "test",
-      lineNumber: 2,
-    });
-    debug?.find(([name]) => name === "render-process-gone")?.[1](
-      {},
-      { reason: "crashed", exitCode: 1 },
-    );
-    debug?.find(([name]) => name === "did-fail-load")?.[1]({}, 3, "failed", "test");
+    fireDebug(debug, "console-message", { level: 1, message: "fixture", sourceId: "test", lineNumber: 2 });
+    fireDebug(debug, "render-process-gone", {}, { reason: "crashed", exitCode: 1 });
+    fireDebug(debug, "did-fail-load", {}, 3, "failed", "test");
     expect(log).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledTimes(2);
     log.mockRestore();
@@ -186,17 +199,7 @@ test("desktop entries register IPC before window creation and render without awa
     expect(order).toEqual(["root", "render"]);
     expect(rendered).toHaveLength(1);
   } finally {
-    if (previousDocument === undefined) delete globals.document;
-    else globals.document = previousDocument;
-    if (previousWindow === undefined) delete globals.window;
-    else globals.window = previousWindow;
-    if (previousDesktop === undefined) delete globals.desktop;
-    else globals.desktop = previousDesktop;
-    for (const [index, key] of environment.entries()) {
-      const value = previousEnvironment[index];
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    restoreHost();
     jest.useRealTimers();
     rmSync(userData, { recursive: true, force: true });
     mock.restore();

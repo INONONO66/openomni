@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
-import { renderToStaticMarkup } from "react-dom/server";
-import { App } from "../src/renderer/app";
-import { StateProvider } from "../src/renderer/state/provider";
-import { queryKeys } from "../src/renderer/state/queries";
 import { consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { renderShell } from "./helpers";
 
 /**
  * The shell's first paint, from the store and the endpoint query and nothing
@@ -16,16 +12,7 @@ beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
 });
 
-/** Render with the endpoint query already answered, or still in flight. */
-function shell(endpoint: "pending" | null) {
-  const client = new QueryClient();
-  if (endpoint !== "pending") client.setQueryData(queryKeys.gatewayEndpoint, endpoint);
-  return renderToStaticMarkup(
-    <StateProvider client={client}>
-      <App platform="darwin" storage={null} />
-    </StateProvider>,
-  );
-}
+const shell = renderShell;
 
 describe("nothing open", () => {
   test("Given no sessions, When the app renders, Then both columns say so and nothing is fabricated", () => {

@@ -1362,90 +1362,98 @@ class Provenance {
             declared.add(event.literal.text);
         }
       });
-    const events = new Set<string>();
-    if (symbol?.name === "Process") {
-      // Node's documented signal events, restricted to catchable host signals.
-      // A private EventEmitter name is not an operating-system signal.
-      walk(source, (node) => {
-        if (!ts.isTypeAliasDeclaration(node) || node.name.text !== "Signals") return;
-        walk(node.type, (part) => {
-          if (ts.isStringLiteral(part)) {
-            declared.add(part.text);
-            if (
-              Object.hasOwn(constants.signals, part.text) &&
-              !["SIGKILL", "SIGSTOP"].includes(part.text)
-            )
-              events.add(part.text);
-          }
-        });
-      });
-      events.add("exit");
-      events.add("beforeExit");
-    } else if (symbol?.name === "BrowserWindow") {
-      // The window manager and the user move, resize, focus and close a window
-      // that production constructed. First paint additionally needs the renderer
-      // load edge, the same prerequisite WebContents listeners carry.
-      const bindings = new Map<ts.ParameterDeclaration, ts.Expression>();
-      const windows = this.runtimeValues(receiver, bindings).filter(
-        (node) =>
-          ts.isNewExpression(node) &&
-          memberName(node.expression) === "BrowserWindow" &&
-          /electron\/electron\.d\.ts$/.test(this.nativeOwner(node)) &&
-          this.path(node),
-      );
-      if (windows.length) {
-        for (const name of WINDOW_MANAGER_EVENTS) events.add(name);
-        const loaded = this.calls.some(
-          (call) =>
-            this.path(call) &&
-            ts.isPropertyAccessExpression(call.expression) &&
-            ["loadURL", "loadFile"].includes(memberName(call.expression)) &&
-            /electron\/electron\.d\.ts$/.test(this.nativeOwner(call)) &&
-            this.runtimeValues(call.expression.expression, bindings).some((window) =>
-              windows.includes(window),
-            ),
-        );
-        if (loaded) events.add("ready-to-show");
-      }
-    } else {
-      // These recurring desktop events have OS/window-manager producers.
-      // Other App events need their own lifecycle prerequisite, not type credit.
-      const electronRoot = [...this.roots.values()].some(
-        (root) => root.symbol === "electron-vite" || root.path.endsWith("electron.vite.config.ts"),
-      );
-      if (electronRoot) {
-        events.add("activate");
-        // Electron emits ready after the main module's synchronous startup.
-        // A listener installed by a ready Promise continuation is already late.
-        if (
-          registration &&
-          this.eventContexts(registration).some(
-            (context) => context.sites[0] && ts.isSourceFile(context.sites[0]),
-          )
-        )
-          events.add("ready");
-        const window = this.sourceFiles.some((file) => {
-          let created = false;
-          walk(file, (node) => {
-            if (
-              ts.isNewExpression(node) &&
-              memberName(node.expression) === "BrowserWindow" &&
-              /electron\/electron\.d\.ts$/.test(this.nativeOwner(node)) &&
-              this.path(node)
-            )
-              created = true;
-          });
-          return created;
-        });
-        if (window) events.add("window-all-closed");
-      }
-    }
+    const events =
+      symbol?.name === "Process"
+        ? this.processEvents(source, declared)
+        : symbol?.name === "BrowserWindow"
+          ? this.windowEvents(receiver)
+          : this.appEvents(registration);
     return {
       declaration,
       declared,
       events,
       documentation: NATIVE_EVENT_DOCUMENTATION[symbol?.name === "Process" ? "Process" : symbol?.name === "BrowserWindow" ? "BrowserWindow" : "App"],
     };
+  }
+  /** Node's documented signal events, restricted to catchable host signals.
+   * A private EventEmitter name is not an operating-system signal. */
+  private processEvents(source: ts.SourceFile, declared: Set<string>): Set<string> {
+    const events = new Set<string>(["exit", "beforeExit"]);
+    walk(source, (node) => {
+      if (!ts.isTypeAliasDeclaration(node) || node.name.text !== "Signals") return;
+      walk(node.type, (part) => {
+        if (ts.isStringLiteral(part)) {
+          declared.add(part.text);
+          if (
+            Object.hasOwn(constants.signals, part.text) &&
+            !["SIGKILL", "SIGSTOP"].includes(part.text)
+          )
+            events.add(part.text);
+        }
+      });
+    });
+    return events;
+  }
+  /** A production `new BrowserWindow()` from Electron's own declaration. */
+  private isProductionWindow(node: ts.Node): boolean {
+    return (
+      ts.isNewExpression(node) &&
+      memberName(node.expression) === "BrowserWindow" &&
+      /electron\/electron\.d\.ts$/.test(this.nativeOwner(node)) &&
+      Boolean(this.path(node))
+    );
+  }
+  /** The window manager and the user move, resize, focus and close a window that
+   * production constructed. First paint additionally needs the renderer load
+   * edge, the same prerequisite WebContents listeners carry. */
+  private windowEvents(receiver: ts.Node): Set<string> {
+    const events = new Set<string>();
+    const bindings = new Map<ts.ParameterDeclaration, ts.Expression>();
+    const windows = this.runtimeValues(receiver, bindings).filter((node) =>
+      this.isProductionWindow(node),
+    );
+    if (!windows.length) return events;
+    for (const name of WINDOW_MANAGER_EVENTS) events.add(name);
+    const loaded = this.calls.some(
+      (call) =>
+        this.path(call) &&
+        ts.isPropertyAccessExpression(call.expression) &&
+        ["loadURL", "loadFile"].includes(memberName(call.expression)) &&
+        /electron\/electron\.d\.ts$/.test(this.nativeOwner(call)) &&
+        this.runtimeValues(call.expression.expression, bindings).some((window) =>
+          windows.includes(window),
+        ),
+    );
+    if (loaded) events.add("ready-to-show");
+    return events;
+  }
+  /** These recurring desktop events have OS/window-manager producers. Other App
+   * events need their own lifecycle prerequisite, not type credit. */
+  private appEvents(registration?: ts.CallExpression): Set<string> {
+    const events = new Set<string>();
+    const electronRoot = [...this.roots.values()].some(
+      (root) => root.symbol === "electron-vite" || root.path.endsWith("electron.vite.config.ts"),
+    );
+    if (!electronRoot) return events;
+    events.add("activate");
+    // Electron emits ready after the main module's synchronous startup.
+    // A listener installed by a ready Promise continuation is already late.
+    if (
+      registration &&
+      this.eventContexts(registration).some(
+        (context) => context.sites[0] && ts.isSourceFile(context.sites[0]),
+      )
+    )
+      events.add("ready");
+    const window = this.sourceFiles.some((file) => {
+      let created = false;
+      walk(file, (node) => {
+        if (this.isProductionWindow(node)) created = true;
+      });
+      return created;
+    });
+    if (window) events.add("window-all-closed");
+    return events;
   }
   private dispatchEvents(): void {
     for (const [registration, receiver] of this.eventRegistrations)
