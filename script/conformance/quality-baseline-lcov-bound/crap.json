@@ -9757,15 +9757,6 @@
   },
   {
     "gate": "crap",
-    "path": "script/quality-ci-metrics.ts",
-    "line": 55,
-    "endLine": 110,
-    "symbol": "FunctionDeclaration:measureBounds",
-    "value": 42.721000000000004,
-    "count": 1
-  },
-  {
-    "gate": "crap",
     "path": "script/quality-coverage-record.ts",
     "line": 1,
     "endLine": 53,

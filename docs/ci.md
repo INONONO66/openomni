@@ -26,12 +26,12 @@ and lint gates still run for executable changes.
 
 ## Quality on pull requests
 
-The measured quality ratchet (`quality` job) runs on main pushes, scheduled
+The quality jobs (`quality-static`, `quality-gates`, `quality`) run on main pushes, scheduled
 runs, and manual dispatch only. Pull requests skip it by design and the final
-`CI` status requires that skip (`script/ci.ts` gate: quality is mandatory
+`CI` status requires that skip (`script/ci.ts` gate: the quality jobs are mandatory
 when `CI_EVENT` is not `pull_request`). This is the interim shape while the
 quality pipeline is split and made change-class-aware; the skip is reversed by
-deleting the event condition on the job and in the gate map.
+deleting the event condition on the three jobs and in the gate map.
 
 ## Execution
 
@@ -52,9 +52,33 @@ and an unknown lane fail. A selected PR does not borrow old reports from
 unselected workspaces. Full runs select every lane. Topology remains the owner
 of lane membership and test commands.
 
-The #945 quality job seals one immutable native receipt per selected coverage
-lane, then verifies source hashes, run identity, and line-record membership
-before running type, publisher, export, store, metrics, and clone collectors.
+Quality Static runs five independent matrix legs (`types`, `publisher`, `export`,
+`store`, and `metrics`) after Build, in parallel with tests. The metrics leg
+collects static complexity, instrumentation maps, and clones without coverage.
+Each leg uploads `quality-leg-<leg>` with its measurement, identity, and native
+process JSON where applicable. Identity records bind the inventory and contract
+hashes and record duration. Phase timings appear on stderr as
+`[quality-phase] name=<phase> ms=<duration>`.
+
+Quality Gates also runs after Build without waiting for tests. It runs ratchet
+self-tests, dead-export and import-cycle checks, tsconfig inheritance, ledger
+rename and schema-drift checks, and uploads `source-metrics`. Schema drift uses
+Bun's SQLite; this job does not install Python.
+
+Each selected coverage test lane seals one immutable native receipt. Quality
+waits for tests and all Quality Static legs, downloads their artifacts, checks
+Python, and runs `quality-measure.ts finish`. Finish rejects missing or stale
+leg identities, verifies native coverage, joins coverage-dependent metrics, and
+runs the ratchet. Its `quality-measurements` artifact retains `quality-results/`,
+`quality-legs/`, and `quality-plan.json`, including available results on failure.
+Per-leg artifacts and measurements are retained for 14 days.
+
+Static jobs have 35-minute timeouts, allowing setup and artifact upload around
+the native collectors' 30-minute process limit; metrics has 45 minutes. Quality
+Gates has 15 minutes, Quality finish has 20 minutes, and test lanes retain 60 minutes.
+The final CI gate requires Quality Static, Quality Gates, and Quality to succeed
+for executable plans; only planned documentation skips are accepted.
+
 `d945-lcov-crap-upper-bound@1` uses only uniquely mapped, wholly executed source
 lines; ambiguous line hits never become statement hits. These counters are a
 lower bound on proven statement coverage, so the unchanged CRAP formula yields
@@ -161,9 +185,7 @@ Use the pinned Bun version, a clean build, and the same commands as CI:
 ```bash
 bun install --frozen-lockfile
 bun run ci build
-bun run script/ci-plan.ts --full
-bun run ci test --lane agent
-bun run ci test --lane scripts
+bun run script/ci-plan.ts --full > quality-plan.json
 bun run lint
 bun run script/check-topology.ts
 bun run script/check-deps.ts
@@ -172,6 +194,39 @@ bun run script/check-dead-exports.ts
 bun run script/verify-tsconfig-inheritance.ts
 bun run script/verify-ledger-rename.ts
 bun run script/check-ledger-schema-drift.ts
+```
+
+For measured quality, use Python 3.12.12 and Node 24.19.0 as in CI. Start from
+fresh lane coverage directories and a new receipt directory: `begin` rejects
+pre-existing LCOV. The following uses `jq` to run every selected lane, wrapping
+coverage lanes with receipts bound to the same run identity. Do not change owned
+sources between collection, tests, and finish.
+
+```bash
+set -euo pipefail
+python -m pip install --requirement script/conformance/quality-python-requirements.txt
+export D945_PYTHON="$(command -v python)"
+export PYTHONDONTWRITEBYTECODE=1
+QUALITY_RUN="local:$(uuidgen):$(git rev-parse HEAD)"
+QUALITY_BASE=origin/main
+mkdir quality-receipts
+for leg in types publisher export store metrics; do
+  bun run script/quality-measure.ts collect --leg "$leg" --output quality-legs
+done
+while IFS=$'\t' read -r key lane coverage; do
+  receipt="quality-receipts/${lane//\//-}.json"
+  if [[ "$coverage" == true ]]; then
+    bun run script/quality-coverage-record.ts begin --lane "$lane" --run "$QUALITY_RUN" --output "$receipt"
+  fi
+  bun run ci test --lane "$key"
+  if [[ "$coverage" == true ]]; then
+    bun run script/quality-coverage-record.ts finish --lane "$lane" --run "$QUALITY_RUN" --output "$receipt"
+  fi
+done < <(jq -r '.matrix.include[] | [.key, .dir, .coverage] | @tsv' quality-plan.json)
+bun run script/check-quality-python.ts
+bun run script/quality-measure.ts finish --legs quality-legs --base "$QUALITY_BASE" \
+  --baseline script/conformance/quality-baseline-lcov-bound.json --plan quality-plan.json \
+  --run "$QUALITY_RUN" --coverage-directory quality-receipts --output quality-results
 ```
 
 The planner accepts `--base <full-SHA> --head <full-SHA>` for a local change

@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { planChanges } from "./ci-plan";
+import { gate } from "./ci";
 import { TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
+const QUALITY_JOBS = ["quality-static", "quality-gates", "quality"];
 function cli(args: readonly string[], env: Record<string, string> = {}) {
   return Bun.spawnSync([process.execPath, "script/ci.ts", ...args], {
     cwd: root,
@@ -39,7 +41,7 @@ const jobSchema = z.object({
       if: z.string().optional(),
       uses: z.string().optional(),
       with: z
-        .looseObject({ ref: z.string().optional(), "fetch-depth": z.number().optional() })
+        .object({ ref: z.string().optional(), "fetch-depth": z.number().optional() })
         .optional(),
       "working-directory": z.string().optional(),
     }),
@@ -50,10 +52,10 @@ test("docs-only planning keeps both final statuses successful while work is inte
   // Given a real planner decision and GitHub's skipped job results.
   const plan = planChanges(["README.md"]);
   const needs = Object.fromEntries(
-    ["prepare", "tests", "static", "deps", "quality", "dependency-review"].map((job) => [
-      job,
-      { result: "skipped" },
-    ]),
+    [
+      "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+      "dependency-review",
+    ].map((job) => [job, { result: "skipped" }]),
   );
   // When the actual CLI consumes GitHub's serialized output.
   const result = cli(["gate"], {
@@ -65,17 +67,21 @@ test("docs-only planning keeps both final statuses successful while work is inte
   expect(result.exitCode).toBe(0);
 });
 
-for (const job of ["plan", "prepare", "tests", "static", "deps", "quality", "dependency-review"]) {
+for (const job of [
+  "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+  "dependency-review",
+]) {
   for (const status of ["failure", "cancelled", "skipped", "missing"]) {
     test(`final gate rejects ${job} ${status} for a required full run`, () => {
       // Given a full plan and one unsuccessful/missing required result. Quality
       // is required on pushes, so the push event exercises every job.
       const needs: Record<string, { result: string }> = Object.fromEntries(
-        ["plan", "prepare", "tests", "static", "deps", "quality", "dependency-review"].map(
-          (key) => [key, { result: "success" }],
-        ),
+        [
+          "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+          "dependency-review",
+        ].map((key) => [key, { result: "success" }]),
       );
-      if (job === "dependency-review") needs.quality = { result: "skipped" };
+      if (job === "dependency-review") for (const q of QUALITY_JOBS) needs[q] = { result: "skipped" };
       if (status === "missing") delete needs[job];
       else needs[job] = { result: status };
       // When the real final-gate entry point runs.
@@ -90,6 +96,29 @@ for (const job of ["plan", "prepare", "tests", "static", "deps", "quality", "dep
     });
   }
 }
+
+test("full gate executes the required quality jobs in process", () => {
+  const plan = planChanges([], true);
+  const env = {
+    CI_NEEDS: JSON.stringify({
+      ...Object.fromEntries([
+        "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+      ].map((job) => [job, { result: "success" }])),
+      "dependency-review": { result: "skipped" },
+    }),
+    CI_EVENT: "push",
+  };
+  const previous = Object.keys(env).map((key) => [key, process.env[key]] as const);
+  try {
+    Object.assign(process.env, env);
+    expect(gate({ ...plan, matrix: { include: [...plan.matrix.include] } }, false)).toBeUndefined();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 
 test("final gate rejects absent planner output", () => {
   // Given missing output, even if GitHub reports the plan job as successful.
@@ -159,7 +188,7 @@ test("workflow restores the one build before every executable consumer", () => {
     .object({ jobs: z.record(z.string(), jobSchema) })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
   // When discovering consumers, then none rebuilds or bypasses artifact validation.
-  for (const name of ["tests", "static", "deps", "quality"]) {
+  for (const name of ["tests", "static", "deps", "quality-static", "quality-gates", "quality"]) {
     expect(
       jobs[name]?.steps.some((step) => step.uses?.startsWith("actions/download-artifact@")),
     ).toBe(true);
@@ -176,6 +205,52 @@ test("workflow restores the one build before every executable consumer", () => {
   expect(jobs.static?.steps.some((step) => step.run?.includes("bun run lint:docs"))).toBe(true);
 });
 
+test("quality collectors run beside tests and join the required final gates", () => {
+  const jobs = z
+    .object({ jobs: z.object({ quality: jobSchema, "quality-static": jobSchema, "quality-gates": jobSchema, ci: jobSchema }) })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  expect(jobs.quality.needs).toContain("quality-static");
+  expect(jobs.quality.needs).toContain("tests");
+  expect(jobs["quality-static"].needs).toEqual(["plan", "prepare"]);
+  expect(jobs["quality-static"].needs).not.toContain("tests");
+  expect(jobs["quality-gates"].needs).toEqual(["plan", "prepare"]);
+  expect(jobs.ci.needs).toContain("quality-static");
+  expect(jobs.ci.needs).toContain("quality-gates");
+});
+
+test("quality matrix has exactly five bounded legs and no job exceeds sixty minutes", () => {
+  const jobs = z
+    .object({
+      jobs: z.record(
+        z.string(),
+        jobSchema.extend({
+          "timeout-minutes": z.union([z.number(), z.string()]),
+          strategy: z
+            .object({
+              "fail-fast": z.boolean(),
+              matrix: z.union([z.string(), z.object({ leg: z.array(z.string()).optional() })]),
+            })
+            .optional(),
+        }),
+      ),
+    })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  for (const [name, job] of Object.entries(jobs)) {
+    const timeout = job["timeout-minutes"];
+    if (typeof timeout === "number") {
+      expect(timeout).toBeGreaterThan(0);
+      expect(timeout).toBeLessThanOrEqual(60);
+    } else {
+      expect(name).toBe("quality-static");
+      expect(timeout).toBe(`\${{ matrix.leg == 'metrics' && 45 || 35 }}`);
+    }
+  }
+  expect(jobs["quality-static"]?.strategy).toEqual({
+    "fail-fast": false,
+    matrix: { leg: ["types", "publisher", "export", "store", "metrics"] },
+  });
+});
+
 test("the stable Test status accepts only the planned documentation skip", () => {
   // Given the real docs plan and exactly the Test job's needs.
   const result = cli(["test-gate"], {
@@ -190,47 +265,50 @@ test("the stable Test status accepts only the planned documentation skip", () =>
   expect(result.exitCode).toBe(0);
 });
 
-test("a pull request requires the skipped quality job and rejects a quality run", () => {
-  // Given a full pull-request plan where GitHub skipped quality by design.
+test("a pull request requires every quality job skipped and rejects a quality run", () => {
+  // Given a full pull-request plan where GitHub skipped the quality jobs by design.
   const needs = Object.fromEntries(
     ["plan", "prepare", "tests", "static", "deps", "dependency-review"].map((key) => [
       key,
       { result: "success" },
     ]),
   );
+  const skippedQuality = Object.fromEntries(QUALITY_JOBS.map((q) => [q, { result: "skipped" }]));
   // When the real gate executes, then the intentional skip is the only accepted result.
   const skipped = cli(["gate"], {
     CI_PLAN: JSON.stringify(planChanges([], true)),
     CI_EVENT: "pull_request",
-    CI_NEEDS: JSON.stringify({ ...needs, quality: { result: "skipped" } }),
+    CI_NEEDS: JSON.stringify({ ...needs, ...skippedQuality }),
   });
   expect(skipped.exitCode).toBe(0);
-  const ran = cli(["gate"], {
-    CI_PLAN: JSON.stringify(planChanges([], true)),
-    CI_EVENT: "pull_request",
-    CI_NEEDS: JSON.stringify({ ...needs, quality: { result: "success" } }),
-  });
-  expect(ran.exitCode).not.toBe(0);
-  expect(ran.stderr.toString()).toContain("quality: success");
+  for (const q of QUALITY_JOBS) {
+    const ran = cli(["gate"], {
+      CI_PLAN: JSON.stringify(planChanges([], true)),
+      CI_EVENT: "pull_request",
+      CI_NEEDS: JSON.stringify({ ...needs, ...skippedQuality, [q]: { result: "success" } }),
+    });
+    expect(ran.exitCode).not.toBe(0);
+    expect(ran.stderr.toString()).toContain(`${q}: success`);
+  }
 });
 
-test("the workflow skips the quality job on pull requests", () => {
-  // Given the shipped workflow, then quality is gated on the event, not only the plan.
+test("the workflow skips every quality job on pull requests", () => {
+  // Given the shipped workflow, then each quality job is gated on the event, not only the plan.
   const jobs = z
     .object({ jobs: z.record(z.string(), jobSchema) })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
-  expect(jobs.quality?.if).toBe(
-    "needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'",
-  );
+  for (const q of QUALITY_JOBS)
+    expect(jobs[q]?.if).toBe(
+      "needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'",
+    );
 });
 
 test("the full push gate accepts successful checks without PR-only dependency review", () => {
   // Given full main-branch results with only the PR-specific check disabled.
   const needs = Object.fromEntries(
-    ["plan", "prepare", "tests", "static", "deps", "quality"].map((key) => [
-      key,
-      { result: "success" },
-    ]),
+    [
+      "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+    ].map((key) => [key, { result: "success" }]),
   );
   // When the real gate executes, then all mandatory work is accepted.
   const result = cli(["gate"], {
