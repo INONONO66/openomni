@@ -27,12 +27,15 @@ export function TreeRow({
   current = false,
   expanded,
   secondary,
+  trailing,
   children,
   ...rest
 }: {
   readonly level?: TreeLevel;
   readonly current?: boolean;
   readonly secondary?: ReactNode;
+  /** Rendered after the text block, centered on the row's full height. */
+  readonly trailing?: ReactNode;
   /** Set only on a row that opens a group; the chevron reports it. */
   readonly expanded?: boolean | undefined;
   readonly children: ReactNode;
@@ -63,6 +66,7 @@ export function TreeRow({
           </span>
         )}
       </span>
+      {trailing}
     </BaseButton>
   );
 }

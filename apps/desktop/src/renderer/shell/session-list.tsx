@@ -50,14 +50,12 @@ export function SessionList({
                           />
                         ) : undefined
                       }
+                      trailing={<StatusGlyph {...sessionGlyphProps(session.phase)} />}
                       onClick={(event) => onSelect(id, "selection", event.metaKey || event.ctrlKey)}
                     >
-                      <span className="flex w-full items-center gap-2">
-                        <Text className="min-w-0 flex-1 truncate" level="label">
-                          {session.title}
-                        </Text>
-                        <StatusGlyph {...sessionGlyphProps(session.phase)} />
-                      </span>
+                      <Text className="block min-w-0 truncate" level="label">
+                        {session.title}
+                      </Text>
                     </TreeRow>
                   </li>
                 );

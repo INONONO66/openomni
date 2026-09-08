@@ -275,6 +275,7 @@ function SessionRow({
           <SessionSecondary session={session} now={now} />
         ) : undefined
       }
+      trailing={<StatusGlyph {...sessionGlyphProps(session.phase)} />}
       onClick={(event) => onSelect(session.id, event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => onKeyDown(event, session.id)}
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}
@@ -285,14 +286,11 @@ function SessionRow({
           weight — the same treatment matched glyphs get — so keeping it at
           `fg` would make the highlight invisible on precisely the row the
           operator is standing on. */}
-      <span className="flex w-full items-center gap-2">
-        <Highlight
-          className="min-w-0 flex-1"
-          runs={highlightRuns(session.title, entry.spans)}
-          tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
-        />
-        <StatusGlyph {...sessionGlyphProps(session.phase)} />
-      </span>
+      <Highlight
+        className="block min-w-0 truncate"
+        runs={highlightRuns(session.title, entry.spans)}
+        tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
+      />
     </TreeRow>
   );
 }
