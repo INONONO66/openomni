@@ -4,6 +4,7 @@ import {
   ConsoleContent,
   type ConsoleShell,
   type ConsoleStrip,
+  StatusGlyph,
   type WindowPlatform,
 } from "@openomni/ui";
 import { useStore } from "@tanstack/react-store";
@@ -19,6 +20,7 @@ import { dispatchShellCommand } from "./shell/commands";
 import { jumpFrom } from "./shell/history";
 import { placeIcon } from "./shell/place-icon";
 import { SessionList } from "./shell/session-list";
+import { sessionGlyphProps } from "./shell/session-glyph";
 import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
 import { useGatewayEndpoint } from "./state/queries";
@@ -42,6 +44,8 @@ import {
   type SessionId,
   setDraft,
   setSessionTitleIfPlaceholder,
+  setSessionPhase,
+  setSessionAttention,
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
@@ -50,8 +54,15 @@ import {
   toggleSidebar,
 } from "./state/store";
 
+if (import.meta.env?.DEV) {
+  Object.assign(window, {
+    __openomniDev: { store: consoleStore, setSessionPhase, setSessionAttention },
+  });
+}
+
 export function App({ platform, storage }: AppEnvironment) {
   const state = useStore(consoleStore);
+  const now = Date.now();
   const { sessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
   const tab = activeTab(state);
   const place = activePlace(state);
@@ -60,7 +71,7 @@ export function App({ platform, storage }: AppEnvironment) {
   const search = useRef({ searching: false, invokingTabId: state.activeTabId });
   const focusRecovery = useRef<"panel" | "tab" | null>(null);
   const [held, setHeld] = useState<Held>(() => ({
-    shown: idealOrder(sessions),
+    shown: idealOrder(sessions, now),
     pendingChanges: 0,
   }));
 
@@ -125,7 +136,7 @@ export function App({ platform, storage }: AppEnvironment) {
     setHeld((previous) =>
       applyAtBoundary(
         previous,
-        idealOrder(consoleStore.state.sessions),
+        idealOrder(consoleStore.state.sessions, Date.now()),
         searching ? null : boundary,
       ),
     );
@@ -185,7 +196,11 @@ export function App({ platform, storage }: AppEnvironment) {
   const select = (id: SessionId, boundary: Boundary | null = "selection", newTab = false) => {
     const place = { kind: "session", sessionId: id } as const;
     if (newTab) openTab(place);
-    else navigate(place, boundary === null ? search.current.invokingTabId : consoleStore.state.activeTabId);
+    else
+      navigate(
+        place,
+        boundary === null ? search.current.invokingTabId : consoleStore.state.activeTabId,
+      );
     arrive(boundary);
   };
   const travel = (action: () => void) => {
@@ -207,7 +222,15 @@ export function App({ platform, storage }: AppEnvironment) {
     tabs: tabs.map((entry) => ({
       id: entry.id,
       title: tabTitle(entry, state),
-      icon: placeIcon(entry.place),
+      icon:
+        entry.place.kind === "session" ? (
+          <StatusGlyph
+            {...sessionGlyphProps(phaseForPlace(entry.place, sessions))}
+            size="compact"
+          />
+        ) : (
+          placeIcon(entry.place)
+        ),
       active: entry.id === state.activeTabId,
     })),
     onActivate: (id) => {
@@ -224,7 +247,7 @@ export function App({ platform, storage }: AppEnvironment) {
     history: {
       entries: historyMenuEntries(state),
       currentId: history === undefined ? null : String(history.cursor),
-      now: Date.now(),
+      now,
       canBack: history !== undefined && canGoBack(history),
       canForward: history !== undefined && canGoForward(history),
       onBack: () => travel(back),
@@ -249,6 +272,7 @@ export function App({ platform, storage }: AppEnvironment) {
       route={place?.kind === "route" ? place.route : null}
       selectedId={place?.kind === "session" ? place.sessionId : null}
       sessions={sessions}
+      now={now}
     />
   );
   const session =
@@ -266,7 +290,7 @@ export function App({ platform, storage }: AppEnvironment) {
         key={tab?.id ?? "empty"}
       >
         {place?.kind === "route" && place.route === "sessions" ? (
-          <SessionList now={Date.now()} onSelect={select} sessions={sessions} />
+          <SessionList now={now} onSelect={select} ordered={held.shown} sessions={sessions} />
         ) : undefined}
       </ConsoleContent>
     ) : (
@@ -335,6 +359,12 @@ function SessionContent({
   };
   return (
     <ConsoleContent
+      header={
+        <h1 className="flex items-center gap-2 px-section py-3 font-semibold text-label">
+          <StatusGlyph {...sessionGlyphProps(session.phase)} />
+          {session.title}
+        </h1>
+      }
       emptyLabel="No turns in this session yet."
       transcript={{
         id: session.id,
@@ -384,12 +414,12 @@ const generateId = () => {
   return `m${nextId}`;
 };
 
-function idealOrder(sessions: readonly Session[]) {
-  return orderByAttention(
-    sessions.map((session) => ({
-      id: session.id,
-      projectId: session.projectId,
-      createdAt: session.createdAt,
-    })),
-  );
+function phaseForPlace(place: import("./state/store").Place, sessions: readonly Session[]) {
+  return place.kind === "session"
+    ? (sessions.find((s) => s.id === place.sessionId)?.phase ?? "idle")
+    : "idle";
+}
+
+function idealOrder(sessions: readonly Session[], now: number) {
+  return orderByAttention(sessions, now);
 }

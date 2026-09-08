@@ -12,12 +12,29 @@ export type SessionId = string;
 /** The project every new session lands in until projects are real. */
 export const DEFAULT_PROJECT_ID: ProjectId = "default";
 
+export type SessionPhase =
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "waiting_input"
+  | "interrupted"
+  | "completed"
+  | "failed"
+  | "idle"
+  | "archived";
+
 export interface Session {
   readonly id: SessionId;
   readonly title: string;
   readonly titleSource: "placeholder" | "prompt";
   readonly projectId: ProjectId | null;
+  readonly phase: SessionPhase;
   readonly createdAt: number;
+  readonly lastActivityAt: number;
+  readonly phaseSince: number;
+  readonly unread: boolean;
+  readonly pinned: boolean;
+  readonly snoozedUntil: number | null;
 }
 
 export type Route = "sessions" | "inbox" | "automations" | "memory";
@@ -107,7 +124,13 @@ export function createSession(now: number = Date.now()): SessionId {
         title: "New Session",
         titleSource: "placeholder",
         projectId: DEFAULT_PROJECT_ID,
+        phase: "idle",
         createdAt: now,
+        lastActivityAt: now,
+        phaseSince: now,
+        unread: false,
+        pinned: false,
+        snoozedUntil: null,
       },
     ],
   }));
@@ -118,6 +141,27 @@ export function newSessionTab(): SessionId {
   const id = createSession();
   openTab({ kind: "session", sessionId: id });
   return id;
+}
+
+export function setSessionPhase(id: SessionId, phase: SessionPhase, now: number): void {
+  consoleStore.setState((state) => ({
+    ...state,
+    sessions: state.sessions.map((session) =>
+      session.id === id && session.phase !== phase
+        ? { ...session, phase, phaseSince: now, lastActivityAt: now }
+        : session,
+    ),
+  }));
+}
+
+export function setSessionAttention(
+  id: SessionId,
+  changes: Partial<Pick<Session, "unread" | "pinned" | "snoozedUntil" | "lastActivityAt">>,
+): void {
+  consoleStore.setState((state) => ({
+    ...state,
+    sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...changes } : s)),
+  }));
 }
 
 export function setSessionTitleIfPlaceholder(id: SessionId, text: string): void {
