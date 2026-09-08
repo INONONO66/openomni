@@ -8,6 +8,8 @@ Single source of truth for current wiring, not a declaration that every target i
 
 **#970 cutover (2026-09-08):** interrupted executor operations settle from classified durable evidence, never by rerunning a body. Attempt ordinal, cap, retry reason, usage, visible-output boundary and a non-secret credential handle are pinned on attempt actions. `restore_model_selection` and `restore_context_projection` are recorded, policy-evaluated actions that append; no schema change, no migration.
 
+**#973 conformance (2026-09-08):** the unified lifecycle is proven on the real tree, not declared. `runLifecycleTrace` (`packages/agent/test/session-lifecycle-conformance.test.ts`) runs the six section 6.7 registrations of the [lifecycle contract](session-lifecycle-contract.md) over the real store, controller, executor waves, request port, outbound path and alarm rows, asserting append-only history, causal parents, terminal uniqueness, single input consumption, one observation per commit and effect-free replay from the reopened SQLite image. No production writer moved and no fixture was deleted; the #945 all-dimension quality receipt stays with #945.
+
 **Source baseline:** #946 stage 2 includes main `678d357e` (#993/#949 stage 1), #991 codemode, #988's protocol contract and #990's desktop gateway selection. Historical #948 receipts below retain their `c4fb7748` source pin. [SLOP](SLOP.md) records deletion ownership; the PR body records the final gate commands and exit codes. Closed issue labels are not implementation evidence.
 
 ## #947 stage-1 branch receipt (2026-09-06)
@@ -40,7 +42,8 @@ async-context binding makes the PTY/FIFO regression fail with AbortError.
 [Decisions and operational limits](alarm-monitor-stage-1.md) include the
 at-most-once restart gap. Stage 2 after #946 still owes only the
 message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
-restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.
+restart tests, and B4 deletion proof. #969-#972 receipts are consumed by their
+own sections below; #973's executable evidence is in the conformance section.
 
 ### PR #994 R1 correction receipt
 
@@ -119,6 +122,14 @@ The #947 alarm band is hardened against the transition contract without a second
 Recovery modes are unchanged in kind and now visible in identity: takeover (`acquire`) advances the fence and preserves epoch, notification count and dedupe digest, so a restarted idempotent poll that prints the same batch is suppressed and the next distinct batch delivers; explicit `rearm` advances the epoch and resets both. A non-persistent (timed) watch found running at band restart settles with a `restart` summary; live PTY output in the gap is never replayed; cursor-capable backends were not added. `createAlarmWorker` (`apps/openomni/src/composition/alarm-worker.ts`) keeps only OS handles, the per-source line counter and the recovery flag; the path source hands its stat identity to the ledger as the occurrence key and keeps its snapshot only to classify create/modify.
 
 Tests: `apps/openomni/test/monitor-occurrence.test.ts` (distinct occurrences and zero-duplicate redelivery, takeover-vs-rearm dedupe, N+1 contenders, ledger-decided deadline, real PTY occurrence key), `packages/ledger/test/storage/alarm.test.ts` and `alarm-control.test.ts` (SQLite/memory parity, budget from the persisted spec), and the existing `alarm-boot-durability`, `alarm-worker-boundaries`, `monitor-budget`, `monitor-deadline`, `monitor-tool-boundaries`, `monitor-process-group` and `monitor-app` suites for evaluator restart, session hibernation and deterministic source shutdown. The contract's ALD/ALA/ALX relocation targets and `AlarmTransition` schema were not built; `session-lifecycle-contract.md` records the landed owners.
+
+## #973 lifecycle conformance
+
+`packages/agent/test/session-lifecycle-conformance.test.ts` is the section 6 HARNESS of the [lifecycle contract](session-lifecycle-contract.md). Each step of a trace runs against the real `SessionHandleStore`, session controller, `createExecutor.runBatch`, `createSessionRequests`, outbound dispatch and alarm rows, then snapshots the complete durable product of every traced session and checks: history only grows and keeps its prefix; every parent action precedes its child in the same session; at most one terminal per turn and per result slot; each inbox row is consumed at most once; exactly one `ledger.action.committed` observation per committed action. After the last step the file-backed SQLite image is reopened and the fold must equal the last prefix while dispatched bodies, tool observations and commits stay `[]`.
+
+Measured against the landed #969-#972 tree: integrated wave revisions are 9/30/30/30/26 (ordinary, approved, refused, timeout, interrupt); the durable deadline fires once and a duplicate timer or late approve commits nothing; every losing contender on a closed request is recorded once per distinct input id as `duplicate`, `late_unknown` or `rejected` and never changes the winner (a seen reply id replayed by another principal is one `duplicate` in the pure authority, a record-free `rejected` at the store); a misrouted answer is refused before any record (destination revision, action count and `seenReplyIds` asserted unchanged; the request-id routing check is pinned in `session-request.test.ts`); the winning reply is delivered as pending inbox input keyed by its input id (inbox ids are store-wide); resume keeps the interrupted turn's messages and mints a new turn/result under the latest generation while crash-open recovery keeps the pinned turn, result and generation; a boot sweep resumes every open turn in the store; a child's reply survives a lost destination wake and a lost source ack with exactly one parent inbox row and one parent consumption; alarm takeover preserves epoch/count/digest and rearm resets them.
+
+Not established here: the #945 receipt at final HEAD (any/unknown zero, clone zero, coverage 100%, complexity/Halstead/CRAP bounds, surviving mutants zero). The conformance file itself has no `any`, no `unknown`, and every unit below cyclomatic/cognitive 22 by the pinned analyzer; the campaign-wide receipt remains #945's.
 
 ## I09 deletion receipt synchronization
 
