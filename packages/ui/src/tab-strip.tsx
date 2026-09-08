@@ -205,7 +205,7 @@ function Tab({
   };
   return (
     <div
-      className={`group/tab no-drag flex h-tab-height w-56 min-w-24 max-w-56 shrink select-none items-center rounded-card border-[0.5px] pr-0.5 font-medium text-label ${tab.active ? "border-line-surface bg-raised text-fg" : "border-line-surface bg-hover text-fg-muted opacity-70 hover:opacity-100"}`}
+      className={`group/tab no-drag flex h-tab-height w-56 min-w-24 max-w-56 shrink select-none items-center rounded-card border-[0.5px] pr-0.5 font-medium text-label ${tab.active ? "border-line-surface bg-raised text-fg" : "border-line-surface bg-hover text-fg-muted"}`}
       data-ui={UI_NAMES.Tab}
       onAuxClick={onAuxClick}
       onPointerDown={(event) => {

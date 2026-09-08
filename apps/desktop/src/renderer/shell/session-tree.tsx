@@ -9,7 +9,9 @@ import {
   SidebarSection,
   Text,
   TreeRow,
+  StatusGlyph,
 } from "@openomni/ui";
+import { sessionGlyphProps } from "./session-glyph";
 import { Settings } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import type { Boundary, Ordered } from "../attention";
@@ -56,6 +58,7 @@ export function SessionTree({
   defaultSearching = false,
 }: {
   readonly ordered: Ordered;
+  readonly now?: number;
   /** Rows that moved since this order was adopted; held until a boundary. */
   readonly pendingChanges: number;
   readonly sessions: readonly Session[];
@@ -168,7 +171,7 @@ export function SessionTree({
                 No sessions yet — press +
               </Text>
             )}
-            {filtered.projects.map((group) => {
+            {filtered.groups.flatMap((attention) => attention.projects).map((group) => {
               // A query overrides a closed group: a result behind a collapsed
               // row is a result nobody was shown.
               const open = !filtered.unfiltered || !collapsedProjectIds.has(group.id);
@@ -182,7 +185,7 @@ export function SessionTree({
                   >
                     <span className="flex items-center gap-2">
                       <span className="truncate">{group.id ?? "no project"}</span>
-                      {group === filtered.projects[0] && <ChangeHint count={pendingChanges} />}
+                      {group === filtered.groups[0]?.projects[0] && <ChangeHint count={pendingChanges} />}
                     </span>
                   </TreeRow>
                   {open && (
@@ -261,11 +264,14 @@ function SessionRow({
           weight — the same treatment matched glyphs get — so keeping it at
           `fg` would make the highlight invisible on precisely the row the
           operator is standing on. */}
+      <span className="flex items-center gap-2 w-full">
+      <StatusGlyph {...sessionGlyphProps(session.phase)} />
       <Highlight
         className="w-full"
         runs={highlightRuns(session.title, entry.spans)}
         tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
       />
+      </span>
     </TreeRow>
   );
 }

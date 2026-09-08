@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { GatewayEndpoint, ShellCommand } from "../src/preload/api";
 import { App } from "../src/renderer/app";
 import { SessionList } from "../src/renderer/shell/session-list";
+import { makeSession } from "./make-session";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
@@ -264,7 +265,7 @@ test("search keeps its invoking tab and reveal while explicit result activation 
 
 test("SessionList preserves insertion order, dates and callback ids and has no controls when empty", async () => {
   const sessions = [
-    { id: "one", title: "first", titleSource: "prompt" as const, projectId: "p", createdAt: 1000 },
+    makeSession({ id: "one", title: "first", projectId: "p", createdAt: 1000 }),
     {
       id: "two",
       title: "second",

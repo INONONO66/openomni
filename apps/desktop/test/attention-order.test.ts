@@ -15,7 +15,7 @@ const facts = (id: string, createdAt: number, projectId: string | null = "p"): S
 });
 
 const ids = (projectId: string | null, ordered: ReturnType<typeof orderByAttention>) =>
-  ordered.projects.find((group) => group.id === projectId)?.sessions ?? [];
+  ordered.groups.flatMap((kind) => kind.projects).find((group) => group.id === projectId)?.sessions ?? [];
 
 describe("recency inside a group", () => {
   test("Given two sessions, When ordered, Then the newer one leads", () => {
@@ -27,7 +27,7 @@ describe("recency inside a group", () => {
   test("Given identical timestamps, When ordered from either input order, Then the sequence is stable", () => {
     const input = [facts("b", 5), facts("a", 5)];
 
-    expect(ids("p", orderByAttention(input))).toEqual(["a", "b"]);
+    expect(ids("p", orderByAttention(input, 10, 10))).toEqual(["a", "b"]);
     expect(ids("p", orderByAttention([...input].reverse()))).toEqual(["a", "b"]);
   });
 });
@@ -40,18 +40,18 @@ describe("groups follow their sessions", () => {
       facts("q0", 10, "quiet"),
     ]);
 
-    expect(ordered.projects.map((group) => group.id)).toEqual(["loud", "quiet"]);
+    expect(ordered.groups.flatMap((kind) => kind.projects).map((group) => group.id)).toEqual(["loud", "quiet"]);
     expect(ids("quiet", ordered)).toEqual(["q1", "q0"]);
   });
 
   test("Given an unfiled session, When ordered, Then it forms the null group rather than vanishing", () => {
     const ordered = orderByAttention([facts("filed", 1), facts("loose", 2, null)]);
 
-    expect(ordered.projects.map((group) => group.id)).toEqual([null, "p"]);
+    expect(ordered.groups.flatMap((kind) => kind.projects).map((group) => group.id)).toEqual([null, "p"]);
   });
 
   test("Given no sessions, When ordered, Then there are no groups", () => {
-    expect(orderByAttention([]).projects).toEqual([]);
+    expect(orderByAttention([], 10, 10).projects).toEqual([]);
   });
 });
 
@@ -59,6 +59,6 @@ describe("the engine is pure", () => {
   test("Given the same inputs, When called twice, Then the output is identical", () => {
     const input = [facts("a", 3), facts("b", 1), facts("c", 2, "other")];
 
-    expect(orderByAttention(input)).toEqual(orderByAttention(input));
+    expect(orderByAttention(input, 10, 10)).toEqual(orderByAttention(input, 10, 10));
   });
 });

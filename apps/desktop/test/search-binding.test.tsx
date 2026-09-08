@@ -16,7 +16,7 @@ test("search binding translates shortcuts, query edits and navigation into focus
   let returned = 0;
   function Harness() {
     binding = useSearch({
-      ordered: { projects: [{ id: null, sessions: ["one", "two"] }] },
+      ordered: { groups: [{ kind: "rest", projects: [{ id: null, sessions: ["one", "two"] }] }] },
       sessions: [],
       onSelect: (id) => { selections.push(id); },
       focusSelectedRow: () => { returned++; },

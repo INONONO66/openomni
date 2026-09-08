@@ -45,6 +45,12 @@ describe("session creation and titles", () => {
         titleSource: "placeholder",
         projectId: DEFAULT_PROJECT_ID,
         createdAt: 100,
+        phase: "idle",
+        lastActivityAt: 100,
+        phaseSince: 100,
+        unread: false,
+        pinned: false,
+        snoozedUntil: null,
       },
     ]);
     expect(consoleStore.state.tabs).toEqual([]);

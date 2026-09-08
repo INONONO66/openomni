@@ -220,12 +220,14 @@ test("list selection targets its own active tab even when sidebar search was inv
   expect(consoleStore.state.tabs.find((tab) => tab.id === aTab)?.history).toBe(invocationHistory);
 });
 
+import { makeSession } from "./make-session";
+
 test("SessionList renders real project/time metadata and an empty list without controls", async () => {
   const host = document.createElement("div");
   const root = createRoot(host);
   cleanups.push(() => root.unmount());
   const sessions = [
-    { id: "s", title: "sample", titleSource: "prompt" as const, projectId: null, createdAt: 0 },
+    makeSession({ id: "s", title: "sample", projectId: null, createdAt: 0 }),
   ];
   const selected: string[] = [];
   await act(async () =>

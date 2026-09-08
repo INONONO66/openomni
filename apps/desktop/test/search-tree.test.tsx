@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { orderByAttention } from "../src/renderer/attention";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
+import { makeSession } from "./make-session";
 
 /**
  * The rendered wiring between the search field and the tree it filters.
@@ -17,19 +18,19 @@ import type { Session } from "../src/renderer/state/store";
  * reducer).
  */
 const sessions: readonly Session[] = [
-  {
+  makeSession({
     id: "s1",
     title: "ledger append path",
     titleSource: "prompt",
     projectId: "kernel",
     createdAt: 1,
-  },
-  { id: "s2", title: "lease semantics", titleSource: "prompt", projectId: "kernel", createdAt: 2 },
-  { id: "s3", title: "sync engine", titleSource: "prompt", projectId: "perimeter", createdAt: 3 },
+  }),
+  makeSession({ id: "s2", title: "lease semantics", projectId: "kernel", createdAt: 2 }),
+  makeSession({ id: "s3", title: "sync engine", projectId: "perimeter", createdAt: 3 }),
 ];
 const selectedId = "s2";
 
-const ordered = orderByAttention(sessions);
+const ordered = orderByAttention(sessions, 10);
 
 const html = renderToStaticMarkup(
   <SessionTree
@@ -38,6 +39,7 @@ const html = renderToStaticMarkup(
     onNavigate={() => undefined}
     onSelect={() => undefined}
     onToggleProject={() => undefined}
+    now={10}
     ordered={ordered}
     pendingChanges={0}
     route="sessions"
@@ -87,7 +89,7 @@ describe("the tree still reads as a tree under the search field", () => {
   test("Given the sidebar, When rendered, Then the two depths survive", () => {
     const levels = [...html.matchAll(/data-level="(\d)"/g)].map((hit) => Number(hit[1]));
 
-    expect(levels.filter((level) => level === 0)).toHaveLength(ordered.projects.length);
+    expect(levels.filter((level) => level === 0)).toHaveLength(ordered.groups.flatMap((kind) => kind.projects).length);
     expect(levels.filter((level) => level === 1)).toHaveLength(sessions.length);
   });
 

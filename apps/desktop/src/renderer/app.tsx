@@ -4,6 +4,7 @@ import {
   ConsoleContent,
   type ConsoleShell,
   type ConsoleStrip,
+  StatusGlyph,
   type WindowPlatform,
 } from "@openomni/ui";
 import { useStore } from "@tanstack/react-store";
@@ -19,6 +20,7 @@ import { dispatchShellCommand } from "./shell/commands";
 import { jumpFrom } from "./shell/history";
 import { placeIcon } from "./shell/place-icon";
 import { SessionList } from "./shell/session-list";
+import { sessionGlyphProps } from "./shell/session-glyph";
 import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
 import { useGatewayEndpoint } from "./state/queries";
@@ -207,7 +209,9 @@ export function App({ platform, storage }: AppEnvironment) {
     tabs: tabs.map((entry) => ({
       id: entry.id,
       title: tabTitle(entry, state),
-      icon: placeIcon(entry.place),
+      icon: entry.place.kind === "session"
+        ? <StatusGlyph {...sessionGlyphProps(phaseForPlace(entry.place, sessions))} />
+        : placeIcon(entry.place),
       active: entry.id === state.activeTabId,
     })),
     onActivate: (id) => {
@@ -266,7 +270,7 @@ export function App({ platform, storage }: AppEnvironment) {
         key={tab?.id ?? "empty"}
       >
         {place?.kind === "route" && place.route === "sessions" ? (
-          <SessionList now={Date.now()} onSelect={select} sessions={sessions} />
+          <SessionList now={Date.now()} onSelect={select} ordered={idealOrder(sessions)} sessions={sessions} />
         ) : undefined}
       </ConsoleContent>
     ) : (
@@ -335,6 +339,7 @@ function SessionContent({
   };
   return (
     <ConsoleContent
+      header={<h1 className="flex items-center gap-2 px-section py-3 font-semibold text-label"><StatusGlyph {...sessionGlyphProps(session.phase)} />{session.title}</h1>}
       emptyLabel="No turns in this session yet."
       transcript={{
         id: session.id,
@@ -384,12 +389,10 @@ const generateId = () => {
   return `m${nextId}`;
 };
 
+function phaseForPlace(place: import("./state/store").Place, sessions: readonly Session[]) {
+  return place.kind === "session" ? sessions.find((s) => s.id === place.sessionId)?.phase ?? "idle" : "idle";
+}
+
 function idealOrder(sessions: readonly Session[]) {
-  return orderByAttention(
-    sessions.map((session) => ({
-      id: session.id,
-      projectId: session.projectId,
-      createdAt: session.createdAt,
-    })),
-  );
+  return orderByAttention(sessions, Date.now());
 }

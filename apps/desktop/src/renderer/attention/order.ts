@@ -1,100 +1,73 @@
-import type { ProjectId, SessionId } from "../state/store";
+import type { ProjectId, Session, SessionId } from "../state/store";
 
-/** One project group: its sessions, ranked. `null` is the unfiled group. */
+export type AttentionKind = "pinned" | "demand" | "report" | "residue" | "watch" | "rest";
+export const ATTENTION_LABEL: Record<AttentionKind, string> = {
+  pinned: "Pinned", demand: "Requests", report: "Reports", residue: "Left off", watch: "Running", rest: "Rest",
+};
+const KINDS: readonly AttentionKind[] = ["pinned", "demand", "report", "residue", "watch", "rest"];
+const HOUR = 3_600_000;
+
 interface OrderedProject {
   readonly id: ProjectId | null;
   readonly sessions: readonly SessionId[];
 }
-
-/** The engine's whole output: PROJECT → SESSION, ranked. */
 export interface Ordered {
-  readonly projects: readonly OrderedProject[];
+  readonly groups: readonly { readonly kind: AttentionKind; readonly projects: readonly OrderedProject[] }[];
 }
+export type SessionFacts = Pick<Session, "id" | "projectId" | "phase" | "createdAt" | "lastActivityAt" | "phaseSince" | "unread" | "pinned" | "snoozedUntil">;
 
-/**
- * What the engine ranks on. Deliberately not the whole `Session`: a title is
- * not a ranking signal, and keeping it out of the input is what stops one from
- * becoming one.
- *
- * Right now the only fact a session carries is when it was created. Run state,
- * unread counts, and the Owner's own pins were ranking inputs once, but nothing
- * real produced them — they were fixture fields — so they are gone rather than
- * left as a shape the wire does not fill. When the gateway can report a
- * session's state, that state is added HERE and the classes come back with it.
- */
-export interface SessionFacts {
-  readonly id: SessionId;
-  readonly projectId: ProjectId | null;
-  readonly createdAt: number;
-}
-
-/**
- * The ideal order, right now.
- *
- * Pure and total: same inputs, same output, no clock and no I/O — and holding
- * it steady across a render is the stability rule's job, not this function's.
- *
- * Groups exist because sessions do: a project appears when its first session
- * does and disappears with its last, in the order the sessions themselves earn.
- * A group weighs as much as its newest session, so the project holding the most
- * recent work is first even if it holds nothing else.
- */
-export function orderByAttention(facts: readonly SessionFacts[]): Ordered {
-  const byProject = new Map<ProjectId | null, SessionFacts[]>();
-  for (const item of facts) {
-    const bucket = byProject.get(item.projectId);
-    if (bucket) bucket.push(item);
-    else byProject.set(item.projectId, [item]);
+export function attentionKind(session: SessionFacts, now: number): AttentionKind {
+  if (session.pinned) return "pinned";
+  if (session.snoozedUntil !== null && session.snoozedUntil > now) return "rest";
+  switch (session.phase) {
+    case "waiting_approval": case "waiting_input": return "demand";
+    case "completed": case "failed": return session.unread ? "report" : "rest";
+    case "interrupted": return "residue";
+    case "queued": case "running": return "watch";
+    default: return "rest";
   }
-
-  const projects = [...byProject.entries()].map(([id, bucket]) => {
-    const ranked = [...bucket].sort(compare);
-    return { id, sessions: ranked.map((item) => item.id), newest: ranked[0]?.createdAt ?? 0 };
-  });
-
-  return {
-    projects: projects
-      .sort((a, b) => b.newest - a.newest || compareId(a.id ?? "", b.id ?? ""))
-      .map(({ id, sessions }) => ({ id, sessions })),
-  };
 }
 
-/**
- * Newest first, id last. The id tie-break is not cosmetic: two sessions created
- * in the same millisecond must not swap places between renders, and
- * `Array.prototype.sort` stability alone cannot promise that across the
- * regrouping above.
- */
-function compare(a: SessionFacts, b: SessionFacts): number {
-  return b.createdAt - a.createdAt || compareId(a.id, b.id);
+/** Six-hour recency half-life; residue adds a unit bonus with a 24-hour half-life. */
+export function attentionScore(session: SessionFacts, now: number): number {
+  const age = Math.max(0, now - session.lastActivityAt);
+  return 2 ** (-age / (6 * HOUR)) + (attentionKind(session, now) === "residue" ? 2 ** (-age / (24 * HOUR)) : 0);
+}
+
+/** Rank kinds, then projects by their best row, then rows. No clock or input mutation. */
+export function orderByAttention(facts: readonly SessionFacts[], now: number = Date.now()): Ordered {
+  const ranked = facts.map((session) => ({ session, score: attentionScore(session, now) }))
+    .sort((a, b) => b.score - a.score || compareId(a.session.id, b.session.id));
+  const groups: Ordered["groups"][number][] = [];
+  for (const kind of KINDS) {
+    const projects = new Map<ProjectId | null, SessionId[]>();
+    for (const { session } of ranked) {
+      if (attentionKind(session, now) !== kind) continue;
+      const rows = projects.get(session.projectId);
+      if (rows) rows.push(session.id);
+      else projects.set(session.projectId, [session.id]);
+    }
+    if (projects.size > 0) groups.push({ kind, projects: [...projects].map(([id, sessions]) => ({ id, sessions })) });
+  }
+  return { groups };
 }
 
 function compareId(a: string, b: string): number {
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
+  return a === b ? 0 : a < b ? -1 : 1;
 }
 
-/** How many rows moved between two orders — the group header's change hint. */
 export function changedSince(previous: Ordered, next: Ordered): number {
   const before = flatten(previous);
   const after = flatten(next);
-
   let changed = 0;
-  for (const [id, position] of after) {
-    if (before.get(id) !== position) changed += 1;
-  }
-  for (const id of before.keys()) {
-    if (!after.has(id)) changed += 1;
-  }
+  for (const [id, position] of after) if (before.get(id) !== position) changed += 1;
+  for (const id of before.keys()) if (!after.has(id)) changed += 1;
   return changed;
 }
-
-/** Every visible session mapped to its painted position. */
 function flatten(ordered: Ordered): ReadonlyMap<SessionId, number> {
   const positions = new Map<SessionId, number>();
-  let index = 0;
-  for (const project of ordered.projects) {
-    for (const id of project.sessions) positions.set(id, index++);
+  for (const group of ordered.groups) for (const project of group.projects) {
+    for (const id of project.sessions) positions.set(id, positions.size);
   }
   return positions;
 }

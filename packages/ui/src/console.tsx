@@ -69,13 +69,16 @@ export function ConsoleContent({
   transcript,
   emptyLabel,
   children,
+  header,
 }: {
+  readonly header?: ReactNode;
   readonly transcript?: ConsoleTranscript | undefined;
   readonly emptyLabel?: string | undefined;
   readonly children?: ReactNode;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-ui={UI_NAMES.ConsoleContent}>
+      {header}
       <ScrollArea
         className="flex-1"
         contentClassName="mx-auto w-full max-w-measure px-section pt-4 pb-section"

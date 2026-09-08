@@ -13,7 +13,7 @@ import {
  * cursor costs more attention than it saves, which would defeat its own reason
  * for existing.
  */
-const facts = (id: string, createdAt: number) => ({ id, projectId: "p", createdAt });
+const facts = (id: string, createdAt: number) => ({ id, projectId: "p", phase: "idle" as const, createdAt, lastActivityAt: createdAt, phaseSince: createdAt, unread: false, pinned: false, snoozedUntil: null });
 const before = orderByAttention([facts("a", 2), facts("b", 1)]);
 const after = orderByAttention([facts("a", 1), facts("b", 2)]);
 
