@@ -233,9 +233,12 @@ test("workflow restores the one build before every executable consumer", () => {
   expect(jobs.test?.if).toBe("always()");
   expect(jobs.ci?.if).toBe("always()");
   expect(jobs.static?.steps.some((step) => step.run?.includes("bun run lint:docs"))).toBe(true);
-  const workflow = Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"));
+  const workflow = Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")) as {
+    on: { merge_group?: unknown };
+    concurrency: { "cancel-in-progress": string };
+  };
   expect(workflow.on.merge_group).toBeDefined();
-  expect(workflow.concurrency["cancel-in-progress"]).toBe("\${{ github.event_name == 'pull_request' }}");
+  expect(workflow.concurrency["cancel-in-progress"]).toBe(`\${{ github.event_name == 'pull_request' }}`);
   expect(jobs["quality-static"]?.if).toBe("needs.plan.outputs.verify == 'true'");
   expect(jobs["quality-gates"]?.if).toBe("needs.plan.outputs.verify == 'true'");
   expect(jobs.quality?.if).toContain("needs.plan.outputs.verify == 'true'");
