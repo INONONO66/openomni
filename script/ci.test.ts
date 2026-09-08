@@ -330,7 +330,8 @@ test("quality jobs run on executable pull requests and merge groups", () => {
       jobs: z.record(z.string(), jobSchema),
     })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")));
-  expect(workflow.concurrency["cancel-in-progress"]).toBe("${{ github.event_name == 'pull_request' }}");
+  // Only pull requests cancel superseded runs; merge groups and main keep every run.
+  expect(workflow.concurrency["cancel-in-progress"]).toBe(["$", "{{ github.event_name == 'pull_request' }}"].join(""));
   const conditions = QUALITY_JOBS.map((q) => workflow.jobs[q]?.if);
   expect(conditions.slice(0, 2)).toEqual(["needs.plan.outputs.verify == 'true'", "needs.plan.outputs.verify == 'true'"]);
   // A skipped need (scripts-coverage on non-tooling PRs) skips a dependent job
