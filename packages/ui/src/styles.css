@@ -156,14 +156,27 @@
   --text-overline--letter-spacing: 0.09em;
 
   /* ---- Radii ------------------------------------------------------------ */
-  /* `sm` is the mark scale — an elbow's corner, a gutter's cut. `md` is the
-     SURFACE scale: every interactive rectangle in the system (a row, a fence, a
-     tool row's hover, a focus ring) lands on 6px, so the softening reads as one
-     decision rather than as three components each picking a corner. Nothing
-     larger exists: past 6px at this density a row stops being a line in a
-     ledger and starts being a card. */
+  /* `sm` is the mark scale — an elbow's corner, a gutter's cut, a tree row. `md`
+     is the SURFACE scale: every interactive rectangle inside a column (a fence,
+     a tool row's hover, a focus ring) lands on 6px, so the softening reads as
+     one decision rather than as three components each picking a corner.
+
+     `card` and `panel` are the two FRAME radii, and they exist for the shell
+     only: a tab in the strip is a card (8px), the main column is a panel
+     (12px). Nothing inside a column may take either — past 6px at this density
+     a row stops being a line in a ledger and starts being a card, and the two
+     frame radii are how the frame stays distinguishable from its content.
+     Measured from the reference console (docs/desktop-shell.md). */
   --radius-sm: 4px;
   --radius-md: 6px;
+  --radius-card: 0.5rem;
+  --radius-panel: 0.75rem;
+
+  /* The ONE shadow, and it belongs to the frame: a panel that has left the
+     layout (the sidebar revealed over the main column) needs depth the hairline
+     cannot give, and nothing inside a column floats. Soft and short-thrown so
+     it reads as lift, not as a drop shadow; light re-points the alpha. */
+  --shadow-panel: 0 8px 24px -8px --alpha(#000 / 60%);
 
   /* ---- Spacing rhythm (8px baseline; named steps are layout intent) ----- */
   /* Every vertical step is a multiple of 8 so rows, headers, and timeline
@@ -173,15 +186,12 @@
      `section`, spent between a group header and its first row. */
   --spacing-gutter: 16px;
   --spacing-section: 24px;
-  --spacing-group-gap: 8px;
-  --spacing-titlebar: 56px;
-  --spacing-tree: 264px;
-  --spacing-detail: 320px;
-  --spacing-row: 32px;
   --spacing-control-sm: 24px;
+  /* The strip's step: between `sm` and `md`, a 28px box around a 16px glyph.
+     Measured from the reference console's strip controls (`IconButton size=medium`). */
+  --spacing-control-base: 28px;
   --spacing-control-md: 32px;
   --spacing-inset: 8px;
-  --spacing-row-inset: 8px;
   /* The reading measure, and the transcript's ONE column.
 
      68ch of the prose face, which lands near the 60–75 character line the
@@ -197,15 +207,11 @@
   --spacing-measure: 68ch;
 
   /* ---- Indentation ------------------------------------------------------ */
-  /* One indent step, spent per level of the navigator's PROJECT → SESSION
-     hierarchy, and the one horizontal rhythm in the system. A list whose levels
-     all start at the same x has no hierarchy in it: the depth has to be visible
-     in the geometry, because this system has no lines and no icons to draw it
-     with. `indent-slot` is the chevron column, reserved at EVERY level whether
-     or not a chevron lands in it, so text x within a level is one value rather
-     than two. */
+  /* One indent step, spent per level of the tree's three depths, and the one
+     horizontal rhythm in the system. A list whose levels all start at the same
+     x has no hierarchy in it: the depth has to be visible in the geometry,
+     because this system has no lines and no icons to draw it with. */
   --spacing-indent: 12px;
-  --spacing-indent-slot: 16px;
 
   /* ---- The character grid ----------------------------------------------- */
   /* One character cell of the mono face, for the places that have to sit on the
@@ -235,6 +241,83 @@
   --motion-fast-duration: 120ms;
   --motion-fast-ease: cubic-bezier(0.2, 0, 0, 1);
   --motion-fast: var(--motion-fast-duration) var(--motion-fast-ease);
+
+  /* ---- Shell motion (frame only) ---------------------------------------- */
+  /* The FRAME moves on a different scale from the content, and these are its
+     three speeds plus its one curve — copied from the reference console (docs/desktop-shell.md),
+     not tuned here. A sidebar sliding 240px cannot run the 120ms answer-to-
+     input token: at that speed a 240px translate reads as a cut, not a slide.
+
+     Scope: the tab strip's controls zone, the sidebar gap, container, and
+     content. Nothing inside a column may spend these — a hover or a chevron is
+     still `--motion-fast`. `fast` is the collapse speed (the frame leaving
+     answers faster than it arrives), `base` is the open speed, `slow` is
+     reserved for overlays.
+
+     Re-measured against Linear (.omo/reports/sidebar-toggle-ref-20260907.md):
+     its sidebar width runs a spring (stiffness 420, damping 38, mass 1) that
+     settles in ~240ms, its content fades in 150ms, and it has no bezier of its
+     own. `base` is that settle; `fast` is the content fade; the frame's curve
+     is the same near-critically-damped ease-out the answer token already uses,
+     so the window has one curve at two speeds. */
+  --duration-fast: 0.15s;
+  --duration-base: 0.24s;
+  --duration-slow: 0.3s;
+  --ease-frame: var(--motion-fast-ease);
+
+  /* The frame's stroked glyphs (lucide, drawn on a 24 grid) take the reference
+     console's line weight: its icons are 16px with 1.5-unit strokes in a
+     `0 0 16 16` box (`Icon` default `size: 16`; every measured path is built
+     from 0.75 radii), so 1.5 CSS px. Applied through `glyph-stroke`, which
+     pins the stroke in screen pixels, so the number is right at any glyph size. */
+  --stroke-glyph: 1.5px;
+
+  /* ---- Shell geometry ---------------------------------------------------- */
+  /* The tab strip's height (reference: `desktopTabsHeight: 42`) and the one
+     tab's inside it (`desktopTabHeight: 26`). `--shell-top` reads the strip's
+     token once the renderer declares a strip. */
+  --spacing-shell-strip: 42px;
+  --spacing-tab-height: 26px;
+
+  /* Where the traffic lights end on darwin, measured from the reference console's
+     main process: origin x 17 + the 52px cluster + a 12px margin = 81. The strip's
+     darwin inset is that safe zone plus the 8px the collapsed cluster pads itself
+     with, so the toggle's box starts at x=89 — a 20px gap after the lights. */
+  --spacing-traffic-safe: 81px;
+  --spacing-strip-inset-darwin: calc(var(--spacing-traffic-safe) + 8px);
+
+  /* The sidebar's width while it is NOT pinned: the hover-reveal overlay panel
+     and the tab strip's controls zone while collapsed read this ONE token, so
+     the zone is exactly as wide as the panel that appears under it, by
+     construction. Pinned, both read the runtime `--sidebar-width` instead.
+     240 = the pinned default (SIDEBAR_WIDTH.default), so the column keeps its
+     line breaks between overlay and pin. The zone's contents need, on darwin,
+     89 inset + 28 toggle + 4 gap + (3 * 28 + 2 * 4) trio + 12 right pad = 225. */
+  --spacing-sidebar-overlay: 240px;
+}
+
+/* ---- Layer scale ----------------------------------------------------------
+   Every stacking decision in the window reads one of these; a component never
+   writes a bare `z-50`. Read through `z-(--z-sidebar)`. Copied from the reference console. */
+:root {
+  --z-top-bar: 10;
+  --z-sidebar: 50;
+  --z-drawer: 350;
+  --z-dialog: 500;
+  --z-overlay-content: 550;
+  --z-toast: 600;
+  --z-tooltip: 700;
+
+  /* How much of the window's top the tab strip owns. 0 until the renderer
+     declares a strip on `<html data-tab-strip>`; then the fixed sidebar starts
+     below it and the sidebar column drops its own top padding. */
+  --shell-top: 0px;
+}
+
+:root[data-tab-strip] {
+  /* The strip's own height. The main process centres the traffic lights in it
+     (`trafficLightPosition.y` = 15 for a 12px light in 42). */
+  --shell-top: var(--spacing-shell-strip);
 }
 
 /* Dark is the shipped default. Light re-points the same semantic tokens, so no
@@ -259,6 +342,7 @@
   --color-raised: var(--color-neutral-800);
   --color-hover: --alpha(#000 / 4%);
   --color-active: --alpha(#000 / 6%);
+  --shadow-panel: 0 8px 24px -8px --alpha(#000 / 18%);
 
   /* The four steps mirror the dark ramp's SEPARATION, not its lightness: on a
      white surface a tone that cannot be read is not a tone. Same floors as
@@ -306,15 +390,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Shell density: a Unix-terminal reading of the SAME tokens. It re-points the
+/* Shell density: the console's compact reading of the SAME tokens. It re-points the
    type scale and the vertical rhythm only — the color system is untouched, so
    a surface cannot acquire a second palette by changing density.
 
-   The scale is MONO-FIRST and anchored on a 13px body, because the transcript
-   is a ledger of machine truth read in long columns, not prose: paths, tool
-   names, durations, and code are the majority of its glyphs, and setting them
-   in the sans ramp at prose leading is what made this surface read as a chat
-   client instead of a console.
+   The scale is anchored on a 13px sans body: the frame (tab strip, sidebar,
+   headers) and the transcript's prose are read as an application, not a
+   terminal, so they set in the sans face. Mono is opted into by the surfaces
+   that carry machine text (paths, code, tool rows) through `.font-mono`, and
+   never inherited from the density.
 
    Only three sizes exist here, and the steps between them are deliberate:
 
@@ -322,17 +406,10 @@ body {
      meta  12px  a tool row, a reason line, a second line — one step quieter
      micro 10px  ambient numerics (inherited): timestamps, durations
 
-   `title` is body + ONE step (14px), not the sans ramp's 15px display jump. A
-   session name is a label on the column it heads, not a headline: past one
-   step above body it stops ranking the header and starts shouting over the
-   content, which is the defect the owner reported. `heading` and `label` SHARE
-   the body size and rank by weight alone — in a mono column at this density a
-   size step below 13px reads as a different tier of information rather than a
-   heading, and the weight ramp (400/500/590) is already carrying rank.
-
-   Line heights are tight (1.3–1.45) because mono glyphs have uniform advance
-   and no descender relief to buy back: prose leading at 1.7 spends a third of
-   the column on air a ledger does not need. */
+   `title` is body + ONE step (14px). `heading` and `label` share the body size
+   and rank by weight alone. Line heights are tight (1.3–1.45) because the
+   shell is a control surface: prose leading at 1.7 spends a third of a row on
+   air a list does not need. */
 [data-density="shell"] {
   --text-display: 15px;
   --text-title: 14px;
@@ -348,20 +425,58 @@ body {
 
   --spacing-gutter: 8px;
   --spacing-section: 16px;
-  --spacing-group-gap: 8px;
-  --spacing-row: 24px;
   --spacing-control-md: 24px;
-
-  font-family: var(--font-mono);
 }
 
 /* Custom window chrome: header rows drag the window, controls inside opt out. */
 @utility drag-region {
   -webkit-app-region: drag;
   user-select: none;
+  /* Every control inside a drag surface opts out BY SELECTOR: a button that
+     forgot `no-drag` would move the window instead of firing. */
+  & :is(button, input, [role="button"]) {
+    -webkit-app-region: no-drag;
+  }
 }
 @utility no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Overlay content opts out of dragging BY SELECTOR, not by class: a menu
+   portalled under the strip would otherwise inherit the drag region and eat
+   its own clicks. Anything with an overlay role is interactive by definition. */
+[role="menu"],
+[role="dialog"],
+[role="alertdialog"],
+[role="listbox"],
+[popover] {
+  -webkit-app-region: no-drag;
+}
+
+/* The frame's speeds, as utilities, so a shell component spends a named token
+   and never a numeric `duration-200`. Tailwind has no `--duration-*` theme
+   namespace, so the three are declared here rather than in `@theme`. */
+@utility duration-fast {
+  --tw-duration: var(--duration-fast);
+  transition-duration: var(--duration-fast);
+}
+@utility duration-base {
+  --tw-duration: var(--duration-base);
+  transition-duration: var(--duration-base);
+}
+@utility duration-slow {
+  --tw-duration: var(--duration-slow);
+  transition-duration: var(--duration-slow);
+}
+
+/* A stroked glyph at the reference console's weight. `non-scaling-stroke` reads
+   `stroke-width` in the host's pixels rather than the icon's grid, so a lucide
+   glyph scaled from 24 to 16 keeps the 1.5px line and does not thin to 1.33. */
+@utility glyph-stroke {
+  stroke-width: var(--stroke-glyph);
+  & * {
+    vector-effect: non-scaling-stroke;
+  }
 }
 
 /* The one shared transition, and the ONLY place a component may acquire one.
@@ -378,6 +493,13 @@ body {
   transition-duration: var(--motion-fast-duration);
   transition-timing-function: var(--motion-fast-ease);
 }
+
+/* The strip's history trio has NO motion of its own. It is one node in both
+   states, `ml-auto` inside the controls zone, so it slides because the zone's
+   width transitions; it never fades. The reference's `clamp(1 - 3p, 0, 1)`
+   belongs to a cluster that fades OUT while leaving and is replaced by another
+   on arrival; a single persistent node that ran that curve from both ends went
+   1 -> 0 -> 1 across the travel, which is a blink. Opacity stays 1. */
 
 /* Focus-first: one ring, identical on every interactive primitive.
 

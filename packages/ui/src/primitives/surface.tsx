@@ -3,12 +3,13 @@ import { UI_NAMES } from "../names";
 
 export type PanelTone = "bg" | "sunken" | "raised";
 /**
- * A hairline is allowed on a COLUMN SPLIT only — the two places where the
- * layout genuinely divides into independently scrolling regions. There is no
- * `top`/`bottom` edge and no card edge: inside a column, structure is
- * whitespace and type weight, never a drawn box.
+ * A hairline is allowed on a COLUMN SPLIT — the places where the layout
+ * genuinely divides into independently scrolling regions — and on the ONE
+ * frame edge: `box` is the main column's own panel, a 12px-cornered hairline
+ * card sitting on the chrome (the reference's `--radius-panel`). Inside a column,
+ * structure is whitespace and type weight, never a drawn box.
  */
-export type PanelEdge = "none" | "right" | "left";
+export type PanelEdge = "none" | "right" | "left" | "box";
 
 const TONE: Record<PanelTone, string> = {
   bg: "bg-bg",
@@ -20,6 +21,7 @@ const EDGE: Record<PanelEdge, string> = {
   none: "",
   right: "border-line border-r",
   left: "border-line border-l",
+  box: "overflow-hidden rounded-panel border-[0.5px] border-line",
 };
 
 /**

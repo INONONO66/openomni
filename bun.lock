@@ -41,8 +41,10 @@
         "@tanstack/react-store": "0.11.1",
         "@tanstack/store": "0.11.1",
         "ai": "7.0.93",
+        "lucide-react": "^1.39.0",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
+        "zod": "^4.5.4",
       },
       "devDependencies": {
         "@tailwindcss/vite": "^4.3.3",
@@ -56,6 +58,7 @@
         "electron-vite": "^5.0.0",
         "happy-dom": "20.14.0",
         "oxc-transform-react": "^0.148.0",
+        "react-grep": "^0.3.3",
         "tailwindcss": "^4.3.3",
         "vite": "^8.2.2",
       },
@@ -206,6 +209,7 @@
         "react": "^19.2.8",
       },
       "devDependencies": {
+        "@happy-dom/global-registrator": "^20.14.0",
         "@types/bun": "latest",
         "@types/react": "^19.2.18",
         "@types/react-dom": "^19.2.5",
@@ -428,6 +432,8 @@
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
     "@fontsource-variable/jetbrains-mono": ["@fontsource-variable/jetbrains-mono@5.3.0", "", {}, "sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw=="],
+
+    "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.14.0", "", { "dependencies": { "@types/node": ">=20.0.0", "happy-dom": "^20.14.0" } }, "sha512-Xn0kdkaA1eHOaFFopr+YQ37sPNTZ3JScpUMz3j4rIsn1Nneqoh94z79iW23Ej0Ytt99+LlFr4JrSDd6ow9c7MQ=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.2", "", { "dependencies": { "@humanfs/types": "^0.15.0" } }, "sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA=="],
 
@@ -1308,6 +1314,8 @@
     "react": ["react@19.2.8", "", {}, "sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="],
 
     "react-dom": ["react-dom@19.2.8", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.8" } }, "sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ=="],
+
+    "react-grep": ["react-grep@0.3.3", "", {}, "sha512-3IPdz4HeKPYoh7baBM6GLzVKG4GS3r4n0ZTFtBAgUo2Bal5Bhdtl+4cblMc1q+78cM1azL0rH0RgQx67MVKszQ=="],
 
     "refa": ["refa@0.12.1", "", { "dependencies": { "@eslint-community/regexpp": "^4.8.0" } }, "sha512-J8rn6v4DBb2nnFqkqwy6/NnTYMcgLA+sLr0iIO41qpv0n+ngb7ksag2tMRl0inb1bbO/esUwzW1vbJi7K0sI0g=="],
 

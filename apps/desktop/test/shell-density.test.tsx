@@ -32,7 +32,7 @@ beforeAll(() => {
   createSession(1);
   SHELL = renderToStaticMarkup(
     <StateProvider>
-      <App />
+      <App platform="darwin" storage={null} />
     </StateProvider>,
   );
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
@@ -227,12 +227,13 @@ describe("the transcript sets exactly three voices", () => {
 });
 
 describe("the sidebar row keeps its own rank", () => {
-  test("Given a session row, When rendered, Then the title is label and the header is overline", () => {
+  test("Given a session row, When rendered, Then the row is label and the section title is meta", () => {
     // Both levels have to be NAMED: the title used to inherit 16px, which put a
-    // session title above the transcript's own prose.
-    const nav = SHELL.slice(SHELL.indexOf('aria-label="Sessions"'), SHELL.indexOf("<main"));
+    // session title above the transcript's own prose. Rows are ONE line at the
+    // label size; the section title above them is the smaller meta step.
+    const nav = SHELL.slice(SHELL.indexOf('data-ui="Sidebar"'), SHELL.indexOf("<main"));
     expect(nav).toContain("text-label");
-    expect(nav).toContain("text-overline");
+    expect(nav).toContain("text-meta");
   });
 
   test("Given the navigator, When scanned, Then no element sets a raw font size", () => {

@@ -27,11 +27,12 @@ const tree = (
   renderToStaticMarkup(
     <SessionTree
       collapsedProjectIds={options.collapsed ?? new Set()}
-      onCreate={() => undefined}
+      onNavigate={() => undefined}
       onSelect={() => undefined}
       onToggleProject={() => undefined}
       ordered={orderByAttention(list)}
       pendingChanges={options.pendingChanges ?? 0}
+      route="sessions"
       selectedId={selectedId}
       sessions={list}
     />,
@@ -66,7 +67,7 @@ describe("the sidebar is project groups over sessions", () => {
 
   test("Given every row, When the tree renders, Then it is one line: the title", () => {
     for (const session of sessions) expect(html).toContain(`>${session.title}</span>`);
-    expect(html.match(/role="option"/g)).toHaveLength(sessions.length);
+    expect(html.match(/id="session-row-/g)).toHaveLength(sessions.length);
     // No second line and no status cell: nothing real fills either yet.
     expect(html).not.toContain("data-status-dot");
   });
@@ -94,8 +95,8 @@ describe("the empty sidebar says so", () => {
 
     expect(html).toContain("No sessions yet");
     expect(html).not.toContain('data-ui="Disclosure"');
-    expect(html).not.toContain('role="option"');
-    // The way out is still there: the header's create control.
-    expect(html).toContain('aria-label="New session"');
+    expect(html).not.toContain('id="session-row-');
+    // The sentence names the way out: the `+` in the tab strip.
+    expect(html).toContain("press +");
   });
 });
