@@ -6,7 +6,7 @@ import { L0Observation, type Message } from "@openomni/protocol";
 import { Bus } from "../test/helpers/observation";
 import { materializeSession } from "../test/helpers/session";
 import { SessionHandleStore, Storage } from "../src/index";
-import { sessionHistory } from "./session-history";
+import { seedTurnHistory } from "./seed-turn-history";
 
 type BenchmarkResult = {
   readonly name: string;
@@ -35,7 +35,7 @@ async function runSessionHydration(): Promise<void> {
   try {
     const sessions = Array.from({ length: 100 }, (_, index) => {
       const id = `bench-session-${index}`;
-      sessionHistory(id);
+      seedTurnHistory(id);
       return id;
     });
     const bench = new Bench({ time: 100 });
