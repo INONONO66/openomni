@@ -327,6 +327,16 @@ function createActions(
         .all(sessionId) as ActionSqlRow[];
       return rows.map(decodeAction);
     },
+    range(sessionId, afterRevision, limit) {
+      const rows = db
+        .query(
+          `SELECT id, parent_id, session_id, kind, intent, effect, revert,
+                  irreversible, encoding_version, ts, ordinal
+           FROM action WHERE session_id = ? AND ordinal > ? ORDER BY ordinal LIMIT ?`,
+        )
+        .all(sessionId, afterRevision, limit) as ActionSqlRow[];
+      return rows.map(decodeAction);
+    },
   };
 }
 

@@ -3,7 +3,7 @@ import { SessionHandleStore } from "../src/index";
 import { materializeSession } from "../test/helpers/session";
 
 /** Populate canonical turn history through the same fenced L0 commit as handles. */
-export function sessionHistory(id: string): void {
+export function seedTurnHistory(id: string): void {
   materializeSession(id);
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
   for (let index = 0; index < 10; index += 1) {

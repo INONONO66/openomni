@@ -19,6 +19,7 @@ import { createSessionTurn } from "./session-turn";
 import { createSessionAdmission, commitSessionRequest } from "./session-admission";
 import { createSessionConfiguration } from "./session-configuration";
 import { dispatchSessionOutbound } from "./session-outbound";
+import { inspectSession } from "./session-lifecycle/inspect";
 
 export function createController(
   sessionId: string,
@@ -203,6 +204,8 @@ export function createController(
     get: (options = {}) => SessionHandleStore.getSnapshot(sessionId, options.turns ?? 1),
     watch: (options = {}) =>
       SessionHandleStore.watchSnapshot(sessionId, options.turns ?? 1, runtime.observations),
+    history: (request = {}) => SessionHandleStore.historyPage(sessionId, request),
+    inspect: (request = {}) => inspectSession(sessionId, request),
     async close() {
       if (state.closed) return;
       state.closed = true;

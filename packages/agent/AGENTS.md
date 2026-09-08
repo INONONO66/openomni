@@ -4,6 +4,8 @@
 
 2026-09-07, #969: `session-request.ts` decides transitions of original actions; `session-requests.ts` obtains session authority and commits them through ledger. Approval re-admission binds the captured invocation, hashes, generations, and domain revisions. `session-outbound.ts` owns durable source obligations; receiving inbox acknowledgement does not confer cross-session write authority. These are session mechanics, not independent lifecycle stores.
 
+2026-09-08, #972: `session-lifecycle/history.ts` folds model context and `session-lifecycle/inspect.ts` derives diagnostic transitions, policy decisions and commissioned-child traversal from committed actions. Both are pure reads over the ledger tree; `SessionHandle.history()` pages revisions for gap resynchronization. Nothing here writes, replays a body or stores a second history.
+
 ## Execution contract
 
 Updated for #937 continuation (2026-09-06): `session-chat-runner` alone invokes production `runAgent`. Session ownership is split by registry/handle, controller lifetime, admission/recovery, running turn, configuration/lease, and durable record projection; none is a second session implementation. `executor-attempts` owns retries and approval re-admission; llm owns failure decisions and usage. `executor-stop` evaluates policy in fixed stop order. Assistant history and reversible compaction projections are durable actions. Native worker assembly shares this loop; it has no separate drive policy.
