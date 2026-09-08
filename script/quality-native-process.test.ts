@@ -11,6 +11,16 @@ test("native JSON preserves argument boundaries and measured nonzero exits", asy
 	expect(result.stdoutHash).toHaveLength(64);
 });
 
+test("native JSON reports compact census errors", async () => {
+	await expect(nativeJson({
+		command: [process.execPath, "-e", "console.log(JSON.stringify({errors:[{code:'first'}, {code:'second'}]}));process.exit(2)"],
+		cwd: import.meta.dir,
+	})).rejects.toMatchObject({
+		code: "native_process",
+		message: 'exit 2: {"code":"first"}; {"code":"second"}',
+	});
+});
+
 test("native JSON rejects infrastructure failures and missing output", async () => {
 	for (const code of [
 		"process.exit(2)",

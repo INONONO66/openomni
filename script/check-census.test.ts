@@ -612,6 +612,24 @@ test("Electron Vite roots include main, preload and HTML module entries", () => 
   expect(result.output).toContain('"path":"src/index.html","sha256":');
 }, 180_000);
 
+test("scheduled and declaration-only registration callbacks reach their bodies", () => {
+  for (const source of [
+    "requestAnimationFrame(() => console.log('frame')); requestIdleCallback(() => console.log('idle'));",
+    "import {store} from 'registration'; store.subscribe(() => console.log('subscription'));",
+    "import './bridge'; const bridge = window.desktop; bridge?.onMessage(() => console.log('bridge'));",
+  ]) {
+    using fixture = new Fixture({
+      "src/main.ts": source,
+      "src/bridge.ts": "export {}; declare global { interface Window { desktop: { onMessage: (listener: () => void) => () => void } } }",
+    });
+    fixture.write("node_modules/registration/package.json", '{"name":"registration","types":"index.d.ts"}');
+    fixture.write("node_modules/registration/index.d.ts", "export declare const store: {subscribe(listener: () => void): () => void};");
+    const result = fixture.run("publisher");
+    expect(result.output).toContain('"complete":true');
+    expect(result.output).not.toContain('"unresolved_callback_edge"');
+  }
+}, 180_000);
+
 test("rendered components, hook callbacks and DOM listeners consume renderer exports", () => {
   for (const rendered of [false, true]) {
     using fixture = new Fixture({
