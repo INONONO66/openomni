@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788862103786,
+  "lastUpdate": 1788863281594,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -67247,6 +67247,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 738576,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "239b4273af7a67217a66ea1bf0c8657579539214",
+          "message": "feat(tools): seal the 11-tool catalog, approval via provision require_approval (#949 stage 2) (#999)\n\n* refactor(tools): flatten catalog definition modules (#949)\n\n* feat(openomni): absorb approval into provision via require_approval policy rows (#949)\n\n- contact_promote / endpoint_merge become provision ops; Owner consent is a\n  require_approval policy row resolved by the kernel request path, no\n  model-callable decide tool (SLOP B17)\n- policy Match gains an optional inner `operation` field so a row can scope\n  to one op of a multi-operation tool\n- the catalog is static: every tool is constructed regardless of wired ports\n  and refuses at execution when its port is absent (drops the Proxy fake\n  port, SLOP G-H8)\n- request-domain read-back moves to tools/core/contact-mutations.ts\n\n* feat(tools): seal the 11-tool catalog on KERNEL §3.5 names (#949)\n\n- read/write/edit/ls/find/grep/bash/eval/monitor/send_message/provision on\n  the model door, completion cell-only; list/search/run_code/llm/sendMessage\n  retired without aliases\n- ls/find/grep split the old list/search: find matches names by glob, grep\n  matches content with glob/ignoreCase/literal/context/limit; edit takes an\n  edits array; bash takes command/timeout/machine\n- every multi-operation tool (eval, monitor, provision) takes\n  operation: { op, ... }; catalog test pins the exact name set, doors, and\n  op sets, and refuses retired vocabulary\n- completion(prompt) replaces llm(prompts); batching is the cell's parallel()\n- lint:tools snake_case ratchet, 7-field budget for grep; snapshots regenerated\n\n* docs(tools): record the sealed catalog and approval-via-provision (#949)\n\n- kernel-contract, machines-and-delegation, gateway-design, conversation\n  and provisioning docs speak the sealed vocabulary (send_message, eval,\n  completion, provision.op noun_verb, no approval tool)\n- implementation-status and SLOP carry the stage-2 receipt with the residue\n  named (eval peek/stop, codemode handle method names)\n- un-export childPath/toGatewaySend (dead-export ratchet), type digestKey rows\n\n* test(script): point alarm type contract at the flat tools/monitor.ts (#949)\n\n* fix(tools): resolve quality residual (#949 stage 2)\n\n* provision: store failures become typed refusals; seed rows and self-test fixture at module scope\n\n- provision.ts: declarePerson/declarationIsStale split out of executePersonDeclare;\n  PersonStore/ChannelInstanceStore.put failures reach the tool through a typed\n  Promise rejection handler (storeRefusal) instead of catch bindings.\n- eval.ts: describe() is a guarded if-chain with stderrOf(); find.ts: renderPaths().\n- policy-seed.ts: KERNEL_POLICY_ROWS (incl. PROVISION_POLICY_ROWS) assembled at module scope.\n- script/lint-tools.ts: the over-budget self-test fixture lives at module scope.\n\n* tests: cover tool edge paths, drop unknown-typed helper inputs, dedupe commission fixtures\n\n- read window offset/limit, grep invalid regex, find on a symlink root, eval\n  timeout rendering, secret_rotate under a locked vault, channel_add store failure,\n  rendered promote/merge outputs.\n- tool-dispatch/provision-tools helpers take PlainObject inputs; consentedDeclare\n  and commissionInput replace duplicated fixtures.\n- lint-tools.test.ts pins the sealed tool-name grammar and the 7-field budget.",
+          "timestamp": "2026-09-08T19:26:53+09:00",
+          "tree_id": "82b0d188d87a8c24862690cb9a95311f24c7471d",
+          "url": "https://github.com/INONONO66/openomni/commit/239b4273af7a67217a66ea1bf0c8657579539214"
+        },
+        "date": 1788863281154,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 564,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 3735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2027,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 875047,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 214089,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4328277,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 85,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 674,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 373,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 302139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1963,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 117962,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 604355,
             "unit": "ns/op"
           }
         ]
