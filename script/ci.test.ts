@@ -233,20 +233,6 @@ test("workflow restores the one build before every executable consumer", () => {
   expect(jobs.test?.if).toBe("always()");
   expect(jobs.ci?.if).toBe("always()");
   expect(jobs.static?.steps.some((step) => step.run?.includes("bun run lint:docs"))).toBe(true);
-  const workflow = Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")) as {
-    on: { merge_group?: unknown };
-    concurrency: { "cancel-in-progress": string };
-  };
-  expect(workflow.on.merge_group).toBeDefined();
-  expect(workflow.concurrency["cancel-in-progress"]).toBe(`\${{ github.event_name == 'pull_request' }}`);
-  expect(jobs["quality-static"]?.if).toBe("needs.plan.outputs.verify == 'true'");
-  expect(jobs["quality-gates"]?.if).toBe("needs.plan.outputs.verify == 'true'");
-  // A skipped need (scripts-coverage on non-tooling PRs) skips a dependent job
-  // unless its condition carries a status-check function; without `!cancelled()`
-  // the `skipped` branch below is unreachable and the fan-in is skipped.
-  expect(jobs.quality?.if).toBe(
-    "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')",
-  );
 });
 
 test("v2 workflow carries scope as an artifact and always runs repository contracts", () => {
@@ -336,9 +322,23 @@ test("a pull request requires every quality job to succeed", () => {
   expect(result.exitCode).toBe(0);
 });
 
-test("quality jobs run on executable pull requests", () => {
-  const jobs = z.object({ jobs: z.record(z.string(), jobSchema) }).parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
-  for (const q of QUALITY_JOBS) expect(jobs[q]?.if).toContain("needs.plan.outputs.verify");
+test("quality jobs run on executable pull requests and merge groups", () => {
+  const workflow = z
+    .object({
+      on: z.object({ merge_group: z.object({}).nullable() }),
+      concurrency: z.object({ "cancel-in-progress": z.string() }),
+      jobs: z.record(z.string(), jobSchema),
+    })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")));
+  expect(workflow.concurrency["cancel-in-progress"]).toBe("${{ github.event_name == 'pull_request' }}");
+  const conditions = QUALITY_JOBS.map((q) => workflow.jobs[q]?.if);
+  expect(conditions.slice(0, 2)).toEqual(["needs.plan.outputs.verify == 'true'", "needs.plan.outputs.verify == 'true'"]);
+  // A skipped need (scripts-coverage on non-tooling PRs) skips a dependent job
+  // unless its condition carries a status-check function; without `!cancelled()`
+  // the `skipped` branch below is unreachable and the fan-in is skipped.
+  expect(conditions[2]).toBe(
+    "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')",
+  );
 });
 
 test("the full push gate accepts successful checks without PR-only dependency review", () => {
