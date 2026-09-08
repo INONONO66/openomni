@@ -272,7 +272,9 @@ jobs:
   quality:
     name: Quality
     needs: [plan, prepare, tests]
-    if: needs.plan.outputs.verify == 'true'
+    # Quality ratchets run on main pushes, schedules and manual dispatch only
+    # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
+    if: needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:

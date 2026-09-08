@@ -68,19 +68,21 @@ test("docs-only planning keeps both final statuses successful while work is inte
 for (const job of ["plan", "prepare", "tests", "static", "deps", "quality", "dependency-review"]) {
   for (const status of ["failure", "cancelled", "skipped", "missing"]) {
     test(`final gate rejects ${job} ${status} for a required full run`, () => {
-      // Given a full plan and one unsuccessful/missing required result.
+      // Given a full plan and one unsuccessful/missing required result. Quality
+      // is required on pushes, so the push event exercises every job.
       const needs: Record<string, { result: string }> = Object.fromEntries(
         ["plan", "prepare", "tests", "static", "deps", "quality", "dependency-review"].map(
           (key) => [key, { result: "success" }],
         ),
       );
+      if (job === "dependency-review") needs.quality = { result: "skipped" };
       if (status === "missing") delete needs[job];
       else needs[job] = { result: status };
       // When the real final-gate entry point runs.
       const result = cli(["gate"], {
         CI_PLAN: JSON.stringify(planChanges([], true)),
         CI_NEEDS: JSON.stringify(needs),
-        CI_EVENT: "pull_request",
+        CI_EVENT: job === "dependency-review" ? "pull_request" : "push",
       });
       // Then matrix failure/cancellation and unexpected skips remain failures.
       expect(result.exitCode).not.toBe(0);
@@ -186,6 +188,40 @@ test("the stable Test status accepts only the planned documentation skip", () =>
   });
   // When its CLI executes, then the always-running status succeeds.
   expect(result.exitCode).toBe(0);
+});
+
+test("a pull request requires the skipped quality job and rejects a quality run", () => {
+  // Given a full pull-request plan where GitHub skipped quality by design.
+  const needs = Object.fromEntries(
+    ["plan", "prepare", "tests", "static", "deps", "dependency-review"].map((key) => [
+      key,
+      { result: "success" },
+    ]),
+  );
+  // When the real gate executes, then the intentional skip is the only accepted result.
+  const skipped = cli(["gate"], {
+    CI_PLAN: JSON.stringify(planChanges([], true)),
+    CI_EVENT: "pull_request",
+    CI_NEEDS: JSON.stringify({ ...needs, quality: { result: "skipped" } }),
+  });
+  expect(skipped.exitCode).toBe(0);
+  const ran = cli(["gate"], {
+    CI_PLAN: JSON.stringify(planChanges([], true)),
+    CI_EVENT: "pull_request",
+    CI_NEEDS: JSON.stringify({ ...needs, quality: { result: "success" } }),
+  });
+  expect(ran.exitCode).not.toBe(0);
+  expect(ran.stderr.toString()).toContain("quality: success");
+});
+
+test("the workflow skips the quality job on pull requests", () => {
+  // Given the shipped workflow, then quality is gated on the event, not only the plan.
+  const jobs = z
+    .object({ jobs: z.record(z.string(), jobSchema) })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  expect(jobs.quality?.if).toBe(
+    "needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'",
+  );
 });
 
 test("the full push gate accepts successful checks without PR-only dependency review", () => {

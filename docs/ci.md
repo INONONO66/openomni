@@ -21,8 +21,17 @@ Examples:
   executable jobs. Package-local documentation still selects that package.
 
 Main pushes, daily scheduled runs, and manual CI dispatch always select all
-lanes. Selection narrows workspace tests and typechecking; global architecture,
-lint, and quality gates still run for executable changes.
+lanes. Selection narrows workspace tests and typechecking; global architecture
+and lint gates still run for executable changes.
+
+## Quality on pull requests
+
+The measured quality ratchet (`quality` job) runs on main pushes, scheduled
+runs, and manual dispatch only. Pull requests skip it by design and the final
+`CI` status requires that skip (`script/ci.ts` gate: quality is mandatory
+when `CI_EVENT` is not `pull_request`). This is the interim shape while the
+quality pipeline is split and made change-class-aware; the skip is reversed by
+deleting the event condition on the job and in the gate map.
 
 ## Execution
 
