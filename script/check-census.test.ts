@@ -1139,6 +1139,38 @@ test("Electron window listeners credit window-manager events; first paint needs 
   }
 }, 180_000);
 
+test("Electron app.getPath roots a durable file family like homedir does", () => {
+  const electron = dirname(
+    Bun.resolveSync("electron/package.json", resolve(import.meta.dir, "../apps/desktop")),
+  );
+  using fixture = new Fixture({
+    "src/main.ts": `import {app} from "electron";import {readFileSync,writeFileSync} from "node:fs";import {join} from "node:path";const file=()=>join(app.getPath("userData"),"window-bounds.json");writeFileSync(file(),"sentinel");console.log(readFileSync(file(),"utf8"));`,
+  });
+  fixture.write(
+    "node_modules/electron/package.json",
+    JSON.stringify({ name: "electron", type: "module", main: "index.js", types: "electron.d.ts" }),
+  );
+  fixture.write(
+    "node_modules/electron/electron.d.ts",
+    readFileSync(join(electron, "electron.d.ts"), "utf8"),
+  );
+  // The dependency double resolves the per-user directory to the fixture root.
+  fixture.write(
+    "node_modules/electron/index.js",
+    `export const app={getPath(){return ${JSON.stringify(fixture.root)}}};`,
+  );
+  const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
+    timeout: 5000,
+  });
+  expect(actual.exitCode).toBe(0);
+  expect(actual.stdout.toString().trim()).toBe("sentinel");
+  const result = fixture.run("store", fixture.schema());
+  expect(result.output).not.toContain("dynamic_store_boundary");
+  expect(result.output).toContain('"family":"$electron.userData/window-bounds.json"');
+  expect(result.output).toContain('"productionWrites":[{');
+  expect(result.output).toContain('"productionReads":[{');
+}, 180_000);
+
 test("forwarded CLI argument slices retain their filesystem input family", () => {
   using fixture = new Fixture({
     "src/main.ts": `async function read(path:string){return Bun.file(path).text()}

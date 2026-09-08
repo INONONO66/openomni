@@ -2790,6 +2790,12 @@ class Provenance {
 
     if (/\/node\/os\.d\.ts$/.test(owner) && ["homedir", "tmpdir"].includes(name))
       return [{ value: `$${name}`, origin: node }];
+    // Electron's per-user directories are ambient roots the same way homedir is.
+    if (/\/electron\/electron\.d\.ts$/.test(owner) && name === "getPath" && node.arguments[0])
+      return nested(node.arguments[0]).map((row) => ({
+        value: `$electron.${row.value}`,
+        origin: node,
+      }));
     if (/\/node_modules\//.test(owner) && name === "randomUUID")
       return [{ value: "*", origin: node }];
     if (
