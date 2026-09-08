@@ -1730,7 +1730,7 @@ class Provenance {
         ].includes(name);
       const scheduled =
         (/(?:(?:bun-types|@types\/node)\/|typescript\/lib\/lib\..*\.d\.ts$)/.test(file) &&
-          ["queueMicrotask", "setTimeout", "setInterval", "setImmediate"].includes(name)) ||
+          ["queueMicrotask", "setTimeout", "setInterval", "setImmediate", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback"].includes(name)) ||
         // `fs.watch(path, options?, listener)` delivers to its listener from the event loop.
         (/@types\/node\/fs\.d\.ts$/.test(file) && name === "watch");
       const eventCallback =
@@ -1743,6 +1743,12 @@ class Provenance {
         ["removeEventListener", "removeListener", "off", "assign"].includes(name)
       )
         for (const argument of arguments_) this.registeredCallbacks.add(argument);
+      // Declaration-only external APIs cannot expose an implementation to the graph;
+      // callbacks passed to their registration methods are retained by the runtime.
+      const declarationOnlyExternal =
+        /\/node_modules\/.*\.d\.ts$/.test(file) &&
+        (name === "subscribe" || /^on[A-Z]/.test(name));
+      const bridgeCallback = /^on[A-Z]/.test(name) && this.desktopBridgeMember(node, name);
       const receiver =
         ts.isPropertyAccessExpression(node.expression) ||
         ts.isElementAccessExpression(node.expression)
@@ -1752,7 +1758,7 @@ class Provenance {
       this.activateSpawnedSource(node, file, name, arguments_);
       this.invokeModuleFactory(node, receiver, name, arguments_);
       this.recordNativeEvents(node, receiver, eventCallback, arguments_, name, file);
-      this.invokeNativeCallbacks(immediate, scheduled, arguments_, node, receiver);
+      this.invokeNativeCallbacks(immediate, scheduled || declarationOnlyExternal || bridgeCallback, arguments_, node, receiver);
       this.invokeAiCallbacks(file, name, node, execute, arguments_);
       if (/bun-types\//.test(file) && ["scan", "scanSync"].includes(name)) this.point(node, node);
       this.invokeBunCallbacks(file, name, arguments_, node);
@@ -1828,6 +1834,17 @@ class Provenance {
         attribute.initializer.expression
       )
         this.watch(attribute.initializer.expression, execute);
+  }
+  // Window.desktop is the contextBridge contract: its renderer-side members are
+  // type declarations, while callbacks are delivered by the preload runtime.
+  private desktopBridgeMember(node: ts.CallExpression | ts.NewExpression, name: string): boolean {
+    const window = this.checker.resolveName("Window", node, ts.SymbolFlags.Type, false);
+    if (!window) return false;
+    const desktop = this.checker.getDeclaredTypeOfSymbol(window).getProperty("desktop");
+    if (!desktop) return false;
+    const member = this.checker.getTypeOfSymbolAtLocation(desktop, node).getProperty(name);
+    const declaration = this.declaration(node.expression);
+    return Boolean(declaration && member?.declarations?.includes(declaration));
   }
   private callbackOwner(node: ts.CallExpression | ts.NewExpression): string {
     let file = this.nativeOwner(node);
