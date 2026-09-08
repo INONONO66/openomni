@@ -50,7 +50,7 @@ const duplication = z.strictObject({
 const staticSchema: z.ZodType<StaticDocument> = z.strictObject({
 	version: z.literal(1), complete: z.literal(true), inventoryHash: hash, contractHash: hash,
 	tools: z.array(z.strictObject({ name: z.string(), version: z.string(), packageHash: hash, entryHash: hash, invocation: z.string() })).min(1),
-	analyzerProcesses: z.array(z.strictObject({ pid: count, exitCode: z.literal(0), operation: z.string(), inputHash: hash, outputHash: hash })).min(1),
+	analyzerProcesses: z.array(z.strictObject({ transport: z.enum(["in-process", "process"]), pid: count.optional(), exitCode: z.literal(0).optional(), operation: z.string(), inputHash: hash, outputHash: hash })).min(1),
 	pythonProcesses: z.array(pythonProcess),
 	sources: z.array(z.strictObject({ path: z.string(), sha256: hash })).min(1),
 	hosts: z.array(source).min(1),

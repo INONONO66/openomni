@@ -25,6 +25,9 @@ test("static leg JSON is validated before joining instead of trusting an untyped
 			{ measured: [{ source: {}, analysis: {} }] },
 			{ measured: jsonArray(json.measured, (entry) => ({ ...jsonObject(entry), analysis: { units: [], prepared: {}, receipt: null } })) },
 			{ duplication: { ...jsonObject(json.duplication), inspected: "invalid" } },
+			{ analyzerProcesses: jsonArray(json.analyzerProcesses, (entry) => ({ ...jsonObject(entry), transport: "invalid" })) },
+			{ analyzerProcesses: jsonArray(json.analyzerProcesses, (entry) => ({ ...jsonObject(entry), pid: -1 })) },
+			{ analyzerProcesses: jsonArray(json.analyzerProcesses, (entry) => ({ ...jsonObject(entry), exitCode: 2 })) },
 		];
 		for (const patch of patches) expect(() => parseStatic({ ...json, ...patch })).toThrow(InventoryError);
 		expect(() => parseStatic(null)).toThrow(InventoryError);

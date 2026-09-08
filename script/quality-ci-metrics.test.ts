@@ -25,6 +25,13 @@ test("static pinned analyzers survive JSON transfer and join conservative bounds
 		const document = parseStatic(readDocument(join(root, "static.json")));
 		expect(document).toEqual(collected);
 		expect(document.analyzerProcesses.map((row) => row.operation)).toEqual(["javascript", "coverage", "clones"]);
+		expect(document.analyzerProcesses.map((row) => row.transport)).toEqual(["in-process", "in-process", "process"]);
+		for (const row of document.analyzerProcesses.slice(0, 2)) {
+			expect(row.pid).toBeUndefined();
+			expect(row.exitCode).toBeUndefined();
+		}
+		expect(document.analyzerProcesses[2]?.pid).toBeGreaterThan(0);
+		expect(document.analyzerProcesses[2]?.exitCode).toBe(0);
 		expect(document.pythonProcesses).toEqual([]);
 		expect(document.sources).toEqual(identity.inventory.files.map(({ path, sha256 }) => ({ path, sha256 })));
 		const lines = new Map<string, ReadonlyMap<number, number>>();
