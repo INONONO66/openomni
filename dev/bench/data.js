@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788886846062,
+  "lastUpdate": 1788888154974,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -68281,6 +68281,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 887296,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b366e2bd7b33371df8f3f1e3666f675f819d8f19",
+          "message": "ci: plan v2 change classes, hash-proven scoped quality, script test shards (CI PR4) (#1017)\n\n* ci(plan): add change classes and hash-proven quality scopes\n\n* ci(test): split contracts and tooling shards with merged coverage\n\n* test(ci): cover scoped shared census and assign its tooling shard\n\n* docs(ci): record shared census compatibility and final gates\n\n* docs(ci): record conflict-free main rebase and green gates\n\n* fix(ci): preserve desktop smoke and isolate sharded test receipts",
+          "timestamp": "2026-09-08T17:21:17Z",
+          "tree_id": "92cac029c3ea9597dc58f174376aa9a92d9c57a6",
+          "url": "https://github.com/INONONO66/openomni/commit/b366e2bd7b33371df8f3f1e3666f675f819d8f19"
+        },
+        "date": 1788888153552,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 820,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 5311,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2827,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1259916,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 322983,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6312544,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 133,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1116,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 647,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 480437,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3320,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18522,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 178399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 891217,
             "unit": "ns/op"
           }
         ]
