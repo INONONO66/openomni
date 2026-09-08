@@ -612,6 +612,64 @@ test("Electron Vite roots include main, preload and HTML module entries", () => 
   expect(result.output).toContain('"path":"src/index.html","sha256":');
 }, 180_000);
 
+test("rendered components, hook callbacks and DOM listeners consume renderer exports", () => {
+  for (const rendered of [false, true]) {
+    using fixture = new Fixture({
+      "src/electron.vite.config.ts":
+        'export default {main:{build:{lib:{entry:"main.ts"}}},renderer:{build:{rollupOptions:{input:"index.html"}}}};',
+      "src/main.ts": 'console.log("main");',
+      "src/state.ts":
+        'import {Store} from "@tanstack/store";export type Facts={count:number};export const LIMIT=3;export const store=new Store<Facts>({count:0});export function bump(previous:number):number{return previous+1}export function selectCount(facts:Facts):number{return facts.count}export function onKey(event:KeyboardEvent):void{console.log(event.key)}',
+      "src/app.tsx":
+        'import {useEffect,useState} from "react";import {useStore} from "@tanstack/react-store";import {bump,LIMIT,onKey,selectCount,store} from "./state";import type {Facts} from "./state";export function App(){const [count,setCount]=useState(0);const stored=useStore(store,(facts:Facts)=>selectCount(facts));useEffect(()=>{document.addEventListener("keydown",onKey);return ()=>document.removeEventListener("keydown",onKey)},[]);return <button type="button" onClick={()=>setCount((previous)=>Math.min(LIMIT,bump(previous)))}>{count+stored}</button>}',
+      "src/renderer.tsx": rendered
+        ? 'import {createRoot} from "react-dom/client";import {App} from "./app";createRoot(document.body).render(<App/>);'
+        : 'import {createRoot} from "react-dom/client";import "./app";createRoot(document.body).render(<p>idle</p>);',
+    });
+    fixture.write("package.json", JSON.stringify({ name: "fixture" }));
+    fixture.write(
+      "src/package.json",
+      JSON.stringify({ name: "application", scripts: { build: "electron-vite build" } }),
+    );
+    fixture.write("src/index.html", '<script type="module" src="./renderer.tsx"></script>');
+    fixture.write(
+      "tsconfig.json",
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          module: "preserve",
+          moduleResolution: "bundler",
+          target: "esnext",
+          jsx: "react-jsx",
+          lib: ["esnext", "dom"],
+        },
+        include: ["src"],
+      }),
+    );
+    fixture.freeze();
+    // React, TanStack and @types/react are installed for the desktop workspace only.
+    symlinkSync(
+      resolve(import.meta.dir, "../apps/desktop/node_modules"),
+      join(fixture.root, "node_modules"),
+    );
+    const result = fixture.run("export");
+    const report = JSON.parse(result.output) as {
+      complete: boolean;
+      errors: unknown[];
+      findings: { path: string; symbol: string }[];
+    };
+    expect(report.complete).toBe(true);
+    expect(report.errors).toEqual([]);
+    const reported = report.findings
+      .filter((finding) => finding.path === "src/state.ts")
+      .map((finding) => finding.symbol)
+      .sort();
+    expect(reported).toEqual(
+      rendered ? [] : ["Facts", "LIMIT", "bump", "onKey", "selectCount", "store"],
+    );
+  }
+}, 180_000);
+
 test("JavaScript publishers and declaration-bound non-SQL query objects", () => {
   using javascript = new Fixture({
     "src/events.ts": protocol,
