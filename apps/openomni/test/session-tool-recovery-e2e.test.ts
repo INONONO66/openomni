@@ -262,7 +262,11 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       if (names.length === 2)
         expect(results?.[1]).toMatchObject({
           tool_use_id: "call-B",
-          content: "Error: tool execution cancelled",
+          // A lost process is settled from evidence as outcome_unknown, never dressed up as a cancel.
+          content:
+            mode === "crash-window"
+              ? "Error: B outcome unknown: the process was lost before a result was recorded"
+              : "Error: tool execution cancelled",
         });
       expect(requests).toHaveLength(2);
       expect(bodies).toEqual(names);
