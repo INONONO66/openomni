@@ -60,6 +60,16 @@ reversible ruleset requirement for `CI` with `gh api` after merge; this workflow
 does not apply the ruleset.
 
 
+## Operations
+
+Partial workflow reruns are unsupported by design. `gh run rerun --failed` cannot
+reliably pass the Script Coverage merge because `QUALITY_RUN` embeds the attempt
+number; partitions produced by an earlier attempt fail the fail-closed freshness
+check with `InventoryError: stale coverage partition: scripts-contracts`. Use a
+full `gh run rerun <id>` (or push) instead. The typical reason a full rerun is
+needed is the artifact-service 403 flake class tracked by
+actions/upload-artifact#560.
+
 ## Execution
 
 The shared setup action installs Bun 1.4.1, pinned in `package.json`,
