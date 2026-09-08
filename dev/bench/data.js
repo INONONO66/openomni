@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788778138009,
+  "lastUpdate": 1788862103786,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -67153,6 +67153,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 604454,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7e50d57d01d03a60ee001084f22354543d86618",
+          "message": "feat(desktop): real multi-tab strip with per-tab history and native tab shortcuts (#1001)\n\n* feat(desktop): add tab store and independent navigation histories\n\n* feat(ui): compose accessible tabs and generic console content\n\n* feat(desktop): route native tab menus through the shell bridge\n\n* feat(desktop): integrate tabs sessions list and window-lifetime chats\n\n* docs(desktop): document tab ownership and shell behavior\n\n* fix(desktop): history menu keeps store order, close control never steals focus, unescape shell docs\n\n* test(desktop): double the application menu and window lifetime in the entry-wiring test\n\n* test(desktop): give the preload bridge test its own module instance in whole-suite runs\n\n* test(desktop): cover tab lifecycle and window menu wiring\n\nExercise mounted App, SessionList, Console and tab controls in-process so package coverage includes their behavior. Cover main-process window ownership, bounds persistence, development events and invalid shell commands with isolated Electron instances. Preserve production code and coverage baselines.\n\n* test(desktop): read the shell-frame interaction pins through the active tab\n\n* fix(ui): cancel the middle press on a tab so closing never steals focus\n\nChromium focuses the pressed tab button before auxclick fires, so a\nmiddle-click on an inactive tab moved focus off the composer before the\ntab closed. Cancel only the middle pointerdown; left presses still\nactivate. Also drop the prose pin on the null-project placeholder copy.\n\n* fix(desktop,ui): sidebar clicks move the current tab, ⌘-click opens a new one, inactive tabs dim\n\n* test(desktop,ui): run DOM fixtures under the current bun binary instead of mise",
+          "timestamp": "2026-09-08T19:07:12+09:00",
+          "tree_id": "61ec838140b094bd079c5741231429883154aa38",
+          "url": "https://github.com/INONONO66/openomni/commit/c7e50d57d01d03a60ee001084f22354543d86618"
+        },
+        "date": 1788862102798,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 658,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 4316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2284,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1026964,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 238207,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4977120,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 94,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 806,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 340153,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15210,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 144597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 738576,
             "unit": "ns/op"
           }
         ]
