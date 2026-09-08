@@ -187,6 +187,19 @@ it("rejects non-Owner approval and changed domain revisions", () => {
     ).resolution,
   ).toBe("rejected");
 });
+it("refuses an answer addressed to another request before any record", () => {
+  const pending = request();
+  const valid = answer(pending);
+  // Same session, different request: the current request must not absorb it.
+  expect(
+    decide({ kind: "request.answer", answer: { ...valid, requestId: "elsewhere" } }, pending),
+  ).toEqual({ resolution: "rejected", actions: [] });
+  // A request owned by another session is never answered under this row.
+  expect(
+    decide({ kind: "request.answer", answer: valid }, { ...pending, sessionId: "other" }),
+  ).toEqual({ resolution: "rejected", actions: [] });
+  expect(decide({ kind: "request.answer", answer: valid }, pending).resolution).toBe("resolved");
+});
 it("counts distinct responders, not repeated replies, for all and quorum", () => {
   const pending = {
     ...request(),
@@ -208,6 +221,18 @@ it("counts distinct responders, not repeated replies, for all and quorum", () =>
     attached.request,
   );
   expect(repeated.resolution).toBe("duplicate");
+  // A seen reply id replayed by a different responder is one duplicate record,
+  // never a second reply: it cannot move the request toward the threshold.
+  const replayed = decide(
+    {
+      kind: "request.answer",
+      answer: { ...first, principal: { ...first.principal, principalId: "bob" } },
+    },
+    attached.request,
+  );
+  expect(replayed.resolution).toBe("duplicate");
+  expect(replayed.request).toMatchObject({ state: "open", replies: attached.request?.replies });
+  expect(replayed.actions.map((action) => action.id)).toEqual(["invocation:input:answer"]);
   const resolved = decide(
     {
       kind: "request.answer",

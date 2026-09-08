@@ -1350,34 +1350,58 @@ describe("session lifecycle conformance", () => {
                 effectHash: canonicalDigest({}),
               }),
             ).toBe("rejected");
-            // Misrouted to a real session: rejected there, never applied here.
+            // Misrouted to a real session: refused there before any record, and
+            // never applied here. The destination row does not move at all.
+            const destination = SessionHandleStore.row("answer-refuse");
+            const destinationTree = SessionHandleStore.tree("answer-refuse").length;
             expect(
               await port.answer({
                 ...reply(q, "corrupt-session", 1_099),
                 sessionId: "answer-refuse",
               }),
             ).toBe("rejected");
+            expect(SessionHandleStore.row("answer-refuse").revision).toBe(destination.revision);
+            expect(SessionHandleStore.tree("answer-refuse")).toHaveLength(destinationTree);
+            expect(SessionHandleStore.requestById("answer-refuse:q")?.seenReplyIds).toEqual([
+              "answer-refuse:reply-1",
+              "answer-refuse:refuse-1",
+            ]);
             await expect(
               port.answer({ ...reply(q, "corrupt-missing", 1_099), sessionId: "OTHER" }),
             ).rejects.toThrow("session not found: OTHER");
             expect(SessionHandleStore.requestById(q.requestId)?.state).toBe("open");
             expect(await port.answer(reply(q, "STALE:reply-1", 1_099))).toBe("resolved");
+            // The winning input id replayed by a different principal is a
+            // conflicting replay: refused without a record, the winner untouched.
+            const settled = SessionHandleStore.tree(q.sessionId).length;
+            expect(
+              await port.answer({
+                ...reply(q, "STALE:reply-1", 1_099),
+                principal: { kind: "session", principalId: "impostor", evidenceId: "other" },
+              }),
+            ).toBe("rejected");
+            expect(SessionHandleStore.tree(q.sessionId)).toHaveLength(settled);
+            expect(
+              SessionHandleStore.requestById(q.requestId)?.replies.map((r) => r.responderId),
+            ).toEqual(["worker"]);
           },
         },
       ],
     });
 
     // Terminal uniqueness: exactly one `<requestId>:resolution` record per
-    // session; every losing contender is a duplicate/late/rejected record.
+    // session; the losing contender is exactly one duplicate record. No product
+    // session ever holds a `rejected` record: only STALE is probed with
+    // corrupt input, and a misrouted answer leaves nothing behind.
     for (const id of sessions) {
       const final = result.final.get(id);
       const records = resolutions(final);
       expect(records[0]).toEqual(["request", "opened"]);
       expect(final?.actions.filter((action) => action.id === `${id}:q:resolution`)).toHaveLength(1);
+      expect(records.filter(([, resolution]) => resolution === "duplicate")).toHaveLength(1);
       expect(
         records.filter(
-          ([, resolution]) =>
-            !["opened", "duplicate", "rejected", undefined].includes(resolution as string),
+          ([, resolution]) => !["opened", "duplicate", undefined].includes(resolution as string),
         ),
       ).toHaveLength(2);
       expect(final?.requests[0]?.state).not.toBe("open");
