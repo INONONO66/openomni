@@ -169,7 +169,11 @@ test("host disconnect closes the injected runner and awaits its processes", asyn
   const release = deferred<void>();
   await pair(
     async ({ mode, host, da }) => {
-      const running = mode.cell.run("tool.hold()", "disconnect", { timeoutMs: 5000 });
+      // With a wait window the loss surfaces through the background path too.
+      const running = mode.cell.run("tool.hold()", "disconnect", {
+        timeoutMs: 5000,
+        waitMs: 5000,
+      });
       const outcome = running.then(
         (result) => {
           throw new Error(`expected connection loss, received ${result.status}`);
@@ -288,6 +292,24 @@ test("run leaves a held cell in the background: peek shows its output so far, st
       );
       if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
       await entered.promise;
+      // A cell queued behind the held one is in flight with no output yet; stopping it
+      // before it executes cancels it without ever touching the interpreter.
+      const queued = await mode.cell.run("print('second')", "background", {
+        timeoutMs: 5000,
+        waitMs: 0,
+      });
+      if (queued.status !== "running") throw new Error(`expected running, got ${queued.status}`);
+      const nothing = { stdout: "", stderr: "" };
+      expect(await mode.cell.peek(queued.cellId, "background")).toEqual({
+        status: "running",
+        cellId: queued.cellId,
+        output: nothing,
+      });
+      expect(await mode.cell.stop(queued.cellId, "background")).toEqual({
+        status: "cancelled",
+        cellId: queued.cellId,
+        output: nothing,
+      });
       const partial = { stdout: "started\n", stderr: "warn\n" };
       expect(await mode.cell.peek(started.cellId, "background")).toEqual({
         status: "running",
