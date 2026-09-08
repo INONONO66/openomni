@@ -1,5 +1,5 @@
 import type { BusEvent, Message, Tool } from "@openomni/protocol";
-import { LlmCall, Operational } from "@openomni/protocol";
+import { LlmCall, Operational, type Transcript } from "@openomni/protocol";
 import { z } from "zod";
 import type { Sink } from "./sink";
 import type { SDKMessage } from "./message";
@@ -110,8 +110,16 @@ export namespace Run {
   );
   export type Failure = InstanceType<typeof FailureError>;
 
+  /** Billed usage, the visible-output boundary and the credential handle of one provider attempt. */
+  export interface AttemptEvidence {
+    readonly usage: z.infer<typeof FailureUsage>;
+    readonly visibleOutput: boolean;
+    readonly finishReason: string;
+    readonly credential: ReturnType<typeof Auth.reference> | null;
+  }
+
   export type Outcome =
-    | { readonly type: "stop" }
+    | { readonly type: "stop"; readonly evidence?: AttemptEvidence }
     | { readonly type: "continue" }
     | { readonly type: "aborted"; readonly error?: Failure }
     | { readonly type: "error"; readonly error: Failure };
@@ -169,6 +177,16 @@ function serializePrompt(system: string, input: RunInput, model: Provider.Model)
   });
 }
 
+function attemptUsage(totals: Transcript.Usage): Run.AttemptEvidence["usage"] {
+  return {
+    inputTokens: totals.input,
+    outputTokens: totals.output,
+    reasoningTokens: totals.reasoning,
+    cacheReadTokens: totals.cache.read,
+    cacheWriteTokens: totals.cache.write,
+  };
+}
+
 export async function run(
   input: RunInput,
   sink: Sink,
@@ -213,6 +231,7 @@ export async function run(
     },
   };
 
+  let credential: ReturnType<typeof Auth.reference> | undefined;
   const createStream: Processor.ProcessorOptions["createStream"] = async (streamInput) => {
     const ai = await import("ai");
     const auth = await Auth.resolve(
@@ -221,6 +240,7 @@ export async function run(
       input.authProvider,
       input.allowAuthFallback,
     );
+    credential = Auth.reference(auth);
 
     const languageModel = getLanguage(model, auth, input.transport);
 
@@ -379,27 +399,28 @@ export async function run(
       time: Date.now(),
     });
 
-    return { type: "stop" };
+    return {
+      type: "stop",
+      evidence: {
+        usage: attemptUsage(finalTokens),
+        visibleOutput: processor.visibleOutput,
+        finishReason,
+        credential: credential ?? null,
+      },
+    };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     const apiError = coerceApiError(err);
     const source = apiError ?? err;
     const sourceFacts = errorFacts(source);
     const aborted = abortSignal.aborted || sourceFacts.aborted === true;
-    const usage = processor.usageTotals;
     const retryAfterMs = Retry.retryAfterMs(source);
     const failure = new Run.FailureError(
       {
         message: err.message,
         providerErrorName: err.name,
         ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
-        usage: {
-          inputTokens: usage.input,
-          outputTokens: usage.output,
-          reasoningTokens: usage.reasoning,
-          cacheReadTokens: usage.cache.read,
-          cacheWriteTokens: usage.cache.write,
-        },
+        usage: attemptUsage(processor.usageTotals),
         aborted,
         contextOverflow: sourceFacts.contextOverflow ?? Retry.isContextOverflow(err),
         visibleOutput: processor.visibleOutput,

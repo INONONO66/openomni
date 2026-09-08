@@ -23,8 +23,10 @@ import type {
   ExecutionRequest,
   ExecutionResult,
   ExecutorOptions,
+  RecoverySite,
 } from "./executor-contract";
 import { createExecutionApprovals } from "./executor-approval";
+import { createExecutionRecovery, recoveryClassification } from "./executor-recovery";
 import { ExecutionApprovalError } from "./executor-contract";
 import { createAttemptRunner } from "./executor-attempts";
 import { createStopJudge } from "./executor-stop";
@@ -37,6 +39,7 @@ export type {
   ExecutionApprovals,
   ExecutionApprovalRequest,
   ExecutionBatchResult,
+  ExecutionResult,
   ExecutorOptions,
 } from "./executor-contract";
 
@@ -50,6 +53,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     publishToolTerminal,
   } = createExecutionRecord(options);
   const { approvals, awaitApproval } = createExecutionApprovals(options);
+  const recovery = createExecutionRecovery(options, { appendResult });
   const kinds = new Set([
     ...CORE_KINDS,
     ...(options.extensionKinds ?? []).map((registration) => registration.kind),
@@ -61,11 +65,16 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     value: PlainValue,
     parentId = options.identity.parentActionId,
   ): Promise<PolicyEvaluation & { readonly receipt: LedgerAction.Receipt }> {
-    // Compaction is the existing turn.post/compaction policy operation,
-    // even though its durable evidence has the dedicated compaction kind.
+    // Compaction is the existing turn.post/compaction policy operation, even
+    // though its durable evidence has the dedicated compaction kind; its typed
+    // compensation keeps its own op there so a policy can pin a projection.
     const point =
       request.kind === "compaction"
-        ? { kind: "turn", phase: "post" as const, op: "compaction" }
+        ? {
+            kind: "turn",
+            phase: "post" as const,
+            op: request.op === "compact" ? "compaction" : request.op,
+          }
         : { kind: request.kind, phase, op: request.op };
     const input: PolicyEvaluationInput = {
       ...point,
@@ -170,6 +179,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         approvalRequired:
           stage.pre.verdict === "require_approval" || stage.request.approval?.required === true,
         domainRevisions: { ...stage.request.approval?.domainRevisions },
+        recovery: recoveryClassification(stage.request),
       },
     });
     return { ...stage, intent };
@@ -356,8 +366,31 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       return { terminal: "failed", error: outcome.error };
     }
     const value = clonePlainValue(outcome.value);
-    const post = await applyPostPolicy(stage.request, value);
-    return finishRun(stage.request, stage.kind, intent.action.id, startedAt, value, post);
+    // The body has settled: a completion exception is recovered from that
+    // evidence, never by running the body again or inventing a post verdict.
+    let site: RecoverySite = "post_policy";
+    const complete = async (): Promise<ExecutionBatchResult> => {
+      const post = await decide(stage.request, "post", {
+        intent: stage.request.intent,
+        effect: stage.request.effect,
+        result: value,
+      });
+      site = "reverter";
+      const settled = await settlePost(stage.request, post, value);
+      site = "result_commit";
+      return finishRun(stage.request, stage.kind, intent.action.id, startedAt, value, settled);
+    };
+    return complete().catch(async (error: Error) => {
+      const recovered = await recovery.recoverCompletion(
+        intent.action.id,
+        stage.request,
+        site,
+        error,
+        value,
+      );
+      publishToolTerminal(stage.request, startedAt, "error");
+      return recovered;
+    });
   }
 
   async function runExisting<T extends PlainValue>(
@@ -470,6 +503,14 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       effect: request.effect,
       result: resultValue,
     });
+    return settlePost(request, post, resultValue);
+  }
+
+  async function settlePost(
+    request: ExecutionRequest,
+    post: PolicyEvaluation,
+    resultValue: PlainValue,
+  ): Promise<Exclude<ExecutionResult, { readonly terminal: "blocked_pre" }>> {
     const transformed = resultFromEvaluation(post, resultValue);
     if (!blocks(post) && transformed.ok) {
       return { terminal: "executed", value: transformed.value };
@@ -485,7 +526,15 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     (op, value) => decide({ kind: "turn", op, intent: value, effect: {} }, "post", value),
     commit,
   );
-  return { run, runAttempts, runExisting, runBatch, approvals, judgeStop };
+  return {
+    run,
+    runAttempts,
+    runExisting,
+    runBatch,
+    approvals,
+    judgeStop,
+    recover: recovery.recover,
+  };
 }
 
 function projectToolResult(request: ExecutionRequest, outcome: ExecutionBatchResult): PlainObject {

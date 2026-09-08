@@ -2,6 +2,8 @@
 
 #969 cutover, 2026-09-07: request waiting, authenticated consent and outbound delivery now use canonical actions. The new receipt below covers the replacement; historical receipts retain their original source pins. Final HEAD and gate outputs are in the PR and local report.
 
+#970 cutover, 2026-09-08: interrupted operations settle from classified evidence; attempt evidence, `restore_model_selection` and `restore_context_projection` are recorded actions. No store, table or schema is added or removed; the receipt at the end records what stayed in place.
+
 Verified on 2026-09-06 against source HEAD `c4fb774869fb060859bbdc2f58ce37ee3a3072c9`, tree `0d6318c742a1ca0eeaa5ddf30003108ba8a53487`; a fresh `git fetch origin main` resolved to the same commit. This docs-only patch preserves that production tree. Final documentation commit/tree and PR URL are recorded in the local `REPORT.md` and PR body.
 
 ## Receipt location and scope
@@ -268,3 +270,16 @@ The immutable migration manifest still names historical migration 0023. The guar
 The old producer entries and allowed perimeter store import are removed. Protocol/tool snapshots are generated from the current public barrel and catalog: SessionTransition maps to existing Session/Action vocabulary, and protected mutation no longer accepts model-minted approval decisions. The channels manifest allows agent for real-kernel tests only, not production source.
 
 Migration 0038 retains terminal legacy row bytes in immutable archive_969_wait/archive_969_approval tables; it does not erase action history or rewrite historical migrations. Unresolved or invalid old rows refuse before mutation. The #967 archive command remains explicitly confirmed and pinned separately. Unresolved old message alarms and native child execution also refuse. The replacement is covered by request/outbound race, restart and actual receiving-executor tests; final command receipts remain attached to the PR. Message/part retention, continuous scheduling (#947), and the broader #945/#948 quality campaign remain outside this cutover.
+
+## #970 durable recovery and typed restoration
+
+| Scope | Cutover disposition | Acceptance surface |
+| --- | --- | --- |
+| Recovery authority | One owner: `packages/agent/src/executor-recovery.ts`; classification pinned on intents; post-body exceptions and crash-open intents settle failed/outcome_unknown from evidence, refused commits stay pending | `packages/agent/test/executor-recovery.test.ts` per site and per kind; turn dispatcher recovery runs no tool |
+| Retry owners | Provider retry stays with `createAttemptRunner`; no second retry loop introduced; channel socket backoff (transport) and summarizer shrink loop (wraps recorded llm) audited as non-owners | `core/execution/llm-attempts.test.ts` pins ordinal/cap/reason and settled evidence |
+| Attempt evidence | Usage, visible-output boundary, finish reason and `Auth.reference` (type + 16-hex digest) recorded; the credential itself is never written | `packages/llm/test/run-outcome.test.ts`, `packages/llm/test/auth/storage.test.ts` |
+| Model restoration | Turn-boundary `restore_model_selection` from the durable last attempt; refusal keeps the fallback pinned | `core/model-restore.test.ts`, `model-selection.test.ts`, two-turn `session-chat-runner.test.ts` |
+| Context restoration | `restore_context_projection` appends under the compaction parent with the lease held; original compaction facts intact; unknown/unexecuted compaction refused before recording | `session-context-restore.test.ts` |
+| Deletion | Nothing deleted: no duplicate retry owner or process-local recovery authority remained at post-#969 main beyond the implicit chain reset in `run.ts`, which the recorded restoration replaces | `git diff --stat origin/main..HEAD`: 25 files, no migration, no schema |
+
+The contract's `move` rows for `session-admission.ts`/`session-turn.ts` into `session-lifecycle/*.ts` were not executed; those symbols keep their current owners and the contract records the landed locations. Gate outputs and the final HEAD are in the PR body.

@@ -95,6 +95,8 @@ export interface AgentRunBase {
 export interface RunState {
   stop: StopState;
   readonly modelFailureReasons: string[];
+  /** Index into the configured chain where this turn's selection starts (a pinned fallback the policy refused to release). */
+  modelChainStart: number;
   modelKey?: string;
   readonly sessionId: string;
   budgetState: BudgetState;
@@ -186,6 +188,7 @@ export function createRunState(input: ChatAgentInput & { traceContext: RunTrace 
     sessionId,
     stop: stopState(),
     modelFailureReasons: [],
+    modelChainStart: 0,
     budgetState: createBudgetState(),
     messages:
       input.history === undefined

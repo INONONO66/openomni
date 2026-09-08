@@ -10,7 +10,7 @@ import type {
   SessionTransition,
 } from "@openomni/protocol";
 import type { ChatAgentConfig } from "./core/types";
-import type { ExecutionApprovals, ExecutorOptions } from "./executor";
+import type { ExecutionApprovals, ExecutionResult, ExecutorOptions } from "./executor";
 
 export interface SessionTool {
   readonly name: string;
@@ -187,6 +187,8 @@ export interface SessionHandle {
   prompt(content: string, origin?: Inbox.Origin): Promise<SessionRunnerResult | undefined>;
   interrupt(origin?: Inbox.Origin): Promise<void>;
   resume(origin?: Inbox.Origin): Promise<void>;
+  /** Record the typed compensation of one compaction (`restore_context_projection`); history is never erased. */
+  restoreContext(compactionId: string): Promise<ExecutionResult>;
   get(options?: SessionGetOptions): SessionTurn.Snapshot;
   watch(options?: SessionGetOptions): SessionTurn.Watch;
   close(): Promise<void>;
