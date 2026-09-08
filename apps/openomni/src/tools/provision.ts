@@ -137,41 +137,59 @@ async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
   return port.supervisor.reconcile();
 }
 
+/**
+ * A store's thrown failure becomes this tool's refusal (§8.8: a second owner
+ * surfaces the store's typed owner_exists refusal); refusals pass through.
+ */
+function storeRefusal(tool: string, error: Error): never {
+  if (error instanceof ToolRefused) throw error;
+  return refusal(tool, error.message);
+}
+
+/** The declaration is stale when the manifest the Owner saw no longer matches the store. */
+function declarationIsStale(
+  existing: Provisioning.Person | undefined,
+  manifest: PersonManifest,
+  domainRevisions: Readonly<Record<string, number>> | undefined,
+): boolean {
+  if (domainRevisions === undefined) return approvalRequirement(existing, manifest) !== undefined;
+  return domainRevisions[manifest.id] !== (existing?.revision ?? -1);
+}
+
+function declarePerson(
+  port: ProvisionPort,
+  input: z.output<typeof PERSON_DECLARE_INPUT>,
+  domainRevisions: Readonly<Record<string, number>> | undefined,
+  now: () => number,
+) {
+  const { displayName, ...rest } = input.manifest;
+  const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
+  const existing = port.persons.get(manifest.id);
+  if (declarationIsStale(existing, manifest, domainRevisions))
+    return refusal("contact_add", "domain revision changed");
+  const person = port.persons.put({
+    ...manifest,
+    revision: (existing?.revision ?? -1) + 1,
+    createdBy: "resident",
+    updatedAt: now(),
+  });
+  port.materialize();
+  return {
+    kind: "declared" as const,
+    id: person.id,
+    trustTier: person.trustTier,
+    revision: person.revision,
+  };
+}
+
 function executePersonDeclare(port: ProvisionPort, now: () => number = Date.now) {
   return (
     input: z.output<typeof PERSON_DECLARE_INPUT>,
     domainRevisions?: Readonly<Record<string, number>>,
   ) =>
-    Storage.get().transaction(() => {
-      const { displayName, ...rest } = input.manifest;
-      const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
-      const existing = port.persons.get(manifest.id);
-      if (
-        (domainRevisions === undefined && approvalRequirement(existing, manifest) !== undefined) ||
-        (domainRevisions !== undefined &&
-          domainRevisions[manifest.id] !== (existing?.revision ?? -1))
-      ) {
-        return refusal("contact_add", "domain revision changed");
-      }
-      try {
-        const person = port.persons.put({
-          ...manifest,
-          revision: (existing?.revision ?? -1) + 1,
-          createdBy: "resident",
-          updatedAt: now(),
-        });
-        port.materialize();
-        return {
-          kind: "declared" as const,
-          id: person.id,
-          trustTier: person.trustTier,
-          revision: person.revision,
-        };
-      } catch (error) {
-        // §8.8: a second owner surfaces the store's typed owner_exists refusal.
-        return refusal("contact_add", error instanceof Error ? error.message : String(error));
-      }
-    });
+    Promise.resolve()
+      .then(() => Storage.get().transaction(() => declarePerson(port, input, domainRevisions, now)))
+      .catch((error: Error) => storeRefusal("contact_add", error));
 }
 
 function executePersonRemove(port: ProvisionPort) {
@@ -234,20 +252,20 @@ function executeChannelDeclare(port: ProvisionPort, now: () => number = Date.now
       port.secrets.put(sealed);
       credentialRef = secretId;
     }
-    try {
-      port.instances.put({
-        id: input.id,
-        provider: input.provider,
-        enabled: input.enabled,
-        settings: input.settings,
-        ...(credentialRef === undefined ? {} : { credentialRef }),
-        revision: (existing?.revision ?? -1) + 1,
-        createdBy: "resident",
-        updatedAt: now(),
-      });
-    } catch (error) {
-      return refusal("channel_add", error instanceof Error ? error.message : String(error));
-    }
+    await Promise.resolve()
+      .then(() =>
+        port.instances.put({
+          id: input.id,
+          provider: input.provider,
+          enabled: input.enabled,
+          settings: input.settings,
+          ...(credentialRef === undefined ? {} : { credentialRef }),
+          revision: (existing?.revision ?? -1) + 1,
+          createdBy: "resident",
+          updatedAt: now(),
+        }),
+      )
+      .catch((error: Error) => storeRefusal("channel_add", error));
     return { id: input.id, action: "declared" as const, statuses: await reconcile(port) };
   };
 }
@@ -512,7 +530,7 @@ export function createProvisionTool(port: ProvisionPort | undefined) {
           case "contact_add":
             return {
               op: operation.op,
-              result: run.contact_add(operation.args, context.domainRevisions),
+              result: await run.contact_add(operation.args, context.domainRevisions),
             };
           case "contact_remove":
             return { op: operation.op, ...(await run.contact_remove(operation.args)) };

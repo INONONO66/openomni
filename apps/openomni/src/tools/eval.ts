@@ -10,7 +10,12 @@ const operation = z.discriminatedUnion("op", [
     .object({
       op: z.literal("run"),
       code: z.string().min(1),
-      timeout: z.number().int().positive().default(15).describe("Seconds before the cell is stopped."),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .default(15)
+        .describe("Seconds before the cell is stopped."),
     })
     .strict(),
 ]);
@@ -18,18 +23,15 @@ const operation = z.discriminatedUnion("op", [
 const Input = z.object({ operation }).strict();
 
 function describe(result: Machine.CellResult, timeout: number): string {
-  switch (result.status) {
-    case "completed":
-      return result.value ?? result.output.stdout;
-    case "raised":
-      return `the cell raised: ${result.error}${result.output.stderr === "" ? "" : `\n${result.output.stderr}`}`;
-    case "timed_out":
-      return `the cell did not finish within ${timeout}s`;
-    case "cancelled":
-      return "the cell was cancelled";
-    case "refused":
-      return result.reason;
-  }
+  if (result.status === "completed") return result.value ?? result.output.stdout;
+  if (result.status === "raised") return `the cell raised: ${result.error}${stderrOf(result)}`;
+  if (result.status === "timed_out") return `the cell did not finish within ${timeout}s`;
+  if (result.status === "cancelled") return "the cell was cancelled";
+  return result.reason;
+}
+
+function stderrOf(result: { readonly output: { readonly stderr: string } }): string {
+  return result.output.stderr === "" ? "" : `\n${result.output.stderr}`;
 }
 
 /** The catalog is static: without a composed codemode the tool exists and refuses. */

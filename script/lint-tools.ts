@@ -591,6 +591,16 @@ function checkToolSchemaSnapshot(): Violation[] {
 // self-test — every check must flag a known-bad fixture (discrimination bench)
 // ---------------------------------------------------------------------------
 
+// Self-test fixture: a camelCase name, no description, and eight public fields (one over budget).
+const badTool: ToolSurface = {
+  name: "DoThingNowFastPlease",
+  description: "",
+  inputSchema: {
+    type: "object",
+    properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {}, h: {} },
+  },
+};
+
 function selfTest(): void {
   const failures: string[] = [];
 
@@ -604,14 +614,6 @@ function selfTest(): void {
     failures.push("vocab-ratchet flagged a mapped namespace (wait→Wait)");
   }
 
-  const badTool: ToolSurface = {
-    name: "DoThingNowFastPlease",
-    description: "",
-    inputSchema: {
-      type: "object",
-      properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {}, h: {} },
-    },
-  };
   if (lintToolSurface(badTool).length !== 3) {
     failures.push("tool-lint did not flag name/description/field-count on a known-bad tool");
   }

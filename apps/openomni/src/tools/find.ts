@@ -33,9 +33,13 @@ export function createFindTool(ports: FilePorts) {
         });
         return { paths, truncated };
       }),
-    render: (_args, value) =>
-      [...value.paths, ...(value.truncated ? ["[truncated: limit reached]"] : [])].join("\n"),
+    render: (_args, value) => renderPaths(value),
   });
+}
+
+/** One path per line, truncation stated last. */
+function renderPaths(value: { readonly paths: readonly string[]; readonly truncated: boolean }) {
+  return [...value.paths, ...(value.truncated ? ["[truncated: limit reached]"] : [])].join("\n");
 }
 
 /** Record a hit unless the limit is already spent; false tells the walk to stop. */
