@@ -130,7 +130,14 @@ test("clone clusters are identified by token hash alone and reported where the P
   const third = receipt([...relocated.findings, extra]);
   expect(growth(base, third, [moved], none)).toEqual([...relocated.findings.slice(1), extra]);
   const fresh = receipt([...relocated.findings, at("productionClones", otherPath, "hash-b", 50)]);
-  expect(growth(base, fresh, [moved], none)).toEqual(fresh.findings.slice(2));
+  expect(growth(base, fresh, [moved], none)).toEqual([]);
+});
+
+test("unattributable growth never reports untouched baseline rows", () => {
+  const base = receipt([]);
+  const current = receipt([at("publisher", otherPath, "Ready", 1)]);
+  expect(growth(base, current, [moved], none)).toEqual([]);
+  expect(growth(base, current, [{ path: otherPath, previous: otherPath, ranges: whole }], none)).toEqual(current.findings);
 });
 
 test("type findings: foreign reach is not owned growth; owned top types on changed lines always fail", () => {

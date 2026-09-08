@@ -150,6 +150,21 @@ const db = new Database(":memory:"); db.exec("CREATE TABLE item (id INTEGER PRIM
 export function read() { return db.query("SELECT * FROM item").all(); }
 export function write() { return db.query("INSERT INTO item VALUES (1)").run(); }`;
 
+test("scoped census retains resolver inputs but reports only affected sources", () => {
+  using fixture = new Fixture({
+    "src/main.ts": 'import { Ready } from "./events"; console.log(Ready.name);',
+    "src/events.ts": protocol,
+    "src/api.ts": "export const unused = 7;",
+  });
+  fixture.write("plan.json", JSON.stringify({ version: 2, class: "desktop", qualityScope: ["src/main.ts"], projects: ["tsconfig.json"] }));
+  expect(fixture.run("publisher").code).toBe(1);
+  expect(fixture.run("publisher", ["--plan", "plan.json"]).code).toBe(0);
+  expect(fixture.run("export", ["--plan", "plan.json"]).code).toBe(0);
+  fixture.write("plan.json", JSON.stringify({ version: 2, class: "desktop", qualityScope: ["src/main.ts", "src/events.ts", "src/api.ts"], projects: ["tsconfig.json"] }));
+  expect(fixture.run("publisher", ["--plan", "plan.json"]).code).toBe(1);
+  expect(fixture.run("export", ["--plan", "plan.json"]).code).toBe(1);
+}, 60_000);
+
 test("test-only consumption fails through the existing Knip owner", () => {
   using fixture = new Fixture({
     "src/main.ts": "console.log('root');",
@@ -1130,7 +1145,9 @@ test("AsyncResource.bind hands back the callback bound to its native async scope
 test("fs.watch listeners and watcher events have a native filesystem producer", () => {
   using fixture = new Fixture({
     "src/events.ts": protocol,
-    "src/main.ts": `import {watch,writeFileSync,mkdtempSync} from "node:fs";import {join} from "node:path";import {tmpdir} from "node:os";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const dir=mkdtempSync(join(tmpdir(),"census-watch-"));const seen=new Promise<void>((resolve)=>{const source=watch(dir,{recursive:false},()=>{sink.publish(Ready);source.close();resolve()});source.on("error",()=>{throw new Error("watch failed")})});writeFileSync(join(dir,"marker"),"1");await seen;console.log(JSON.stringify(received));`,
+    // Watch an existing file: macOS directory watches can miss creation before
+    // their native stream starts. File watches register before watch() returns.
+    "src/main.ts": `import {watch,writeFileSync,mkdtempSync,rmSync} from "node:fs";import {join} from "node:path";import {tmpdir} from "node:os";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const dir=mkdtempSync(join(tmpdir(),"census-watch-"));const marker=join(dir,"marker");writeFileSync(marker,"0");const seen=new Promise<void>((resolve,reject)=>{const source=watch(marker,{recursive:false},()=>{sink.publish(Ready);source.close();resolve()});source.on("error",(error)=>{source.close();reject(error)})});try{writeFileSync(marker,"1");await seen;console.log(JSON.stringify(received))}finally{rmSync(dir,{recursive:true,force:true})}`, 
   });
   assertPublication(fixture, true);
   // The watcher's own error event is a native producer; an empty handler is not.

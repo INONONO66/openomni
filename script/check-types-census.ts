@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { qualitySource } from "./quality-source";
 import { CensusPrograms, readProject } from "./census-program";
+import { qualityPlan } from "./quality-plan";
 import {
   buildInventory,
   cliOptions,
@@ -430,7 +431,7 @@ function scanSource(
   visit(source);
   return violations;
 }
-export function census(root: string, contract: Contract, inventory: Inventory, shared = new CensusPrograms()): CensusResult {
+export function census(root: string, contract: Contract, inventory: Inventory, shared = new CensusPrograms(), scope?: ReturnType<typeof qualityPlan>): CensusResult {
   const result: CensusResult = {
     version: 1,
     tool: "typescript@5.9.2",
@@ -448,6 +449,7 @@ export function census(root: string, contract: Contract, inventory: Inventory, s
       .filter((file) => file.language === "typescript" && (!contract.topology || qualitySource(file.path)))
       .map((file) => join(root, file.path)),
   );
+  const selected = new Set([...owned].filter((file) => scope === undefined || scope.paths.includes(relative(root, file))));
   const covered = new Set<string>();
   const semanticCovered = new Set<string>();
   const analyzed = new Map<ts.Program, CensusError[]>();
@@ -483,7 +485,7 @@ export function census(root: string, contract: Contract, inventory: Inventory, s
     // but never report error-any as a genuine inferred type violation.
     const unresolved = diagnostics.some((d) => d.category === ts.DiagnosticCategory.Error);
     for (const source of program.getSourceFiles()) {
-      if (!owned.has(source.fileName)) continue;
+      if (!selected.has(source.fileName)) continue;
       covered.add(source.fileName);
       if (!unresolved) semanticCovered.add(source.fileName);
       result.violations.push(
@@ -500,12 +502,12 @@ export function census(root: string, contract: Contract, inventory: Inventory, s
       );
     }
   }
-  for (const project of contract.projects) {
+  for (const project of scope?.projects ?? contract.projects) {
     try {
       const parsed = projectOptions(root, project);
       analyze(
         project,
-        parsed.fileNames.filter((file) => owned.has(file)),
+        parsed.fileNames.filter((file) => selected.has(file)),
         parsed.options,
       );
     } catch {
@@ -516,7 +518,7 @@ export function census(root: string, contract: Contract, inventory: Inventory, s
       });
     }
   }
-  const remaining = [...owned].filter((file) => !covered.has(file));
+  const remaining = [...selected].filter((file) => !covered.has(file));
   if (remaining.length) {
     analyze("<inventory-fallback>", remaining, {
       strict: true,
@@ -550,7 +552,7 @@ export function census(root: string, contract: Contract, inventory: Inventory, s
   result.errors = [...new Map(result.errors.map((e) => [JSON.stringify(e), e])).values()].sort(
     (a, b) => compareText(a.path, b.path) || compareText(a.message, b.message),
   );
-  result.complete = result.errors.length === 0 && covered.size === owned.size;
+  result.complete = result.errors.length === 0 && covered.size === selected.size;
   return result;
 }
 export function censusMain(): number {
@@ -589,7 +591,8 @@ export function censusMain(): number {
       });
     } else {
       verifyInventory(inventory, expected);
-      result = census(options.root, contract, inventory);
+      const scope = options.plan ? qualityPlan(options.root, options.contract, inventory, options.plan) : undefined;
+      result = census(options.root, contract, inventory, undefined, scope);
     }
   } catch {
     result.errors.push({

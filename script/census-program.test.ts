@@ -47,6 +47,29 @@ test("C1 shared host parses each unique file once across types and all census cl
   expect(programs.stats.programs).toBe(2);
 });
 
+for (const fallback of [false, true]) {
+  test(`scoped types use the shared host with ${fallback ? "inventory fallback" : "selected projects"}`, () => {
+    using input = fixture();
+    const { root, contract } = input;
+    writeFileSync(join(root, "src/main.ts"), 'import { value } from "./dependency"; export const selected = value;\n');
+    writeFileSync(join(root, "src/dependency.ts"), "export const value: unknown = 1;\n");
+    const inventory = buildInventory(root, contract);
+    const programs = new CensusPrograms();
+    const scope = { whole: false, paths: ["src/main.ts"], projects: fallback ? [] : contract.projects, workspaces: [], hash: "" };
+    const result = census(root, contract, inventory, programs, scope);
+    expect(result.complete).toBe(true);
+    expect(result.measured).toEqual(scope.paths);
+    expect(result.semanticMeasured).toEqual(scope.paths);
+    expect(result.projects).toEqual(fallback ? ["<inventory-fallback>"] : contract.projects);
+    expect(result.violations.some((row) => row.symbol === "selected" && row.kind === "unknown" && row.origin === "owned")).toBe(true);
+    expect(result.violations.every((row) => row.path === "src/main.ts")).toBe(true);
+    expect(programs.stats.programs).toBe(1);
+    expect(programs.stats.reused).toBe(fallback ? 0 : 1);
+    expect(programs.stats.parses.has(join(root, "src/dependency.ts"))).toBe(true);
+    expect([...programs.stats.parses.values()].every((count) => count === 1)).toBe(true);
+  });
+}
+
 test("C2 identical resolved projects dedupe, malformed and empty configs fail closed", () => {
   using input = fixture();
   const { root, contract } = input;

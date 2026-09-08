@@ -3,6 +3,7 @@ import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   buildInventory,
+  digest,
   category,
   readContract,
   decodeJson,
@@ -82,13 +83,18 @@ function finding(value: Json) {
   return result;
 }
 function parseReceipt(value: Json) {
-  const input = jsonObject(value, ["version", "complete", "analyzed", "inventory", "findings"]);
+  const input = jsonObject(value, ["version", "complete", "analyzed", "inventory", "findings", "sha256"]);
   const result = {
     version: jsonLiteral(input.version, 1),
     complete: jsonBoolean(input.complete),
     analyzed: jsonArray(input.analyzed, (gate) => jsonChoice(gate, gates)),
     inventory: jsonArray(input.inventory, jsonString),
     findings: jsonArray(input.findings, finding),
+    ...optional("sha256", input.sha256, (value) => Object.fromEntries(Object.entries(jsonObject(value)).map(([path, hash]) => {
+      const sha256 = jsonString(hash);
+      if (!/^[a-f0-9]{64}$/.test(sha256)) fail(`invalid baseline hash: ${path}`);
+      return [path, sha256];
+    }))),
   };
   if (!result.complete || !result.inventory.length || !result.analyzed.length)
     fail("incomplete receipt");
@@ -96,6 +102,30 @@ function parseReceipt(value: Json) {
 }
 type Receipt = ReturnType<typeof parseReceipt>;
 type Finding = ReturnType<typeof finding>;
+
+/** Unmeasured findings are debt, not new observations. Only a matching baseline
+ * content hash admits them; missing proof (including deletion) fails closed. */
+export function carryUnmeasured(root: string, baseline: Receipt, current: Receipt, measured: readonly string[], globalGates: readonly Finding["gate"][] = []): Receipt {
+  comparable(baseline, current);
+  const scope = new Set(measured);
+  const unmeasured = [...new Set([...baseline.inventory, ...current.inventory])].filter((path) => !scope.has(path));
+  for (const path of unmeasured) {
+    const proof = baseline.sha256?.[path];
+    if (!proof) fail(`missing unchanged proof: ${path}`);
+    let hash: string;
+    try {
+      hash = digest(readFileSync(resolve(root, path)));
+    } catch {
+      fail(`missing unchanged source: ${path}`);
+    }
+    if (hash !== proof) fail(`unchanged proof mismatch: ${path}`);
+  }
+  const carried = baseline.findings.filter((row) => !scope.has(row.path) && !globalGates.includes(row.gate)).flatMap((row) => {
+    const { count = 1, ...finding } = row;
+    return Array.from({ length: count }, () => finding);
+  });
+  return { ...current, inventory: [...new Set([...current.inventory, ...unmeasured])].sort(), findings: [...current.findings, ...carried] };
+}
 
 function key(row: Finding): string {
   return `${row.gate}\0${row.path}\0${row.symbol}`;
@@ -252,7 +282,7 @@ export function growth(
     if (!grew(values, limits.get(id) ?? new Map())) continue;
     const rows = current.findings.filter((row) => compared(row) && identity(row) === id && counts(row));
     const attributable = rows.filter((row) => byPath.has(row.path));
-    failures.push(...(attributable.length ? attributable : rows));
+    failures.push(...attributable);
   }
   // The literal-zero target: an owned top type on a changed line always fails.
   failures.push(
@@ -286,6 +316,7 @@ export function baselineAt(root: string, path: string, ref?: string): Receipt {
     "inventory",
     "findings",
     "fragments",
+    "sha256",
   ]);
   if (document.fragments === undefined) return parseReceipt(document);
   if (document.findings !== undefined) fail("baseline has two finding authorities");
@@ -458,9 +489,9 @@ export function ratchetMain(argv = process.argv.slice(2)): number {
       JSON.stringify({ complete: true, violations: failures.length, analyzed: current.analyzed }),
     );
     return Number(failures.length > 0);
-  } catch {
+  } catch (error) {
     console.error(
-      "incomplete ratchet: invalid receipt, baseline, source inventory or Git comparison",
+      error instanceof InventoryError ? `incomplete ratchet: ${error.message}` : "incomplete ratchet: invalid receipt, baseline, source inventory or Git comparison",
     );
     return 2;
   }

@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { TOPOLOGY } from "./topology";
+import { scriptContracts, scriptPartitions, scriptTestCommand } from "./scripts-lanes";
+import { changeClasses } from "./ci-plan";
 
 const ROOT = join(import.meta.dir, "..");
 const LANES = [
@@ -11,10 +13,13 @@ const LANES = [
     dir: workspace.dir,
     coverage: workspace.coverageLane,
   })),
-  { key: "scripts", dir: "script", coverage: true },
+  ...scriptPartitions.filter((key) => key !== "scripts-contracts").map((key) => ({ key, dir: "script", coverage: true })),
 ];
 const planSchema = z
   .object({
+    version: z.literal(2),
+    class: z.enum(changeClasses),
+    toolingTests: z.boolean(),
     full: z.boolean(),
     verify: z.boolean(),
     dependencyReview: z.boolean(),
@@ -35,6 +40,7 @@ const planSchema = z
       keys.size !== plan.matrix.include.length ||
       plan.verify !== keys.size > 0 ||
       (plan.full && keys.size !== LANES.length) ||
+      scriptPartitions.filter((key) => key !== "scripts-contracts").some((key) => keys.has(key) !== plan.toolingTests) ||
       plan.matrix.include.some(
         (lane) =>
           !LANES.some(
@@ -82,8 +88,10 @@ export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void 
     .parse(JSON.parse(process.env.CI_NEEDS ?? "null"));
   const required = new Map([
     ["plan", true],
-    ["prepare", plan.verify],
+    ["prepare", true],
     ["tests", plan.verify],
+    ["scripts-contracts", true],
+    ["scripts-coverage", plan.toolingTests],
     ...(testOnly
       ? []
       : ([
@@ -156,10 +164,15 @@ function main(): void {
       );
       // Artifacts are already restored: --only prevents dependency builds from running again.
       if (filters.length > 0) run(["bunx", "turbo", "run", "check-types", "--only", ...filters]);
-      if (selected.has("scripts")) run(["bunx", "tsc", "-p", "script/tsconfig.json"]);
+      if (plan.toolingTests) run(["bunx", "tsc", "-p", "script/tsconfig.json"]);
       return;
     }
     case "test": {
+      if (values.lane && scriptPartitions.some((key) => key === values.lane)) {
+        run(scriptTestCommand(values.lane), join(ROOT, "script"));
+        if (values.lane === "scripts-contracts") for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)]);
+        return;
+      }
       const lane = LANES.find((candidate) => candidate.key === values.lane);
       if (!lane) throw new CiError(`unknown lane: ${values.lane}`);
       const workspace = TOPOLOGY.find((candidate) => candidate.key === lane.key);

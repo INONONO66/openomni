@@ -53,14 +53,14 @@ test("docs-only planning keeps both final statuses successful while work is inte
   const plan = planChanges(["README.md"]);
   const needs = Object.fromEntries(
     [
-      "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
-      "dependency-review",
+      "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+      "dependency-review", "scripts-coverage",
     ].map((job) => [job, { result: "skipped" }]),
   );
   // When the actual CLI consumes GitHub's serialized output.
   const result = cli(["gate"], {
     CI_PLAN: JSON.stringify(plan),
-    CI_NEEDS: JSON.stringify({ ...needs, plan: { result: "success" } }),
+    CI_NEEDS: JSON.stringify({ ...needs, plan: { result: "success" }, prepare: { result: "success" }, "scripts-contracts": { result: "success" } }),
     CI_EVENT: "pull_request",
   });
   // Then documentation is a deliberate success, not a missing required status.
@@ -68,8 +68,8 @@ test("docs-only planning keeps both final statuses successful while work is inte
 });
 
 for (const job of [
-  "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
-  "dependency-review",
+  "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+  "dependency-review", "scripts-contracts", "scripts-coverage",
 ]) {
   for (const status of ["failure", "cancelled", "skipped", "missing"]) {
     test(`final gate rejects ${job} ${status} for a required full run`, () => {
@@ -78,7 +78,7 @@ for (const job of [
       const needs: Record<string, { result: string }> = Object.fromEntries(
         [
           "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
-          "dependency-review",
+          "dependency-review", "scripts-contracts", "scripts-coverage",
         ].map((key) => [key, { result: "success" }]),
       );
       if (job === "dependency-review") for (const q of QUALITY_JOBS) needs[q] = { result: "skipped" };
@@ -97,12 +97,43 @@ for (const job of [
   }
 }
 
+for (const path of ["README.md", "apps/desktop/src/main/index.ts", "packages/ui/src/index.ts", "packages/ledger/src/index.ts", "script/ci.ts"]) {
+  test(`desktop smoke follows selected v2 lanes for ${path}`, () => {
+    const plan = planChanges([path]);
+    const selected = plan.matrix.include.some((lane) => lane.key === "desktopApp" || lane.key === "ui");
+    const needs = {
+      plan: { result: "success" }, prepare: { result: "success" },
+      "scripts-contracts": { result: "success" },
+      "scripts-coverage": { result: plan.toolingTests ? "success" : "skipped" },
+      ...Object.fromEntries(["tests", "static", "deps"].map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
+      ...Object.fromEntries(QUALITY_JOBS.map((job) => [job, { result: "skipped" }])),
+      "dependency-review": { result: plan.dependencyReview ? "success" : "skipped" },
+    };
+    for (const status of ["success", "skipped", "failure", "cancelled"]) {
+      const result = cli(["gate"], {
+        CI_PLAN: JSON.stringify(plan), CI_EVENT: "pull_request",
+        CI_NEEDS: JSON.stringify({ ...needs, "desktop-smoke": { result: status } }),
+      });
+      expect(result.exitCode === 0).toBe(status === (selected ? "success" : "skipped"));
+    }
+  });
+}
+
+test("desktop smoke uses exact selected lane keys and joins the final gate", () => {
+  const jobs = z.object({ jobs: z.record(z.string(), jobSchema) }).parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  expect(jobs["desktop-smoke"]?.needs).toEqual(["plan", "prepare"]);
+  expect(jobs["desktop-smoke"]?.if).toBe("needs.plan.outputs.verify == 'true' && (contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'desktopApp') || contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'ui'))");
+  expect(jobs["desktop-smoke"]?.steps.some((step) => step.run === "xvfb-run -a bun run test:e2e")).toBe(true);
+  for (const job of ["desktop-smoke", "scripts-contracts", "scripts-coverage"]) expect(jobs.ci?.needs).toContain(job);
+});
+
 test("full gate executes the required quality jobs in process", () => {
   const plan = planChanges([], true);
   const env = {
     CI_NEEDS: JSON.stringify({
       ...Object.fromEntries([
         "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+        "scripts-contracts", "scripts-coverage",
       ].map((job) => [job, { result: "success" }])),
       "dependency-review": { result: "skipped" },
     }),
@@ -205,6 +236,19 @@ test("workflow restores the one build before every executable consumer", () => {
   expect(jobs.static?.steps.some((step) => step.run?.includes("bun run lint:docs"))).toBe(true);
 });
 
+test("v2 workflow carries scope as an artifact and always runs repository contracts", () => {
+  const jobs = z.object({ jobs: z.record(z.string(), jobSchema.extend({ outputs: z.record(z.string(), z.string()).optional(), "timeout-minutes": z.union([z.number(), z.string()]) })) }).parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  expect(jobs.plan?.outputs?.class).toBeDefined();
+  expect(jobs.plan?.outputs?.toolingTests).toBeDefined();
+  expect(jobs.plan?.outputs?.plan).toBeUndefined();
+  expect(jobs["scripts-contracts"]?.needs).toEqual(["plan", "prepare"]);
+  expect(jobs["scripts-contracts"]?.if).toBeUndefined();
+  expect(jobs["scripts-coverage"]?.needs).toContain("tests");
+  expect(jobs["quality-static"]?.["timeout-minutes"]).toBe(20);
+  expect(jobs.tests?.["timeout-minutes"]).toBe(`\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}`);
+  expect(jobs["quality-static"]?.steps.some((step) => step.run?.includes('--plan ci-plan.json'))).toBe(true);
+});
+
 test("quality collectors run beside tests and join the required final gates", () => {
   const jobs = z
     .object({ jobs: z.object({ quality: jobSchema, "quality-static": jobSchema, "quality-gates": jobSchema, ci: jobSchema }) })
@@ -241,8 +285,8 @@ test("quality matrix has exactly five bounded legs and no job exceeds sixty minu
       expect(timeout).toBeGreaterThan(0);
       expect(timeout).toBeLessThanOrEqual(60);
     } else {
-      expect(name).toBe("quality-static");
-      expect(timeout).toBe(`\${{ matrix.leg == 'metrics' && 45 || 35 }}`);
+      expect(name).toBe("tests");
+      expect(timeout).toBe(`\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}`);
     }
   }
   expect(jobs["quality-static"]?.strategy).toEqual({
@@ -257,8 +301,10 @@ test("the stable Test status accepts only the planned documentation skip", () =>
     CI_PLAN: JSON.stringify(planChanges(["README.md"])),
     CI_NEEDS: JSON.stringify({
       plan: { result: "success" },
-      prepare: { result: "skipped" },
+      prepare: { result: "success" },
       tests: { result: "skipped" },
+      "scripts-contracts": { result: "success" },
+      "scripts-coverage": { result: "skipped" },
     }),
   });
   // When its CLI executes, then the always-running status succeeds.
@@ -268,7 +314,7 @@ test("the stable Test status accepts only the planned documentation skip", () =>
 test("a pull request requires every quality job skipped and rejects a quality run", () => {
   // Given a full pull-request plan where GitHub skipped the quality jobs by design.
   const needs = Object.fromEntries(
-    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review"].map((key) => [
+    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review", "scripts-contracts", "scripts-coverage"].map((key) => [
       key,
       { result: "success" },
     ]),
@@ -307,7 +353,7 @@ test("the full push gate accepts successful checks without PR-only dependency re
   // Given full main-branch results with only the PR-specific check disabled.
   const needs = Object.fromEntries(
     [
-      "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+      "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality", "scripts-contracts", "scripts-coverage",
     ].map((key) => [key, { result: "success" }]),
   );
   // When the real gate executes, then all mandatory work is accepted.
@@ -342,7 +388,7 @@ test("selected test lanes depend only on planning and the shared build", () => {
   const job = workflow.jobs.tests;
   // Then unrelated static and dependency gates cannot serialize it.
   expect(job?.needs).toEqual(["plan", "prepare"]);
-  for (const lane of [...TOPOLOGY, { key: "scripts", dir: "script" }]) {
+  for (const lane of TOPOLOGY) {
     expect(job?.steps.find((step) => step["working-directory"] === lane.dir)?.if).toBe(
       `matrix.key == '${lane.key}'`,
     );

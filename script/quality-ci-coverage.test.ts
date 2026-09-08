@@ -33,6 +33,12 @@ test("coverage aggregation checks selected membership bytes run and script floor
 			writeFileSync(join(root, "script.json"), JSON.stringify(changed));
 			expect(() => readNativeCoverage(options, identity)).toThrow();
 		}
+		const partitions = ["scripts-contracts", "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3"];
+		writeFileSync(plan, JSON.stringify({ version: 2, toolingTests: true, matrix: { include: partitions.slice(1).map((key) => ({ key, dir: "script", coverage: true })) } }));
+		writeFileSync(join(root, "script.json"), JSON.stringify(receipt));
+		expect(() => readNativeCoverage(options, identity)).toThrow();
+		writeFileSync(join(root, "script.json"), JSON.stringify({ ...receipt, partitions }));
+		expect(readNativeCoverage(options, identity).receipts).toHaveLength(1);
 		const uncovered = lcov.replace("DA:1,1", "DA:1,0").replace("LH:1", "LH:0");
 		writeFileSync(join(root, "script.json"), JSON.stringify({
 			...receipt, lcov: uncovered, lcovHash: digest(uncovered), files: parseNativeLcov(uncovered, "script"),
