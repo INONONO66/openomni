@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788863281594,
+  "lastUpdate": 1788870181490,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -67341,6 +67341,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 604355,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41d566aebb2ee5a7d28ddad263f59f099650e004",
+          "message": "refactor(kernel): align monitor occurrences and evaluator recovery with session transitions (#971) (#1006)\n\n* refactor(kernel): ledger owns alarm occurrence identity, deadline and budget admission (#971)\n\nAlarm.Fire carries the evaluator's transport sourceKey instead of caller-minted\naction/inbox ids and a caller-supplied budget. The ledger derives the committed\noccurrence identity from (alarmId, epoch, sourceKey), so redelivery of one\noccurrence commits nothing, and reads the watch deadline and notification limit\nfrom the persisted spec. The app band only reports what its sources observed;\nthe path source hands its stat identity to the ledger as the occurrence key.\n\n* test(openomni),docs: pin #971 occurrence acceptance and record the landed alarm shape\n\nAcceptance suite for distinct occurrences, zero-duplicate redelivery, takeover\nversus explicit rearm dedupe, N+1 budget contenders, ledger-decided deadline and\nthe real PTY occurrence key. Schema snapshot regenerated for Alarm.Fire\n(sourceKey replaces actionId/inboxId/limit). Docs record the landed owners.",
+          "timestamp": "2026-09-08T21:21:49+09:00",
+          "tree_id": "2a425d0ddc9fce39855ab40aabf183f272b62913",
+          "url": "https://github.com/INONONO66/openomni/commit/41d566aebb2ee5a7d28ddad263f59f099650e004"
+        },
+        "date": 1788870180733,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 665,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 4884,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2757,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1025404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 266229,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5234661,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 845,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 341047,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 13886,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 132049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 680582,
             "unit": "ns/op"
           }
         ]
