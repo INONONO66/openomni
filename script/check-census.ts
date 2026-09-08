@@ -2194,9 +2194,13 @@ class Provenance {
       (/@types\/react\//.test(file) && HOOK_CALLBACK_ARGUMENTS.react.has(name)) ||
       // `setState(previous => next)`: React's state dispatch runs its updater.
       this.reactDispatch(node.expression);
-    const store = /@tanstack\/react-store\//.test(file) && name === "useStore";
+    // `useStore(store, selector)` runs its selector; `Store.setState(updater)`
+    // runs its updater against the previous state.
+    const selector = /@tanstack\/react-store\//.test(file) && name === "useStore";
+    const store =
+      selector || (/@tanstack\/store\//.test(file) && name === "setState");
     if (!react && !store) return;
-    const callback = arguments_[store ? 1 : 0];
+    const callback = arguments_[selector ? 1 : 0];
     if (!callback) return;
     for (const target of this.points.get(callback) ?? []) this.invoke(node, target, [], false);
   }

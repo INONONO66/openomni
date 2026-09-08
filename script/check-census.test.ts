@@ -619,9 +619,9 @@ test("rendered components, hook callbacks and DOM listeners consume renderer exp
         'export default {main:{build:{lib:{entry:"main.ts"}}},renderer:{build:{rollupOptions:{input:"index.html"}}}};',
       "src/main.ts": 'console.log("main");',
       "src/state.ts":
-        'import {Store} from "@tanstack/store";export type Facts={count:number};export const LIMIT=3;export const store=new Store<Facts>({count:0});export function bump(previous:number):number{return previous+1}export function selectCount(facts:Facts):number{return facts.count}export function onKey(event:KeyboardEvent):void{console.log(event.key)}',
+        'import {Store} from "@tanstack/store";export type Facts={count:number};export const LIMIT=3;export const store=new Store<Facts>({count:0});export function bump(previous:number):number{return previous+1}export function selectCount(facts:Facts):number{return facts.count}export function onKey(event:KeyboardEvent):void{console.log(event.key)}export function reset(facts:Facts):Facts{return {...facts,count:0}}',
       "src/app.tsx":
-        'import {useEffect,useState} from "react";import {useStore} from "@tanstack/react-store";import {bump,LIMIT,onKey,selectCount,store} from "./state";import type {Facts} from "./state";export function App(){const [count,setCount]=useState(0);const stored=useStore(store,(facts:Facts)=>selectCount(facts));useEffect(()=>{document.addEventListener("keydown",onKey);return ()=>document.removeEventListener("keydown",onKey)},[]);return <button type="button" onClick={()=>setCount((previous)=>Math.min(LIMIT,bump(previous)))}>{count+stored}</button>}',
+        'import {useEffect,useState} from "react";import {useStore} from "@tanstack/react-store";import {bump,LIMIT,onKey,reset,selectCount,store} from "./state";import type {Facts} from "./state";export function App(){const [count,setCount]=useState(0);const stored=useStore(store,(facts:Facts)=>selectCount(facts));useEffect(()=>{document.addEventListener("keydown",onKey);return ()=>document.removeEventListener("keydown",onKey)},[]);return <button type="button" onClick={()=>setCount((previous)=>Math.min(LIMIT,bump(previous)))} onDoubleClick={()=>store.setState((previous)=>reset(previous))}>{count+stored}</button>}',
       "src/renderer.tsx": rendered
         ? 'import {createRoot} from "react-dom/client";import {App} from "./app";createRoot(document.body).render(<App/>);'
         : 'import {createRoot} from "react-dom/client";import "./app";createRoot(document.body).render(<p>idle</p>);',
@@ -665,7 +665,9 @@ test("rendered components, hook callbacks and DOM listeners consume renderer exp
       .map((finding) => finding.symbol)
       .sort();
     expect(reported).toEqual(
-      rendered ? [] : ["Facts", "LIMIT", "bump", "onKey", "selectCount", "store"],
+      rendered
+        ? []
+        : ["Facts", "LIMIT", "bump", "onKey", "reset", "selectCount", "store"],
     );
   }
 }, 180_000);
