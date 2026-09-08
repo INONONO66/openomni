@@ -87,6 +87,10 @@ export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void 
     ...(testOnly
       ? []
       : ([
+          [
+            "desktop-smoke",
+            plan.verify && plan.matrix.include.some((lane) => lane.key === "desktopApp" || lane.key === "ui"),
+          ],
           ["static", plan.verify],
           ["deps", plan.verify],
           ["quality-static", plan.verify && !pullRequest],

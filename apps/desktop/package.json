@@ -10,7 +10,7 @@
     "build": "rm -rf dist && electron-vite build",
     "preview": "electron-vite preview",
     "test": "bun test",
-    "test:e2e": "playwright test --output=/tmp/openomni-playwright-results test-e2e/desktop.spec.ts",
+    "test:e2e": "playwright test",
     "lint": "bunx biome check ./src ./test",
     "check-types": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.test.json"
   },
