@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { NamedError } from "../error/index.js";
-import { PlainValueSchema } from "../json.js";
+import { canonicalDigest, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 
 export { SessionTransition } from "./session-transition.js";
@@ -672,21 +672,32 @@ export namespace Alarm {
   });
   export type Arm = z.infer<typeof Arm>;
 
+  /**
+   * One evaluator delivery. `id` is the stable alarm/control identity, `fence`
+   * the evaluator authority, and `sourceKey` the transport occurrence captured
+   * at the source (timer slot, PTY line slot, path stat identity). The ledger
+   * derives the committed occurrence identity from (id, epoch, sourceKey), so
+   * redelivering the same occurrence commits nothing; budget and deadline are
+   * read from the persisted spec, never supplied by the evaluator.
+   */
   export const Fire = z
     .object({
       id: Identifier,
       epoch: z.number().int().positive(),
       fence: z.number().int().nonnegative(),
-      actionId: Identifier,
-      inboxId: Identifier,
+      sourceKey: z.string().min(1),
       at: EpochMs,
       content: z.string(),
       batchHash: z.string().optional(),
-      limit: z.number().int().nonnegative(),
       terminal: z.boolean(),
     })
     .strict();
   export type Fire = z.infer<typeof Fire>;
+
+  /** Deterministic committed occurrence identity for one transport delivery. */
+  export function occurrenceId(id: string, epoch: number, sourceKey: string): string {
+    return canonicalDigest(["alarm.occurrence", id, epoch, sourceKey]);
+  }
 
   export interface Fired {
     readonly row: Row;

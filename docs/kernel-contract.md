@@ -133,11 +133,22 @@ terminal. Captured policy rows bound notifications; excess pauses once until
 explicit rearm. PTY exit always has a summary unless control already fenced it.
 Persistent source recovery does not replay a live-stream gap.
 
+Three identities are kept apart (#971): the alarm id is the stable control
+identity and inbox origin; the persisted fence is the evaluator authority that
+every takeover, pause, cancel and rearm advances before physical cleanup; the
+committed occurrence identity is the `alarm.fired`/`alarm.paused` action id
+derived from `(alarmId, epoch, sourceKey)`, where `sourceKey` is what the source
+observed (timer slot, PTY line slot, path stat identity). The ledger alone
+admits a delivery: it rejects stale fences, consecutive equal poll batches and
+already-committed occurrences, and reads the deadline and notification budget
+from the persisted spec. Evaluators report; they do not judge.
+
 [Stage-1 decisions](alarm-monitor-stage-1.md) specify framing, source cleanup,
 restart and operator behavior. [Implementation Status](implementation-status.md)
-distinguishes branch evidence from merged delivery. The unified alarm/occurrence
-transition product in [session-lifecycle-contract.md](session-lifecycle-contract.md)
-remains the separate #971 target, not a receipt consumed by this baseline.
+distinguishes branch evidence from merged delivery. The alarm/occurrence rows of
+[session-lifecycle-contract.md](session-lifecycle-contract.md) record the
+#971 landed shape; evaluator owner/expiry leasing, active-key reservation and
+cursor-capable backends were not added.
 
 ### Unified message boundary
 

@@ -58,15 +58,13 @@
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "Alarm.Arm": ["fireAt", "id", "kind", "sessionId", "spec"],
   "Alarm.Fire": [
-    "actionId",
     "at",
     "batchHash",
     "content",
     "epoch",
     "fence",
     "id",
-    "inboxId",
-    "limit",
+    "sourceKey",
     "terminal"
   ],
   "Alarm.RequestDeadline": ["kind", "requestId"],

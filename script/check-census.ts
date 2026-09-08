@@ -22,6 +22,7 @@ import {
 } from "./ledger-producer-manifest";
 import { knipWorkspaces } from "./topology";
 import { qualitySource } from "./quality-source";
+import { CensusPrograms, readProject } from "./census-program";
 import { decodeJson, parseEntry } from "./quality-inventory";
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
@@ -236,6 +237,19 @@ function loadEmbedded(inventory: { [key: string]: Json }, names: Set<string>, ro
   return { embedded, embeddedText };
 }
 
+const HOOK_CALLBACK_ARGUMENTS = {
+  react: new Set([
+    "useState",
+    "useReducer",
+    "useMemo",
+    "useCallback",
+    "useEffect",
+    "useLayoutEffect",
+    "useInsertionEffect",
+    "useSyncExternalStore",
+  ]),
+};
+
 function unwrap(node: ts.Node): ts.Node {
   if (
     ts.isParenthesizedExpression(node) ||
@@ -273,7 +287,7 @@ function memberName(node: ts.Node): string {
   if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) return node.text;
   return "";
 }
-function makeProgram(root: string, files: Entry[], projects: string[]) {
+function makeProgram(root: string, files: Entry[], projects: string[], shared: CensusPrograms) {
   const paths: Record<string, string[]> = {};
   for (const workspace of knipWorkspaces())
     paths[workspace.packageName] = [join(root, workspace.dir, "src/index.ts")];
@@ -296,38 +310,21 @@ function makeProgram(root: string, files: Entry[], projects: string[]) {
   };
   const membership = new Set(files.map((row) => resolve(root, row.path)));
   for (const project of projects) {
-    const host = ts.createWatchCompilerHost(
-      resolve(root, project),
-      {},
-      {
-        ...ts.sys,
-        watchFile: () => ({ close: () => undefined }),
-        watchDirectory: () => ({ close: () => undefined }),
-      },
-      ts.createSemanticDiagnosticsBuilderProgram,
-      () => fail("configuration", project, "invalid TS project"),
-      () => undefined,
-    );
-    host.afterProgramCreate = () => undefined;
-    host.onUnRecoverableConfigFileDiagnostic = () =>
-      fail("configuration", project, "unreadable TS project");
-    const watch = ts.createWatchProgram(host);
+    let config: ReturnType<typeof readProject>;
     try {
-      const config = watch.getProgram().getProgram();
-      if (config.getConfigFileParsingDiagnostics().length)
-        fail("configuration", project, "invalid TS project");
-      for (const path of config.getRootFileNames())
-        if (!membership.has(resolve(path)))
-          fail(
-            "incomplete_inventory",
-            relative(root, path),
-            "project source omitted from inventory",
-          );
-    } finally {
-      watch.close();
+      config = readProject(root, project);
+    } catch {
+      return fail("configuration", project, "invalid TS project");
     }
+    for (const path of config.fileNames)
+      if (!membership.has(resolve(path)))
+        fail(
+          "incomplete_inventory",
+          relative(root, path),
+          "project source omitted from inventory",
+        );
   }
-  const program = ts.createProgram(
+  const program = shared.program(
     files
       .filter((row) => ["typescript", "javascript"].includes(row.language))
       .map((row) => resolve(root, row.path)),
@@ -610,7 +607,8 @@ class Provenance {
         !local &&
         !native &&
         !this.externalEventOrigin(receiver) &&
-        !this.externalEvents.has(call)
+        !this.externalEvents.has(call) &&
+        !this.domEventTarget(receiver)
       )
         this.problem(call, "unresolved_event_source", receiver);
       const names = call.arguments[0]
@@ -1588,6 +1586,9 @@ class Provenance {
     const origin = this.externalEventOrigin(receiver);
     if (origin)
       for (const target of this.points.get(callback) ?? []) this.invoke(origin, target, [], false);
+    if (this.domEventTarget(receiver))
+      for (const target of this.points.get(callback) ?? [])
+        this.invoke(registration, target, [], false);
     const contract = this.nativeEventContract(receiver, registration);
     const nativeNames = names.filter((name) => {
       if (!contract?.events.has(name)) return false;
@@ -1680,6 +1681,7 @@ class Provenance {
     this.flowBindings(node);
     this.flowMember(node);
     this.flowExpressions(node);
+    if (ts.isJsxOpeningLikeElement(node)) this.flowJsxElement(node);
     if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return;
     const arguments_ = node.arguments ?? [];
     const execute = () => {
@@ -1712,7 +1714,7 @@ class Provenance {
         ].includes(name);
       const scheduled =
         (/(?:(?:bun-types|@types\/node)\/|typescript\/lib\/lib\..*\.d\.ts$)/.test(file) &&
-          ["queueMicrotask", "setTimeout", "setInterval", "setImmediate"].includes(name)) ||
+          ["queueMicrotask", "setTimeout", "setInterval", "setImmediate", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback"].includes(name)) ||
         // `fs.watch(path, options?, listener)` delivers to its listener from the event loop.
         (/@types\/node\/fs\.d\.ts$/.test(file) && name === "watch");
       const eventCallback =
@@ -1725,6 +1727,12 @@ class Provenance {
         ["removeEventListener", "removeListener", "off", "assign"].includes(name)
       )
         for (const argument of arguments_) this.registeredCallbacks.add(argument);
+      // Declaration-only external APIs cannot expose an implementation to the graph;
+      // callbacks passed to their registration methods are retained by the runtime.
+      const declarationOnlyExternal =
+        /\/node_modules\/.*\.d\.ts$/.test(file) &&
+        (name === "subscribe" || /^on[A-Z]/.test(name));
+      const bridgeCallback = /^on[A-Z]/.test(name) && this.desktopBridgeMember(node, name);
       const receiver =
         ts.isPropertyAccessExpression(node.expression) ||
         ts.isElementAccessExpression(node.expression)
@@ -1734,10 +1742,11 @@ class Provenance {
       this.activateSpawnedSource(node, file, name, arguments_);
       this.invokeModuleFactory(node, receiver, name, arguments_);
       this.recordNativeEvents(node, receiver, eventCallback, arguments_, name, file);
-      this.invokeNativeCallbacks(immediate, scheduled, arguments_, node, receiver);
+      this.invokeNativeCallbacks(immediate, scheduled || declarationOnlyExternal || bridgeCallback, arguments_, node, receiver);
       this.invokeAiCallbacks(file, name, node, execute, arguments_);
       if (/bun-types\//.test(file) && ["scan", "scanSync"].includes(name)) this.point(node, node);
       this.invokeBunCallbacks(file, name, arguments_, node);
+      this.invokeHookCallbacks(file, name, arguments_, node);
       this.flowNativeContainers(receiver, name, file, node, arguments_);
       this.flowAsyncStorage(receiver, file, name, arguments_, node);
       if (/\/drizzle-orm\//.test(file) && name === "sqliteTable")
@@ -1766,6 +1775,60 @@ class Provenance {
     )
       this.watch(node.expression.expression, execute);
     for (const argument of arguments_) this.watch(argument, execute);
+  }
+  // Rendering `<Component .../>` invokes the component: the element activates its
+  // function target and its attributes flow into the props parameter. Attribute
+  // handlers (`onClick`, `onKeyDown`, ...) run on user input from the host.
+  private flowJsxElement(node: ts.JsxOpeningLikeElement): void {
+    const execute = (): void => {
+      const path = this.path(node);
+      if (!path || !this.activeBranch(node)) return;
+      const chain = [...path.chain, this.locus(node)];
+      const render = (target: ts.Node): ts.ParameterDeclaration | undefined => {
+        if (!isFunction(target) || !this.sourceFiles.includes(target.getSourceFile())) return;
+        if (!this.reachable.has(target)) this.activate(target, { root: path.root, chain });
+        return target.parameters[0];
+      };
+      const targets = new Set<ts.Node>(this.points.get(node.tagName) ?? []);
+      const declaration = this.declaration(node.tagName);
+      if (declaration) targets.add(declaration);
+      for (const target of targets) {
+        const props = render(target);
+        if (props) this.flow(node.attributes, props);
+      }
+      for (const attribute of node.attributes.properties) {
+        if (
+          !ts.isJsxAttribute(attribute) ||
+          !/^on[A-Z]/.test(memberName(attribute.name)) ||
+          !attribute.initializer ||
+          !ts.isJsxExpression(attribute.initializer) ||
+          !attribute.initializer.expression
+        )
+          continue;
+        for (const target of this.points.get(attribute.initializer.expression) ?? []) render(target);
+      }
+    };
+    this.inScope(node, execute);
+    this.watch(node.tagName, execute);
+    for (const attribute of node.attributes.properties)
+      if (
+        ts.isJsxAttribute(attribute) &&
+        attribute.initializer &&
+        ts.isJsxExpression(attribute.initializer) &&
+        attribute.initializer.expression
+      )
+        this.watch(attribute.initializer.expression, execute);
+  }
+  // Window.desktop is the contextBridge contract: its renderer-side members are
+  // type declarations, while callbacks are delivered by the preload runtime.
+  private desktopBridgeMember(node: ts.CallExpression | ts.NewExpression, name: string): boolean {
+    const window = this.checker.resolveName("Window", node, ts.SymbolFlags.Type, false);
+    if (!window) return false;
+    const desktop = this.checker.getDeclaredTypeOfSymbol(window).getProperty("desktop");
+    if (!desktop) return false;
+    const member = this.checker.getTypeOfSymbolAtLocation(desktop, node).getProperty(name);
+    const declaration = this.declaration(node.expression);
+    return Boolean(declaration && member?.declarations?.includes(declaration));
   }
   private callbackOwner(node: ts.CallExpression | ts.NewExpression): string {
     let file = this.nativeOwner(node);
@@ -2159,6 +2222,52 @@ class Provenance {
     for (const value of this.points.get(options) ?? []) {
       if (ts.isObjectLiteralExpression(value)) this.invokeServerProperties(value, node);
     }
+  }
+  // Browser documents, windows and elements receive user input from the host; a
+  // renderer root makes that producer real, so listeners on them are dispatched.
+  private domEventTarget(receiver: ts.Node): boolean {
+    const rendererRoot = [...this.roots.values()].some(
+      (root) => root.symbol === "electron-vite" || root.path.endsWith("electron.vite.config.ts"),
+    );
+    if (!rendererRoot) return false;
+    const symbol = this.checker.getTypeAtLocation(receiver).getSymbol();
+    return Boolean(
+      symbol &&
+        /^(?:Document|Window|EventTarget|Element|HTML\w*Element)$/.test(symbol.name) &&
+        symbol.declarations?.some((node) =>
+          /typescript\/lib\/lib\.dom\.d\.ts$/.test(node.getSourceFile().fileName),
+        ),
+    );
+  }
+  private reactDispatch(callee: ts.Expression): boolean {
+    const alias = this.checker.getTypeAtLocation(callee).aliasSymbol;
+    return Boolean(
+      alias?.name === "Dispatch" &&
+        alias.declarations?.some((node) => /@types\/react\//.test(node.getSourceFile().fileName)),
+    );
+  }
+  // React and TanStack hooks run the callbacks they receive on the renderer's
+  // schedule; the census treats each as invoked (not directly) so component bodies
+  // that only reach state through hooks count as reachable.
+  private invokeHookCallbacks(
+    file: string,
+    name: string,
+    arguments_: readonly ts.Expression[],
+    node: ts.NewExpression | ts.CallExpression,
+  ): void {
+    const react =
+      (/@types\/react\//.test(file) && HOOK_CALLBACK_ARGUMENTS.react.has(name)) ||
+      // `setState(previous => next)`: React's state dispatch runs its updater.
+      this.reactDispatch(node.expression);
+    // `useStore(store, selector)` runs its selector; `Store.setState(updater)`
+    // runs its updater against the previous state.
+    const selector = /@tanstack\/react-store\//.test(file) && name === "useStore";
+    const store =
+      selector || (/@tanstack\/store\//.test(file) && name === "setState");
+    if (!react && !store) return;
+    const callback = arguments_[selector ? 1 : 0];
+    if (!callback) return;
+    for (const target of this.points.get(callback) ?? []) this.invoke(node, target, [], false);
   }
   private invokeServerProperties(
     value: ts.ObjectLiteralExpression,
@@ -4047,14 +4156,24 @@ function censusInput(values: ReturnType<typeof censusOptions>): {
   const input = loadInput(root, values.inventory, values["inventory-sha256"], values.contract);
   return { root, selected, input };
 }
-export function censusMain(argv = Bun.argv.slice(2)): number {
+export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms()): number {
+  const selection = argv.indexOf("--class");
+  if (selection >= 0 && argv[selection + 1] === "all") {
+    let status = 0;
+    for (const selected of ["publisher", "export", "store"]) {
+      const args = [...argv];
+      args[selection + 1] = selected;
+      status = Math.max(status, censusMain(args, shared));
+    }
+    return status;
+  }
   lastFailure = undefined;
   const jsonMode = argv.includes("--json");
   try {
     if (ts.version !== "5.9.2") fail("tool_version", "typescript", "requires 5.9.2");
     const values = censusOptions(argv);
     const { root, selected, input } = censusInput(values);
-    const program = makeProgram(root, input.files, input.projects);
+    const program = makeProgram(root, input.files, input.projects, shared);
     const roots = productionRoots(root, input.files, input.topology);
     const graph = new Provenance(root, program, input.files, roots.entries, input.topology);
     if (input.topology) validateApplications(root, roots, graph);

@@ -40,28 +40,34 @@ function exercise(
     sessionId: "alarm-session",
     kind: "watch",
     fireAt: 1000,
+    spec: {
+      encodingVersion: 1,
+      value: {
+        watch: { command: "true", description: "parity", persistent: true },
+        notificationLimit: 1,
+        policyGeneration: 1,
+      },
+    },
   });
   expect(armed).toMatchObject({ status: "armed", epoch: 1, fence: 0 });
   const owned = adapter.alarms.acquire("watch", 0);
   if (owned === undefined) throw new Error("acquisition refused");
   expect(adapter.alarms.acquire("watch", 0)).toBeUndefined();
-  const fire = (actionId: string, content: string, fence = owned.fence) =>
+  const fire = (sourceKey: string, content: string, fence = owned.fence) =>
     adapter.alarms.fire({
       id: "watch",
       epoch: 1,
       fence,
-      actionId,
-      inboxId: `${actionId}-inbox`,
+      sourceKey,
       at: 1000,
       content,
       batchHash: content,
-      limit: 1,
       terminal: false,
     });
-  expect(fire("first", "A")?.receipts.map((receipt) => receipt.action.kind)).toEqual([
-    "alarm.fired",
-    "prompt",
-  ]);
+  const first = fire("first", "A");
+  expect(first?.receipts.map((receipt) => receipt.action.kind)).toEqual(["alarm.fired", "prompt"]);
+  expect(first?.receipts[0]?.action.id).toBe(Alarm.occurrenceId("watch", 1, "first"));
+  expect(fire("first", "A")).toBeUndefined();
   expect(fire("duplicate", "A")).toBeUndefined();
   expect(fire("budget", "B")?.row.status).toBe("paused");
   expect(fire("stale", "C")).toBeUndefined();
@@ -100,11 +106,9 @@ test("alarm rollback: fired action and inbox share one transaction, bus follows 
       id: "at",
       epoch: 1,
       fence: 0,
-      actionId: "fire",
-      inboxId: "prompt",
+      sourceKey: "timer:1000",
       at: 1000,
       content: "due",
-      limit: 1,
       terminal: true,
     });
     fixture.db.run(

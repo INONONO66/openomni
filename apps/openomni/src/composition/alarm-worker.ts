@@ -57,25 +57,25 @@ export function createAlarmWorker(options: {
     track(current.source.close());
   }
 
-  function deliver(row: Alarm.Row, content: string, terminal: boolean, batchHash?: string) {
+  // The ledger owns admission: identity, fence, dedupe, deadline and budget are
+  // decided from the committed row. This band only reports what a source saw.
+  function deliver(
+    row: Alarm.Row,
+    sourceKey: string,
+    content: string,
+    terminal: boolean,
+    batchHash?: string,
+  ) {
     if (stopped) return;
-    const spec = row.kind === "watch" ? Alarm.WatchSpec.parse(row.spec?.value) : undefined;
-    const at = now();
-    const expired =
-      spec?.watch.timeout_ms !== undefined && at >= row.fireAt + spec.watch.timeout_ms;
     const fired = options.alarms.fire({
       id: row.id,
       epoch: row.epoch,
       fence: row.fence,
-      actionId: crypto.randomUUID(),
-      inboxId: crypto.randomUUID(),
-      at,
-      content: expired
-        ? JSON.stringify({ alarmId: row.id, epoch: row.epoch, reason: "timeout", exitCode: null })
-        : content,
-      terminal: terminal || expired,
-      limit: spec?.notificationLimit ?? 1,
-      ...(expired || batchHash === undefined ? {} : { batchHash }),
+      sourceKey,
+      at: now(),
+      content,
+      terminal,
+      ...(batchHash === undefined ? {} : { batchHash }),
     });
     if (fired === undefined) return;
     if (fired.row.status !== "armed") release(row);
@@ -88,7 +88,12 @@ export function createAlarmWorker(options: {
     reason: "exit" | "timeout" | "restart" | "source_error",
     exitCode: number | null,
   ) {
-    deliver(row, JSON.stringify({ alarmId: row.id, epoch: row.epoch, reason, exitCode }), true);
+    deliver(
+      row,
+      `${reason}:${row.fence}`,
+      JSON.stringify({ alarmId: row.id, epoch: row.epoch, reason, exitCode }),
+      true,
+    );
   }
 
   function sourceFailure(row: Alarm.Row, error: Error) {
@@ -111,6 +116,7 @@ export function createAlarmWorker(options: {
     if (owned.kind === "at") {
       deliver(
         owned,
+        `timer:${owned.fireAt}`,
         owned.spec === undefined
           ? "Alarm due"
           : typeof owned.spec.value === "string"
@@ -133,11 +139,19 @@ export function createAlarmWorker(options: {
       let source: AlarmSource;
       if ("command" in watch) {
         const filter = watch.filter === undefined ? undefined : new RegExp(watch.filter);
+        let lines = 0;
         source = commandSource(
           watch.command,
           (content) => {
+            lines += 1;
             if (filter === undefined || filter.test(content))
-              deliver(owned, content, false, canonicalDigest(content));
+              deliver(
+                owned,
+                `line:${owned.fence}:${lines}`,
+                content,
+                false,
+                canonicalDigest(content),
+              );
           },
           (code) => summary(owned, "exit", code),
           (error) => sourceFailure(owned, error),
@@ -145,7 +159,7 @@ export function createAlarmWorker(options: {
       } else {
         source = pathSource(
           watch,
-          (content) => deliver(owned, content, false),
+          (content, identity) => deliver(owned, `path:${identity}`, content, false),
           (error) => sourceFailure(owned, error),
         );
       }

@@ -2,7 +2,11 @@
 
 #969 cutover, 2026-09-07: request waiting, authenticated consent and outbound delivery now use canonical actions. The new receipt below covers the replacement; historical receipts retain their original source pins. Final HEAD and gate outputs are in the PR and local report.
 
+#971 cutover, 2026-09-08: alarm occurrence identity, deadline and budget admission moved into the ledger's single judgment; evaluators report transport keys only. Receipt below.
+
 #970 cutover, 2026-09-08: interrupted operations settle from classified evidence; attempt evidence, `restore_model_selection` and `restore_context_projection` are recorded actions. No store, table or schema is added or removed; the receipt at the end records what stayed in place.
+
+#972 cutover, 2026-09-08: history and diagnostics are read projections over committed actions. `SessionHandle.history()` pages the append-only tree by revision; `SessionHandle.inspect()` derives redacted causal transitions, policy decisions, requests and compactions. No table, migration, writer or store is added; the receipt at the end names the one moved fold and the census.
 
 Verified on 2026-09-06 against source HEAD `c4fb774869fb060859bbdc2f58ce37ee3a3072c9`, tree `0d6318c742a1ca0eeaa5ddf30003108ba8a53487`; a fresh `git fetch origin main` resolved to the same commit. This docs-only patch preserves that production tree. Final documentation commit/tree and PR URL are recorded in the local `REPORT.md` and PR body.
 
@@ -284,6 +288,17 @@ The old producer entries and allowed perimeter store import are removed. Protoco
 
 Migration 0038 retains terminal legacy row bytes in immutable archive_969_wait/archive_969_approval tables; it does not erase action history or rewrite historical migrations. Unresolved or invalid old rows refuse before mutation. The #967 archive command remains explicitly confirmed and pinned separately. Unresolved old message alarms and native child execution also refuse. The replacement is covered by request/outbound race, restart and actual receiving-executor tests; final command receipts remain attached to the PR. Message/part retention, continuous scheduling (#947), and the broader #945/#948 quality campaign remain outside this cutover.
 
+## #971 monitor occurrences and evaluator recovery
+
+| Scope | Cutover disposition | Acceptance surface |
+| --- | --- | --- |
+| Identity split | Alarm id = control identity/inbox origin; persisted `fence` = evaluator authority; occurrence = `Alarm.occurrenceId(alarmId, epoch, sourceKey)` as the `alarm.fired`/`alarm.paused` action id. No redundant occurrence table or id column. | `monitor-occurrence.test.ts` two matches -> two action ids; same key redelivered -> undefined, revision unchanged |
+| Admission owner | `alarmOccurrence` in `packages/ledger/src/storage/l0-action-builders.ts` is the only judgment (fence, due, dedupe, deadline, budget), shared by SQLite and the memory double; `Alarm.Fire` lost `actionId`, `inboxId`, `limit` | `alarm.test.ts` parity, `alarm-control.test.ts` budget-of-one pause, `monitor-occurrence.test.ts` late match settles as timeout |
+| Takeover vs rearm | `acquire` keeps epoch/count/digest; `rearm` resets them; both advance the fence before physical cleanup | `monitor-occurrence.test.ts` poll A -> takeover -> A suppressed, B delivers, old fence zero, rearm re-admits A; `alarm-boot-durability.test.ts` real PTY restart gap |
+| Budget | N notifications then one `alarm.paused` prompt on N+1; N+2 and every stale contender commit zero; cancel of paused refuses later fires | `monitor-occurrence.test.ts`, `monitor-budget.test.ts` |
+| Recovery limits | Live streams restart from now; timed watches settle `restart`; cursor backends not added; band retains OS handles only | `alarm-worker-boundaries.test.ts`, `monitor-process-group.test.ts`, `monitor-app.test.ts` hibernation wake |
+| Deletion | Worker-side `expired` computation, caller-minted random action/inbox ids and caller-supplied `limit` removed with their schema fields in the same PR; `schema-snapshot.json` regenerated for `Alarm.Fire` | `git grep -n -e "randomUUID" -e "limit:" -e "expired" apps/openomni/src/composition/alarm-worker.ts` -> zero |
+
 ## #970 durable recovery and typed restoration
 
 | Scope | Cutover disposition | Acceptance surface |
@@ -296,3 +311,19 @@ Migration 0038 retains terminal legacy row bytes in immutable archive_969_wait/a
 | Deletion | Nothing deleted: no duplicate retry owner or process-local recovery authority remained at post-#969 main beyond the implicit chain reset in `run.ts`, which the recorded restoration replaces | `git diff --stat origin/main..HEAD`: 25 files, no migration, no schema |
 
 The contract's `move` rows for `session-admission.ts`/`session-turn.ts` into `session-lifecycle/*.ts` were not executed; those symbols keep their current owners and the contract records the landed locations. Gate outputs and the final HEAD are in the PR body.
+
+## #972 action-based history and diagnostic projections
+
+| Scope | Cutover disposition | Acceptance surface |
+| --- | --- | --- |
+| Authoritative history read | `SessionHandleStore.historyPage` reads the session row revision and `actions.range(sessionId, afterRevision, limit)` in one transaction; `nextRevision` continues an incomplete page and is null at the head. `watch()` gaps are hints: the caller re-reads from `gap.from`; no event is synthesized | `packages/ledger/test/session/kernel.test.ts` dropped-notification resync; `packages/ledger/test/storage/adapter-contracts.test.ts` range contract on both adapters |
+| Canonical context fold | `foldSessionHistory` in `packages/agent/src/session-lifecycle/history.ts` (moved from `session-history.ts`, which is deleted). Model context carries delivered prompts, assistant snapshots, positional tool settlements and compaction projections only | `packages/agent/test/session-history.test.ts` (kept at its contract path), `session-context-restore.test.ts` |
+| Diagnostic projection | `inspectActions`/`inspectSession` in `packages/agent/src/session-lifecycle/inspect.ts` derive one `SessionHistory.Transition` per action with `cause` (`action`/`inbox`/`alarm`/`root`), turn/call/request identity, outcome and a canonical digest; `outcome_unknown` is its own outcome; a pre denial is the refused call's only terminal record (`blocked_pre` on the decision). Payloads are never copied, so credentials in tool input do not appear | `packages/agent/test/session-inspection.test.ts`: child session, retried model call, tool refusal, approval, `outcome_unknown` effect, monitor wake and compaction; every cause resolves to a committed action, inbox row or alarm |
+| Policy inspection | `inspectPolicy(decisions, {generation, ruleId, verdict})` over the recorded `policy.decision` actions; reason and inputHash are the recorded ones | same suite, `deny`/`require_approval` rows by rule and verdict |
+| Cross-session traversal | `inspect({depth})` follows only `parentId` (commissioned children). Outbound destinations appear as `peerSessionId` and are not read | same suite: parent -> child, depth 0 yields none |
+| Compaction evidence | Existing `compaction` result (`summary`, `firstKeptEntryId`, `discarded{first,last,count,sha256}`, revert recipe) is surfaced as `SessionHistory.Compaction` with `restoredBy`; original facts untouched | same suite; `session-context-restore.test.ts` |
+| Pure replay | Inspection and paging run no body and append nothing; a rebuilt page sequence equals the tree, and its fold equals the canonical fold | same suite: body counter and tree equality before/after |
+| Transcript / fact taps | `Transcript.fold` stays: it is the ephemeral provider-stream assembler in `packages/llm/src/processor`. `onFact` remains grep-zero (see #944 grep above). OTel/log ids are derived from turn/session identity in `executor-record.ts`; no durable trace grammar | `rg -n '\bonFact\b' apps packages -g '*.ts'` = 0 |
+| Deletion | `packages/agent/src/session-history.ts` removed with its five importers rewired in the same commit; no schema, table or migration touched (`message`/`part` bytes refused per contract) | `rg -n "session-history\"|\bsessionHistory\b" apps packages -g '*.ts'` = 0 (the unrelated ledger benchmark seeder of the same name became `seedTurnHistory`) |
+
+`LedgerAction.Kind` is unchanged: no new action kind was needed, so no forward CHECK migration ships. The #971 occurrence kinds will project through the generic `record` phase when they land.

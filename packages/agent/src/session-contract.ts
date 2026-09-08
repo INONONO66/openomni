@@ -6,6 +6,7 @@ import type {
   LedgerSession,
   ObservationSink,
   SessionGeneration,
+  SessionHistory,
   SessionTurn,
   SessionTransition,
 } from "@openomni/protocol";
@@ -191,6 +192,10 @@ export interface SessionHandle {
   restoreContext(compactionId: string): Promise<ExecutionResult>;
   get(options?: SessionGetOptions): SessionTurn.Snapshot;
   watch(options?: SessionGetOptions): SessionTurn.Watch;
+  /** Bounded revision page of committed actions; the resynchronization read after a `watch` gap. */
+  history(request?: SessionHistory.PageRequest): SessionHistory.Page;
+  /** Redacted causal projection over this session and the sessions it commissioned. */
+  inspect(request?: SessionHistory.InspectRequest): SessionHistory.Inspection;
   close(): Promise<void>;
 }
 

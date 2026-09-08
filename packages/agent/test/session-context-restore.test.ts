@@ -18,7 +18,7 @@ import {
   type SessionRunner,
   type SessionRuntime,
 } from "../src/index";
-import { sessionHistory } from "../src/session-history";
+import { foldSessionHistory } from "../src/session-lifecycle/history";
 
 let nextId = 0;
 const runtime: SessionRuntime = {
@@ -56,7 +56,7 @@ const compactingRunner: SessionRunner = async (input) => {
     { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
     async () => PlainValueSchema.parse(answer),
   );
-  const prior = sessionHistory(input.sessionId, input.ledger.actions?.() ?? []);
+  const prior = foldSessionHistory(input.sessionId, input.ledger.actions?.() ?? []);
   const plan = createCompactionPlan(prior, [answer], 100);
   await executor.run(
     {
@@ -105,7 +105,7 @@ describe("restore_context_projection", () => {
     seed();
     const { handle, before } = await compactedSession();
     const compaction = compactionIntent(before);
-    expect(sessionHistory("ctx", before).map((entry) => entry.info.role)).toEqual(["assistant"]);
+    expect(foldSessionHistory("ctx", before).map((entry) => entry.info.role)).toEqual(["assistant"]);
 
     const outcome = await handle.restoreContext(compaction.id);
 
@@ -132,9 +132,9 @@ describe("restore_context_projection", () => {
       terminal: "executed",
       result: { restored: { compactionId: compaction.id, discarded: { count: 1 } } },
     });
-    const restored = sessionHistory("ctx", after);
+    const restored = foldSessionHistory("ctx", after);
     expect(restored.map((entry) => entry.info.role)).toEqual(["user", "assistant"]);
-    expect(restored).toEqual(sessionHistory("ctx", before.slice(0, before.indexOf(compaction))));
+    expect(restored).toEqual(foldSessionHistory("ctx", before.slice(0, before.indexOf(compaction))));
     expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
   });
 
@@ -156,7 +156,7 @@ describe("restore_context_projection", () => {
     expect(outcome).toEqual({ terminal: "blocked_pre", reason: "pinned_projection" });
     const after = SessionHandleStore.tree("ctx");
     expect(after.slice(before.length).map((action) => action.kind)).toEqual(["policy.decision"]);
-    expect(sessionHistory("ctx", after)).toEqual(sessionHistory("ctx", before));
+    expect(foldSessionHistory("ctx", after)).toEqual(foldSessionHistory("ctx", before));
   });
 
   test("an unknown or unexecuted compaction is refused before anything is recorded", async () => {

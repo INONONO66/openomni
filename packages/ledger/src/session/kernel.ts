@@ -6,6 +6,7 @@ import {
   L0Observation,
   type PolicyRow,
   SessionGeneration,
+  SessionHistory,
   SessionTransition,
   SessionTurn,
   type ObservationSink,
@@ -113,6 +114,30 @@ export function inboxRows(sessionId: string): Inbox.Row[] {
 
 export function tree(sessionId: string): LedgerAction.Node[] {
   return requiredActions().tree(sessionId);
+}
+
+/**
+ * Authoritative, bounded read of committed history after `afterRevision`. The
+ * row revision and the slice come from one transaction, so a watcher that saw a
+ * gap resynchronizes from its last revision without inventing or skipping events.
+ */
+export function historyPage(
+  sessionId: string,
+  request: SessionHistory.PageRequest = {},
+): SessionHistory.Page {
+  const { afterRevision, limit } = SessionHistory.PageRequest.parse(request);
+  return Storage.get().transaction(() => {
+    const headRevision = row(sessionId).revision;
+    const actions = requiredActions().range(sessionId, afterRevision, limit);
+    const last = actions.at(-1)?.ordinal ?? afterRevision;
+    return SessionHistory.Page.parse({
+      sessionId,
+      afterRevision,
+      headRevision,
+      actions,
+      nextRevision: last < headRevision ? last : null,
+    });
+  });
 }
 
 export function requestRows(sessionId?: string): SessionTransition.Request[] {

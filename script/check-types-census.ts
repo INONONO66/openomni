@@ -2,6 +2,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { qualitySource } from "./quality-source";
+import { CensusPrograms, readProject } from "./census-program";
 import {
   buildInventory,
   cliOptions,
@@ -124,40 +125,7 @@ export function projectOptions(
   root: string,
   path: string,
 ): { fileNames: string[]; options: ts.CompilerOptions } {
-  const errors: ts.Diagnostic[] = [];
-  // TypeScript projects use JSONC (comments/trailing commas), unlike strict
-  // machine receipts. The native project parser owns configuration validation.
-  // Use the native config-driven program API, not its raw JSON parse result.
-  // This is a one-shot read: no filesystem watchers and no emit callback.
-  const host = ts.createWatchCompilerHost(
-    join(root, path),
-    {},
-    {
-      ...ts.sys,
-      watchFile: () => ({ close: () => undefined }),
-      watchDirectory: () => ({ close: () => undefined }),
-    },
-    ts.createSemanticDiagnosticsBuilderProgram,
-    (diagnostic) => errors.push(diagnostic),
-    () => undefined,
-  );
-  host.afterProgramCreate = () => undefined;
-  host.onUnRecoverableConfigFileDiagnostic = (diagnostic) => {
-    throw new InventoryError(
-      "config",
-      path,
-      ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
-    );
-  };
-  const watch = ts.createWatchProgram(host);
-  try {
-    const program = watch.getProgram().getProgram();
-    if (errors.length || program.getConfigFileParsingDiagnostics().length)
-      throw new InventoryError("config", path, "native configuration diagnostic");
-    return { fileNames: [...program.getRootFileNames()], options: program.getCompilerOptions() };
-  } finally {
-    watch.close();
-  }
+  return readProject(root, path);
 }
 function symbolName(node: ts.Node): string {
   let current: ts.Node | undefined = node;
@@ -462,7 +430,7 @@ function scanSource(
   visit(source);
   return violations;
 }
-export function census(root: string, contract: Contract, inventory: Inventory): CensusResult {
+export function census(root: string, contract: Contract, inventory: Inventory, shared = new CensusPrograms()): CensusResult {
   const result: CensusResult = {
     version: 1,
     tool: "typescript@5.9.2",
@@ -482,9 +450,10 @@ export function census(root: string, contract: Contract, inventory: Inventory): 
   );
   const covered = new Set<string>();
   const semanticCovered = new Set<string>();
+  const analyzed = new Map<ts.Program, CensusError[]>();
   function analyze(project: string, files: string[], options: ts.CompilerOptions): void {
     result.projects.push(project);
-    const program = ts.createProgram(files, {
+    const program = shared.program(files, {
       ...options,
       noEmit: true,
       rootDir: root,
@@ -492,6 +461,11 @@ export function census(root: string, contract: Contract, inventory: Inventory): 
       composite: false,
       paths: options.paths,
     });
+    const previous = analyzed.get(program);
+    if (previous) {
+      result.errors.push(...previous.map((error) => ({ ...error, project })));
+      return;
+    }
     const checker = program.getTypeChecker();
     const classify = typeClassifier(program, checker, owned);
     const diagnostics = [
@@ -500,11 +474,11 @@ export function census(root: string, contract: Contract, inventory: Inventory): 
       ...program.getSyntacticDiagnostics(),
       ...program.getSemanticDiagnostics(),
     ];
-    result.errors.push(
-      ...diagnostics
-        .filter((d) => d.category === ts.DiagnosticCategory.Error)
-        .map((d) => ({ ...diagnosticError(root, d), project })),
-    );
+    const errors = diagnostics
+      .filter((d) => d.category === ts.DiagnosticCategory.Error)
+      .map((d) => diagnosticError(root, d));
+    analyzed.set(program, errors);
+    result.errors.push(...errors.map((error) => ({ ...error, project })));
     // Resolution failures taint checker results. Keep explicit syntax findings,
     // but never report error-any as a genuine inferred type violation.
     const unresolved = diagnostics.some((d) => d.category === ts.DiagnosticCategory.Error);

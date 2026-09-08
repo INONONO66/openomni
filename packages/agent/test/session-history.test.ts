@@ -6,7 +6,7 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
-import { sessionHistory } from "../src/session-history";
+import { foldSessionHistory } from "../src/session-lifecycle/history";
 
 for (const terminal of [undefined, "interrupted", "error"] as const) {
   test(`positional settlements survive ${terminal ?? "open crash"} history and do not cross turns`, () => {
@@ -109,7 +109,7 @@ for (const terminal of [undefined, "interrupted", "error"] as const) {
         },
       );
     const original = structuredClone(actions);
-    const projected = sessionHistory("history", actions);
+    const projected = foldSessionHistory("history", actions);
     const tools = projected
       .find((message) => message.info.id === current.info.id)
       ?.parts.filter((part) => part.type === "tool");
