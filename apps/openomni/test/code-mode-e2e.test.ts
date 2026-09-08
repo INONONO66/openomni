@@ -507,6 +507,29 @@ test("eval run answers running after its wait; peek shows the output so far; sto
   expect(calls).toBe(1);
 }, 40_000);
 
+test("eval peek and stop racing on one cell: exactly one is answered, the other finds the id spent", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  const { run, execute } = await startCellHarness({
+    llm: async () => {
+      entered.resolve();
+      await release.promise;
+      return "late";
+    },
+  });
+  const started = await run("completion('hold')", 1);
+  const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
+  if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
+  await entered.promise;
+  const [peeked, stopped] = await Promise.all([
+    execute({ operation: { op: "peek", cell_id: cellId } }),
+    execute({ operation: { op: "stop", cell_id: cellId } }),
+  ]);
+  expect(stopped).toBe("the cell was stopped");
+  expect(peeked).toContain("no such cell_id");
+  release.resolve();
+}, 40_000);
+
 test("eval peek and stop refuse another session's cell id and a forged one", async () => {
   const { execute, runWith } = await startCellHarness({ llm: async () => "ok" });
   expect(await execute({ operation: { op: "stop", cell_id: "not-a-cell" } })).toContain(

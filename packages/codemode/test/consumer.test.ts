@@ -350,6 +350,82 @@ test("run leaves a held cell in the background: peek shows its output so far, st
   );
 });
 
+test("a peek and a stop racing on one cell hand its settled state to exactly one of them", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  await pair(
+    async ({ mode }) => {
+      const started = await mode.cell.run("tool.hold()", "race", { timeoutMs: 5000, waitMs: 0 });
+      if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
+      await entered.promise;
+      // peek is mid round-trip to the daemon when stop claims the entry synchronously.
+      const outcomes = await Promise.allSettled([
+        mode.cell.peek(started.cellId, "race"),
+        mode.cell.stop(started.cellId, "race"),
+      ]);
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(["rejected", "fulfilled"]);
+      expect(outcomes[0]).toMatchObject({
+        reason: { name: "CodemodeError", data: { reason: "unknown_cell_id" } },
+      });
+      expect(outcomes[1]).toMatchObject({
+        value: { status: "cancelled", cellId: started.cellId },
+      });
+      release.resolve();
+    },
+    {
+      tools: () => async () => {
+        entered.resolve();
+        await release.promise;
+        return { status: "completed" };
+      },
+    },
+  );
+});
+
+test("unread settled cells are retained up to the bound; the oldest is evicted and its id is spent", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  await pair(
+    async ({ mode }) => {
+      const ids: string[] = [];
+      // The first cell holds the interpreter, so the 64 queued behind it are `running` by
+      // construction: 65 cells, one more than the facade retains once they settle unread.
+      for (let index = 0; index < 65; index += 1) {
+        const started = await mode.cell.run(index === 0 ? "tool.hold()" : `${index}`, "bound", {
+          timeoutMs: 5000,
+          waitMs: 0,
+        });
+        if (started.status !== "running")
+          throw new Error(`expected running, got ${started.status}`);
+        ids.push(started.cellId);
+      }
+      await entered.promise;
+      release.resolve();
+      // Queued behind all 65 on the same interpreter and connection: when it answers, they
+      // have all settled at the facade.
+      expect(await mode.cell.run("'barrier'", "bound")).toMatchObject({ status: "completed" });
+      await expect(mode.cell.peek(ids[0] ?? "", "bound")).rejects.toMatchObject({
+        data: { reason: "unknown_cell_id" },
+      });
+      expect(await mode.cell.peek(ids[1] ?? "", "bound")).toMatchObject({
+        status: "completed",
+        value: "1",
+      });
+      expect(await mode.cell.peek(ids[64] ?? "", "bound")).toMatchObject({
+        status: "completed",
+        value: "64",
+      });
+    },
+    {
+      tools: () => async () => {
+        entered.resolve();
+        await release.promise;
+        return { status: "completed" };
+      },
+    },
+  );
+}, 30_000);
+
 test("a run that settles within its wait answers the result and leaves nothing behind", async () => {
   await pair(async ({ mode }) => {
     const settled = await mode.cell.run("print('quick')\n1 + 1", "prompt", {

@@ -196,13 +196,19 @@ describe("code-mode kernel substrate", () => {
           return { status: "completed" };
         },
       );
+      // The forger bypasses the redirect and emits a frame naming another cell, then
+      // pauses on a tool so the kernel-side output it tried to pollute can be observed.
+      let seenAfterForgery: Machine.CellOutput | undefined;
       const forged = kernel.run(
         {
           cellId: "queued-behind",
-          code: 'import sys\nsys.__stdout__.write(\'{"kind":"output","cellId":"other","stream":"stdout","text":"forged"}\\n\')\nprint(\'mine\')',
+          code: 'import sys\nprint(\'mine\')\nsys.__stdout__.write(\'{"kind":"output","cellId":"other","stream":"stdout","text":"forged"}\\n\')\ntool.hold()',
           timeoutMs: 15_000,
         },
-        noTools,
+        () => {
+          seenAfterForgery = kernel.peek("queued-behind");
+          return Promise.resolve({ status: "completed" });
+        },
       );
       // Queued behind the held cell: in flight, but nothing executed yet.
       expect(kernel.peek("queued-behind")).toBeUndefined();
@@ -213,8 +219,10 @@ describe("code-mode kernel substrate", () => {
       });
       expect(seenAtEntry).toEqual({ stdout: "one\n", stderr: "two\n" });
       expect(kernel.peek("streaming")).toBeUndefined();
-      // A frame naming another cell never lands on the running cell's output.
+      // A frame naming another cell never lands on the running cell's kernel-side output:
+      // the peek channel, taken after the forged write, shows only the redirected print.
       expect(await forged).toMatchObject({ status: "completed", output: { stdout: "mine\n" } });
+      expect(seenAfterForgery).toEqual({ stdout: "mine\n", stderr: "" });
     } finally {
       release();
       await kernel.close();

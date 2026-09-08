@@ -207,7 +207,11 @@ Owner grants shell execution knowingly. Codemode consumes these handles through
 one `eval` cell runner, with per-tenant interpreter state and no legacy
 machines or filesystem tools. Inside a cell a machine handle's methods are the
 tool names: `read`, `write`, `ls`, `bash`, `eval`; there is no second
-vocabulary for the same operation.
+vocabulary for the same operation. The `edit`, `find` and `grep` handle methods
+the #949 amendment names are not offered yet: those tools are compositions over
+the raw fs endpoints that live in the app tool layer, above codemode, and until
+that composition is hoisted a cell reaches them through the `tool.<name>()`
+proxies.
 
 `eval.op = run({code, timeout?})` starts code in the session's cell and waits
 up to `timeout` seconds (default 15) for it to settle; a cell still running is
@@ -217,8 +221,11 @@ running in the background under a hard ceiling of ten minutes.
 `stop({cell_id})` interrupts the cell and settles it as `cancelled` with the
 output it produced — the code never runs again, and the interpreter's state is
 discarded like any other cancel. A settled background cell is handed over once:
-the `peek` or `stop` that observes the terminal state consumes the id, and a
-`cell_id` from another session is as unknown as a spent one.
+the `peek` or `stop` that observes the terminal state claims the id synchronously,
+so a `peek` whose daemon round trip a `stop` overtook finds it spent, and a
+`cell_id` from another session is as unknown as a spent one. Unread settled
+cells are retained per facade up to a bound (64); beyond it the oldest is
+dropped and its id is spent.
 
 ### The sealed tool catalog (#949)
 

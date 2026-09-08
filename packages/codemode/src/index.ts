@@ -205,14 +205,20 @@ export function createCodemode(options: Options = {}) {
     return binding.caller(call);
   }
 
+  function unknownCell(): never {
+    throw new CodemodeError({ reason: "unknown_cell_id", message: "no such cell" });
+  }
   function tenantCell(cellId: string, tenant: string): BackgroundCell {
     const entry = background.get(cellId);
     // Another tenant's cell is as unknown as a settled one: ids never leak across sessions.
-    if (entry === undefined || entry.tenant !== tenant)
-      throw new CodemodeError({ reason: "unknown_cell_id", message: "no such cell" });
+    if (entry === undefined || entry.tenant !== tenant) unknownCell();
     return entry;
   }
-  /** Hand the settled state over exactly once; a rejection surfaces the same way. */
+  /**
+   * Hand the settled state over exactly once: every caller claims synchronously, right
+   * after looking the entry up, so nothing can claim it between the two. A rejection
+   * surfaces the same way.
+   */
   function settle(cellId: string, entry: BackgroundCell): Promise<Machine.CellResult> {
     background.delete(cellId);
     return entry.execution;
@@ -227,6 +233,8 @@ export function createCodemode(options: Options = {}) {
     const entry = tenantCell(cellId, tenant);
     if (entry.done) return settle(cellId, entry);
     const view = await machines().get(entry.machineId).peekCode(cellId);
+    // A stop that claimed the cell during the round trip owns its result; here it is spent.
+    if (!background.has(cellId)) unknownCell();
     if (view.running) return { status: "running", cellId, output: view.output };
     // The daemon has settled it; the result is in transit.
     return settle(cellId, entry);
@@ -342,7 +350,12 @@ export function createCodemode(options: Options = {}) {
           background.delete(started.cellId);
           throw error;
         });
-        if (settled !== undefined) return settle(started.cellId, entry);
+        // The id has not been answered yet, so no peek or stop can have claimed it: the
+        // launcher is the one reader even if the retention bound already evicted the entry.
+        if (settled !== undefined) {
+          background.delete(started.cellId);
+          return settled;
+        }
         return peek(started.cellId, tenant);
       },
       peek,
