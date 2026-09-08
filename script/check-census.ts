@@ -236,6 +236,19 @@ function loadEmbedded(inventory: { [key: string]: Json }, names: Set<string>, ro
   return { embedded, embeddedText };
 }
 
+const HOOK_CALLBACK_ARGUMENTS = {
+  react: new Set([
+    "useState",
+    "useReducer",
+    "useMemo",
+    "useCallback",
+    "useEffect",
+    "useLayoutEffect",
+    "useInsertionEffect",
+    "useSyncExternalStore",
+  ]),
+};
+
 function unwrap(node: ts.Node): ts.Node {
   if (
     ts.isParenthesizedExpression(node) ||
@@ -610,7 +623,8 @@ class Provenance {
         !local &&
         !native &&
         !this.externalEventOrigin(receiver) &&
-        !this.externalEvents.has(call)
+        !this.externalEvents.has(call) &&
+        !this.domEventTarget(receiver)
       )
         this.problem(call, "unresolved_event_source", receiver);
       const names = call.arguments[0]
@@ -1588,6 +1602,9 @@ class Provenance {
     const origin = this.externalEventOrigin(receiver);
     if (origin)
       for (const target of this.points.get(callback) ?? []) this.invoke(origin, target, [], false);
+    if (this.domEventTarget(receiver))
+      for (const target of this.points.get(callback) ?? [])
+        this.invoke(registration, target, [], false);
     const contract = this.nativeEventContract(receiver, registration);
     const nativeNames = names.filter((name) => {
       if (!contract?.events.has(name)) return false;
@@ -1680,6 +1697,7 @@ class Provenance {
     this.flowBindings(node);
     this.flowMember(node);
     this.flowExpressions(node);
+    if (ts.isJsxOpeningLikeElement(node)) this.flowJsxElement(node);
     if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return;
     const arguments_ = node.arguments ?? [];
     const execute = () => {
@@ -1738,6 +1756,7 @@ class Provenance {
       this.invokeAiCallbacks(file, name, node, execute, arguments_);
       if (/bun-types\//.test(file) && ["scan", "scanSync"].includes(name)) this.point(node, node);
       this.invokeBunCallbacks(file, name, arguments_, node);
+      this.invokeHookCallbacks(file, name, arguments_, node);
       this.flowNativeContainers(receiver, name, file, node, arguments_);
       this.flowAsyncStorage(receiver, file, name, arguments_, node);
       if (/\/drizzle-orm\//.test(file) && name === "sqliteTable")
@@ -1766,6 +1785,49 @@ class Provenance {
     )
       this.watch(node.expression.expression, execute);
     for (const argument of arguments_) this.watch(argument, execute);
+  }
+  // Rendering `<Component .../>` invokes the component: the element activates its
+  // function target and its attributes flow into the props parameter. Attribute
+  // handlers (`onClick`, `onKeyDown`, ...) run on user input from the host.
+  private flowJsxElement(node: ts.JsxOpeningLikeElement): void {
+    const execute = (): void => {
+      const path = this.path(node);
+      if (!path || !this.activeBranch(node)) return;
+      const chain = [...path.chain, this.locus(node)];
+      const render = (target: ts.Node): ts.ParameterDeclaration | undefined => {
+        if (!isFunction(target) || !this.sourceFiles.includes(target.getSourceFile())) return;
+        if (!this.reachable.has(target)) this.activate(target, { root: path.root, chain });
+        return target.parameters[0];
+      };
+      const targets = new Set<ts.Node>(this.points.get(node.tagName) ?? []);
+      const declaration = this.declaration(node.tagName);
+      if (declaration) targets.add(declaration);
+      for (const target of targets) {
+        const props = render(target);
+        if (props) this.flow(node.attributes, props);
+      }
+      for (const attribute of node.attributes.properties) {
+        if (
+          !ts.isJsxAttribute(attribute) ||
+          !/^on[A-Z]/.test(memberName(attribute.name)) ||
+          !attribute.initializer ||
+          !ts.isJsxExpression(attribute.initializer) ||
+          !attribute.initializer.expression
+        )
+          continue;
+        for (const target of this.points.get(attribute.initializer.expression) ?? []) render(target);
+      }
+    };
+    this.inScope(node, execute);
+    this.watch(node.tagName, execute);
+    for (const attribute of node.attributes.properties)
+      if (
+        ts.isJsxAttribute(attribute) &&
+        attribute.initializer &&
+        ts.isJsxExpression(attribute.initializer) &&
+        attribute.initializer.expression
+      )
+        this.watch(attribute.initializer.expression, execute);
   }
   private callbackOwner(node: ts.CallExpression | ts.NewExpression): string {
     let file = this.nativeOwner(node);
@@ -2159,6 +2221,52 @@ class Provenance {
     for (const value of this.points.get(options) ?? []) {
       if (ts.isObjectLiteralExpression(value)) this.invokeServerProperties(value, node);
     }
+  }
+  // Browser documents, windows and elements receive user input from the host; a
+  // renderer root makes that producer real, so listeners on them are dispatched.
+  private domEventTarget(receiver: ts.Node): boolean {
+    const rendererRoot = [...this.roots.values()].some(
+      (root) => root.symbol === "electron-vite" || root.path.endsWith("electron.vite.config.ts"),
+    );
+    if (!rendererRoot) return false;
+    const symbol = this.checker.getTypeAtLocation(receiver).getSymbol();
+    return Boolean(
+      symbol &&
+        /^(?:Document|Window|EventTarget|Element|HTML\w*Element)$/.test(symbol.name) &&
+        symbol.declarations?.some((node) =>
+          /typescript\/lib\/lib\.dom\.d\.ts$/.test(node.getSourceFile().fileName),
+        ),
+    );
+  }
+  private reactDispatch(callee: ts.Expression): boolean {
+    const alias = this.checker.getTypeAtLocation(callee).aliasSymbol;
+    return Boolean(
+      alias?.name === "Dispatch" &&
+        alias.declarations?.some((node) => /@types\/react\//.test(node.getSourceFile().fileName)),
+    );
+  }
+  // React and TanStack hooks run the callbacks they receive on the renderer's
+  // schedule; the census treats each as invoked (not directly) so component bodies
+  // that only reach state through hooks count as reachable.
+  private invokeHookCallbacks(
+    file: string,
+    name: string,
+    arguments_: readonly ts.Expression[],
+    node: ts.NewExpression | ts.CallExpression,
+  ): void {
+    const react =
+      (/@types\/react\//.test(file) && HOOK_CALLBACK_ARGUMENTS.react.has(name)) ||
+      // `setState(previous => next)`: React's state dispatch runs its updater.
+      this.reactDispatch(node.expression);
+    // `useStore(store, selector)` runs its selector; `Store.setState(updater)`
+    // runs its updater against the previous state.
+    const selector = /@tanstack\/react-store\//.test(file) && name === "useStore";
+    const store =
+      selector || (/@tanstack\/store\//.test(file) && name === "setState");
+    if (!react && !store) return;
+    const callback = arguments_[selector ? 1 : 0];
+    if (!callback) return;
+    for (const target of this.points.get(callback) ?? []) this.invoke(node, target, [], false);
   }
   private invokeServerProperties(
     value: ts.ObjectLiteralExpression,
