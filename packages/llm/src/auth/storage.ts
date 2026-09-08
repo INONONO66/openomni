@@ -130,6 +130,15 @@ export namespace Auth {
     return parsed.data;
   }
 
+  /** A durable, non-secret handle on the credential an attempt used: kind plus a truncated digest. */
+  export function reference(info: Info): {
+    readonly type: Info["type"];
+    readonly fingerprint: string;
+  } {
+    const digest = new Bun.CryptoHasher("sha256").update(JSON.stringify(info)).digest("hex");
+    return { type: info.type, fingerprint: digest.slice(0, 16) };
+  }
+
   export async function get(providerID: string): Promise<Info | undefined> {
     const auth = await all();
     return auth[providerID];

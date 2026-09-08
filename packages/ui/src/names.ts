@@ -13,20 +13,53 @@
  * inside all of them.
  */
 export const UI_NAMES = {
-  /** The whole window: chrome + navigator slot + transcript + composer. */
-  Console: "Console",
   /** A tonal surface — the window, a column, a recessed region. */
   Panel: "Panel",
-  /** The sidebar's titlebar row: the drag surface beside the traffic lights. */
-  SidebarHeader: "SidebarHeader",
-  /** The main column's titlebar row: title plus one qualifying fact. */
-  MainHeader: "MainHeader",
-  /** The sidebar's one control: a line, not a box. */
-  SearchLine: "SearchLine",
-  /** The one selectable surface in the system. */
-  Row: "Row",
-  /** A group header that expands a region. */
-  Disclosure: "Disclosure",
+  /** The window's top row: the controls zone, the one tab, the create control. */
+  TabStrip: "TabStrip",
+  /** The strip's left zone: window controls, sidebar toggle, history trio. */
+  TabStripControls: "TabStrip.Controls",
+  /** The one sidebar toggle, first in the strip's zone in every state. */
+  SidebarToggle: "Sidebar.Toggle",
+  /** The toggle's glyph; `data-opened` is the column's visibility (pinned or revealed). */
+  SidebarToggleIcon: "Sidebar.Toggle.Icon",
+  /** The history trio: clock, back, forward. Right-aligned to the sidebar's edge while open. */
+  TabStripTrio: "TabStrip.Trio",
+  TabStripList: "TabStrip.List",
+  TabStripCreate: "TabStrip.Create",
+  Tab: "Tab",
+  TabIcon: "Tab.Icon",
+  TabTitle: "Tab.Title",
+  TabClose: "Tab.Close",
+  ConsoleContent: "Console.Content",
+  /** The window root: sidebar state and the runtime `--sidebar-width` live here. */
+  Sidebar: "Sidebar",
+  /** The in-flow spacer the fixed sidebar container sits over. */
+  SidebarGap: "Sidebar.Gap",
+  /** The fixed box that slides; pinned, revealed as an overlay, or hidden (`data-mode`). */
+  SidebarContainer: "Sidebar.Container",
+  /** The fading column inside the container; `inert` while hidden. */
+  SidebarContent: "Sidebar.Content",
+  /** The 8px hot zone on the window's left edge while the sidebar is collapsed. */
+  SidebarEdge: "Sidebar.Edge",
+  /** The 16px grab zone on the sidebar's right edge; pinned mode only. */
+  SidebarResizeHandle: "Sidebar.ResizeHandle",
+  /** The primary destinations: the column's first row, directly under the strip. */
+  SidebarNav: "Sidebar.Nav",
+  /** One destination in the nav. */
+  NavItem: "NavItem",
+  /** A section's title row, or its search field while searching. */
+  SectionHeader: "SectionHeader",
+  /** The section header's one control: search open, search closed. */
+  SectionHeaderToggle: "SectionHeader.Toggle",
+  /** The sidebar's bottom row, above a hairline. */
+  SidebarFooter: "Sidebar.Footer",
+  /** One line of the tree, at one of three depths. */
+  TreeRow: "TreeRow",
+  /** The clock: the last twenty places the main column has been. */
+  HistoryMenu: "HistoryMenu",
+  /** One place in the history: a title and how long ago. */
+  HistoryMenuItem: "HistoryMenu.Item",
 
   /** The transcript column. */
   Timeline: "Timeline",

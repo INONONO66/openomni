@@ -115,12 +115,11 @@ describe("the shell density type scale", () => {
     }
   });
 
-  test("Given the shell block, When the family is read, Then the surface is mono-first", () => {
-    // The transcript is a ledger of machine truth read in long columns: paths,
-    // tool names, durations, and code are the majority of its glyphs. Setting
-    // it in the sans ramp is what made the shell read as a chat client.
-    expect(SHELL).toContain("font-family: var(--font-mono)");
-    expect(SHELL).not.toContain("var(--font-sans)");
+  test("Given the shell block, When the family is read, Then density sets no family", () => {
+    // The frame and prose inherit the sans body; mono is opted into per
+    // surface through `.font-mono`. A density that re-pointed the family would
+    // turn the whole console into a terminal again.
+    expect(SHELL).not.toContain("font-family");
   });
 
   test("Given the shell block, When inspected, Then it re-points type and rhythm only", () => {

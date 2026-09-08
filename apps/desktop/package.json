@@ -20,10 +20,14 @@
     "@tanstack/react-store": "0.11.1",
     "@tanstack/store": "0.11.1",
     "ai": "7.0.93",
+    "lucide-react": "^1.39.0",
     "react": "^19.2.8",
+    "zod": "^4.5.4",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "react-grep": "^0.3.3",
+    "@happy-dom/global-registrator": "^20.14.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query-devtools": "5.102.8",
     "@types/bun": "latest",

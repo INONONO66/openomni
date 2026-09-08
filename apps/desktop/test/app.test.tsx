@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
-import { renderToStaticMarkup } from "react-dom/server";
-import { App } from "../src/renderer/app";
-import { StateProvider } from "../src/renderer/state/provider";
-import { queryKeys } from "../src/renderer/state/queries";
-import { consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { consoleStore, INITIAL_CLIENT_STATE, newSessionTab, openTab } from "../src/renderer/state/store";
+import { renderShell } from "./helpers";
 
 /**
  * The shell's first paint, from the store and the endpoint query and nothing
@@ -16,16 +12,7 @@ beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
 });
 
-/** Render with the endpoint query already answered, or still in flight. */
-function shell(endpoint: "pending" | null) {
-  const client = new QueryClient();
-  if (endpoint !== "pending") client.setQueryData(queryKeys.gatewayEndpoint, endpoint);
-  return renderToStaticMarkup(
-    <StateProvider client={client}>
-      <App />
-    </StateProvider>,
-  );
-}
+const shell = renderShell;
 
 describe("nothing open", () => {
   test("Given no sessions, When the app renders, Then both columns say so and nothing is fabricated", () => {
@@ -45,19 +32,32 @@ describe("nothing open", () => {
   });
 });
 
+describe("empty routes", () => {
+  test("renders each non-session route as an honest empty column", () => {
+    for (const route of ["inbox", "automations", "memory"] as const) {
+      consoleStore.setState(() => INITIAL_CLIENT_STATE);
+      openTab({ kind: "route", route });
+      const html = shell(null);
+      expect(html).toContain('data-ui="Panel"');
+      expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+      expect(html).not.toContain("data-composer");
+    }
+  });
+});
+
 describe("one session", () => {
   test("Given a created session, When the app renders, Then it is the header and the current row", () => {
-    createSession(1);
+    newSessionTab();
     const html = shell(null);
 
-    expect(html).toContain("Session 1");
+    expect(html).toContain(`aria-label="${consoleStore.state.sessions[0]?.title}"`);
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
     expect(html).toContain("No turns in this session yet.");
     expect(html).not.toContain("No sessions yet");
   });
 
   test("Given no gateway, When the app renders, Then the composer is disabled and says why", () => {
-    createSession(1);
+    newSessionTab();
     const html = shell(null);
     const field = html.slice(html.indexOf("<textarea"), html.indexOf("</textarea>"));
 
@@ -66,7 +66,7 @@ describe("one session", () => {
   });
 
   test("Given the endpoint still in flight, When the app renders, Then the composer waits without a verdict", () => {
-    createSession(1);
+    newSessionTab();
     const html = shell("pending");
     const field = html.slice(html.indexOf("<textarea"), html.indexOf("</textarea>"));
 

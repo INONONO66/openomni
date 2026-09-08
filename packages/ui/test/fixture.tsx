@@ -1,3 +1,4 @@
+import type { ConsoleShell, ConsoleStrip } from "../src/console";
 import type {
   PendingApproval,
   TranscriptCodeLine,
@@ -223,3 +224,32 @@ export const costs: Readonly<Record<number, TurnCost>> = {
 export const pending: readonly PendingApproval[] = [
   { toolId: "t10", summary: "shell wants to run npm test", reason: "outside declared scope" },
 ];
+
+/** The frame at rest: sidebar open at its default width, an empty history. */
+export const SHELL: ConsoleShell = {
+  sidebarOpen: true,
+  sidebarFloating: false,
+  sidebarWidth: 240,
+  onToggleSidebar: () => undefined,
+  onSidebarFloatingChange: () => undefined,
+  onSidebarWidthCommit: () => undefined,
+};
+
+export const STRIP: ConsoleStrip = {
+  tabs: [],
+  onActivate: () => undefined,
+  onClose: () => undefined,
+  createLabel: "New",
+  onCreate: () => undefined,
+  platform: "darwin",
+  history: {
+    entries: [],
+    currentId: null,
+    now: 0,
+    canBack: false,
+    canForward: false,
+    onBack: () => undefined,
+    onForward: () => undefined,
+    onJump: () => undefined,
+  },
+};

@@ -44,11 +44,21 @@ interface ToolObservationIdentity {
   readonly timeoutMs?: number;
 }
 
+/** How an interrupted effect may be settled from evidence; nothing here permits a replay. */
+export type RecoveryClassification =
+  | "local_transactional"
+  | "endpoint_idempotent"
+  | "read_back_reconcilable"
+  | "ambiguous_no_replay";
+export type RecoverySite = "post_policy" | "reverter" | "result_commit" | "crash";
+
 export interface ExecutionRequest {
   readonly kind: string;
   readonly op: string;
   readonly intent: PlainValue;
   readonly effect: PlainValue;
+  /** Recorded on the intent so crash-open recovery classifies from durable evidence. */
+  readonly recovery?: RecoveryClassification;
   readonly message?: PolicyEvaluationInput["message"];
   readonly revert?: () => void | Promise<void>;
   /** Result-dependent evidence for a reversible durable projection. */
@@ -82,6 +92,8 @@ export interface LlmAttempts<T extends PlainValue> {
     body(): Promise<T>;
   }>;
   recoverOverflow?(error: Error): Promise<boolean>;
+  /** Durable attempt evidence (usage, visible-output boundary, credential handle) projected from a settled body. */
+  evidence?(value: T): PlainValue;
   onRetry?(decision: {
     readonly attempt: number;
     readonly maxAttempts: number;
@@ -173,6 +185,11 @@ export interface Executor {
 }
 
 export interface DurableExecutor extends Executor {
+  recover(): Promise<void>;
+  runBatch(
+    items: readonly ExecutionBatchItem[],
+    control: WaveControl,
+  ): Promise<readonly ExecutionBatchResult[]>;
   judgeStop(
     state: import("./core/execution/stop-chain").StopState,
     observation: import("./core/execution/stop-chain").StopObservation,

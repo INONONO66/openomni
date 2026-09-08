@@ -263,17 +263,21 @@ Runner operations (adopted from the same survey):
 
 ## 5. Runtime administration
 
-Resident-only tools (the same `origin.role === "resident"` gate as approval tools),
-each a recorded act:
+One Resident-only tool, `provision({operation: {op, args}})`, where every op is
+a recorded act (#949 folded the former `approval` tool into it; Owner consent is
+a `require_approval` policy row resolved by the kernel request path, never a
+model-callable decision):
 
-| Tool | Act | Guard |
+| `provision.op` | Act | Guard |
 | --- | --- | --- |
-| `person_declare` | upsert Person (identity + endpoint bindings) | tier raises above `collaborator`, and any change to the `owner` Person, go through the approval lane; lateral/downward edits are direct |
-| `person_remove` | remove Person, reconcile derived rows | refuses to remove the sole `owner` |
-| `channel_declare` | upsert ChannelInstance (+ optional secret payload → vault write + ref) | credential validated against provider schema before the row lands; invalid → typed refusal, nothing mounts |
+| `contact_add` | upsert Person (identity + endpoint bindings) | tier raises above `collaborator`, and any change to the `owner` Person, suspend the original invocation for authenticated Owner approval; lateral/downward edits are direct |
+| `contact_remove` | remove Person, reconcile derived rows | refuses to remove the sole `owner` |
+| `contact_promote` | register a provisional contact | `require_approval` policy row; domain-revision CAS at apply |
+| `contact_merge` | move an endpoint onto an existing contact | `require_approval` policy row; domain-revision CAS at apply |
+| `channel_add` | upsert ChannelInstance (+ optional secret payload → vault write + ref) | credential validated against provider schema before the row lands; invalid → typed refusal, nothing mounts |
 | `channel_enable` / `channel_disable` | flip `enabled`, bounce the stage | — |
 | `secret_rotate` | new ciphertext revision, remount referencing stages | — |
-| `provision_status` | read-only: declared vs mounted diff, last reconcile errors | — |
+| `status` | read-only: declared vs mounted diff, last reconcile errors | — |
 
 Boot reconcile and tool-driven mutation are the same code path: declarations
 change → affected stages bounce. There is no second "runtime config" surface.

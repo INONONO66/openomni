@@ -18,6 +18,52 @@ export function createAttemptRunner(
     admission: Admission,
   ) => Promise<"approve" | "refuse" | "timeout">,
 ) {
+  // Attempt ordinal, the provider-retry cap and the reason this attempt
+  // exists are pinned on the intent; llm decided them, the ledger keeps them.
+  function appendAttemptIntent(
+    request: AttemptRequest,
+    parent: LedgerAction.Receipt,
+    attempt: number,
+    failures: readonly string[],
+  ): Promise<LedgerAction.Receipt> {
+    return record.appendIntent({
+      kind: "attempt",
+      op: request.op,
+      parentId: parent.action.id,
+      value: request.intent,
+      invocation: {
+        effectHash: canonicalDigest(request.effect),
+        attempt,
+        maxAttempts: Retry.MAX_ATTEMPTS,
+        retryReason: failures.at(-1) ?? null,
+      },
+    });
+  }
+  function appendExecuted(
+    request: AttemptRequest,
+    intent: LedgerAction.Receipt,
+    evidence: PlainValue | undefined,
+  ): Promise<void> {
+    return record.appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
+      phase: "result",
+      terminal: "executed",
+      effect: request.effect,
+      ...(evidence === undefined ? {} : { evidence }),
+    });
+  }
+  async function waitForRetry<T extends PlainValue>(
+    attempts: LlmAttempts<T>,
+    retry: {
+      readonly attempt: number;
+      readonly delayMs: number;
+      readonly decision: Retry.Decision;
+      readonly error: Error;
+      readonly reason: string;
+    },
+  ): Promise<void> {
+    attempts.onRetry?.({ ...retry, maxAttempts: Retry.MAX_ATTEMPTS });
+    await (options.waitRetry ?? Retry.sleep)(retry.delayMs, options.signal);
+  }
   return async function runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
@@ -33,13 +79,7 @@ export function createAttemptRunner(
         throw new Error(`llm admission refused: ${policy.reason ?? policy.verdict}`);
       await prepared.admit();
       options.signal?.throwIfAborted();
-      const intent = await record.appendIntent({
-        kind: "attempt",
-        op: prepared.request.op,
-        parentId: parent.action.id,
-        value: prepared.request.intent,
-        invocation: { effectHash: canonicalDigest(prepared.request.effect) },
-      });
+      const intent = await appendAttemptIntent(prepared.request, parent, attempt, failures);
       if (policy?.verdict === "require_approval") {
         const decision = await approve(prepared.request, intent, policy);
         if (decision !== "approve") {
@@ -64,11 +104,7 @@ export function createAttemptRunner(
         }),
       );
       if (outcome.status === "fulfilled") {
-        await record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
-          phase: "result",
-          terminal: "executed",
-          effect: prepared.request.effect,
-        });
+        await appendExecuted(prepared.request, intent, attempts.evidence?.(outcome.value));
         return outcome.value;
       }
       await record.appendFailure(
@@ -94,16 +130,9 @@ export function createAttemptRunner(
       const recover = overflow && (await attempts.recoverOverflow?.(outcome.error)) === true;
       if (!recover && (overflow || !decision.retry)) throw outcome.error;
       const delayMs = recover ? 0 : decision.retry ? decision.delayMs : 0;
-      failures.push(recover ? "context_overflow" : Retry.attemptReason(outcome.error));
-      attempts.onRetry?.({
-        attempt,
-        maxAttempts: Retry.MAX_ATTEMPTS,
-        delayMs,
-        decision,
-        error: outcome.error,
-        reason: failures[failures.length - 1] ?? "transient_error",
-      });
-      await (options.waitRetry ?? Retry.sleep)(delayMs, options.signal);
+      const reason = recover ? "context_overflow" : Retry.attemptReason(outcome.error);
+      failures.push(reason);
+      await waitForRetry(attempts, { attempt, delayMs, decision, error: outcome.error, reason });
     }
   };
 }

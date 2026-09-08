@@ -35,7 +35,7 @@ import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import { resolveKek } from "./provisioning/vault-key";
-import type { ProvisionPort } from "./tools/mutation/provision";
+import type { ProvisionPort } from "./tools/provision";
 import {
   assertWsExposure,
   loadConfig,
@@ -43,7 +43,7 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import { createLlmToolPort } from "./tools/execution/llm";
+import { createCompletionPort } from "./tools/completion";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
@@ -92,7 +92,7 @@ function registerActors(actors: readonly RegisteredActor[]): void {
  * The app's HTTP surface: the ws upgrade seam, unauthenticated liveness (no
  * clock, no version, no state), and — only when a GitHub channel is composed —
  * its webhook ingress. Everything else is 404. The webhook handler is read
- * live from the supervisor's table so a channel_declare landing a GitHub
+ * live from the supervisor's table so a channel_add landing a GitHub
  * instance mid-run is reachable without rebinding the server.
  */
 function createHttpRoutes(
@@ -193,8 +193,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         return gateway.ingest(...args);
       },
     };
-    // The catalog's approval lane (§6): Owner-consent requests plus the two
-    // acts they authorize — promotion and cross-channel endpoint merge.
     // Provisioning administration port: the supervisor is created after the
     // Resident (it needs the routing handler), so the port reaches it through
     // a late binding — tools cannot run before composition finishes anyway.
@@ -217,12 +215,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
       materialize: materializePersons,
       removeIdentity: ActorRegistry.removeIdentity,
-    };
-    const approvalPort = {
-      getIdentity: ActorRegistry.getIdentity,
-      getEndpoint: ActorRegistry.getEndpoint,
-      promote: ActorRegistry.promote,
-      mergeEndpoint: ActorRegistry.mergeEndpoint,
     };
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
@@ -247,7 +239,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     }
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
-    const llmPort = createLlmToolPort(
+    const llmPort = createCompletionPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       options.llm ?? {},
     );
@@ -269,7 +261,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         machines: host,
         ...(cells === undefined ? {} : { cells }),
         llm: llmPort,
-        approvals: approvalPort,
         provisioning: provisioningPort,
       },
       sessionRuntime,

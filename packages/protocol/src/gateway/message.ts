@@ -11,17 +11,21 @@ const TargetKind = z.enum(["session", "new_session", "actor"]);
 const Addressee = z.enum(["bot", "owner", "ambient"]);
 const Verdict = z.enum(["allow", "deny"]);
 
+// The session-addressed variants are shared with the model-facing send_message
+// tool, which swaps only the actor variant for its `contact` noun.
+const SessionTarget = z.object({ kind: z.literal("session"), id: Id }).strict();
+const NewSessionTarget = z
+  .object({
+    kind: z.literal("new_session"),
+    role: LedgerSession.Role,
+    runner: Id,
+    // The authenticated caller supplies the parent identity, not the model.
+    parent: z.literal("me"),
+  })
+  .strict();
 const Target = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("session"), id: Id }).strict(),
-  z
-    .object({
-      kind: z.literal("new_session"),
-      role: LedgerSession.Role,
-      runner: Id,
-      // The authenticated caller supplies the parent identity, not the model.
-      parent: z.literal("me"),
-    })
-    .strict(),
+  SessionTarget,
+  NewSessionTarget,
   z.object({ kind: z.literal("actor"), actorId: Id }).strict(),
 ]);
 
@@ -163,6 +167,8 @@ const Observation = z.discriminatedUnion("kind", [
 
 /** Internal schema assembly; public names are exposed through Gateway. */
 export const MessageContract = {
+  SessionTarget,
+  NewSessionTarget,
   Send,
   RequestAnswer,
   Handle,

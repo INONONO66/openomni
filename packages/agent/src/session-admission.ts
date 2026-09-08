@@ -9,7 +9,12 @@ import {
   type LedgerSession,
   type PlainValue,
 } from "@openomni/protocol";
-import { createExecutor } from "./executor";
+import { createExecutor, type ExecutionResult } from "./executor";
+import {
+  recordedCompaction,
+  restoreContextRequest,
+  restoredContextProjection,
+} from "./compaction/restore";
 import {
   SessionPolicyRefusal,
   SessionCommitError,
@@ -55,9 +60,10 @@ export function createSessionAdmission(
       result: SessionRunnerResult,
       releaseLease: boolean,
     ) => Promise<void>;
+    readonly releaseHeldLease: () => void;
   },
 ) {
-  const { awaitRetainedRunner, acquire, runTurn, seal } = ports;
+  const { awaitRetainedRunner, acquire, runTurn, seal, releaseHeldLease } = ports;
   async function startTurn(): Promise<SessionRunnerResult | undefined> {
     await awaitRetainedRunner();
     const current = SessionHandleStore.row(sessionId);
@@ -289,6 +295,34 @@ export function createSessionAdmission(
     };
   }
 
+  /**
+   * Append `restore_context_projection`: the recorded, policy-evaluated
+   * compensation of one compaction, rebuilt from that compaction's own recipe.
+   * The original compaction and every earlier projection stay in history.
+   */
+  async function restoreContextProjection(compactionId: string): Promise<ExecutionResult> {
+    await awaitRetainedRunner();
+    const current = SessionHandleStore.row(sessionId);
+    state.fence = acquire(current.leaseFence);
+    try {
+      const actions = SessionHandleStore.tree(sessionId);
+      const record = recordedCompaction(actions, compactionId);
+      const executor = createExecutor({
+        policy: pinPolicy(SessionHandleStore.latestGeneration(actions).policyGeneration),
+        ledger: createExecutionLedger(),
+        observations: runtime.observations,
+        clock,
+        entropy,
+        identity: { sessionId, role: current.role, parentActionId: compactionId },
+      });
+      return await executor.run(restoreContextRequest(compactionId), async () =>
+        restoredContextProjection(sessionId, actions, compactionId, record),
+      );
+    } finally {
+      releaseHeldLease();
+    }
+  }
+
   async function resumeTurn(open: SessionHandleStore.OpenTurn): Promise<SessionRunnerResult> {
     await awaitRetainedRunner();
     state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
@@ -415,6 +449,7 @@ export function createSessionAdmission(
     resumeTurn,
     resumeInterrupted,
     consumeNoopInbox,
+    restoreContextProjection,
   };
 }
 

@@ -68,10 +68,10 @@ test("message policy selects worker actor denial without matching external sende
   expect(external.matchedRuleIds).toEqual([]);
 });
 
-test("sendMessage cannot bypass admission by omitting its authenticated context", () => {
+test("send_message cannot bypass admission by omitting its authenticated context", () => {
   const policy = compilePolicySnapshot({ generation: 1, rows: [atGeneration(compaction, 1)] });
   expect(
-    policy.evaluate({ kind: "message", phase: "pre", op: "sendMessage", value: {} }),
+    policy.evaluate({ kind: "message", phase: "pre", op: "send_message", value: {} }),
   ).toMatchObject({
     verdict: "deny",
     reason: "message_context_missing",

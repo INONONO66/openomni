@@ -101,3 +101,15 @@ export function requestToolStep(
   );
   return undefined;
 }
+
+/** send_message input that commissions one native worker child under the calling session. */
+export function commissionInput(send: {
+  readonly message: string;
+  readonly reply_to: string;
+  readonly deadline_ms?: number;
+}) {
+  return {
+    to: { kind: "new_session", role: "worker", runner: "native", parent: "me" } as const,
+    ...send,
+  };
+}

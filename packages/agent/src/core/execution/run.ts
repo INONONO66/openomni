@@ -7,13 +7,14 @@ import {
   type Sink,
 } from "@openomni/llm";
 import { selectModel } from "@openomni/llm";
-import type { PlainValue } from "@openomni/protocol";
+import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { CompactionSession } from "../../compaction";
 import { DEFAULT_PROTECT_RECENT } from "../../compaction/contract";
 import { estimateMessagesTokens } from "../../compaction/estimate";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { evaluateBudget, publishBudgetTelemetry } from "../budget";
+import { restoreModelSelection } from "../../model-selection";
 import { AgentStopError } from "./stop-chain";
 import { assertToolExecutor, assertUnambiguousToolMetadata } from "./tools";
 import {
@@ -65,6 +66,10 @@ export async function runAgent(
   const compaction = createCompactionSession(config);
   emitRunStarted(config.events, trace, config.model.id);
   try {
+    state.modelChainStart = await restoreModelSelection(config.executor, config.pinnedModel, [
+      config.model,
+      ...(config.modelFallbacks ?? []),
+    ]);
     for (;;) {
       await drainStepBoundary(state, config, "before_llm");
       if (
@@ -115,10 +120,8 @@ async function runModelStep(
   let provider = config.model.provider;
   const prepareAttempt = async (attempt: number, failures: readonly string[]) => {
     recordRunAttempt(state, attempt);
-    const selected = selectModel(
-      [config.model, ...(config.modelFallbacks ?? [])],
-      [...priorFailures, ...failures],
-    );
+    const chain = [config.model, ...(config.modelFallbacks ?? [])].slice(state.modelChainStart);
+    const selected = selectModel(chain, [...priorFailures, ...failures]);
     const model = await (config.llm?.resolveModel ?? Provider.resolveModel)(selected.model);
     const modelKey = `${model.providerID}/${model.id}`;
     if (state.modelKey !== undefined && state.modelKey !== modelKey) resetModelWindowGuards(state);
@@ -137,7 +140,7 @@ async function runModelStep(
     turn = built.turn;
     const prepared = turn;
     return {
-      fallbackAvailable: selected.index < (config.modelFallbacks?.length ?? 0),
+      fallbackAvailable: selected.index < chain.length - 1,
       request: {
         op: "chat",
         intent: {
@@ -168,7 +171,12 @@ async function runModelStep(
         const result = await (config.llm?.run ?? llmRun)(prepared.runInput, prepared.trackingSink);
         if (result.type === "aborted") throw result.error ?? Retry.abortError();
         if (result.type === "error") throw result.error;
-        return result;
+        return {
+          type: result.type,
+          evidence: PlainValueSchema.parse(
+            result.type === "stop" ? (result.evidence ?? null) : null,
+          ),
+        };
       },
     };
   };
@@ -184,6 +192,7 @@ async function runModelStep(
       execution.runAttempts(parent, {
         prepare: async (attempt, failures) =>
           attempt === 1 ? initial : prepareAttempt(attempt, failures),
+        evidence: (result) => result.evidence,
         recoverOverflow: async () => {
           if (state.overflowCompactionAttempted) return false;
           state.overflowCompactionAttempted = true;

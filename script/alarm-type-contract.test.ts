@@ -8,7 +8,7 @@ const root = resolve(import.meta.dir, "..");
 const sources = [
   "apps/openomni/src/composition/alarm-sources.ts",
   "apps/openomni/src/composition/alarm-worker.ts",
-  "apps/openomni/src/tools/mutation/monitor.ts",
+  "apps/openomni/src/tools/monitor.ts",
   "apps/openomni/test/monitor-tool-boundaries.test.ts",
   "apps/openomni/test/monitor-budget.test.ts",
   "apps/openomni/test/monitor-deadline.test.ts",

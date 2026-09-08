@@ -1,63 +1,101 @@
+import { clampSidebarWidth, SIDEBAR_WIDTH } from "@openomni/ui";
 import { Store } from "@tanstack/store";
 
 /**
- * The renderer's CLIENT state: what this window knows that no server told it.
- *
- * One `Store`, four fields, plain functions to change them. There are no
- * slices, reducers, or action types — the state is small enough to read in one
- * screen, and the ceremony would outweigh it. Components read it through
- * `useStore(consoleStore, selector)` so a change to one field re-renders only
- * the components that selected it.
- *
- * Server state — anything the gateway can answer for — does not live here; it
- * goes through `queries.ts`. Sessions are here ONLY because the wire has no
- * session-list method yet: until it does, a session is a thing the Owner
- * created in this window, and this window is its whole record.
+ * Window-lifetime client state. Server state belongs in queries.ts; sessions
+ * stay here until the wire supplies a session-list method. Explicit selection
+ * reuses open views, while history traversal is strictly tab-local.
  */
-
 export type ProjectId = string;
 export type SessionId = string;
 
 /** The project every new session lands in until projects are real. */
 export const DEFAULT_PROJECT_ID: ProjectId = "default";
 
-/**
- * One conversation. `projectId` is membership, never position: the sidebar's
- * order is `attention`'s output, so a session cannot be moved by editing it.
- */
 export interface Session {
   readonly id: SessionId;
   readonly title: string;
+  readonly titleSource: "placeholder" | "prompt";
   readonly projectId: ProjectId | null;
-  /** Epoch ms. The one fact a locally created session carries. */
   readonly createdAt: number;
+}
+
+export type Route = "sessions" | "inbox" | "automations" | "memory";
+
+export const ROUTES: readonly Route[] = ["sessions", "inbox", "automations", "memory"];
+
+export type Place =
+  | { readonly kind: "session"; readonly sessionId: SessionId }
+  | { readonly kind: "route"; readonly route: Route };
+
+export interface History {
+  readonly entries: readonly Place[];
+  readonly cursor: number;
+}
+
+export interface Tab {
+  readonly id: string;
+  readonly place: Place;
+  readonly history: History;
+}
+
+interface ClosedTab {
+  readonly tab: Tab;
+  readonly index: number;
 }
 
 export interface ClientState {
   readonly sessions: readonly Session[];
-  readonly selectedSessionId: SessionId | null;
-  /** Project groups the Owner has closed. `null` is the group of unfiled sessions. */
+  readonly tabs: readonly Tab[];
+  readonly activeTabId: string | null;
+  readonly closedTabs: readonly ClosedTab[];
   readonly collapsedProjectIds: ReadonlySet<ProjectId | null>;
-  /**
-   * Per session, so switching away and back never hands the Owner a
-   * half-written message addressed to a different agent.
-   */
   readonly drafts: Readonly<Record<SessionId, string>>;
+  readonly sidebarOpen: boolean;
+  /** Transient reveal; App owns search-aware arrival dismissal. */
+  readonly sidebarFloating: boolean;
+  readonly sidebarWidth: number;
 }
 
 export const INITIAL_CLIENT_STATE: ClientState = {
   sessions: [],
-  selectedSessionId: null,
+  tabs: [],
+  activeTabId: null,
+  closedTabs: [],
   collapsedProjectIds: new Set(),
   drafts: {},
+  sidebarOpen: true,
+  sidebarFloating: false,
+  sidebarWidth: SIDEBAR_WIDTH.default,
 };
 
 export const consoleStore = new Store<ClientState>(INITIAL_CLIENT_STATE);
 
-/**
- * Create a session and select it. Returns the new id so the caller can treat
- * the creation as the focus boundary it is.
- */
+export function activeTab(state: ClientState): Tab | null {
+  return state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
+}
+
+export function activePlace(state: ClientState): Place | null {
+  return activeTab(state)?.place ?? null;
+}
+
+export function tabTitle(tab: Tab, state: ClientState = consoleStore.state): string {
+  return titleOf(state, tab.place);
+}
+
+export function historyMenuEntries(
+  state: ClientState = consoleStore.state,
+): readonly { readonly id: string; readonly title: string }[] {
+  const tab = activeTab(state);
+  if (!tab) return [];
+  const { entries, cursor } = tab.history;
+  const newestCount = cursor < entries.length - 20 ? 19 : 20;
+  return entries
+    .map((place, index) => ({ id: String(index), title: titleOf(state, place) }))
+    .filter((_entry, index) => index >= entries.length - newestCount || index === cursor)
+    .reverse();
+}
+
 export function createSession(now: number = Date.now()): SessionId {
   const id = crypto.randomUUID();
   consoleStore.setState((state) => ({
@@ -66,19 +104,211 @@ export function createSession(now: number = Date.now()): SessionId {
       ...state.sessions,
       {
         id,
-        title: `Session ${state.sessions.length + 1}`,
+        title: "New Session",
+        titleSource: "placeholder",
         projectId: DEFAULT_PROJECT_ID,
         createdAt: now,
       },
     ],
-    selectedSessionId: id,
   }));
   return id;
 }
 
-export function selectSession(id: SessionId): void {
-  consoleStore.setState((state) => ({ ...state, selectedSessionId: id }));
+export function newSessionTab(): SessionId {
+  const id = createSession();
+  openTab({ kind: "session", sessionId: id });
+  return id;
 }
+
+export function setSessionTitleIfPlaceholder(id: SessionId, text: string): void {
+  const title = Array.from(text.trim()).slice(0, 40).join("");
+  if (!title) return;
+  consoleStore.setState((state) => {
+    const session = state.sessions.find((candidate) => candidate.id === id);
+    if (session?.titleSource !== "placeholder") return state;
+    return {
+      ...state,
+      sessions: state.sessions.map((candidate) =>
+        candidate.id === id ? { ...candidate, title, titleSource: "prompt" } : candidate,
+      ),
+    };
+  });
+}
+
+export function openTab(place: Place): void {
+  const id = crypto.randomUUID();
+  consoleStore.setState((state) => {
+    const match = matchingTab(state, place, activeTab(state));
+    return match ? activated(state, match.id) : appendTab(state, place, id);
+  });
+}
+
+export function activateTab(id: string): void {
+  consoleStore.setState((state) =>
+    state.tabs.some((tab) => tab.id === id) ? activated(state, id) : state,
+  );
+}
+
+export function closeTab(id: string): void {
+  consoleStore.setState((state) => {
+    const index = state.tabs.findIndex((tab) => tab.id === id);
+    const tab = state.tabs[index];
+    if (!tab) return state;
+    return {
+      ...state,
+      tabs: state.tabs.filter((candidate) => candidate.id !== id),
+      activeTabId:
+        state.activeTabId === id
+          ? (state.tabs[index + 1]?.id ?? state.tabs[index - 1]?.id ?? null)
+          : state.activeTabId,
+      closedTabs: [...state.closedTabs, { tab, index }].slice(-20),
+    };
+  });
+}
+
+export function reopenClosedTab(): void {
+  consoleStore.setState((state) => {
+    const snapshot = state.closedTabs[state.closedTabs.length - 1];
+    if (!snapshot) return state;
+    if (snapshot.tab.place.kind === "session") {
+      const match = matchingTab(state, snapshot.tab.place, activeTab(state));
+      if (match) return activated(state, match.id);
+    }
+    const index = Math.min(snapshot.index, state.tabs.length);
+    return {
+      ...state,
+      tabs: [...state.tabs.slice(0, index), snapshot.tab, ...state.tabs.slice(index)],
+      activeTabId: snapshot.tab.id,
+      closedTabs: state.closedTabs.slice(0, -1),
+    };
+  });
+}
+
+export function activateTabAt(ordinal: number): void {
+  if (!Number.isInteger(ordinal) || ordinal < 1 || ordinal > 9) return;
+  consoleStore.setState((state) => {
+    const tab = state.tabs[ordinal === 9 ? state.tabs.length - 1 : ordinal - 1];
+    return tab ? activated(state, tab.id) : state;
+  });
+}
+
+export function cycleTab(delta: 1 | -1): void {
+  consoleStore.setState((state) => {
+    if (state.tabs.length === 0) return state;
+    const index = state.tabs.findIndex((tab) => tab.id === state.activeTabId);
+    const tab = state.tabs[(index + delta + state.tabs.length) % state.tabs.length];
+    return tab ? activated(state, tab.id) : state;
+  });
+}
+
+export function navigate(
+  place: Place,
+  targetTabId: string | null = consoleStore.state.activeTabId,
+): void {
+  const id = crypto.randomUUID();
+  consoleStore.setState((state) => {
+    const target = state.tabs.find((tab) => tab.id === targetTabId) ?? activeTab(state);
+    if (place.kind === "session") {
+      const match = matchingTab(state, place, target);
+      if (match) return activated(state, match.id);
+    }
+    if (!target) return appendTab(state, place, id);
+    if (samePlace(target.place, place)) return activated(state, target.id);
+    const kept = target.history.entries.slice(0, target.history.cursor + 1);
+    return replaceTab(state, {
+      ...target,
+      place,
+      history: { entries: [...kept, place], cursor: kept.length },
+    });
+  });
+}
+
+export function back(): void {
+  moveCursor(-1);
+}
+
+export function forward(): void {
+  moveCursor(1);
+}
+
+export function jumpTo(cursor: number): void {
+  if (!Number.isInteger(cursor)) return;
+  consoleStore.setState((state) => {
+    const tab = activeTab(state);
+    return tab ? atCursor(state, tab, cursor) : state;
+  });
+}
+
+export function canGoBack(history: History): boolean {
+  return history.cursor > 0;
+}
+
+export function canGoForward(history: History): boolean {
+  return history.cursor < history.entries.length - 1;
+}
+
+function moveCursor(delta: 1 | -1): void {
+  consoleStore.setState((state) => {
+    const tab = activeTab(state);
+    return tab ? atCursor(state, tab, tab.history.cursor + delta) : state;
+  });
+}
+
+function atCursor(state: ClientState, tab: Tab, cursor: number): ClientState {
+  const place = tab.history.entries[cursor];
+  if (!place || cursor === tab.history.cursor) return state;
+  return replaceTab(state, { ...tab, place, history: { ...tab.history, cursor } });
+}
+
+function activated(state: ClientState, id: string): ClientState {
+  return state.activeTabId === id ? state : { ...state, activeTabId: id };
+}
+
+function appendTab(state: ClientState, place: Place, id: string): ClientState {
+  return {
+    ...state,
+    tabs: [...state.tabs, { id, place, history: { entries: [place], cursor: 0 } }],
+    activeTabId: id,
+  };
+}
+
+function replaceTab(state: ClientState, tab: Tab): ClientState {
+  return {
+    ...state,
+    tabs: state.tabs.map((candidate) => (candidate.id === tab.id ? tab : candidate)),
+    activeTabId: tab.id,
+  };
+}
+
+function matchingTab(state: ClientState, place: Place, preferred: Tab | null): Tab | undefined {
+  return preferred && samePlace(preferred.place, place)
+    ? preferred
+    : state.tabs.find((tab) => samePlace(tab.place, place));
+}
+
+function samePlace(a: Place, b: Place): boolean {
+  return a.kind === "session" && b.kind === "session"
+    ? a.sessionId === b.sessionId
+    : a.kind === "route" && b.kind === "route" && a.route === b.route;
+}
+
+function titleOf(state: ClientState, place: Place): string {
+  switch (place.kind) {
+    case "session":
+      return (
+        state.sessions.find((session) => session.id === place.sessionId)?.title ?? place.sessionId
+      );
+    case "route":
+      return ROUTE_LABEL[place.route];
+  }
+}
+
+export const ROUTE_LABEL: Record<Route, string> = {
+  sessions: "Sessions",
+  inbox: "Inbox",
+  automations: "Automations",
+  memory: "Memory",
+};
 
 export function toggleProject(id: ProjectId | null): void {
   consoleStore.setState((state) => {
@@ -91,4 +321,28 @@ export function toggleProject(id: ProjectId | null): void {
 
 export function setDraft(id: SessionId, value: string): void {
   consoleStore.setState((state) => ({ ...state, drafts: { ...state.drafts, [id]: value } }));
+}
+
+export function setSidebarOpen(open: boolean): void {
+  consoleStore.setState((state) => ({ ...state, sidebarOpen: open }));
+}
+
+/** Open ↔ collapsed. A toggle while the reveal floats PINS it: open, no longer floating. */
+export function toggleSidebar(): void {
+  consoleStore.setState((state) => ({
+    ...state,
+    sidebarOpen: !state.sidebarOpen,
+    sidebarFloating: false,
+  }));
+}
+
+export function setSidebarFloating(floating: boolean): void {
+  consoleStore.setState((state) =>
+    state.sidebarFloating === floating ? state : { ...state, sidebarFloating: floating },
+  );
+}
+
+/** Clamped here, so no caller can put an out-of-range width in the store. */
+export function setSidebarWidth(width: number): void {
+  consoleStore.setState((state) => ({ ...state, sidebarWidth: clampSidebarWidth(width) }));
 }

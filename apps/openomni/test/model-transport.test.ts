@@ -7,7 +7,7 @@ import type { RunInput, Sink } from "@openomni/llm";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
 import { residentRunner as createResident } from "./helpers/resident-runner";
-import { createLlmToolPort } from "../src/tools/execution/llm";
+import { createCompletionPort } from "../src/tools/completion";
 import { assistantMessage } from "./helpers/assistant-message";
 import { admittedOperation } from "./helpers/admitted-operation";
 
@@ -89,9 +89,9 @@ describe("operator transport reaches every model caller", () => {
     expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
   });
 
-  it("the llm tool port forwards it to its one-shot sub-model call", async () => {
+  it("the completion port forwards it to its one-shot sub-model call", async () => {
     let seen: RunInput | undefined;
-    const port = createLlmToolPort(
+    const port = createCompletionPort(
       { provider: "fake", id: "port-test", apiKey: "port-key", transport: OPERATOR_TRANSPORT },
       {
         resolveModel,

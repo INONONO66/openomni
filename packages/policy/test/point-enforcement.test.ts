@@ -215,7 +215,7 @@ describe("policy row compiler enforcement", () => {
     });
     const cases = [
       ["turn", "post", "continue", "continuation", 8],
-      ["tool", "pre", "sendMessage", "fanout", 8],
+      ["tool", "pre", "send_message", "fanout", 8],
       ["turn", "post", "exact_repeat", "exact_repeat", 3],
       ["turn", "post", "toolless_stall", "toolless_stall", 3],
       ["turn", "post", "blocked_recurrence", "blocked_recurrence", 3],
@@ -310,5 +310,40 @@ describe("policy row compiler enforcement", () => {
 
     expect(snapshot.evaluate(input).matchedRuleIds).toEqual(["wildcard", "write-only"]);
     expect(snapshot.evaluate({ ...input, op: "read" }).matchedRuleIds).toEqual(["wildcard"]);
+  });
+
+  it("scopes a row to one inner operation of a multi-operation tool", () => {
+    const snapshot = compilePolicySnapshot({
+      generation: 1,
+      rows: [
+        atGeneration(compaction, 1),
+        atGeneration(
+          draft(
+            "promote-consent",
+            "tool",
+            "pre",
+            { type: "require_approval", reason: "owner consent" },
+            { match: { op: "provision", operation: "contact_promote" }, priority: 10 },
+          ),
+          1,
+        ),
+      ],
+    });
+    const provision = (op: string) => ({
+      ...input,
+      op: "provision",
+      value: { operation: { op, args: {} } },
+    });
+
+    expect(snapshot.evaluate(provision("contact_promote"))).toMatchObject({
+      verdict: "require_approval",
+      reason: "owner consent",
+      matchedRuleIds: ["promote-consent"],
+    });
+    expect(snapshot.evaluate(provision("status"))).toMatchObject({
+      verdict: "allow",
+      matchedRuleIds: [],
+    });
+    expect(snapshot.evaluate({ ...input, op: "provision", value: [] }).verdict).toBe("allow");
   });
 });

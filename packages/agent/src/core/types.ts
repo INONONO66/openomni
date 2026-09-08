@@ -66,6 +66,13 @@ export interface ChatAgentConfig {
    * answer it). Absent = every attempt uses `model`.
    */
   modelFallbacks?: Model.Ref[];
+  /**
+   * The model an earlier turn ended on (#970). When it is a configured
+   * fallback, releasing it back to `model` is a recorded, policy-evaluated
+   * `restore_model_selection` action at this turn's start; a refused
+   * restoration keeps the fallback pinned for the turn.
+   */
+  pinnedModel?: Model.Ref;
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;

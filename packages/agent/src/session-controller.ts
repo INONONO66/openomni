@@ -72,11 +72,13 @@ export function createController(
     resumeTurn,
     resumeInterrupted,
     consumeNoopInbox,
+    restoreContextProjection,
   } = createSessionAdmission(sessionId, runtime, state, owner, clock, entropy, pinPolicy, {
     awaitRetainedRunner: (...args) => awaitRetainedRunner(...args),
     acquire: (...args) => acquire(...args),
     runTurn: (...args) => runTurn(...args),
     seal: (...args) => seal(...args),
+    releaseHeldLease: (...args) => releaseHeldLease(...args),
   });
 
   const { configure, acquire, leaseLive, releaseHeldLease } = createSessionConfiguration(
@@ -191,6 +193,12 @@ export function createController(
     async resume(origin = internalOrigin(sessionId)) {
       const nextHandle = replacement();
       await (nextHandle === undefined ? enqueue("resume", "", origin) : nextHandle.resume(origin));
+    },
+    restoreContext(compactionId) {
+      const nextHandle = replacement();
+      return nextHandle === undefined
+        ? restoreContextProjection(compactionId)
+        : nextHandle.restoreContext(compactionId);
     },
     get: (options = {}) => SessionHandleStore.getSnapshot(sessionId, options.turns ?? 1),
     watch: (options = {}) =>

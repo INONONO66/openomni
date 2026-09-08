@@ -42,7 +42,21 @@ test("stop and aborted are produced by the real attempt entry", async () => {
       })(),
     }),
   });
-  expect(stop).toEqual({ type: "stop" });
+  expect(stop).toEqual({
+    type: "stop",
+    evidence: {
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+      visibleOutput: false,
+      finishReason: "stop",
+      credential: null,
+    },
+  });
   expect(await run({ ...input, signal: AbortSignal.abort() }, sink)).toEqual({ type: "aborted" });
 });
 

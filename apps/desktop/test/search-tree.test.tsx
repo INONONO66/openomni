@@ -17,9 +17,15 @@ import type { Session } from "../src/renderer/state/store";
  * reducer).
  */
 const sessions: readonly Session[] = [
-  { id: "s1", title: "ledger append path", projectId: "kernel", createdAt: 1 },
-  { id: "s2", title: "lease semantics", projectId: "kernel", createdAt: 2 },
-  { id: "s3", title: "sync engine", projectId: "perimeter", createdAt: 3 },
+  {
+    id: "s1",
+    title: "ledger append path",
+    titleSource: "prompt",
+    projectId: "kernel",
+    createdAt: 1,
+  },
+  { id: "s2", title: "lease semantics", titleSource: "prompt", projectId: "kernel", createdAt: 2 },
+  { id: "s3", title: "sync engine", titleSource: "prompt", projectId: "perimeter", createdAt: 3 },
 ];
 const selectedId = "s2";
 
@@ -28,11 +34,13 @@ const ordered = orderByAttention(sessions);
 const html = renderToStaticMarkup(
   <SessionTree
     collapsedProjectIds={new Set()}
-    onCreate={() => undefined}
+    defaultSearching
+    onNavigate={() => undefined}
     onSelect={() => undefined}
     onToggleProject={() => undefined}
     ordered={ordered}
     pendingChanges={0}
+    route="sessions"
     selectedId={selectedId}
     sessions={sessions}
   />,
@@ -59,7 +67,7 @@ describe("the field is wired to the tree it filters", () => {
   });
 
   test("Given the rows, When rendered, Then they are options inside the controlled element", () => {
-    expect(html.match(/role="option"/g)).toHaveLength(sessions.length);
+    expect(html.match(/id="session-row-/g)).toHaveLength(sessions.length);
   });
 
   test("Given no active row, When rendered, Then the field points at nothing", () => {
@@ -69,8 +77,7 @@ describe("the field is wired to the tree it filters", () => {
     expect(html.match(/aria-selected="true"/g)).toBeNull();
   });
 
-  test("Given the field at rest, When rendered, Then the entry shortcut is shown and no count", () => {
-    expect(html).toContain("\u2318K");
+  test("Given the field open with no query, When rendered, Then there is no count", () => {
     expect(html).not.toContain("results");
     expect(html).not.toContain("no sessions match");
   });

@@ -20,6 +20,7 @@ import {
 import { z } from "zod";
 import {
   createExecutor,
+  type DurableExecutor,
   type ExecutionLedger,
   type Executor,
   type ExecutionBatchResult,
@@ -475,7 +476,7 @@ export function createTurnDispatcher(
   definitions: readonly AnyToolDefinition[],
   input: TurnDispatchInput,
   runtime: TurnDispatchRuntime,
-): Dispatcher & { readonly executor: Executor } {
+): Dispatcher & { readonly executor: DurableExecutor } {
   for (const captured of input.tools ?? []) {
     const definition = definitions.find((candidate) => candidate.name === captured.name);
     if (
@@ -523,11 +524,15 @@ export function createTurnDispatcher(
     executor: {
       ...executor,
       recover() {
-        const wave = dispatcher.recover(input.ledger.actions?.() ?? [], {
-          sessionId: input.sessionId,
-          turnId: input.turnId ?? input.actionId,
-          signal: input.signal,
-        });
+        // Persisted evidence settles ordinary crash-open intents first; only
+        // request-bearing waves then re-admit their captured invocations.
+        const wave = executor.recover().then(() =>
+          dispatcher.recover(input.ledger.actions?.() ?? [], {
+            sessionId: input.sessionId,
+            turnId: input.turnId ?? input.actionId,
+            signal: input.signal,
+          }),
+        );
         input.trackWave?.(wave);
         return wave;
       },

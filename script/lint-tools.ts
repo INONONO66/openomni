@@ -5,7 +5,7 @@
  *   1. vocab-ratchet     protocol namespace ↔ core-model Tier-1/2 noun (injective),
  *                        grandfathered baseline + no-new-violations ratchet
  *   2. tool-lint         LLM tool surface: snake_case ≤3 segments, description
- *                        required, ≤5 public input fields; protocol naming rules
+ *                        required, ≤7 public input fields; protocol naming rules
  *                        (banned nouns, no *Module wrappers) with the same ratchet
  *   6. earned-check      every dispatch action constant / registered tool has ≥1
  *                        non-definition production reference, or is baselined
@@ -140,9 +140,11 @@ export interface ToolSurface {
   readonly inputSchema: Record<string, unknown>;
 }
 
-// #946/#988 fixes the public sendMessage spelling; all other names retain the catalog grammar.
-const TOOL_NAME_PATTERN = /^(?:sendMessage|[a-z][a-z0-9]*(?:[._][a-z][a-z0-9]*){0,2})$/;
-const MAX_PUBLIC_FIELDS = 5;
+// #949 seals the catalog on snake_case (KERNEL §3.5); dot namespacing stays for protocol vocab.
+const TOOL_NAME_PATTERN = /^[a-z][a-z0-9]*(?:[._][a-z][a-z0-9]*){0,2}$/;
+// KERNEL §3.5 fixes grep at seven public fields (pattern, path, glob, ignoreCase, literal,
+// context, limit); the budget is the sealed catalog's widest tool, not a spare allowance.
+const MAX_PUBLIC_FIELDS = 7;
 
 function localReference(
   root: Record<string, unknown>,
@@ -231,7 +233,7 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
   if (!TOOL_NAME_PATTERN.test(tool.name)) {
     failures.push({
       rule: "tool-name",
-      message: "name must be sendMessage or snake_case (dot namespacing allowed), ≤3 segments",
+      message: "name must be snake_case (dot namespacing allowed), ≤3 segments",
     });
   }
   if (!tool.description || tool.description.trim().length === 0) {
@@ -589,6 +591,16 @@ function checkToolSchemaSnapshot(): Violation[] {
 // self-test — every check must flag a known-bad fixture (discrimination bench)
 // ---------------------------------------------------------------------------
 
+// Self-test fixture: a camelCase name, no description, and eight public fields (one over budget).
+const badTool: ToolSurface = {
+  name: "DoThingNowFastPlease",
+  description: "",
+  inputSchema: {
+    type: "object",
+    properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {}, h: {} },
+  },
+};
+
 function selfTest(): void {
   const failures: string[] = [];
 
@@ -602,14 +614,6 @@ function selfTest(): void {
     failures.push("vocab-ratchet flagged a mapped namespace (wait→Wait)");
   }
 
-  const badTool: ToolSurface = {
-    name: "DoThingNowFastPlease",
-    description: "",
-    inputSchema: {
-      type: "object",
-      properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {} },
-    },
-  };
   if (lintToolSurface(badTool).length !== 3) {
     failures.push("tool-lint did not flag name/description/field-count on a known-bad tool");
   }

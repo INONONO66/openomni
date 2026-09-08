@@ -19,7 +19,7 @@ export const ORIGINAL_CALL = {
   tool: "provision",
   input: {
     operation: {
-      op: "person_declare",
+      op: "contact_add",
       args: { manifest: { ...PERSON, endpoints: [...PERSON.endpoints] } },
     },
   },

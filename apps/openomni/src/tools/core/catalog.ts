@@ -1,37 +1,43 @@
-import type { AnyToolDefinition, Tool } from "@openomni/protocol";
-import { monitorTool } from "../mutation/monitor";
-import type { LedgerSession } from "@openomni/protocol";
+import { eraseTool, toolSpec } from "@openomni/agent";
+import type { GatewayRouter } from "@openomni/channels";
 import type { MachineHost } from "@openomni/machines";
-import { createSendMessageTool, type MessagePort } from "../authority/send-message";
+import type { AnyToolDefinition, LedgerSession, Tool } from "@openomni/protocol";
+import type { composeCodemode } from "../../composition/codemode";
+import { createBashTool } from "../bash";
+import { createCompletionTool, type LlmPort } from "../completion";
+import { createEditTool } from "../edit";
+import { createEvalTool } from "../eval";
+import { createFindTool } from "../find";
+import { createGrepTool } from "../grep";
+import { createLsTool } from "../ls";
+import { monitorTool } from "../monitor";
+import { createProvisionTool, type ProvisionPort } from "../provision";
+import { createReadTool } from "../read";
+import { createSendMessageTool } from "../send-message";
+import { createWriteTool } from "../write";
 
 export interface CatalogOrigin {
   readonly role: LedgerSession.Role;
   readonly depth: number;
   readonly sessionId: string;
 }
-import { createApprovalTool, type ApprovalPort } from "../authority/approval";
-import { createLlmTool, type LlmPort } from "../execution/llm";
-import { createRunCodeTool } from "../execution/run-code";
-import type { composeCodemode } from "../../composition/codemode";
-import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
-import { eraseTool, toolSpec } from "@openomni/agent";
-import { createReadTool } from "../fs/read";
-import { createWriteTool } from "../fs/write";
-import { createEditTool } from "../fs/edit";
-import { createListTool } from "../fs/list";
-import { createSearchTool } from "../fs/search";
-import { createBashTool } from "../code/bash";
 
 export interface CatalogPorts {
-  readonly messages?: MessagePort;
+  readonly messages?: Pick<GatewayRouter, "ingest">;
   readonly machines?: MachineHost;
-  readonly approvals?: ApprovalPort;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
   readonly llm?: LlmPort;
   readonly provisioning?: ProvisionPort;
+  /** The session runtime clock; deadlines are computed against it, never wall time. */
+  readonly clock?: () => number;
 }
 
-/** Construct the immutable tool set once for a session. */
+/**
+ * The static catalog (KERNEL §3.4): the eleven model-door tools in this order,
+ * then the cell-only completion. Every tool is constructed regardless of which
+ * ports the composition wired, and a tool whose port is absent refuses at
+ * execution. Nothing silently disappears.
+ */
 export function createTools(
   ports: CatalogPorts,
   origin: CatalogOrigin,
@@ -40,17 +46,16 @@ export function createTools(
     eraseTool(createReadTool(ports)),
     eraseTool(createWriteTool(ports)),
     eraseTool(createEditTool(ports)),
-    eraseTool(createListTool(ports)),
-    eraseTool(createSearchTool(ports)),
+    eraseTool(createLsTool(ports)),
+    eraseTool(createFindTool(ports)),
+    eraseTool(createGrepTool(ports)),
     eraseTool(createBashTool(ports)),
+    eraseTool(createEvalTool(ports.cells?.cell)),
+    eraseTool(monitorTool),
+    eraseTool(createSendMessageTool(ports.messages, ports.clock)),
+    eraseTool(createProvisionTool(ports.provisioning)),
+    eraseTool(createCompletionTool(ports.llm)),
   ];
-  tools.push(eraseTool(monitorTool));
-  if (ports.messages !== undefined) tools.push(eraseTool(createSendMessageTool(ports.messages)));
-  if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
-  if (ports.provisioning !== undefined)
-    tools.push(eraseTool(createProvisionTool(ports.provisioning)));
-  if (ports.cells !== undefined) tools.push(eraseTool(createRunCodeTool(ports.cells.cell)));
-  if (ports.llm !== undefined) tools.push(eraseTool(createLlmTool(ports.llm)));
   const visible = tools.filter(
     (tool) =>
       tool.visibility.model.includes(origin.role) || tool.visibility.cell.includes(origin.role),
@@ -59,15 +64,10 @@ export function createTools(
   return visible;
 }
 
-const ALL_PORTS = new Proxy(
-  {},
-  { get: () => new Proxy(() => undefined, { get: () => () => undefined }) },
-) as CatalogPorts;
-const CATALOG_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "catalog" };
 /** Schema-only exhaustive list used by repository conformance tooling. */
 export const TOOL_DEFINITIONS: readonly AnyToolDefinition[] = createTools(
-  ALL_PORTS,
-  CATALOG_ORIGIN,
+  {},
+  { role: "resident", depth: 0, sessionId: "catalog" },
 );
 
 export function collectToolSpecs(): readonly Tool.Spec[] {

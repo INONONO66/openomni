@@ -11,7 +11,7 @@ export interface RunOptions {
 interface Options {
   /** Absent on a daemon runner: its calls travel back through the injected wire port. */
   readonly machines?: Pick<MachineHost, "list" | "get">;
-  readonly llm?: (prompts: string[]) => Promise<string[]>;
+  readonly completion?: (prompt: string) => Promise<string>;
   /** Captured synchronously at cell entry, preserving the consumer's executor context. */
   readonly tools?: (tenant: string) => Caller;
   readonly boundary?: (
@@ -187,12 +187,9 @@ export function createCodemode(options: Options = {}) {
         ),
       };
     }
-    if (call.name === "llm" && options.llm !== undefined) {
-      const input = z
-        .object({ prompts: z.array(z.string()).min(1) })
-        .strict()
-        .parse(call.arguments);
-      return { status: "completed", value: await options.llm(input.prompts) };
+    if (call.name === "completion" && options.completion !== undefined) {
+      const input = z.object({ prompt: z.string().min(1) }).strict().parse(call.arguments);
+      return { status: "completed", value: await options.completion(input.prompt) };
     }
     return binding.caller(call);
   }

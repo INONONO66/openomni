@@ -354,20 +354,37 @@ describe("the accent budget", () => {
 });
 
 describe("the motion budget", () => {
-  test("Given the token file, When durations are counted, Then one token owns them", () => {
-    // SINGLE OWNER. The previous system ran `--duration-quiet` and
-    // `--ease-out-quiet` as a separate pair, which meant a component could take
-    // one and not the other and invent a third speed without naming it. There
-    // is now exactly one duration token and one easing token, and they are
-    // composed into `--motion-fast` so the normal way to spend motion is to
-    // spend the pair.
-    const durations = [...CSS.matchAll(/^\s*--[\w-]*duration[\w-]*:/gm)];
-    const easings = [...CSS.matchAll(/^\s*--[\w-]*ease[\w-]*:/gm)];
+  test("Given the token file, When durations are counted, Then content has one owner and the frame three named speeds", () => {
+    // TWO SCALES, each with a single owner. Content motion — hover, surface,
+    // a chevron — is `--motion-fast`, one duration composed with one easing so
+    // a component cannot take one and not the other and invent a third speed.
+    // The FRAME (tab strip zone, sidebar gap/container/content) moves on
+    // the reference's measured scale: exactly `fast`/`base`/`slow` and one curve, and
+    // nothing inside a column may spend them (docs/desktop-shell.md).
+    const durations = [...CSS.matchAll(/^\s*(--[\w-]*duration[\w-]*):/gm)].map(([, name]) => name);
+    const easings = [...CSS.matchAll(/^\s*(--[\w-]*ease[\w-]*):/gm)].map(([, name]) => name);
 
-    expect(durations, "exactly one duration token").toHaveLength(1);
-    expect(easings, "exactly one easing token").toHaveLength(1);
+    expect(durations.filter((name) => name?.startsWith("--motion-"))).toEqual([
+      "--motion-fast-duration",
+    ]);
+    expect(easings.filter((name) => name?.startsWith("--motion-"))).toEqual(["--motion-fast-ease"]);
     expect(CSS).toContain("--motion-fast-duration: 120ms");
     expect(CSS).toContain("--motion-fast:");
+
+    // The frame's three, once each in `@theme`, and the utilities that read them.
+    const theme = CSS.slice(CSS.indexOf("@theme {"), CSS.indexOf("\n}\n", CSS.indexOf("@theme {")));
+    expect(
+      [...theme.matchAll(/^\s*--duration-(\w+):\s*([^;]+);/gm)].map((m) => [m[1], m[2]]),
+    ).toEqual([
+      ["fast", "0.15s"],
+      ["base", "0.24s"],
+      ["slow", "0.3s"],
+    ]);
+    // The frame's curve IS the answer curve at another speed: one bezier in the
+    // window, not two (.omo/reports/sidebar-toggle-ref-20260907.md).
+    expect(theme).toContain("--ease-frame: var(--motion-fast-ease)");
+    expect(durations.filter((name) => name?.startsWith("--duration-"))).toHaveLength(3);
+    expect(easings.filter((name) => name?.startsWith("--ease-"))).toEqual(["--ease-frame"]);
   });
 
   test("Given the retired tokens, When searched, Then neither survives", () => {
@@ -389,7 +406,9 @@ describe("the motion budget", () => {
 
     expect(transitions.length, "transitions exist to check").toBeGreaterThan(0);
     for (const value of transitions) {
-      expect(value, `transition "${value}" spends the motion token`).toContain("--motion-fast");
+      expect(value, `transition "${value}" spends a motion token`).toMatch(
+        /--motion-fast|--duration-(?:fast|base|slow)/,
+      );
     }
   });
 

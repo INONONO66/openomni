@@ -1,62 +1,93 @@
 import { Chat, useChat } from "@ai-sdk/react";
-import { Console } from "@openomni/ui";
+import {
+  Console,
+  ConsoleContent,
+  type ConsoleShell,
+  type ConsoleStrip,
+  type WindowPlatform,
+} from "@openomni/ui";
 import { useStore } from "@tanstack/react-store";
 import type { ChatTransport, UIMessage } from "ai";
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ShellCommand } from "../preload/api";
 import { applyAtBoundary, orderByAttention } from "./attention";
 import type { Boundary, Held } from "./attention";
 import { uiMessagesToTranscript } from "./chat/adapter";
 import type { OpenOmniUIMessage } from "./chat/message";
 import { selectChatTransport } from "./chat/select-transport";
+import { dispatchShellCommand } from "./shell/commands";
+import { jumpFrom } from "./shell/history";
+import { placeIcon } from "./shell/place-icon";
+import { SessionList } from "./shell/session-list";
 import { SessionTree } from "./shell/session-tree";
+import { shellShortcut } from "./shell/shortcuts";
 import { useGatewayEndpoint } from "./state/queries";
+import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
+  activateTab,
+  activePlace,
+  activeTab,
+  back,
+  canGoBack,
+  canGoForward,
+  closeTab,
   consoleStore,
-  createSession,
+  forward,
+  historyMenuEntries,
+  navigate,
+  newSessionTab,
+  openTab,
+  type Route,
   type Session,
   type SessionId,
-  selectSession,
   setDraft,
+  setSessionTitleIfPlaceholder,
+  setSidebarFloating,
+  setSidebarOpen,
+  setSidebarWidth,
+  tabTitle,
   toggleProject,
+  toggleSidebar,
 } from "./state/store";
 
-/**
- * The shell: [session navigator | transcript], wired to the store and the wire.
- *
- * This file's job is what the design system must not know: which session is
- * selected, how the list is ranked, where the gateway is, and what the
- * product's words are. It composes `Console` from `@openomni/ui`; it does not
- * draw one.
- *
- * Client state — the sessions this window created, the selection, the drafts,
- * which groups are closed — is read from `state/store.ts` through selectors,
- * so a keystroke in a draft re-renders the composer and not the tree. Server
- * state — today only the gateway endpoint — comes through `state/queries.ts`,
- * and the app renders IMMEDIATELY rather than awaiting it: the window is
- * useful before the endpoint answers, and the composer simply stays disabled
- * until it does.
- *
- * Ordering runs through `attention` and is applied at a focus boundary only —
- * a selection change, or creating a session, which selects it. Between
- * boundaries the previous order is held, so the list never reflows under the
- * cursor. A selection made FROM the search field is deliberately not a
- * boundary: the operator is still inside the control, narrowing.
- */
-export function App() {
-  const sessions = useStore(consoleStore, (state) => state.sessions);
-  const selectedId = useStore(consoleStore, (state) => state.selectedSessionId);
-  const collapsedProjectIds = useStore(consoleStore, (state) => state.collapsedProjectIds);
+export function App({ platform, storage }: AppEnvironment) {
+  const state = useStore(consoleStore);
+  const { sessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
+  const tab = activeTab(state);
+  const place = activePlace(state);
+  const history = tab?.history;
   const endpoint = useGatewayEndpoint();
-
+  const search = useRef({ searching: false, invokingTabId: state.activeTabId });
+  const focusRecovery = useRef<"panel" | "tab" | null>(null);
   const [held, setHeld] = useState<Held>(() => ({
     shown: idealOrder(sessions),
     pendingChanges: 0,
   }));
 
-  // The wire, derived from the endpoint query. `null` while the query is in
-  // flight, when this build has no gateway, and when the configured token
-  // cannot be offered — three states the composer reports in one line rather
-  // than talking to anything fabricated.
+  useLayoutEffect(() => {
+    if (storage === null) return;
+    const remembered = readShellPreferences(storage);
+    setSidebarOpen(remembered.open);
+    setSidebarWidth(remembered.width);
+    const subscription = consoleStore.subscribe(() => {
+      writeShellPreferences(storage, {
+        open: consoleStore.state.sidebarOpen,
+        width: consoleStore.state.sidebarWidth,
+      });
+    });
+    return subscription.unsubscribe;
+  }, [storage]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (shellShortcut(event, isEditing(event.target)) === null) return;
+      toggleSidebar();
+      event.preventDefault();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const selected = useMemo(
     () => (endpoint.data ? selectChatTransport(endpoint.data) : null),
     [endpoint.data],
@@ -70,81 +101,6 @@ export function App() {
         : selected.kind === "misconfigured"
           ? selected.problem
           : undefined));
-
-  // Adopt the ideal order for the store's CURRENT sessions. Read off the store
-  // rather than the selector's value so a session created in this same handler
-  // is already in the order that boundary adopts.
-  const adopt = (boundary: Boundary | null) =>
-    setHeld((previous) =>
-      applyAtBoundary(previous, idealOrder(consoleStore.state.sessions), boundary),
-    );
-
-  // Selection change IS the breakpoint: the Owner has just finished deciding
-  // what to look at, so a new order costs them nothing — UNLESS the decision
-  // was made from inside the search field, where they have not finished yet.
-  const select = (id: SessionId, boundary: Boundary | null = "selection") => {
-    selectSession(id);
-    adopt(boundary);
-  };
-
-  const create = () => {
-    createSession();
-    adopt("selection");
-  };
-
-  const session = sessions.find((candidate) => candidate.id === selectedId);
-  const sidebar = (
-    <SessionTree
-      collapsedProjectIds={collapsedProjectIds}
-      onCreate={create}
-      onSelect={select}
-      onToggleProject={toggleProject}
-      ordered={held.shown}
-      pendingChanges={held.pendingChanges}
-      selectedId={selectedId}
-      sessions={sessions}
-    />
-  );
-
-  return (
-    // The window's own height. `Console` fills whatever box it is given.
-    <div className="h-screen min-h-0">
-      {session === undefined ? (
-        <Console emptyLabel="Select or create a session" sidebar={sidebar} />
-      ) : (
-        <SessionConsole notice={notice} session={session} sidebar={sidebar} transport={transport} />
-      )}
-    </div>
-  );
-}
-
-/**
- * The main column for ONE open session, and the only place `useChat` runs.
- *
- * It is a component of its own so the hook has a session to run over: with
- * nothing selected there is no chat, and a hook cannot be skipped, so the split
- * is what lets the empty column be honestly empty instead of a chat for a
- * session that does not exist.
- */
-function SessionConsole({
-  session,
-  sidebar,
-  transport,
-  notice,
-}: {
-  readonly session: Session;
-  readonly sidebar: ReactNode;
-  readonly transport: ChatTransport<UIMessage> | null;
-  /** Why the composer is disabled, when it is. */
-  readonly notice: string | undefined;
-}) {
-  const draft = useStore(consoleStore, (state) => state.drafts[session.id] ?? "");
-
-  // One `Chat` per session, kept in a ref so a re-render never rebuilds one and
-  // drops a stream mid-turn. A session the Owner has never opened has no chat
-  // at all. The chat sends through `wire`, which reads the CURRENT transport at
-  // send time — `Chat` takes its transport at construction, and the endpoint
-  // query may not have answered when the first chat is built.
   const transportRef = useRef(transport);
   useLayoutEffect(() => {
     transportRef.current = transport;
@@ -157,71 +113,254 @@ function SessionConsole({
     [],
   );
   const chats = useRef<Map<SessionId, Chat<OpenOmniUIMessage>>>(new Map());
-  const chat = chatFor(chats.current, session.id, wire);
+  useEffect(() => {
+    const cache = chats.current;
+    return () => {
+      for (const chat of cache.values()) void chat.stop();
+    };
+  }, []);
 
-  const { messages, sendMessage, status, stop, addToolApprovalResponse } = useChat({ chat });
+  const arrive = useCallback((boundary: Boundary | null = "selection") => {
+    const searching = search.current.searching;
+    setHeld((previous) =>
+      applyAtBoundary(
+        previous,
+        idealOrder(consoleStore.state.sessions),
+        searching ? null : boundary,
+      ),
+    );
+    if (!searching) setSidebarFloating(false);
+  }, []);
 
+  const captureCloseFocus = useCallback((id: string) => {
+    const focused = document.activeElement;
+    const panel = document.getElementById(`tab-panel-${id}`);
+    const control = document.getElementById(`tab-${id}`)?.parentElement;
+    focusRecovery.current = panel?.contains(focused)
+      ? "panel"
+      : control?.contains(focused)
+        ? "tab"
+        : null;
+  }, []);
+
+  useLayoutEffect(() => {
+    const scope = focusRecovery.current;
+    if (scope === null) return;
+    focusRecovery.current = null;
+    const id = tabs.find((entry) => entry.id === state.activeTabId)?.id ?? null;
+    const editor =
+      id === null || scope !== "panel"
+        ? null
+        : document
+            .getElementById(`tab-panel-${id}`)
+            ?.querySelector<HTMLElement>('textarea:not(:disabled), [contenteditable="true"]');
+    const successor = id === null ? null : document.getElementById(`tab-${id}`);
+    (
+      editor ??
+      successor ??
+      document.querySelector<HTMLElement>('[data-ui="TabStrip.Create"]')
+    )?.focus();
+  }, [state.activeTabId, tabs]);
+
+  useEffect(() => {
+    const bridge = (window as { readonly desktop?: Window["desktop"] }).desktop;
+    return bridge?.onShellCommand((command: ShellCommand) => {
+      const before = consoleStore.state;
+      if (command === "close-tab" && before.activeTabId !== null)
+        captureCloseFocus(before.activeTabId);
+      dispatchShellCommand(command);
+      if (consoleStore.state !== before) arrive();
+    });
+  }, [arrive, captureCloseFocus]);
+
+  const onSearchingChange = useCallback((searching: boolean) => {
+    if (searching && !search.current.searching) {
+      search.current.invokingTabId = consoleStore.state.activeTabId;
+    }
+    search.current.searching = searching;
+    setSidebarFloating(searching && !consoleStore.state.sidebarOpen);
+  }, []);
+
+  // Clicking moves the current tab; only ⌘/Ctrl-click (or `+`) opens a new one.
+  const select = (id: SessionId, boundary: Boundary | null = "selection", newTab = false) => {
+    const place = { kind: "session", sessionId: id } as const;
+    if (newTab) openTab(place);
+    else navigate(place, boundary === null ? search.current.invokingTabId : consoleStore.state.activeTabId);
+    arrive(boundary);
+  };
+  const travel = (action: () => void) => {
+    const before = consoleStore.state;
+    action();
+    if (consoleStore.state !== before) arrive();
+  };
+  const shell: ConsoleShell = {
+    sidebarOpen,
+    sidebarFloating,
+    sidebarWidth,
+    onToggleSidebar: toggleSidebar,
+    onSidebarFloatingChange: (floating) => {
+      if (floating || !search.current.searching) setSidebarFloating(floating);
+    },
+    onSidebarWidthCommit: setSidebarWidth,
+  };
+  const strip: ConsoleStrip = {
+    tabs: tabs.map((entry) => ({
+      id: entry.id,
+      title: tabTitle(entry, state),
+      icon: placeIcon(entry.place),
+      active: entry.id === state.activeTabId,
+    })),
+    onActivate: (id) => {
+      activateTab(id);
+      arrive();
+    },
+    onClose: (id) => {
+      captureCloseFocus(id);
+      travel(() => closeTab(id));
+    },
+    createLabel: "New session",
+    onCreate: () => travel(newSessionTab),
+    platform,
+    history: {
+      entries: historyMenuEntries(state),
+      currentId: history === undefined ? null : String(history.cursor),
+      now: Date.now(),
+      canBack: history !== undefined && canGoBack(history),
+      canForward: history !== undefined && canGoForward(history),
+      onBack: () => travel(back),
+      onForward: () => travel(forward),
+      onJump: (cursor) => travel(() => jumpFrom(tab, cursor)),
+    },
+  };
+  const sidebar = (
+    <SessionTree
+      collapsedProjectIds={collapsedProjectIds}
+      onNavigate={(route, newTab) => {
+        const place = { kind: "route", route } as const;
+        if (newTab) openTab(place);
+        else navigate(place);
+        arrive();
+      }}
+      onSearchingChange={onSearchingChange}
+      onSelect={select}
+      onToggleProject={toggleProject}
+      ordered={held.shown}
+      pendingChanges={held.pendingChanges}
+      route={place?.kind === "route" ? place.route : null}
+      selectedId={place?.kind === "session" ? place.sessionId : null}
+      sessions={sessions}
+    />
+  );
+  const session =
+    place?.kind === "session"
+      ? sessions.find((candidate) => candidate.id === place.sessionId)
+      : undefined;
+  const content =
+    session === undefined ? (
+      <ConsoleContent
+        emptyLabel={
+          place?.kind === "route" && place.route !== "sessions"
+            ? ROUTE_EMPTY[place.route]
+            : "Select or create a session"
+        }
+        key={tab?.id ?? "empty"}
+      >
+        {place?.kind === "route" && place.route === "sessions" ? (
+          <SessionList now={Date.now()} onSelect={select} sessions={sessions} />
+        ) : undefined}
+      </ConsoleContent>
+    ) : (
+      <SessionContent
+        chat={chatFor(chats.current, session.id, wire)}
+        key={tab?.id}
+        notice={notice}
+        session={session}
+        transport={transport}
+      />
+    );
+  return <Console content={content} shell={shell} sidebar={sidebar} strip={strip} />;
+}
+
+export interface AppEnvironment {
+  readonly platform: WindowPlatform;
+  readonly storage: Storage | null;
+}
+
+function isEditing(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
+  );
+}
+
+const ROUTE_EMPTY = {
+  inbox: "Nothing in the inbox.",
+  automations: "No automations yet.",
+  memory: "Nothing remembered yet.",
+} as const satisfies Record<Exclude<Route, "sessions">, string>;
+
+function SessionContent({
+  session,
+  chat,
+  transport,
+  notice,
+}: {
+  readonly session: Session;
+  readonly chat: Chat<OpenOmniUIMessage>;
+  readonly transport: ChatTransport<UIMessage> | null;
+  readonly notice: string | undefined;
+}) {
+  const draft = useStore(consoleStore, (state) => state.drafts[session.id] ?? "");
+  const { messages, sendMessage, status, stop, addToolApprovalResponse, error } = useChat({ chat });
   const { nodes, costs, pending } = useMemo(() => uiMessagesToTranscript(messages), [messages]);
-  // `submitted` is the window between the send and the first chunk; without it
-  // the composer unlocks for exactly as long as the request takes to reach the
-  // transport, which is where a double-send comes from.
   const sending = status === "submitted" || status === "streaming";
-
   const send = () => {
     const text = draft.trim();
-    if (text === "" || transport === null) return;
+    if (
+      text === "" ||
+      transport === null ||
+      chat.status === "submitted" ||
+      chat.status === "streaming"
+    )
+      return;
+    setSessionTitleIfPlaceholder(session.id, text);
     void sendMessage({ text });
     setDraft(session.id, "");
   };
-
-  // The tray hands back the APPROVAL's id, because that is what the adapter put
-  // on the row and the only identifier the SDK will accept a decision under.
   const decide = (approved: boolean) => (approvalId: string) => {
     void addToolApprovalResponse({ id: approvalId, approved });
   };
-
   return (
-    <Console
+    <ConsoleContent
       emptyLabel="No turns in this session yet."
-      session={{
+      transcript={{
         id: session.id,
-        title: session.title,
         nodes,
         costs,
         draft,
         onDraftChange: (value) => setDraft(session.id, value),
         onSubmit: send,
-        // Per SESSION, because `stop` belongs to the chat the hook is currently
-        // subscribed to: it aborts the turn the Owner is watching, and switching
-        // sessions mid-stream leaves the other one running, which is what one
-        // chat per session is for.
         onStop: () => void stop(),
         sending,
         composerDisabled: transport === null,
-        composerHint: notice,
+        composerHint: error?.message ?? notice,
         composerMeta: `${Object.keys(costs).length} turns`,
         pending,
         onApprove: decide(true),
         onDeny: decide(false),
       }}
-      sidebar={sidebar}
     />
   );
 }
 
-/** The transport to send on right now, or the reason there is none. */
 function current(transport: ChatTransport<UIMessage> | null): ChatTransport<UIMessage> {
   if (transport === null) throw new Error("gateway not configured");
   return transport;
 }
 
-/**
- * The chat for a session, created on first sight and never again.
- *
- * It starts EMPTY, always. There is no history on the wire yet, and seeding a
- * session with anything else would open the transcript on a conversation
- * nobody had — the one failure a real connection must not introduce.
- */
 function chatFor(
   chats: Map<SessionId, Chat<OpenOmniUIMessage>>,
   sessionId: SessionId,
@@ -229,7 +368,6 @@ function chatFor(
 ): Chat<OpenOmniUIMessage> {
   const existing = chats.get(sessionId);
   if (existing !== undefined) return existing;
-
   const created = new Chat<OpenOmniUIMessage>({
     id: sessionId,
     messages: [],
@@ -240,21 +378,12 @@ function chatFor(
   return created;
 }
 
-/**
- * Message ids, from a counter rather than the SDK's random default.
- *
- * The renderer's tests render the shell to static markup and assert on it, and
- * an id that changes per run turns any such assertion into a coin flip. The
- * counter is per window and never leaves it — nothing downstream treats a
- * message id as globally unique.
- */
 let nextId = 0;
 const generateId = () => {
   nextId += 1;
   return `m${nextId}`;
 };
 
-/** The engine's input: the facts a store session actually carries. */
 function idealOrder(sessions: readonly Session[]) {
   return orderByAttention(
     sessions.map((session) => ({
