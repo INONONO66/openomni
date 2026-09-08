@@ -319,8 +319,8 @@ const KEY_STEP = 8;
 const KEY_STEP_SHIFT = 32;
 
 /**
- * The grab zone: 16px wide, straddling the sidebar's right edge, with the 1px
- * line drawn by `after:` on the edge itself. The drag never re-renders React:
+ * The grab zone: 16px wide, straddling the sidebar's right edge, drawing
+ * nothing itself (the cursor is the only feedback). The drag never re-renders React:
  * pointer moves write `--sidebar-width` under rAF and the store hears the final
  * width on release. `data-resizing` on the root is what zeroes the frame's
  * transitions for the duration, so the gap, container, content, and strip zone
@@ -359,7 +359,7 @@ function SidebarResizeHandle() {
       aria-valuemax={SIDEBAR_WIDTH.max}
       aria-valuemin={SIDEBAR_WIDTH.min}
       aria-valuenow={width}
-      className="focus-ring no-drag absolute inset-y-0 -right-2 w-4 cursor-col-resize touch-none after:absolute after:inset-y-0 after:left-2 after:w-px after:bg-line-surface after:opacity-0 after:transition-quiet hover:after:opacity-100 focus-visible:after:opacity-100 group-data-[resizing]/sidebar:after:opacity-100 after:motion-reduce:transition-none"
+      className="focus-ring no-drag absolute inset-y-0 -right-2 w-4 cursor-col-resize touch-none"
       data-ui={UI_NAMES.SidebarResizeHandle}
       onKeyDown={(event) => {
         const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
