@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Run } from "@openomni/llm";
 import {
+  Alarm,
   L0Observation,
   PlainValueSchema,
   type PolicyRow,
@@ -256,11 +257,9 @@ async function lifecycle(): Promise<SessionHandle> {
     id: "monitor",
     epoch: 1,
     fence: owned.fence,
-    actionId: "monitor-fire",
-    inboxId: "monitor-inbox",
+    sourceKey: `timer:${owned.fireAt}`,
     at: 1_000,
     content: "monitor woke",
-    limit: 1,
     terminal: true,
   });
   await wakeSession("parent", parentRunner, runtime);
@@ -320,10 +319,12 @@ describe("action-based history and diagnostic projections", () => {
     expect(inspection.compactions[0]?.restoredBy).toEqual([]);
     const woke = inspection.transitions.filter((entry) => entry.cause.kind === "alarm");
     expect(woke.map((entry) => entry.kind)).toEqual(["alarm.fired"]);
+    const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
+    expect(woke.map((entry) => entry.actionId)).toEqual([monitorFire]);
     const wakePrompt = inspection.transitions.find(
-      (entry) => entry.kind === "prompt" && entry.parentId === "monitor-fire",
+      (entry) => entry.kind === "prompt" && entry.parentId === monitorFire,
     );
-    expect(wakePrompt?.cause).toEqual({ kind: "action", actionId: "monitor-fire" });
+    expect(wakePrompt?.cause).toEqual({ kind: "action", actionId: monitorFire });
     const fromChild = inspection.transitions.find(
       (entry) => entry.kind === "prompt" && entry.peerSessionId === "child",
     );
