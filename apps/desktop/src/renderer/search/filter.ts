@@ -39,7 +39,10 @@ interface FilteredProject {
 }
 
 export interface Filtered {
-  readonly groups: readonly { readonly kind: AttentionKind; readonly projects: readonly FilteredProject[] }[];
+  readonly groups: readonly {
+    readonly kind: AttentionKind;
+    readonly projects: readonly FilteredProject[];
+  }[];
   /** Every visible session id, in painted order — the arrow-key sequence. */
   readonly sequence: readonly SessionId[];
   readonly total: number;
@@ -58,16 +61,22 @@ export function filterOrdered(
 ): Filtered {
   const trimmed = query.trim();
   const unfiltered = trimmed.length === 0;
-  const groups = ordered.groups.map((group) => ({
-    kind: group.kind,
-    projects: group.projects.map((project) => ({
-      id: project.id,
-      sessions: unfiltered
-        ? project.sessions.map((id) => ({ id, spans: EMPTY }))
-        : matching(project.sessions, trimmed, fieldsFor),
-    })).filter((project) => project.sessions.length > 0),
-  })).filter((group) => group.projects.length > 0);
-  const sequence = groups.flatMap((group) => group.projects.flatMap((project) => project.sessions.map((entry) => entry.id)));
+  const groups = ordered.groups
+    .map((group) => ({
+      kind: group.kind,
+      projects: group.projects
+        .map((project) => ({
+          id: project.id,
+          sessions: unfiltered
+            ? project.sessions.map((id) => ({ id, spans: EMPTY }))
+            : matching(project.sessions, trimmed, fieldsFor),
+        }))
+        .filter((project) => project.sessions.length > 0),
+    }))
+    .filter((group) => group.projects.length > 0);
+  const sequence = groups.flatMap((group) =>
+    group.projects.flatMap((project) => project.sessions.map((entry) => entry.id)),
+  );
   return { groups, sequence, total: sequence.length, unfiltered };
 }
 

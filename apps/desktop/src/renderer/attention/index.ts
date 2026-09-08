@@ -11,5 +11,5 @@
  */
 export type { Boundary, Held } from "./stability";
 export { applyAtBoundary, IDLE_BOUNDARY_MS, idleBoundaryReached } from "./stability";
-export type { Ordered, SessionFacts } from "./order";
+export type { Ordered } from "./order";
 export { changedSince, orderByAttention } from "./order";

@@ -44,6 +44,8 @@ import {
   type SessionId,
   setDraft,
   setSessionTitleIfPlaceholder,
+  setSessionPhase,
+  setSessionAttention,
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
@@ -51,6 +53,12 @@ import {
   toggleProject,
   toggleSidebar,
 } from "./state/store";
+
+if (import.meta.env?.DEV) {
+  Object.assign(window, {
+    __openomniDev: { store: consoleStore, setSessionPhase, setSessionAttention },
+  });
+}
 
 export function App({ platform, storage }: AppEnvironment) {
   const state = useStore(consoleStore);
@@ -187,7 +195,11 @@ export function App({ platform, storage }: AppEnvironment) {
   const select = (id: SessionId, boundary: Boundary | null = "selection", newTab = false) => {
     const place = { kind: "session", sessionId: id } as const;
     if (newTab) openTab(place);
-    else navigate(place, boundary === null ? search.current.invokingTabId : consoleStore.state.activeTabId);
+    else
+      navigate(
+        place,
+        boundary === null ? search.current.invokingTabId : consoleStore.state.activeTabId,
+      );
     arrive(boundary);
   };
   const travel = (action: () => void) => {
@@ -209,9 +221,12 @@ export function App({ platform, storage }: AppEnvironment) {
     tabs: tabs.map((entry) => ({
       id: entry.id,
       title: tabTitle(entry, state),
-      icon: entry.place.kind === "session"
-        ? <StatusGlyph {...sessionGlyphProps(phaseForPlace(entry.place, sessions))} />
-        : placeIcon(entry.place),
+      icon:
+        entry.place.kind === "session" ? (
+          <StatusGlyph {...sessionGlyphProps(phaseForPlace(entry.place, sessions))} />
+        ) : (
+          placeIcon(entry.place)
+        ),
       active: entry.id === state.activeTabId,
     })),
     onActivate: (id) => {
@@ -270,7 +285,12 @@ export function App({ platform, storage }: AppEnvironment) {
         key={tab?.id ?? "empty"}
       >
         {place?.kind === "route" && place.route === "sessions" ? (
-          <SessionList now={Date.now()} onSelect={select} ordered={idealOrder(sessions)} sessions={sessions} />
+          <SessionList
+            now={Date.now()}
+            onSelect={select}
+            ordered={held.shown}
+            sessions={sessions}
+          />
         ) : undefined}
       </ConsoleContent>
     ) : (
@@ -339,7 +359,12 @@ function SessionContent({
   };
   return (
     <ConsoleContent
-      header={<h1 className="flex items-center gap-2 px-section py-3 font-semibold text-label"><StatusGlyph {...sessionGlyphProps(session.phase)} />{session.title}</h1>}
+      header={
+        <h1 className="flex items-center gap-2 px-section py-3 font-semibold text-label">
+          <StatusGlyph {...sessionGlyphProps(session.phase)} />
+          {session.title}
+        </h1>
+      }
       emptyLabel="No turns in this session yet."
       transcript={{
         id: session.id,
@@ -390,7 +415,9 @@ const generateId = () => {
 };
 
 function phaseForPlace(place: import("./state/store").Place, sessions: readonly Session[]) {
-  return place.kind === "session" ? sessions.find((s) => s.id === place.sessionId)?.phase ?? "idle" : "idle";
+  return place.kind === "session"
+    ? (sessions.find((s) => s.id === place.sessionId)?.phase ?? "idle")
+    : "idle";
 }
 
 function idealOrder(sessions: readonly Session[]) {

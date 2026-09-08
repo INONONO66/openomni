@@ -12,7 +12,16 @@ export type SessionId = string;
 /** The project every new session lands in until projects are real. */
 export const DEFAULT_PROJECT_ID: ProjectId = "default";
 
-export type SessionPhase = "queued" | "running" | "waiting_approval" | "waiting_input" | "interrupted" | "completed" | "failed" | "idle" | "archived";
+export type SessionPhase =
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "waiting_input"
+  | "interrupted"
+  | "completed"
+  | "failed"
+  | "idle"
+  | "archived";
 
 export interface Session {
   readonly id: SessionId;
@@ -135,11 +144,24 @@ export function newSessionTab(): SessionId {
 }
 
 export function setSessionPhase(id: SessionId, phase: SessionPhase, now: number): void {
-  consoleStore.setState((state) => ({ ...state, sessions: state.sessions.map((session) => session.id === id && session.phase !== phase ? { ...session, phase, phaseSince: now, lastActivityAt: now } : session) }));
+  consoleStore.setState((state) => ({
+    ...state,
+    sessions: state.sessions.map((session) =>
+      session.id === id && session.phase !== phase
+        ? { ...session, phase, phaseSince: now, lastActivityAt: now }
+        : session,
+    ),
+  }));
 }
 
-export function setSessionAttention(id: SessionId, changes: Partial<Pick<Session, "unread" | "pinned" | "snoozedUntil" | "lastActivityAt">>): void {
-  consoleStore.setState((state) => ({ ...state, sessions: state.sessions.map((s) => s.id === id ? { ...s, ...changes } : s) }));
+export function setSessionAttention(
+  id: SessionId,
+  changes: Partial<Pick<Session, "unread" | "pinned" | "snoozedUntil" | "lastActivityAt">>,
+): void {
+  consoleStore.setState((state) => ({
+    ...state,
+    sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...changes } : s)),
+  }));
 }
 
 export function setSessionTitleIfPlaceholder(id: SessionId, text: string): void {

@@ -9,9 +9,12 @@ import { filterOrdered, highlightRuns, type SearchFields, scoreText } from "../s
  * read, with titles chosen so each query below hits exactly what it says.
  */
 const ordered: Ordered = {
-  projects: [
-    { id: "kernel", sessions: ["kernel-ledger", "kernel-lease"] },
-    { id: "perimeter", sessions: ["perimeter-sync", "perimeter-bind"] },
+  groups: [
+    { kind: "demand", projects: [{ id: "kernel", sessions: ["kernel-ledger", "kernel-lease"] }] },
+    {
+      kind: "watch",
+      projects: [{ id: "perimeter", sessions: ["perimeter-sync", "perimeter-bind"] }],
+    },
   ],
 };
 
@@ -27,14 +30,19 @@ const fieldsFor = (id: string): SearchFields => [titles[id] ?? id, id.split("-")
 const apply = (query: string) => filterOrdered(ordered, query, fieldsFor);
 
 const rows = (filtered: ReturnType<typeof apply>) =>
-  filtered.groups.flatMap((kind) => kind.projects).map((group) => group.sessions.map((entry) => entry.id));
+  filtered.groups
+    .flatMap((kind) => kind.projects)
+    .map((group) => group.sessions.map((entry) => entry.id));
 
 describe("an empty query leaves the tree untouched", () => {
   test("Given no query, When filtered, Then every project and row survives", () => {
     const filtered = apply("");
 
     expect(filtered.unfiltered).toBe(true);
-    expect(rows(filtered)).toEqual(ordered.groups.flatMap((kind) => kind.projects).map((group) => [...group.sessions]));
+    expect(filtered.groups.map((group) => group.kind)).toEqual(["demand", "watch"]);
+    expect(rows(filtered)).toEqual(
+      ordered.groups.flatMap((kind) => kind.projects).map((group) => [...group.sessions]),
+    );
   });
 
   test("Given whitespace only, When filtered, Then it is the same as no query", () => {
@@ -55,8 +63,11 @@ describe("filtering preserves the PROJECT to SESSION hierarchy", () => {
     // a result the operator cannot place.
     const filtered = apply("ledger");
 
-    expect(filtered.groups.flatMap((kind) => kind.projects).map((group) => group.id)).toEqual(["kernel"]);
+    expect(filtered.groups.flatMap((kind) => kind.projects).map((group) => group.id)).toEqual([
+      "kernel",
+    ]);
     expect(rows(filtered)).toEqual([["kernel-ledger"]]);
+    expect(filtered.groups.map((group) => group.kind)).toEqual(["demand"]);
   });
 
   test("Given a query matching nothing, When filtered, Then there are no groups at all", () => {
@@ -77,7 +88,9 @@ describe("filtering preserves the PROJECT to SESSION hierarchy", () => {
 describe("the attention order survives the filter", () => {
   test("Given a query matching several rows, When filtered, Then they keep the engine's sequence", () => {
     const filtered = apply("e");
-    const engineSequence = ordered.groups.flatMap((kind) => kind.projects).flatMap((group) => group.sessions);
+    const engineSequence = ordered.groups
+      .flatMap((kind) => kind.projects)
+      .flatMap((group) => group.sessions);
     const survivors = engineSequence.filter((id) => filtered.sequence.includes(id));
 
     expect(filtered.sequence).toEqual(survivors);
@@ -87,7 +100,9 @@ describe("the attention order survives the filter", () => {
     // The load-bearing case. `sync` PREFIXES the second row's title and only
     // scatters through the first, so a score-sorted filter would swap them.
     // Sequence is the attention engine's call, so the first row still leads.
-    const engineOrder: Ordered = { groups: [{ kind: "rest", projects: [{ id: "p", sessions: ["first", "second"] }] }] };
+    const engineOrder: Ordered = {
+      groups: [{ kind: "rest", projects: [{ id: "p", sessions: ["first", "second"] }] }],
+    };
     const names: Record<string, string> = {
       first: "stale yamlninja cutover",
       second: "sync engine",
@@ -103,7 +118,9 @@ describe("the attention order survives the filter", () => {
   test("Given a query, When filtered, Then the count equals the painted sequence", () => {
     for (const query of ["", "e", "ledger", "zzz", "lease"]) {
       const filtered = apply(query);
-      const painted = filtered.groups.flatMap((kind) => kind.projects).reduce((count, group) => count + group.sessions.length, 0);
+      const painted = filtered.groups
+        .flatMap((kind) => kind.projects)
+        .reduce((count, group) => count + group.sessions.length, 0);
 
       expect(filtered.total).toBe(painted);
       expect(filtered.sequence).toHaveLength(painted);
@@ -167,9 +184,10 @@ describe("highlight runs weight the matched glyphs only", () => {
 
 /** The spans a query would produce on one label, for the round-trip checks. */
 function scoreSpans(text: string, query: string): readonly number[] {
-  const filtered = filterOrdered({ groups: [{ kind: "rest", projects: [{ id: "p", sessions: ["s"] }] }] }, query, () => [
-    text,
-    "",
-  ]);
+  const filtered = filterOrdered(
+    { groups: [{ kind: "rest", projects: [{ id: "p", sessions: ["s"] }] }] },
+    query,
+    () => [text, ""],
+  );
   return filtered.groups.flatMap((kind) => kind.projects)[0]?.sessions[0]?.spans ?? [];
 }

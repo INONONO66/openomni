@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { orderByAttention } from "../src/renderer/attention";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
-import { makeSession } from "./make-session";
+import { makeSession } from "./helpers/session";
 
 /**
  * The rendered wiring between the search field and the tree it filters.
@@ -89,7 +89,9 @@ describe("the tree still reads as a tree under the search field", () => {
   test("Given the sidebar, When rendered, Then the two depths survive", () => {
     const levels = [...html.matchAll(/data-level="(\d)"/g)].map((hit) => Number(hit[1]));
 
-    expect(levels.filter((level) => level === 0)).toHaveLength(ordered.groups.flatMap((kind) => kind.projects).length);
+    expect(levels.filter((level) => level === 0)).toHaveLength(
+      ordered.groups.flatMap((kind) => kind.projects).length,
+    );
     expect(levels.filter((level) => level === 1)).toHaveLength(sessions.length);
   });
 

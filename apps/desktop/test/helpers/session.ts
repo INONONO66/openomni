@@ -1,4 +1,4 @@
-import type { Session } from "../src/renderer/state/store";
+import type { Session } from "../../src/renderer/state/store";
 
 export function makeSession(overrides: Partial<Session> = {}): Session {
   const createdAt = overrides.createdAt ?? 0;

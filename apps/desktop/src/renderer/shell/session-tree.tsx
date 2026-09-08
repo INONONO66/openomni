@@ -171,47 +171,51 @@ export function SessionTree({
                 No sessions yet — press +
               </Text>
             )}
-            {filtered.groups.flatMap((attention) => attention.projects).map((group) => {
-              // A query overrides a closed group: a result behind a collapsed
-              // row is a result nobody was shown.
-              const open = !filtered.unfiltered || !collapsedProjectIds.has(group.id);
-              return (
-                <div key={group.id ?? ""}>
-                  <TreeRow
-                    expanded={open}
-                    level={0}
-                    onClick={() => onToggleProject(group.id)}
-                    role="treeitem"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="truncate">{group.id ?? "no project"}</span>
-                      {group === filtered.groups[0]?.projects[0] && <ChangeHint count={pendingChanges} />}
-                    </span>
-                  </TreeRow>
-                  {open && (
-                    // biome-ignore lint/a11y/useSemanticElements: a tree's children are a `group` by the ARIA tree pattern; no native element carries that role.
-                    <ul className="flex flex-col gap-px" role="group">
-                      {group.sessions.map((entry) => {
-                        const session = sessionById.get(entry.id);
-                        if (!session) return null;
-                        return (
-                          <SessionRow
-                            active={entry.id === state.activeId}
-                            current={entry.id === selectedId}
-                            entry={entry}
-                            key={entry.id}
-                            onKeyDown={onKeyDown}
-                            onSelect={selectRow}
-                            registerRef={registerRef}
-                            session={session}
-                          />
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
+            {filtered.groups.flatMap((attention) =>
+              attention.projects.map((group) => {
+                // A query overrides a closed group: a result behind a collapsed
+                // row is a result nobody was shown.
+                const open = !filtered.unfiltered || !collapsedProjectIds.has(group.id);
+                return (
+                  <div key={JSON.stringify([attention.kind, group.id])}>
+                    <TreeRow
+                      expanded={open}
+                      level={0}
+                      onClick={() => onToggleProject(group.id)}
+                      role="treeitem"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="truncate">{group.id ?? "no project"}</span>
+                        {group === filtered.groups[0]?.projects[0] && (
+                          <ChangeHint count={pendingChanges} />
+                        )}
+                      </span>
+                    </TreeRow>
+                    {open && (
+                      // biome-ignore lint/a11y/useSemanticElements: a tree's children are a `group` by the ARIA tree pattern; no native element carries that role.
+                      <ul className="flex flex-col gap-px" role="group">
+                        {group.sessions.map((entry) => {
+                          const session = sessionById.get(entry.id);
+                          if (!session) return null;
+                          return (
+                            <SessionRow
+                              active={entry.id === state.activeId}
+                              current={entry.id === selectedId}
+                              entry={entry}
+                              key={entry.id}
+                              onKeyDown={onKeyDown}
+                              onSelect={selectRow}
+                              registerRef={registerRef}
+                              session={session}
+                            />
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                );
+              }),
+            )}
           </div>
         </SectionList>
       </SidebarSection>
@@ -264,13 +268,13 @@ function SessionRow({
           weight — the same treatment matched glyphs get — so keeping it at
           `fg` would make the highlight invisible on precisely the row the
           operator is standing on. */}
-      <span className="flex items-center gap-2 w-full">
-      <StatusGlyph {...sessionGlyphProps(session.phase)} />
-      <Highlight
-        className="w-full"
-        runs={highlightRuns(session.title, entry.spans)}
-        tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
-      />
+      <span className="flex w-full items-center gap-2">
+        <StatusGlyph {...sessionGlyphProps(session.phase)} />
+        <Highlight
+          className="w-full"
+          runs={highlightRuns(session.title, entry.spans)}
+          tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
+        />
       </span>
     </TreeRow>
   );

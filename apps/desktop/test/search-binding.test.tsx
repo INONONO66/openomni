@@ -7,7 +7,11 @@ import { installGlobals } from "./helpers";
 
 test("search binding translates shortcuts, query edits and navigation into focus and selection", async () => {
   const window = new Window();
-  const restoreGlobals = installGlobals({ window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const restoreGlobals = installGlobals({
+    window,
+    document: window.document,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -18,33 +22,68 @@ test("search binding translates shortcuts, query edits and navigation into focus
     binding = useSearch({
       ordered: { groups: [{ kind: "rest", projects: [{ id: null, sessions: ["one", "two"] }] }] },
       sessions: [],
-      onSelect: (id) => { selections.push(id); },
-      focusSelectedRow: () => { returned++; },
+      onSelect: (id) => {
+        selections.push(id);
+      },
+      focusSelectedRow: () => {
+        returned++;
+      },
     });
     return <input ref={binding.inputRef} onKeyDown={binding.onKeyDown} />;
   }
   try {
-    await act(async () => { root.render(<Harness />); });
     await act(async () => {
-      window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "k", metaKey: true, cancelable: true }));
+      root.render(<Harness />);
+    });
+    await act(async () => {
+      window.document.dispatchEvent(
+        new window.KeyboardEvent("keydown", { key: "k", metaKey: true, cancelable: true }),
+      );
     });
     expect(document.activeElement === container.querySelector("input")).toBe(true);
-    await act(async () => { binding.onValueChange("one"); });
-    await act(async () => { expect(binding.filtered.sequence).toEqual(["one"]); });
-    await act(async () => { binding.onValueChange("missing"); });
-    await act(async () => { expect(binding.filtered.sequence).toEqual([]); });
-    await act(async () => { binding.onValueChange(""); });
-    const key = (value: string) => window.document.querySelector("input")?.dispatchEvent(new window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }));
-    await act(async () => { key("ArrowDown"); });
-    await act(async () => { expect(binding.state.activeId).toBe("one"); });
-    await act(async () => { key("Enter"); });
+    await act(async () => {
+      binding.onValueChange("one");
+    });
+    await act(async () => {
+      expect(binding.filtered.sequence).toEqual(["one"]);
+    });
+    await act(async () => {
+      binding.onValueChange("missing");
+    });
+    await act(async () => {
+      expect(binding.filtered.sequence).toEqual([]);
+    });
+    await act(async () => {
+      binding.onValueChange("");
+    });
+    const key = (value: string) =>
+      window.document
+        .querySelector("input")
+        ?.dispatchEvent(
+          new window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }),
+        );
+    await act(async () => {
+      key("ArrowDown");
+    });
+    await act(async () => {
+      expect(binding.state.activeId).toBe("one");
+    });
+    await act(async () => {
+      key("Enter");
+    });
     expect(selections).toEqual(["one"]);
-    await act(async () => { key("Escape"); });
+    await act(async () => {
+      key("Escape");
+    });
     expect(returned).toBe(1);
-    await act(async () => { key("a"); });
+    await act(async () => {
+      key("a");
+    });
     expect(selections).toEqual(["one"]);
   } finally {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     restoreGlobals();
     await window.happyDOM.close();
   }

@@ -6,6 +6,7 @@ import {
   IDLE_BOUNDARY_MS,
   orderByAttention,
 } from "../src/renderer/attention";
+import { makeSession } from "./helpers/session";
 
 /**
  * The stability rule: a new order is adopted at a focus boundary, never while
@@ -13,9 +14,9 @@ import {
  * cursor costs more attention than it saves, which would defeat its own reason
  * for existing.
  */
-const facts = (id: string, createdAt: number) => ({ id, projectId: "p", phase: "idle" as const, createdAt, lastActivityAt: createdAt, phaseSince: createdAt, unread: false, pinned: false, snoozedUntil: null });
-const before = orderByAttention([facts("a", 2), facts("b", 1)]);
-const after = orderByAttention([facts("a", 1), facts("b", 2)]);
+const facts = (id: string, createdAt: number) => makeSession({ id, projectId: "p", createdAt });
+const before = orderByAttention([facts("a", 2), facts("b", 1)], 10);
+const after = orderByAttention([facts("a", 1), facts("b", 2)], 10);
 
 describe("order is applied at a focus boundary only", () => {
   test("Given a new ideal order and no boundary, When applied, Then the shown order is held", () => {
@@ -47,7 +48,7 @@ describe("drift is counted, never animated", () => {
   });
 
   test("Given a session disappears, When counting drift, Then the loss is reported", () => {
-    const shrunk = orderByAttention([facts("a", 2)]);
+    const shrunk = orderByAttention([facts("a", 2)], 10);
 
     expect(changedSince(before, shrunk)).toBe(1);
   });

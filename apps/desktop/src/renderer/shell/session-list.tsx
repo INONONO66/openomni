@@ -5,20 +5,31 @@ import { sessionReason } from "../attention/reason";
 import type { Session, SessionId } from "../state/store";
 import { sessionGlyphProps } from "./session-glyph";
 
-export function SessionList({ sessions, now, onSelect, ordered = orderByAttention(sessions, now) }: {
+export function SessionList({
+  sessions,
+  now,
+  onSelect,
+  ordered = orderByAttention(sessions, now),
+}: {
   readonly sessions: readonly Session[];
   readonly now: number;
   readonly ordered?: Ordered;
   readonly onSelect: (id: SessionId, boundary?: Boundary | null, newTab?: boolean) => void;
 }) {
   const byId = new Map(sessions.map((session) => [session.id, session]));
-  if (sessions.length === 0) return <Text as="p" level="meta" tone="faint">No sessions yet.</Text>;
+  if (sessions.length === 0)
+    return (
+      <Text as="p" level="meta" tone="faint">
+        No sessions yet.
+      </Text>
+    );
   return (
-    <div aria-label="All sessions" className="flex flex-col gap-4">
+    <section aria-label="All sessions" className="flex flex-col gap-4">
       {ordered.groups.map((group) => (
         <section data-attention-kind={group.kind} key={group.kind}>
           <Text as="h2" className="px-2 font-semibold" level="label">
-            {ATTENTION_LABEL[group.kind]} · {group.projects.reduce((count, project) => count + project.sessions.length, 0)}
+            {ATTENTION_LABEL[group.kind]} ·{" "}
+            {group.projects.reduce((count, project) => count + project.sessions.length, 0)}
           </Text>
           {group.projects.map((project) => (
             <ul className="flex flex-col gap-px" key={project.id ?? ""}>
@@ -27,14 +38,30 @@ export function SessionList({ sessions, now, onSelect, ordered = orderByAttentio
                 if (!session) return null;
                 return (
                   <li key={id}>
-                    <TreeRow aria-label={session.title} onClick={(event) => onSelect(id, "selection", event.metaKey || event.ctrlKey)}>
+                    <TreeRow
+                      aria-label={session.title}
+                      multiline
+                      onClick={(event) => onSelect(id, "selection", event.metaKey || event.ctrlKey)}
+                    >
                       <span className="flex w-full items-center gap-2">
                         <StatusGlyph {...sessionGlyphProps(session.phase)} />
-                        <Text className="min-w-0 flex-1 truncate" level="label">{session.title}</Text>
-                        <Text className="max-w-24 truncate" level="meta" tone="faint">{session.projectId ?? "no project"}</Text>
-                        <Text className="truncate" level="meta" tone="faint">{sessionReason(session, now)}</Text>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <Text className="truncate" level="label">
+                            {session.title}
+                          </Text>
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Text className="max-w-24 truncate" level="meta" tone="faint">
+                              {session.projectId ?? "no project"}
+                            </Text>
+                            <Text className="truncate" level="meta" tone="faint">
+                              {sessionReason(session, now)}
+                            </Text>
+                          </span>
+                        </span>
                         <Text className="shrink-0" level="meta" numeric tone="faint">
-                          <time dateTime={new Date(session.lastActivityAt).toISOString()}>{relativeTime(session.lastActivityAt, now)}</time>
+                          <time dateTime={new Date(session.lastActivityAt).toISOString()}>
+                            {relativeTime(session.lastActivityAt, now)}
+                          </time>
                         </Text>
                       </span>
                     </TreeRow>
@@ -45,6 +72,6 @@ export function SessionList({ sessions, now, onSelect, ordered = orderByAttentio
           ))}
         </section>
       ))}
-    </div>
+    </section>
   );
 }

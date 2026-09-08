@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { orderByAttention } from "../src/renderer/attention";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
-import { makeSession } from "./make-session";
+import { makeSession } from "./helpers/session";
 
 /**
  * The tree's render contract over store sessions: PROJECT → SESSION, exactly
@@ -63,8 +63,11 @@ describe("the sidebar is project groups over sessions", () => {
   const html = tree("s1");
 
   test("Given the ordered groups, When the tree renders, Then every project is a disclosure header", () => {
-    for (const group of ordered.groups.flatMap((kind) => kind.projects)) expect(html).toContain(group.id ?? "no project");
-    expect(html.match(/aria-expanded="true"/g)).toHaveLength(ordered.groups.flatMap((kind) => kind.projects).length);
+    for (const group of ordered.groups.flatMap((kind) => kind.projects))
+      expect(html).toContain(group.id ?? "no project");
+    expect(html.match(/aria-expanded="true"/g)).toHaveLength(
+      ordered.groups.flatMap((kind) => kind.projects).length,
+    );
   });
 
   test("Given every row, When the tree renders, Then it is one line: the title", () => {

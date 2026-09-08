@@ -3,10 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { attentionKind, attentionScore, orderByAttention } from "../src/renderer/attention/order";
 import { SessionList } from "../src/renderer/shell/session-list";
 import { sessionGlyphProps } from "../src/renderer/shell/session-glyph";
-import { consoleStore, INITIAL_CLIENT_STATE, openTab, setSessionPhase, setSessionAttention } from "../src/renderer/state/store";
+import {
+  consoleStore,
+  INITIAL_CLIENT_STATE,
+  openTab,
+  setSessionPhase,
+  setSessionAttention,
+} from "../src/renderer/state/store";
 import type { SessionPhase } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
-import { makeSession } from "./make-session";
+import { makeSession } from "./helpers/session";
 
 const now = 100_000_000;
 const hour = 3_600_000;
@@ -36,6 +42,11 @@ for (const [phase, kind, tone, shape] of cases) {
     expect(html.match(/data-ui="StatusGlyph"/g)).toHaveLength(3);
     expect(html.match(new RegExp(`data-tone="${tone}"`, "g"))).toHaveLength(3);
     expect(html.match(new RegExp(`data-shape="${shape}"`, "g"))).toHaveLength(3);
+    const list = renderToStaticMarkup(
+      <SessionList now={now} sessions={[session]} onSelect={() => undefined} />,
+    );
+    expect(list).toContain(`data-tone="${tone}"`);
+    expect(list).toContain(`data-shape="${shape}"`);
   });
 }
 
@@ -47,7 +58,9 @@ test("unread terminals report; snooze overrides demand; pin overrides snooze", (
   expect(attentionKind(session, now)).toBe("rest");
   expect(attentionKind(session, now + 1)).toBe("demand");
   expect(attentionKind({ ...session, pinned: true }, now)).toBe("pinned");
-  expect(attentionKind(makeSession({ phase: "idle", unread: false, lastActivityAt: 0 }), now)).toBe("rest");
+  expect(attentionKind(makeSession({ phase: "idle", unread: false, lastActivityAt: 0 }), now)).toBe(
+    "rest",
+  );
 });
 
 test("score has a six-hour half-life and residue a 24-hour bonus", () => {
@@ -55,7 +68,9 @@ test("score has a six-hour half-life and residue a 24-hour bonus", () => {
   expect(attentionScore(fresh, now)).toBe(1);
   expect(attentionScore({ ...fresh, lastActivityAt: now - 6 * hour }, now)).toBeCloseTo(0.5);
   expect(attentionScore({ ...fresh, lastActivityAt: now - hour }, now)).toBeLessThan(1);
-  expect(attentionScore({ ...fresh, phase: "interrupted", lastActivityAt: now - 24 * hour }, now)).toBeCloseTo(0.5625);
+  expect(
+    attentionScore({ ...fresh, phase: "interrupted", lastActivityAt: now - 24 * hour }, now),
+  ).toBeCloseTo(0.5625);
 });
 
 test("kinds precede project best score; ties use session id, not input order", () => {
@@ -65,18 +80,68 @@ test("kinds precede project best score; ties use session id, not input order", (
     makeSession({ id: "b", projectId: "zeta", lastActivityAt: now - hour }),
   ];
   const ordered = orderByAttention(sessions, now);
-  expect(ordered.groups).toEqual([{ kind: "rest", projects: [
-    { id: "zeta", sessions: ["a", "b"] }, { id: "alpha", sessions: ["z"] },
-  ] }]);
+  expect(ordered.groups).toEqual([
+    {
+      kind: "rest",
+      projects: [
+        { id: "zeta", sessions: ["a", "b"] },
+        { id: "alpha", sessions: ["z"] },
+      ],
+    },
+  ]);
   expect(orderByAttention([...sessions].reverse(), now)).toEqual(ordered);
 });
 
 test("Sessions list paints every kind in order with matching glyphs", () => {
-  const phases: SessionPhase[] = ["idle", "running", "interrupted", "failed", "waiting_input", "archived"];
-  const sessions = phases.map((phase, i) => makeSession({ id: String(i), phase, unread: phase === "failed", pinned: phase === "archived" }));
-  const html = renderToStaticMarkup(<SessionList now={now} sessions={sessions} onSelect={() => {}} />);
-  expect([...html.matchAll(/data-attention-kind="(\w+)"/g)].map((m) => m[1])).toEqual(["pinned", "demand", "report", "residue", "watch", "rest"]);
+  const phases: SessionPhase[] = [
+    "idle",
+    "running",
+    "interrupted",
+    "failed",
+    "waiting_input",
+    "archived",
+  ];
+  const sessions = phases.map((phase, i) =>
+    makeSession({ id: String(i), phase, unread: phase === "failed", pinned: phase === "archived" }),
+  );
+  const html = renderToStaticMarkup(
+    <SessionList now={now} sessions={sessions} onSelect={() => undefined} />,
+  );
+  expect([...html.matchAll(/data-attention-kind="(\w+)"/g)].map((m) => m[1])).toEqual([
+    "pinned",
+    "demand",
+    "report",
+    "residue",
+    "watch",
+    "rest",
+  ]);
   expect(html.match(/data-ui="StatusGlyph"/g)).toHaveLength(6);
+  const ordered = orderByAttention(sessions, now);
+  expect(ordered.groups.map((group) => group.kind)).toEqual([
+    "pinned",
+    "demand",
+    "report",
+    "residue",
+    "watch",
+    "rest",
+  ]);
+  expect(
+    ordered.groups.flatMap((group) => group.projects.flatMap((project) => project.sessions)),
+  ).toEqual(["5", "4", "3", "2", "1", "0"]);
+  expect(orderByAttention([...sessions].reverse(), now)).toEqual(ordered);
+});
+
+test("scores decrease monotonically for every phase and clamp future activity", () => {
+  for (const [phase] of cases) {
+    const session = makeSession({ phase, lastActivityAt: now });
+    let previous = attentionScore(session, now);
+    expect(attentionScore(makeSession({ phase, lastActivityAt: now + hour }), now)).toBe(previous);
+    for (const age of [1, 6, 24, 48]) {
+      const score = attentionScore(session, now + age * hour);
+      expect(score).toBeLessThan(previous);
+      previous = score;
+    }
+  }
 });
 
 test("setters keep phase timestamps stable on repeated projections", () => {
@@ -84,5 +149,12 @@ test("setters keep phase timestamps stable on repeated projections", () => {
   setSessionPhase("session", "running", now);
   setSessionPhase("session", "running", now + 1);
   setSessionAttention("session", { unread: true, pinned: true, snoozedUntil: now + hour });
-  expect(consoleStore.state.sessions[0]).toMatchObject({ phase: "running", phaseSince: now, lastActivityAt: now, unread: true, pinned: true, snoozedUntil: now + hour });
+  expect(consoleStore.state.sessions[0]).toMatchObject({
+    phase: "running",
+    phaseSince: now,
+    lastActivityAt: now,
+    unread: true,
+    pinned: true,
+    snoozedUntil: now + hour,
+  });
 });

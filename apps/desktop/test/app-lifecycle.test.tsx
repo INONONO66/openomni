@@ -8,7 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { GatewayEndpoint, ShellCommand } from "../src/preload/api";
 import { App } from "../src/renderer/app";
 import { SessionList } from "../src/renderer/shell/session-list";
-import { makeSession } from "./make-session";
+import { makeSession } from "./helpers/session";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
@@ -37,6 +37,8 @@ const listeners = new Set<(command: ShellCommand) => void>();
 const descriptors = new Map<string, PropertyDescriptor | undefined>();
 const cleanups: (() => void)[] = [];
 beforeEach(() => {
+  const clock = spyOn(Date, "now").mockReturnValue(10_000);
+  cleanups.push(() => clock.mockRestore());
   browser = new Window({ url: "http://localhost" });
   for (const [key, value] of Object.entries({
     window: browser,
@@ -189,12 +191,12 @@ test("pointer navigation, local history and list selection keep one frame and pr
   const listTab = consoleStore.state.activeTabId;
   const list = node('[role="tabpanel"] ul');
   expect(list.querySelectorAll("li")).toHaveLength(3);
-  await click("button", list);
+  await click('button[aria-label="alpha"]', list);
   expect(consoleStore.state.activeTabId).toBe(firstTab);
   await act(() => {
     if (listTab) activateTab(listTab);
   });
-  await click("li:last-child button", node('[role="tabpanel"] ul'));
+  await click('button[aria-label="gamma"]', node('[role="tabpanel"] ul'));
   expect(consoleStore.state.activeTabId).toBe(listTab);
   expect(activeTab(consoleStore.state)?.place).toEqual({ kind: "session", sessionId: unopened });
   expect(node('[data-ui="TabStrip"]')).toBe(frame);
@@ -263,16 +265,10 @@ test("search keeps its invoking tab and reveal while explicit result activation 
   expect(consoleStore.state.sidebarFloating).toBe(false);
 });
 
-test("SessionList preserves insertion order, dates and callback ids and has no controls when empty", async () => {
+test("SessionList preserves attention order, dates and callback ids and has no controls when empty", async () => {
   const sessions = [
     makeSession({ id: "one", title: "first", projectId: "p", createdAt: 1000 }),
-    {
-      id: "two",
-      title: "second",
-      titleSource: "prompt" as const,
-      projectId: null,
-      createdAt: 2000,
-    },
+    makeSession({ id: "two", title: "second", projectId: null, createdAt: 2000 }),
   ];
   const selected: string[] = [];
   await act(() =>
@@ -283,7 +279,7 @@ test("SessionList preserves insertion order, dates and callback ids and has no c
   const rows = [...host.querySelectorAll("li")];
   expect(rows).toHaveLength(2);
   for (const [index, row] of rows.entries()) {
-    const session = sessions[index];
+    const session = sessions[sessions.length - 1 - index];
     if (!session) throw new Error("Missing session");
     expect(node("button", row).getAttribute("aria-label")).toBe(session.title);
     expect(node("time", row).getAttribute("datetime")).toBe(
@@ -292,13 +288,13 @@ test("SessionList preserves insertion order, dates and callback ids and has no c
     expect(node("button", row).dataset.level).toBe("0");
     await act(() => node("button", row).click());
   }
-  expect(selected).toEqual(["one", "two"]);
+  expect(selected).toEqual(["two", "one"]);
   expect(host.querySelector("textarea")).toBeNull();
   await act(() =>
     root.render(<SessionList sessions={[]} now={120000} onSelect={(id) => selected.push(id)} />),
   );
   expect(host.querySelector("ul, button, textarea")).toBeNull();
-  expect(selected).toEqual(["one", "two"]);
+  expect(selected).toEqual(["two", "one"]);
 });
 
 function signal<T>() {

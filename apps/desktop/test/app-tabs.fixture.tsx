@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient } from "@tanstack/react-query";
 import type { ServerWebSocket } from "bun";
@@ -49,6 +49,8 @@ const cleanups: (() => void)[] = [];
 const listeners = new Set<(command: ShellCommand) => void>();
 let subscriptions = 0;
 beforeEach(() => {
+  const clock = spyOn(Date, "now").mockReturnValue(10_000);
+  cleanups.push(() => clock.mockRestore());
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
   subscriptions = 0;
   Object.defineProperty(window, "desktop", {
@@ -163,7 +165,7 @@ test("one frame survives session, route, empty and reopen; bridge subscribes onc
   expect(consoleStore.state.sessions).toHaveLength(4);
 });
 
-test("Sessions list ignores collapsed/filter state, keeps insertion order and explicitly dedupes", async () => {
+test("Sessions list ignores collapsed/filter state, keeps attention order and explicitly dedupes", async () => {
   const { a, b, c, bTab } = seed();
   toggleProject("default");
   openTab({ kind: "route", route: "sessions" });
@@ -179,9 +181,7 @@ test("Sessions list ignores collapsed/filter state, keeps insertion order and ex
   expect(host.querySelectorAll('[role="tree"] [data-level="1"]')).toHaveLength(0);
   const list = node(host, '[role="tabpanel"] ul');
   const rows = [...list.querySelectorAll("button")];
-  expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual(
-    consoleStore.state.sessions.map((session) => session.title),
-  );
+  expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual(["gamma", "beta", "alpha"]);
   expect(list.querySelectorAll('[data-level="0"]')).toHaveLength(3);
   expect(list.querySelectorAll("time")).toHaveLength(3);
   await click(node(list, 'button[aria-label="beta"]'));
@@ -199,6 +199,31 @@ test("Sessions list ignores collapsed/filter state, keeps insertion order and ex
   await click(node(host, `#session-row-${b}`));
   expect(consoleStore.state.activeTabId).toBe(bTab);
   expect(consoleStore.state.sessions.map((session) => session.id)).toEqual([a, b, c]);
+});
+
+test("Sessions list holds its order until a focus boundary after a phase update", async () => {
+  const { a, c } = seed();
+  openTab({ kind: "route", route: "sessions" });
+  const tabId = consoleStore.state.activeTabId;
+  const { host } = await mount();
+  const kinds = () =>
+    [...host.querySelectorAll('[role="tabpanel"] [data-attention-kind]')].map((group) =>
+      group.getAttribute("data-attention-kind"),
+    );
+  expect(kinds()).toEqual(["rest"]);
+  await act(() =>
+    consoleStore.setState((state) => ({
+      ...state,
+      sessions: state.sessions.map((session) => ({
+        ...session,
+        phase: session.id === a ? "waiting_input" : session.id === c ? "running" : "idle",
+      })),
+    })),
+  );
+  expect(kinds()).toEqual(["rest"]);
+  await click(node(host, `#tab-${tabId}`));
+  expect(kinds()).toEqual(["demand", "watch", "rest"]);
+  expect(host.querySelectorAll('[role="tree"] [data-ui="StatusGlyph"]')).toHaveLength(3);
 });
 
 test("list selection targets its own active tab even when sidebar search was invoked elsewhere", async () => {
@@ -220,15 +245,13 @@ test("list selection targets its own active tab even when sidebar search was inv
   expect(consoleStore.state.tabs.find((tab) => tab.id === aTab)?.history).toBe(invocationHistory);
 });
 
-import { makeSession } from "./make-session";
+import { makeSession } from "./helpers/session";
 
 test("SessionList renders real project/time metadata and an empty list without controls", async () => {
   const host = document.createElement("div");
   const root = createRoot(host);
   cleanups.push(() => root.unmount());
-  const sessions = [
-    makeSession({ id: "s", title: "sample", projectId: null, createdAt: 0 }),
-  ];
+  const sessions = [makeSession({ id: "s", title: "sample", projectId: null, createdAt: 0 })];
   const selected: string[] = [];
   await act(async () =>
     root.render(
@@ -328,30 +351,28 @@ test("closing a composer onto a route focuses its tab rather than the removed pa
   expect(host.querySelector("textarea")).toBeNull();
 });
 
-test.each(["newest", "oldest"])(
-  "mounted history menu is newest first at the %s cursor with the current entry included once",
-  async (position) => {
-    seed();
-    for (let index = 0; index < 25; index += 1) {
-      const id = createSession(4000 + index);
-      setSessionTitleIfPlaceholder(id, `visit-${index}`);
-      navigate({ kind: "session", sessionId: id });
-    }
-    if (position === "oldest") jumpTo(0);
-    const { host } = await mount();
-    await click(node(host, '[aria-label="History"]'));
-    const items = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-ui="HistoryMenu.Item"]'),
-    );
-    expect(items.map((item) => item.textContent)).toEqual(
-      historyMenuEntries().map((entry) => entry.title),
-    );
-    expect(items).toHaveLength(20);
-    expect(items[0]?.textContent).toBe("visit-24");
-    expect(items.at(-1)?.textContent).toBe(position === "oldest" ? "alpha" : "visit-5");
-    expect(items.filter((item) => item.getAttribute("aria-current") === "true")).toHaveLength(1);
-  },
-);
+test.each([
+  "newest",
+  "oldest",
+])("mounted history menu is newest first at the %s cursor with the current entry included once", async (position) => {
+  seed();
+  for (let index = 0; index < 25; index += 1) {
+    const id = createSession(4000 + index);
+    setSessionTitleIfPlaceholder(id, `visit-${index}`);
+    navigate({ kind: "session", sessionId: id });
+  }
+  if (position === "oldest") jumpTo(0);
+  const { host } = await mount();
+  await click(node(host, '[aria-label="History"]'));
+  const items = Array.from(document.querySelectorAll<HTMLElement>('[data-ui="HistoryMenu.Item"]'));
+  expect(items.map((item) => item.textContent)).toEqual(
+    historyMenuEntries().map((entry) => entry.title),
+  );
+  expect(items).toHaveLength(20);
+  expect(items[0]?.textContent).toBe("visit-24");
+  expect(items.at(-1)?.textContent).toBe(position === "oldest" ? "alpha" : "visit-5");
+  expect(items.filter((item) => item.getAttribute("aria-current") === "true")).toHaveLength(1);
+});
 
 test("pointer-pressing an inactive tab's close control leaves the editor focused", async () => {
   const { bTab } = seed();
@@ -435,7 +456,9 @@ test("real Chat and gateway keep in-flight messages across switch, close and reo
   await act(async () => setDraft(id, "next draft"));
   await key(node(host, "textarea"), "Enter");
   expect(consoleStore.state.drafts[id]).toBe("next draft");
-  expect(node(host, `#session-row-${id}`).textContent).toBe(consoleStore.state.sessions[0]?.title ?? "");
+  expect(node(host, `#session-row-${id}`).textContent).toBe(
+    consoleStore.state.sessions[0]?.title ?? "",
+  );
   await command("new-tab");
   await command("select-tab-1");
   expect(node(host, '[role="tabpanel"]').textContent).toContain("earned title");

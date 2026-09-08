@@ -295,10 +295,10 @@
      line breaks between overlay and pin. The zone's contents need, on darwin,
      89 inset + 28 toggle + 4 gap + (3 * 28 + 2 * 4) trio + 12 right pad = 225. */
   --spacing-sidebar-overlay: 240px;
-  --status-progress: oklch(82.4% .179 91.3);
-  --status-attention: oklch(72% .19 41);
-  --status-success: oklch(61.7% .208 142.85);
-  --status-destructive: oklch(55% .185 27);
+  --status-progress: oklch(82.4% 0.179 91.3);
+  --status-attention: oklch(72% 0.19 41);
+  --status-success: oklch(61.7% 0.208 142.85);
+  --status-destructive: oklch(55% 0.185 27);
 }
 
 /* ---- Layer scale ----------------------------------------------------------
