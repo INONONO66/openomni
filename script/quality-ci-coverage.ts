@@ -5,9 +5,11 @@ import { recordObject } from "./quality-ci-input";
 import { completeDocument, requireMeasurement, sameMembers, type Identity } from "./quality-ci-receipt";
 import { parseNativeLcov, type NativeLines } from "./quality-native-lcov";
 import { coverageLanes } from "./topology";
+import { scriptPartitions } from "./scripts-lanes";
 
 function selectedLanes(plan: string): string[] {
-	const matrix = jsonObject(recordObject(plan).matrix);
+	const document = recordObject(plan);
+	const matrix = jsonObject(document.matrix);
 	const lanes = jsonArray(matrix.include, (value) => {
 		const row = jsonObject(value);
 		return { dir: jsonString(row.dir), coverage: jsonBoolean(row.coverage) };
@@ -15,8 +17,12 @@ function selectedLanes(plan: string): string[] {
 	requireMeasurement(lanes.length > 0, "no selected coverage lanes");
 	for (const lane of lanes)
 		requireMeasurement(coverageLanes().some((row) => row.dir === lane), "unknown selected coverage lane");
-	sameMembers(lanes, [...new Set(lanes)]);
-	return lanes;
+	if (document.version === 2 && document.toolingTests === true) {
+		const partitions = jsonArray(matrix.include, jsonObject).filter((row) => row.dir === "script").map((row) => jsonString(row.key));
+		sameMembers(partitions, scriptPartitions.filter((key) => key !== "scripts-contracts"));
+		sameMembers(lanes.filter((lane) => lane !== "script"), [...new Set(lanes.filter((lane) => lane !== "script"))]);
+	} else sameMembers(lanes, [...new Set(lanes)]);
+	return [...new Set(lanes)];
 }
 function checkScriptFloor(files: NativeLines[]): void {
 	const lines = files.filter((file) =>
@@ -39,7 +45,10 @@ export function readNativeCoverage(options: {
 		requireMeasurement(row.lcovHash === digest(lcov), "coverage bytes changed");
 		const files = parseNativeLcov(lcov, lane);
 		requireMeasurement(JSON.stringify(row.files) === JSON.stringify(files), "coverage line records changed");
-		if (lane === "script") checkScriptFloor(files);
+		if (lane === "script") {
+			if (recordObject(options.plan).toolingTests === true) sameMembers(jsonArray(row.partitions, jsonString), [...scriptPartitions]);
+			checkScriptFloor(files);
+		}
 		return { lane, lcovHash: digest(lcov), files };
 	});
 	const lines = new Map<string, Map<number, number>>();
