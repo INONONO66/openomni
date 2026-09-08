@@ -67,8 +67,9 @@ registry. Source and wake errors are reported by the app. A timed watch lost
 across worker restart produces a restart summary rather than rerunning effects;
 a persistent watch starts from now, preserving its epoch and dedupe digest.
 Only explicitly idempotent polling commands should be relied on for repeated
-external effects. The band assumes one active app per database; unified
-multi-owner evaluator leasing is #971's separate target.
+external effects. The band assumes one active app per database. #971 moved
+occurrence identity, deadline and budget admission into the ledger's
+`alarmOccurrence`; multi-owner evaluator leasing was not added.
 
 Migration 0037 validates every persisted watch using the shared protocol
 `Alarm.WatchSpec` before applying SQL in the migration transaction. Missing or

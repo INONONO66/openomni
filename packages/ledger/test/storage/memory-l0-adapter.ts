@@ -10,7 +10,7 @@ import {
   SessionTurn,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { alarmAppend, inboxAppend } from "../../src/storage/l0-action-builders.js";
+import { alarmAppend, alarmOccurrence, inboxAppend } from "../../src/storage/l0-action-builders.js";
 
 export interface MemoryL0Adapter {
   transaction<T>(operation: () => T): T;
@@ -408,47 +408,28 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
       fire(input) {
         return transaction(() => {
           const row = alarmRows.get(input.id);
-          if (
-            row === undefined ||
-            row.status !== "armed" ||
-            row.epoch !== input.epoch ||
-            row.fence !== input.fence ||
-            input.at < row.fireAt
-          )
-            return undefined;
-          if (input.batchHash !== undefined && row.lastBatch === input.batchHash) return undefined;
+          const occurrence = row === undefined ? undefined : alarmOccurrence(row, input);
+          if (row === undefined || occurrence === undefined) return undefined;
           const session = sessionRows.get(row.sessionId);
           if (session === undefined) return undefined;
-          const paused = !input.terminal && row.notifications >= input.limit;
-          const status = paused
-            ? "paused"
-            : input.terminal || row.kind === "at"
-              ? "fired"
-              : "armed";
-          const content = paused
-            ? JSON.stringify({
-                alarmId: row.id,
-                epoch: row.epoch,
-                reason: "wake_budget",
-                status: "paused",
-              })
-            : input.content;
+          const { status, content, terminal } = occurrence;
           const fired = appendMemoryAction(
             sessionRows,
             actionRows,
             alarmRows,
             {
-              id: input.actionId,
+              id: occurrence.actionId,
               parentId: row.id,
               sessionId: row.sessionId,
-              kind: paused ? "alarm.paused" : "alarm.fired",
+              kind: status === "paused" ? "alarm.paused" : "alarm.fired",
               intent: {
                 encodingVersion: 1,
                 value: {
                   alarmId: row.id,
                   epoch: row.epoch,
                   fence: row.fence,
-                  inboxId: input.inboxId,
+                  sourceKey: input.sourceKey,
+                  inboxId: occurrence.inboxId,
                 },
               },
               effect: { encodingVersion: 1, value: { status, content } },
@@ -459,13 +440,13 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           );
           if (fired === undefined) return undefined;
           const pending: Inbox.Commit = {
-            id: input.inboxId,
+            id: occurrence.inboxId,
             sessionId: row.sessionId,
             kind: "prompt",
             content,
             origin: { encodingVersion: 1, value: row.id },
             createdAt: input.at,
-            parentActionId: input.actionId,
+            parentActionId: occurrence.actionId,
           };
           const prompt = appendMemoryAction(
             sessionRows,
@@ -491,8 +472,8 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           const next: Alarm.Row = {
             ...row,
             status,
-            notifications: row.notifications + (paused || input.terminal ? 0 : 1),
-            lastBatch: input.batchHash ?? row.lastBatch,
+            notifications: row.notifications + (status === "armed" ? 1 : 0),
+            lastBatch: terminal ? row.lastBatch : (input.batchHash ?? row.lastBatch),
             fence: row.fence + (status === "armed" ? 0 : 1),
             updatedAt: input.at,
           };

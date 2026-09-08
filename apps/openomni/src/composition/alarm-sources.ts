@@ -152,9 +152,11 @@ async function killCommandGroup(pid: number): Promise<void> {
 
 export function pathSource(
   spec: Extract<Alarm.Watch, { path: string }>,
-  event: (content: string) => void,
+  event: (content: string, identity: string) => void,
   failure: (error: Error) => void,
 ): AlarmSource {
+  // The stat identity is the transport occurrence key; `previous` is only the
+  // physical snapshot that classifies create/modify. Durable dedupe is the ledger's.
   const identity = () => {
     const stat = statSync(spec.path, { bigint: true, throwIfNoEntry: false });
     return stat === undefined ? null : `${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
@@ -167,7 +169,7 @@ export function pathSource(
       const next = identity();
       const kind = previous === null && next !== null ? "create" : "modify";
       if (next !== null && next !== previous && kind === spec.event)
-        event(JSON.stringify({ path: spec.path, event: kind }));
+        event(JSON.stringify({ path: spec.path, event: kind }), `${kind}:${next}`);
       // Do not advance the observation cursor if committing the event failed.
       previous = next;
     } catch {
