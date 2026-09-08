@@ -99,11 +99,10 @@ test("SDK handles and Python globals share raw endpoints across two machines", a
         "dst = codemode.getMachine('B')",
         `raw = src.read(${JSON.stringify(join(a, "source"))})`,
         `written = dst.write(${JSON.stringify(join(b, "copy"))}, raw['data'])`,
-        `listed = dst.list(${JSON.stringify(b)})`,
-        `info = dst.stat(${JSON.stringify(join(b, "copy"))})`,
-        `shell = dst.shell('printf out; printf err >&2; exit 3', ${JSON.stringify(b)})`,
-        "nested = dst.run('6 * 7')",
-        "(ids, list(raw['data']), written['bytesWritten'], listed['entries'][0]['name'], info['size'], shell['stdout'], shell['stderr'], shell['exitCode'], nested['value'])",
+        `listed = dst.ls(${JSON.stringify(b)})`,
+        `shell = dst.bash('printf out; printf err >&2; exit 3', ${JSON.stringify(b)})`,
+        "nested = dst.eval('6 * 7')",
+        "(ids, list(raw['data']), written['bytesWritten'], listed['entries'][0]['name'], listed['entries'][0]['size'], shell['stdout'], shell['stderr'], shell['exitCode'], nested['value'])",
       ].join("\n"),
       "consumer",
     );
@@ -112,19 +111,25 @@ test("SDK handles and Python globals share raw endpoints across two machines", a
       value: "(['A', 'B'], [0, 255, 128, 65], 4, 'copy', 4, b'out', b'err', 3, '42')",
     });
     expect((await mode.getMachine("B").read(join(b, "copy"))).data).toEqual(bytes);
-    expect(await mode.getMachine("B").stat(join(b, "copy"))).toMatchObject({
-      kind: "file",
-      size: 4,
+    expect(await mode.getMachine("B").ls(b)).toMatchObject({
+      entries: [{ name: "copy", kind: "file", size: 4 }],
     });
-    expect(await mode.getMachine("B").list(b)).toMatchObject({ entries: [{ name: "copy" }] });
-    expect(await mode.getMachine("B").shell("printf direct", b)).toMatchObject({
+    expect(await mode.getMachine("B").bash("printf direct", b)).toMatchObject({
       stdout: Buffer.from("direct"),
     });
     expect(
       await mode
         .getMachine("B")
-        .run({ cellId: "direct", code: "40 + 2", tenant: "direct", timeoutMs: 1000 }),
+        .eval({ cellId: "direct", code: "40 + 2", tenant: "direct", timeoutMs: 1000 }),
     ).toMatchObject({ status: "completed", value: "42" });
+    // Handle methods are the tool names; the raw endpoint names are gone (KERNEL 3.5).
+    expect(Object.keys(mode.getMachine("B")).sort()).toEqual([
+      "bash",
+      "eval",
+      "ls",
+      "read",
+      "write",
+    ]);
   });
 });
 
@@ -164,7 +169,11 @@ test("host disconnect closes the injected runner and awaits its processes", asyn
   const release = deferred<void>();
   await pair(
     async ({ mode, host, da }) => {
-      const running = mode.cell.run("tool.hold()", "disconnect", { timeoutMs: 5000 });
+      // With a wait window the loss surfaces through the background path too.
+      const running = mode.cell.run("tool.hold()", "disconnect", {
+        timeoutMs: 5000,
+        waitMs: 5000,
+      });
       const outcome = running.then(
         (result) => {
           throw new Error(`expected connection loss, received ${result.status}`);
@@ -265,6 +274,172 @@ test("injected completion batches through parallel and tenant state never crosse
       });
       expect(await mode.cell.run("x", "two")).toMatchObject({ status: "raised" });
     },
-    { completion: async (prompt) => `answer:${prompt}` },
+    { completion: async (request) => `answer:${request.prompt}` },
   );
+});
+
+test("run leaves a held cell in the background: peek shows its output so far, stop interrupts it once", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  let holds = 0;
+  await pair(
+    async ({ mode }) => {
+      // The hold cannot settle until released, so a zero wait answers `running` by construction.
+      const started = await mode.cell.run(
+        "print('started')\nprint('warn', file=__import__('sys').stderr)\ntool.hold()\nprint('never')",
+        "background",
+        { timeoutMs: 5000, waitMs: 0 },
+      );
+      if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
+      await entered.promise;
+      // A cell queued behind the held one is in flight with no output yet; stopping it
+      // before it executes cancels it without ever touching the interpreter.
+      const queued = await mode.cell.run("print('second')", "background", {
+        timeoutMs: 5000,
+        waitMs: 0,
+      });
+      if (queued.status !== "running") throw new Error(`expected running, got ${queued.status}`);
+      const nothing = { stdout: "", stderr: "" };
+      expect(await mode.cell.peek(queued.cellId, "background")).toEqual({
+        status: "running",
+        cellId: queued.cellId,
+        output: nothing,
+      });
+      expect(await mode.cell.stop(queued.cellId, "background")).toEqual({
+        status: "cancelled",
+        cellId: queued.cellId,
+        output: nothing,
+      });
+      const partial = { stdout: "started\n", stderr: "warn\n" };
+      expect(await mode.cell.peek(started.cellId, "background")).toEqual({
+        status: "running",
+        cellId: started.cellId,
+        output: partial,
+      });
+      // Another tenant cannot see, let alone stop, this cell.
+      for (const op of [mode.cell.peek, mode.cell.stop]) {
+        await expect(op(started.cellId, "intruder")).rejects.toMatchObject({
+          name: "CodemodeError",
+          data: { reason: "unknown_cell_id", message: expect.any(String) },
+        });
+      }
+      expect(await mode.cell.stop(started.cellId, "background")).toEqual({
+        status: "cancelled",
+        cellId: started.cellId,
+        output: partial,
+      });
+      // Settled state is handed over once; the code never runs again.
+      await expect(mode.cell.peek(started.cellId, "background")).rejects.toMatchObject({
+        data: { reason: "unknown_cell_id" },
+      });
+      release.resolve();
+      expect(await mode.cell.run("6 * 7", "background")).toMatchObject({
+        status: "completed",
+        value: "42",
+      });
+      expect(holds).toBe(1);
+    },
+    {
+      tools: () => async () => {
+        holds += 1;
+        entered.resolve();
+        await release.promise;
+        return { status: "completed" };
+      },
+    },
+  );
+});
+
+test("a peek and a stop racing on one cell hand its settled state to exactly one of them", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  await pair(
+    async ({ mode }) => {
+      const started = await mode.cell.run("tool.hold()", "race", { timeoutMs: 5000, waitMs: 0 });
+      if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
+      await entered.promise;
+      // peek is mid round-trip to the daemon when stop claims the entry synchronously.
+      const outcomes = await Promise.allSettled([
+        mode.cell.peek(started.cellId, "race"),
+        mode.cell.stop(started.cellId, "race"),
+      ]);
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(["rejected", "fulfilled"]);
+      expect(outcomes[0]).toMatchObject({
+        reason: { name: "CodemodeError", data: { reason: "unknown_cell_id" } },
+      });
+      expect(outcomes[1]).toMatchObject({
+        value: { status: "cancelled", cellId: started.cellId },
+      });
+      release.resolve();
+    },
+    {
+      tools: () => async () => {
+        entered.resolve();
+        await release.promise;
+        return { status: "completed" };
+      },
+    },
+  );
+});
+
+test("unread settled cells are retained up to the bound; the oldest is evicted and its id is spent", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  await pair(
+    async ({ mode }) => {
+      const ids: string[] = [];
+      // The first cell holds the interpreter, so the 64 queued behind it are `running` by
+      // construction: 65 cells, one more than the facade retains once they settle unread.
+      for (let index = 0; index < 65; index += 1) {
+        const started = await mode.cell.run(index === 0 ? "tool.hold()" : `${index}`, "bound", {
+          timeoutMs: 5000,
+          waitMs: 0,
+        });
+        if (started.status !== "running")
+          throw new Error(`expected running, got ${started.status}`);
+        ids.push(started.cellId);
+      }
+      await entered.promise;
+      release.resolve();
+      // Queued behind all 65 on the same interpreter and connection: when it answers, they
+      // have all settled at the facade.
+      expect(await mode.cell.run("'barrier'", "bound")).toMatchObject({ status: "completed" });
+      await expect(mode.cell.peek(ids[0] ?? "", "bound")).rejects.toMatchObject({
+        data: { reason: "unknown_cell_id" },
+      });
+      expect(await mode.cell.peek(ids[1] ?? "", "bound")).toMatchObject({
+        status: "completed",
+        value: "1",
+      });
+      expect(await mode.cell.peek(ids[64] ?? "", "bound")).toMatchObject({
+        status: "completed",
+        value: "64",
+      });
+    },
+    {
+      tools: () => async () => {
+        entered.resolve();
+        await release.promise;
+        return { status: "completed" };
+      },
+    },
+  );
+}, 30_000);
+
+test("a run that settles within its wait answers the result and leaves nothing behind", async () => {
+  await pair(async ({ mode }) => {
+    const settled = await mode.cell.run("print('quick')\n1 + 1", "prompt", {
+      timeoutMs: 5000,
+      waitMs: 5000,
+    });
+    expect(settled).toMatchObject({
+      status: "completed",
+      value: "2",
+      output: { stdout: "quick\n", stderr: "" },
+    });
+    if (settled.status !== "completed") throw new Error("unreachable");
+    await expect(mode.cell.peek(settled.cellId, "prompt")).rejects.toMatchObject({
+      data: { reason: "unknown_cell_id" },
+    });
+  });
 });

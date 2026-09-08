@@ -178,6 +178,15 @@ the repository ruleset to require `CI`; adding the workflow does not itself
 change GitHub branch protection. Benchmark checks are post-merge checks and
 must not be required for PR admission.
 
+## Desktop smoke
+
+The desktop lane includes built-output CSP/preload contracts in its Bun tests and
+one Playwright production-build smoke when `desktopApp` or `ui` is selected.
+Locally, build first and run `mise exec bun@1.4.1 -- bun run --cwd apps/desktop test:e2e`.
+On Linux the command must run under `xvfb-run -a`; macOS can run it directly.
+CI reuses the prepared `workspace-dist.tar` and caches Electron's binary only in
+this smoke job.
+
 ## Local reproduction
 
 Use the pinned Bun version, a clean build, and the same commands as CI:

@@ -111,6 +111,7 @@ export const UI_NAMES = {
   Spinner: "Spinner",
   /** A drawn 6px status mark in a fixed 2ch column. */
   StatusDot: "StatusDot",
+  StatusGlyph: "StatusGlyph",
   /** Match emphasis inside a label, as weight only. */
   Highlight: "Highlight",
   /** The named scroll owner. */

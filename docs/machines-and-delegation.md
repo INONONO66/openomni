@@ -101,28 +101,44 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
 
 ### 2.2 Code-mode ownership and lifecycle
 
-`createCodemode({machines,llm,tools})` is a reusable facade over a structural
-machines port. It supplies `cell.run(code,tenant,{timeoutMs,signal})` and
-`listMachines/getMachine/findMachine({tag})`. Tag lookup requires exactly one
-match: zero or multiple matches are typed errors, never arbitrary selection.
-Handles expose `read/write/list/stat/shell/run`, forwarding raw structures and
-bytes. The same names are installed under the Python `codemode` global;
-Python reads and shell outputs contain bytes, and writes accept bytes.
+`createCodemode({machines,completion,tools})` is a reusable facade over a
+structural machines port. It supplies
+`cell.run(code,tenant,{timeoutMs,waitMs,signal})`, `cell.peek(cellId,tenant)`,
+`cell.stop(cellId,tenant)` and `listMachines/getMachine/findMachine({tag})`.
+Tag lookup requires exactly one match: zero or multiple matches are typed
+errors, never arbitrary selection. Handle methods are the tool names —
+`read/write/ls/bash/eval` — forwarding raw structures and bytes. The same
+names are installed under the Python `codemode` global; Python reads and bash
+outputs contain bytes, and writes accept bytes.
+
+`cell.run` waits `waitMs` for the cell to settle and otherwise answers
+`running` with the cell id and the output produced so far, keeping the cell
+in a per-tenant background registry until `timeoutMs` (the app's ceiling is
+ten minutes). The interpreter streams stdout/stderr frames as the cell prints,
+so `peek` (wire `machine.peek_code`) reads a running cell's partial output
+without waiting, and `timed_out`/`cancelled` results carry what was printed
+before the interrupt. `stop` aborts the cell's own controller and settles it as
+`cancelled`; the code never runs again. A settled background result is handed
+over exactly once, and an id from another tenant is `unknown_cell_id`.
 
 Only a daemon's injected `createCodemode().runner` starts Python, lazily on
 its first request. Codemode owns the interpreter map, per-tenant persistence,
-parallel helper, `completion(prompt)` helper, callId routing and cell bindings. Different tenants
-never share an interpreter. Nested handle `run` uses a nested tenant to avoid
-queuing behind its calling interpreter. The brain facade never spawns Python.
-The app captures its executor and tool catalog at cell entry; `eval`
-(`operation: { op: "run", code, timeout? }`) is metadata/render plus one
-`cell.run` call. Machine-handle calls pass through the
-captured executor's `tool.pre`, without manufacturing model tool definitions.
+parallel helper, `completion(prompt, model=, system=, schema=)` helper (a
+`schema` answer is decoded with `json.loads`), callId routing and cell
+bindings. Different tenants never share an interpreter. Nested handle `eval`
+uses a nested tenant to avoid queuing behind its calling interpreter. The brain
+facade never spawns Python. The app captures its executor and tool catalog at
+cell entry; `eval` (`operation: { op: "run", code, timeout? } | { op: "peek",
+cell_id } | { op: "stop", cell_id }`) is metadata/render plus one
+`cell.run`/`cell.peek`/`cell.stop` call, with the session id as tenant.
+Machine-handle calls pass through the captured executor's `tool.pre`, without
+manufacturing model tool definitions.
 
 A call is accepted only from the connection with that live cell in flight.
-Forged, late and detached callbacks cannot inherit another cell's authority.
-`machine.cancel_code` propagates AbortSignal cancellation. Timeout/cancel kills
-that interpreter, discards its state and lets its successor start fresh.
+Forged, late and detached callbacks cannot inherit another cell's authority; an
+output frame naming another cell is dropped. `machine.cancel_code` propagates
+AbortSignal cancellation. Timeout/cancel/stop kills that interpreter, discards
+its state and lets its successor start fresh.
 Attachment loss closes the injected runner; `daemon.close()` and `closed`
 await process cleanup. Facade close cancels and awaits its live requests.
 

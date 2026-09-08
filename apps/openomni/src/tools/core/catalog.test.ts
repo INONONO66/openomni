@@ -21,7 +21,7 @@ const CELL_ONLY = ["completion"];
 const FILE_TOOLS = ["read", "write", "edit", "ls", "find", "grep", "bash"];
 /** Every multi-operation tool takes `operation: { op, ... }`; these are the exact op sets. */
 const OPS: Record<string, readonly string[]> = {
-  eval: ["run"],
+  eval: ["run", "peek", "stop"],
   monitor: ["create", "rearm", "cancel"],
   provision: [
     "contact_add",
@@ -112,8 +112,17 @@ describe("tool catalog", () => {
       }
     }
   });
-  it("keeps completion cell-only", () => {
+  it("keeps completion cell-only with exactly prompt, model, system and schema", () => {
     const completion = TOOL_DEFINITIONS.find((tool) => tool.name === "completion");
-    expect(completion?.visibility).toEqual({ model: [], cell: ["resident", "worker"] });
+    if (completion === undefined) throw new Error("missing completion");
+    expect(completion.visibility).toEqual({ model: [], cell: ["resident", "worker"] });
+    const schema = toolInputSchema(completion);
+    expect(Object.keys(record(schema.properties)).sort()).toEqual([
+      "model",
+      "prompt",
+      "schema",
+      "system",
+    ]);
+    expect(schema.required).toEqual(["prompt"]);
   });
 });

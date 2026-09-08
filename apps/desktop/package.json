@@ -10,6 +10,7 @@
     "build": "rm -rf dist && electron-vite build",
     "preview": "electron-vite preview",
     "test": "bun test",
+    "test:e2e": "playwright test",
     "lint": "bunx biome check ./src ./test",
     "check-types": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.test.json"
   },
@@ -26,8 +27,8 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "react-grep": "^0.3.3",
     "@happy-dom/global-registrator": "^20.14.0",
+    "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query-devtools": "5.102.8",
     "@types/bun": "latest",
@@ -39,6 +40,7 @@
     "electron-vite": "^5.0.0",
     "happy-dom": "20.14.0",
     "oxc-transform-react": "^0.148.0",
+    "react-grep": "^0.3.3",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.2"
   }

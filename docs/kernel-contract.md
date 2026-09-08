@@ -216,17 +216,43 @@ not an OS shell sandbox: commands run as
 the daemon user and may exercise that user's other OS authority once started;
 Owner grants shell execution knowingly. Codemode consumes these handles through
 one `eval` cell runner, with per-tenant interpreter state and no legacy
-machines or filesystem tools.
+machines or filesystem tools. Inside a cell a machine handle's methods are the
+tool names: `read`, `write`, `ls`, `bash`, `eval`; there is no second
+vocabulary for the same operation. The `edit`, `find` and `grep` handle methods
+the #949 amendment names are not offered yet: those tools are compositions over
+the raw fs endpoints that live in the app tool layer, above codemode, and until
+that composition is hoisted a cell reaches them through the `tool.<name>()`
+proxies.
+
+`eval.op = run({code, timeout?})` starts code in the session's cell and waits
+up to `timeout` seconds (default 15) for it to settle; a cell still running is
+answered as `running` with its `cell_id` and its output so far, and keeps
+running in the background under a hard ceiling of ten minutes.
+`peek({cell_id})` returns the state and the output so far without waiting;
+`stop({cell_id})` interrupts the cell and settles it as `cancelled` with the
+output it produced — the code never runs again, and the interpreter's state is
+discarded like any other cancel. A settled background cell is handed over once:
+the `peek` or `stop` that observes the terminal state claims the id synchronously,
+so a `peek` whose daemon round trip a `stop` overtook finds it spent, and a
+`cell_id` from another session is as unknown as a spent one. Unread settled
+cells are retained per facade up to a bound (64); beyond it the oldest is
+dropped and its id is spent.
 
 ### The sealed tool catalog (#949)
 
 The model door offers exactly eleven tools, in catalog order: `read`, `write`,
 `edit`, `ls`, `find`, `grep`, `bash`, `eval`, `monitor`, `send_message`,
-`provision`. `completion(prompt)` is the one cell-only tool; batching is the
-cell's `parallel()`. Names are lowercase snake_case and follow the senpi/pi
-file-tool vocabulary; the file is the tool (`apps/openomni/src/tools/<name>.ts`).
-Every multi-operation tool takes `operation: { op, ... }` with one discriminator
-named `op`: `eval.op = run`, `monitor.op = create | rearm | cancel`,
+`provision`. `completion({prompt, model?, system?, schema?})` is the one
+cell-only tool; batching is the cell's `parallel()`. `model` is an id on the
+configured provider (never another credential), `system` is system text, and
+`schema` is a JSON Schema the answer must satisfy: the host validates the
+answer and returns canonical JSON text, or refuses. Names are lowercase
+snake_case and follow the senpi/pi file-tool vocabulary; the file is the tool
+(`apps/openomni/src/tools/<name>.ts`, with `_` written `-` in the file name
+because the repo-wide kebab-case file rule applies; `lint:tools` checks the
+correspondence). Every multi-operation tool takes `operation: { op, ... }`
+with one discriminator named `op`: `eval.op = run | peek | stop`,
+`monitor.op = create | rearm | cancel`,
 `provision.op = contact_add | contact_remove | contact_promote | contact_merge |
 channel_add | channel_enable | channel_disable | secret_rotate | status`. The
 root of every input schema is an object. There is no `approval` tool: Owner

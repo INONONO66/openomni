@@ -31,7 +31,14 @@ class ResultFrame(TypedDict):
     kind: Literal["result"]
     result: Mapping[str, JsonValue]
 
-type DriverFrame = ToolFrame | ResultFrame
+
+class OutputFrame(TypedDict):
+    kind: Literal["output"]
+    cellId: str
+    stream: Literal["stdout", "stderr"]
+    text: str
+
+type DriverFrame = ToolFrame | ResultFrame | OutputFrame
 
 
 def is_driver_frame(value: JsonValue) -> TypeGuard[DriverFrame]:
@@ -39,6 +46,12 @@ def is_driver_frame(value: JsonValue) -> TypeGuard[DriverFrame]:
         return False
     if value.get("kind") == "result":
         return isinstance(value.get("result"), Mapping)
+    if value.get("kind") == "output":
+        return (
+            isinstance(value.get("cellId"), str)
+            and value.get("stream") in ("stdout", "stderr")
+            and isinstance(value.get("text"), str)
+        )
     arguments = value.get("arguments")
     return (
         value.get("kind") == "tool_call"
@@ -68,7 +81,14 @@ def exchange(argv: list[str]) -> list[ResultFrame]:
         try:
             _ = stdin.write(json.dumps({"cellId": "one", "code": 'value = 41\nprint("hello")\nvalue + 1'}) + "\n")
             stdin.flush()
+            # The print streams as output frames (one per write) before the result settles.
+            streamed: list[str] = []
             first = frames.get(timeout=15)
+            while first["kind"] == "output":
+                assert (first["cellId"], first["stream"]) == ("one", "stdout"), first
+                streamed.append(first["text"])
+                first = frames.get(timeout=15)
+            assert "".join(streamed) == "hello\n", streamed
             assert first["kind"] == "result", first
             _ = stdin.write(json.dumps({
                 "cellId": "two",

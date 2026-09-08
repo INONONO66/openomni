@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Highlight } from "@openomni/ui";
 import { renderToStaticMarkup } from "react-dom/server";
-import { orderByAttention } from "../src/renderer/attention";
+import { Window } from "happy-dom";
+import { ATTENTION_LABEL, orderByAttention } from "../src/renderer/attention/order";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
+import { makeSession } from "./helpers/session";
 
 /**
  * The rendered wiring between the search field and the tree it filters.
@@ -17,19 +19,19 @@ import type { Session } from "../src/renderer/state/store";
  * reducer).
  */
 const sessions: readonly Session[] = [
-  {
+  makeSession({
     id: "s1",
     title: "ledger append path",
     titleSource: "prompt",
     projectId: "kernel",
     createdAt: 1,
-  },
-  { id: "s2", title: "lease semantics", titleSource: "prompt", projectId: "kernel", createdAt: 2 },
-  { id: "s3", title: "sync engine", titleSource: "prompt", projectId: "perimeter", createdAt: 3 },
+  }),
+  makeSession({ id: "s2", title: "lease semantics", projectId: "kernel", createdAt: 2 }),
+  makeSession({ id: "s3", title: "sync engine", projectId: "perimeter", createdAt: 3 }),
 ];
 const selectedId = "s2";
 
-const ordered = orderByAttention(sessions);
+const ordered = orderByAttention(sessions, 10);
 
 const html = renderToStaticMarkup(
   <SessionTree
@@ -38,6 +40,7 @@ const html = renderToStaticMarkup(
     onNavigate={() => undefined}
     onSelect={() => undefined}
     onToggleProject={() => undefined}
+    now={10}
     ordered={ordered}
     pendingChanges={0}
     route="sessions"
@@ -45,6 +48,53 @@ const html = renderToStaticMarkup(
     sessions={sessions}
   />,
 );
+
+describe("attention kind headers disambiguate repeated projects", () => {
+  test("mixed kinds show non-collapsible labels above each project group", () => {
+    const mixed = [
+      makeSession({ id: "waiting", phase: "waiting_input", projectId: "default" }),
+      makeSession({ id: "running", phase: "running", projectId: "default" }),
+      makeSession({ id: "rest", phase: "idle", projectId: "default" }),
+    ];
+    const mixedHtml = renderToStaticMarkup(
+      <SessionTree
+        collapsedProjectIds={new Set()}
+        onNavigate={() => undefined}
+        onSelect={() => undefined}
+        onToggleProject={() => undefined}
+        now={10}
+        ordered={orderByAttention(mixed, 10)}
+        pendingChanges={0}
+        route="sessions"
+        selectedId={null}
+        sessions={mixed}
+      />,
+    );
+    const document = new Window().document;
+    document.body.innerHTML = mixedHtml;
+    const groups = [...document.querySelectorAll('[role="tree"] > div')];
+    expect(groups).toHaveLength(3);
+    expect(groups.map((group) => group.firstElementChild?.textContent)).toEqual([
+      ATTENTION_LABEL.demand,
+      ATTENTION_LABEL.watch,
+      ATTENTION_LABEL.rest,
+    ]);
+    for (const group of groups) {
+      const header = group.firstElementChild;
+      expect(header?.tagName).toBe("SPAN");
+      expect(header?.classList.contains("text-meta")).toBe(true);
+      expect(header?.classList.contains("text-fg-faint")).toBe(true);
+      expect(header?.hasAttribute("aria-expanded")).toBe(false);
+      expect(header?.nextElementSibling?.getAttribute("data-level")).toBe("0");
+      expect(group.querySelectorAll('[data-ui="TreeRow"]')).toHaveLength(2);
+    }
+  });
+
+  test("rest-only sessions keep the plain project tree without a kind label", () => {
+    expect(html).not.toContain(`>${ATTENTION_LABEL.rest}</span>`);
+    expect(html.match(/data-ui="TreeRow"/g)).toHaveLength(5);
+  });
+});
 
 describe("the field is wired to the tree it filters", () => {
   test("Given the sidebar, When rendered, Then the field is a combobox over a real element", () => {
@@ -87,7 +137,9 @@ describe("the tree still reads as a tree under the search field", () => {
   test("Given the sidebar, When rendered, Then the two depths survive", () => {
     const levels = [...html.matchAll(/data-level="(\d)"/g)].map((hit) => Number(hit[1]));
 
-    expect(levels.filter((level) => level === 0)).toHaveLength(ordered.projects.length);
+    expect(levels.filter((level) => level === 0)).toHaveLength(
+      ordered.groups.flatMap((kind) => kind.projects).length,
+    );
     expect(levels.filter((level) => level === 1)).toHaveLength(sessions.length);
   });
 
