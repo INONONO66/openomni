@@ -2,6 +2,8 @@
 
 #969 cutover, 2026-09-07: request waiting, authenticated consent and outbound delivery now use canonical actions. The new receipt below covers the replacement; historical receipts retain their original source pins. Final HEAD and gate outputs are in the PR and local report.
 
+#971 cutover, 2026-09-08: alarm occurrence identity, deadline and budget admission moved into the ledger's single judgment; evaluators report transport keys only. Receipt below.
+
 #970 cutover, 2026-09-08: interrupted operations settle from classified evidence; attempt evidence, `restore_model_selection` and `restore_context_projection` are recorded actions. No store, table or schema is added or removed; the receipt at the end records what stayed in place.
 
 Verified on 2026-09-06 against source HEAD `c4fb774869fb060859bbdc2f58ce37ee3a3072c9`, tree `0d6318c742a1ca0eeaa5ddf30003108ba8a53487`; a fresh `git fetch origin main` resolved to the same commit. This docs-only patch preserves that production tree. Final documentation commit/tree and PR URL are recorded in the local `REPORT.md` and PR body.
@@ -283,6 +285,17 @@ The immutable migration manifest still names historical migration 0023. The guar
 The old producer entries and allowed perimeter store import are removed. Protocol/tool snapshots are generated from the current public barrel and catalog: SessionTransition maps to existing Session/Action vocabulary, and protected mutation no longer accepts model-minted approval decisions. The channels manifest allows agent for real-kernel tests only, not production source.
 
 Migration 0038 retains terminal legacy row bytes in immutable archive_969_wait/archive_969_approval tables; it does not erase action history or rewrite historical migrations. Unresolved or invalid old rows refuse before mutation. The #967 archive command remains explicitly confirmed and pinned separately. Unresolved old message alarms and native child execution also refuse. The replacement is covered by request/outbound race, restart and actual receiving-executor tests; final command receipts remain attached to the PR. Message/part retention, continuous scheduling (#947), and the broader #945/#948 quality campaign remain outside this cutover.
+
+## #971 monitor occurrences and evaluator recovery
+
+| Scope | Cutover disposition | Acceptance surface |
+| --- | --- | --- |
+| Identity split | Alarm id = control identity/inbox origin; persisted `fence` = evaluator authority; occurrence = `Alarm.occurrenceId(alarmId, epoch, sourceKey)` as the `alarm.fired`/`alarm.paused` action id. No redundant occurrence table or id column. | `monitor-occurrence.test.ts` two matches -> two action ids; same key redelivered -> undefined, revision unchanged |
+| Admission owner | `alarmOccurrence` in `packages/ledger/src/storage/l0-action-builders.ts` is the only judgment (fence, due, dedupe, deadline, budget), shared by SQLite and the memory double; `Alarm.Fire` lost `actionId`, `inboxId`, `limit` | `alarm.test.ts` parity, `alarm-control.test.ts` budget-of-one pause, `monitor-occurrence.test.ts` late match settles as timeout |
+| Takeover vs rearm | `acquire` keeps epoch/count/digest; `rearm` resets them; both advance the fence before physical cleanup | `monitor-occurrence.test.ts` poll A -> takeover -> A suppressed, B delivers, old fence zero, rearm re-admits A; `alarm-boot-durability.test.ts` real PTY restart gap |
+| Budget | N notifications then one `alarm.paused` prompt on N+1; N+2 and every stale contender commit zero; cancel of paused refuses later fires | `monitor-occurrence.test.ts`, `monitor-budget.test.ts` |
+| Recovery limits | Live streams restart from now; timed watches settle `restart`; cursor backends not added; band retains OS handles only | `alarm-worker-boundaries.test.ts`, `monitor-process-group.test.ts`, `monitor-app.test.ts` hibernation wake |
+| Deletion | Worker-side `expired` computation, caller-minted random action/inbox ids and caller-supplied `limit` removed with their schema fields in the same PR; `schema-snapshot.json` regenerated for `Alarm.Fire` | `git grep -n -e "randomUUID" -e "limit:" -e "expired" apps/openomni/src/composition/alarm-worker.ts` -> zero |
 
 ## #970 durable recovery and typed restoration
 
