@@ -97,7 +97,7 @@ describe("SessionHistory projections", () => {
   };
 
   test("causes are one of action, inbox, alarm or root and carry only identities", () => {
-    const causes = [
+    const causes: SessionHistory.Cause[] = [
       { kind: "action", actionId: "a" },
       { kind: "inbox", inboxIds: ["i"] },
       { kind: "alarm", alarmId: "m", epoch: 1 },
