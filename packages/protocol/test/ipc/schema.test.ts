@@ -95,6 +95,7 @@ describe("Ipc.Methods param schemas", () => {
         Machine.WireMethod.Attach,
         Machine.WireMethod.RunCode,
         Machine.WireMethod.CancelCode,
+        Machine.WireMethod.PeekCode,
         Machine.WireMethod.Exec,
         Machine.WireMethod.CallTool,
         Machine.WireMethod.FsOp,

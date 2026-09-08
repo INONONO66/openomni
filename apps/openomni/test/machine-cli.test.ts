@@ -101,8 +101,8 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       `data = src.read(${JSON.stringify(join(rootA, "source"))})['data']`,
       `written = dst.write(${JSON.stringify(join(rootB, "copy"))}, data)`,
       `readback = dst.read(${JSON.stringify(join(rootB, "copy"))})['data']`,
-      `shell = dst.shell('printf out; printf err >&2; exit 7', ${JSON.stringify(rootB)})`,
-      "nested = dst.run('6 * 7')",
+      `shell = dst.bash('printf out; printf err >&2; exit 7', ${JSON.stringify(rootB)})`,
+      "nested = dst.eval('6 * 7')",
       "state = 41",
       "(ids, list(readback), written['bytesWritten'], shell['stdout'], shell['stderr'], shell['exitCode'], nested['value'])",
     ].join("\n");

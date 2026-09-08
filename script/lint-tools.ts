@@ -363,6 +363,11 @@ async function locateExportedDefinitions(
   return Array.from(located, ([definition, filePath]) => ({ definition, filePath }));
 }
 
+/** KERNEL 3.5: `tools/<name>.ts`, with the repo's kebab-case file rule applied to snake_case names. */
+function toolFileName(toolName: string): string {
+  return `${toolName.replaceAll("_", "-")}.ts`;
+}
+
 export function definitionInvariantViolations(
   definitions: readonly AnyToolDefinition[],
   located: readonly LocatedDefinition[],
@@ -391,6 +396,12 @@ export function definitionInvariantViolations(
         check: "tool-lint",
         subject: definition.name,
         message: "[tool-source-location] catalog definition has no verifiable source file",
+      });
+    } else if (!filePath.endsWith(`/${toolFileName(definition.name)}`)) {
+      violations.push({
+        check: "tool-lint",
+        subject: definition.name,
+        message: `[tool-file-name] tool must live in ${toolFileName(definition.name)} (KERNEL 3.5: file name is the tool name, kebab-case)`,
       });
     }
     if (!TOOL_CATEGORIES.includes(definition.category)) {
@@ -649,6 +660,20 @@ function selfTest(): void {
       ).some(({ check }) => check === "earned-check")
     ) {
       failures.push("earned-check did not flag an exported definition absent from the catalog");
+    }
+    const fileNameChecks = [
+      ["send_message", "apps/openomni/src/tools/send-message.ts", 0],
+      ["send_message", "apps/openomni/src/tools/send_message.ts", 1],
+      ["read", "apps/openomni/src/tools/files/read.ts", 0],
+      ["read", "apps/openomni/src/tools/files/read-file.ts", 1],
+    ] as const;
+    for (const [name, filePath, expected] of fileNameChecks) {
+      const definition = { ...exemplar, name } as AnyToolDefinition;
+      const flagged = definitionInvariantViolations(
+        [definition],
+        [{ definition, filePath }],
+      ).filter(({ message }) => message.startsWith("[tool-file-name]")).length;
+      if (flagged !== expected) failures.push(`tool-file-name misjudged ${filePath} for ${name}`);
     }
   }
 
