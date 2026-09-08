@@ -117,6 +117,7 @@ describe("machine attach handshake", () => {
                   value: id,
                   output: { stdout: "", stderr: "" },
                 }),
+                peekCode: () => undefined,
                 close: async () => undefined,
               },
             });

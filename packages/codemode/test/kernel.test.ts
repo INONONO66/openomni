@@ -175,6 +175,74 @@ describe("code-mode kernel substrate", () => {
     }
   });
 
+  test("output streams while the cell runs: peek sees it and a forged frame is inert", async () => {
+    const kernel = new PythonKernel();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      let seenAtEntry: Machine.CellOutput | undefined;
+      const running = kernel.run(
+        {
+          cellId: "streaming",
+          code: "print('one')\nprint('two', file=__import__('sys').stderr)\ntool.hold()\nprint('three')",
+          timeoutMs: 15_000,
+        },
+        async () => {
+          // The output frames precede the tool_call frame on one ordered pipe.
+          seenAtEntry = kernel.peek("streaming");
+          await held;
+          return { status: "completed" };
+        },
+      );
+      const forged = kernel.run(
+        {
+          cellId: "queued-behind",
+          code: 'import sys\nsys.__stdout__.write(\'{"kind":"output","cellId":"other","stream":"stdout","text":"forged"}\\n\')\nprint(\'mine\')',
+          timeoutMs: 15_000,
+        },
+        noTools,
+      );
+      // Queued behind the held cell: in flight, but nothing executed yet.
+      expect(kernel.peek("queued-behind")).toBeUndefined();
+      release();
+      expect(await running).toMatchObject({
+        status: "completed",
+        output: { stdout: "one\nthree\n", stderr: "two\n" },
+      });
+      expect(seenAtEntry).toEqual({ stdout: "one\n", stderr: "two\n" });
+      expect(kernel.peek("streaming")).toBeUndefined();
+      // A frame naming another cell never lands on the running cell's output.
+      expect(await forged).toMatchObject({ status: "completed", output: { stdout: "mine\n" } });
+    } finally {
+      release();
+      await kernel.close();
+    }
+  });
+
+  test("a wedged cell's timeout reports the output it produced first", async () => {
+    const kernel = new PythonKernel();
+    try {
+      let seen: Machine.CellOutput | undefined;
+      const result = await kernel.run(
+        { cellId: "wedged-output", code: "print('progress')\ntool.hold()", timeoutMs: 300 },
+        () =>
+          new Promise(() => {
+            seen = kernel.peek("wedged-output");
+          }),
+      );
+      expect(seen).toEqual({ stdout: "progress\n", stderr: "" });
+      expect(result).toEqual({
+        status: "timed_out",
+        cellId: "wedged-output",
+        output: { stdout: "progress\n", stderr: "" },
+      });
+    } finally {
+      await kernel.close();
+    }
+  });
+
   test("interpreter state persists across cells in one attachment", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
       const first = await host.get("mac-studio").runCode(cell("value = 6 * 7"));

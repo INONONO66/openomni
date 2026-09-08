@@ -13,6 +13,8 @@ export interface CodeRunner {
     call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>,
     signal: AbortSignal,
   ): Promise<Machine.CellResult>;
+  /** Output the named cell has produced so far; undefined when it is not executing. */
+  peekCode(cellId: string): Machine.CellOutput | undefined;
   close(): Promise<void>;
 }
 
@@ -163,6 +165,15 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
           const cell = cells.get(request.cellId);
           cell?.abort();
           respond({ cancelled: cell !== undefined } satisfies Machine.CancelResult);
+          return;
+        }
+        if (method === Machine.WireMethod.PeekCode) {
+          const request = Machine.PeekCode.parse(params);
+          // A queued cell is in flight without output yet; a settled one is not running.
+          respond({
+            running: cells.has(request.cellId),
+            output: options.runner?.peekCode(request.cellId) ?? { stdout: "", stderr: "" },
+          } satisfies Machine.PeekResult);
           return;
         }
         if (method !== Machine.WireMethod.RunCode)

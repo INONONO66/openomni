@@ -212,7 +212,7 @@
   },
   {
     "name": "eval",
-    "description": "Run Python in this session's persistent cell: state survives between calls; machine handles, parallel, completion, and tool.<name>() proxies are in scope. operation.op=run.",
+    "description": "Run Python in this session's persistent cell: state survives between calls; machine handles, parallel, completion, and tool.<name>() proxies are in scope. operation.op=run starts code and waits up to timeout seconds; peek reads a running cell's output so far; stop interrupts it. stop and the 10 minute ceiling discard the interpreter's state.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -231,13 +231,45 @@
                 },
                 "timeout": {
                   "default": 15,
-                  "description": "Seconds before the cell is stopped.",
+                  "description": "Seconds to wait for the cell. A cell still running is answered as running with its cell_id and keeps going in the background.",
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
                 }
               },
               "required": ["op", "code"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "peek"
+                },
+                "cell_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The cell_id a run answered with while still running."
+                }
+              },
+              "required": ["op", "cell_id"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "stop"
+                },
+                "cell_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The cell_id a run answered with while still running."
+                }
+              },
+              "required": ["op", "cell_id"],
               "additionalProperties": false
             }
           ]
@@ -768,7 +800,7 @@
   },
   {
     "name": "completion",
-    "description": "Ask a sub-model one one-shot, stateless question and return its text.",
+    "description": "Ask a sub-model one one-shot, stateless question and return its text. Options: model (an id on the configured provider), system, schema (a JSON Schema the answer must satisfy; the validated JSON text is returned).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -776,10 +808,63 @@
           "type": "string",
           "minLength": 1,
           "description": "One complete instruction for a stateless sub-model call."
+        },
+        "model": {
+          "description": "A model id on the configured provider; the default model when omitted.",
+          "type": "string",
+          "minLength": 1
+        },
+        "system": {
+          "description": "System text for the sub-model call.",
+          "type": "string",
+          "minLength": 1
+        },
+        "schema": {
+          "description": "A JSON Schema the answer must satisfy; the validated JSON text is returned.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema0"
+          }
         }
       },
       "required": ["prompt"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "definitions": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/__schema0"
+              }
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/definitions/__schema0"
+              }
+            }
+          ]
+        }
+      }
     },
     "safe": false
   }

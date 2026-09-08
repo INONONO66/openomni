@@ -19,7 +19,8 @@ import { admittedOperation } from "./helpers/admitted-operation";
 
 function createCompletionPort(...args: Parameters<typeof completionPort>) {
   const port = completionPort(...args);
-  return (prompt: string) => admittedOperation(() => port(prompt));
+  return (call: string | Parameters<typeof port>[0]) =>
+    admittedOperation(() => port(typeof call === "string" ? { prompt: call } : call));
 }
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -28,7 +29,7 @@ describe("the completion tool", () => {
   it("returns the port's answer", async () => {
     const run = modelToolOutput(
       COMPLETION_TOOL_NAME,
-      { llm: async (prompt) => `answered: ${prompt}` },
+      { llm: async (call) => `answered: ${call.prompt}` },
       RESIDENT,
     );
     expect(await run({ prompt: "summarize this" })).toBe("answered: summarize this");
@@ -55,6 +56,51 @@ describe("the completion tool", () => {
       errorKind: "invalid_input",
     });
     expect(invoked).toBe(0);
+  });
+
+  it("forwards system and model to the port and validates a schema-shaped answer", async () => {
+    const seen: Array<Parameters<NonNullable<Parameters<typeof createTools>[0]["llm"]>>[0]> = [];
+    const answers = ['```json\n{"n": 7}\n```', '{"n": "seven"}', "not json at all"];
+    const run = dispatchModelTool(
+      COMPLETION_TOOL_NAME,
+      {
+        llm: async (call) => {
+          seen.push(call);
+          return answers[seen.length - 1] ?? "";
+        },
+      },
+      RESIDENT,
+    );
+    const schema = {
+      type: "object",
+      properties: { n: { type: "integer" } },
+      required: ["n"],
+      additionalProperties: false,
+    };
+    // The fenced answer is unwrapped, validated, and returned as canonical JSON text.
+    expect(await run({ prompt: "count", system: "terse", model: "mini", schema })).toMatchObject({
+      output: '{"n":7}',
+    });
+    expect(seen[0]).toMatchObject({ prompt: "count", model: "mini" });
+    expect(seen[0]?.system?.startsWith("terse\n\n")).toBe(true);
+    expect(seen[0]?.system).toContain(JSON.stringify(schema));
+    for (const message of ["does not satisfy the schema", "is not JSON"]) {
+      expect(await run({ prompt: "count", schema })).toMatchObject({
+        isError: true,
+        errorKind: "precondition_failed",
+        output: expect.stringContaining(message),
+      });
+    }
+    expect(seen).toHaveLength(3);
+    // Without a schema nothing is added to the system text and nothing is parsed.
+    expect(await run({ prompt: "free" })).toMatchObject({ output: "" });
+    expect(seen[3]).toEqual({ prompt: "free" });
+    // Options are typed: an unsupported option is invalid input, never forwarded.
+    expect(await run({ prompt: "x", temperature: 1 })).toMatchObject({
+      isError: true,
+      errorKind: "invalid_input",
+    });
+    expect(seen).toHaveLength(4);
   });
 
   it(`serves ${MAX_COMPLETION_CALLS} calls, then classifies refusal without invoking the port`, async () => {
@@ -184,6 +230,30 @@ describe("the completion port", () => {
     expect(seen?.trace.sessionId).toBe("completion");
     const parts = seen?.messages[0]?.parts ?? [];
     expect(parts[0]).toMatchObject({ type: "text", text: "summarize" });
+  });
+
+  it("carries a system text and a model id override on the configured provider", async () => {
+    let seen: RunInput | undefined;
+    const port = createCompletionPort(MODEL, {
+      resolveModel,
+      run: async (input, sink) => {
+        seen = input;
+        sink.onMessage(assistantMessage(input, { id: "sub-reply", text: "shaped" }));
+        return { type: "stop" };
+      },
+    });
+
+    expect(await port({ prompt: "shape it", system: "answer as JSON", model: "port-mini" })).toBe(
+      "shaped",
+    );
+    expect(seen?.system).toBe("answer as JSON");
+    expect(seen?.model).toMatchObject({ id: "port-mini", providerID: "fake" });
+    // The override never changes whose credential is used.
+    expect(seen?.auth).toEqual({ type: "api", key: "port-key" });
+    expect(seen?.messages[0]?.info).toMatchObject({
+      role: "user",
+      model: { providerID: "fake", modelID: "port-mini" },
+    });
   });
 
   it("ignores non-assistant messages when reading the answer", async () => {

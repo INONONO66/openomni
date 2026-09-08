@@ -20,8 +20,7 @@ export function composeCodemode(machines: MachineHost) {
             effect: {
               category:
                 call.name === "codemode.read" ||
-                call.name === "codemode.list" ||
-                call.name === "codemode.stat" ||
+                call.name === "codemode.ls" ||
                 call.name === "codemode.listMachines" ||
                 call.name === "codemode.findMachine"
                   ? "query"

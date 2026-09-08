@@ -119,8 +119,38 @@ def parallel(thunks, max_workers=8):
         return [_future.result() for _future in _futures]
 
 
-def completion(prompt):
-    return tool.completion(prompt=prompt)
+class _Output(io.TextIOBase):
+    """A cell stream: buffered for the result frame, streamed so a peek sees it live."""
+
+    def __init__(self, cell_id, stream):
+        self._cell_id = cell_id
+        self._stream = stream
+        self._buffer = io.StringIO()
+
+    def writable(self):
+        return True
+
+    def write(self, text):
+        if text:
+            self._buffer.write(text)
+            _emit({"kind": "output", "cellId": self._cell_id, "stream": self._stream, "text": text})
+        return len(text)
+
+    def getvalue(self):
+        return self._buffer.getvalue()
+
+
+def completion(prompt, model=None, system=None, schema=None):
+    """One stateless sub-model call; with a JSON Schema the answer is decoded JSON."""
+    _arguments = {"prompt": prompt}
+    if model is not None:
+        _arguments["model"] = model
+    if system is not None:
+        _arguments["system"] = system
+    if schema is not None:
+        _arguments["schema"] = schema
+    _answer = tool.completion(**_arguments)
+    return json.loads(_answer) if schema is not None else _answer
 
 
 class _Machine:
@@ -135,21 +165,18 @@ class _Machine:
     def write(self, path, data):
         return tool['codemode.write'](machineId=self.machine_id, path=path, data=base64.b64encode(data).decode('ascii'))
 
-    def list(self, path):
-        return tool['codemode.list'](machineId=self.machine_id, path=path)
+    def ls(self, path):
+        return tool['codemode.ls'](machineId=self.machine_id, path=path)
 
-    def stat(self, path):
-        return tool['codemode.stat'](machineId=self.machine_id, path=path)
-
-    def shell(self, cmd, cwd):
-        value = tool['codemode.shell'](machineId=self.machine_id, cmd=cmd, cwd=cwd)
+    def bash(self, command, cwd):
+        value = tool['codemode.bash'](machineId=self.machine_id, cmd=command, cwd=cwd)
         if value['status'] == 'completed':
             value['stdout'] = base64.b64decode(value['stdout'])
             value['stderr'] = base64.b64decode(value['stderr'])
         return value
 
-    def run(self, code):
-        return tool['codemode.run'](machineId=self.machine_id, code=code)
+    def eval(self, code):
+        return tool['codemode.eval'](machineId=self.machine_id, code=code)
 
 
 class _Codemode:
@@ -181,8 +208,8 @@ while True:
     if _request is None:
         break
     _cell_context.cell_id = _request["cellId"]
-    _stdout = io.StringIO()
-    _stderr = io.StringIO()
+    _stdout = _Output(_request["cellId"], "stdout")
+    _stderr = _Output(_request["cellId"], "stderr")
     _filename = f"<cell {_request['cellId']}>"
     try:
         with contextlib.redirect_stdout(_stdout), contextlib.redirect_stderr(_stderr):
@@ -225,10 +252,21 @@ const ToolCallFrame = Machine.ToolCall.extend({
   callId: z.string().min(1),
 });
 type ToolCallFrame = z.infer<typeof ToolCallFrame>;
+const OutputFrame = z
+  .object({
+    kind: z.literal("output"),
+    cellId: z.string().min(1),
+    stream: z.enum(["stdout", "stderr"]),
+    text: z.string(),
+  })
+  .strict();
 const Frame = z.discriminatedUnion("kind", [
   ToolCallFrame,
+  OutputFrame,
   z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict(),
 ]);
+
+const NO_OUTPUT: Machine.CellOutput = { stdout: "", stderr: "" };
 
 /** Answers a call made from inside a cell. */
 type CellToolCaller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
@@ -240,6 +278,8 @@ type PendingCell = {
   readonly cellId: string;
   readonly callTool: CellToolCaller;
   readonly inFlight: Map<string, Promise<void>>;
+  /** Streamed as the cell writes, so a peek or an interruption can report it. */
+  readonly output: { stdout: string; stderr: string };
   /**
    * The interpreter this cell was written to. A replaced interpreter dies
    * asynchronously, so its exit must never settle a cell already handed to
@@ -265,7 +305,7 @@ export class PythonKernel {
     const cancellation =
       signal === undefined ? this.lifetime.signal : AbortSignal.any([signal, this.lifetime.signal]);
     if (cancellation.aborted)
-      return Promise.resolve({ status: "cancelled", cellId: request.cellId });
+      return Promise.resolve({ status: "cancelled", cellId: request.cellId, output: NO_OUTPUT });
     const deadline = Date.now() + request.timeoutMs;
     let queueExpired = false;
     let resolveResult!: (result: Machine.CellResult) => void;
@@ -276,21 +316,27 @@ export class PythonKernel {
     });
     const queueTimer = setTimeout(() => {
       queueExpired = true;
-      resolveResult({ status: "timed_out", cellId: request.cellId });
+      resolveResult({ status: "timed_out", cellId: request.cellId, output: NO_OUTPUT });
     }, request.timeoutMs);
 
     const abort = () => {
       queueExpired = true;
       clearTimeout(queueTimer);
       const pending = this.pending;
+      // An interrupted cell keeps what it printed; a cell still queued printed nothing.
+      const interrupted: Machine.CellResult = {
+        status: "cancelled",
+        cellId: request.cellId,
+        output: pending?.cellId === request.cellId ? { ...pending.output } : NO_OUTPUT,
+      };
       if (pending?.cellId === request.cellId) {
         clearTimeout(pending.timer);
         this.pending = undefined;
         pending.inFlight.clear();
         this.discard(pending.process);
-        pending.resolve({ status: "cancelled", cellId: request.cellId });
+        pending.resolve(interrupted);
       }
-      resolveResult({ status: "cancelled", cellId: request.cellId });
+      resolveResult(interrupted);
     };
     cancellation.addEventListener("abort", abort, { once: true });
     const operation = this.tail.then(() => {
@@ -299,7 +345,7 @@ export class PythonKernel {
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
         queueExpired = true;
-        resolveResult({ status: "timed_out", cellId: request.cellId });
+        resolveResult({ status: "timed_out", cellId: request.cellId, output: NO_OUTPUT });
         return;
       }
       return this.execute(request, callTool, remainingMs).then(resolveResult, rejectResult);
@@ -309,6 +355,12 @@ export class PythonKernel {
       () => undefined,
     );
     return result.finally(() => cancellation.removeEventListener("abort", abort));
+  }
+
+  /** The output the named cell has produced so far; undefined unless it is the one executing. */
+  peek(cellId: string): Machine.CellOutput | undefined {
+    const pending = this.pending;
+    return pending?.cellId === cellId ? { ...pending.output } : undefined;
   }
 
   async close(): Promise<void> {
@@ -333,7 +385,11 @@ export class PythonKernel {
         // and replace the interpreter instead: state is lost after a timeout,
         // but the next queued cell is guaranteed a fresh, unwedgeable process.
         this.discard(process);
-        resolve({ status: "timed_out", cellId: request.cellId });
+        resolve({
+          status: "timed_out",
+          cellId: request.cellId,
+          output: pending === undefined ? NO_OUTPUT : { ...pending.output },
+        });
       }, timeoutMs);
       this.pending = {
         resolve,
@@ -343,6 +399,7 @@ export class PythonKernel {
         cellId: request.cellId,
         callTool,
         inFlight: new Map(),
+        output: { stdout: "", stderr: "" },
       };
       process.stdin.write(`${JSON.stringify(request)}\n`);
     });
@@ -375,6 +432,12 @@ export class PythonKernel {
       // that hangs waiting on a tool still times out honestly.
       if (frame.kind === "tool_call") {
         this.answerToolCall(process, pending, frame);
+        return;
+      }
+      // Output is attributed to the cell that owns the redirect; a frame naming
+      // another cell came from a forged raw-stdout write and is inert.
+      if (frame.kind === "output") {
+        if (frame.cellId === pending.cellId) pending.output[frame.stream] += frame.text;
         return;
       }
       clearTimeout(pending.timer);

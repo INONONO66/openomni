@@ -49,6 +49,8 @@ test("a resident tool call is executed and observed through the durable executor
               output: { stdout: "ok", stderr: "" },
             };
           },
+          peek: () => Promise.reject(new Error("not a background cell")),
+          stop: () => Promise.reject(new Error("not a background cell")),
         },
         bindTools: () => undefined,
       },

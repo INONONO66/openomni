@@ -5,13 +5,29 @@ import { PythonKernel } from "./kernel";
 
 type Caller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
 export interface RunOptions {
+  /** Hard deadline: at expiry the cell is `timed_out` and its interpreter replaced. */
   readonly timeoutMs?: number;
+  /**
+   * How long `run` waits for settlement before answering `running` and leaving
+   * the cell in the background for `peek`/`stop`. Absent waits for settlement.
+   */
+  readonly waitMs?: number;
   readonly signal?: AbortSignal;
 }
+/** A cell left running by `run`; kept until its settled state has been read once. */
+interface BackgroundCell {
+  readonly tenant: string;
+  readonly machineId: string;
+  readonly controller: AbortController;
+  readonly execution: Promise<Machine.CellResult>;
+  done: boolean;
+}
+/** Settled-but-unread background results retained per facade before the oldest is dropped. */
+const RETAINED_SETTLED_CELLS = 64;
 interface Options {
   /** Absent on a daemon runner: its calls travel back through the injected wire port. */
   readonly machines?: Pick<MachineHost, "list" | "get">;
-  readonly completion?: (prompt: string) => Promise<string>;
+  readonly completion?: (request: Machine.CompletionRequest) => Promise<string>;
   /** Captured synchronously at cell entry, preserving the consumer's executor context. */
   readonly tools?: (tenant: string) => Caller;
   readonly boundary?: (
@@ -21,7 +37,7 @@ interface Options {
     body: () => Promise<Machine.ToolCallResult>,
   ) => Promise<Machine.ToolCallResult>;
 }
-const CodemodeError = NamedError.create(
+export const CodemodeError = NamedError.create(
   "CodemodeError",
   z.object({
     reason: z.enum([
@@ -56,6 +72,7 @@ export function createCodemode(options: Options = {}) {
   >();
   const lifetime = new AbortController();
   const running = new Set<Promise<Machine.CellResult>>();
+  const background = new Map<string, BackgroundCell>();
   let closed = false;
   function requireOpen(): void {
     if (closed) throw new CodemodeError({ reason: "closed", message: "codemode is closed" });
@@ -89,13 +106,13 @@ export function createCodemode(options: Options = {}) {
   }
   function makeHandle(id: string) {
     const target = (): MachineHandle => machines().get(id);
+    // Handle methods are named exactly like the tools they mirror (KERNEL §3.5).
     return {
       read: (path: string) => target().fs.read(path),
       write: (path: string, data: Uint8Array) => target().fs.write(path, data),
-      list: (path: string) => target().fs.list(path),
-      stat: (path: string) => target().fs.stat(path),
-      shell: (cmd: string, cwd: string) => target().exec(cmd, cwd),
-      run: (cell: Machine.CellRequest, signal?: AbortSignal) => target().runCode(cell, signal),
+      ls: (path: string) => target().fs.list(path),
+      bash: (command: string, cwd: string) => target().exec(command, cwd),
+      eval: (cell: Machine.CellRequest, signal?: AbortSignal) => target().runCode(cell, signal),
     };
   }
   function getMachine(id: string) {
@@ -148,19 +165,13 @@ export function createCodemode(options: Options = {}) {
         ),
       };
     }
-    if (call.name === "codemode.list" || call.name === "codemode.stat") {
+    if (call.name === "codemode.ls") {
       const input = PathInput.parse(call.arguments);
-      const handle = getMachine(input.machineId);
-      return {
-        status: "completed",
-        value: await (call.name === "codemode.list"
-          ? handle.list(input.path)
-          : handle.stat(input.path)),
-      };
+      return { status: "completed", value: await getMachine(input.machineId).ls(input.path) };
     }
-    if (call.name === "codemode.shell") {
+    if (call.name === "codemode.bash") {
       const input = ShellInput.parse(call.arguments);
-      const value = await getMachine(input.machineId).shell(input.cmd, input.cwd);
+      const value = await getMachine(input.machineId).bash(input.cmd, input.cwd);
       return {
         status: "completed",
         value:
@@ -173,7 +184,7 @@ export function createCodemode(options: Options = {}) {
             : value,
       };
     }
-    if (call.name === "codemode.run") {
+    if (call.name === "codemode.eval") {
       const input = RunInput.parse(call.arguments);
       return {
         status: "completed",
@@ -188,10 +199,44 @@ export function createCodemode(options: Options = {}) {
       };
     }
     if (call.name === "completion" && options.completion !== undefined) {
-      const input = z.object({ prompt: z.string().min(1) }).strict().parse(call.arguments);
-      return { status: "completed", value: await options.completion(input.prompt) };
+      const input = Machine.CompletionRequest.parse(call.arguments);
+      return { status: "completed", value: await options.completion(input) };
     }
     return binding.caller(call);
+  }
+
+  function tenantCell(cellId: string, tenant: string): BackgroundCell {
+    const entry = background.get(cellId);
+    // Another tenant's cell is as unknown as a settled one: ids never leak across sessions.
+    if (entry === undefined || entry.tenant !== tenant)
+      throw new CodemodeError({ reason: "unknown_cell_id", message: "no such cell" });
+    return entry;
+  }
+  /** Hand the settled state over exactly once; a rejection surfaces the same way. */
+  function settle(cellId: string, entry: BackgroundCell): Promise<Machine.CellResult> {
+    background.delete(cellId);
+    return entry.execution;
+  }
+  function retainSettled(): void {
+    const settled = [...background].filter(([, entry]) => entry.done);
+    for (const [cellId] of settled.slice(0, Math.max(0, settled.length - RETAINED_SETTLED_CELLS)))
+      background.delete(cellId);
+  }
+  async function peek(cellId: string, tenant: string): Promise<Machine.CellState> {
+    requireOpen();
+    const entry = tenantCell(cellId, tenant);
+    if (entry.done) return settle(cellId, entry);
+    const view = await machines().get(entry.machineId).peekCode(cellId);
+    if (view.running) return { status: "running", cellId, output: view.output };
+    // The daemon has settled it; the result is in transit.
+    return settle(cellId, entry);
+  }
+  async function stop(cellId: string, tenant: string): Promise<Machine.CellResult> {
+    requireOpen();
+    const entry = tenantCell(cellId, tenant);
+    // Aborting a settled cell is a no-op on the wire; the code never runs again.
+    entry.controller.abort();
+    return settle(cellId, entry);
   }
 
   async function runOn(
@@ -202,21 +247,34 @@ export function createCodemode(options: Options = {}) {
     runOptions: RunOptions,
     boundary = options.boundary?.(tenant),
   ): Promise<Machine.CellResult> {
+    return launch(id, code, tenant, caller, runOptions, boundary).execution;
+  }
+  function launch(
+    id: string,
+    code: string,
+    tenant: string,
+    caller: Caller,
+    runOptions: RunOptions,
+    boundary = options.boundary?.(tenant),
+  ): { cellId: string; controller: AbortController; execution: Promise<Machine.CellResult> } {
     const timeoutMs = runOptions.timeoutMs ?? 15_000;
     const cellId = crypto.randomUUID();
-    const signal =
-      runOptions.signal === undefined
-        ? lifetime.signal
-        : AbortSignal.any([lifetime.signal, runOptions.signal]);
+    const controller = new AbortController();
+    const signal = AbortSignal.any([
+      lifetime.signal,
+      controller.signal,
+      ...(runOptions.signal === undefined ? [] : [runOptions.signal]),
+    ]);
+    const handle = machines().get(id);
     live.set(cellId, { caller, tenant, timeoutMs, signal, boundary });
-    const execution = machines().get(id).runCode({ cellId, code, tenant, timeoutMs }, signal);
+    const execution = handle.runCode({ cellId, code, tenant, timeoutMs }, signal);
     running.add(execution);
-    try {
-      return await execution;
-    } finally {
+    const cleanup = () => {
       live.delete(cellId);
       running.delete(execution);
-    }
+    };
+    execution.then(cleanup, cleanup);
+    return { cellId, controller, execution };
   }
   const runner: CodeRunner = {
     async runCode(request, call, signal) {
@@ -228,6 +286,13 @@ export function createCodemode(options: Options = {}) {
         kernels.set(tenant, kernel);
       }
       return kernel.run(request, call, signal);
+    },
+    peekCode(cellId) {
+      for (const kernel of kernels.values()) {
+        const output = kernel.peek(cellId);
+        if (output !== undefined) return output;
+      }
+      return undefined;
     },
     async close() {
       closed = true;
@@ -246,17 +311,59 @@ export function createCodemode(options: Options = {}) {
     runner,
     close: runner.close,
     cell: {
-      run(code: string, tenant: string, runOptions: RunOptions = {}): Promise<Machine.CellResult> {
+      async run(
+        code: string,
+        tenant: string,
+        runOptions: RunOptions = {},
+      ): Promise<Machine.CellState> {
         const target = machines()
           .list()
           .find((entry) => entry.capabilities.includes(Machine.WellKnownCapability.pythonKernel));
-        if (target === undefined)
-          return Promise.resolve({ status: "refused", reason: "kernel_not_available" });
+        if (target === undefined) return { status: "refused", reason: "kernel_not_available" };
         const caller =
           options.tools?.(tenant) ??
           (async () => ({ status: "failed" as const, error: "this cell exposes no tools" }));
-        return runOn(target.machineId, code, tenant, caller, runOptions);
+        const started = launch(target.machineId, code, tenant, caller, runOptions);
+        if (runOptions.waitMs === undefined) return started.execution;
+        const entry: BackgroundCell = {
+          tenant,
+          machineId: target.machineId,
+          controller: started.controller,
+          execution: started.execution,
+          done: false,
+        };
+        const markDone = () => {
+          entry.done = true;
+          retainSettled();
+        };
+        started.execution.then(markDone, markDone);
+        background.set(started.cellId, entry);
+        const settled = await within(started.execution, runOptions.waitMs).catch((error: Error) => {
+          background.delete(started.cellId);
+          throw error;
+        });
+        if (settled !== undefined) return settle(started.cellId, entry);
+        return peek(started.cellId, tenant);
       },
+      peek,
+      stop,
     },
   };
+}
+
+/** The promise's value once it settles within `ms`, else undefined; a rejection propagates. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: Error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }

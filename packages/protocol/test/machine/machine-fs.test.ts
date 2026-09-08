@@ -460,11 +460,22 @@ describe("write, exec and cancellation wire contracts", () => {
         truncated: false,
       }),
     ).toMatchObject({ stdout: "AP8=", signal: "SIGTERM" });
-    expect(Machine.CellResult.parse({ status: "cancelled", cellId: "cancel" })).toEqual({
-      status: "cancelled",
+    const interrupted = {
+      status: "cancelled" as const,
       cellId: "cancel",
+      output: { stdout: "so far", stderr: "" },
+    };
+    expect(Machine.CellResult.parse(interrupted)).toEqual(interrupted);
+    // An interrupted cell keeps the output it produced; the bare terminal is retired.
+    expect(Machine.CellResult.safeParse({ status: "cancelled", cellId: "cancel" }).success).toBe(
+      false,
+    );
+    expect(Machine.CellState.parse({ ...interrupted, status: "running" })).toMatchObject({
+      status: "running",
     });
+    expect(Machine.CellResult.safeParse({ ...interrupted, status: "running" }).success).toBe(false);
     expect(Machine.CancelCode.safeParse({ cellId: "" }).success).toBe(false);
+    expect(Machine.PeekCode.safeParse({ cellId: "" }).success).toBe(false);
   });
 });
 

@@ -103,7 +103,7 @@ describe("operator transport reaches every model caller", () => {
       },
     );
 
-    await admittedOperation(() => port("summarize"));
+    await admittedOperation(() => port({ prompt: "summarize" }));
 
     expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
   });

@@ -30,6 +30,8 @@ export interface MachineHandle {
     cwd: string,
   ): Promise<ExecValue | Exclude<Machine.ExecResult, { status: "completed" }>>;
   runCode(cell: Machine.CellRequest, signal?: AbortSignal): Promise<Machine.CellResult>;
+  /** The output a cell started by `runCode` has produced so far, and whether it is still running. */
+  peekCode(cellId: string): Promise<Machine.PeekResult>;
 }
 
 export interface MachineInfo extends Machine.Enrollment {
@@ -235,7 +237,12 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       },
       async runCode(cell, signal) {
         const request = Machine.CellRequest.parse(cell);
-        if (signal?.aborted) return { status: "cancelled", cellId: request.cellId };
+        if (signal?.aborted)
+          return {
+            status: "cancelled",
+            cellId: request.cellId,
+            output: { stdout: "", stderr: "" },
+          };
         const peer = connection(id);
         const cells = inFlight.get(peer.id) ?? new Set<string>();
         if (cells.has(request.cellId))
@@ -274,6 +281,16 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
         }
         if (cancellationError !== undefined) throw cancellationError;
         return result;
+      },
+      async peekCode(cellId) {
+        const request = Machine.PeekCode.parse({ cellId });
+        const peer = connection(id);
+        if (inFlight.get(peer.id)?.has(request.cellId) !== true)
+          return { running: false, output: { stdout: "", stderr: "" } };
+        server.useConnection(peer.id);
+        return Machine.PeekResult.parse(
+          await typedCall(server, Machine.WireMethod.PeekCode, request),
+        );
       },
     };
     handles.set(id, handle);

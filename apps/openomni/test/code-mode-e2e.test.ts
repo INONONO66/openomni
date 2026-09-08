@@ -107,8 +107,8 @@ test("app root runs machine read write shell and code through one eval cell", as
                 `m = codemode.getMachine('${MACHINE_ID}')`,
                 `m.write(${JSON.stringify(join(root, "value"))}, bytes([0, 255, 128, 65]))`,
                 `readback = list(m.read(${JSON.stringify(join(root, "value"))})['data'])`,
-                `shell = m.shell('printf shell; exit 7', ${JSON.stringify(root)})`,
-                `code = m.run('6 * 7')`,
+                `shell = m.bash('printf shell; exit 7', ${JSON.stringify(root)})`,
+                `code = m.eval('6 * 7')`,
                 "(readback, shell['stdout'], shell['exitCode'], code['value'])",
               ].join("\n"),
               timeout: 15,
@@ -402,6 +402,14 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
 
 const CELL_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+
 /**
  * A real host+daemon pair whose cells go through the production eval
  * executor, with the catalog's ports swapped for fakes — the same seam
@@ -433,6 +441,7 @@ async function startCellHarness(ports: CatalogPorts) {
   const execute = modelToolOutput("eval", { ...ports, cells }, CELL_ORIGIN);
   return {
     socketPath,
+    execute,
     run: (code: string, timeout = 15) => execute({ operation: { op: "run", code, timeout } }),
     runWith: (origin: CatalogOrigin, code: string) =>
       modelToolOutput(
@@ -461,16 +470,78 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(otherSession).toContain("NameError");
 }, 40_000);
 
-test("a cell over its deadline reports the timeout it was given", async () => {
-  const { run } = await startCellHarness({ llm: async () => "ok" });
-  const output = await run("import time\nwhile True: time.sleep(0.05)", 1);
-  expect(output).toBe("the cell did not finish within 1s");
+/**
+ * The wait window is the behavior under test here: a held cell cannot settle,
+ * so the one-second `timeout` is exactly what makes run answer `running`.
+ */
+test("eval run answers running after its wait; peek shows the output so far; stop interrupts once", async () => {
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  let calls = 0;
+  const { run, execute } = await startCellHarness({
+    llm: async () => {
+      calls += 1;
+      entered.resolve();
+      await release.promise;
+      return "late";
+    },
+  });
+  const started = await run("print('started')\ncompletion('hold')\nprint('never')", 1);
+  const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
+    started,
+  )?.[1];
+  if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
+  await entered.promise;
+  expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toBe(
+    `cell ${cellId} is still running; peek or stop it by cell_id\nstarted\n`,
+  );
+  expect(await execute({ operation: { op: "stop", cell_id: cellId } })).toBe(
+    "the cell was stopped\nstarted\n",
+  );
+  // The settled state was handed over by stop; the id is spent and the code never re-runs.
+  expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toContain(
+    "no such cell_id",
+  );
+  release.resolve();
+  expect(await run("6 * 7")).toBe("42");
+  expect(calls).toBe(1);
+}, 40_000);
+
+test("eval peek and stop refuse another session's cell id and a forged one", async () => {
+  const { execute, runWith } = await startCellHarness({ llm: async () => "ok" });
+  expect(await execute({ operation: { op: "stop", cell_id: "not-a-cell" } })).toContain(
+    "no such cell_id",
+  );
+  expect(await runWith({ ...CELL_ORIGIN, sessionId: "other-session" }, "1 + 1")).toBe("2");
+}, 40_000);
+
+test("completion(prompt, model=, system=, schema=) reaches the port and decodes the validated JSON", async () => {
+  const seen: Array<{ prompt: string; system?: string; model?: string }> = [];
+  const { run } = await startCellHarness({
+    llm: async (call) => {
+      seen.push(call);
+      return call.system?.includes("JSON Schema") === true
+        ? '```json\n{"answer": 42}\n```'
+        : `plain:${call.prompt}`;
+    },
+  });
+  const output = await run(
+    [
+      "plain = completion('p', model='mini', system='be terse')",
+      "shaped = completion('q', schema={'type': 'object', 'properties': {'answer': {'type': 'integer'}}, 'required': ['answer'], 'additionalProperties': False})",
+      "(plain, shaped, shaped['answer'] + 1)",
+    ].join("\n"),
+  );
+  expect(output).toBe("('plain:p', {'answer': 42}, 43)");
+  expect(seen[0]).toEqual({ prompt: "p", system: "be terse", model: "mini" });
+  expect(seen[1]?.prompt).toBe("q");
+  expect(seen[1]?.system).toContain('"required":["answer"]');
 }, 40_000);
 
 test("a cell rejects legacy batched completion input and serves one prompt", async () => {
   const prompts: string[] = [];
   const { run } = await startCellHarness({
-    llm: async (prompt) => {
+    llm: async ({ prompt }) => {
       prompts.push(prompt);
       return `answered: ${prompt}`;
     },
@@ -524,7 +595,7 @@ test("parallel() runs independent tool calls concurrently and returns both resul
     releaseBoth = resolve;
   });
   const { run } = await startCellHarness({
-    llm: async (prompt) => {
+    llm: async (call) => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       if (inFlight === 2) releaseBoth?.();
@@ -542,7 +613,7 @@ test("parallel() runs independent tool calls concurrently and returns both resul
         clearTimeout(timer);
       }
       inFlight -= 1;
-      return `answered(${prompt})`;
+      return `answered(${call.prompt})`;
     },
   });
 
