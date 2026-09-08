@@ -47,29 +47,21 @@ describe("the shortcut reaches the field from anywhere", () => {
   });
 });
 
-describe("Esc has two meanings, decided by whether there is anything to undo", () => {
-  test("Given text in the field, When Esc is pressed, Then the query clears and the caret stays", () => {
+describe("Esc leaves", () => {
+  test("Given text in the field, When Esc is pressed, Then the query clears and the field closes", () => {
     const transition = run(typing("back"), { kind: "escape" });
 
     expect(transition.state).toEqual(INITIAL);
-    expect(transition.effects).toEqual([{ kind: "focusField" }]);
+    expect(transition.effects).toEqual([{ kind: "close" }]);
   });
 
-  test("Given an empty field, When Esc is pressed, Then focus returns to the selected row", () => {
-    // Leaving must land somewhere the operator is working. Blurring to nowhere
-    // strands the keyboard with no position at all.
+  test("Given an empty field, When Esc is pressed, Then the field closes the same way", () => {
+    // Leaving must land somewhere the operator is working; `close` hands focus
+    // back to the selected row rather than blurring to nowhere.
     const transition = run(INITIAL, { kind: "escape" });
 
     expect(transition.state).toEqual(INITIAL);
-    expect(transition.effects).toEqual([{ kind: "focusSelectedRow" }]);
-  });
-
-  test("Given the two Esc cases, When compared, Then they do not share an effect", () => {
-    // The whole point of the branch: one keeps the caret, one gives it back.
-    const withText = run(typing("x"), { kind: "escape" }).effects;
-    const empty = run(INITIAL, { kind: "escape" }).effects;
-
-    expect(withText).not.toEqual(empty);
+    expect(transition.effects).toEqual([{ kind: "close" }]);
   });
 
   test("Given an active row and text, When Esc is pressed, Then the active row clears too", () => {

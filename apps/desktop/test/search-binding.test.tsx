@@ -3,15 +3,11 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { useSearch, type Search } from "../src/renderer/shell/use-search";
+import { installGlobals } from "./helpers";
 
 test("search binding translates shortcuts, query edits and navigation into focus and selection", async () => {
   const window = new Window();
-  const descriptors = new Map(["window", "document", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  Object.defineProperties(globalThis, {
-    window: { value: window, configurable: true },
-    document: { value: window.document, configurable: true },
-    IS_REACT_ACT_ENVIRONMENT: { value: true, configurable: true },
-  });
+  const restoreGlobals = installGlobals({ window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -49,10 +45,7 @@ test("search binding translates shortcuts, query edits and navigation into focus
     expect(selections).toEqual(["one"]);
   } finally {
     await act(async () => { root.unmount(); });
-    for (const [key, descriptor] of descriptors) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
+    restoreGlobals();
     await window.happyDOM.close();
   }
 });
