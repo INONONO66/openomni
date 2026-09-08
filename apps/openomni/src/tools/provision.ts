@@ -1,16 +1,10 @@
 import { ChannelProviders } from "@openomni/channels";
 import type { ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/ledger";
-import { Storage, Vault } from "@openomni/ledger";
-import type { Actor, PolicyRow, Provisioning } from "@openomni/protocol";
+import { ActorRegistry, Storage, Vault } from "@openomni/ledger";
+import { type Actor, canonicalDigest, type PolicyRow, type Provisioning } from "@openomni/protocol";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "@openomni/agent";
-import {
-  CONTACT_MERGE_INPUT,
-  CONTACT_PROMOTE_INPUT,
-  ContactResult,
-  contactDomainRevisions,
-  mutateContact,
-} from "./core/contact-mutations";
+import { ContactOperation, ContactResult, contactDomainRevisions } from "./core/contact-mutations";
 import {
   isRegisteredProvider,
   validateProviderCredential,
@@ -373,8 +367,7 @@ function renderProvisionStatus(value: z.output<typeof ProvisionStatusOutput>): s
 const ProvisionOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_add"), args: PERSON_DECLARE_INPUT }).strict(),
   z.object({ op: z.literal("contact_remove"), args: PERSON_REMOVE_INPUT }).strict(),
-  z.object({ op: z.literal("contact_promote"), args: CONTACT_PROMOTE_INPUT }).strict(),
-  z.object({ op: z.literal("contact_merge"), args: CONTACT_MERGE_INPUT }).strict(),
+  ...ContactOperation.options,
   z.object({ op: z.literal("channel_add"), args: CHANNEL_DECLARE_INPUT }).strict(),
   z.object({ op: z.literal("channel_enable"), args: INSTANCE_INPUT }).strict(),
   z.object({ op: z.literal("channel_disable"), args: INSTANCE_INPUT }).strict(),
@@ -439,6 +432,51 @@ function statusLines(statuses: readonly ChannelRuntimeStatus[]): string {
             `${status.id} → ${status.state}${status.detail === undefined ? "" : ` (${status.detail})`}`,
         )
         .join("\n");
+}
+
+type ContactMutation = z.output<typeof ContactOperation>;
+type ContactOutcome = z.output<typeof ContactResult>;
+
+function promoteContact(operation: ContactMutation & { op: "contact_promote" }): ContactOutcome {
+  const identity = ActorRegistry.getIdentity(operation.args.actorId);
+  if (identity?.standing !== "provisional")
+    throw new ToolRefused(operation.op, "contact is missing or already registered");
+  const promoted = ActorRegistry.promote(operation.args.actorId);
+  return { op: operation.op, id: promoted.id, trustTier: promoted.trustTier };
+}
+
+function mergeContactEndpoint(
+  operation: ContactMutation & { op: "contact_merge" },
+): ContactOutcome {
+  const { endpointId, toActorId } = operation.args;
+  const endpoint = ActorRegistry.getEndpoint(endpointId);
+  const bindable =
+    endpoint !== undefined &&
+    endpoint.actorId !== toActorId &&
+    ActorRegistry.getIdentity(toActorId) !== undefined;
+  if (!bindable)
+    throw new ToolRefused(operation.op, "endpoint or target is missing, or already bound");
+  const merged = ActorRegistry.mergeEndpoint(endpointId, toActorId);
+  return { op: operation.op, id: merged.id, actorId: merged.actorId };
+}
+
+/**
+ * Body-entry domain CAS inside one transaction. Consent itself is the kernel
+ * request the `require_approval` policy row opened; this layer only refuses to
+ * spend it on rows that changed since the Owner saw them.
+ */
+function mutateContact(
+  operation: ContactMutation,
+  revisions: Readonly<Record<string, number>> | undefined,
+): ContactOutcome {
+  return Storage.get().transaction(() => {
+    const seen = revisions === undefined ? undefined : canonicalDigest({ ...revisions });
+    if (seen !== canonicalDigest(contactDomainRevisions(operation)))
+      throw new ToolRefused(operation.op, "domain revision changed");
+    return operation.op === "contact_promote"
+      ? promoteContact(operation)
+      : mergeContactEndpoint(operation);
+  });
 }
 
 function provisionExecutors(port: ProvisionPort) {

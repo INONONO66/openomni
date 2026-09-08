@@ -1,8 +1,10 @@
 import { defineTool } from "@openomni/agent";
 import { z } from "zod";
-import { fileOperation, walk, type FilePorts } from "./core/filesystem";
+import { fileOperation, walker, type FilePorts } from "./core/filesystem";
+import { parseLocus } from "./locus";
 
 export function createFindTool(ports: FilePorts) {
+  const walk = walker(ports);
   return defineTool({
     name: "find",
     description:
@@ -20,24 +22,27 @@ export function createFindTool(ports: FilePorts) {
     execute: (args, ctx) =>
       fileOperation("find", async () => {
         const glob = new Bun.Glob(args.pattern);
+        const machine = parseLocus(args.path).kind === "machine";
         const paths: string[] = [];
         let truncated = false;
-        await walk(args.path, ports, ctx.signal, async (path, endpoint) => {
-          const relative = relativeTo(args.path, path, endpoint.locus.kind === "machine");
-          if (relative !== "" && glob.match(relative)) {
-            if (args.limit !== undefined && paths.length >= args.limit) {
-              truncated = true;
-              return false;
-            }
-            paths.push(path);
-          }
-          return true;
+        await walk(args.path, ctx.signal, async (path) => {
+          const relative = relativeTo(args.path, path, machine);
+          if (relative === "" || !glob.match(relative)) return true;
+          truncated = !admit(paths, path, args.limit);
+          return !truncated;
         });
         return { paths, truncated };
       }),
     render: (_args, value) =>
       [...value.paths, ...(value.truncated ? ["[truncated: limit reached]"] : [])].join("\n"),
   });
+}
+
+/** Record a hit unless the limit is already spent; false tells the walk to stop. */
+function admit(paths: string[], path: string, limit: number | undefined): boolean {
+  if (paths.length >= (limit ?? Number.POSITIVE_INFINITY)) return false;
+  paths.push(path);
+  return true;
 }
 
 /** The walked path minus the search root, so globs read like `**\/*.ts` from the root. */

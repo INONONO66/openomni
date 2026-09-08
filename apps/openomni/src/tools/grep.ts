@@ -1,6 +1,6 @@
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { z } from "zod";
-import { fileOperation, text, walk, type FilePorts } from "./core/filesystem";
+import { fileOperation, filesystem, text, walker, type FilePorts } from "./core/filesystem";
 
 const Input = z
   .object({
@@ -13,6 +13,7 @@ const Input = z
     limit: z.number().int().positive().optional(),
   })
   .strict();
+type Args = z.output<typeof Input>;
 
 const Match = z.object({
   path: z.string(),
@@ -21,17 +22,35 @@ const Match = z.object({
   before: z.array(z.string()),
   after: z.array(z.string()),
 });
+type Match = z.output<typeof Match>;
 
-function compile(args: z.output<typeof Input>): RegExp {
+function compile(args: Args): RegExp {
   const source = args.literal ? args.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : args.pattern;
   try {
     return new RegExp(source, args.ignoreCase ? "i" : "");
-  } catch (error) {
-    throw new ToolRefused("grep", `invalid pattern: ${error instanceof Error ? error.message : String(error)}`);
+  } catch {
+    throw new ToolRefused("grep", `invalid regular expression: ${args.pattern}`);
   }
 }
 
+function nameMatches(names: Bun.Glob | undefined, path: string): boolean {
+  return names === undefined || names.match(path.slice(path.lastIndexOf("/") + 1));
+}
+
+/** Append one file's matches in line order; false once the limit is spent (the walk stops). */
+function collect(matches: Match[], path: string, lines: string[], args: Args, pattern: RegExp) {
+  const hits = [...lines.entries()].filter(([, line]) => pattern.test(line));
+  for (const [index, line] of hits) {
+    if (matches.length >= (args.limit ?? Number.POSITIVE_INFINITY)) return false;
+    const before = lines.slice(Math.max(0, index - args.context), index);
+    const after = lines.slice(index + 1, index + 1 + args.context);
+    matches.push({ path, line: index + 1, text: line, before, after });
+  }
+  return true;
+}
+
 export function createGrepTool(ports: FilePorts) {
+  const walk = walker(ports);
   return defineTool({
     name: "grep",
     description:
@@ -44,28 +63,13 @@ export function createGrepTool(ports: FilePorts) {
       fileOperation("grep", async () => {
         const pattern = compile(args);
         const names = args.glob === undefined ? undefined : new Bun.Glob(args.glob);
-        const matches: z.output<typeof Match>[] = [];
+        const matches: Match[] = [];
         let truncated = false;
-        await walk(args.path, ports, ctx.signal, async (path, endpoint, kind) => {
-          if (kind !== "file") return true;
-          if (names !== undefined && !names.match(path.slice(path.lastIndexOf("/") + 1)))
-            return true;
-          const lines = text(await endpoint.read()).split("\n");
-          for (const [index, line] of lines.entries()) {
-            if (!pattern.test(line)) continue;
-            if (args.limit !== undefined && matches.length >= args.limit) {
-              truncated = true;
-              return false;
-            }
-            matches.push({
-              path,
-              line: index + 1,
-              text: line,
-              before: lines.slice(Math.max(0, index - args.context), index),
-              after: lines.slice(index + 1, index + 1 + args.context),
-            });
-          }
-          return true;
+        await walk(args.path, ctx.signal, async (path, kind) => {
+          if (kind !== "file" || !nameMatches(names, path)) return true;
+          const lines = text(await filesystem(path, ports).read()).split("\n");
+          truncated = !collect(matches, path, lines, args, pattern);
+          return !truncated;
         });
         return { matches, truncated };
       }),
@@ -74,7 +78,7 @@ export function createGrepTool(ports: FilePorts) {
 }
 
 /** `path:line:text` per match, context lines marked with `-`, truncation stated last. */
-function renderMatches(value: { matches: z.output<typeof Match>[]; truncated: boolean }): string {
+function renderMatches(value: { matches: Match[]; truncated: boolean }): string {
   const lines: string[] = [];
   for (const match of value.matches) {
     let line = match.line - match.before.length;

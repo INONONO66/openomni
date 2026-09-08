@@ -19,8 +19,12 @@ import {
   prepareMessage,
 } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
-import { createSendMessageTool, type SendMessageInput } from "../../src/tools/send-message";
+import { createSendMessageTool } from "../../src/tools/send-message";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
+import type { z } from "zod";
+
+/** The model-facing vocabulary is read off the sealed tool, not re-exported for tests. */
+type SendMessageInput = z.output<ReturnType<typeof createSendMessageTool>["input"]>;
 
 export function messageFixture(
   role: LedgerSession.Role = "resident",

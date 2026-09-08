@@ -1,4 +1,5 @@
 import { eraseTool, toolSpec } from "@openomni/agent";
+import type { GatewayRouter } from "@openomni/channels";
 import type { MachineHost } from "@openomni/machines";
 import type { AnyToolDefinition, LedgerSession, Tool } from "@openomni/protocol";
 import type { composeCodemode } from "../../composition/codemode";
@@ -12,7 +13,7 @@ import { createLsTool } from "../ls";
 import { monitorTool } from "../monitor";
 import { createProvisionTool, type ProvisionPort } from "../provision";
 import { createReadTool } from "../read";
-import { createSendMessageTool, type MessagePort } from "../send-message";
+import { createSendMessageTool } from "../send-message";
 import { createWriteTool } from "../write";
 
 export interface CatalogOrigin {
@@ -22,7 +23,7 @@ export interface CatalogOrigin {
 }
 
 export interface CatalogPorts {
-  readonly messages?: MessagePort;
+  readonly messages?: Pick<GatewayRouter, "ingest">;
   readonly machines?: MachineHost;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
   readonly llm?: LlmPort;
@@ -31,27 +32,11 @@ export interface CatalogPorts {
   readonly clock?: () => number;
 }
 
-/** The sealed catalog (KERNEL §3.4): the eleven model-door tools, in this order. */
-export const MODEL_TOOL_NAMES = [
-  "read",
-  "write",
-  "edit",
-  "ls",
-  "find",
-  "grep",
-  "bash",
-  "eval",
-  "monitor",
-  "send_message",
-  "provision",
-] as const;
-/** The one cell-only tool. */
-export const CELL_TOOL_NAMES = ["completion"] as const;
-
 /**
- * The static catalog: every tool is constructed regardless of which ports the
- * composition wired, and a tool whose port is absent refuses at execution.
- * Nothing silently disappears (KERNEL §3.4).
+ * The static catalog (KERNEL §3.4): the eleven model-door tools in this order,
+ * then the cell-only completion. Every tool is constructed regardless of which
+ * ports the composition wired, and a tool whose port is absent refuses at
+ * execution. Nothing silently disappears.
  */
 export function createTools(
   ports: CatalogPorts,

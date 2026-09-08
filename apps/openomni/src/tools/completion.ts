@@ -12,7 +12,7 @@ import { defineTool, ToolRefused } from "@openomni/agent";
 export type LlmPort = (prompt: string) => Promise<string>;
 
 /** The per-cell call budget: how many sub-model calls one executor may serve. */
-export const MAX_COMPLETION_CALLS = 32;
+const MAX_COMPLETION_CALLS = 32;
 
 const Input = z
   .object({
@@ -20,7 +20,7 @@ const Input = z
   })
   .strict();
 
-export const COMPLETION_TOOL_NAME = "completion";
+const COMPLETION_TOOL_NAME = "completion";
 
 function executeCompletion(llm: LlmPort | undefined) {
   let calls = 0;
@@ -69,13 +69,16 @@ export interface LlmIo {
  * turn's run identity. Auth is the configured key, exactly as the Resident
  * and the worker loop authenticate.
  */
+interface ResolvedModel {
+  readonly provider: string;
+  readonly id: string;
+  readonly apiKey: string;
+  /** Operator transport overrides in the llm package's shape (see `modelTransport`). */
+  readonly transport?: { readonly baseUrl?: string; readonly headers?: Record<string, string> };
+}
+
 interface ResolvedTextCall {
-  readonly model: {
-    readonly provider: string;
-    readonly id: string;
-    readonly apiKey: string;
-    readonly transport?: RunInput["transport"];
-  };
+  readonly model: ResolvedModel;
   readonly messages: Message.WithParts[];
   readonly sessionId: string;
   readonly signal?: AbortSignal;
@@ -158,7 +161,7 @@ export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): P
   return value.text;
 }
 
-export function createCompletionPort(model: ResolvedTextCall["model"], io: LlmIo = {}): LlmPort {
+export function createCompletionPort(model: ResolvedModel, io: LlmIo = {}): LlmPort {
   return async (prompt) => {
     const sessionId = "completion";
     const messageId = crypto.randomUUID();

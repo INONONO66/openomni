@@ -1,32 +1,21 @@
 import { defineTool, ToolRefused } from "@openomni/agent";
-import { Gateway, LedgerSession } from "@openomni/protocol";
+import type { GatewayRouter } from "@openomni/channels";
+import { Gateway } from "@openomni/protocol";
 import { z } from "zod";
 
-export interface MessagePort {
-  ingest(
-    sender: Gateway.IngestSender,
-    message: Gateway.SendMessage | Gateway.IngressFacts,
-  ): Promise<Gateway.IngestResult>;
-}
+/** The tool needs exactly the router's ingest door; composition supplies the router itself. */
+type MessagePort = Pick<GatewayRouter, "ingest">;
 
 const Id = z.string().min(1);
 
 /** Model vocabulary (§3.5): one `contact` noun; the protocol keeps `Actor` internally. */
 const Target = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("session"), id: Id }).strict(),
-  z
-    .object({
-      kind: z.literal("new_session"),
-      role: LedgerSession.Role,
-      runner: Id,
-      // The authenticated caller supplies the parent identity, not the model.
-      parent: z.literal("me"),
-    })
-    .strict(),
+  Gateway.SessionTarget,
+  Gateway.NewSessionTarget,
   z.object({ kind: z.literal("contact"), id: Id }).strict(),
 ]);
 
-export const SendMessageInput = z
+const SendMessageInput = z
   .object({
     to: Target,
     message: z.string(),
@@ -43,7 +32,7 @@ export const SendMessageInput = z
       .describe("Milliseconds from now after which no reply counts as unknown."),
   })
   .strict();
-export type SendMessageInput = z.output<typeof SendMessageInput>;
+type SendMessageInput = z.output<typeof SendMessageInput>;
 
 /** The tool's vocabulary folded onto the gateway's consumer surface. */
 function toGatewaySend(input: SendMessageInput, now: number): Gateway.SendMessage {

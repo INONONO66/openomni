@@ -79,33 +79,37 @@ export function filesystem(path: string, ports: FilePorts) {
   };
 }
 
-export type Endpoint = ReturnType<typeof filesystem>;
+type Endpoint = ReturnType<typeof filesystem>;
+type EntryKind = "file" | "dir";
+/** Called once per visited path; false stops the walk. Readers open the path themselves. */
+type Visit = (path: string, kind: EntryKind) => Promise<boolean>;
 
 /**
- * Depth-first walk in name order without following symlinks. `visit` returns
- * false to stop early; regular files and directories are the only entries seen.
+ * Depth-first walk in name order without following symlinks: regular files
+ * and directories are the only entries visited. Bound to the ports once so a
+ * tool builds its walker when it is constructed.
  */
-export async function walk(
-  path: string,
-  ports: FilePorts,
-  signal: AbortSignal,
-  visit: (path: string, endpoint: Endpoint, kind: "file" | "dir") => Promise<boolean>,
-): Promise<void> {
-  const step = async (current: string): Promise<boolean> => {
+export function walker(ports: FilePorts) {
+  async function step(path: string, signal: AbortSignal, visit: Visit): Promise<boolean> {
     signal.throwIfAborted();
-    const endpoint = filesystem(current, ports);
-    const kind = await endpoint.kind();
-    if (kind !== "file" && kind !== "dir")
-      throw new ToolRefused("walk", "expected a regular file or directory");
-    if (!(await visit(current, endpoint, kind))) return false;
-    if (kind === "file") return true;
-    for (const entry of await endpoint.list()) {
-      if (entry.kind !== "file" && entry.kind !== "dir") continue;
-      if (!(await step(childPath(endpoint.locus, entry.name)))) return false;
-    }
+    const endpoint = filesystem(path, ports);
+    const kind = await entryKind(endpoint);
+    if (!(await visit(path, kind))) return false;
+    return kind === "file" || descend(endpoint, signal, visit);
+  }
+  async function descend(endpoint: Endpoint, signal: AbortSignal, visit: Visit): Promise<boolean> {
+    const entries = await endpoint.list();
+    for (const entry of entries.filter((entry) => entry.kind === "file" || entry.kind === "dir"))
+      if (!(await step(childPath(endpoint.locus, entry.name), signal, visit))) return false;
     return true;
-  };
-  await step(path);
+  }
+  return step;
+}
+
+async function entryKind(endpoint: Endpoint): Promise<EntryKind> {
+  const kind = await endpoint.kind();
+  if (kind === "file" || kind === "dir") return kind;
+  throw new ToolRefused("walk", "expected a regular file or directory");
 }
 
 function childPath(locus: Locus, name: string): string {

@@ -1,13 +1,13 @@
-import { ToolRefused } from "@openomni/agent";
-import { ActorRegistry, Storage } from "@openomni/ledger";
+import { ActorRegistry } from "@openomni/ledger";
 import { type Actor, canonicalDigest, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 
-export const CONTACT_PROMOTE_INPUT = z.object({ actorId: z.string().min(1) }).strict();
-export const CONTACT_MERGE_INPUT = z
+const CONTACT_PROMOTE_INPUT = z.object({ actorId: z.string().min(1) }).strict();
+const CONTACT_MERGE_INPUT = z
   .object({ endpointId: z.string().min(1), toActorId: z.string().min(1) })
   .strict();
 
+/** The consent-gated address-book operations; the provision tool spreads these into its union. */
 export const ContactOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_promote"), args: CONTACT_PROMOTE_INPUT }).strict(),
   z.object({ op: z.literal("contact_merge"), args: CONTACT_MERGE_INPUT }).strict(),
@@ -36,39 +36,4 @@ export function contactDomainRevisions(operation: ContactOperation): Record<stri
     [digestKey("identity", toActorId, ActorRegistry.getIdentity(toActorId))]: 0,
     [digestKey("source", endpoint?.actorId ?? endpointId, source)]: 0,
   };
-}
-
-/**
- * Body-entry domain CAS inside one transaction. Consent itself is the kernel
- * request the `require_approval` policy row opened; this layer only refuses to
- * spend it on rows that changed since the Owner saw them.
- */
-export function mutateContact(
-  operation: ContactOperation,
-  revisions: Readonly<Record<string, number>> | undefined,
-): z.output<typeof ContactResult> {
-  return Storage.get().transaction(() => {
-    if (
-      revisions === undefined ||
-      canonicalDigest({ ...revisions }) !== canonicalDigest(contactDomainRevisions(operation))
-    )
-      throw new ToolRefused(operation.op, "domain revision changed");
-    if (operation.op === "contact_promote") {
-      const identity = ActorRegistry.getIdentity(operation.args.actorId);
-      if (identity === undefined || identity.standing !== "provisional")
-        throw new ToolRefused(operation.op, "contact is missing or already registered");
-      const promoted = ActorRegistry.promote(operation.args.actorId);
-      return { op: operation.op, id: promoted.id, trustTier: promoted.trustTier };
-    }
-    const { endpointId, toActorId } = operation.args;
-    const endpoint = ActorRegistry.getEndpoint(endpointId);
-    if (
-      endpoint === undefined ||
-      ActorRegistry.getIdentity(toActorId) === undefined ||
-      endpoint.actorId === toActorId
-    )
-      throw new ToolRefused(operation.op, "endpoint or target is missing, or already bound");
-    const merged = ActorRegistry.mergeEndpoint(endpointId, toActorId);
-    return { op: operation.op, id: merged.id, actorId: merged.actorId };
-  });
 }

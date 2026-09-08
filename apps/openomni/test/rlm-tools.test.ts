@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
 import { createDispatcher, toolSpec } from "@openomni/agent";
-import {
-  createCompletionPort as completionPort,
-  COMPLETION_TOOL_NAME,
-  MAX_COMPLETION_CALLS,
-} from "../src/tools/completion";
+import { createCompletionPort as completionPort } from "../src/tools/completion";
 import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
 
-afterEach(() => mock.restore());
 import { assistantMessage } from "./helpers/assistant-message";
 import { providerFailure } from "./helpers/provider-failure";
 import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
+
+afterEach(() => mock.restore());
+
+/** The sealed cell-only tool name and its per-cell call budget (KERNEL §3.4). */
+const COMPLETION_TOOL_NAME = "completion";
+const MAX_COMPLETION_CALLS = 32;
 
 import { admittedOperation } from "./helpers/admitted-operation";
 

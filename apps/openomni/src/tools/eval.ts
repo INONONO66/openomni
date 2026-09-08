@@ -42,9 +42,10 @@ export function createEvalTool(cell: Cell | undefined) {
     input: Input,
     output: Machine.CellResult,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-    execute: ({ operation: { code, timeout } }, ctx) => {
+    execute: ({ operation }, ctx) => {
       if (cell === undefined) throw new ToolRefused("eval", "codemode is not composed");
-      return cell.run(code, ctx.sessionId, { timeoutMs: timeout * 1000, signal: ctx.signal });
+      const timeoutMs = operation.timeout * 1000;
+      return cell.run(operation.code, ctx.sessionId, { timeoutMs, signal: ctx.signal });
     },
     render: (args, value) => describe(value, args.operation.timeout),
   });

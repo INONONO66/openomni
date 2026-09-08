@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { toolInputSchema, toolSpec } from "@openomni/agent";
 import type { PlainValue } from "@openomni/protocol";
-import { CELL_TOOL_NAMES, collectToolSpecs, MODEL_TOOL_NAMES, TOOL_DEFINITIONS } from "./catalog";
+import { collectToolSpecs, TOOL_DEFINITIONS } from "./catalog";
 
 /** KERNEL §3.4/§3.5: the sealed model door, in catalog order, then the one cell-only tool. */
 const MODEL_DOOR = [
@@ -74,8 +74,6 @@ function operationOps(name: string): readonly string[] {
 
 describe("tool catalog", () => {
   it("is sealed at eleven model-door tools plus the cell-only completion", () => {
-    expect<readonly string[]>(MODEL_TOOL_NAMES).toEqual(MODEL_DOOR);
-    expect<readonly string[]>(CELL_TOOL_NAMES).toEqual(CELL_ONLY);
     expect(TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual([...MODEL_DOOR, ...CELL_ONLY]);
     expect(collectToolSpecs().map((tool) => tool.name)).toEqual([...MODEL_DOOR, ...CELL_ONLY]);
     for (const tool of TOOL_DEFINITIONS) {
