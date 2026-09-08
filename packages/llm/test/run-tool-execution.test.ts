@@ -57,7 +57,7 @@ async function returnedCalls(
 
 test("a provider step returns pending invocation data without fabricating tool results", async () => {
   const observed = await returnedCalls(["lookup"], ["lookup"]);
-  expect(observed.outcome).toEqual({ type: "stop" });
+  expect(observed.outcome).toMatchObject({ type: "stop" });
   expect(observed.calls).toEqual([{ id: "call-0", tool: "lookup", input: { slot: 0 } }]);
   expect(observed.results).toEqual([]);
   expect(observed.states).toEqual(["pending"]);

@@ -92,6 +92,8 @@ export interface LlmAttempts<T extends PlainValue> {
     body(): Promise<T>;
   }>;
   recoverOverflow?(error: Error): Promise<boolean>;
+  /** Durable attempt evidence (usage, visible-output boundary, credential handle) projected from a settled body. */
+  evidence?(value: T): PlainValue;
   onRetry?(decision: {
     readonly attempt: number;
     readonly maxAttempts: number;

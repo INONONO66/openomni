@@ -109,6 +109,44 @@ test("executor admits ordered retry children and retains every failed billed usa
   ).toHaveLength(3);
 });
 
+test("every attempt pins its ordinal, cap and retry reason; the settled one pins projected evidence", async () => {
+  const { executor, committed } = harness();
+  let calls = 0;
+  const evidence = { usage, visibleOutput: true, credential: { type: "api", fingerprint: "ab12" } };
+  await executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
+    executor.runAttempts(parent, {
+      prepare: async (attempt) => ({
+        request: { op: "chat", intent: { attempt }, effect: {} },
+        admit: async () => undefined,
+        body: async () => {
+          calls += 1;
+          if (calls < 2) throw providerFailure();
+          return { type: "stop", evidence };
+        },
+      }),
+      evidence: (value) =>
+        typeof value === "object" && value !== null && !Array.isArray(value)
+          ? (value.evidence ?? null)
+          : null,
+    }),
+  );
+  expect(intents(committed, "attempt").map((a) => a.intent.value)).toMatchObject([
+    { attempt: 1, maxAttempts: 3, retryReason: null },
+    { attempt: 2, maxAttempts: 3, retryReason: "transient_error" },
+  ]);
+  const executed = committed.filter(
+    (a) =>
+      a.kind === "attempt" &&
+      typeof a.effect.value === "object" &&
+      a.effect.value !== null &&
+      !Array.isArray(a.effect.value) &&
+      a.effect.value.terminal === "executed",
+  );
+  expect(executed.map((a) => a.effect.value)).toEqual([
+    { phase: "result", terminal: "executed", effect: {}, evidence },
+  ]);
+});
+
 test("visible output makes a provider failure terminal without a second admission", async () => {
   const { executor, committed, waits } = harness();
   const failure = providerFailure(true);

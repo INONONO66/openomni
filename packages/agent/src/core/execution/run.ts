@@ -7,7 +7,7 @@ import {
   type Sink,
 } from "@openomni/llm";
 import { selectModel } from "@openomni/llm";
-import type { PlainValue } from "@openomni/protocol";
+import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { CompactionSession } from "../../compaction";
 import { DEFAULT_PROTECT_RECENT } from "../../compaction/contract";
 import { estimateMessagesTokens } from "../../compaction/estimate";
@@ -168,7 +168,12 @@ async function runModelStep(
         const result = await (config.llm?.run ?? llmRun)(prepared.runInput, prepared.trackingSink);
         if (result.type === "aborted") throw result.error ?? Retry.abortError();
         if (result.type === "error") throw result.error;
-        return result;
+        return {
+          type: result.type,
+          evidence: PlainValueSchema.parse(
+            result.type === "stop" ? (result.evidence ?? null) : null,
+          ),
+        };
       },
     };
   };
@@ -184,6 +189,7 @@ async function runModelStep(
       execution.runAttempts(parent, {
         prepare: async (attempt, failures) =>
           attempt === 1 ? initial : prepareAttempt(attempt, failures),
+        evidence: (result) => result.evidence,
         recoverOverflow: async () => {
           if (state.overflowCompactionAttempted) return false;
           state.overflowCompactionAttempted = true;

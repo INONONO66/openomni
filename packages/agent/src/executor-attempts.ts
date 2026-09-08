@@ -33,12 +33,19 @@ export function createAttemptRunner(
         throw new Error(`llm admission refused: ${policy.reason ?? policy.verdict}`);
       await prepared.admit();
       options.signal?.throwIfAborted();
+      // Attempt ordinal, the provider-retry cap and the reason this attempt
+      // exists are pinned on the intent; llm decided them, the ledger keeps them.
       const intent = await record.appendIntent({
         kind: "attempt",
         op: prepared.request.op,
         parentId: parent.action.id,
         value: prepared.request.intent,
-        invocation: { effectHash: canonicalDigest(prepared.request.effect) },
+        invocation: {
+          effectHash: canonicalDigest(prepared.request.effect),
+          attempt,
+          maxAttempts: Retry.MAX_ATTEMPTS,
+          retryReason: failures.at(-1) ?? null,
+        },
       });
       if (policy?.verdict === "require_approval") {
         const decision = await approve(prepared.request, intent, policy);
@@ -64,10 +71,12 @@ export function createAttemptRunner(
         }),
       );
       if (outcome.status === "fulfilled") {
+        const evidence = attempts.evidence?.(outcome.value);
         await record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
           phase: "result",
           terminal: "executed",
           effect: prepared.request.effect,
+          ...(evidence === undefined ? {} : { evidence }),
         });
         return outcome.value;
       }

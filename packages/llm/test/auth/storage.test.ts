@@ -167,3 +167,17 @@ describe("Auth Storage", () => {
     });
   });
 });
+
+describe("Auth.reference", () => {
+  it("is a stable non-secret handle", () => {
+    const info = { type: "api", key: "sk-live-very-secret" } as const;
+    const reference = Auth.reference(info);
+    expect(reference).toEqual(Auth.reference({ ...info }));
+    expect(reference.type).toBe("api");
+    expect(reference.fingerprint).toMatch(/^[0-9a-f]{16}$/);
+    expect(JSON.stringify(reference)).not.toContain(info.key);
+    expect(Auth.reference({ type: "api", key: "other" }).fingerprint).not.toBe(
+      reference.fingerprint,
+    );
+  });
+});
