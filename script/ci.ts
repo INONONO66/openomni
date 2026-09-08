@@ -88,7 +88,7 @@ function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void {
       : ([
           ["static", plan.verify],
           ["deps", plan.verify],
-          ["quality", plan.verify],
+          ["quality", plan.verify && process.env.CI_EVENT !== "pull_request"],
           ["dependency-review", plan.dependencyReview && process.env.CI_EVENT === "pull_request"],
         ] satisfies [string, boolean][])),
   ]);
