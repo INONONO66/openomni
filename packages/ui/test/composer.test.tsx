@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ApprovalTray, Composer, type ComposerAction, composerKey } from "../src/composer";
 import { Console } from "../src/console";
+import { SHELL, STRIP } from "./fixture";
 
 /**
  * The composer's keyboard contract and the approval tray's shape.
@@ -163,10 +164,11 @@ describe("the composer surface", () => {
     // the prop is a control that exists in the package and not in the product.
     const html = renderToStaticMarkup(
       <Console
+        shell={SHELL}
+        strip={STRIP}
+        title="Session"
         session={{
           id: "stop",
-          title: "Session",
-          detail: "claude-sonnet-4-6",
           nodes: [],
           draft: "",
           onDraftChange: () => undefined,

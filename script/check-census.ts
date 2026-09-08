@@ -26,6 +26,30 @@ import { decodeJson, parseEntry } from "./quality-inventory";
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 type CensusClass = "publisher" | "export" | "store";
+// BrowserWindow events whose producer is the window manager or the user.
+const WINDOW_MANAGER_EVENTS = [
+  "blur",
+  "close",
+  "closed",
+  "enter-full-screen",
+  "focus",
+  "hide",
+  "leave-full-screen",
+  "maximize",
+  "minimize",
+  "move",
+  "moved",
+  "resize",
+  "restore",
+  "show",
+  "unmaximize",
+];
+const NATIVE_EVENT_DOCUMENTATION = {
+  Process: "https://nodejs.org/api/process.html#signal-events;#event-exit;#event-beforeexit",
+  App: "https://www.electronjs.org/docs/latest/api/app#event-activate;#event-ready;#event-window-all-closed",
+  BrowserWindow:
+    "https://www.electronjs.org/docs/latest/api/browser-window#event-ready-to-show;#event-resize;#event-move;#event-close",
+};
 type Locus = { path: string; line: number; symbol: string };
 type Problem = Locus & { code: string; declarationOwner?: string; valueOrigins?: Locus[] };
 type Entry = { path: string; sha256: string; bytes: number; category: string; language: string };
@@ -1213,13 +1237,12 @@ class Provenance {
     const base = this.rendererReceiver(receiver);
     if (!base) return undefined;
     const bindings = new Map<ts.ParameterDeclaration, ts.Expression>();
-    const windows = this.runtimeValues(base, bindings).filter(
-      (node) =>
-        ts.isNewExpression(node) &&
-        memberName(node.expression) === "BrowserWindow" &&
-        /electron\/electron\.d\.ts$/.test(this.nativeOwner(node)) &&
-        this.path(node),
+    const windows = this.runtimeValues(base, bindings).filter((node) =>
+      this.isProductionWindow(node),
     );
+    return this.windowLoad(windows, bindings);
+  }
+  private windowLoad(windows: ts.Node[], bindings: Map<ts.ParameterDeclaration, ts.Expression>): ts.CallExpression | undefined {
     return this.calls.find(
       (call) =>
         this.path(call) &&
@@ -1302,84 +1325,125 @@ class Provenance {
     return false;
   }
   private nativeEventContract(receiver: ts.Node, registration?: ts.CallExpression) {
-    const symbol = this.checker.getTypeAtLocation(receiver).getSymbol();
+    const type = this.checker.getTypeAtLocation(receiver),
+      symbol = type.getSymbol();
+    // Process and App are singletons whose declaration is the value; a window
+    // is instantiated, so it only carries a contract for a registration.
+    if (symbol?.name === "BrowserWindow" && !registration) return undefined;
     const declaration = symbol?.declarations?.find(
       (node) =>
         (symbol.name === "Process" &&
           /@types\/node\/process\.d\.ts$/.test(node.getSourceFile().fileName)) ||
-        (symbol.name === "App" && /electron\/electron\.d\.ts$/.test(node.getSourceFile().fileName)),
+        (["App", "BrowserWindow"].includes(symbol.name) &&
+          /electron\/electron\.d\.ts$/.test(node.getSourceFile().fileName)),
     );
     if (!declaration) return undefined;
     const source = declaration.getSourceFile(),
       declared = new Set<string>();
-    walk(declaration, (node) => {
-      if (ts.isMethodSignature(node) && memberName(node.name) === "on") {
-        const event = node.parameters[0]?.type;
-        if (event && ts.isLiteralTypeNode(event) && ts.isStringLiteral(event.literal))
-          declared.add(event.literal.text);
-      }
-    });
-    const events = new Set<string>();
-    if (symbol?.name === "Process") {
-      // Node's documented signal events, restricted to catchable host signals.
-      // A private EventEmitter name is not an operating-system signal.
-      walk(source, (node) => {
-        if (!ts.isTypeAliasDeclaration(node) || node.name.text !== "Signals") return;
-        walk(node.type, (part) => {
-          if (ts.isStringLiteral(part)) {
-            declared.add(part.text);
-            if (
-              Object.hasOwn(constants.signals, part.text) &&
-              !["SIGKILL", "SIGSTOP"].includes(part.text)
-            )
-              events.add(part.text);
-          }
-        });
-      });
-      events.add("exit");
-      events.add("beforeExit");
-    } else {
-      // These recurring desktop events have OS/window-manager producers.
-      // Other App events need their own lifecycle prerequisite, not type credit.
-      const electronRoot = [...this.roots.values()].some(
-        (root) => root.symbol === "electron-vite" || root.path.endsWith("electron.vite.config.ts"),
-      );
-      if (electronRoot) {
-        events.add("activate");
-        // Electron emits ready after the main module's synchronous startup.
-        // A listener installed by a ready Promise continuation is already late.
-        if (
-          registration &&
-          this.eventContexts(registration).some(
-            (context) => context.sites[0] && ts.isSourceFile(context.sites[0]),
-          )
-        )
-          events.add("ready");
-        const window = this.sourceFiles.some((file) => {
-          let created = false;
-          walk(file, (node) => {
-            if (
-              ts.isNewExpression(node) &&
-              memberName(node.expression) === "BrowserWindow" &&
-              /electron\/electron\.d\.ts$/.test(this.nativeOwner(node)) &&
-              this.path(node)
-            )
-              created = true;
-          });
-          return created;
-        });
-        if (window) events.add("window-all-closed");
-      }
+    // Electron re-declares each class per process as an empty subclass; the
+    // event overloads live up the base chain, so read every level.
+    const owners: ts.Node[] = [];
+    const chain = [type];
+    for (let index = 0; index < chain.length; index++) {
+      const level = chain[index];
+      if (!level) continue;
+      owners.push(...(level.getSymbol()?.declarations ?? []));
+      if (level.isClassOrInterface()) chain.push(...this.checker.getBaseTypes(level));
     }
+    for (const owner of owners)
+      walk(owner, (node) => {
+        if (
+          (ts.isMethodSignature(node) || ts.isMethodDeclaration(node)) &&
+          memberName(node.name) === "on"
+        ) {
+          const event = node.parameters[0]?.type;
+          if (event && ts.isLiteralTypeNode(event) && ts.isStringLiteral(event.literal))
+            declared.add(event.literal.text);
+        }
+      });
+    const events =
+      symbol?.name === "Process"
+        ? this.processEvents(source, declared)
+        : symbol?.name === "BrowserWindow"
+          ? this.windowEvents(receiver)
+          : this.appEvents(registration);
     return {
       declaration,
       declared,
       events,
-      documentation:
-        symbol?.name === "Process"
-          ? "https://nodejs.org/api/process.html#signal-events;#event-exit;#event-beforeexit"
-          : "https://www.electronjs.org/docs/latest/api/app#event-activate;#event-ready;#event-window-all-closed",
+      documentation: NATIVE_EVENT_DOCUMENTATION[symbol?.name === "Process" ? "Process" : symbol?.name === "BrowserWindow" ? "BrowserWindow" : "App"],
     };
+  }
+  /** Node's documented signal events, restricted to catchable host signals.
+   * A private EventEmitter name is not an operating-system signal. */
+  private processEvents(source: ts.SourceFile, declared: Set<string>): Set<string> {
+    const events = new Set<string>(["exit", "beforeExit"]);
+    walk(source, (node) => {
+      if (!ts.isTypeAliasDeclaration(node) || node.name.text !== "Signals") return;
+      walk(node.type, (part) => {
+        if (ts.isStringLiteral(part)) {
+          declared.add(part.text);
+          if (
+            Object.hasOwn(constants.signals, part.text) &&
+            !["SIGKILL", "SIGSTOP"].includes(part.text)
+          )
+            events.add(part.text);
+        }
+      });
+    });
+    return events;
+  }
+  /** A production `new BrowserWindow()` from Electron's own declaration. */
+  private isProductionWindow(node: ts.Node): boolean {
+    return (
+      ts.isNewExpression(node) &&
+      memberName(node.expression) === "BrowserWindow" &&
+      /electron\/electron\.d\.ts$/.test(this.nativeOwner(node)) &&
+      Boolean(this.path(node))
+    );
+  }
+  /** The window manager and the user move, resize, focus and close a window that
+   * production constructed. First paint additionally needs the renderer load
+   * edge, the same prerequisite WebContents listeners carry. */
+  private windowEvents(receiver: ts.Node): Set<string> {
+    const events = new Set<string>();
+    const bindings = new Map<ts.ParameterDeclaration, ts.Expression>();
+    const windows = this.runtimeValues(receiver, bindings).filter((node) =>
+      this.isProductionWindow(node),
+    );
+    if (!windows.length) return events;
+    for (const name of WINDOW_MANAGER_EVENTS) events.add(name);
+    const loaded = this.windowLoad(windows, bindings);
+    if (loaded) events.add("ready-to-show");
+    return events;
+  }
+  /** These recurring desktop events have OS/window-manager producers. Other App
+   * events need their own lifecycle prerequisite, not type credit. */
+  private appEvents(registration?: ts.CallExpression): Set<string> {
+    const events = new Set<string>();
+    const electronRoot = [...this.roots.values()].some(
+      (root) => root.symbol === "electron-vite" || root.path.endsWith("electron.vite.config.ts"),
+    );
+    if (!electronRoot) return events;
+    events.add("activate");
+    // Electron emits ready after the main module's synchronous startup.
+    // A listener installed by a ready Promise continuation is already late.
+    if (
+      registration &&
+      this.eventContexts(registration).some(
+        (context) => context.sites[0] && ts.isSourceFile(context.sites[0]),
+      )
+    )
+      events.add("ready");
+    const window = this.sourceFiles.some((file) => {
+      let created = false;
+      walk(file, (node) => {
+        if (this.isProductionWindow(node)) created = true;
+      });
+      return created;
+    });
+    if (window) events.add("window-all-closed");
+    return events;
   }
   private dispatchEvents(): void {
     for (const [registration, receiver] of this.eventRegistrations)
@@ -2724,6 +2788,12 @@ class Provenance {
 
     if (/\/node\/os\.d\.ts$/.test(owner) && ["homedir", "tmpdir"].includes(name))
       return [{ value: `$${name}`, origin: node }];
+    // Electron's per-user directories are ambient roots the same way homedir is.
+    if (/\/electron\/electron\.d\.ts$/.test(owner) && name === "getPath" && node.arguments[0])
+      return nested(node.arguments[0]).map((row) => ({
+        value: `$electron.${row.value}`,
+        origin: node,
+      }));
     if (/\/node_modules\//.test(owner) && name === "randomUUID")
       return [{ value: "*", origin: node }];
     if (

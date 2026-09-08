@@ -22,6 +22,9 @@ import {
  */
 export interface Search {
   readonly state: SearchState;
+  /** Whether the section header is showing the field instead of its label. */
+  readonly searching: boolean;
+  readonly setSearching: (searching: boolean) => void;
   readonly filtered: Filtered;
   readonly inputRef: RefObject<HTMLInputElement | null>;
   readonly onValueChange: (value: string) => void;
@@ -35,14 +38,20 @@ export function useSearch({
   sessions,
   onSelect,
   focusSelectedRow,
+  defaultSearching = false,
 }: {
   readonly ordered: Ordered;
   readonly sessions: readonly Session[];
   readonly onSelect: (id: SessionId, boundary?: Boundary | null) => void;
   /** Where Esc returns the caret when there is nothing left to clear. */
   readonly focusSelectedRow: () => void;
+  /** The initial mode only; the hook owns it from then on. */
+  readonly defaultSearching?: boolean;
 }): Search {
   const [state, setState] = useState<SearchState>(INITIAL);
+  // The field exists only while searching, and it autofocuses on mount — so
+  // "focus the field" is "open it", and the ref is for the already-open case.
+  const [searching, setSearchingState] = useState(defaultSearching);
   const inputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -77,9 +86,11 @@ export function useSearch({
         for (const effect of effects) {
           switch (effect.kind) {
             case "focusField":
+              setSearchingState(true);
               inputRef.current?.focus();
               break;
-            case "focusSelectedRow":
+            case "close":
+              setSearchingState(false);
               focusSelectedRow();
               break;
             case "select":
@@ -127,6 +138,14 @@ export function useSearch({
 
   return {
     state,
+    searching,
+    setSearching: useCallback(
+      (next: boolean) => {
+        if (next) run({ kind: "shortcut" });
+        else run({ kind: "escape" });
+      },
+      [run],
+    ),
     filtered,
     inputRef,
     onValueChange: useCallback((query: string) => run({ kind: "type", query }), [run]),

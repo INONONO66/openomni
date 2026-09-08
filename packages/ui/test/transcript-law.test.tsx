@@ -21,7 +21,7 @@ import {
   summarize,
   summaryLabel,
 } from "../src/timeline/work-group";
-import { pending, transcript } from "./fixture";
+import { pending, SHELL, STRIP, transcript } from "./fixture";
 
 /**
  * The transcript law, pinned where it is DECIDED rather than where it is drawn.
@@ -384,10 +384,11 @@ describe("tool expansion is scoped to its session", () => {
  */
 const SCREEN = renderToStaticMarkup(
   <Console
+    shell={SHELL}
+    strip={STRIP}
+    title="ledger append path"
     session={{
       id: "budget",
-      title: "ledger append path",
-      detail: "claude-sonnet-4-6",
       nodes: transcript,
       draft: "",
       composerHint: "claude-sonnet-4-6",
@@ -562,7 +563,6 @@ describe("the diff exception stays scoped to diff rows", () => {
 
     for (const relative of [
       "primitives/code.tsx",
-      "primitives/row.tsx",
       "primitives/state.tsx",
       "primitives/surface.tsx",
       "primitives/button.tsx",
@@ -572,7 +572,11 @@ describe("the diff exception stays scoped to diff rows", () => {
       "timeline/voice.tsx",
       "composer.tsx",
       "console.tsx",
-      "chrome.tsx",
+      "sidebar.tsx",
+      "sidebar-nav.tsx",
+      "tab-strip.tsx",
+      "tree-row.tsx",
+      "history-menu.tsx",
     ]) {
       const source = readFileSync(new URL(relative, root), "utf8");
       if (/(?:bg|text|border)-diff-(?:add|remove)/.test(source)) offenders.push(relative);
