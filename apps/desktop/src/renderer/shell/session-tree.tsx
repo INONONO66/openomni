@@ -68,8 +68,9 @@ export function SessionTree({
    * clicked or arrowed in the tree is a finished decision; one committed from
    * the search field is not, so that path passes `null` and the order holds.
    */
-  readonly onSelect: (id: SessionId, boundary?: Boundary | null) => void;
-  readonly onNavigate: (route: Route) => void;
+  readonly onSelect: (id: SessionId, boundary?: Boundary | null, newTab?: boolean) => void;
+  /** `newTab` is the ⌘/Ctrl-click intent: open the route in a new tab instead of moving this one. */
+  readonly onNavigate: (route: Route, newTab: boolean) => void;
   readonly onSearchingChange?: (searching: boolean) => void;
   /** Whether the section opens in search mode; uncontrolled after mount. */
   readonly defaultSearching?: boolean;
@@ -99,7 +100,7 @@ export function SessionTree({
   });
   const { filtered, state } = search;
   const selectRow = useCallback(
-    (id: SessionId) => onSelect(id, search.searching ? null : "selection"),
+    (id: SessionId, newTab = false) => onSelect(id, search.searching ? null : "selection", newTab),
     [onSelect, search.searching],
   );
 
@@ -131,7 +132,7 @@ export function SessionTree({
             active={destination === route}
             icon={placeIcon({ kind: "route", route: destination })}
             key={destination}
-            onClick={() => onNavigate(destination)}
+            onClick={(event) => onNavigate(destination, event.metaKey || event.ctrlKey)}
           >
             {ROUTE_LABEL[destination]}
           </NavItem>
@@ -240,7 +241,7 @@ function SessionRow({
   readonly entry: FilteredSession;
   readonly current: boolean;
   readonly active: boolean;
-  readonly onSelect: (id: SessionId) => void;
+  readonly onSelect: (id: SessionId, newTab?: boolean) => void;
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>, id: SessionId) => void;
   readonly registerRef: (id: SessionId, node: HTMLButtonElement | null) => void;
 }) {
@@ -250,7 +251,7 @@ function SessionRow({
       current={current || active}
       id={rowId(session.id)}
       level={1}
-      onClick={() => onSelect(session.id)}
+      onClick={(event) => onSelect(session.id, event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => onKeyDown(event, session.id)}
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}
       role="treeitem"

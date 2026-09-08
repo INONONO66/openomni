@@ -181,11 +181,11 @@ export function App({ platform, storage }: AppEnvironment) {
     setSidebarFloating(searching && !consoleStore.state.sidebarOpen);
   }, []);
 
-  const select = (id: SessionId, boundary: Boundary | null = "selection") => {
-    navigate(
-      { kind: "session", sessionId: id },
-      boundary === null ? search.current.invokingTabId : consoleStore.state.activeTabId,
-    );
+  // Clicking moves the current tab; only ⌘/Ctrl-click (or `+`) opens a new one.
+  const select = (id: SessionId, boundary: Boundary | null = "selection", newTab = false) => {
+    const place = { kind: "session", sessionId: id } as const;
+    if (newTab) openTab(place);
+    else navigate(place, boundary === null ? search.current.invokingTabId : consoleStore.state.activeTabId);
     arrive(boundary);
   };
   const travel = (action: () => void) => {
@@ -235,8 +235,10 @@ export function App({ platform, storage }: AppEnvironment) {
   const sidebar = (
     <SessionTree
       collapsedProjectIds={collapsedProjectIds}
-      onNavigate={(route) => {
-        openTab({ kind: "route", route });
+      onNavigate={(route, newTab) => {
+        const place = { kind: "route", route } as const;
+        if (newTab) openTab(place);
+        else navigate(place);
         arrive();
       }}
       onSearchingChange={onSearchingChange}

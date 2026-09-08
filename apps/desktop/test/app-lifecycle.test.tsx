@@ -198,7 +198,8 @@ test("pointer navigation, local history and list selection keep one frame and pr
   expect(activeTab(consoleStore.state)?.place).toEqual({ kind: "session", sessionId: unopened });
   expect(node('[data-ui="TabStrip"]')).toBe(frame);
   await click('[data-ui="TabStrip.Create"]');
-  expect(consoleStore.state.tabs).toHaveLength(4);
+  // The nav click moved the second tab, so only `+` grew the strip: two seeded tabs plus one.
+  expect(consoleStore.state.tabs).toHaveLength(3);
   expect(consoleStore.state.sessions).toHaveLength(4);
 });
 

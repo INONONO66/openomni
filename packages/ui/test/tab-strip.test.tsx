@@ -76,6 +76,10 @@ test("tab keyboard navigation wraps, updates panel ownership and scrolls selecti
       );
     });
     expect(node("#tab-a").getAttribute("aria-selected")).toBe("true");
+    // Unselected tabs read dimmer than the active one so the strip has one clear focus.
+    const dimmed = (id: string) => node(`#tab-${id}`).closest('[data-ui="Tab"]')?.className.includes("opacity-70");
+    expect(dimmed("a")).toBe(false);
+    expect(dimmed("b")).toBe(true);
     expect(document.activeElement === node('[data-ui="Tab.Close"]')).toBe(true);
   } finally {
     scroll.mockRestore();

@@ -205,8 +205,14 @@ test("list selection targets its own active tab even when sidebar search was inv
   const { aTab, c } = seed();
   const { host } = await mount();
   await key(document, "k", true);
-  await click(node(host, '[data-ui="Sidebar.Nav"] button'));
+  // ⌘-click opens the Sessions list in its own tab; a plain click would move the invoking tab.
+  await act(() =>
+    node(host, '[data-ui="Sidebar.Nav"] button').dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+    ),
+  );
   const listTab = consoleStore.state.activeTabId;
+  expect(listTab).not.toBe(aTab);
   const invocationHistory = consoleStore.state.tabs.find((tab) => tab.id === aTab)?.history;
   await click(node(host, '[role="tabpanel"] button[aria-label="gamma"]'));
   expect(consoleStore.state.activeTabId).toBe(listTab);
