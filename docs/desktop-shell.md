@@ -1,5 +1,17 @@
 # Desktop shell
 
+## Production build and CI smoke
+
+The desktop production tuple is `electron-vite 5.0.0` with the workspace's Vite
+`8.2.2`; the build was verified on 2026-09-08 with Bun 1.4.1 and emitted
+`dist/main/index.js`, `dist/preload/index.cjs`, and `dist/renderer/index.html`.
+The resolved build uses Vite 8.2.2 successfully despite electron-vite's older
+peer declaration; keep the tuple pinned and re-check it when either changes.
+
+CI builds once in `prepare`, restores `workspace-dist.tar`, and runs one
+production Electron smoke when the selected plan includes `desktopApp` or `ui`.
+The smoke uses Playwright `_electron` and Linux Xvfb; it does not rebuild.
+
 Tab composition updated on `feat/desktop-tabs` (2026-09-07). Implementation receipts
 are in `.omo/reports/desktop-tabs-20260907/impl-{A,B,C,D}.md`; native QA is in
 `.omo/reports/desktop-tabs-20260907/qa/QA.md` (menu-driven commands, DOM and
