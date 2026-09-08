@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 // Client-only modules must observe a DOM before they load, independently of SSR test order.
 test("mounted tabs and history in a client DOM", async () => {
   const child = Bun.spawn(
-    ["mise", "exec", "bun@1.4.1", "--", "bun", "test", fileURLToPath(import.meta.resolve("./tabs.fixture.tsx"))],
+    [process.execPath, "test", fileURLToPath(import.meta.resolve("./tabs.fixture.tsx"))],
     { cwd: join(import.meta.dir, "../../.."), stdout: "inherit", stderr: "inherit" },
   );
   expect(await child.exited).toBe(0);
