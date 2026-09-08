@@ -54,6 +54,12 @@ test.each([
   expect(planChanges(paths)).toMatchObject({ class: changeClass, toolingTests });
 });
 
+test("merge-group planning is full and global", () => {
+  const plan = planChanges(undefined, true);
+  expect(plan).toMatchObject({ full: true, class: "global", toolingTests: true });
+  expect(plan.lanes).toEqual(allKeys);
+});
+
 test("v2 scopes desktop quality to its workspace and never kernel projects", () => {
   const plan = planChanges(["packages/ui/src/index.ts"]);
   expect(plan.qualityScope.length).toBeGreaterThan(0);

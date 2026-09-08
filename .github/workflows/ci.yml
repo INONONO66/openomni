@@ -6,12 +6,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  merge_group:
   schedule:
     - cron: '23 3 * * *'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -282,7 +283,7 @@ jobs:
         working-directory: apps/desktop
       # topology:test-steps:end
       - name: Tooling self-tests
-        if: matrix.dir == 'script'
+        if: matrix.dir == 'script' && needs.plan.outputs.toolingTests == 'true'
         env:
           LANE: ${{ matrix.key }}
         run: bun run ci test --lane "$LANE"
@@ -401,7 +402,7 @@ jobs:
     needs: [plan, prepare]
     # Quality ratchets run on main pushes, schedules and manual dispatch only
     # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
-    if: needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'
+    if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -453,7 +454,7 @@ jobs:
     needs: [plan, prepare]
     # Quality ratchets run on main pushes, schedules and manual dispatch only
     # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
-    if: needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'
+    if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -494,7 +495,7 @@ jobs:
     needs: [plan, prepare, tests, scripts-contracts, scripts-coverage, quality-static]
     # Quality ratchets run on main pushes, schedules and manual dispatch only
     # (docs/ci.md, "Quality on pull requests"); pull requests skip them by design.
-    if: needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'
+    if: needs.plan.outputs.verify == 'true' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

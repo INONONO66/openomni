@@ -34,14 +34,31 @@ archive and its producer is a follow-up, not an unverified saving claimed here.
 The plan travels as `ci-plan.json` in the `ci-plan` artifact; only small selection
 fields and the matrix travel through job outputs, never `qualityScope`.
 
-## Quality on pull requests
+## CI tiers and merge queue
 
-The quality jobs (`quality-static`, `quality-gates`, `quality`) run on main pushes, scheduled
-runs, and manual dispatch only. Pull requests skip it by design and the final
-`CI` status requires that skip (`script/ci.ts` gate: the quality jobs are mandatory
-when `CI_EVENT` is not `pull_request`). This is the interim shape while the
-quality pipeline is split and made change-class-aware; the skip is reversed by
-deleting the event condition on the three jobs and in the gate map.
+CI has two tiers with the same job names and required `CI` status. The scoped PR
+ tier uses the change class and affected closure from `ci-plan.json`; quality
+runs for executable plans against the PR base SHA, while docs-only executable
+jobs are skipped. Tooling self-tests run only when `script/**` changes.
+
+The full tier runs on `merge_group`, pushes to `main`, nightly schedules, and
+manual dispatch. It uses the global plan, all workspace lanes, the whole quality
+inventory, and all tooling self-tests. The merge queue trigger is required so
+its unchanged job contexts report the required status.
+
+| Class | Workspace tests | Quality scope | Tooling self-tests |
+| --- | --- | --- | --- |
+| docs | none | none | no |
+| desktop | UI/desktop closure | affected inventory | no |
+| kernel | affected closure | affected inventory | no |
+| tooling | scripts | whole inventory | yes |
+| global | all | whole inventory | yes |
+
+Only pull-request runs are cancellable; queue entries and main pushes are never
+cancelled. Dependency review remains pull-request-only. The lead applies the
+reversible ruleset requirement for `CI` with `gh api` after merge; this workflow
+does not apply the ruleset.
+
 
 ## Execution
 

@@ -81,7 +81,6 @@ for (const job of [
           "dependency-review", "scripts-contracts", "scripts-coverage",
         ].map((key) => [key, { result: "success" }]),
       );
-      if (job === "dependency-review") for (const q of QUALITY_JOBS) needs[q] = { result: "skipped" };
       if (status === "missing") delete needs[job];
       else needs[job] = { result: status };
       // When the real final-gate entry point runs.
@@ -106,7 +105,7 @@ for (const path of ["README.md", "apps/desktop/src/main/index.ts", "packages/ui/
       "scripts-contracts": { result: "success" },
       "scripts-coverage": { result: plan.toolingTests ? "success" : "skipped" },
       ...Object.fromEntries(["tests", "static", "deps"].map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
-      ...Object.fromEntries(QUALITY_JOBS.map((job) => [job, { result: "skipped" }])),
+      ...Object.fromEntries(QUALITY_JOBS.map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
       "dependency-review": { result: plan.dependencyReview ? "success" : "skipped" },
     };
     for (const status of ["success", "skipped", "failure", "cancelled"]) {
@@ -234,6 +233,12 @@ test("workflow restores the one build before every executable consumer", () => {
   expect(jobs.test?.if).toBe("always()");
   expect(jobs.ci?.if).toBe("always()");
   expect(jobs.static?.steps.some((step) => step.run?.includes("bun run lint:docs"))).toBe(true);
+  const workflow = Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"));
+  expect(workflow.on.merge_group).toBeDefined();
+  expect(workflow.concurrency["cancel-in-progress"]).toBe("\${{ github.event_name == 'pull_request' }}");
+  expect(jobs["quality-static"]?.if).toBe("needs.plan.outputs.verify == 'true'");
+  expect(jobs["quality-gates"]?.if).toBe("needs.plan.outputs.verify == 'true'");
+  expect(jobs.quality?.if).toContain("needs.plan.outputs.verify == 'true'");
 });
 
 test("v2 workflow carries scope as an artifact and always runs repository contracts", () => {
@@ -311,42 +316,21 @@ test("the stable Test status accepts only the planned documentation skip", () =>
   expect(result.exitCode).toBe(0);
 });
 
-test("a pull request requires every quality job skipped and rejects a quality run", () => {
-  // Given a full pull-request plan where GitHub skipped the quality jobs by design.
+test("a pull request requires every quality job to succeed", () => {
   const needs = Object.fromEntries(
-    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review", "scripts-contracts", "scripts-coverage"].map((key) => [
-      key,
-      { result: "success" },
-    ]),
+    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review", "scripts-contracts", "scripts-coverage", ...QUALITY_JOBS].map((key) => [key, { result: "success" }]),
   );
-  const skippedQuality = Object.fromEntries(QUALITY_JOBS.map((q) => [q, { result: "skipped" }]));
-  // When the real gate executes, then the intentional skip is the only accepted result.
-  const skipped = cli(["gate"], {
+  const result = cli(["gate"], {
     CI_PLAN: JSON.stringify(planChanges([], true)),
     CI_EVENT: "pull_request",
-    CI_NEEDS: JSON.stringify({ ...needs, ...skippedQuality }),
+    CI_NEEDS: JSON.stringify(needs),
   });
-  expect(skipped.exitCode).toBe(0);
-  for (const q of QUALITY_JOBS) {
-    const ran = cli(["gate"], {
-      CI_PLAN: JSON.stringify(planChanges([], true)),
-      CI_EVENT: "pull_request",
-      CI_NEEDS: JSON.stringify({ ...needs, ...skippedQuality, [q]: { result: "success" } }),
-    });
-    expect(ran.exitCode).not.toBe(0);
-    expect(ran.stderr.toString()).toContain(`${q}: success`);
-  }
+  expect(result.exitCode).toBe(0);
 });
 
-test("the workflow skips every quality job on pull requests", () => {
-  // Given the shipped workflow, then each quality job is gated on the event, not only the plan.
-  const jobs = z
-    .object({ jobs: z.record(z.string(), jobSchema) })
-    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
-  for (const q of QUALITY_JOBS)
-    expect(jobs[q]?.if).toBe(
-      "needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'",
-    );
+test("quality jobs run on executable pull requests", () => {
+  const jobs = z.object({ jobs: z.record(z.string(), jobSchema) }).parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  for (const q of QUALITY_JOBS) expect(jobs[q]?.if).toContain("needs.plan.outputs.verify");
 });
 
 test("the full push gate accepts successful checks without PR-only dependency review", () => {
