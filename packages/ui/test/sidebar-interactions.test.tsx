@@ -109,6 +109,9 @@ test("mounted splitter coalesces pointer frames, commits or cancels, and support
   await act(() => root.render(<Frame />));
   await act(() => element(host, "button").click());
   const handle = element(host, '[data-ui="Sidebar.ResizeHandle"]');
+  // The handle is a silent hit zone: cursor feedback only, no line drawn on hover or drag.
+  expect(handle.className.includes("cursor-col-resize")).toBe(true);
+  expect(handle.className.includes("after:")).toBe(false);
   const frame = element(host, '[data-ui="Sidebar"]');
   const capture = mock((_id: number) => undefined);
   Object.defineProperty(handle, "setPointerCapture", { value: capture });
