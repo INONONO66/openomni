@@ -19,10 +19,19 @@ async function sources(): Promise<string> {
   return parts.join("\n");
 }
 
+function references(src: string, key: string): boolean {
+  return new RegExp(`(?<![\\w$])UI_NAMES\\.${key}(?![\\w$])`).test(src);
+}
+
 describe("the address book", () => {
+  test("a part reference does not satisfy its parent token", () => {
+    const src = '<span data-ui={UI_NAMES.TabIcon} />';
+    expect(references(src, "TabIcon")).toBe(true);
+    expect(references(src, "Tab")).toBe(false);
+  });
   test("Given every name, When src is read, Then each is stamped through UI_NAMES and none by its literal", async () => {
     const src = await sources();
-    const orphans = Object.keys(UI_NAMES).filter((key) => !src.includes(`UI_NAMES.${key}`));
+    const orphans = Object.keys(UI_NAMES).filter((key) => !references(src, key));
     expect(orphans).toEqual([]);
     const literals = Object.values(UI_NAMES).filter((value) => src.includes(`data-ui="${value}"`));
     expect(literals).toEqual([]);

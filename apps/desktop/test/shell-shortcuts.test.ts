@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type ShellKey, shellShortcut } from "../src/renderer/shell/shortcuts";
 
-/**
- * The frame's keyboard table (docs/desktop-shell.md): ⌘[ / ⌘] move the history,
- * a bare `[` toggles the sidebar — Linear's key — unless the Owner is typing.
- */
 function key(overrides: Partial<ShellKey>): ShellKey {
   return {
     key: "",
@@ -18,10 +14,19 @@ function key(overrides: Partial<ShellKey>): ShellKey {
 }
 
 describe("the shell's keys", () => {
-  test("Given ⌘[ and ⌘], When pressed, Then history moves", () => {
-    expect(shellShortcut(key({ key: "[", metaKey: true }), false)).toBe("back");
-    expect(shellShortcut(key({ key: "]", metaKey: true }), false)).toBe("forward");
-    expect(shellShortcut(key({ key: "[", ctrlKey: true }), false)).toBe("back");
+  test("native menu accelerators never dispatch again in the renderer", () => {
+    for (const value of ["[", "]", "t", "w", "Tab", "1", "9"]) {
+      for (const editing of [false, true]) {
+        expect(shellShortcut(key({ key: value, metaKey: true }), editing)).toBeNull();
+        expect(shellShortcut(key({ key: value, ctrlKey: true }), editing)).toBeNull();
+        expect(
+          shellShortcut(key({ key: value, metaKey: true, shiftKey: true }), editing),
+        ).toBeNull();
+        expect(
+          shellShortcut(key({ key: value, ctrlKey: true, shiftKey: true }), editing),
+        ).toBeNull();
+      }
+    }
   });
 
   test("Given a bare [, When pressed outside a field, Then the sidebar toggles", () => {
@@ -30,8 +35,7 @@ describe("the shell's keys", () => {
 
   test("Given a bare [, When typed into a field, Then it is a bracket", () => {
     expect(shellShortcut(key({ key: "[" }), true)).toBeNull();
-    // A modified [ is a history move even from a field.
-    expect(shellShortcut(key({ key: "[", metaKey: true }), true)).toBe("back");
+    expect(shellShortcut(key({ key: "[", metaKey: true }), true)).toBeNull();
   });
 
   test("Given other keys or chords, When pressed, Then nothing is heard", () => {

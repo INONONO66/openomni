@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { SIDEBAR_WIDTH } from "@openomni/ui";
 import {
+  activePlace,
+  activeTab,
   back,
   canGoBack,
   canGoForward,
@@ -11,139 +13,191 @@ import {
   INITIAL_CLIENT_STATE,
   jumpTo,
   navigate,
+  newSessionTab,
+  openTab,
   setDraft,
+  setSessionTitleIfPlaceholder,
   setSidebarFloating,
+  setSidebarOpen,
   setSidebarWidth,
+  tabTitle,
   toggleProject,
   toggleSidebar,
 } from "../src/renderer/state/store";
 
-/**
- * The client store's transitions. Small by design: every rule here is one the
- * surface depends on and the compiler cannot see.
- */
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
 });
 
-describe("createSession", () => {
-  test("Given an empty store, When a session is created, Then it lands in the default project and is selected", () => {
-    const id = createSession(100);
-    const { sessions, selectedSessionId } = consoleStore.state;
+function currentTab() {
+  const tab = activeTab(consoleStore.state);
+  if (!tab) throw new Error("expected an active tab");
+  return tab;
+}
 
-    expect(sessions).toEqual([
-      { id, title: "Session 1", projectId: DEFAULT_PROJECT_ID, createdAt: 100 },
+describe("session creation and titles", () => {
+  test("creates a placeholder record in the default project without opening a view", () => {
+    const id = createSession(100);
+    expect(consoleStore.state.sessions).toEqual([
+      {
+        id,
+        title: "New Session",
+        titleSource: "placeholder",
+        projectId: DEFAULT_PROJECT_ID,
+        createdAt: 100,
+      },
     ]);
-    expect(selectedSessionId).toBe(id);
+    expect(consoleStore.state.tabs).toEqual([]);
+    expect(consoleStore.state.activeTabId).toBeNull();
   });
 
-  test("Given existing sessions, When another is created, Then it is numbered after them and takes the selection", () => {
-    const first = createSession(1);
-    const second = createSession(2);
-
-    expect(first).not.toBe(second);
-    expect(consoleStore.state.sessions.map((session) => session.title)).toEqual([
-      "Session 1",
-      "Session 2",
+  test("new-session action creates distinct records and fresh active tabs", () => {
+    newSessionTab();
+    const first = currentTab();
+    const secondId = newSessionTab();
+    expect(consoleStore.state.sessions).toHaveLength(2);
+    expect(consoleStore.state.tabs).toHaveLength(2);
+    expect(currentTab().id).not.toBe(first.id);
+    expect(consoleStore.state.sessions.map(({ titleSource }) => titleSource)).toEqual([
+      "placeholder",
+      "placeholder",
     ]);
-    expect(consoleStore.state.selectedSessionId).toBe(second);
+    expect(currentTab().place).toEqual({ kind: "session", sessionId: secondId });
+    expect(consoleStore.state.sessions[1]?.id).toBe(secondId);
+  });
+
+  test("whitespace does not earn a title, while the first trimmed 40 code points do", () => {
+    const id = createSession(1);
+    const before = consoleStore.state;
+    setSessionTitleIfPlaceholder(id, " \n\t ");
+    expect(consoleStore.state).toBe(before);
+    const prompt = `  ${"😀".repeat(39)}ab  `;
+    setSessionTitleIfPlaceholder(id, prompt);
+    expect(consoleStore.state.sessions[0]?.title).toBe(`${"😀".repeat(39)}a`);
+    expect(consoleStore.state.sessions[0]?.titleSource).toBe("prompt");
+    const earned = consoleStore.state;
+    setSessionTitleIfPlaceholder(id, "later prompt");
+    setSessionTitleIfPlaceholder("missing", "prompt");
+    expect(consoleStore.state).toBe(earned);
+  });
+
+  test("a literal placeholder prompt is earned and titles resolve live", () => {
+    const id = createSession(1);
+    openTab({ kind: "session", sessionId: id });
+    const tab = currentTab();
+    setSessionTitleIfPlaceholder(id, " New Session ");
+    setSessionTitleIfPlaceholder(id, "replacement");
+    expect(consoleStore.state.sessions[0]?.titleSource).toBe("prompt");
+    expect(tabTitle(tab)).toBe("New Session");
+    const other = createSession(2);
+    openTab({ kind: "session", sessionId: other });
+    const otherTab = currentTab();
+    setSessionTitleIfPlaceholder(other, "  earned title  ");
+    expect(tabTitle(otherTab)).toBe("earned title");
+    openTab({ kind: "route", route: "inbox" });
+    expect(tabTitle(currentTab())).toBe("Inbox");
   });
 });
 
-describe("selection and groups", () => {
-  test("Given two sessions, When the first is selected, Then the selection moves", () => {
-    const first = createSession(1);
-    createSession(2);
-    navigate({ kind: "session", sessionId: first });
-
-    expect(consoleStore.state.selectedSessionId).toBe(first);
+describe("selection, groups and drafts", () => {
+  test("explicit session selection reuses the already open view", () => {
+    newSessionTab();
+    const first = currentTab();
+    newSessionTab();
+    navigate(first.place);
+    expect(currentTab()).toBe(first);
+    expect(activePlace(consoleStore.state)).toEqual(first.place);
+    expect(consoleStore.state.tabs).toHaveLength(2);
   });
 
-  test("Given a project, When toggled twice, Then it is collapsed and then open again", () => {
+  test("project groups toggle independently", () => {
     toggleProject("p");
     expect(consoleStore.state.collapsedProjectIds.has("p")).toBe(true);
-
     toggleProject("p");
     expect(consoleStore.state.collapsedProjectIds.has("p")).toBe(false);
+    toggleProject(null);
+    expect(consoleStore.state.collapsedProjectIds.has(null)).toBe(true);
   });
-});
 
-describe("drafts are per session", () => {
-  test("Given two sessions, When one draft is written, Then the other is untouched", () => {
+  test("drafts stay with their sessions", () => {
     const first = createSession(1);
     const second = createSession(2);
     setDraft(first, "half a thought");
-
     expect(consoleStore.state.drafts[first]).toBe("half a thought");
     expect(consoleStore.state.drafts[second]).toBeUndefined();
   });
 });
 
-describe("history has browser semantics", () => {
-  test("Given three visits, When going back twice and forward once, Then the cursor follows and the column moves", () => {
+describe("tab history has browser semantics", () => {
+  test("back twice and forward once move the active cursor and place", () => {
     const first = createSession(1);
     const second = createSession(2);
-    navigate({ kind: "route", route: "inbox" }, 3);
-
-    expect(consoleStore.state.history.entries.map((entry) => entry.title)).toEqual([
-      "Session 1",
-      "Session 2",
-      "Inbox",
-    ]);
+    navigate({ kind: "session", sessionId: first });
+    navigate({ kind: "session", sessionId: second });
+    navigate({ kind: "route", route: "inbox" });
     back();
     back();
-    expect(consoleStore.state.selectedSessionId).toBe(first);
-    expect(consoleStore.state.route).toBe("sessions");
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: first });
     forward();
-    expect(consoleStore.state.selectedSessionId).toBe(second);
-    expect(canGoBack(consoleStore.state.history)).toBe(true);
-    expect(canGoForward(consoleStore.state.history)).toBe(true);
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: second });
+    expect(canGoBack(currentTab().history)).toBe(true);
+    expect(canGoForward(currentTab().history)).toBe(true);
   });
 
-  test("Given a cursor behind the end, When a new place is visited, Then the forward entries are dropped", () => {
-    createSession(1);
-    createSession(2);
+  test("a new place truncates forward entries", () => {
+    openTab({ kind: "route", route: "sessions" });
+    navigate({ kind: "route", route: "inbox" });
     back();
-    navigate({ kind: "route", route: "memory" }, 3);
-
-    expect(consoleStore.state.history.entries.map((entry) => entry.title)).toEqual([
-      "Session 1",
-      "Memory",
+    navigate({ kind: "route", route: "memory" });
+    expect(currentTab().history.entries).toEqual([
+      { kind: "route", route: "sessions" },
+      { kind: "route", route: "memory" },
     ]);
-    expect(canGoForward(consoleStore.state.history)).toBe(false);
+    expect(canGoForward(currentTab().history)).toBe(false);
   });
 
-  test("Given the current place, When visited again, Then no entry is added", () => {
-    createSession(1);
-    navigate({ kind: "route", route: "inbox" }, 2);
-    navigate({ kind: "route", route: "inbox" }, 3);
-
-    expect(consoleStore.state.history.entries).toHaveLength(2);
+  test("same-place selection neither pushes nor truncates forward history", () => {
+    openTab({ kind: "route", route: "sessions" });
+    navigate({ kind: "route", route: "inbox" });
+    back();
+    const before = currentTab();
+    navigate({ kind: "route", route: "sessions" });
+    expect(currentTab()).toBe(before);
+    expect(currentTab().history.entries).toHaveLength(2);
   });
 
-  test("Given an entry id, When jumped to, Then the cursor lands there without pushing", () => {
-    const first = createSession(1);
-    createSession(2);
-    navigate({ kind: "route", route: "automations" }, 3);
-    const target = consoleStore.state.history.entries[0];
-    if (target === undefined) throw new Error("expected a first entry");
-
-    jumpTo(target.id);
-    expect(consoleStore.state.history.cursor).toBe(0);
-    expect(consoleStore.state.history.entries).toHaveLength(3);
-    expect(consoleStore.state.selectedSessionId).toBe(first);
+  test("integer cursor jumps do not push", () => {
+    openTab({ kind: "route", route: "sessions" });
+    navigate({ kind: "route", route: "inbox" });
+    navigate({ kind: "route", route: "automations" });
+    jumpTo(0);
+    expect(currentTab().history.cursor).toBe(0);
+    expect(currentTab().history.entries).toHaveLength(3);
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "sessions" });
   });
 
-  test("Given the stack ends, When moving past them, Then nothing changes", () => {
-    expect(canGoBack(consoleStore.state.history)).toBe(false);
+  test("empty strips and invalid boundaries leave state unchanged", () => {
+    const empty = consoleStore.state;
     back();
     forward();
-    expect(consoleStore.state.history.cursor).toBe(-1);
+    jumpTo(0);
+    expect(consoleStore.state).toBe(empty);
+    expect(activeTab(empty)).toBeNull();
+    expect(activePlace(empty)).toBeNull();
+    openTab({ kind: "route", route: "sessions" });
+    const before = consoleStore.state;
+    for (const cursor of [-1, 1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) jumpTo(cursor);
+    back();
+    forward();
+    jumpTo(0);
+    expect(consoleStore.state).toBe(before);
+    expect(canGoBack(currentTab().history)).toBe(false);
+    expect(canGoForward(currentTab().history)).toBe(false);
   });
 });
 
 describe("the sidebar's width and mode", () => {
-  test("Given widths outside the range, When set, Then they are clamped to it", () => {
+  test("widths are clamped and rounded", () => {
     setSidebarWidth(SIDEBAR_WIDTH.min - 100);
     expect(consoleStore.state.sidebarWidth).toBe(SIDEBAR_WIDTH.min);
     setSidebarWidth(SIDEBAR_WIDTH.max + 100);
@@ -152,14 +206,16 @@ describe("the sidebar's width and mode", () => {
     expect(consoleStore.state.sidebarWidth).toBe(260);
   });
 
-  test("Given an open sidebar, When toggled twice, Then it closes and reopens", () => {
+  test("toggle closes and reopens, explicit state is supported", () => {
     toggleSidebar();
     expect(consoleStore.state.sidebarOpen).toBe(false);
     toggleSidebar();
     expect(consoleStore.state.sidebarOpen).toBe(true);
+    setSidebarOpen(false);
+    expect(consoleStore.state.sidebarOpen).toBe(false);
   });
 
-  test("Given a collapsed sidebar revealed by hover, When toggled, Then it is pinned: open and no longer floating", () => {
+  test("toggling a floating reveal pins it", () => {
     toggleSidebar();
     setSidebarFloating(true);
     expect(consoleStore.state.sidebarFloating).toBe(true);
@@ -168,26 +224,21 @@ describe("the sidebar's width and mode", () => {
     expect(consoleStore.state.sidebarFloating).toBe(false);
   });
 
-  test("Given a floating reveal, When the column arrives anywhere, Then the reveal is dismissed", () => {
+  test("navigation leaves search-owned floating reveal for App to dismiss", () => {
     const id = createSession(1);
     toggleSidebar();
     setSidebarFloating(true);
     navigate({ kind: "route", route: "inbox" });
-    expect(consoleStore.state.sidebarFloating).toBe(false);
+    expect(consoleStore.state.sidebarFloating).toBe(true);
     expect(consoleStore.state.sidebarOpen).toBe(false);
-
-    // The same place again is still an arrival: a row click on the selected
-    // session closes the reveal too.
-    setSidebarFloating(true);
     navigate({ kind: "session", sessionId: id });
     navigate({ kind: "session", sessionId: id });
-    expect(consoleStore.state.sidebarFloating).toBe(false);
-    setSidebarFloating(true);
+    expect(consoleStore.state.sidebarFloating).toBe(true);
     back();
-    expect(consoleStore.state.sidebarFloating).toBe(false);
+    expect(consoleStore.state.sidebarFloating).toBe(true);
   });
 
-  test("Given the reveal already in a state, When set to it again, Then the store does not churn", () => {
+  test("unchanged reveal state does not churn", () => {
     const before = consoleStore.state;
     setSidebarFloating(false);
     expect(consoleStore.state).toBe(before);

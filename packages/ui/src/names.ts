@@ -25,8 +25,13 @@ export const UI_NAMES = {
   SidebarToggleIcon: "Sidebar.Toggle.Icon",
   /** The history trio: clock, back, forward. Right-aligned to the sidebar's edge while open. */
   TabStripTrio: "TabStrip.Trio",
-  /** The one tab: the open column's title. */
+  TabStripList: "TabStrip.List",
+  TabStripCreate: "TabStrip.Create",
   Tab: "Tab",
+  TabIcon: "Tab.Icon",
+  TabTitle: "Tab.Title",
+  TabClose: "Tab.Close",
+  ConsoleContent: "Console.Content",
   /** The window root: sidebar state and the runtime `--sidebar-width` live here. */
   Sidebar: "Sidebar",
   /** The in-flow spacer the fixed sidebar container sits over. */

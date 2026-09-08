@@ -31,6 +31,7 @@ describe("the strip's tokens", () => {
     expect(px("--spacing-shell-strip")).toBe(42);
     expect(px("--spacing-tab-height")).toBe(26);
     expect(px("--spacing-control-base")).toBe(28);
+    expect(px("--spacing-control-xs")).toBe(20);
     expect(px("--spacing-traffic-safe")).toBe(81);
     expect(CSS).toContain("--shell-top: var(--spacing-shell-strip);");
   });
@@ -97,7 +98,7 @@ describe("the strip's glyphs", () => {
   test("Given the strip, When its imports are read, Then the toggle and chevrons are ours, not lucide's", async () => {
     const strip = await Bun.file(join(SRC, "tab-strip.tsx")).text();
     const lucide = strip.match(/import \{([^}]+)\} from "lucide-react"/)?.[1] ?? "";
-    expect(lucide.split(",").map((name) => name.trim())).toEqual(["Plus"]);
+    expect(lucide.split(",").map((name) => name.trim())).toEqual(["Plus", "X"]);
     expect(strip).toContain('from "./icons/sidebar-toggle"');
     expect(strip).toContain('from "./icons/chevron"');
   });

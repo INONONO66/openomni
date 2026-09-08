@@ -17,9 +17,15 @@ import type { Session } from "../src/renderer/state/store";
  * reducer).
  */
 const sessions: readonly Session[] = [
-  { id: "s1", title: "ledger append path", projectId: "kernel", createdAt: 1 },
-  { id: "s2", title: "lease semantics", projectId: "kernel", createdAt: 2 },
-  { id: "s3", title: "sync engine", projectId: "perimeter", createdAt: 3 },
+  {
+    id: "s1",
+    title: "ledger append path",
+    titleSource: "prompt",
+    projectId: "kernel",
+    createdAt: 1,
+  },
+  { id: "s2", title: "lease semantics", titleSource: "prompt", projectId: "kernel", createdAt: 2 },
+  { id: "s3", title: "sync engine", titleSource: "prompt", projectId: "perimeter", createdAt: 3 },
 ];
 const selectedId = "s2";
 

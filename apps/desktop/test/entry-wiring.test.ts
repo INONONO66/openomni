@@ -43,6 +43,7 @@ test("desktop entries register IPC before window creation and render without awa
   const handlers = new Map<string, () => GatewayEndpoint>();
   const events = new Map<string, () => void>();
   const windows: WindowDouble[] = [];
+  const menus: number[] = [];
   const loaded: string[] = [];
   const order: string[] = [];
   const rendered: object[] = [];
@@ -61,6 +62,7 @@ test("desktop entries register IPC before window creation and render without awa
       expect(handlers.has(GATEWAY_CHANNEL)).toBe(true);
       windows.push(this);
     }
+    readonly id = windows.length;
     readonly listeners = new Map<string, () => void>();
     readonly debug: DebugListeners = {};
     readonly webContents = {
@@ -80,6 +82,9 @@ test("desktop entries register IPC before window creation and render without awa
     loadURL(url: string): Promise<void> {
       loaded.push(url);
       return Promise.resolve();
+    }
+    static getFocusedWindow(): WindowDouble | null {
+      return null;
     }
     loadFile(path: string): Promise<void> {
       loaded.push(path);
@@ -108,6 +113,15 @@ test("desktop entries register IPC before window creation and render without awa
       },
     },
     nativeTheme: { shouldUseDarkColors: true },
+    Menu: {
+      buildFromTemplate: (template: object[]) => {
+        order.push(`menu:${template.length}`);
+        return { template };
+      },
+      setApplicationMenu: (menu: { template: object[] }) => {
+        menus.push(menu.template.length);
+      },
+    },
     contextBridge: {
       exposeInMainWorld: (name: string, api: DesktopApi) => {
         expect(name).toBe("desktop");
@@ -177,8 +191,11 @@ test("desktop entries register IPC before window creation and render without awa
     });
     first?.listeners.get("close")?.();
     jest.useRealTimers();
+    expect(menus).toHaveLength(1);
+    expect(menus[0]).toBeGreaterThan(0);
     events.get("activate")?.();
     expect(windows).toHaveLength(1);
+    windows[0]?.listeners.get("closed")?.();
     windows.length = 0;
     process.env.ELECTRON_RENDERER_URL = "http://localhost:5173";
     events.get("activate")?.();

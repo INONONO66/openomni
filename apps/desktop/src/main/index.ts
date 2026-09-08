@@ -1,8 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, app, ipcMain, nativeTheme } from "electron";
+import { BrowserWindow, Menu, app, ipcMain, nativeTheme } from "electron";
 import { GATEWAY_CHANNEL } from "../preload/api";
 import { resolveGatewayEndpoint } from "./gateway-endpoint";
+import { buildMenuTemplate, createShellCommandSender } from "./menu";
 import {
   BOUNDS_WRITE_DELAY_MS,
   parseWindowBounds,
@@ -22,6 +23,11 @@ const gateway = resolveGatewayEndpoint({
   OPENOMNI_WS_PORT: process.env.OPENOMNI_WS_PORT,
   OPENOMNI_WS_TOKEN: process.env.OPENOMNI_WS_TOKEN,
 });
+const development = Boolean(process.env.ELECTRON_RENDERER_URL);
+const applicationWindows = new Map<number, BrowserWindow>();
+let lastFocusedWindowId: number | null = null;
+
+if (development) app.commandLine.appendSwitch("remote-debugging-port", "9333");
 
 /** Same values as `--color-sunken` in @openomni/ui's two themes: no flash of the wrong shade before first paint. */
 const BACKGROUND = { dark: "#0A0A0C", light: "#EFEFF0" } as const;
@@ -63,6 +69,17 @@ function createWindow(): void {
       // shown so a backgrounded window stops burning frames.
       backgroundThrottling: false,
     },
+  });
+  const windowId = window.id;
+  applicationWindows.set(windowId, window);
+  const rememberFocus = () => {
+    lastFocusedWindowId = windowId;
+  };
+  window.on("focus", rememberFocus);
+  window.webContents.on("devtools-focused", rememberFocus);
+  window.once("closed", () => {
+    applicationWindows.delete(windowId);
+    if (lastFocusedWindowId === windowId) lastFocusedWindowId = null;
   });
   window.once("ready-to-show", () => {
     window.show();
@@ -122,9 +139,17 @@ app.whenReady().then(() => {
   // endpoint on its first paint, and a handler installed inside `createWindow`
   // would be a race with it on the second window.
   ipcMain.handle(GATEWAY_CHANNEL, () => gateway);
+  const send = createShellCommandSender({
+    getFocusedWindow: () => BrowserWindow.getFocusedWindow(),
+    getApplicationWindows: () => [...applicationWindows.values()],
+    getLastFocusedWindowId: () => lastFocusedWindowId,
+  });
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(buildMenuTemplate({ platform: process.platform, development, send })),
+  );
   createWindow();
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (applicationWindows.size === 0) createWindow();
   });
 });
 

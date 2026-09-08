@@ -36,6 +36,7 @@ function frame(
       width={240}
     >
       <TabStrip
+        {...STRIP}
         createLabel="New"
         history={STRIP.history}
         onCreate={() => undefined}
@@ -306,7 +307,7 @@ describe("the tab strip's controls zone", () => {
     const html = frame(true, null);
     const zone = html.slice(
       html.indexOf('data-ui="TabStrip.Controls"'),
-      html.indexOf('aria-label="New"'),
+      html.indexOf('data-ui="TabStrip.List"'),
     );
     // Children in order: toggle, trio — and nothing after the trio's closing tag.
     const toggleAt = zone.indexOf('data-ui="Sidebar.Toggle"');
@@ -400,16 +401,19 @@ describe("the tab strip's controls zone", () => {
         width={240}
       >
         <TabStrip
+          {...STRIP}
           createLabel="New"
           history={STRIP.history}
           onCreate={() => undefined}
           platform="darwin"
-          title="ledger"
+          tabs={[{ id: "a", title: "ledger", icon: <svg aria-hidden="true" />, active: true }]}
         />
       </Sidebar>,
     );
     const tab = tag(html, "Tab");
-    expect(tab).toContain("h-tab-height w-56");
+    expect(tab).toContain("h-tab-height");
+    expect(tab).toContain("min-w-24");
+    expect(tab).toContain("max-w-56");
     expect(tab).toContain("rounded-card");
     expect(html).not.toContain('data-ui="StatusDot"');
   });

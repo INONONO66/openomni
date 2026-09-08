@@ -165,9 +165,11 @@ describe("the composer surface", () => {
     const html = renderToStaticMarkup(
       <Console
         shell={SHELL}
-        strip={STRIP}
-        title="Session"
-        session={{
+        strip={{
+          ...STRIP,
+          tabs: [{ id: "stop", title: "Title", icon: <svg aria-hidden="true" />, active: true }],
+        }}
+        transcript={{
           id: "stop",
           nodes: [],
           draft: "",
