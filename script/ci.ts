@@ -36,22 +36,32 @@ const planSchema = z
   })
   .superRefine((plan, ctx) => {
     const keys = new Set(plan.matrix.include.map((lane) => lane.key));
-    if (
-      keys.size !== plan.matrix.include.length ||
-      plan.verify !== keys.size > 0 ||
-      (plan.full && keys.size !== LANES.length) ||
-      scriptPartitions.filter((key) => key !== "scripts-contracts").some((key) => keys.has(key) !== plan.toolingTests) ||
-      plan.matrix.include.some(
-        (lane) =>
-          !LANES.some(
-            (known) =>
-              known.key === lane.key && known.dir === lane.dir && known.coverage === lane.coverage,
-          ),
-      )
-    ) {
+    if (laneSetInvalid(plan, keys) || laneRowsUnknown(plan, keys)) {
       ctx.addIssue({ code: "custom", message: "Invalid CI lane inventory" });
     }
   });
+type Plan = z.infer<typeof planSchema>;
+
+function laneSetInvalid(plan: Plan, keys: ReadonlySet<string>): boolean {
+  return (
+    keys.size !== plan.matrix.include.length ||
+    plan.verify !== keys.size > 0 ||
+    (plan.full && keys.size !== LANES.length)
+  );
+}
+
+function laneRowsUnknown(plan: Plan, keys: ReadonlySet<string>): boolean {
+  return (
+    scriptPartitions.filter((key) => key !== "scripts-contracts").some((key) => keys.has(key) !== plan.toolingTests) ||
+    plan.matrix.include.some(
+      (lane) =>
+        !LANES.some(
+          (known) =>
+            known.key === lane.key && known.dir === lane.dir && known.coverage === lane.coverage,
+        ),
+    )
+  );
+}
 
 class CiError extends Error {
   constructor(readonly operation: string) {
@@ -76,7 +86,7 @@ function readPlan(path?: string) {
   );
 }
 
-export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void {
+export function gate(plan: Plan, testOnly: boolean): void {
   const needs = z
     .record(
       z.string(),
@@ -133,6 +143,47 @@ function artifacts(mode: "pack" | "restore", root: string): void {
   if (mode === "pack") run(["tar", "-cf", archive, ...dirs], root);
 }
 
+function checkTypes(plan: Plan): void {
+  const selected = new Set(plan.matrix.include.map((lane) => lane.key));
+  const filters = TOPOLOGY.filter((workspace) => selected.has(workspace.key)).map(
+    (workspace) => `--filter=${workspace.packageName}`,
+  );
+  // Artifacts are already restored: --only prevents dependency builds from running again.
+  if (filters.length > 0) run(["bunx", "turbo", "run", "check-types", "--only", ...filters]);
+  if (plan.toolingTests) run(["bunx", "tsc", "-p", "script/tsconfig.json"]);
+}
+
+function testScripts(lane: string): void {
+  run(scriptTestCommand(lane), join(ROOT, "script"));
+  if (lane === "scripts-contracts")
+    for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)]);
+}
+
+function laneTestCommand(lane: (typeof LANES)[number]): string[] {
+  const workspace = TOPOLOGY.find((candidate) => candidate.key === lane.key);
+  const override = workspace && "ciTestCommand" in workspace ? workspace.ciTestCommand : undefined;
+  return override
+    ? override.split(" ")
+    : [
+        "bun",
+        "test",
+        "--timeout",
+        "15000",
+        ...(lane.coverage ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"] : []),
+      ];
+}
+
+function testLane(key: string | undefined): void {
+  if (key && scriptPartitions.some((partition) => partition === key)) {
+    testScripts(key);
+    return;
+  }
+  const lane = LANES.find((candidate) => candidate.key === key);
+  if (!lane) throw new CiError(`unknown lane: ${key}`);
+  run(laneTestCommand(lane), join(ROOT, lane.dir));
+  if (lane.coverage) run(["bun", "run", "script/check-coverage-ratchet.ts", "--lane", lane.dir]);
+}
+
 function main(): void {
   const { values, positionals } = parseArgs({
     args: Bun.argv.slice(2),
@@ -155,46 +206,12 @@ function main(): void {
     case "test-gate":
       gate(readPlan(values.plan), positionals[0] === "test-gate");
       return;
-    case "check-types": {
-      const plan = readPlan(values.plan);
-      const selected = new Set(plan.matrix.include.map((lane) => lane.key));
-      const filters = TOPOLOGY.filter((workspace) => selected.has(workspace.key)).map(
-        (workspace) => `--filter=${workspace.packageName}`,
-      );
-      // Artifacts are already restored: --only prevents dependency builds from running again.
-      if (filters.length > 0) run(["bunx", "turbo", "run", "check-types", "--only", ...filters]);
-      if (plan.toolingTests) run(["bunx", "tsc", "-p", "script/tsconfig.json"]);
+    case "check-types":
+      checkTypes(readPlan(values.plan));
       return;
-    }
-    case "test": {
-      if (values.lane && scriptPartitions.some((key) => key === values.lane)) {
-        run(scriptTestCommand(values.lane), join(ROOT, "script"));
-        if (values.lane === "scripts-contracts") for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)]);
-        return;
-      }
-      const lane = LANES.find((candidate) => candidate.key === values.lane);
-      if (!lane) throw new CiError(`unknown lane: ${values.lane}`);
-      const workspace = TOPOLOGY.find((candidate) => candidate.key === lane.key);
-      const override =
-        workspace && "ciTestCommand" in workspace ? workspace.ciTestCommand : undefined;
-      run(
-        override
-          ? override.split(" ")
-          : [
-              "bun",
-              "test",
-              "--timeout",
-              "15000",
-              ...(lane.coverage
-                ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"]
-                : []),
-            ],
-        join(ROOT, lane.dir),
-      );
-      if (lane.coverage)
-        run(["bun", "run", "script/check-coverage-ratchet.ts", "--lane", lane.dir]);
+    case "test":
+      testLane(values.lane);
       return;
-    }
     default:
       throw new CiError(
         "expected build, pack, restore, check-types --plan FILE, test --lane KEY, gate or test-gate",
