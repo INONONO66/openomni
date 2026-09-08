@@ -22,6 +22,7 @@ export const scriptsLanes = {
     "verify-tsconfig-inheritance.test.ts",
   ],
   "scripts-tooling": [
+    "census-program.test.ts",
     "check-census.test.ts",
     "check-quality-coverage.test.ts",
     "check-quality-metrics.test.ts",
