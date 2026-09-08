@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788880513274,
+  "lastUpdate": 1788883171438,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -68093,6 +68093,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 1006168,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "495a9523f57fa2116d9bdfe4d4ed7f13a98d57e9",
+          "message": "feat(tools): eval peek/stop, completion options, codemode handle names (#949 stage 3) (#1010)\n\n* feat(tools): eval peek/stop, completion options, codemode handle names (#949 stage 3)\n\n- protocol: machine.peek_code wire method, CellState (CellResult + running),\n  timed_out/cancelled carry partial output, CompletionRequest {prompt, model?,\n  system?, schema?} shared by the tool input and the codemode helper.\n- codemode: the Python driver tees stdout/stderr into output frames as the\n  cell prints; the kernel accumulates them per pending cell (frames naming\n  another cell are dropped) and exposes peek(cellId). cell.run waits waitMs\n  and otherwise answers running while the cell continues in a per-tenant\n  background registry; cell.peek/cell.stop read or interrupt it; a settled\n  result is handed over once and never re-runs. Handle methods are the tool\n  names: read/write/ls/bash/eval (raw list/stat/shell/run names removed).\n- machines: daemon PeekCode handler, host peekCode, aborted results keep output.\n- app: eval.op = run | peek | stop with a ten-minute background ceiling;\n  completion forwards model/system, validates a schema answer host-side\n  (z.fromJSONSchema) and returns canonical JSON; the Python helper decodes it.\n- snapshots regenerated via script/lint-tools.ts --update.\n\n* feat(lint): pin the tool file name to the tool name in kebab-case\n\nKERNEL 3.5 says the file is the tool; the repo-wide biome filename rule makes\nthat send-message.ts for send_message. lint:tools [tool-file-name] now checks\nevery catalog definition's source path against that spelling; self-test and\nunit tests cover the pass and fail sides.\n\n* docs: close #949 stage 3 residue (eval peek/stop, completion options, handle names)\n\nkernel-contract: eval op union, completion options, file-name spelling rule.\nmachines-and-delegation: cell.run/peek/stop lifecycle, streamed output, tool-\nnamed handles. implementation-status: stale tools/execution pointer replaced,\n#949 marked complete. SLOP: E8/E9 residue closed with receipts.\n\n* test(agent): point the cell-door comment at composition/codemode.ts\n\n* test: cover peek over the wire and the streamed output frame\n\n- machines: host peekCode answers not-running locally for an unknown cell,\n  forwards a live one to the daemon runner, and is silent once it settles.\n- codemode: a cell queued behind a held one peeks as running with no output\n  and stops as cancelled without touching the interpreter; a connection loss\n  also propagates through the background wait path.\n- quality-coverage driver self-test: the wire now streams output frames\n  before a result; the test consumes them and asserts the printed text.\n\n* fix(codemode): claim a background cell synchronously; pin forged-frame, race and eviction\n\nReview R1 of #1010.\n\n- kernel.test: the forged-frame test now observes the kernel-side output through\n  `kernel.peek` after the forged write, so removing the cellId guard fails it.\n- index.ts: a `peek` whose daemon round trip a `stop` overtook finds the id spent\n  instead of handing the settled result over a second time; `run` reads its own\n  settled value directly, since no other caller can know the id yet.\n- consumer.test: deterministic concurrent peek+stop (exactly one wins), and the\n  64-entry retention bound evicts the oldest unread settled cell.\n- code-mode-e2e: the same race through the eval tool door renders ToolRefused.\n- docs: #949 stays open — `edit/find/grep` handle methods are not offered yet\n  (tool-layer compositions above codemode); stated exactly, not claimed complete.",
+          "timestamp": "2026-09-09T00:58:21+09:00",
+          "tree_id": "ffbfff30bcd5af4140323fa37789d30e7b392979",
+          "url": "https://github.com/INONONO66/openomni/commit/495a9523f57fa2116d9bdfe4d4ed7f13a98d57e9"
+        },
+        "date": 1788883170634,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 821,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 5390,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2828,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1241793,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 340580,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6341341,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 138,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 472853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3371,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 176575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 883276,
             "unit": "ns/op"
           }
         ]
