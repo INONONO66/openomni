@@ -76,10 +76,12 @@ test("tab keyboard navigation wraps, updates panel ownership and scrolls selecti
       );
     });
     expect(node("#tab-a").getAttribute("aria-selected")).toBe("true");
-    // Unselected tabs read dimmer than the active one so the strip has one clear focus.
-    const dimmed = (id: string) => node(`#tab-${id}`).closest('[data-ui="Tab"]')?.className.includes("opacity-70");
-    expect(dimmed("a")).toBe(false);
-    expect(dimmed("b")).toBe(true);
+    // Only the label dims: the leading status glyph retains its exact tone.
+    const tabClasses = (id: string) =>
+      node(`#tab-${id}`).closest('[data-ui="Tab"]')?.className ?? "";
+    expect(tabClasses("a")).not.toContain("text-fg-muted");
+    expect(tabClasses("b")).toContain("text-fg-muted");
+    for (const id of ["a", "b"]) expect(tabClasses(id)).not.toMatch(/\bopacity-\d+/);
     // ...but an unselected tab still reads as a box: its edge and fill stay drawn.
     const boxed = (id: string) => {
       const cls = node(`#tab-${id}`).closest('[data-ui="Tab"]')?.className ?? "";

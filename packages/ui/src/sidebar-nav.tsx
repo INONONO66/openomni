@@ -109,7 +109,7 @@ export function SectionHeader({
         {searching ? (
           children
         ) : (
-          <Text className="truncate" level="meta" tone="fg">
+          <Text className="truncate font-semibold" level="label" tone="fg">
             {label}
           </Text>
         )}

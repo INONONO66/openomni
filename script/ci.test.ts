@@ -53,7 +53,7 @@ test("docs-only planning keeps both final statuses successful while work is inte
   const plan = planChanges(["README.md"]);
   const needs = Object.fromEntries(
     [
-      "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+      "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
       "dependency-review",
     ].map((job) => [job, { result: "skipped" }]),
   );
@@ -77,7 +77,7 @@ for (const job of [
       // is required on pushes, so the push event exercises every job.
       const needs: Record<string, { result: string }> = Object.fromEntries(
         [
-          "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+          "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
           "dependency-review",
         ].map((key) => [key, { result: "success" }]),
       );
@@ -102,7 +102,7 @@ test("full gate executes the required quality jobs in process", () => {
   const env = {
     CI_NEEDS: JSON.stringify({
       ...Object.fromEntries([
-        "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+        "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
       ].map((job) => [job, { result: "success" }])),
       "dependency-review": { result: "skipped" },
     }),
@@ -268,7 +268,7 @@ test("the stable Test status accepts only the planned documentation skip", () =>
 test("a pull request requires every quality job skipped and rejects a quality run", () => {
   // Given a full pull-request plan where GitHub skipped the quality jobs by design.
   const needs = Object.fromEntries(
-    ["plan", "prepare", "tests", "static", "deps", "dependency-review"].map((key) => [
+    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review"].map((key) => [
       key,
       { result: "success" },
     ]),
@@ -307,7 +307,7 @@ test("the full push gate accepts successful checks without PR-only dependency re
   // Given full main-branch results with only the PR-specific check disabled.
   const needs = Object.fromEntries(
     [
-      "plan", "prepare", "tests", "static", "deps", "quality-static", "quality-gates", "quality",
+      "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
     ].map((key) => [key, { result: "success" }]),
   );
   // When the real gate executes, then all mandatory work is accepted.

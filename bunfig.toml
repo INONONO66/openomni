@@ -10,4 +10,4 @@ coverageSkipTestFiles = true
 # runs don't read the root bunfig) — the load-bearing guard is build-side:
 # every package builds via tsconfig.build.json, which excludes `**/*.test.ts`
 # from emit, after an `rm -rf dist` clean step.
-pathIgnorePatterns = ["**/dist/**"]
+pathIgnorePatterns = ["**/dist/**", "**/test-e2e/**"]

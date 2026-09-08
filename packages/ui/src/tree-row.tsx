@@ -26,11 +26,16 @@ export function TreeRow({
   level = 0,
   current = false,
   expanded,
+  secondary,
+  trailing,
   children,
   ...rest
 }: {
   readonly level?: TreeLevel;
   readonly current?: boolean;
+  readonly secondary?: ReactNode;
+  /** Rendered after the text block, centered on the row's full height. */
+  readonly trailing?: ReactNode;
   /** Set only on a row that opens a group; the chevron reports it. */
   readonly expanded?: boolean | undefined;
   readonly children: ReactNode;
@@ -39,9 +44,10 @@ export function TreeRow({
     <BaseButton
       aria-current={current ? "true" : undefined}
       aria-expanded={expanded}
-      className={`focus-ring flex h-7 w-full select-none items-center gap-1.5 rounded-sm pr-2 text-left text-label transition-quiet active:bg-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 ${
+      className={`focus-ring flex w-full select-none items-center gap-1.5 rounded-sm pr-2 text-left text-label transition-quiet active:bg-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 ${
         current ? "bg-raised font-medium text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
-      } ${LEVEL[level]}`}
+      } ${secondary == null ? "h-7" : "min-h-7 py-1.5"} ${LEVEL[level]}`}
+      data-density={secondary == null ? "single" : "double"}
       data-level={level}
       data-ui={UI_NAMES.TreeRow}
       {...rest}
@@ -49,10 +55,18 @@ export function TreeRow({
       {expanded !== undefined && (
         <ChevronRight
           aria-hidden
-          className={`transition-quiet motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
+          className={`size-3.5 transition-quiet motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
         />
       )}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {children}
+        {secondary != null && (
+          <span className="block truncate text-fg-muted text-meta" data-secondary="">
+            {secondary}
+          </span>
+        )}
+      </span>
+      {trailing}
     </BaseButton>
   );
 }
