@@ -60,14 +60,14 @@ interface RevealIntent {
 }
 
 /** The timers the intent schedules on; the window's by default, a fake clock under test. */
-export interface RevealTimers {
-  readonly setTimeout: (callback: () => void, ms: number) => unknown;
-  readonly clearTimeout: (handle: unknown) => void;
+export interface RevealTimers<H> {
+  readonly setTimeout: (callback: () => void, ms: number) => H;
+  readonly clearTimeout: (handle: H) => void;
 }
 
-const WINDOW_TIMERS: RevealTimers = {
+const WINDOW_TIMERS: RevealTimers<ReturnType<typeof setTimeout>> = {
   setTimeout: (callback, ms) => setTimeout(callback, ms),
-  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  clearTimeout: (handle) => clearTimeout(handle),
 };
 
 /**
@@ -77,14 +77,14 @@ const WINDOW_TIMERS: RevealTimers = {
  * between two hot zones fires leave-then-enter in one frame, so the close a
  * leave armed is cancelled before it can fire: no counter, no zone identity.
  */
-export function createRevealIntent(
+export function createRevealIntent<H>(
   shown: () => boolean,
   set: (floating: boolean) => void,
-  timers: RevealTimers = WINDOW_TIMERS,
+  timers: RevealTimers<H>,
   delays: { readonly openDelay: number; readonly closeDelay: number } = SIDEBAR_REVEAL,
 ): RevealIntent {
-  let opening: unknown = null;
-  let closing: unknown = null;
+  let opening: H | null = null;
+  let closing: H | null = null;
   const disarm = () => {
     if (opening !== null) timers.clearTimeout(opening);
     if (closing !== null) timers.clearTimeout(closing);
@@ -180,6 +180,7 @@ export function Sidebar({
     intent.current = createRevealIntent(
       () => latest.current.floating,
       (value) => latest.current.onFloatingChange(value),
+      WINDOW_TIMERS,
     );
   }
   const reveal = useRef({

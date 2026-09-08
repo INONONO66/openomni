@@ -76,9 +76,9 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     await click('[data-ui="SectionHeader.Toggle"]');
     expect(host.querySelector('[role="combobox"]')).not.toBeNull();
     await act(() =>
-      host
+      window.document
         .querySelector("input")
-        ?.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }) as unknown as Event),
+        ?.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
     );
     expect(host.querySelector('[role="combobox"]')).toBeNull();
     await act(() => key("x"));

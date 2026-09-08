@@ -14,7 +14,7 @@ const ENVIRONMENT = ["OPENOMNI_WS_URL", "OPENOMNI_WS_TOKEN", "ELECTRON_RENDERER_
 function snapshotHost(globals: Globals): () => void {
   const previous = { ...globals };
   const environment = ENVIRONMENT.map((key) => [key, process.env[key]] as const);
-  const restore = (target: Record<string, unknown>, key: string, value: unknown) => {
+  const restore = <T extends object, K extends keyof T>(target: T, key: K, value: T[K]) => {
     if (value === undefined) delete target[key];
     else target[key] = value;
   };
@@ -24,12 +24,17 @@ function snapshotHost(globals: Globals): () => void {
   };
 }
 
-type DebugCall = readonly [string, (...args: unknown[]) => void];
+interface DebugEvents {
+  "console-message": [{ level: number; message: string; sourceId: string; lineNumber: number }];
+  "render-process-gone": [object, { reason: string; exitCode: number }];
+  "did-fail-load": [object, number, string, string];
+}
+type DebugListeners = { [K in keyof DebugEvents]?: (...args: DebugEvents[K]) => void };
 /** Fire the webContents debug listener registered under `name` with `args`. */
-function fireDebug(calls: readonly DebugCall[] | undefined, name: string, ...args: unknown[]): void {
-  const call = calls?.find(([registered]) => registered === name);
-  expect(call).toBeDefined();
-  call?.[1](...args);
+function fireDebug<K extends keyof DebugEvents>(listeners: DebugListeners | undefined, name: K, ...args: DebugEvents[K]): void {
+  const listener = listeners?.[name];
+  expect(listener).toBeDefined();
+  listener?.(...args);
 }
 
 test("desktop entries register IPC before window creation and render without awaiting the gateway", async () => {
@@ -57,10 +62,13 @@ test("desktop entries register IPC before window creation and render without awa
       windows.push(this);
     }
     readonly listeners = new Map<string, () => void>();
+    readonly debug: DebugListeners = {};
     readonly webContents = {
       setBackgroundThrottling: mock((_enabled: boolean) => undefined),
       openDevTools: mock((_options: { mode: string }) => undefined),
-      on: mock((_name: string, _callback: (...args: any[]) => void) => undefined),
+      on: <K extends keyof DebugEvents>(name: K, callback: DebugListeners[K]) => {
+        this.debug[name] = callback;
+      },
     };
     readonly once = (name: string, callback: () => void) => this.listeners.set(name, callback);
     readonly on = (name: string, callback: () => void) => this.listeners.set(name, callback);
@@ -179,7 +187,7 @@ test("desktop entries register IPC before window creation and render without awa
     expect(windows[0]?.webContents.openDevTools).toHaveBeenCalledWith({ mode: "detach" });
     const log = spyOn(console, "log").mockImplementation(() => undefined);
     const error = spyOn(console, "error").mockImplementation(() => undefined);
-    const debug = windows[0]?.webContents.on.mock.calls;
+    const debug = windows[0]?.debug;
     fireDebug(debug, "console-message", { level: 1, message: "fixture", sourceId: "test", lineNumber: 2 });
     fireDebug(debug, "render-process-gone", {}, { reason: "crashed", exitCode: 1 });
     fireDebug(debug, "did-fail-load", {}, 3, "failed", "test");

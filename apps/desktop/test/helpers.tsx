@@ -5,7 +5,7 @@ import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 
 /** Install `replacements` as browser globals; the returned function restores the originals. */
-export function installGlobals(replacements: Record<string, unknown>): () => void {
+export function installGlobals(replacements: Record<string, object | boolean>): () => void {
   const descriptors = new Map(
     Object.keys(replacements).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
   );

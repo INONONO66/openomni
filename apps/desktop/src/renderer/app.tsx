@@ -75,8 +75,10 @@ export function App({ platform, storage }: AppEnvironment) {
     setSidebarOpen(remembered.open);
     setSidebarWidth(remembered.width);
     const subscription = consoleStore.subscribe(() => {
-      const { sidebarOpen: open, sidebarWidth: width } = consoleStore.state;
-      writeShellPreferences(storage, { open, width });
+      writeShellPreferences(storage, {
+        open: consoleStore.state.sidebarOpen,
+        width: consoleStore.state.sidebarWidth,
+      });
     });
     return subscription.unsubscribe;
   }, [storage]);

@@ -189,8 +189,6 @@ function at(state: ClientState, place: Place): ClientState {
       };
     case "route":
       return { ...state, route: place.route, sidebarFloating: false };
-    default:
-      return unreachable(place);
   }
 }
 
@@ -209,8 +207,6 @@ function titleOf(state: ClientState, place: Place): string {
       );
     case "route":
       return ROUTE_LABEL[place.route];
-    default:
-      return unreachable(place);
   }
 }
 
@@ -257,8 +253,4 @@ export function setSidebarFloating(floating: boolean): void {
 /** Clamped here, so no caller can put an out-of-range width in the store. */
 export function setSidebarWidth(width: number): void {
   consoleStore.setState((state) => ({ ...state, sidebarWidth: clampSidebarWidth(width) }));
-}
-
-function unreachable(value: never): never {
-  throw new Error(`unhandled place: ${JSON.stringify(value)}`);
 }

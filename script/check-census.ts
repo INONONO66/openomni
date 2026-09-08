@@ -1237,13 +1237,12 @@ class Provenance {
     const base = this.rendererReceiver(receiver);
     if (!base) return undefined;
     const bindings = new Map<ts.ParameterDeclaration, ts.Expression>();
-    const windows = this.runtimeValues(base, bindings).filter(
-      (node) =>
-        ts.isNewExpression(node) &&
-        memberName(node.expression) === "BrowserWindow" &&
-        /electron\/electron\.d\.ts$/.test(this.nativeOwner(node)) &&
-        this.path(node),
+    const windows = this.runtimeValues(base, bindings).filter((node) =>
+      this.isProductionWindow(node),
     );
+    return this.windowLoad(windows, bindings);
+  }
+  private windowLoad(windows: ts.Node[], bindings: Map<ts.ParameterDeclaration, ts.Expression>): ts.CallExpression | undefined {
     return this.calls.find(
       (call) =>
         this.path(call) &&
@@ -1414,16 +1413,7 @@ class Provenance {
     );
     if (!windows.length) return events;
     for (const name of WINDOW_MANAGER_EVENTS) events.add(name);
-    const loaded = this.calls.some(
-      (call) =>
-        this.path(call) &&
-        ts.isPropertyAccessExpression(call.expression) &&
-        ["loadURL", "loadFile"].includes(memberName(call.expression)) &&
-        /electron\/electron\.d\.ts$/.test(this.nativeOwner(call)) &&
-        this.runtimeValues(call.expression.expression, bindings).some((window) =>
-          windows.includes(window),
-        ),
-    );
+    const loaded = this.windowLoad(windows, bindings);
     if (loaded) events.add("ready-to-show");
     return events;
   }

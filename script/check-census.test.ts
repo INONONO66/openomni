@@ -1095,8 +1095,7 @@ function electronFixture(
 const ELECTRON_SINK = `import {BrowserWindow} from "electron";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};`;
 const ELECTRON_REPORT = "console.log(JSON.stringify(received));";
 
-test("Electron renderer listeners require a real window load edge", () => {
-  for (const loaded of [false, true]) {
+test.each([false, true])("Electron renderer listeners require a real window load edge: loaded=%s", (loaded) => {
     // The dependency double delivers the documented event only after loading.
     const run = electronFixture(
       {
@@ -1109,11 +1108,9 @@ test("Electron renderer listeners require a real window load edge", () => {
     using fixture = run.fixture;
     expect(run.stdout).toBe(loaded ? '["ready"]' : "[]");
     expect(fixture.run("publisher").code).toBe(loaded ? 0 : 2);
-  }
 }, 180_000);
 
-test("Electron window listeners credit window-manager events; first paint needs the load edge", () => {
-  for (const loaded of [false, true]) {
+test.each([false, true])("Electron window listeners credit window-manager events; first paint needs the load edge: loaded=%s", (loaded) => {
     // The dependency double paints (ready-to-show) only after loading.
     const run = electronFixture(
       {
@@ -1127,8 +1124,38 @@ test("Electron window listeners credit window-manager events; first paint needs 
     expect(run.stdout).toBe(loaded ? '["ready"]' : "[]");
     const result = fixture.run("publisher");
     expect(result.code).toBe(loaded ? 0 : 2);
-    if (!loaded) expect(result.output).toContain("unsupported_native_event_lifecycle");
-  }
+    expect(result.output.includes("unsupported_native_event_lifecycle")).toBe(!loaded);
+}, 180_000);
+
+test.each([
+  ["ready", "", "attach();", true, '["ready"]', 0],
+  ["ready", "", "app.whenReady().then(attach);", true, "[]", 2],
+  ["activate", "", "attach();", true, '["ready"]', 0],
+  ["window-all-closed", "create();", "attach();", true, '["ready"]', 0],
+  ["window-all-closed", "", "attach();", true, "[]", 2],
+  ["ready", "", "attach();", false, '["ready"]', 2],
+] as const)("Electron app lifecycle follows entry, readiness and window construction: %j", (event, create, attach, electronRoot, stdout, code) => {
+    const run = electronFixture(
+      {
+        "src/events.ts": protocol,
+        "src/electron.vite.config.ts": 'export default {main:{build:{lib:{entry:"main.ts"}}}};',
+        "src/main.ts": `${ELECTRON_SINK}import {app} from "electron";
+function create(){return new BrowserWindow()}
+${create}
+function attach(){app.on("${event}",()=>sink.publish(Ready))}
+${attach}
+await new Promise<void>(resolve=>queueMicrotask(resolve));${ELECTRON_REPORT}`,
+      },
+      () => 'import {EventEmitter} from "node:events";export const app=new EventEmitter();app.whenReady=()=>Promise.resolve();export class BrowserWindow{constructor(){queueMicrotask(()=>app.emit("window-all-closed"))}}queueMicrotask(()=>{app.emit("ready");app.emit("activate")});',
+    );
+    using fixture = run.fixture;
+    if (electronRoot)
+      fixture.write("src/package.json", JSON.stringify({ name: "desktop", scripts: { build: "electron-vite build" } }));
+    expect(run.stdout).toBe(stdout);
+    const result = fixture.run("publisher");
+    expect(result.code).toBe(code);
+    if (code === 0) expect(result.output).toContain(`"events":["${event}"]`);
+    else expect(result.output).toContain("unsupported_native_event_lifecycle");
 }, 180_000);
 
 test("Electron app.getPath roots a durable file family like homedir does", () => {

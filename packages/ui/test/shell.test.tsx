@@ -181,14 +181,14 @@ function fakeClock() {
   let now = 0;
   let nextId = 1;
   const pending = new Map<number, { at: number; run: () => void }>();
-  const timers: RevealTimers = {
+  const timers: RevealTimers<number> = {
     setTimeout: (callback, ms) => {
       const id = nextId++;
       pending.set(id, { at: now + ms, run: callback });
       return id;
     },
     clearTimeout: (handle) => {
-      pending.delete(handle as number);
+      pending.delete(handle);
     },
   };
   const advance = (ms: number) => {

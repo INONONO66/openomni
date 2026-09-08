@@ -122,7 +122,7 @@ describe("history menu first paint", () => {
     const empty = renderToStaticMarkup(
       <HistoryMenu entries={[]} currentId={null} now={0} onJump={() => undefined} />,
     );
-    const entries = Array.from({ length: 21 }, (_, i) => ({
+    const entries = Array.from({ length: 21 }, (_: undefined, i: number) => ({
       id: String(i),
       title: `t${i}`,
       at: 0,

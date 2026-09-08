@@ -84,8 +84,8 @@ describe("the strip's glyphs", () => {
     expect(block).toContain("stroke-width: var(--stroke-glyph);");
     expect(block).toContain("vector-effect: non-scaling-stroke;");
     const button = await Bun.file(join(SRC, "primitives", "button.tsx")).text();
-    const sizes = Object.fromEntries(
-      [...button.matchAll(/^\s+(sm|base|md): "([^"]+)",$/gm)].map((hit) => [hit[1], hit[2]]),
+    const sizes: Record<string, string | undefined> = Object.fromEntries(
+      [...button.matchAll(/^\s+(sm|base|md): "([^"]+)",$/gm)].map((hit): [string, string | undefined] => [hit[1] ?? "", hit[2]]),
     );
     expect(sizes.base).toContain("[&_svg]:glyph-stroke");
     expect(sizes.sm).not.toContain("glyph-stroke");
