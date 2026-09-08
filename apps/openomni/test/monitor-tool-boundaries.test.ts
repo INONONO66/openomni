@@ -84,12 +84,10 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
           id: old.id,
           epoch: old.epoch,
           fence: old.fence,
-          actionId: "stale",
-          inboxId: "stale-inbox",
+          sourceKey: "path:stale",
           at: 1001,
           content: "late callback",
           terminal: false,
-          limit: 8,
         }),
       ).toBeUndefined();
       expect(fixture.rows()).toHaveLength(2);
