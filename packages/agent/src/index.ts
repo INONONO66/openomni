@@ -5,6 +5,8 @@ export { decideRequestTransition, requestBindingDigest } from "./session-request
 export { failureFacts } from "./core/retry";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
+export { foldSessionHistory } from "./session-lifecycle/history";
+export { inspectActions, inspectPolicy } from "./session-lifecycle/inspect";
 export {
   closeSessions,
   getSessionHandle,

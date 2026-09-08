@@ -1,7 +1,7 @@
 import { Message, PlainValueSchema, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionRequest } from "../executor-contract";
-import { sessionHistory } from "../session-history";
+import { foldSessionHistory } from "../session-lifecycle/history";
 import { type CompactionRecord, restoreCompactionProjection } from "./durable";
 
 const DiscardedRange = z
@@ -72,7 +72,7 @@ export function restoredContextProjection(
   compactionId: string,
   record: CompactionRecord,
 ): PlainValue {
-  const projection = restoreCompactionProjection(sessionHistory(sessionId, actions), record);
+  const projection = restoreCompactionProjection(foldSessionHistory(sessionId, actions), record);
   return PlainValueSchema.parse({
     projection,
     restored: { compactionId, discarded: record.discarded },

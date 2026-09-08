@@ -25,5 +25,6 @@ export * from "./transcript/index.js";
 export * from "./ledger/index.js";
 export * from "./storage/index.js";
 export * from "./ledger/l0.js";
+export * from "./ledger/session-history.js";
 export * from "./trace/index.js";
 export * from "./app-connector/index.js";

@@ -9,7 +9,7 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import { createExecutor } from "./executor";
-import { sessionHistory } from "./session-history";
+import { foldSessionHistory } from "./session-lifecycle/history";
 import { sessionStopEvidence } from "./session-stop-evidence";
 import type {
   SessionPolicyRefusal,
@@ -198,7 +198,7 @@ export function createSessionTurn(
                   parentActionId,
                   boundaryActionId,
                   messages: sessionMessages(SessionHandleStore.tree(sessionId)),
-                  history: sessionHistory(sessionId, SessionHandleStore.tree(sessionId)),
+                  history: foldSessionHistory(sessionId, SessionHandleStore.tree(sessionId)),
                   tools: input.generation.tools,
                   toolsGeneration: input.generation.generation,
                   toolsHash: input.generation.toolsHash,

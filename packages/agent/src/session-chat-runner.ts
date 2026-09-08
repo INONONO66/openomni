@@ -4,7 +4,7 @@ import { activeExecutor } from "./executor-context";
 import type { AgentResult, ChatAgentConfig } from "./core/types";
 import type { Executor } from "./executor";
 import type { SessionRunner, SessionRunnerInput, SessionRunnerResult } from "./session-handle";
-import { sessionHistory } from "./session-history";
+import { foldSessionHistory } from "./session-lifecycle/history";
 import { pinnedModelSelection } from "./model-selection";
 
 interface SessionChatRun {
@@ -41,7 +41,7 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
             {
               messages,
               history:
-                actions === undefined ? input.history : sessionHistory(input.sessionId, actions),
+                actions === undefined ? input.history : foldSessionHistory(input.sessionId, actions),
               traceContext: prepared.traceContext,
             },
             {
