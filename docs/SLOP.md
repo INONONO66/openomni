@@ -151,6 +151,16 @@ A direct fresh `initializeSqliteDatabase` probe found none of `work_item`, `arti
 
 The narrower existing gates are the empty-baseline Knip ratchet, protocol start/terminal pairing, and enumerated ledger-producer drift. They are not #945's complete publisher/export/store census. Expanded #945 requirements additionally include coverage100%, production/test clones0, cyclomatic<22, cognitive<22, Halstead difficulty<80, CRAP<25 and surviving mutants0 with frozen tools, inventories, settings and mutation operators. Full mutation remains scheduled/final-convergence work, not silently waived.
 
+## #973 lifecycle conformance receipt (2026-09-08)
+
+| Row | Disposition | Evidence |
+| --- | --- | --- |
+| Harness | `runLifecycleTrace` in `packages/agent/test/session-lifecycle-conformance.test.ts` drives the real store, controller, executor, request port, outbound path and alarm rows; six section 6.7 registrations exist and pass. | `bun test packages/agent/test/session-lifecycle-conformance.test.ts` -> 6 pass |
+| Deletion matrix | No production writer moved, no fixture deleted, no compat alias or dual path introduced; the contract's #973 rows cite HEAD symbols. | `docs/session-lifecycle-contract.md` #973 rows |
+| Replay | Every trace reopens its SQLite image; fold equals the last prefix with dispatched bodies, tool observations and commits `[]`. | `replayEffectFree` in the harness |
+| #945 all-dimension zero | Not closed here. The campaign-wide any/unknown/clone/coverage/mutation receipt at final HEAD remains #945's; this file adds no `any`/`unknown` and no unit at or above complexity 22. | E5 row above |
+| Contract checker | The manual receipt checker in the contract aborts on a pre-existing #969 row citing the deleted `packages/channels/src/router/wait/lifecycle.ts`; #973's eight rows validate individually. | pre-existing on main |
+
 ## Local verification
 
 Darwin arm64; Bun `1.4.1` (`4661e494f`), TypeScript `5.9.2`, Knip `6.31.0`, Ultracite `7.8.3`, Biome `2.4.16`. Frozen-lockfile installation completed. No production/test/lockfile edits.
