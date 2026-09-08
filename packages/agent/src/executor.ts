@@ -39,6 +39,7 @@ export type {
   ExecutionApprovals,
   ExecutionApprovalRequest,
   ExecutionBatchResult,
+  ExecutionResult,
   ExecutorOptions,
 } from "./executor-contract";
 
@@ -64,11 +65,16 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     value: PlainValue,
     parentId = options.identity.parentActionId,
   ): Promise<PolicyEvaluation & { readonly receipt: LedgerAction.Receipt }> {
-    // Compaction is the existing turn.post/compaction policy operation,
-    // even though its durable evidence has the dedicated compaction kind.
+    // Compaction is the existing turn.post/compaction policy operation, even
+    // though its durable evidence has the dedicated compaction kind; its typed
+    // compensation keeps its own op there so a policy can pin a projection.
     const point =
       request.kind === "compaction"
-        ? { kind: "turn", phase: "post" as const, op: "compaction" }
+        ? {
+            kind: "turn",
+            phase: "post" as const,
+            op: request.op === "compact" ? "compaction" : request.op,
+          }
         : { kind: request.kind, phase, op: request.op };
     const input: PolicyEvaluationInput = {
       ...point,
