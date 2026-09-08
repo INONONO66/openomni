@@ -3,7 +3,7 @@ import { describe, expect, it, spyOn } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Retry as LlmRetry } from "@openomni/llm";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
-import type { LedgerAction } from "@openomni/protocol";
+import type { LedgerAction, Model } from "@openomni/protocol";
 import {
   Bus,
   closeSessions,
@@ -73,11 +73,12 @@ function testExecutor(): Executor {
   });
 }
 
-function config(run: MockLlmFn, executor: Executor = testExecutor()) {
+function config(run: MockLlmFn, executor: Executor = testExecutor(), fallbacks?: Model.Ref[]) {
   return {
     events: noopSink(),
     executor,
     model: { provider: "anthropic", id: mockProviderModel.id },
+    ...(fallbacks === undefined ? {} : { modelFallbacks: fallbacks }),
     llm: createMockLlmConfig({
       getModels: async () => mockProviderData,
       fromModelsDevModel: () => mockProviderModel,
@@ -99,7 +100,10 @@ function actionPhase(action: LedgerAction.Node): string | undefined {
   return typeof value.phase === "string" ? value.phase : undefined;
 }
 
-async function runDurably(run: MockLlmFn): Promise<DurableRun> {
+async function runDurably(
+  run: MockLlmFn,
+  options: { readonly prompts?: number; readonly fallbacks?: Model.Ref[] } = {},
+): Promise<DurableRun> {
   return Storage.withIsolation(async () => {
     Bus.reset();
     let nextId = 0;
@@ -115,10 +119,31 @@ async function runDurably(run: MockLlmFn): Promise<DurableRun> {
     if (policies === undefined) throw new Error("missing policy adapter");
     for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
     const chatRunner = createSessionChatRunner({
-      prepare: (input) => ({
-        config: config(run, createTurnDispatcher([], input, runtime).executor),
-        traceContext,
-      }),
+      prepare: (input) => {
+        const base = config(
+          run,
+          createTurnDispatcher([], input, runtime).executor,
+          options.fallbacks,
+        );
+        return {
+          config:
+            options.fallbacks === undefined
+              ? base
+              : {
+                  ...base,
+                  llm: {
+                    ...base.llm,
+                    // Echo the selected ref so the recorded chat names the model that answered.
+                    resolveModel: async (model: Model.Ref) => ({
+                      id: model.id,
+                      name: model.id,
+                      providerID: model.provider,
+                    }),
+                  },
+                },
+          traceContext,
+        };
+      },
     });
     const handle = session(
       { id: "boundary-session", role: "resident", runner: chatRunner },
@@ -126,8 +151,10 @@ async function runDurably(run: MockLlmFn): Promise<DurableRun> {
     );
 
     try {
-      const result = await handle.prompt("run the durable turn");
-      if (result?.kind !== "result") throw new Error("durable chat did not return a result");
+      for (let prompt = 0; prompt < (options.prompts ?? 1); prompt += 1) {
+        const result = await handle.prompt(`run durable turn ${prompt + 1}`);
+        if (result?.kind !== "result") throw new Error("durable chat did not return a result");
+      }
       return {
         actions: SessionHandleStore.tree(handle.id),
         inboxIds: SessionHandleStore.inboxRows(handle.id).map((row) => row.id),
@@ -305,6 +332,39 @@ describe("session chat runner", () => {
       const llmIntent = llmIntents[0];
       if (llmIntent === undefined) throw new Error("missing logical llm intent");
       expect(attempts.map((action) => action.parentId)).toEqual([llmIntent.id, llmIntent.id]);
+    } finally {
+      sleep.mockRestore();
+    }
+  });
+
+  it("restores the primary model at the next turn boundary as a recorded llm action", async () => {
+    const sleep = spyOn(LlmRetry, "sleep").mockResolvedValue(undefined);
+    const fallback = { provider: "openai", id: "gpt-4o" };
+    const answered: string[] = [];
+
+    try {
+      const { actions } = await runDurably(
+        async (input) => {
+          answered.push(input.model?.id ?? "unresolved");
+          return answered.length === 1
+            ? { type: "error", error: providerFailure("transient provider outage") }
+            : createStopOutcome();
+        },
+        { prompts: 2, fallbacks: [fallback] },
+      );
+
+      const llmIntents = actions
+        .filter((action) => action.kind === "llm" && actionPhase(action) === "intent")
+        .map((action) => action.intent.value);
+      expect(answered).toEqual([mockProviderModel.id, fallback.id, mockProviderModel.id]);
+      expect(llmIntents).toMatchObject([
+        { op: "chat", value: { model: mockProviderModel.id } },
+        {
+          op: "restore_model_selection",
+          value: { from: fallback, to: { provider: "anthropic", id: mockProviderModel.id } },
+        },
+        { op: "chat", value: { model: mockProviderModel.id } },
+      ]);
     } finally {
       sleep.mockRestore();
     }

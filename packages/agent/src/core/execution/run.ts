@@ -7,7 +7,7 @@ import {
   type Sink,
 } from "@openomni/llm";
 import { selectModel } from "@openomni/llm";
-import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
+import { PlainValueSchema, type Model, type PlainValue } from "@openomni/protocol";
 import { CompactionSession } from "../../compaction";
 import { DEFAULT_PROTECT_RECENT } from "../../compaction/contract";
 import { estimateMessagesTokens } from "../../compaction/estimate";
@@ -65,6 +65,7 @@ export async function runAgent(
   const compaction = createCompactionSession(config);
   emitRunStarted(config.events, trace, config.model.id);
   try {
+    await restoreModelSelection(state, config);
     for (;;) {
       await drainStepBoundary(state, config, "before_llm");
       if (
@@ -115,10 +116,8 @@ async function runModelStep(
   let provider = config.model.provider;
   const prepareAttempt = async (attempt: number, failures: readonly string[]) => {
     recordRunAttempt(state, attempt);
-    const selected = selectModel(
-      [config.model, ...(config.modelFallbacks ?? [])],
-      [...priorFailures, ...failures],
-    );
+    const chain = modelChain(config).slice(state.modelChainStart);
+    const selected = selectModel(chain, [...priorFailures, ...failures]);
     const model = await (config.llm?.resolveModel ?? Provider.resolveModel)(selected.model);
     const modelKey = `${model.providerID}/${model.id}`;
     if (state.modelKey !== undefined && state.modelKey !== modelKey) resetModelWindowGuards(state);
@@ -137,7 +136,7 @@ async function runModelStep(
     turn = built.turn;
     const prepared = turn;
     return {
-      fallbackAvailable: selected.index < (config.modelFallbacks?.length ?? 0),
+      fallbackAvailable: selected.index < chain.length - 1,
       request: {
         op: "chat",
         intent: {
@@ -226,6 +225,38 @@ async function runModelStep(
   }
   const result = await handleStop(state, config, base, turn, compaction);
   return result === "continue" ? undefined : result;
+}
+
+function modelChain(config: ChatAgentConfig): readonly Model.Ref[] {
+  return [config.model, ...(config.modelFallbacks ?? [])];
+}
+
+/**
+ * Turn boundary: a fallback an earlier turn ended on is released back to the
+ * primary only through a recorded `restore_model_selection` action the policy
+ * admitted; a refusal keeps the fallback pinned for this turn.
+ */
+async function restoreModelSelection(state: RunState, config: ChatAgentConfig): Promise<void> {
+  const pinned = config.pinnedModel;
+  if (pinned === undefined || config.executor === undefined) return;
+  const index = modelChain(config).findIndex(
+    (model) => model.provider === pinned.provider && model.id === pinned.id,
+  );
+  if (index <= 0) return;
+  const outcome = await config.executor.run(
+    {
+      kind: "llm",
+      op: "restore_model_selection",
+      intent: {
+        from: { provider: pinned.provider, id: pinned.id },
+        to: { provider: config.model.provider, id: config.model.id },
+      },
+      effect: { model: { provider: config.model.provider, id: config.model.id } },
+      recovery: "local_transactional",
+    },
+    async () => ({ restored: true }),
+  );
+  if (outcome.terminal !== "executed") state.modelChainStart = index;
 }
 
 /** Only successful machine outcomes can cross the executor's encoded result boundary. */
