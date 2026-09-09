@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
+import { openRequest } from "./helpers/open-request";
 import { boundedBy } from "./helpers/bounded";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
 import {
@@ -15,7 +16,6 @@ import {
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   type BusEvent,
-  canonicalDigest,
   type LedgerAction,
   L0Observation,
   PlainValueSchema,
@@ -24,8 +24,7 @@ import {
   type SessionTransition,
   type SessionTurn,
 } from "@openomni/protocol";
-import { Bus, SEEDED_POLICY_ROWS } from "../src/index";
-import { requestBindingDigest } from "../src/session-request";
+import { Bus } from "../src/index";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
 const bounded = boundedBy(SIGNAL_TIMEOUT_MS);
@@ -41,6 +40,119 @@ function signal<T>(): Signal<T> {
     resolvePromise = resolve;
   });
   return { promise, resolve: resolvePromise };
+}
+
+/** A runner that ignores abort and only settles once released; tracks its concurrency. */
+function stubbornRunner(options: { readonly resumeAfterFirst?: boolean } = {}) {
+  const entered = signal<void>();
+  const abortSeen = signal<void>();
+  const releaseRunner = signal<void>();
+  let active = 0;
+  let maximumActive = 0;
+  let calls = 0;
+  const runner: SessionRunner = async (input) => {
+    calls += 1;
+    if (options.resumeAfterFirst && calls > 1) return { kind: "result", text: "resumed" };
+    active += 1;
+    maximumActive = Math.max(maximumActive, active);
+    input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
+    entered.resolve();
+    await releaseRunner.promise;
+    active -= 1;
+    return { kind: "result", text: "late" };
+  };
+  return {
+    runner,
+    entered,
+    abortSeen,
+    releaseRunner,
+    maximumActive: () => maximumActive,
+    calls: () => calls,
+  };
+}
+
+type StubbornRun = ReturnType<typeof stubbornRunner>;
+
+/** Prompts, waits for the stubborn runner to enter, interrupts, and waits for the abort to reach it. */
+async function interruptStubborn(
+  handle: SessionHandle,
+  run: StubbornRun,
+): Promise<{ running: Promise<unknown>; interrupted: Promise<unknown> }> {
+  const running = handle.prompt("start");
+  await bounded(run.entered.promise, "runner entry");
+  const interrupted = handle.interrupt();
+  await bounded(run.abortSeen.promise, "runner abort signal");
+  return { running, interrupted };
+}
+
+/**
+ * The caller-facing interrupt completes at the sealed terminal, not when the
+ * abort-ignoring runner finally settles; the lease stays held until then.
+ */
+async function settleStubborn(
+  handle: SessionHandle,
+  run: StubbornRun,
+  pending: { running: Promise<unknown>; interrupted: Promise<unknown> },
+  hibernated: Signal<void>,
+): Promise<void> {
+  await bounded(pending.interrupted, "interrupt receipt before runner settlement");
+  expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+  run.releaseRunner.resolve();
+  await bounded(
+    Promise.all([pending.running, hibernated.promise]),
+    "runner settlement + lease release",
+  );
+}
+
+/** A runner that records every input it receives and answers `text`. */
+function recordingRunner(text: string): { runner: SessionRunner; inputs: SessionRunnerInput[] } {
+  const inputs: SessionRunnerInput[] = [];
+  const runner: SessionRunner = async (input) => {
+    inputs.push(input);
+    return { kind: "result", text };
+  };
+  return { runner, inputs };
+}
+
+/** No second runtime may take the lease while the stubborn runner lives; once it settles the lease is free. */
+async function expectLeaseHeldUntilSettled(
+  handle: SessionHandle,
+  run: StubbornRun,
+  pending: { running: Promise<unknown>; interrupted: Promise<unknown> },
+  hibernated: Signal<void>,
+  fence = handle.get().lease.fence,
+): Promise<void> {
+  expect(contendLease(handle, fence).ok).toBe(false);
+  expect(run.maximumActive()).toBe(1);
+  await settleStubborn(handle, run, pending, hibernated);
+  expect(contendLease(handle).ok).toBe(true);
+  expect(run.maximumActive()).toBe(1);
+}
+
+/** Declares `id` with a runtime whose hibernation resolves the returned signal. */
+function hibernatingSession(
+  id: string,
+  runner: SessionRunner,
+  extra: Partial<SessionRuntime> = {},
+): { handle: SessionHandle; hibernated: Signal<void> } {
+  const hibernated = signal<void>();
+  const handle = session(residentOptions(id, runner), {
+    ...runtime,
+    ...extra,
+    onHibernate: () => hibernated.resolve(),
+  });
+  return { handle, hibernated };
+}
+
+/** A second runtime trying to take the lease right now, without waiting for the TTL. */
+function contendLease(handle: SessionHandle, expectedFence = handle.get().lease.fence) {
+  return SessionHandleStore.acquireLease({
+    sessionId: handle.id,
+    owner: "second-runtime",
+    expectedFence,
+    now,
+    expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+  });
 }
 
 class TestObservationSink implements ObservationSink {
@@ -97,9 +209,7 @@ beforeEach(() => {
     scheduleHeartbeat: () => () => undefined,
   };
   Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
+  seedPolicy();
 });
 
 afterEach(async () => {
@@ -192,35 +302,17 @@ function commitOpenTurn(input: {
 
 function durableRequest(sessionId: string, turnId: string): SessionTransition.Request {
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
-  const request: SessionTransition.Request = {
+  return openRequest({
     requestId: `${sessionId}:request`,
     sessionId,
     turnId,
     callId: `${sessionId}:call`,
-    mode: "approval",
-    parsedInput: {},
-    inputHash: canonicalDigest({}),
-    effectHash: canonicalDigest({ category: "mutation" }),
-    generation: 1,
     toolsGeneration: generation.generation,
     toolsHash: generation.toolsHash,
     systemHash: generation.systemHash,
-    domainRevisions: {},
     deadline: now + 1_000,
-    expectedResponders: ["owner"],
-    correlation: {},
-    allowedActions: ["report_result"],
-    bindingDigest: "",
-    resolution: "first",
-    threshold: 1,
-    seenReplyIds: [],
-    replies: [],
-    state: "open",
-    outcome: null,
     createdAt: now,
-  };
-  request.bindingDigest = requestBindingDigest(request);
-  return request;
+  });
 }
 
 function approvalRequest(sessionId: string, turnId: string): ExecutionApprovalRequest {
@@ -299,88 +391,54 @@ describe("durable session handle", () => {
     expect(observedBeforeCommit).toEqual([]);
   });
 
-  test("a prompt pre denial consumes the inbox row without constructing or running a turn", async () => {
-    await Storage.withIsolation(async () => {
+  /** Runs one prompt against an isolated store whose only extra policy row denies prompts at `phase`. */
+  async function promptDeniedAt(phase: "pre" | "post", reason: string) {
+    return await Storage.withIsolation(async () => {
       Storage.initialize({ dbPath: ":memory:", observationSink: sink });
       seedPolicy([
         {
-          name: "deny-prompt-pre",
+          name: `deny-prompt-${phase}`,
           kind: "prompt",
-          phase: "pre",
+          phase,
           match: { encodingVersion: 1, value: { op: "inbox" } },
-          verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt refused" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason } },
           priority: 2_000,
         },
       ]);
       const isolatedRuntime = { ...runtime };
       let calls = 0;
       const handle = session(
-        residentOptions("prompt-pre-deny", async () => {
+        residentOptions(`prompt-${phase}-deny`, async () => {
           calls += 1;
           return { kind: "result", text: "must not run" };
         }),
         isolatedRuntime,
       );
-
       const result = await handle.prompt("blocked prompt");
-
       const tree = SessionHandleStore.tree(handle.id);
       expect(result).toMatchObject({
         kind: "error",
-        cause: { name: "SessionPolicyRefusal", reason: "prompt refused" },
+        cause: { name: "SessionPolicyRefusal", reason },
       });
       expect(calls).toBe(0);
       expect(tree.filter((action) => action.kind === "turn")).toEqual([]);
-      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
-        "prompt.pre",
-      ]);
-      expect(SessionHandleStore.inboxRows(handle.id).map((row) => row.status)).toEqual([
-        "consumed",
-      ]);
+      const hooks = tree.filter((action) => action.kind === "policy.decision").map(policyHook);
+      const inbox = SessionHandleStore.inboxRows(handle.id).map((row) => row.status);
       await closeSessions(isolatedRuntime);
       Storage.reset();
+      return { hooks, inbox };
     });
+  }
+
+  test("a prompt pre denial consumes the inbox row without constructing or running a turn", async () => {
+    const { hooks, inbox } = await promptDeniedAt("pre", "prompt refused");
+    expect(hooks).toEqual(["prompt.pre"]);
+    expect(inbox).toEqual(["consumed"]);
   });
 
   test("a prompt post denial records both prompt decisions but never starts a turn", async () => {
-    await Storage.withIsolation(async () => {
-      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-      seedPolicy([
-        {
-          name: "deny-prompt-post",
-          kind: "prompt",
-          phase: "post",
-          match: { encodingVersion: 1, value: { op: "inbox" } },
-          verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt post refused" } },
-          priority: 2_000,
-        },
-      ]);
-      const isolatedRuntime = { ...runtime };
-      let calls = 0;
-      const handle = session(
-        residentOptions("prompt-post-deny", async () => {
-          calls += 1;
-          return { kind: "result", text: "must not run" };
-        }),
-        isolatedRuntime,
-      );
-
-      const result = await handle.prompt("blocked after record");
-
-      const tree = SessionHandleStore.tree(handle.id);
-      expect(result).toMatchObject({
-        kind: "error",
-        cause: { name: "SessionPolicyRefusal", reason: "prompt post refused" },
-      });
-      expect(calls).toBe(0);
-      expect(tree.filter((action) => action.kind === "turn")).toEqual([]);
-      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
-        "prompt.pre",
-        "prompt.post",
-      ]);
-      await closeSessions(isolatedRuntime);
-      Storage.reset();
-    });
+    const { hooks } = await promptDeniedAt("post", "prompt post refused");
+    expect(hooks).toEqual(["prompt.pre", "prompt.post"]);
   });
 
   test("fails closed when prompt post policy transforms its immutable receipt", async () => {
@@ -773,11 +831,7 @@ describe("durable session handle", () => {
   });
 
   test("records an idle interrupt as a no-op without resuming the next prompt", async () => {
-    const inputs: SessionRunnerInput[] = [];
-    const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "ran once" };
-    };
+    const { runner, inputs } = recordingRunner("ran once");
     const handle = session(residentOptions("idle-interrupt", runner), runtime);
     SessionHandleStore.commitInbox({
       id: "idle-interrupt:interrupt",
@@ -840,11 +894,7 @@ describe("durable session handle", () => {
   });
 
   test("a leading idle interrupt is consumed before a later prompt starts", async () => {
-    const inputs: SessionRunnerInput[] = [];
-    const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "ran once" };
-    };
+    const { runner, inputs } = recordingRunner("ran once");
     const handle = session(residentOptions("leading-idle-interrupt", runner), runtime);
     const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
     SessionHandleStore.commitInbox({
@@ -951,30 +1001,9 @@ describe("durable session handle", () => {
   });
 
   test("keeps the durable lease held through an ignored abort so no other runtime can resume", async () => {
-    const entered = signal<void>();
-    const abortSeen = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async (input) => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("lease-held-through-abort", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
-    });
-
-    const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry");
-    const interrupted = handle.interrupt();
-    await bounded(abortSeen.promise, "runner abort signal");
+    const run = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("lease-held-through-abort", run.runner);
+    const pending = await interruptStubborn(handle, run);
 
     // The interrupted terminal is sealed promptly, but the runner ignored the
     // abort and is still alive, so the durable lease MUST stay held by this
@@ -982,53 +1011,14 @@ describe("durable session handle", () => {
     // (no clock advance) must be refused, or two live executors could exist for
     // one durable session.
     expect(handle.get().state).toBe("interrupted");
-    const contended = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: handle.get().lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(contended.ok).toBe(false);
-    expect(maximumActive).toBe(1);
-
-    // Once the runner settles, this owner releases the lease and it becomes
-    // acquirable again.
-    // The caller-facing interrupt completes at the sealed terminal, not when
-    // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement");
-    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
-    releaseRunner.resolve();
-    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
-    const afterSettle = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: handle.get().lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(afterSettle.ok).toBe(true);
-    expect(maximumActive).toBe(1);
+    await expectLeaseHeldUntilSettled(handle, run, pending, hibernated);
   });
 
   test("a retained runner whose lease lapsed does not wedge the handle: the next prompt still runs", async () => {
-    const entered = signal<void>();
-    const abortSeen = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let calls = 0;
-    const runner: SessionRunner = async (input) => {
-      calls += 1;
-      if (calls > 1) return { kind: "result", text: "resumed" };
-      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
-      entered.resolve();
-      await releaseRunner.promise;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("retained-lease-lapsed", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
+    const { runner, entered, abortSeen, releaseRunner, calls } = stubbornRunner({
+      resumeAfterFirst: true,
     });
+    const { handle, hibernated } = hibernatingSession("retained-lease-lapsed", runner);
 
     const running = handle.prompt("start");
     await bounded(entered.promise, "runner entry");
@@ -1046,24 +1036,15 @@ describe("durable session handle", () => {
 
     const leaseBefore = SessionHandleStore.row(handle.id).leaseFence;
     await bounded(handle.resume(), "resume after retained settlement");
-    expect(calls).toBe(2);
+    expect(calls()).toBe(2);
     expect(handle.get().state).toBe("idle");
     expect(SessionHandleStore.row(handle.id).leaseFence).toBe(leaseBefore + 1);
   });
 
   test("a refused retained release surfaces once to the next turn start and then clears", async () => {
-    const entered = signal<void>();
-    const abortSeen = signal<void>();
-    const releaseRunner = signal<void>();
-    let calls = 0;
-    const runner: SessionRunner = async (input) => {
-      calls += 1;
-      if (calls > 1) return { kind: "result", text: "resumed" };
-      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
-      entered.resolve();
-      await releaseRunner.promise;
-      return { kind: "result", text: "late" };
-    };
+    const { runner, entered, abortSeen, releaseRunner, calls } = stubbornRunner({
+      resumeAfterFirst: true,
+    });
     const handle = session(residentOptions("retained-release-refused", runner), runtime);
     const running = handle.prompt("start");
     await bounded(entered.promise, "runner entry");
@@ -1087,36 +1068,15 @@ describe("durable session handle", () => {
 
     await expect(handle.resume()).rejects.toThrow("release refused by storage");
     await bounded(handle.resume(), "resume after the surfaced failure");
-    expect(calls).toBe(2);
+    expect(calls()).toBe(2);
     expect(handle.get().state).toBe("idle");
     expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
   });
 
   test("configure during the ignored-abort window keeps the lease held by the live runner", async () => {
-    const entered = signal<void>();
-    const abortSeen = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async (input) => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("configure-in-interrupt-window", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
-    });
-
-    const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry");
-    const interrupted = handle.interrupt();
-    await bounded(abortSeen.promise, "runner abort signal");
+    const run = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("configure-in-interrupt-window", run.runner);
+    const pending = await interruptStubborn(handle, run);
     expect(handle.get().state).toBe("interrupted");
     const fenceBefore = handle.get().lease.fence;
 
@@ -1127,51 +1087,16 @@ describe("durable session handle", () => {
     const afterConfigure = handle.get();
     expect(afterConfigure.lease.fence).toBe(fenceBefore);
     expect(afterConfigure.lease.owner).not.toBeNull();
-    const contended = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: afterConfigure.lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(contended.ok).toBe(false);
-    expect(maximumActive).toBe(1);
-
-    // The caller-facing interrupt completes at the sealed terminal, not when
-    // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement");
-    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
-    releaseRunner.resolve();
-    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
-    const afterSettle = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: handle.get().lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(afterSettle.ok).toBe(true);
-    expect(maximumActive).toBe(1);
+    await expectLeaseHeldUntilSettled(handle, run, pending, hibernated, afterConfigure.lease.fence);
   });
 
   test("configure re-entered from the interrupted seal observation still sees the lease as held", async () => {
-    const entered = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async () => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("configure-from-seal-observation", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
-    });
+    const run = stubbornRunner();
+    const { entered } = run;
+    const { handle, hibernated } = hibernatingSession(
+      "configure-from-seal-observation",
+      run.runner,
+    );
     // Re-enter configure synchronously from the observation of the interrupted
     // terminal seal — the earliest point a subscriber can react to it.
     const reentered = signal<() => Promise<SessionGeneration.ConfigureReceipt>>();
@@ -1194,38 +1119,17 @@ describe("durable session handle", () => {
     const row = SessionHandleStore.row(handle.id);
     expect(row.leaseFence).toBe(fenceAtSeal);
     expect(row.leaseOwner).not.toBeNull();
-    const contended = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(contended.ok).toBe(false);
+    expect(contendLease(handle, row.leaseFence).ok).toBe(false);
 
-    // The caller-facing interrupt completes at the sealed terminal, not when
-    // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement");
-    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
-    releaseRunner.resolve();
-    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
+    await settleStubborn(handle, run, { running, interrupted }, hibernated);
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
-    expect(maximumActive).toBe(1);
+    expect(run.maximumActive()).toBe(1);
   });
 
   test("close() returns once a positive grace window lapses while the runner still ignores abort", async () => {
-    const entered = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    const runner: SessionRunner = async () => {
-      entered.resolve();
-      await releaseRunner.promise;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("close-after-positive-grace", runner), {
-      ...runtime,
+    const { runner, entered, releaseRunner } = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("close-after-positive-grace", runner, {
       closeGraceMs: 1,
-      onHibernate: () => hibernated.resolve(),
     });
 
     const running = handle.prompt("start");
@@ -1242,23 +1146,9 @@ describe("durable session handle", () => {
   });
 
   test("close() returns after the grace window while the lease stays held until the abort-ignoring runner settles", async () => {
-    const entered = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async () => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("close-detaches-after-grace", runner), {
-      ...runtime,
+    const { runner, entered, releaseRunner, maximumActive } = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("close-detaches-after-grace", runner, {
       closeGraceMs: 0,
-      onHibernate: () => hibernated.resolve(),
     });
 
     const running = handle.prompt("start");
@@ -1269,28 +1159,14 @@ describe("durable session handle", () => {
     // and its heartbeat keeps renewing, so no second executor can start.
     const row = SessionHandleStore.row(handle.id);
     expect(row.leaseOwner).not.toBeNull();
-    const whileAlive = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(whileAlive.ok).toBe(false);
+    expect(contendLease(handle, row.leaseFence).ok).toBe(false);
 
     // Once the runner settles the turn continuation releases the lease itself.
     releaseRunner.resolve();
     await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
-    const afterSettle = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: SessionHandleStore.row(handle.id).leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(afterSettle.ok).toBe(true);
-    expect(maximumActive).toBe(1);
+    expect(contendLease(handle, SessionHandleStore.row(handle.id).leaseFence).ok).toBe(true);
+    expect(maximumActive()).toBe(1);
   });
 
   test("heartbeat loss aborts the runner and the stale fence cannot seal its result", async () => {
@@ -1385,11 +1261,7 @@ describe("durable session handle", () => {
   });
 
   test("a reactivated handle removes a tool from the next runner generation", async () => {
-    const inputs: SessionRunnerInput[] = [];
-    const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "complete" };
-    };
+    const { runner, inputs } = recordingRunner("complete");
     const handle = session(
       {
         ...residentOptions("remove-after-reactivation", runner),
@@ -1407,11 +1279,7 @@ describe("durable session handle", () => {
   });
 
   test("a reactivated handle replaces system blocks for the next runner generation", async () => {
-    const inputs: SessionRunnerInput[] = [];
-    const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "complete" };
-    };
+    const { runner, inputs } = recordingRunner("complete");
     const handle = session(residentOptions("blocks-after-reactivation", runner), runtime);
     const nextBlocks = [{ id: "safety", source: "operator", content: "Use the safe path." }];
 

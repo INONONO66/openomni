@@ -1,4 +1,5 @@
 import { providerFailure } from "./helpers/mock-llm";
+import { seedPolicy } from "./helpers/seed-policy";
 import { describe, expect, it, spyOn } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Retry as LlmRetry } from "@openomni/llm";
@@ -131,9 +132,7 @@ async function runDurably(
       scheduleHeartbeat: () => () => undefined,
     };
     Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
-    const policies = Storage.get().policies;
-    if (policies === undefined) throw new Error("missing policy adapter");
-    for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
+    seedPolicy();
     const chatRunner = createSessionChatRunner({
       prepare: (input) => {
         return {

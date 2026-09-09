@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, it } from "bun:test";
+import { seedPolicy } from "./helpers/seed-policy";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { session, closeSessions, type SessionRuntime } from "../src/session-handle";
 import { createTurnDispatcher, defineTool, eraseTool, sessionTool } from "../src/tool-dispatcher";
 import { createSessionRequests } from "../src/session-requests";
-import { SEEDED_POLICY_ROWS } from "../src/index";
 import { bounded } from "./helpers/bounded";
 
 let runtime: SessionRuntime;
@@ -16,9 +16,7 @@ beforeEach(() => {
       publish: (event, payload) => runtime?.observations.publish(event, payload),
     },
   });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policies");
-  for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
+  seedPolicy();
 });
 afterEach(async () => {
   await closeSessions(runtime);

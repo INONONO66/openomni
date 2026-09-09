@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/receive-outbound";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import {
@@ -11,15 +12,12 @@ import {
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { SEEDED_POLICY_ROWS } from "@openomni/policy";
 
 const runtimes: SessionRuntime[] = [];
 const directories: string[] = [];
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
+  seedPolicy();
 });
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => closeSessions(runtime)));
@@ -80,9 +78,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
   directories.push(directory);
   const dbPath = join(directory, "ledger.sqlite");
   Storage.initialize({ dbPath });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
+  seedPolicy();
   let consumed = 0;
   const parentRunner = async () => {
     consumed += 1;

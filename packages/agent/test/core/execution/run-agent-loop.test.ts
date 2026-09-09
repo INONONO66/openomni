@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { seedPolicy } from "../../helpers/seed-policy";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +14,6 @@ import {
   defineTool,
   eraseTool,
 } from "../../../src/tool-dispatcher";
-import { SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { restoreCompactionProjection } from "../../../src/compaction/durable";
 import { bounded } from "../../helpers/bounded";
@@ -90,8 +90,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
     });
     try {
       Storage.initialize({ dbPath });
-      for (const row of SEEDED_POLICY_ROWS)
-        Storage.get().policies?.append({ ...row, generation: 1 });
+      seedPolicy();
       const options = {
         id: "history",
         role: "resident" as const,
@@ -197,8 +196,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
     });
     try {
       Storage.initialize({ dbPath });
-      for (const row of SEEDED_POLICY_ROWS)
-        Storage.get().policies?.append({ ...row, generation: 1 });
+      seedPolicy();
       const options = { id: "compact", role: "resident" as const, runner };
       const handle = session(options, runtime);
       await handle.prompt("first");
