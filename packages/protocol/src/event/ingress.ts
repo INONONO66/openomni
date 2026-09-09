@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
 import { BusEvent } from "../bus/index.js";
+import { PlainObjectSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 
 const Base = z.object({
@@ -71,6 +72,8 @@ export type RoutingDecisionPayload = z.infer<typeof RoutingDecisionPayloadSchema
 // Anything else was never a valid route.decided of any era — the caller
 // decides how that fails closed. New writes go through
 // RoutingDecisionPayloadSchema and cannot produce these legacy shapes.
+// The bytes are persisted JSON, so the persisted plain-object profile is
+// the typed boundary; anything outside it is equally not a route.decided.
 const RecordedRoutingDecisionSchema = routingDecisionUnion(
   z.string().regex(/^(?:request|wait|pending_ask|pending_interaction):.+/),
 );
@@ -80,17 +83,10 @@ const LegacyRetiredFieldsSchema = z.object({
   pendingInteractionId: z.string().optional(),
 });
 
-export function recordedRoutingDecision(data: unknown): RoutingDecisionPayload | undefined {
-  let upcast = data;
-  if (typeof data === "object" && data !== null) {
-    if (!LegacyRetiredFieldsSchema.safeParse(data).success) return undefined;
-    const {
-      runId: _runId,
-      pendingInteractionId: _pendingInteractionId,
-      ...rest
-    } = data as Record<string, unknown>;
-    upcast = rest;
-  }
+export function recordedRoutingDecision(data: object): RoutingDecisionPayload | undefined {
+  const bytes = PlainObjectSchema.safeParse(data);
+  if (!bytes.success || !LegacyRetiredFieldsSchema.safeParse(bytes.data).success) return undefined;
+  const { runId: _runId, pendingInteractionId: _pendingInteractionId, ...upcast } = bytes.data;
   const result = RecordedRoutingDecisionSchema.safeParse(upcast);
   return result.success ? result.data : undefined;
 }
