@@ -3,6 +3,39 @@ import { requireMeasurement } from "./quality-ci-receipt";
 
 export type NativeLines = { path: string; lines: { line: number; hits: number }[] };
 
+/** Merge only lanes that executed the file; when several did, shared DA lines are executable. */
+export function mergeNativeLines(records: readonly NativeLines[]): NativeLines[] {
+	const byPath = new Map<string, NativeLines[]>();
+	for (const record of records) {
+		const path = record.path;
+		let group = byPath.get(path);
+		if (!group) {
+			group = [];
+			byPath.set(path, group);
+		}
+		group.push(record);
+	}
+	return [...byPath].map(([path, candidates]) => {
+		const executed = candidates.filter((record) => record.lines.some((row) => row.hits > 0));
+		if (!executed.length) {
+			const lines = new Map<number, number>();
+			for (const record of candidates)
+				for (const row of record.lines) lines.set(row.line, 0);
+			return { path, lines: [...lines].sort(([a], [b]) => a - b).map(([line, hits]) => ({ line, hits })) };
+		}
+		const shared = new Set(executed[0]?.lines.map((row) => row.line) ?? []);
+		for (const record of executed.slice(1)) {
+			const present = new Set(record.lines.map((row) => row.line));
+			for (const line of shared) if (!present.has(line)) shared.delete(line);
+		}
+		const lines = [...shared].sort((a, b) => a - b).map((line) => ({
+			line,
+			hits: Math.max(...executed.map((record) => record.lines.find((row) => row.line === line)?.hits ?? 0)),
+		}));
+		return { path, lines };
+	});
+}
+
 function count(value: string): number {
 	requireMeasurement(/^\d+$/.test(value), "invalid LCOV count");
 	const result = Number(value);
