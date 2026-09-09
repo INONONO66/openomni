@@ -73,7 +73,7 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       streamClass: "route",
       // The gateway router records channel-admitted route decisions before
       // anything acts. The removed product kernel's internal arm is gone.
-      producers: ["packages/channels/src/router/routing-resolution.ts"],
+      producers: ["packages/channels/src/router/route-record.ts"],
       writes: "append",
     },
     {
@@ -87,7 +87,7 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       // Todo 21: one durable admission per outbound message id. Retries read
       // this single-fact stream before resuming debit and physical delivery.
       streamClass: "gateway_send",
-      producers: ["packages/channels/src/router/messaging/send.ts"],
+      producers: ["packages/channels/src/router/messaging/admission.ts"],
       writes: "append",
     },
   ],
