@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/receive-outbound";
-import { bounded as boundedWithin } from "./helpers/bounded";
+import { boundedBy } from "./helpers/bounded";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,9 +49,7 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 
 const SIGNAL_TIMEOUT_MS = 2_000;
-/** This suite's deadline for every awaited signal. */
-const bounded = <T>(signal: Promise<T>, label: string): Promise<T> =>
-  boundedWithin(signal, label, SIGNAL_TIMEOUT_MS);
+const bounded = boundedBy(SIGNAL_TIMEOUT_MS);
 
 interface Signal<T> {
   readonly promise: Promise<T>;
@@ -1585,6 +1583,39 @@ function reply(
   };
 }
 
+/** The pending turn every 6.x seed opens under its `cfg` boundary at the given generation. */
+function pendingTurn(
+  sessionId: string,
+  turnId: string,
+  boundaryActionId: string,
+  resultId: string,
+  generation: ReturnType<typeof SessionHandleStore.latestGeneration>,
+): LedgerAction.Append {
+  return {
+    id: turnId,
+    sessionId,
+    parentId: boundaryActionId,
+    kind: "turn",
+    intent: {
+      encodingVersion: 1,
+      value: {
+        phase: "intent",
+        resultId,
+        inboxIds: [],
+        resumeCount: 0,
+        boundaryActionId,
+        toolsGeneration: generation.generation,
+        toolsHash: generation.toolsHash,
+        systemHash: generation.systemHash,
+        policyGeneration: 1,
+      },
+    },
+    effect: { encodingVersion: 1, value: { phase: "pending" } },
+    ts: now,
+    irreversible: true,
+  };
+}
+
 /** A fresh resident at G1 whose lease `owner` holds for `leaseMs`: the seed every request fixture starts from. */
 function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs: number) {
   const created = SessionHandleStore.materialize({
@@ -1623,29 +1654,7 @@ function seedRequestSession(id: string): void {
     state: "running",
     releaseLease: true,
     actions: [
-      {
-        id: turn,
-        sessionId: id,
-        parentId: `${id}:cfg`,
-        kind: "turn",
-        intent: {
-          encodingVersion: 1,
-          value: {
-            phase: "intent",
-            resultId: `${id}:R`,
-            inboxIds: [],
-            resumeCount: 0,
-            boundaryActionId: `${id}:cfg`,
-            toolsGeneration: generation.generation,
-            toolsHash: generation.toolsHash,
-            systemHash: generation.systemHash,
-            policyGeneration: 1,
-          },
-        },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: now,
-        irreversible: true,
-      },
+      pendingTurn(id, turn, `${id}:cfg`, `${id}:R`, generation),
       {
         id: `${id}:q-pre`,
         sessionId: id,
@@ -1733,29 +1742,7 @@ function seedCrashOpen(id: string): void {
       policyGeneration: g2.policyGeneration,
     },
     actions: [
-      {
-        id: "T",
-        sessionId: id,
-        parentId: "cfg",
-        kind: "turn",
-        intent: {
-          encodingVersion: 1,
-          value: {
-            phase: "intent",
-            resultId: "R",
-            inboxIds: [],
-            resumeCount: 0,
-            boundaryActionId: "cfg",
-            toolsGeneration: generation.generation,
-            toolsHash: generation.toolsHash,
-            systemHash: generation.systemHash,
-            policyGeneration: 1,
-          },
-        },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: now,
-        irreversible: true,
-      },
+      pendingTurn(id, "T", "cfg", "R", generation),
       SessionHandleStore.configureAction({
         id: "cfg2",
         sessionId: id,

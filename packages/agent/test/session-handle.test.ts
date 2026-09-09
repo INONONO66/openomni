@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
-import { bounded as boundedWithin } from "./helpers/bounded";
+import { boundedBy } from "./helpers/bounded";
 import {
   closeSessions,
   session,
@@ -24,9 +24,7 @@ import {
 import { Bus, SEEDED_POLICY_ROWS } from "../src/index";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
-/** This suite's deadline for every awaited signal. */
-const bounded = <T>(signal: Promise<T>, label: string): Promise<T> =>
-  boundedWithin(signal, label, SIGNAL_TIMEOUT_MS);
+const bounded = boundedBy(SIGNAL_TIMEOUT_MS);
 
 interface Signal<T> {
   readonly promise: Promise<T>;

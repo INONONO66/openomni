@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc";
 import type { BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../src/daemon";
+import { attachMachineDaemon, type CodeRunner } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { socketPath } from "./helpers/socket-path";
 
@@ -57,6 +57,15 @@ function offer(overrides: Partial<Machine.Offer> = {}): Machine.Offer {
     offeredAt: 2000,
     ...overrides,
   };
+}
+
+/** A daemon offering only the kernel capability, backed by a partial code runner. */
+function attachKernel(path: string, runner: Pick<CodeRunner, "runCode"> & Partial<CodeRunner>) {
+  return attachMachineDaemon({
+    socketPath: path,
+    offer: offer({ offeredCapabilities: ["kernel.py"] }),
+    runner: { peekCode: () => undefined, close: async () => undefined, ...runner },
+  });
 }
 
 async function withHost(
@@ -171,24 +180,19 @@ describe("machine attach handshake", () => {
     await withHost(
       () => ({ ...enrollment, allowedCapabilities: ["kernel.py"] }),
       async ({ host, path }) => {
-        const daemon = await attachMachineDaemon({
-          socketPath: path,
-          offer: offer({ offeredCapabilities: ["kernel.py"] }),
-          runner: {
-            runCode: async (request) => {
-              entered();
-              await held;
-              return {
-                status: "completed",
-                cellId: request.cellId,
-                output: { stdout: "done\n", stderr: "" },
-              };
-            },
-            peekCode: (cellId) => {
-              peeked.push(cellId);
-              return { stdout: "so far\n", stderr: "warn\n" };
-            },
-            close: async () => undefined,
+        const daemon = await attachKernel(path, {
+          runCode: async (request) => {
+            entered();
+            await held;
+            return {
+              status: "completed",
+              cellId: request.cellId,
+              output: { stdout: "done\n", stderr: "" },
+            };
+          },
+          peekCode: (cellId) => {
+            peeked.push(cellId);
+            return { stdout: "so far\n", stderr: "warn\n" };
           },
         });
         try {
@@ -373,25 +377,19 @@ describe("machine attach handshake", () => {
     await withHost(
       () => ({ ...enrollment, allowedCapabilities: ["kernel.py"] }),
       async ({ host, path }) => {
-        const daemon = await attachMachineDaemon({
-          socketPath: path,
-          offer: offer({ offeredCapabilities: ["kernel.py"] }),
-          runner: {
-            runCode: async (request, call, signal) => {
-              const answer = await call({ cellId: request.cellId, name: "answer", arguments: {} });
-              // The abort may already have landed while the tool answer was in flight.
-              if (!signal.aborted)
-                await new Promise<void>((resolve) => {
-                  signal.addEventListener("abort", () => resolve(), { once: true });
-                });
-              return {
-                status: "cancelled",
-                cellId: request.cellId,
-                output: { stdout: JSON.stringify(answer), stderr: "" },
-              };
-            },
-            peekCode: () => undefined,
-            close: async () => undefined,
+        const daemon = await attachKernel(path, {
+          runCode: async (request, call, signal) => {
+            const answer = await call({ cellId: request.cellId, name: "answer", arguments: {} });
+            // The abort may already have landed while the tool answer was in flight.
+            if (!signal.aborted)
+              await new Promise<void>((resolve) => {
+                signal.addEventListener("abort", () => resolve(), { once: true });
+              });
+            return {
+              status: "cancelled",
+              cellId: request.cellId,
+              output: { stdout: JSON.stringify(answer), stderr: "" },
+            };
           },
         });
         try {

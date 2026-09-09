@@ -16,3 +16,8 @@ export async function bounded<T>(
     clearTimeout(timer);
   }
 }
+
+/** A suite-wide `bounded` with a fixed deadline. */
+export function boundedBy(timeoutMs: number): <T>(signal: Promise<T>, label: string) => Promise<T> {
+  return (signal, label) => bounded(signal, label, timeoutMs);
+}
