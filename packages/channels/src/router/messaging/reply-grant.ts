@@ -48,7 +48,7 @@ export function replyGrantEndpointFromFacts(
   }
 }
 
-export type ReplyGrantAdmission = Readonly<{
+type ReplyGrantAdmission = Readonly<{
   /** Resolved registered initiator (perimeter fact — anonymous senders materialize nothing). */
   actorId: string;
   /** The initiator's resolved endpoint — the same facts the send kernel re-derives at evaluation. */

@@ -4,6 +4,18 @@ import { resolveRoute, type RouteState } from "../../src/router/resolve-route.js
 
 type RouteInbound = Parameters<typeof resolveRoute>[0];
 import { requireRoutedDecision } from "../../src/router/routing-execution.js";
+import { IngressRoutingError } from "../../src/router/routing-resolution";
+
+function routingError(decision: Ingress.RoutingDecisionPayload): IngressRoutingError {
+  try {
+    requireRoutedDecision(decision);
+  } catch (error) {
+    if (!(error instanceof IngressRoutingError)) throw error;
+    expect(error.decision).toEqual(decision);
+    return error;
+  }
+  throw new Error("blocked route was accepted");
+}
 
 const inbound = Object.freeze({
   traceId: "trace-precedence",
@@ -29,6 +41,12 @@ const trustedChannel = Object.freeze({
   kind: "trusted_channel",
   inboundTreatment: "full_access",
   defaultTier: "observer",
+});
+
+const blockedChannel = Object.freeze({
+  id: "grant-blocked",
+  kind: "blocked_channel",
+  inboundTreatment: "drop",
 });
 
 const registeredActor = Object.freeze({
@@ -62,11 +80,7 @@ const precedenceCases = Object.freeze([
     name: "request correlation before channel ceiling",
     state: Object.freeze({
       request: matchedRequest,
-      channel: Object.freeze({
-        id: "grant-blocked",
-        kind: "blocked_channel",
-        inboundTreatment: "drop",
-      }),
+      channel: blockedChannel,
       actor: registeredActor,
       surfaceSessionId: "session-surface",
     }),
@@ -79,11 +93,7 @@ const precedenceCases = Object.freeze([
     name: "channel ceiling before actor identity",
     state: Object.freeze({
       request: Object.freeze({ kind: "none" }),
-      channel: Object.freeze({
-        id: "grant-blocked",
-        kind: "blocked_channel",
-        inboundTreatment: "drop",
-      }),
+      channel: blockedChannel,
       actor: registeredActor,
       surfaceSessionId: "session-surface",
     }),
@@ -165,11 +175,7 @@ describe("resolveRoute precedence", () => {
     const states = Object.freeze([
       Object.freeze({
         request: Object.freeze({ kind: "none" }),
-        channel: Object.freeze({
-          id: "grant-blocked",
-          kind: "blocked_channel",
-          inboundTreatment: "drop",
-        }),
+        channel: blockedChannel,
         actor: registeredActor,
         surfaceSessionId: "session-surface",
       }),
@@ -216,57 +222,21 @@ describe("resolveRoute precedence", () => {
     if (accepted === undefined || accepted.stage !== "blacklist" || accepted.outcome !== "drop") {
       throw new TypeError("missing accepted decision fixture");
     }
-    const codes = decisions.map((decision) => {
-      try {
-        requireRoutedDecision(decision);
-        return "accepted";
-      } catch (error) {
-        return (error as { readonly code?: string }).code;
-      }
-    });
+    const codes = decisions.map((decision) => routingError(decision).code);
     expect(codes).toEqual(["route_blocked", "route_blocked", "route_ambiguous"]);
   });
 
-  it("classifies a blocked channel through the typed routing error", () => {
+  it.each([
+    { label: "a blocked channel", channel: blockedChannel },
+    {
+      label: "an actor-identity block",
+      channel: { id: "grant-no-default", kind: "trusted_channel", inboundTreatment: "full_access" },
+    },
+  ] as const)("classifies $label through the typed routing error", ({ channel }) => {
     const decision = Ingress.Events.RoutingDecision.schema.parse(
-      resolveRoute(inbound, {
-        request: { kind: "none" },
-        channel: {
-          id: "grant-blocked",
-          kind: "blocked_channel",
-          inboundTreatment: "drop",
-        },
-      }),
+      resolveRoute(inbound, { request: { kind: "none" }, channel }),
     );
-
-    let code: string | undefined;
-    try {
-      requireRoutedDecision(decision);
-    } catch (error) {
-      code = (error as { readonly code?: string }).code;
-    }
-    expect(code).toBe("route_blocked");
-  });
-
-  it("classifies an actor-identity block through the typed routing error", () => {
-    const decision = Ingress.Events.RoutingDecision.schema.parse(
-      resolveRoute(inbound, {
-        request: { kind: "none" },
-        channel: {
-          id: "grant-no-default",
-          kind: "trusted_channel",
-          inboundTreatment: "full_access",
-        },
-      }),
-    );
-
-    let code: string | undefined;
-    try {
-      requireRoutedDecision(decision);
-    } catch (error) {
-      code = (error as { readonly code?: string }).code;
-    }
-    expect(code).toBe("route_blocked");
+    expect(routingError(decision).code).toBe("route_blocked");
   });
 
   it("preserves evidence_only treatment while routing a broadcast channel", () => {

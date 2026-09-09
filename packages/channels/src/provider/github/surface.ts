@@ -4,19 +4,19 @@ import { z } from "zod";
 import { Dedupe, type DedupeToken } from "../../support/dedupe";
 import { requireHandler } from "../../support/handler-frame";
 import { GitHubClient } from "./client";
-import {
-  type GitHubEventContent,
-  type GitHubIssuePayload,
-  type GitHubUser,
-  GitHubWebhookPayloadSchemas,
-} from "./types";
+import { GitHubWebhookPayloadSchemas } from "./types";
 import type { PublishPort } from "../../types";
 import type { DeliveryReceipt } from "../../support/deliver";
-import {
-  ChannelAuthnMiddleware,
-  type ChannelAuthnDecisionObserver,
-  decisionOption,
-} from "../../channel-authn";
+import { authenticateGitHubWebhook } from "../../authn/github";
+import type { ChannelAuthnDecisionObserver } from "../../authn/types";
+
+interface GitHubEventContent {
+  text: string;
+  sender: string;
+  repo: string;
+  issueNumber: number;
+  issueKind: "issue" | "pr";
+}
 
 interface GitHubAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
@@ -34,8 +34,8 @@ function actionOf(raw: object): string | undefined {
 /** Shared shape of both supported payloads — one construction site, not two cloned literals. */
 function issueContent(
   text: string,
-  user: GitHubUser,
-  payload: GitHubIssuePayload,
+  user: { login: string },
+  payload: z.infer<typeof GitHubWebhookPayloadSchemas.issues>,
 ): GitHubEventContent | null {
   return {
     text,
@@ -142,10 +142,12 @@ export class GitHubAdapter implements Channel.Surface {
     // Origin: the first frame of an inbound webhook delivery — this ONE mint
     // is the message's trace, carried to the run (D11).
     const traceId = newTraceId();
-    const auth = await ChannelAuthnMiddleware.authenticateGitHubWebhook({
+    const auth = await authenticateGitHubWebhook({
       request,
       secret: this.secret,
-      ...decisionOption(this.authOptions.onDecision),
+      ...(this.authOptions.onDecision === undefined
+        ? {}
+        : { onDecision: this.authOptions.onDecision }),
     });
     if (auth.response) return auth.response;
 
@@ -198,9 +200,10 @@ export class GitHubAdapter implements Channel.Surface {
       return { response: new Response("Missing delivery id", { status: 400 }) };
     const addressees = [
       ...new Set(
-        [...content.text.matchAll(/@([a-zA-Z0-9][a-zA-Z0-9-]*)/g)]
-          .map((match) => match[1])
-          .filter((id: string | undefined): id is string => id !== undefined),
+        [...content.text.matchAll(/@([a-zA-Z0-9][a-zA-Z0-9-]*)/g)].flatMap((match) => {
+          const id = match[1];
+          return id === undefined ? [] : [id];
+        }),
       ),
     ];
     const inbound: Channel.InboundMessage = {

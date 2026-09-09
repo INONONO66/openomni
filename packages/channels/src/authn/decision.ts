@@ -1,9 +1,9 @@
 import { type Policy, PolicyDecision } from "@openomni/protocol";
 import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
-import type { ChannelAuthnDecisionObserver, ChannelAuthnPolicyId } from "./types";
+import type { ChannelAuthnDecisionObserver } from "./types";
 
 export function evaluateChannelPermission(input: {
-  readonly action: ChannelAuthnPolicyId;
+  readonly action: string;
   readonly resource: string;
   readonly field: string;
   readonly allowed: boolean;

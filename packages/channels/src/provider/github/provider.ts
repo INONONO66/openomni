@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ChannelProvider } from "../contract.js";
 import { GitHubAdapter } from "./surface.js";
 
-export interface GitHubCredentials {
+interface GitHubCredentials {
   /** HMAC secret verifying webhook deliveries — the one required field. */
   readonly secret: string;
   /** API token for posting reply comments; absent leaves the channel ingress-only. */

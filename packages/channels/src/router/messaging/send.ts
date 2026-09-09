@@ -9,6 +9,7 @@ import {
 } from "@openomni/protocol";
 import { ActorRegistry, EgressBudgetStore, LedgerAppend } from "@openomni/ledger";
 import type { GatewayRouterPorts } from "../message-ports.js";
+import type { DeliveryReceipt } from "../../support/deliver";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,
@@ -43,7 +44,7 @@ function sendClassOf(input: SendInput): MessageClass {
  * `allocationDelta: 0` receipt plus the messaging test suite pin that.
  */
 
-export type OutboundMessage = Readonly<{
+type OutboundMessage = Readonly<{
   messageId: string;
   /** Stable gateway idempotency key. Delivery owners must reconcile/dedupe retries under this key. */
   idempotencyKey: string;
@@ -52,16 +53,6 @@ export type OutboundMessage = Readonly<{
   body: string;
   target: DeliveryTarget;
   requestId?: string;
-}>;
-
-/**
- * What the concrete delivery owner reports back: the platform message id,
- * when the channel API returns one. Returning nothing is valid (channels
- * without message ids) — the request correlation then keeps the internal id.
- */
-export type DeliveryReceipt = Readonly<{
-  externalMessageId?: string;
-  value: "accepted" | "rejected" | "unknown";
 }>;
 
 export type MessagingPorts = Readonly<{

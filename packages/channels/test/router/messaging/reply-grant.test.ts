@@ -4,7 +4,6 @@ import { Operational, type BusEvent, type Gateway } from "@openomni/protocol";
 import {
   createReplyGrantInstances,
   replyGrantEndpointFromFacts,
-  type ReplyGrantAdmission,
 } from "../../../src/router/messaging/reply-grant.js";
 
 /**
@@ -13,6 +12,8 @@ import {
  * first-contact admitted actors — perimeter facts only, capped per rule.
  * The current projection is durable and never reconstructed from route history.
  */
+
+type ReplyGrantAdmission = Parameters<ReturnType<typeof createReplyGrantInstances>["admit"]>[0];
 
 const NOW = 1_700_000_000_000;
 

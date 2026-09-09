@@ -1,4 +1,5 @@
 import { openRequest, requestPort, seededRequests } from "../helpers/requests";
+import { replaceLedger } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
 import { Channel, Ingress, type Gateway } from "@openomni/protocol";
 import {
@@ -248,23 +249,15 @@ test.each([
   "empty_conflict",
 ] as const)("route correction %s fails closed", async (fault) => {
   await openRequest("correction", { expectedResponders: ["someone-else"] });
-  const adapter = Storage.get();
-  const ledger = adapter.ledger;
-  if (ledger === undefined) throw new Error("missing ledger");
-  Storage.configure({
-    ...adapter,
-    transaction: adapter.transaction.bind(adapter),
-    ledger: {
-      ...ledger,
-      append: (fact, expected) => {
-        if (fact.type !== Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE)
-          return ledger.append(fact, expected);
-        if (fault === "throw") throw new Error("correction unavailable");
-        return { kind: "cas_conflict", currentHead: 0 };
-      },
-      headFact: (id) => (id.startsWith("route_correction:") ? undefined : ledger.headFact(id)),
+  replaceLedger((ledger) => ({
+    ...ledger,
+    append: (fact, expected) => {
+      if (fact.type !== Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return ledger.append(fact, expected);
+      if (fault === "throw") throw new Error("correction unavailable");
+      return { kind: "cas_conflict", currentHead: 0 };
     },
-  });
+    headFact: (id) => (id.startsWith("route_correction:") ? undefined : ledger.headFact(id)),
+  }));
   await expect(kernelRouter().ingest(sender, facts("reply"))).rejects.toMatchObject({
     code: "route_record_failed",
   });

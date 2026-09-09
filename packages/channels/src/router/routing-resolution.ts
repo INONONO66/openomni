@@ -11,7 +11,7 @@ import {
 import { LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { applyChannelGrantTreatment } from "./authority.js";
 import { matchBlacklist } from "./blacklist.js";
-import { resolveChannelGrant, type ChannelGrantResolution } from "./channel-grant.js";
+import { resolveChannelGrant } from "./channel-grant.js";
 import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findRequestCandidates, type RequestResolution } from "./request/correlation.js";
@@ -130,7 +130,7 @@ function kernelRequestExecution(
   }
 }
 
-type ChannelResolution = ChannelGrantResolution | undefined;
+type ChannelResolution = ReturnType<typeof resolveChannelGrant>;
 
 function channelState(
   resolution: ChannelResolution,

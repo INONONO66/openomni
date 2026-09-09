@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
-import type { Channel } from "@openomni/protocol";
+import type { Channel, PlainValue } from "@openomni/protocol";
+import type { TelegramMessage } from "../src/provider/telegram/types";
 import { DiscordAdapter } from "../src/provider/discord/surface";
 import { TelegramAdapter } from "../src/provider/telegram/surface";
 import { Dedupe, DedupeWindow } from "../src/support/dedupe";
@@ -13,21 +14,21 @@ import { Dedupe, DedupeWindow } from "../src/support/dedupe";
 
 const realFetch = globalThis.fetch;
 
-function jsonResponse(result: unknown): Response {
+function jsonResponse(result: PlainValue): Response {
   return new Response(JSON.stringify({ ok: true, result }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
 }
 
-function tgMessage(messageId: number, chatId: number, text: string): Record<string, unknown> {
+function tgMessage(messageId: number, chatId: number, text: string) {
   return {
     message_id: messageId,
     chat: { id: chatId, type: "private" },
     from: { id: chatId, is_bot: false, first_name: `u${chatId}`, username: `u${chatId}` },
     date: 1_700_000_000,
     text,
-  };
+  } satisfies TelegramMessage;
 }
 
 describe("TelegramAdapter dedupe (D1)", () => {

@@ -9,7 +9,7 @@ interface ChannelGrantMatchInput {
   readonly sender?: string;
 }
 
-export interface ChannelGrantResolution {
+interface ChannelGrantResolution {
   readonly grant: Actor.ChannelGrant;
   readonly inboundTreatment: Actor.InboundTreatment;
 }

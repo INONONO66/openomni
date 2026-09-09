@@ -7,7 +7,7 @@ import type {
   PlainValue,
   SessionTransition,
 } from "@openomni/protocol";
-import type { DeliveryReceipt } from "./messaging/send";
+import type { DeliveryReceipt } from "../support/deliver";
 
 export type ChannelDeliveryRoute = (
   externalId: string,

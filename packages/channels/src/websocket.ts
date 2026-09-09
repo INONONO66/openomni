@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { newTraceId } from "./support/trace";
 import { Channel, Gateway, Operational } from "@openomni/protocol";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
+import { authenticateWebSocketUpgrade } from "./authn/websocket";
+import type { ChannelAuthnDecisionObserver } from "./authn/types";
 import type { PublishPort } from "./types";
 
 export interface WebSocketConfig {
@@ -144,7 +145,7 @@ export class WebSocketHandler {
     req: Request,
     server: { upgrade(req: Request, options: WebSocketUpgradeOptions): boolean },
   ): Response | undefined {
-    const auth = ChannelAuthnMiddleware.authenticateWebSocketUpgrade({
+    const auth = authenticateWebSocketUpgrade({
       request: req,
       publish: this.publish,
       ...(this.config.token !== undefined ? { token: this.config.token } : {}),

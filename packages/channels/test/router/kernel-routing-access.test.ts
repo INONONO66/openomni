@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { ActorRegistry, ChannelGrantStore } from "@openomni/ledger";
+import { ActorRegistry } from "@openomni/ledger";
+import { registerChannelGrant } from "../helpers/channel-grant";
 import {
   commits,
   kernelRouter,
@@ -20,12 +21,7 @@ describe("GatewayRouter access routing", () => {
     expect(commits).toEqual([]);
   });
   test("unknown actor on a trusted channel without a default tier is refused", async () => {
-    ChannelGrantStore.put({
-      id: "grant",
-      surface: "discord",
-      kind: "trusted_channel",
-      createdBy: "owner",
-    });
+    registerChannelGrant();
     expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
       status: "blocked_pre",
     });
@@ -33,13 +29,7 @@ describe("GatewayRouter access routing", () => {
     expect(commits).toEqual([]);
   });
   test("default-tier admission never registers a new endpoint", async () => {
-    ChannelGrantStore.put({
-      id: "grant",
-      surface: "discord",
-      kind: "trusted_channel",
-      defaultTier: "owner",
-      createdBy: "owner",
-    });
+    registerChannelGrant({ defaultTier: "owner" });
     const result = await kernelRouter().ingest(ownerSender, ownerFacts);
     expect(result.status).toBe("executed");
     expect(routingDecisions()[0]).toMatchObject({
@@ -60,12 +50,9 @@ describe("GatewayRouter access routing", () => {
     undefined,
     "full_access",
   ] as const)("broadcast treatment %s remains evidence-only", async (inboundTreatment) => {
-    ChannelGrantStore.put({
-      id: "grant",
-      surface: "discord",
+    registerChannelGrant({
       kind: "broadcast_channel",
       defaultTier: "observer",
-      createdBy: "owner",
       ...(inboundTreatment === undefined ? {} : { inboundTreatment }),
     });
     expect((await kernelRouter().ingest(ownerSender, ownerFacts)).status).toBe("executed");
@@ -79,12 +66,7 @@ describe("GatewayRouter access routing", () => {
     expect(commits[0]?.content).not.toBe(ownerFacts.render);
   });
   test("blocked channel refuses before inbox commit", async () => {
-    ChannelGrantStore.put({
-      id: "grant",
-      surface: "discord",
-      kind: "blocked_channel",
-      createdBy: "owner",
-    });
+    registerChannelGrant({ kind: "blocked_channel" });
     expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
       status: "blocked_pre",
     });

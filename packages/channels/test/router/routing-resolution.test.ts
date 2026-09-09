@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
+import { replaceLedger } from "../helpers/ledger";
 import { Channel, Ingress, type Ledger } from "@openomni/protocol";
 import {
   ActorRegistry,
@@ -172,33 +173,27 @@ test.each([
 ] as const)("ledger %s refuses before inbox commit or projection", async (fault) => {
   registerOwnerDm();
   createMappedOwnerSession();
-  const adapter = Storage.get();
-  const ledger = adapter.ledger;
-  if (ledger === undefined) throw new Error("missing ledger");
-  Storage.configure({
-    ...adapter,
-    transaction: adapter.transaction.bind(adapter),
-    ledger:
-      fault === "absent"
-        ? undefined
-        : {
-            ...ledger,
-            append: () => {
-              if (fault === "append_failure") throw new Error("ledger unavailable");
-              return { kind: "cas_conflict", currentHead: 1 };
-            },
-            headFact: () =>
-              fault === "corrupt_conflict"
-                ? {
-                    streamId: streamId(),
-                    seq: 1,
-                    type: "route.decided",
-                    data: { invalid: true },
-                    timeCreated: 1,
-                  }
-                : undefined,
+  replaceLedger((ledger) =>
+    fault === "absent"
+      ? undefined
+      : {
+          ...ledger,
+          append: () => {
+            if (fault === "append_failure") throw new Error("ledger unavailable");
+            return { kind: "cas_conflict", currentHead: 1 };
           },
-  });
+          headFact: () =>
+            fault === "corrupt_conflict"
+              ? {
+                  streamId: streamId(),
+                  seq: 1,
+                  type: "route.decided",
+                  data: { invalid: true },
+                  timeCreated: 1,
+                }
+              : undefined,
+        },
+  );
   await expect(makeRouter().ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
     code: "route_record_failed",
   });

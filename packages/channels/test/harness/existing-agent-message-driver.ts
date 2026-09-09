@@ -4,10 +4,9 @@ import { join } from "node:path";
 import { ActorRegistry, SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import { answer, originalAction, requestPort } from "../helpers/requests";
-import {
-  createExistingAgentMessaging,
-  type OutboundMessage,
-} from "../../src/router/messaging/send";
+import { createExistingAgentMessaging } from "../../src/router/messaging/send";
+
+type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
 import { findRequestCandidates } from "../../src/router/request/correlation";
 
 const version = "existing-agent-message-driver-v2";

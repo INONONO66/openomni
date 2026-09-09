@@ -36,16 +36,3 @@ export const GitHubWebhookPayloadSchemas = {
     repository: GitHubRepositorySchema,
   }),
 } as const;
-
-export type GitHubUser = z.infer<typeof GitHubUserSchema>;
-export type GitHubIssuePayload = z.infer<
-  (typeof GitHubWebhookPayloadSchemas)["issues" | "issue_comment"]
->;
-
-export interface GitHubEventContent {
-  text: string;
-  sender: string;
-  repo: string;
-  issueNumber: number;
-  issueKind: "issue" | "pr";
-}

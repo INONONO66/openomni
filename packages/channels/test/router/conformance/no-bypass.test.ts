@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { ChannelGrantStore } from "@openomni/ledger";
+import { registerChannelGrant } from "../../helpers/channel-grant";
 import {
   commits,
   kernelRouter,
@@ -11,12 +11,7 @@ import {
 beforeEach(resetRouterState);
 
 test("unauthorized external sender cannot reach inbox commit", async () => {
-  ChannelGrantStore.put({
-    id: "grant",
-    surface: "discord",
-    kind: "trusted_channel",
-    createdBy: "owner",
-  });
+  registerChannelGrant();
   expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
     status: "blocked_pre",
   });
