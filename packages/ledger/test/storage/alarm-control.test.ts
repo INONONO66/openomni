@@ -119,8 +119,10 @@ function snapshot(
   observations: readonly L0Observation.ActionCommitted[],
   id: string,
 ) {
+  const alarm = adapter.alarms.get(id);
   return {
-    alarm: adapter.alarms.get(id),
+    alarm,
+    fence: alarm?.fence ?? 0,
     session: adapter.sessions.get("owner"),
     tree: adapter.actions.tree("owner"),
     inbox: adapter.inbox.list("owner"),
@@ -140,7 +142,7 @@ for (const backend of ["sqlite", "memory"] as const) {
         const before = snapshot(adapter, observations, id);
         const result = adapter.alarms[op](id, sessionId, 102);
         if (admitted) {
-          expectTransition(op, before.alarm, result);
+          expectTransition(op, before.fence, result);
         } else {
           expect(result).toBeUndefined();
           expect(snapshot(adapter, observations, id)).toEqual(before);
@@ -150,14 +152,10 @@ for (const backend of ["sqlite", "memory"] as const) {
   }
 }
 
-function expectTransition(
-  op: Control,
-  before: Alarm.Row | undefined,
-  result: Alarm.Row | undefined,
-) {
+function expectTransition(op: Control, fenceBefore: number, result: Alarm.Row | undefined) {
   expect(result).toMatchObject({
     status: op === "rearm" ? "armed" : "cancelled",
     epoch: op === "rearm" ? 2 : 1,
-    fence: (before?.fence ?? 0) + 1,
+    fence: fenceBefore + 1,
   });
 }
