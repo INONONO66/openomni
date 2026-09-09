@@ -1,0 +1,61 @@
+import { describe, expect, test } from "bun:test";
+import { useProcessor, capturingSink, processorInfo, streamOf } from "../helpers/processor";
+
+describe("processor ingress", () => {
+  const { createProcessor, events } = useProcessor();
+
+  test.each([
+    { type: "text-start", providerMetadata: ["not-an-object"] },
+    { type: "tool-call", toolCallId: "bad", toolName: "lookup", input: [1] },
+    { type: "tool-result", toolCallId: "bad", output: () => 1 },
+  ])("rejects malformed provider fields before projecting %s", async (event) => {
+    const capture = capturingSink();
+    const processor = createProcessor({ sink: capture.sink, createStream: streamOf([event]) });
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toThrow();
+    expect(capture.finalParts()).toEqual([]);
+    expect(processor.message.finish).toBe("error");
+  });
+
+  test("records an iterator close failure and preserves successful settlement", async () => {
+    const error = new Error("close fixture");
+    const processor = createProcessor({
+      createStream: async () => ({
+        fullStream: {
+          [Symbol.asyncIterator]() {
+            return {
+              next: async () => ({ done: true as const, value: undefined }),
+              return: () => Promise.reject(error),
+            };
+          },
+        },
+      }),
+    });
+    await processor.process({ system: "", promptText: "" });
+    expect(processor.message.finish).toBe("stop");
+    expect(processorInfo(events).filter((event) => event.msg === "stream.close.failed"))
+      .toMatchObject([{ context: { error: "Error: close fixture" } }]);
+  });
+
+  test("aborts a text-only stream without waiting for tool settlement", async () => {
+    const abort = new AbortController();
+    const capture = capturingSink();
+    const processor = createProcessor({
+      sink: capture.sink, abort: abort.signal,
+      createStream: async () => ({ fullStream: (async function* () {
+        yield { type: "text-delta", text: "partial" };
+        abort.abort();
+        yield { type: "text-end" };
+      })() }),
+    });
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ name: "AbortError" });
+    expect(capture.finalParts()).toMatchObject([{ type: "text", text: "partial" }]);
+    expect(processor.message.finish).toBe("aborted");
+  });
+
+  test("ignores unconsumed text and reasoning wire events", async () => {
+    const capture = capturingSink();
+    const processor = createProcessor({ sink: capture.sink, createStream: streamOf([{ type: "text-other" }, { type: "reasoning-other" }]) });
+    await processor.process({ system: "", promptText: "" });
+    expect(capture.finalParts()).toEqual([]);
+  });
+});

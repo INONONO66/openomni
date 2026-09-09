@@ -6,6 +6,7 @@ import { ModelsDev } from "../../src/model";
 import { Catalog } from "../../src/model/schema";
 import snapshot from "../../src/model/models-snapshot.json";
 import { resetCatalog } from "../helpers/model-loader";
+import { mockFetch, jsonResponse } from "../helpers/provider-fetch";
 
 const expectedSnapshot = Catalog.parse(snapshot);
 const fixture = { fixture: { id: "fixture", name: "Fixture", env: [], models: {} } };
@@ -97,6 +98,14 @@ describe("ModelsDev", () => {
     delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
     expect(await ModelsDev.get()).toEqual(expectedSnapshot);
     expect(network).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a fetched catalog usable when its cache cannot be written", async () => {
+    delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+    process.env.OPENOMNI_MODELS_PATH = directory;
+    const remote = { openai: { id: "openai", name: "OpenAI", env: [], npm: "@ai-sdk/openai", models: {} } };
+    globalThis.fetch = mockFetch(() => jsonResponse(remote));
+    expect(await ModelsDev.get()).toEqual(remote);
   });
 
   it("propagates an unavailable snapshot instead of fabricating an empty catalog", async () => {

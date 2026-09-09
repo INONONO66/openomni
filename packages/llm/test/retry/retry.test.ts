@@ -1,23 +1,12 @@
 import { describe, expect, test, vi } from "bun:test";
-import { APIError } from "../../src/error";
 import { Retry } from "../../src/retry";
 
-type APIErrorInput = ConstructorParameters<typeof APIError>[0];
-const apiError = (input: APIErrorInput) => new APIError(input);
+import { apiError, rateLimitError, withRandom, type APIErrorInput } from "../helpers/retry";
 
 function retryableError(headers?: Record<string, string>) {
   return apiError({
     message: "Rate limited",
     isRetryable: true,
-    ...(headers && { responseHeaders: headers }),
-  });
-}
-
-function rateLimitError(headers?: Record<string, string>) {
-  return apiError({
-    message: "rate limited",
-    isRetryable: true,
-    statusCode: 429,
     ...(headers && { responseHeaders: headers }),
   });
 }
@@ -29,12 +18,7 @@ function rateLimitError(headers?: Record<string, string>) {
  * about. Header-directed delays are never jittered and need no pin.
  */
 function withoutJitter<T>(fn: () => T): T {
-  const random = vi.spyOn(Math, "random").mockReturnValue(0);
-  try {
-    return fn();
-  } finally {
-    random.mockRestore();
-  }
+  return withRandom(0, fn);
 }
 
 function decideWithoutJitter(attempt: number, error: unknown): Retry.Decision {

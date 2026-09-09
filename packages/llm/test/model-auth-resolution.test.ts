@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { Auth, ModelsDev, Provider } from "../src";
+import { Auth, Provider } from "../src";
+import { ModelsDev } from "../src/model";
 
 const catalog = {
   anthropic: {

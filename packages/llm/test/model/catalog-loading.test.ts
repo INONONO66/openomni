@@ -190,24 +190,15 @@ describe("ModelsDev catalog loading", () => {
     });
 
     it("should not let prototype keys mutate sanitized catalog objects", async () => {
-      await writeCacheCatalog(`{
-          "__proto__": {
-            id: "__proto__",
-            name: "Polluted",
-            env: [],
-            npm: "@ai-sdk/openai",
-            models: {
-              "__proto__": {
-                id: "__proto__",
-                name: "Polluted Model",
-              },
-            },
-          }
-        }`);
-
+      const provider = {
+        id: "safe", name: "Safe", env: [], npm: "@ai-sdk/openai",
+        models: { ["__proto__"]: { id: "bad", name: "Bad" }, safe: { id: "safe", name: "Safe" } },
+      };
+      await writeCacheCatalog(JSON.stringify({ ["__proto__"]: provider, safe: provider }));
       const data = await ModelsDev.get();
+      expect(Object.keys(data)).toEqual(["safe"]);
+      expect(Object.keys(data.safe?.models ?? {})).toEqual(["safe"]);
       expect(Reflect.ownKeys(data).includes("__proto__")).toBe(false);
-      expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
     });
   });
 });

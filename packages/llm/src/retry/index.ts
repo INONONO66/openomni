@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { APIError, coerceApiError } from "../error";
+import { headerDelay } from "./delay";
 
 const Payload = z.object({
   type: z.string().catch(""),
@@ -179,7 +180,10 @@ export namespace Retry {
     if (instantFailureStreak > 0) {
       return { retry: true, reason, delayMs: INSTANT_FAILURE_PROBE_DELAY_MS };
     }
-    const header = headerDelay(providerError);
+    return selectDelay(attempt, reason, headerDelay(providerError));
+  }
+
+  function selectDelay(attempt: number, reason: RetryableReason, header: ReturnType<typeof headerDelay>): Decision {
     if (header !== undefined) {
       if (header.ms > RETRY_HEADER_DELAY_CAP) {
         // Only an explicit retry-after directive fails fast; an out-of-range
@@ -227,70 +231,6 @@ export namespace Retry {
     return headerDelay(apiError)?.ms;
   }
 
-  /** Directive: explicit retry-after vs an inferred ratelimit reset. */
-  function headerDelay(
-    error?: InstanceType<typeof APIError>,
-  ): { ms: number; directive: boolean } | undefined {
-    const headers = error?.data.responseHeaders;
-    if (!headers) return undefined;
-
-    const retryAfterMs = headers["retry-after-ms"];
-    if (retryAfterMs) {
-      const parsedMs = Number.parseFloat(retryAfterMs);
-      if (!Number.isNaN(parsedMs)) {
-        return { ms: parsedMs, directive: true };
-      }
-    }
-
-    const retryAfter = headers["retry-after"];
-    if (retryAfter) {
-      const parsedSeconds = Number.parseFloat(retryAfter);
-      if (!Number.isNaN(parsedSeconds)) {
-        return { ms: Math.ceil(parsedSeconds * 1000), directive: true };
-      }
-      const parsed = Date.parse(retryAfter) - Date.now();
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        return { ms: Math.ceil(parsed), directive: true };
-      }
-    }
-
-    // Structured ratelimit resets are the fallback signal when retry-after is
-    // absent: Anthropic sends RFC3339 timestamps, OpenAI sends Go-style
-    // durations ("1s", "1m30s"). Take the earliest reset across buckets.
-    let earliest: number | undefined;
-    for (const [name, value] of Object.entries(headers)) {
-      if (!/^(anthropic-ratelimit|x-ratelimit)-.*reset/.test(name)) continue;
-      const ms = parseResetValue(value);
-      if (ms === undefined) continue;
-      if (earliest === undefined || ms < earliest) earliest = ms;
-    }
-    return earliest === undefined ? undefined : { ms: earliest, directive: false };
-  }
-
-  function parseResetValue(value: string): number | undefined {
-    // Durations before Date.parse: a bare number like "2027" would otherwise
-    // parse as a year.
-    const duration = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?(?:(\d+)ms)?$/.exec(value.trim());
-    if (duration && duration[0] !== "") {
-      // A non-empty match necessarily populated at least one capture: every
-      // accepted character belongs to one of h/m/s/ms.
-      const [, h, m, s, ms] = duration;
-      return (
-        Number(h ?? 0) * 3_600_000 +
-        Number(m ?? 0) * 60_000 +
-        Math.ceil(Number(s ?? 0) * 1000) +
-        Number(ms ?? 0)
-      );
-    }
-    if (!/[-T:]/.test(value)) return undefined; // timestamps only — never bare numbers
-    const asDate = Date.parse(value);
-    if (!Number.isNaN(asDate)) {
-      const ms = asDate - Date.now();
-      return ms > 0 ? Math.ceil(ms) : undefined;
-    }
-    return undefined;
-  }
-
   /**
    * How deep a cause chain is walked before giving up. A wrapper layer per
    * package is the realistic shape (`llm` failure inside an app-level error);
@@ -317,15 +257,15 @@ export namespace Retry {
       const apiError = coerceApiError(current);
       if (apiError !== undefined) return apiError;
       if (typeof current !== "object" || current === null || !("cause" in current)) break;
-      const cause = (current as { cause?: unknown }).cause;
+      const cause = current.cause;
       if (cause === current || cause === undefined) break;
       current = cause;
     }
     return undefined;
   }
 
-  function classify(error: unknown): Reason {
-    if (!APIError.isInstance(error)) {
+  function classify(error: InstanceType<typeof APIError> | undefined): Reason {
+    if (error === undefined) {
       return "non_retryable";
     }
 

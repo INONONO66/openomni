@@ -2,6 +2,8 @@ import type { Message, Transcript } from "@openomni/protocol";
 import type { Sink } from "../sink";
 import { appendPart, advancePart, handleToolCall, handleToolResult } from "./tool-events";
 import { TokenTracker, type EstimateUsage } from "../token";
+import { ProviderEvent, Signature } from "./event-schema";
+import { normalizeEvent } from "./normalize";
 
 export interface StreamEvent {
   type: string;
@@ -97,61 +99,13 @@ export function handleStreamEvent(
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
-  for (const normalized of normalizeEvent(event, state, context)) {
+  for (const normalized of normalizeEvent(ProviderEvent.parse(event), state, context)) {
     applyStreamEvent(normalized, state, context);
   }
 }
 
-/**
- * #532-6 malformed-sequence normalization: rewrites impossible provider
- * sequences into legal ones before any fact is recorded. A delta for an
- * unopened block opens it; a duplicate end (or start) is dropped with a
- * debug note. This is deliberately a small input rewrite, not a layer —
- * everything downstream sees only well-formed block sequences.
- */
-function normalizeEvent(
-  event: StreamEvent,
-  state: StreamEventState,
-  context: StreamEventContext,
-): StreamEvent[] {
-  switch (event.type) {
-    case "text-start": {
-      if (state.currentText === undefined) return [event];
-      context.note("stream.normalized", { anomaly: "text-start while a text block is open" });
-      return [{ type: "text-end" }, event];
-    }
-    case "text-delta": {
-      if (state.currentText !== undefined) return [event];
-      context.note("stream.normalized", { anomaly: "text-delta for an unopened block" });
-      return [{ type: "text-start", providerMetadata: event.providerMetadata }, event];
-    }
-    case "text-end": {
-      if (state.currentText !== undefined) return [event];
-      context.note("stream.normalized", { anomaly: "duplicate text-end ignored" });
-      return [];
-    }
-    case "reasoning-start": {
-      if (!state.reasoning.has(String(event.id))) return [event];
-      context.note("stream.normalized", { anomaly: "duplicate reasoning-start ignored" });
-      return [];
-    }
-    case "reasoning-delta": {
-      if (state.reasoning.has(String(event.id))) return [event];
-      context.note("stream.normalized", { anomaly: "reasoning-delta for an unopened block" });
-      return [{ type: "reasoning-start", id: event.id }, event];
-    }
-    case "reasoning-end": {
-      if (state.reasoning.has(String(event.id))) return [event];
-      context.note("stream.normalized", { anomaly: "duplicate reasoning-end ignored" });
-      return [];
-    }
-    default:
-      return [event];
-  }
-}
-
 function applyStreamEvent(
-  event: StreamEvent,
+  event: ProviderEvent,
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
@@ -224,7 +178,7 @@ function applyStreamEvent(
   }
 }
 
-function startText(event: StreamEvent, state: StreamEventState, context: StreamEventContext): void {
+function startText(event: ProviderEvent, state: StreamEventState, context: StreamEventContext): void {
   const part: Message.TextPart = {
     id: crypto.randomUUID(),
     sessionID: context.sessionID,
@@ -232,7 +186,7 @@ function startText(event: StreamEvent, state: StreamEventState, context: StreamE
     type: "text",
     text: "",
     time: { start: Date.now() },
-    metadata: (event.providerMetadata as Record<string, unknown>) || {},
+    metadata: event.providerMetadata ?? {},
   };
   state.currentText = { partId: part.id, text: "" };
   appendPart(part, context);
@@ -250,7 +204,7 @@ function finishText(state: StreamEventState, context: StreamEventContext): void 
 }
 
 function startReasoning(
-  event: StreamEvent,
+  event: ProviderEvent,
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
@@ -261,13 +215,13 @@ function startReasoning(
     type: "reasoning",
     text: "",
     time: { start: Date.now(), end: undefined },
-    metadata: (event.providerMetadata as Record<string, unknown>) || {},
+    metadata: event.providerMetadata ?? {},
   };
   state.reasoning.set(String(event.id), { partId: part.id, text: "" });
   appendPart(part, context);
 }
 
-function appendReasoning(event: StreamEvent, state: StreamEventState): void {
+function appendReasoning(event: ProviderEvent, state: StreamEventState): void {
   const open = state.reasoning.get(String(event.id));
   if (open === undefined) return;
   const text = String(event.text || "");
@@ -280,7 +234,7 @@ function appendReasoning(event: StreamEvent, state: StreamEventState): void {
 }
 
 function finishReasoning(
-  event: StreamEvent,
+  event: ProviderEvent,
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
@@ -306,18 +260,16 @@ function finishReasoning(
  * as a trailing empty reasoning-delta with {anthropic:{signature}}). Scan the
  * namespaces so the capture is provider-agnostic.
  */
-function extractSignature(providerMetadata: unknown): string | undefined {
-  if (typeof providerMetadata !== "object" || providerMetadata === null) return undefined;
-  for (const value of Object.values(providerMetadata)) {
-    if (typeof value !== "object" || value === null) continue;
-    const signature = (value as Record<string, unknown>).signature;
-    if (typeof signature === "string") return signature;
+function extractSignature(providerMetadata: ProviderEvent["providerMetadata"]): string | undefined {
+  for (const value of Object.values(providerMetadata ?? {})) {
+    const parsed = Signature.safeParse(value);
+    if (parsed.success && parsed.data.signature !== undefined) return parsed.data.signature;
   }
   return undefined;
 }
 
 function handleStepFinish(
-  event: StreamEvent,
+  event: ProviderEvent,
   state: StreamEventState,
   context: StreamEventContext,
 ): void {

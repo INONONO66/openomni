@@ -1,31 +1,10 @@
 import { describe, expect, test, vi } from "bun:test";
-import { APIError } from "../../src/error";
 import { Retry } from "../../src/retry";
 
-type APIErrorInput = ConstructorParameters<typeof APIError>[0];
-const apiError = (input: APIErrorInput) => new APIError(input);
+import { apiError, rateLimitError, withRandom, type APIErrorInput } from "../helpers/retry";
 
 function retryableError(overrides: Partial<APIErrorInput> = {}) {
   return apiError({ message: "boom", isRetryable: true, ...overrides });
-}
-
-function rateLimitError(headers?: Record<string, string>) {
-  return apiError({
-    message: "rate limited",
-    isRetryable: true,
-    statusCode: 429,
-    ...(headers && { responseHeaders: headers }),
-  });
-}
-
-/** Pins Math.random so a jittered delay is asserted exactly, never by range. */
-function withRandom<T>(value: number, fn: () => T): T {
-  const random = vi.spyOn(Math, "random").mockReturnValue(value);
-  try {
-    return fn();
-  } finally {
-    random.mockRestore();
-  }
 }
 
 function delayOf(attempt: number, error: unknown): number {

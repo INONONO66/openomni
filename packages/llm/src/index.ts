@@ -1,5 +1,5 @@
 export { Auth } from "./auth";
-export { Provider, ModelsDev } from "./provider";
+export { Provider } from "./provider";
 export { Retry } from "./retry";
 export { selectModel } from "./model/select";
 export { accumulateUsage } from "./token";
