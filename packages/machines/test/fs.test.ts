@@ -21,6 +21,7 @@ import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Machine } from "@openomni/protocol";
 import { createFsDriver } from "../src/fs";
+import { expectEscape, expectInsideRead } from "./helpers";
 
 function withFixture(
   run: (fixture: { base: string; root: string; outside: string }) => Promise<void>,
@@ -116,6 +117,54 @@ describe("machine fs request boundary", () => {
 });
 
 describe("daemon filesystem driver", () => {
+  test.each([
+    "removed",
+    "replaced",
+  ])("refuses a final symlink %s after readlink", async (change) => {
+    await withFixture(async ({ root }) => {
+      const link = join(root, "link");
+      symlinkSync("target", link);
+      writeFileSync(join(root, "target"), "inside");
+      const driver = createFsDriver(new Map([["docs", root]]), {
+        afterSymlinkRead: () => {
+          rmSync(link);
+          if (change === "replaced") writeFileSync(link, "replacement");
+        },
+      });
+      try {
+        expect(await driver({ op: "stat", export: "docs", path: "link" })).toMatchObject({
+          status: "refused",
+          reason: "io_error",
+        });
+      } finally {
+        driver.close();
+      }
+    });
+  });
+
+  test("releases the duplicated descriptor when native directory stream acquisition fails", async () => {
+    await withFixture(async ({ root }) => {
+      let duplicate = -1;
+      const driver = createFsDriver(new Map([["docs", root]]), {
+        openDirectoryStream: (fd) => {
+          duplicate = fd;
+          expect(fstatSync(fd).isDirectory()).toBe(true);
+          // fdopendir returns NULL on allocation failure without taking ownership.
+          return null;
+        },
+      });
+      try {
+        expect(await driver({ op: "list", export: "docs", path: "" })).toMatchObject({
+          status: "refused",
+          reason: "io_error",
+        });
+        expect(() => fstatSync(duplicate)).toThrow(expect.objectContaining({ code: "EBADF" }));
+      } finally {
+        driver.close();
+      }
+    });
+  });
+
   test("walks nested links, normalizes targets, and preserves links to the root", async () => {
     await withFixture(async ({ root }) => {
       mkdirSync(join(root, "nested"));
@@ -127,13 +176,16 @@ describe("daemon filesystem driver", () => {
       try {
         for (const path of ["absolute/note", "nested/relative"])
           expect(await driver({ op: "read", export: "docs", path })).toMatchObject({
-            status: "completed", value: { data: "eA==" },
+            status: "completed",
+            value: { data: "eA==" },
           });
         expect(await driver({ op: "stat", export: "docs", path: "absolute" })).toMatchObject({
-          status: "completed", value: { kind: "symlink" },
+          status: "completed",
+          value: { kind: "symlink" },
         });
         expect(await driver({ op: "stat", export: "docs", path: "escape" })).toMatchObject({
-          status: "refused", reason: "path_escapes_export",
+          status: "refused",
+          reason: "path_escapes_export",
         });
       } finally {
         driver.close();
@@ -148,11 +200,13 @@ describe("daemon filesystem driver", () => {
       const driver = createFsDriver(new Map([["docs", root]]));
       try {
         expect(await driver({ op: "stat", export: "docs", path: "cycle" })).toMatchObject({
-          status: "refused", reason: "io_error",
+          status: "refused",
+          reason: "io_error",
         });
         expect(spawnSync("mkfifo", [join(root, "pipe")]).status).toBe(0);
         expect(await driver({ op: "stat", export: "docs", path: "pipe" })).toMatchObject({
-          status: "completed", value: { kind: "other" },
+          status: "completed",
+          value: { kind: "other" },
         });
       } finally {
         driver.close();
@@ -212,16 +266,7 @@ describe("daemon filesystem driver", () => {
       });
 
       expect(swapped).toBe(true);
-      await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toEqual({
-        status: "completed",
-        value: {
-          op: "read",
-          data: Buffer.from("inside").toString("base64"),
-          bytesRead: 6,
-          size: 6,
-          truncated: false,
-        },
-      });
+      await expectInsideRead(fsOp, "note.txt");
       fsOp.close();
     });
   });
@@ -234,16 +279,7 @@ describe("daemon filesystem driver", () => {
       renameSync(root, join(base, "original-root"));
       symlinkSync(outside, root);
 
-      await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toEqual({
-        status: "completed",
-        value: {
-          op: "read",
-          data: Buffer.from("inside").toString("base64"),
-          bytesRead: 6,
-          size: 6,
-          truncated: false,
-        },
-      });
+      await expectInsideRead(fsOp, "note.txt");
     });
   });
 
@@ -252,11 +288,7 @@ describe("daemon filesystem driver", () => {
       symlinkSync(join(outside, "missing.txt"), join(root, "escape"));
       const fsOp = createFsDriver(new Map([["docs", root]]));
 
-      await expect(fsOp({ op: "read", export: "docs", path: "escape" })).resolves.toEqual({
-        status: "refused",
-        reason: "path_escapes_export",
-        message: "path escapes export: escape",
-      });
+      await expectEscape(fsOp);
     });
   });
 
@@ -270,11 +302,7 @@ describe("daemon filesystem driver", () => {
     symlinkSync(join(evil, "secret.txt"), join(root, "escape"));
     try {
       const fsOp = createFsDriver(new Map([["docs", root]]));
-      await expect(fsOp({ op: "read", export: "docs", path: "escape" })).resolves.toEqual({
-        status: "refused",
-        reason: "path_escapes_export",
-        message: "path escapes export: escape",
-      });
+      await expectEscape(fsOp);
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
@@ -444,16 +472,7 @@ describe("daemon filesystem driver", () => {
       symlinkSync("target.txt", join(root, "link.txt"));
       const fsOp = createFsDriver(new Map([["docs", root]]));
 
-      await expect(fsOp({ op: "read", export: "docs", path: "link.txt" })).resolves.toEqual({
-        status: "completed",
-        value: {
-          op: "read",
-          data: Buffer.from("inside").toString("base64"),
-          bytesRead: 6,
-          size: 6,
-          truncated: false,
-        },
-      });
+      await expectInsideRead(fsOp, "link.txt");
       const stat = await fsOp({ op: "stat", export: "docs", path: "link.txt" });
       expect(stat.status === "completed" && stat.value).toMatchObject({
         op: "stat",
