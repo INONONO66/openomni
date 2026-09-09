@@ -81,7 +81,6 @@ for (const job of [
           "dependency-review", "scripts-contracts", "scripts-coverage",
         ].map((key) => [key, { result: "success" }]),
       );
-      if (job === "dependency-review") for (const q of QUALITY_JOBS) needs[q] = { result: "skipped" };
       if (status === "missing") delete needs[job];
       else needs[job] = { result: status };
       // When the real final-gate entry point runs.
@@ -106,7 +105,7 @@ for (const path of ["README.md", "apps/desktop/src/main/index.ts", "packages/ui/
       "scripts-contracts": { result: "success" },
       "scripts-coverage": { result: plan.toolingTests ? "success" : "skipped" },
       ...Object.fromEntries(["tests", "static", "deps"].map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
-      ...Object.fromEntries(QUALITY_JOBS.map((job) => [job, { result: "skipped" }])),
+      ...Object.fromEntries(QUALITY_JOBS.map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
       "dependency-review": { result: plan.dependencyReview ? "success" : "skipped" },
     };
     for (const status of ["success", "skipped", "failure", "cancelled"]) {
@@ -311,42 +310,36 @@ test("the stable Test status accepts only the planned documentation skip", () =>
   expect(result.exitCode).toBe(0);
 });
 
-test("a pull request requires every quality job skipped and rejects a quality run", () => {
-  // Given a full pull-request plan where GitHub skipped the quality jobs by design.
+test("a pull request requires every quality job to succeed", () => {
   const needs = Object.fromEntries(
-    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review", "scripts-contracts", "scripts-coverage"].map((key) => [
-      key,
-      { result: "success" },
-    ]),
+    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review", "scripts-contracts", "scripts-coverage", ...QUALITY_JOBS].map((key) => [key, { result: "success" }]),
   );
-  const skippedQuality = Object.fromEntries(QUALITY_JOBS.map((q) => [q, { result: "skipped" }]));
-  // When the real gate executes, then the intentional skip is the only accepted result.
-  const skipped = cli(["gate"], {
+  const result = cli(["gate"], {
     CI_PLAN: JSON.stringify(planChanges([], true)),
     CI_EVENT: "pull_request",
-    CI_NEEDS: JSON.stringify({ ...needs, ...skippedQuality }),
+    CI_NEEDS: JSON.stringify(needs),
   });
-  expect(skipped.exitCode).toBe(0);
-  for (const q of QUALITY_JOBS) {
-    const ran = cli(["gate"], {
-      CI_PLAN: JSON.stringify(planChanges([], true)),
-      CI_EVENT: "pull_request",
-      CI_NEEDS: JSON.stringify({ ...needs, ...skippedQuality, [q]: { result: "success" } }),
-    });
-    expect(ran.exitCode).not.toBe(0);
-    expect(ran.stderr.toString()).toContain(`${q}: success`);
-  }
+  expect(result.exitCode).toBe(0);
 });
 
-test("the workflow skips every quality job on pull requests", () => {
-  // Given the shipped workflow, then each quality job is gated on the event, not only the plan.
-  const jobs = z
-    .object({ jobs: z.record(z.string(), jobSchema) })
-    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
-  for (const q of QUALITY_JOBS)
-    expect(jobs[q]?.if).toBe(
-      "needs.plan.outputs.verify == 'true' && github.event_name != 'pull_request'",
-    );
+test("quality jobs run on executable pull requests and merge groups", () => {
+  const workflow = z
+    .object({
+      on: z.object({ merge_group: z.object({}).nullable() }),
+      concurrency: z.object({ "cancel-in-progress": z.string() }),
+      jobs: z.record(z.string(), jobSchema),
+    })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")));
+  // Only pull requests cancel superseded runs; merge groups and main keep every run.
+  expect(workflow.concurrency["cancel-in-progress"]).toBe(["$", "{{ github.event_name == 'pull_request' }}"].join(""));
+  const conditions = QUALITY_JOBS.map((q) => workflow.jobs[q]?.if);
+  expect(conditions.slice(0, 2)).toEqual(["needs.plan.outputs.verify == 'true'", "needs.plan.outputs.verify == 'true'"]);
+  // A skipped need (scripts-coverage on non-tooling PRs) skips a dependent job
+  // unless its condition carries a status-check function; without `!cancelled()`
+  // the `skipped` branch below is unreachable and the fan-in is skipped.
+  expect(conditions[2]).toBe(
+    "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')",
+  );
 });
 
 test("the full push gate accepts successful checks without PR-only dependency review", () => {

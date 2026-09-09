@@ -77,7 +77,6 @@ function readPlan(path?: string) {
 }
 
 export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void {
-  const pullRequest = process.env.CI_EVENT === "pull_request";
   const needs = z
     .record(
       z.string(),
@@ -101,10 +100,10 @@ export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void 
           ],
           ["static", plan.verify],
           ["deps", plan.verify],
-          ["quality-static", plan.verify && !pullRequest],
-          ["quality-gates", plan.verify && !pullRequest],
-          ["quality", plan.verify && !pullRequest],
-          ["dependency-review", plan.dependencyReview && pullRequest],
+          ["quality-static", plan.verify],
+          ["quality-gates", plan.verify],
+          ["quality", plan.verify],
+          ["dependency-review", plan.dependencyReview && process.env.CI_EVENT === "pull_request"],
         ] satisfies [string, boolean][])),
   ]);
   for (const [job, enabled] of required) {
