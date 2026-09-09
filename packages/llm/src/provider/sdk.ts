@@ -228,4 +228,3 @@ function resolveLanguageModel(
   }
   return sdk.languageModel(modelID);
 }
-
