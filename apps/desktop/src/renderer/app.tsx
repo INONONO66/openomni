@@ -129,16 +129,20 @@ export function App({ platform, storage }: AppEnvironment) {
     )?.focus();
   }, [state.activeTabId, tabs]);
 
-  useEffect(() => {
-    const bridge = desktopBridge();
-    return bridge?.onShellCommand((command: ShellCommand) => {
+  const onShellCommand = useCallback(
+    (command: ShellCommand) => {
       const before = consoleStore.state;
       if (command === "close-tab" && before.activeTabId !== null)
         captureCloseFocus(before.activeTabId);
       dispatchShellCommand(command);
       if (consoleStore.state !== before) arrive();
-    });
-  }, [arrive, captureCloseFocus]);
+    },
+    [arrive, captureCloseFocus],
+  );
+
+  useEffect(() => {
+    return desktopBridge()?.onShellCommand(onShellCommand);
+  }, [onShellCommand]);
 
   const onSearchingChange = useCallback((searching: boolean) => {
     if (searching && !search.current.searching) {

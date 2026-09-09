@@ -41,9 +41,3 @@ export interface DesktopApi {
    */
   readonly gateway: () => Promise<GatewayEndpoint | undefined>;
 }
-
-declare global {
-  interface Window {
-    readonly desktop: DesktopApi;
-  }
-}

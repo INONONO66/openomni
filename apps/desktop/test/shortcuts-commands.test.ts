@@ -18,7 +18,10 @@ function currentTab() {
 
 test("an unknown runtime command fails without mutating tab state", () => {
   const before = consoleStore.state;
-  expect(() => Reflect.apply(dispatchShellCommand, undefined, ["unknown-command"])).toThrow(Error);
+  function invokeUnknownCommand(): void {
+    Reflect.apply(dispatchShellCommand, undefined, ["unknown-command"]);
+  }
+  expect(invokeUnknownCommand).toThrow(Error);
   expect(consoleStore.state).toBe(before);
 });
 

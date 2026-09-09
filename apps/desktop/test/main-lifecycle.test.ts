@@ -118,7 +118,8 @@ test.each([
   try {
     // Entry modules are cached across test files; each double needs its own evaluation.
     const ownInstance: string = `../src/main/index?main-lifecycle-${development}`;
-    await import(ownInstance);
+    const moduleLoaded: Promise<void> = import(ownInstance).then(() => undefined);
+    await moduleLoaded;
     await ready.promise;
     expect(windows).toHaveLength(1);
     const first = windows[0];

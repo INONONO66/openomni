@@ -123,16 +123,17 @@ class ControlledSocket {
   }
 
   addEventListener(
-    ...[type, listener]:
-      | [type: "open" | "close" | "error", listener: () => void]
-      | [type: "message", listener: (event: { data: string | ArrayBuffer | Blob }) => void]
+    ...args:
+      | ["open" | "close" | "error", () => void]
+      | ["message", (event: { data: string | ArrayBuffer | Blob }) => void]
   ): void {
-    if (type === "open") this.openListeners.push(listener);
-    if (type === "close") this.closeListeners.push(listener);
-    if (type === "error") this.errorListeners.push(listener);
-    if (type === "message") {
-      this.messageListeners.push(listener);
+    if (args[0] === "message") {
+      this.messageListeners.push(args[1]);
+      return;
     }
+    if (args[0] === "open") this.openListeners.push(args[1]);
+    if (args[0] === "close") this.closeListeners.push(args[1]);
+    if (args[0] === "error") this.errorListeners.push(args[1]);
   }
 
   open(): void {

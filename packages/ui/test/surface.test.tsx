@@ -78,9 +78,6 @@ describe("ScrollArea", () => {
     expect(textContent(area, ".fixture-content")).toBe("rows");
     const viewports = attributes(area, ".overscroll-contain");
     expect(viewports).toHaveLength(1);
-    const style = Object.fromEntries(
-      (viewports[0]?.style ?? "").split(";").map((declaration) => declaration.split(":")),
-    );
-    expect(style.overflow).toBe("scroll");
+    expect(viewports[0]?.style).toContain("overflow:scroll");
   });
 });

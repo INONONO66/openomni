@@ -212,8 +212,12 @@ function groupElapsed(calls: readonly TranscriptTool[]): string | undefined {
   if (calls.some((call) => call.status === "running" || call.status === "waiting")) {
     return undefined;
   }
-  const durations = calls.map((call) => call.duration).filter((d): d is string => d !== undefined);
-  if (durations.length !== calls.length || durations.length === 0) return undefined;
+  const durations: string[] = [];
+  for (const call of calls) {
+    if (call.duration === undefined) return undefined;
+    durations.push(call.duration);
+  }
+  if (durations.length === 0) return undefined;
   return sumDurations(durations);
 }
 
