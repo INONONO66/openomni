@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { z } from "zod";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActorRegistry, SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
@@ -233,42 +234,53 @@ async function scenario(name: Scenario) {
   return result;
 }
 
-export async function runExistingAgentMessageDriver(
+async function executeDriver(
   args: readonly string[],
 ): Promise<ExistingAgentMessageDriverExecution> {
-  try {
-    if (args.length === 1 && args[0] === "--help") return { exitCode: 0, stdout: USAGE };
-    const name = args[1];
-    if (
-      args.length !== 3 ||
-      args[0] !== "--scenario" ||
-      args[2] !== "--json" ||
-      (name !== "restart-quorum" && name !== "duplicate-ambiguous")
-    )
-      return {
-        exitCode: 1,
-        stdout: JSON.stringify({
-          version,
-          mode: "argument_error",
-          ok: false,
-          resultCode: "invalid_arguments",
-        }),
-      };
-    const receipt = await Bus.withIsolation(() => Storage.withIsolation(() => scenario(name)));
-    return { exitCode: receipt.ok ? 0 : 1, stdout: JSON.stringify(receipt) };
-  } catch (error) {
+  if (args.length === 1 && args[0] === "--help") return { exitCode: 0, stdout: USAGE };
+  const name = args[1];
+  if (
+    args.length !== 3 ||
+    args[0] !== "--scenario" ||
+    args[2] !== "--json" ||
+    (name !== "restart-quorum" && name !== "duplicate-ambiguous")
+  )
     return {
+      exitCode: 1,
+      stdout: JSON.stringify({
+        version,
+        mode: "argument_error",
+        ok: false,
+        resultCode: "invalid_arguments",
+      }),
+    };
+  const receipt = await Bus.withIsolation(() => Storage.withIsolation(() => scenario(name)));
+  return { exitCode: receipt.ok ? 0 : 1, stdout: JSON.stringify(receipt) };
+}
+
+const DriverFailure = z
+  .instanceof(Error)
+  .transform((error) => error.name)
+  .catch("NonError")
+  .transform(
+    (errorType): ExistingAgentMessageDriverExecution => ({
       exitCode: 1,
       stdout: JSON.stringify({
         version,
         mode: "driver_error",
         ok: false,
         resultCode: "driver_threw",
-        errorType: error instanceof Error ? error.name : "NonError",
+        errorType,
       }),
-    };
-  }
+    }),
+  );
+
+export function runExistingAgentMessageDriver(
+  args: readonly string[],
+): Promise<ExistingAgentMessageDriverExecution> {
+  return executeDriver(args).catch(DriverFailure.parse);
 }
+
 if (import.meta.main) {
   const result = await runExistingAgentMessageDriver(Bun.argv.slice(2));
   process.stdout.write(`${result.stdout}\n`);

@@ -44,7 +44,7 @@ function sendStreamId(messageId: string): string {
 function existingAdmission(
   input: Gateway.SendInput,
   target: Gateway.DeliveryTarget,
-): SendAdmission | undefined {
+): SendAdmission | SendAdmissionConflict | undefined {
   const ledger = LedgerAppend.port();
   if (ledger === undefined)
     throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
@@ -57,7 +57,7 @@ function existingAdmission(
   if (!parsed.success) throw new Error(`corrupt send admission fact on ${streamId}`);
   const admission = parsed.data;
   if (admission.signature !== sendSignature(input, target)) {
-    throw new SendAdmissionConflict(
+    return new SendAdmissionConflict(
       `message id ${input.messageId} was already admitted with different content`,
     );
   }
@@ -78,6 +78,7 @@ function recordAdmission(
   const appended = ledger.append({ streamId, type: SEND_ADMITTED_FACT, data: { ...admission } }, 0);
   if (appended.kind === "appended") return admission;
   const raced = existingAdmission(input, target);
+  if (raced instanceof SendAdmissionConflict) throw raced;
   if (raced === undefined)
     throw new Error(`send admission conflicted without a recorded fact on ${streamId}`);
   return raced;
@@ -109,14 +110,10 @@ export function admitSend(
 ): SendAdmission | Gateway.SendReceipt {
   const { input, target, grant } = authorization;
   const sendClass = input.class ?? (input.operation === "awaited" ? "converse" : "notify");
-  let admission: SendAdmission | undefined;
-  try {
-    admission = existingAdmission(input, target);
-  } catch (error) {
-    if (error instanceof SendAdmissionConflict && input.operation === "awaited") {
-      return deny(input, "request_duplicate", error.message);
-    }
-    throw error;
+  let admission = existingAdmission(input, target);
+  if (admission instanceof SendAdmissionConflict) {
+    if (input.operation === "awaited") return deny(input, "request_duplicate", admission.message);
+    throw admission;
   }
   if (admission !== undefined) {
     repairBudgetDebit(input, admission);

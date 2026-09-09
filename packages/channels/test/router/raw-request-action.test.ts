@@ -94,20 +94,14 @@ test.each([
   };
 
   // When a driver submits raw facts through the current public seam.
-  let outcome: Gateway.IngestResult | IngressRoutingError | undefined;
-  try {
-    outcome = await router.ingest(
-      { kind: "external", surface: "telegram", externalId: "seller" },
-      facts,
-    );
-  } catch (error) {
-    if (!(error instanceof IngressRoutingError)) throw error;
-    outcome = error;
-  }
+  const outcome = router.ingest(
+    { kind: "external", surface: "telegram", externalId: "seller" },
+    facts,
+  );
 
   // Then only the allowed action can resolve the request and commit a prompt.
   if (action === "report_result") {
-    expect(outcome).toMatchObject({
+    expect(await outcome).toMatchObject({
       status: "executed",
       handle: { target: "request-owner" },
     });
@@ -115,6 +109,8 @@ test.each([
     expect(SessionHandleStore.inboxRows("request-owner")).toMatchObject([{ content: "answer" }]);
     expect(SessionHandleStore.requestById("request-raw-action")?.state).toBe("resolved");
   } else {
+    await expect(outcome).rejects.toBeInstanceOf(IngressRoutingError);
+    await expect(outcome).rejects.toMatchObject({ data: { code: "route_blocked" } });
     expect(decisions[0]).toMatchObject({
       stage: "request_correlation",
       outcome: "block",
@@ -124,9 +120,6 @@ test.each([
         "request.action:disallowed",
       ],
     });
-    expect(outcome).toBeInstanceOf(IngressRoutingError);
-    if (!(outcome instanceof IngressRoutingError)) throw new Error("expected routing rejection");
-    expect(outcome.data.code).toBe("route_blocked");
     expect(commits).toHaveLength(0);
     expect(SessionHandleStore.requestById("request-raw-action")).toMatchObject({
       state: "open",

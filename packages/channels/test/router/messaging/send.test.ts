@@ -1,6 +1,7 @@
 import { seededRequests } from "../../helpers/requests";
 import { replaceLedger } from "../../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
+import { z } from "zod";
 import type { Gateway } from "@openomni/protocol";
 import { ActorRegistry, EgressBudgetStore, Storage, SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "../../helpers/observation";
@@ -453,6 +454,24 @@ describe("durable send admission faults", () => {
     }));
 
     await expect(messaging().send(buildSendInput())).rejects.toThrow();
+    expect(deliveries).toEqual([]);
+  });
+
+  test("an incompatible concurrent admission still rejects an awaited send", async () => {
+    replaceLedger((ledger) => ({
+      ...ledger,
+      append: (fact, head) => {
+        if (fact.type !== "gateway.send.admitted") return ledger.append(fact, head);
+        const data = z.record(z.string(), z.json()).parse(fact.data);
+        expect(
+          ledger.append({ ...fact, data: { ...data, signature: "conflicting" } }, head).kind,
+        ).toBe("appended");
+        return { kind: "cas_conflict", currentHead: 1 };
+      },
+    }));
+    await expect(messaging().send(buildAwaitedSendInput())).rejects.toThrow(
+      "already admitted with different content",
+    );
     expect(deliveries).toEqual([]);
   });
 

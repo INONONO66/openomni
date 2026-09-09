@@ -1,4 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
+import { z } from "zod";
+import { rejected } from "../helpers/rejection";
 import { replaceLedger } from "../helpers/ledger";
 import { replyGrantEndpointFacts } from "../../src/router/messaging/reply-grant";
 import { Channel, Ingress, type Gateway, type Inbox, type Ledger } from "@openomni/protocol";
@@ -146,16 +148,10 @@ test.each([
       createdBy: "owner",
     });
   }
-  let caught: Error | undefined;
-  try {
-    await router.ingest(ownerSender, ownerFacts);
-  } catch (error) {
-    if (!(error instanceof Error)) throw error;
-    caught = error;
-  }
+  const caught = await rejected(router.ingest(ownerSender, ownerFacts), z.instanceof(Error));
   expect(caught).toMatchObject({ code: "route_replay_divergent" });
   for (const value of ["actor-owner", "replacement", "manager", "evidence_only"])
-    expect(caught?.message).not.toContain(value);
+    expect(caught.message).not.toContain(value);
   expect(commits).toHaveLength(1);
   expect(routingDecisions()).toHaveLength(count);
 });

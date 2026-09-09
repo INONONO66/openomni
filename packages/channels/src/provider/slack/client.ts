@@ -6,7 +6,9 @@ import { SlackApiError } from "./error";
 const BASE_URL = "https://slack.com/api";
 
 /** Slack wraps errors in a 200 body — every call is judged by this envelope first. */
-const EnvelopeSchema = z.object({ ok: z.boolean(), error: z.string().optional() });
+const EnvelopeSchema = z
+  .object({ ok: z.boolean(), error: z.string().optional() })
+  .catchall(z.json());
 
 const SocketUrlSchema = z.object({ url: z.string() });
 const IdentitySchema = z.object({ user_id: z.string(), team_id: z.string() });
@@ -108,8 +110,7 @@ export class SlackClient implements ChannelClient {
         rejected: res.status >= 400 && res.status < 500,
       });
     }
-    const raw: unknown = await res.json();
-    const envelope = EnvelopeSchema.safeParse(raw);
+    const envelope = EnvelopeSchema.safeParse(await res.json());
     if (!envelope.success) {
       throw new SlackApiError({ message: `slack ${method} returned a malformed envelope` });
     }
@@ -119,7 +120,7 @@ export class SlackClient implements ChannelClient {
         rejected: true,
       });
     }
-    const parsed = shape.schema.safeParse(raw);
+    const parsed = shape.schema.safeParse(envelope.data);
     if (!parsed.success) {
       throw new SlackApiError({ message: shape.malformed });
     }

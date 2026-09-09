@@ -5,16 +5,18 @@ import { resolveRoute, type RouteState } from "../../src/router/resolve-route.js
 type RouteInbound = Parameters<typeof resolveRoute>[0];
 import { requireRoutedDecision } from "../../src/router/routing-execution.js";
 import { IngressRoutingError } from "../../src/router/routing-error";
+import { z } from "zod";
+import { rejected } from "../helpers/rejection";
 
-function routingError(decision: Ingress.RoutingDecisionPayload): IngressRoutingError {
-  try {
-    requireRoutedDecision(decision);
-  } catch (error) {
-    if (!(error instanceof IngressRoutingError)) throw error;
-    expect(error.decision).toEqual(decision);
-    return error;
-  }
-  throw new Error("blocked route was accepted");
+async function routingError(
+  decision: Ingress.RoutingDecisionPayload,
+): Promise<IngressRoutingError> {
+  const error = await rejected(
+    Promise.resolve().then(() => requireRoutedDecision(decision)),
+    z.instanceof(IngressRoutingError),
+  );
+  expect(error.decision).toEqual(decision);
+  return error;
 }
 
 const inbound = Object.freeze({
@@ -195,7 +197,7 @@ describe("resolveRoute precedence", () => {
     expect(decisions.every((decision) => decision.sessionId === undefined)).toBe(true);
   });
 
-  it("refuses blacklist, block and ambiguity before the inbox body", () => {
+  it("refuses blacklist, block and ambiguity before the inbox body", async () => {
     const decisions = [
       resolveRoute(inbound, {
         blacklist: { id: "blacklist-actor", kind: "actor", reason: "revoked" },
@@ -222,7 +224,8 @@ describe("resolveRoute precedence", () => {
     if (accepted === undefined || accepted.stage !== "blacklist" || accepted.outcome !== "drop") {
       throw new TypeError("missing accepted decision fixture");
     }
-    const codes = decisions.map((decision) => routingError(decision).code);
+    const errors = await Promise.all(decisions.map(routingError));
+    const codes = errors.map((error) => error.code);
     expect(codes).toEqual(["route_blocked", "route_blocked", "route_ambiguous"]);
   });
 
@@ -232,11 +235,11 @@ describe("resolveRoute precedence", () => {
       label: "an actor-identity block",
       channel: { id: "grant-no-default", kind: "trusted_channel", inboundTreatment: "full_access" },
     },
-  ] as const)("classifies $label through the typed routing error", ({ channel }) => {
+  ] as const)("classifies $label through the typed routing error", async ({ channel }) => {
     const decision = Ingress.Events.RoutingDecision.schema.parse(
       resolveRoute(inbound, { request: { kind: "none" }, channel }),
     );
-    expect(routingError(decision).code).toBe("route_blocked");
+    expect((await routingError(decision)).code).toBe("route_blocked");
   });
 
   it("preserves evidence_only treatment while routing a broadcast channel", () => {
