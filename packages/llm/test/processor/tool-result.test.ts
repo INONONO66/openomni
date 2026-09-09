@@ -24,7 +24,7 @@ type ToolProjectionCase = {
   readonly expectedPart: {
     readonly callID: string;
     readonly tool?: string;
-    readonly state: Record<string, unknown>;
+    readonly state: Partial<Tool.State>;
   };
 };
 
@@ -166,7 +166,7 @@ describe("Processor tool result projection", () => {
     const processor = createProcessor({
       sink,
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield {
             type: "tool-call",
             toolCallId: "call-weather",
@@ -229,7 +229,7 @@ describe("Processor tool result projection", () => {
       sink,
       toolNames,
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield* chunks;
         })(),
       }),
@@ -273,7 +273,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       abort: abortController.signal,
       sink: captureSink(messages),
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield {
             type: "tool-call",
             toolCallId: "call-grace",
@@ -329,7 +329,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       abort: abortController.signal,
       sink: captureSink(messages),
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield {
             type: "tool-call",
             toolCallId: "call-hang",

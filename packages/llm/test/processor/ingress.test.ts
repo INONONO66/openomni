@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ProviderEvent } from "../../src/processor/event-schema";
 import { useProcessor, capturingSink, processorInfo, streamOf } from "../helpers/processor";
+import type { StreamEvent } from "../../src/processor/stream-events";
 
 describe("processor ingress", () => {
   const { createProcessor, events } = useProcessor();
@@ -58,7 +59,7 @@ describe("processor ingress", () => {
       sink: capture.sink,
       abort: abort.signal,
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield { type: "text-delta", text: "partial" };
           abort.abort();
           yield { type: "text-end" };

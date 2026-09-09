@@ -10,7 +10,7 @@ export function streamOf(
   chunks: readonly StreamEvent[],
 ): Processor.ProcessorOptions["createStream"] {
   return async () => ({
-    fullStream: (async function* () {
+    fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
       yield* chunks;
     })(),
   });
@@ -22,7 +22,7 @@ export function failingStream(
   next: readonly StreamEvent[] = [{ type: "finish" }],
 ): Mock<Processor.ProcessorOptions["createStream"]> {
   return mock(streamOf(next)).mockImplementationOnce(async () => ({
-    fullStream: (async function* () {
+    fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
       yield* chunks;
       throw error;
     })(),

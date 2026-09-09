@@ -7,6 +7,7 @@ import type { Message } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Processor } from "../../src/processor";
 import { Bus } from "../helpers/observation";
+import type { StreamEvent } from "../../src/processor/stream-events";
 
 // Emission count depends on part boundaries, not token volume.
 
@@ -60,7 +61,7 @@ describe("Processor emission measurement (#545 T2)", () => {
       events: { publish: Bus.publish },
       trace: { traceId: "trace-processor-test", sessionId: "session-measure" },
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield* scenario() as Array<{ type: string }>;
         })(),
       }),

@@ -37,7 +37,7 @@ export function useStreamCapture() {
       streamText: (input: Arguments) => {
         args = input;
         return {
-          fullStream: (async function* () {
+          fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
             yield* chunks;
           })(),
         };

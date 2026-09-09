@@ -3,19 +3,25 @@ import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { PlainObject } from "@openomni/protocol";
 import { ModelsDev } from "../../src/model";
 import { Catalog } from "../../src/model/schema";
 import { resetCatalog } from "../helpers/model-loader";
 
-type RemoteCatalogCase = {
+type RemoteCatalogCase<Selected> = {
   readonly name: string;
-  readonly catalog: Record<string, unknown>;
-  readonly select: (data: Record<string, ModelsDev.Provider>) => unknown;
-  readonly expected: unknown;
+  /** The JSON body the remote catalog answers with. */
+  readonly catalog: PlainObject;
+  readonly select: (data: Record<string, ModelsDev.Provider>) => Selected;
+  readonly expected: Selected;
 };
 
-const remoteCatalogCases: RemoteCatalogCase[] = [
-  {
+function remoteCase<Selected>(testCase: RemoteCatalogCase<Selected>): RemoteCatalogCase<Selected> {
+  return testCase;
+}
+
+const remoteCatalogCases = [
+  remoteCase({
     name: "prefers a successful fetch over the bundled snapshot",
     catalog: {
       "test-network-provider": {
@@ -41,8 +47,8 @@ const remoteCatalogCases: RemoteCatalogCase[] = [
       name: "Network Provider",
       npm: "@ai-sdk/openai",
     },
-  },
-  {
+  }),
+  remoteCase({
     name: "drops custom providers without a bundled SDK",
     catalog: {
       custom: {
@@ -55,8 +61,8 @@ const remoteCatalogCases: RemoteCatalogCase[] = [
     },
     select: (data) => data.custom,
     expected: undefined,
-  },
-  {
+  }),
+  remoteCase({
     name: "removes model-level provider packages",
     catalog: {
       openai: {
@@ -75,7 +81,7 @@ const remoteCatalogCases: RemoteCatalogCase[] = [
     },
     select: (data) => data.openai?.models["gpt-test"],
     expected: { id: "gpt-test", name: "GPT Test" },
-  },
+  }),
 ];
 
 describe("ModelsDev catalog loading", () => {
@@ -94,7 +100,7 @@ describe("ModelsDev catalog loading", () => {
     }
   });
 
-  async function writeCacheCatalog(content: unknown): Promise<void> {
+  async function writeCacheCatalog(content: string | PlainObject): Promise<void> {
     testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-cache-"));
     process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
     process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";

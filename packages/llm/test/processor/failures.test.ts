@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { LlmCall } from "@openomni/protocol";
 import { APIError } from "../../src/error";
 import { useProcessor, capturingSink, failingStream, statusStates } from "../helpers/processor";
+import type { StreamEvent } from "../../src/processor/stream-events";
 
 describe("Processor failures", () => {
   const fixture = useProcessor();
@@ -49,7 +50,7 @@ describe("Processor failures", () => {
     const processor = createProcessor({
       sink: capture.sink,
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield { type: "tool-call", toolCallId: "call-abort", toolName: "lookup", input: {} };
           fixture.abortController.abort(reason);
           yield { type: "text-start" };
