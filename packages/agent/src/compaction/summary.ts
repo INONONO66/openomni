@@ -130,7 +130,8 @@ function replacementRecord(
   return [...stampedUsers, ...keepSpan].flatMap((message) =>
     message.parts
       .filter(
-        (part): part is Message.TextPart => part.type === "text" && !isTimeCarriageMarkerPart(part),
+        (part: Message.Part): part is Message.TextPart =>
+          part.type === "text" && !isTimeCarriageMarkerPart(part),
       )
       .map((part) => ({
         role: message.info.role,

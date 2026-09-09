@@ -13,7 +13,7 @@ import {
 export function assistantTextOf(message: Message.WithParts | undefined): string {
   if (message === undefined) return "";
   return message.parts
-    .filter((part): part is Message.TextPart => part.type === "text")
+    .filter((part: Message.Part): part is Message.TextPart => part.type === "text")
     .map((part) => part.text)
     .join("");
 }

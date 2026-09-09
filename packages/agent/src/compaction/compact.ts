@@ -123,6 +123,7 @@ export namespace Compaction {
         finish,
       );
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       // The one exit finish() cannot serve: the summarizer threw. The
       // bracket still closes — `failed` is this operation's terminal — and
       // the throw propagates unchanged into the seam's fail-closed contract.
@@ -134,7 +135,7 @@ export namespace Compaction {
         messagesAfter: messagesBefore,
         removedCount: 0,
         elidedChars: 0,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
       throw error;
     }

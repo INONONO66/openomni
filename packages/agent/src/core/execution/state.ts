@@ -70,13 +70,13 @@ export function requireTrace(
       traceId === undefined ? "traceId" : undefined,
       sessionId === undefined ? "sessionId" : undefined,
       runId === undefined ? "runId" : undefined,
-    ].filter((field): field is string => field !== undefined);
+    ].filter((field: string | undefined): field is string => field !== undefined);
     throw new Error(`${subject} requires a trace context with ${missing.join(", ")}`);
   }
   return { ...traceContext, traceId, sessionId, runId };
 }
 
-export function nonEmptyString(value: unknown): string | undefined {
+export function nonEmptyString<T>(value: T): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 

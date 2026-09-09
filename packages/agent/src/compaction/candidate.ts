@@ -30,7 +30,7 @@ export function planAnchoredCut(
 function anchorPart(message: Message.WithParts): Message.TextPart | undefined {
   if (message.info.role !== "user") return undefined;
   return message.parts.find(
-    (part): part is Message.TextPart =>
+    (part: Message.Part): part is Message.TextPart =>
       part.type === "text" && part.metadata?.compactionAnchor === true,
   );
 }

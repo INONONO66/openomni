@@ -337,7 +337,7 @@ export function createDispatcher(
     const execute = async (): Promise<readonly ToolDispatchResult[]> => {
       const prepared = calls.map((call) => prepare(call, context, "model"));
       const ready = prepared.filter(
-        (item): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
+        (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
       );
       const results = await runPreparedBatch(ready, context, options?.retainEffect);
       let index = 0;
@@ -378,7 +378,7 @@ export function createDispatcher(
         if (prepared.some((item) => item.kind === "refused"))
           throw new Error("captured invocation no longer parses");
         const ready = prepared.filter(
-          (item): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
+          (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
         );
         const results = await runPreparedBatch(ready, context);
         results.forEach((result, index) => {

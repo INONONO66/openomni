@@ -87,7 +87,7 @@ export async function settleModelTools(
   const assistant = turn.turnAssistant.message;
   const pending =
     assistant?.parts.filter(
-      (part): part is Message.ToolPart =>
+      (part: Message.Part): part is Message.ToolPart =>
         part.type === "tool" &&
         (part.state.status === "pending" || part.state.status === "running"),
     ) ?? [];

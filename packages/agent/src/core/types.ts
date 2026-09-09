@@ -3,6 +3,7 @@ import type {
   BusEvent,
   LedgerAction,
   Model,
+  Message,
   PlainObject,
   PlainValue,
   Policy,
@@ -126,14 +127,14 @@ export interface ChatAgentInput {
         role: "user";
         content: string;
         id?: string;
-        partMetadata?: Record<string, unknown>;
+        partMetadata?: Message.TextPart["metadata"];
         time?: number;
       }
     | {
         role: "assistant";
         content: string;
         id?: string;
-        partMetadata?: Record<string, unknown>;
+        partMetadata?: Message.TextPart["metadata"];
         time?: number;
       }
   >;

@@ -91,7 +91,7 @@ export function attachFailureFacts(error: Error, facts: AgentFailureFacts): void
  * from an agent run (or died before any decision was reached). Absent is a
  * real answer: a host must not invent an attempt count.
  */
-export function failureFacts(error: unknown): AgentFailureFacts | undefined {
+export function failureFacts<T>(error: T): AgentFailureFacts | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   const parsed = AgentFailureFacts.safeParse(Reflect.get(error, FAILURE_FACTS));
   return parsed.success ? parsed.data : undefined;
