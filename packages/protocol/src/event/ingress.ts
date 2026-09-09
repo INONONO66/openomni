@@ -86,7 +86,7 @@ const LegacyRetiredFieldsSchema = z.object({
 export function recordedRoutingDecision(data: object): RoutingDecisionPayload | undefined {
   const bytes = PlainObjectSchema.safeParse(data);
   if (!bytes.success || !LegacyRetiredFieldsSchema.safeParse(bytes.data).success) return undefined;
-  const { runId: _runId, pendingInteractionId: _pendingInteractionId, ...upcast } = bytes.data;
+  const { runId, pendingInteractionId, ...upcast } = bytes.data;
   const result = RecordedRoutingDecisionSchema.safeParse(upcast);
   return result.success ? result.data : undefined;
 }
