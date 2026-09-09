@@ -23,11 +23,16 @@ describe("Processor attempt settlement", () => {
       expect(statusStates(events)).toEqual(["busy", "idle"]);
     }
     const processing = processor.process({ system: "", promptText: "" });
-    const rejection = processing.catch((error) => {
-      assertSettled();
-      return error;
-    });
+    // Registered before any await: this handler observes the state at the moment of rejection.
+    const settledAtRejection = processing.then(
+      () => false,
+      () => {
+        assertSettled();
+        return true;
+      },
+    );
     if (synchronous) assertSettled();
-    expect(await rejection).toBe(failure);
+    await expect(processing).rejects.toBe(failure);
+    expect(await settledAtRejection).toBe(true);
   });
 });

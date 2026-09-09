@@ -1,5 +1,4 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import type { Message } from "@openomni/protocol";
 import { useProcessor, capturingSink, streamOf, textEvents } from "../helpers/processor";
 
 describe("Processor processor", () => {
@@ -43,9 +42,7 @@ describe("Processor processor", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    const textPart = capture
-      .finalParts()
-      .find((part): part is Message.TextPart => part.type === "text");
+    const textPart = capture.textParts()[0];
     expect(textPart?.text).toBe("Hello");
     expect(textPart?.time?.start).toBeNumber();
     expect(textPart?.time?.end).toBeNumber();
@@ -98,9 +95,7 @@ describe("Processor processor", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    const reasoningPart = capture
-      .finalParts()
-      .find((part): part is Message.ReasoningPart => part.type === "reasoning");
+    const reasoningPart = capture.reasoningParts()[0];
     expect(reasoningPart?.text).toBe("Step 1 - Step 2");
     expect(reasoningPart?.time.start).toBeNumber();
     expect(reasoningPart?.time.end).toBeNumber();
@@ -135,9 +130,7 @@ describe("Processor processor", () => {
     // Provider finish maps into the transcript vocabulary; the raw provider
     // string survives on the step-finish part.
     expect(processor.message.finish).toBe("stop");
-    const stepFinish = capture
-      .finalParts()
-      .find((part): part is Message.StepFinishPart => part.type === "step-finish");
+    const stepFinish = capture.stepFinishParts()[0];
     expect(stepFinish?.reason).toBe("end_turn");
     expect(processor.message.tokens).toEqual({
       input: 10,
@@ -164,11 +157,8 @@ describe("Processor processor", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    const parts = capture.finalParts();
-    const textPart = parts.find((part): part is Message.TextPart => part.type === "text");
-    const reasoningPart = parts.find(
-      (part): part is Message.ReasoningPart => part.type === "reasoning",
-    );
+    const textPart = capture.textParts()[0];
+    const reasoningPart = capture.reasoningParts()[0];
     expect(textPart?.text).toBe("Hello");
     expect(reasoningPart?.text).toBe("thinking");
   });
@@ -190,9 +180,7 @@ describe("Processor processor", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    const textParts = capture
-      .finalParts()
-      .filter((part): part is Message.TextPart => part.type === "text");
+    const textParts = capture.textParts();
     expect(textParts.map((part) => part.text)).toEqual(["First", "Second"]);
   });
 
@@ -211,9 +199,7 @@ describe("Processor processor", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    const reasoningParts = capture
-      .finalParts()
-      .filter((part): part is Message.ReasoningPart => part.type === "reasoning");
+    const reasoningParts = capture.reasoningParts();
     expect(reasoningParts).toHaveLength(1);
     expect(reasoningParts[0]?.text).toBe("test");
   });
@@ -232,9 +218,7 @@ describe("Processor processor", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    const toolPart = capture
-      .finalParts()
-      .find((part): part is Message.ToolPart => part.type === "tool");
+    const toolPart = capture.toolParts()[0];
     expect(toolPart?.state.status).toBe("error");
     expect(capture.toolResults).toHaveLength(1);
     expect(capture.toolResults[0]).toMatchObject({

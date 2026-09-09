@@ -56,13 +56,20 @@ export function capturingSink() {
       toolResults.push(result);
     },
   };
+  const finalParts = () => messages.at(-1)?.parts ?? [];
   return {
     sink,
     messages,
     toolCalls,
     toolResults,
     textTimeline,
-    finalParts: () => messages.at(-1)?.parts ?? [],
+    finalParts,
+    /** The final snapshot's parts of one kind, narrowed by discriminant. */
+    textParts: () => finalParts().flatMap((part) => (part.type === "text" ? [part] : [])),
+    reasoningParts: () => finalParts().flatMap((part) => (part.type === "reasoning" ? [part] : [])),
+    toolParts: () => finalParts().flatMap((part) => (part.type === "tool" ? [part] : [])),
+    stepFinishParts: () =>
+      finalParts().flatMap((part) => (part.type === "step-finish" ? [part] : [])),
   };
 }
 

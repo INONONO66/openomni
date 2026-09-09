@@ -64,7 +64,7 @@ describe("canonical model and provider-bound credentials", () => {
       Provider.resolveModel({ provider: "anthropic", id: "absent" }),
     ).rejects.toMatchObject({
       data: { reason: "proxy_listing_failed" },
-      cause: expect.any(Error),
+      cause: { name: "ProxyModelsError", cause: { message: "connection refused" } },
     });
   });
 

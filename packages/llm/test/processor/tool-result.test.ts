@@ -261,8 +261,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
 
   function lastToolState(messages: Message.WithParts[]): Message.ToolPart["state"] | undefined {
     const parts = messages[messages.length - 1]?.parts ?? [];
-    const tool = parts.find((part): part is Message.ToolPart => part.type === "tool");
-    return tool?.state;
+    return parts.flatMap((part) => (part.type === "tool" ? [part.state] : []))[0];
   }
 
   test("tool result already in the stream at abort settles as completed", async () => {

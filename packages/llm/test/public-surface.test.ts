@@ -18,10 +18,9 @@ describe("@openomni/llm root public surface", () => {
     );
 
     // When: TypeScript parses the callback members (not comments or prose).
-    const contract = source.statements.find(
-      (node): node is ts.InterfaceDeclaration =>
-        ts.isInterfaceDeclaration(node) && node.name.text === "Sink",
-    );
+    const contract = source.statements
+      .filter(ts.isInterfaceDeclaration)
+      .find((node) => node.name.text === "Sink");
 
     // Then: only retained callbacks are public; the typed map is exhaustive too.
     expect(contract?.members.map((member) => member.name?.getText(source)).sort()).toEqual(

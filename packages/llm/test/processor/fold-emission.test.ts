@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { Message } from "@openomni/protocol";
 import { APIError } from "../../src/error";
 import {
   useProcessor,
@@ -161,9 +160,7 @@ describe("Processor fold emission", () => {
     const { capture } = await project([
       { type: "reasoning-delta", id: "orphan", text: "inferred start" },
     ]);
-    const part = capture
-      .finalParts()
-      .find((part): part is Message.ReasoningPart => part.type === "reasoning");
+    const part = capture.reasoningParts()[0];
     expect(part?.text).toBe("inferred start");
     expect(part?.time.end).toBeNumber();
   });
