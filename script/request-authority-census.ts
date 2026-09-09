@@ -48,6 +48,7 @@ const archiveFixtureSql = new Set([
   "packages/ledger/test/helpers/disposition-967.ts",
   "packages/ledger/test/helpers/disposition-967-fault.ts",
   "packages/ledger/test/storage/u967-disposition-cases.ts",
+  "packages/ledger/test/storage/storage-boundaries.test.ts",
   "packages/ledger/test/storage/request-migration.test.ts",
   "script/generate-ledger-archive-manifest.test.ts",
   "script/ledger-archive-review-r2.test.ts",
