@@ -47,8 +47,11 @@ describe("internal actor projection sanitization", () => {
 
   test("missing registry cannot preserve claimed authority", () => {
     const base = Storage.get();
-    const { actorRegistry: _registry, ...adapter } = base;
-    Storage.configure({ ...adapter, transaction: base.transaction.bind(base) });
+    Storage.configure({
+      ...base,
+      actorRegistry: undefined,
+      transaction: base.transaction.bind(base),
+    });
     expect(resolveIngressActor(makeEvent("user-1", spoof)).meta?.actor).toEqual({
       role: "user",
       id: "user-1",

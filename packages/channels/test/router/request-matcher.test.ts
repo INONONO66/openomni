@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, SessionTransition } from "@openomni/protocol";
 import { ActorRegistry, Storage } from "@openomni/ledger";
 import * as Matcher from "../../src/router/request/matcher";
+
+type ResponderTarget = Parameters<typeof Matcher.responderCandidates>[0][number];
 import { requestFixture } from "../helpers/request-record";
 beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
 afterEach(() => Storage.reset());
@@ -27,12 +29,12 @@ function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.Dire
 
 describe("request matcher — ingress evidence", () => {
   test("credits a bearer token only when no actor is pinned", () => {
-    const bearer: Matcher.ResponderTarget = {
+    const bearer: ResponderTarget = {
       responderId: "endpoint-1",
       endpointId: "endpoint-1",
       tokenHash: correlation.tokenHash,
     };
-    const pinned: Matcher.ResponderTarget = {
+    const pinned: ResponderTarget = {
       responderId: "actor-pinned",
       targetActorId: "actor-pinned",
       endpointId: "endpoint-1",
@@ -45,7 +47,7 @@ describe("request matcher — ingress evidence", () => {
   });
 
   test("rejects a claimed endpoint that contradicts the expected one", () => {
-    const target: Matcher.ResponderTarget = { responderId: "endpoint-2", endpointId: "endpoint-2" };
+    const target: ResponderTarget = { responderId: "endpoint-2", endpointId: "endpoint-2" };
     const evidence = Matcher.ingressEvidence(directEvent(), {
       ...correlation,
       tokenHash: undefined,
@@ -55,7 +57,7 @@ describe("request matcher — ingress evidence", () => {
   });
 
   test("matches an identity-less direct sender through the userId endpoint forms", () => {
-    const target: Matcher.ResponderTarget = {
+    const target: ResponderTarget = {
       responderId: "telegram:seller-1",
       endpointId: "telegram:seller-1",
     };
@@ -72,7 +74,7 @@ describe("request matcher — ingress evidence", () => {
   });
 
   test("requires resolved-actor endpoint evidence for a pinned target actor", () => {
-    const targets: Matcher.ResponderTarget[] = [
+    const targets: ResponderTarget[] = [
       {
         responderId: "actor-a",
         targetActorId: "actor-a",

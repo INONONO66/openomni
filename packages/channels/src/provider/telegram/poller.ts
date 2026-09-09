@@ -5,7 +5,7 @@ import type { PublishPort } from "../../types";
 import type { TelegramClient } from "./client";
 import type { TelegramMessage } from "./types";
 
-export interface PollerCallbacks {
+interface PollerCallbacks {
   onMessage: (message: TelegramMessage) => void | Promise<void>;
 }
 

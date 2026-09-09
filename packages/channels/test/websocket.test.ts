@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
+import { z } from "zod";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
 import type { PublishPort } from "../src/types";
 import { WebSocketHandler } from "../src/websocket";
@@ -21,13 +22,11 @@ function createHandler(
 }
 
 function createUpgradeServer() {
-  let options: { data?: unknown; headers?: Record<string, string> } | undefined;
+  type Options = Parameters<Parameters<WebSocketHandler["handleUpgrade"]>[1]["upgrade"]>[1];
+  let options: Options | undefined;
   return {
     server: {
-      upgrade(
-        _req: Request,
-        nextOptions?: { data?: unknown; headers?: Record<string, string> },
-      ): boolean {
+      upgrade(_req: Request, nextOptions: Options): boolean {
         options = nextOptions;
         return true;
       },
@@ -49,7 +48,7 @@ describe("WebSocketHandler authentication", () => {
 
     expect(handler.handleUpgrade(req, upgrade.server)).toBeUndefined();
     expect(req.headers.get("sec-websocket-protocol")).toBe("auth");
-    expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
+    expect(upgrade.options?.data.authenticated).toBe(true);
     expect(decisions.map((decision) => decision.verdict)).toEqual(["allow"]);
   });
 
@@ -76,9 +75,7 @@ describe("WebSocketHandler authentication", () => {
     expect(
       handler.handleUpgrade(new Request("http://localhost/ws?actor=alice"), upgrade.server),
     ).toBeUndefined();
-    expect(upgrade.options?.data).toMatchObject({
-      externalId: expect.stringMatching(/^connection:/),
-    });
+    expect(upgrade.options?.data.externalId).toMatch(/^connection:/);
     expect(upgrade.options?.data).not.toMatchObject({ externalId: "alice" });
   });
 });
@@ -100,7 +97,12 @@ describe("WebSocketHandler ingress and receipts", () => {
     };
   }
 
-  it("emits Gateway.IngressFacts and an accepted receipt", async () => {
+  it.each([
+    "frame-7",
+    "",
+    0,
+    null,
+  ])("validates optional frame identifiers %j before emitting facts", async (identifier) => {
     let inbound: Channel.InboundMessage | undefined;
     const handler = new WebSocketHandler(async (message) => {
       inbound = message;
@@ -111,7 +113,10 @@ describe("WebSocketHandler ingress and receipts", () => {
       externalId: "connection:c1",
     });
 
-    handler.ws.message(ws, JSON.stringify({ text: "done", replyToId: "frame-7" }));
+    handler.ws.message(
+      ws,
+      JSON.stringify({ text: "done", eventId: identifier, replyToId: identifier }),
+    );
     await framed;
 
     expect(inbound).toMatchObject({
@@ -120,10 +125,16 @@ describe("WebSocketHandler ingress and receipts", () => {
         surface: "ws",
         channelId: "ws::dm:c1",
         dm: true,
-        reply: { chain: ["frame-7"] },
         render: "done",
       },
     });
+    if (identifier === "frame-7") {
+      expect(inbound?.facts.eventId).toBe(identifier);
+      expect(inbound?.facts.reply).toEqual({ chain: [identifier] });
+    } else {
+      expect(inbound?.facts.eventId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(inbound?.facts.reply).toBeUndefined();
+    }
     expect(sent).toEqual([JSON.stringify({ type: "receipt", status: "accepted" })]);
   });
 
@@ -138,7 +149,11 @@ describe("WebSocketHandler ingress and receipts", () => {
 
     const receipt = handler.push("alice", "review", "message-1");
     expect(receipt).toEqual({ value: "accepted", externalMessageId: "message-1" });
-    expect(JSON.parse(sent[0] ?? "{}")).toMatchObject({
+    expect(
+      z
+        .object({ type: z.string(), messageId: z.string(), text: z.string() })
+        .parse(JSON.parse(sent[0] ?? "{}")),
+    ).toMatchObject({
       type: "message",
       messageId: "message-1",
       text: "review",

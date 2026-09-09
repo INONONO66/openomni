@@ -3,13 +3,14 @@ import { SlackClient } from "../src/provider/slack/client";
 import { SlackApiError } from "../src/provider/slack/error";
 import type { PublishPort } from "../src/types";
 import type { PlainValue } from "@openomni/protocol";
+import { z } from "zod";
 
 const noopPublish: PublishPort = () => undefined;
 
 interface RecordedCall {
   readonly method: string;
   readonly authorization: string;
-  readonly body: Record<string, unknown>;
+  readonly body: Record<string, PlainValue>;
 }
 
 /** Routes slack Web API calls to scripted bodies and records what was sent. */
@@ -17,21 +18,24 @@ function installFetchMock(respond: (method: string) => { status?: number; body: 
   calls: RecordedCall[];
 } {
   const calls: RecordedCall[] = [];
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
-    const method = url.slice(url.lastIndexOf("/") + 1);
-    const headers = new Headers(init?.headers);
-    calls.push({
-      method,
-      authorization: headers.get("Authorization") ?? "",
-      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
-    });
-    const scripted = respond(method);
-    return new Response(JSON.stringify(scripted.body), {
-      status: scripted.status ?? 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }) as typeof fetch;
+  globalThis.fetch = Object.assign(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = url.slice(url.lastIndexOf("/") + 1);
+      const headers = new Headers(init?.headers);
+      calls.push({
+        method,
+        authorization: headers.get("Authorization") ?? "",
+        body: z.record(z.string(), z.json()).parse(JSON.parse(String(init?.body))),
+      });
+      const scripted = respond(method);
+      return new Response(JSON.stringify(scripted.body), {
+        status: scripted.status ?? 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    { preconnect: globalThis.fetch.preconnect },
+  );
   return { calls };
 }
 
@@ -60,13 +64,7 @@ describe("SlackClient", () => {
 
   it("throws a typed error when apps.connections.open returns no url", async () => {
     installFetchMock(() => ({ body: { ok: true } }));
-    const error = await client()
-      .openSocketUrl("trace-1")
-      .then(
-        () => null,
-        (err: unknown) => err,
-      );
-    expect(SlackApiError.isInstance(error)).toBe(true);
+    await expect(client().openSocketUrl("trace-1")).rejects.toBeInstanceOf(SlackApiError);
   });
 
   it("surfaces slack's in-body refusal (`ok:false`) as a typed error", async () => {
@@ -128,12 +126,6 @@ describe("SlackClient", () => {
 
   it("throws a typed error when conversations.open returns no channel id", async () => {
     installFetchMock(() => ({ body: { ok: true, channel: {} } }));
-    const error = await client()
-      .openDm("U5", "trace-1")
-      .then(
-        () => null,
-        (err: unknown) => err,
-      );
-    expect(SlackApiError.isInstance(error)).toBe(true);
+    await expect(client().openDm("U5", "trace-1")).rejects.toBeInstanceOf(SlackApiError);
   });
 });

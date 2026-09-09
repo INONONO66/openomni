@@ -13,10 +13,8 @@ export interface DeliveryReceipt {
  * Shared `deliver()` shell for the existing-agent delivery seam: report the
  * platform message id of the final chunk (the message a reply would
  * reference). Origin: the messaging kernel's deliver seam does not thread the
- * sender's trace yet (#215) — each delivery is its own causal chain. The
- * idempotency window is an additive capability only: the current server
- * composition calls this seam without a key, which intentionally retains
- * at-least-once behavior.
+ * sender's trace yet — each delivery is its own causal chain. The required
+ * idempotency key shares one in-flight or completed result in the window.
  */
 export function deliverKeyed(
   window: DedupeWindow<DeliveryReceipt>,

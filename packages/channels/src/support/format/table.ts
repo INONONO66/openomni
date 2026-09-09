@@ -14,8 +14,8 @@ function isTableRow(line: string): boolean {
 }
 
 /** Cell-wise check (`---`, `:-:`, ...) — linear, no backtracking ambiguity. */
-function isSeparatorRow(line: string | undefined): line is string {
-  if (line === undefined || !line.includes("|")) return false;
+function isSeparatorRow(line: string): boolean {
+  if (!line.includes("|")) return false;
   const parts = cells(line);
   return parts.length > 0 && parts.every((cell) => SEPARATOR_CELL.test(cell));
 }
@@ -59,7 +59,7 @@ export function tablesToBullets(text: string): string {
   while (index < lines.length) {
     const line = lines[index] ?? "";
     if (FENCE_LINE.test(line)) inFence = !inFence;
-    const next = lines[index + 1];
+    const next = lines[index + 1] ?? "";
     const startsTable = !inFence && isTableRow(line) && isSeparatorRow(next);
     if (!startsTable) {
       out.push(line);

@@ -3,7 +3,7 @@ import type { ChannelProvider } from "../contract.js";
 import { DISCORD_RENDER } from "./format.js";
 import { DiscordAdapter } from "./surface.js";
 
-export interface DiscordCredentials {
+interface DiscordCredentials {
   /** Bot token from the developer portal. */
   readonly token: string;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { DiscordNormalizer } from "../src/provider/discord/normalizer";
 import { TelegramNormalizer } from "../src/provider/telegram/normalizer";
+import { telegramReply } from "./helpers/telegram";
 
 describe("channel normalizers", () => {
   it("maps Discord messages into ingress facts", () => {
@@ -30,21 +31,9 @@ describe("channel normalizers", () => {
     const message = new TelegramNormalizer({
       botId: "bot-1",
       botUsername: "openomni_bot",
-    }).normalize({
-      message_id: 12,
-      chat: { id: 34, type: "group" },
-      date: 1,
-      from: { id: 56, is_bot: false, first_name: "Seller" },
-      text: "tracking number",
-      reply_to_message: {
-        message_id: 11,
-        chat: { id: 34, type: "group" },
-        date: 1,
-        from: { id: 78, is_bot: true, first_name: "OpenOmni" },
-        text: "please report",
-      },
-    });
+    }).normalize(telegramReply());
 
+    expect(message?.facts.payload).not.toHaveProperty("from.username");
     expect(message).toMatchObject({
       sender: { kind: "external", surface: "telegram", externalId: "56" },
       facts: {

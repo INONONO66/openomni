@@ -7,7 +7,7 @@ import type {
   PlainValue,
   SessionTransition,
 } from "@openomni/protocol";
-import type { DeliveryReceipt } from "./messaging/send";
+import type { DeliveryReceipt } from "../support/deliver";
 
 export type ChannelDeliveryRoute = (
   externalId: string,
@@ -41,6 +41,22 @@ interface PreparedMessage {
   readonly createSession?: Inbox.Commit["createSession"];
 }
 
+type RequestOpenInput = Pick<
+  SessionTransition.Request,
+  "requestId" | "sessionId" | "correlation" | "resolution" | "threshold" | "deadline"
+> & {
+  expectedResponders: Readonly<SessionTransition.Request["expectedResponders"]>;
+  allowedActions: Readonly<SessionTransition.Request["allowedActions"]>;
+  at: number;
+  admission?: Inbox.Commit;
+};
+
+interface MessagingGrantSources {
+  readonly grants: () => readonly Gateway.SenderTargetGrant[];
+  /** Absence disables egress budgeting; an empty source instead applies the fail-closed default. */
+  readonly budgets?: () => readonly Gateway.SocialBudget[];
+}
+
 export interface GatewayRouterPorts {
   /** Authenticate explicit Owner evidence; never infer it from driver trust fields. */
   readonly authenticateAnswer?: (
@@ -50,18 +66,7 @@ export interface GatewayRouterPorts {
   ) => Promise<SessionTransition.Principal>;
   readonly requests: {
     list(): readonly SessionTransition.Request[];
-    open(input: {
-      requestId: string;
-      sessionId: string;
-      expectedResponders: readonly string[];
-      correlation: SessionTransition.Correlation;
-      allowedActions: readonly SessionTransition.AllowedAction[];
-      resolution: "first" | "quorum" | "all";
-      threshold: number;
-      deadline: number;
-      at: number;
-      admission?: Inbox.Commit;
-    }): SessionTransition.Request;
+    open(input: RequestOpenInput): SessionTransition.Request;
     answer(input: SessionTransition.Answer): Promise<SessionTransition.Resolution>;
     receipt(input: SessionTransition.DeliveryReceipt): Promise<SessionTransition.Request>;
   };
@@ -85,10 +90,8 @@ export interface GatewayRouterPorts {
   ) => Promise<MessageExecutionResult>;
   readonly committed?: (row: Inbox.Row) => void;
   readonly clock?: () => number;
-  readonly messaging?: {
+  readonly messaging?: MessagingGrantSources & {
     readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
-    readonly grants: () => readonly Gateway.SenderTargetGrant[];
-    readonly budgets?: () => readonly Gateway.SocialBudget[];
     readonly replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];
   };
 }

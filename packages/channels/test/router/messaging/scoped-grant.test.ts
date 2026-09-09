@@ -9,7 +9,12 @@ import {
   resolveScopedSenderTargetGrant,
 } from "../../../src/router/messaging/grant.js";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
-import { buildSendInput, messagingNow, registerAgentFixture } from "../../helpers/messaging.js";
+import {
+  expectDenied,
+  buildSendInput,
+  messagingNow,
+  registerAgentFixture,
+} from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
 
 /**
@@ -141,10 +146,8 @@ describe("send kernel over reply-scoped instances", () => {
       }),
     );
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("ungranted");
-    expect(receipt.reason).toContain("replies stay inside the initiating container");
+    const denial = expectDenied(receipt, "ungranted");
+    expect(denial.reason).toContain("replies stay inside the initiating container");
     expect(delivered).toHaveLength(0);
   });
 
@@ -153,9 +156,7 @@ describe("send kernel over reply-scoped instances", () => {
 
     const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("target_missing");
+    expectDenied(receipt, "target_missing");
   });
 
   test("no candidate at all keeps the ungranted denial ahead of any registry lookup", async () => {
@@ -163,8 +164,6 @@ describe("send kernel over reply-scoped instances", () => {
 
     const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("ungranted");
+    expectDenied(receipt, "ungranted");
   });
 });

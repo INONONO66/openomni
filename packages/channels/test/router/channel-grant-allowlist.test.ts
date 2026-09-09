@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
+import { ChannelGrantStore } from "@openomni/ledger";
+import { resetGrantStore } from "../helpers/channel-grant";
 import { resolveChannelGrant } from "../../src/router/channel-grant";
 
-beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-});
+beforeEach(resetGrantStore);
 
 describe("channel-grant sender allowlist", () => {
   test("an allowlisted grant matches only the listed sender", () => {

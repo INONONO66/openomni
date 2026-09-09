@@ -9,6 +9,36 @@ import { resolveAndRecordRoute } from "./routing-resolution";
 import type { GatewayRouterPorts } from "./message-ports";
 import { evaluateSocialBudget } from "./messaging/social-budget";
 
+function admitWebSocketOwner(sender: Extract<Gateway.IngestSender, { kind: "external" }>): void {
+  if (
+    sender.surface !== "ws" ||
+    ActorRegistry.resolveEndpoint("ws", sender.externalId) !== undefined ||
+    resolveChannelGrant({ surface: "ws", sender: sender.externalId })?.grant.defaultTier !== "owner"
+  )
+    return;
+  const actorId = `ws:owner:${sender.externalId}`;
+  ActorRegistry.registerIdentity({ id: actorId, kind: "human", trustTier: "owner" });
+  ActorRegistry.registerEndpoint({
+    id: `ws:${sender.externalId}`,
+    actorId,
+    channel: "ws",
+    externalId: sender.externalId,
+  });
+}
+
+function resolveAddressee(facts: Gateway.IngressFacts): "bot" | "owner" | "ambient" {
+  const identities = facts.addressees.flatMap((addressee) => {
+    const resolved = ActorRegistry.resolveEndpoint(
+      facts.surface,
+      addressee.externalId,
+      facts.workspaceId,
+    );
+    return resolved === undefined ? [] : [resolved.identity];
+  });
+  if (facts.dm || identities.some((identity) => identity.kind === "resident")) return "bot";
+  return identities.some((identity) => identity.trustTier === "owner") ? "owner" : "ambient";
+}
+
 /** Only raw driver facts enter this projection; every authority field is resolved here. */
 export function externalMessage(
   sender: Extract<Gateway.IngestSender, { kind: "external" }>,
@@ -27,20 +57,7 @@ export function externalMessage(
     ...(facts.reply?.threadId === undefined ? {} : { threadId: facts.reply.threadId }),
   });
   const reply = facts.reply ?? { chain: [] };
-  if (
-    sender.surface === "ws" &&
-    ActorRegistry.resolveEndpoint("ws", sender.externalId) === undefined &&
-    resolveChannelGrant({ surface: "ws", sender: sender.externalId })?.grant.defaultTier === "owner"
-  ) {
-    const actorId = `ws:owner:${sender.externalId}`;
-    ActorRegistry.registerIdentity({ id: actorId, kind: "human", trustTier: "owner" });
-    ActorRegistry.registerEndpoint({
-      id: `ws:${sender.externalId}`,
-      actorId,
-      channel: "ws",
-      externalId: sender.externalId,
-    });
-  }
+  admitWebSocketOwner(sender);
   const event = resolveIngressActor({
     id: [facts.surface, facts.workspaceId ?? "", facts.channelId, facts.eventId]
       .map(encodeURIComponent)
@@ -66,20 +83,7 @@ export function externalMessage(
     },
   });
   const route = resolveAndRecordRoute(event, surfaceKey, event.traceId, sink, requests, at);
-  const identities = facts.addressees.flatMap((addressee) => {
-    const resolved = ActorRegistry.resolveEndpoint(
-      sender.surface,
-      addressee.externalId,
-      facts.workspaceId,
-    );
-    return resolved === undefined ? [] : [resolved.identity];
-  });
-  const addressee =
-    facts.dm || identities.some((identity) => identity.kind === "resident")
-      ? "bot"
-      : identities.some((identity) => identity.trustTier === "owner")
-        ? "owner"
-        : "ambient";
+  const addressee = resolveAddressee(facts);
   const target = route.decision.sessionId ?? SurfaceKey.lookup(surfaceKey) ?? crypto.randomUUID();
   const actorId = event.meta?.actor?.actorId;
   const budget = budgets.find((candidate) => candidate.targetActorId === actorId);

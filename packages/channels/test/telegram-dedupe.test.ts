@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
-import type { Channel } from "@openomni/protocol";
+import type { Channel, PlainValue } from "@openomni/protocol";
+import type { TelegramMessage } from "../src/provider/telegram/types";
 import { DiscordAdapter } from "../src/provider/discord/surface";
 import { TelegramAdapter } from "../src/provider/telegram/surface";
 import { Dedupe, DedupeWindow } from "../src/support/dedupe";
@@ -13,21 +14,21 @@ import { Dedupe, DedupeWindow } from "../src/support/dedupe";
 
 const realFetch = globalThis.fetch;
 
-function jsonResponse(result: unknown): Response {
+function jsonResponse(result: PlainValue): Response {
   return new Response(JSON.stringify({ ok: true, result }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
 }
 
-function tgMessage(messageId: number, chatId: number, text: string): Record<string, unknown> {
+function tgMessage(messageId: number, chatId: number, text: string) {
   return {
     message_id: messageId,
     chat: { id: chatId, type: "private" },
     from: { id: chatId, is_bot: false, first_name: `u${chatId}`, username: `u${chatId}` },
     date: 1_700_000_000,
     text,
-  };
+  } satisfies TelegramMessage;
 }
 
 describe("TelegramAdapter dedupe (D1)", () => {
@@ -94,6 +95,17 @@ describe("TelegramAdapter dedupe (D1)", () => {
     expect(surfaceKeys.some((k) => k.includes("222"))).toBe(true);
   });
 });
+
+function expectStaleReleasePreservesReplacement(
+  dedupe: Dedupe,
+  first: ReturnType<Dedupe["acquire"]>,
+) {
+  const second = dedupe.acquire("same-id");
+  expect(second.duplicate).toBe(false);
+  if (first.duplicate) throw new Error("first acquisition was not accepted");
+  dedupe.forget("same-id", first.token);
+  expect(dedupe.acquire("same-id").duplicate).toBe(true);
+}
 
 const config = {};
 type DeliveryOwner = Readonly<{
@@ -163,7 +175,7 @@ describe("outbound adapter delivery dedupe capability", () => {
 
   test.each(
     owners,
-  )("%s remains at-least-once when no idempotency key is supplied", async (_name, fixture) => {
+  )("%s delivers independently for distinct idempotency keys", async (_name, fixture) => {
     const { owner, outboundCalls } = fixture();
 
     await owner.deliver("recipient-1", "hello", "gateway-message-2");
@@ -212,12 +224,7 @@ describe("outbound adapter delivery dedupe capability", () => {
       const dedupe = new Dedupe(5);
       const first = dedupe.acquire("same-id");
       now += 6;
-      const second = dedupe.acquire("same-id");
-
-      expect(second.duplicate).toBe(false);
-      if (first.duplicate) throw new Error("first acquisition was not accepted");
-      dedupe.forget("same-id", first.token);
-      expect(dedupe.acquire("same-id").duplicate).toBe(true);
+      expectStaleReleasePreservesReplacement(dedupe, first);
     } finally {
       Date.now = originalNow;
     }
@@ -228,11 +235,6 @@ describe("outbound adapter delivery dedupe capability", () => {
     const first = dedupe.acquire("same-id");
     for (let index = 0; index < 99; index += 1) dedupe.acquire(`other-${index}`);
     dedupe.acquire("eviction-trigger");
-    const second = dedupe.acquire("same-id");
-
-    expect(second.duplicate).toBe(false);
-    if (first.duplicate) throw new Error("first acquisition was not accepted");
-    dedupe.forget("same-id", first.token);
-    expect(dedupe.acquire("same-id").duplicate).toBe(true);
+    expectStaleReleasePreservesReplacement(dedupe, first);
   });
 });

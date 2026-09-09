@@ -1,5 +1,8 @@
 import { beforeEach } from "bun:test";
-import type { Gateway, Ingress } from "@openomni/protocol";
+import { type Gateway, Ingress } from "@openomni/protocol";
+import { z } from "zod";
+
+export const actorFixtureSchema = Ingress.ActorSchema.catchall(z.json());
 import { ActorRegistry, ChannelGrantStore } from "@openomni/ledger";
 import { resetStores } from "./_router-fixture";
 
@@ -26,7 +29,7 @@ export function setupIngressActorResolverTest(): void {
 
 export function makeEvent(
   userId: string,
-  actor: Ingress.Actor = { role: "user", id: userId },
+  actor: z.infer<typeof actorFixtureSchema> = { role: "user", id: userId },
 ): Gateway.DeliveredEvent {
   return {
     id: `event-${userId}`,

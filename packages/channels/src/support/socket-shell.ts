@@ -11,7 +11,7 @@ export interface SocketSettle {
 }
 
 /** The per-surface log lines the shell speaks with — pinned by the surface tests. */
-export interface SocketShellMessages {
+interface SocketShellMessages {
   /** URL fetch rejected during a reconnect; retrying under backoff. */
   readonly urlFetchFailed: string;
   /** Connection closed; a reconnect is scheduled. */
@@ -128,15 +128,17 @@ export class SocketReconnectShell {
     });
     await this.delay(backoffMs);
     if (this.active) {
-      reconnect(traceId).catch((err) =>
+      try {
+        await reconnect(traceId);
+      } catch (error) {
         this.publish(Operational.Events.Error, {
           traceId,
           time: Date.now(),
           component: "server",
           msg: this.messages.reconnectFailed,
-          context: { err: String(err) },
-        }),
-      );
+          context: { err: String(error) },
+        });
+      }
     }
   }
 

@@ -86,10 +86,7 @@ export class DiscordClient implements ChannelClient {
       {
         traceId,
         publish: this.publish,
-        parseRetryAfter: (data) => {
-          const hint = RetryAfterSchema.safeParse(data);
-          return (hint.success ? hint.data.retry_after : undefined) ?? 5;
-        },
+        retryAfterSchema: RetryAfterSchema.transform((hint) => hint.retry_after ?? 5),
         label: `discord${path}`,
       },
     );

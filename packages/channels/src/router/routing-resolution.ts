@@ -1,73 +1,29 @@
+import { z } from "zod";
 import {
   type Gateway,
   Ingress,
-  NamedError,
   SessionTransition,
   resolveTarget,
   targetKey,
   type BusEvent,
 } from "@openomni/protocol";
-import { LedgerAppend, SurfaceKey } from "@openomni/ledger";
+import { SurfaceKey } from "@openomni/ledger";
+import { recordRouteDecided } from "./route-record";
 import { applyChannelGrantTreatment } from "./authority.js";
 import { matchBlacklist } from "./blacklist.js";
-import { resolveChannelGrant, type ChannelGrantResolution } from "./channel-grant.js";
-import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messaging/reply-grant.js";
+import { resolveChannelGrant } from "./channel-grant.js";
+import { replyGrantEndpointFacts } from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findRequestCandidates, type RequestResolution } from "./request/correlation.js";
 import type { GatewayRouterPorts } from "./message-ports.js";
 
-const ingressRoutingErrorCodes = [
-  "route_blocked",
-  "route_ambiguous",
-  "route_record_failed",
-  /** Redelivered inbound whose fresh decision diverges from the recorded route.decided fact — fail closed, no action, no second fact (#510 review fix F2). */
-  "route_replay_divergent",
-  "request_reply_rejected",
-] as const;
-export type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];
-const IngressRoutingErrorCode = NamedError.Unknown.Schema.shape.data.shape.message.refine(
-  (value): value is IngressRoutingErrorCode =>
-    ingressRoutingErrorCodes.includes(value as IngressRoutingErrorCode),
-);
-
-/**
- * #498 C3: ingress correlation claims reuse THE one SessionTransition.Correlation shape.
- * A claim envelope must carry its endpoint+channel scope pins — kept as a
- * local type-narrowing refine at this call site so no second correlation
- * shape is exported.
- */
-type ScopedCorrelation = SessionTransition.Correlation &
-  Readonly<{ endpointId: string; channelId: string }>;
-const ScopedCorrelationClaim = SessionTransition.Correlation.refine(
-  (value): value is ScopedCorrelation =>
-    value.endpointId !== undefined && value.channelId !== undefined,
-  { message: "correlation claims require endpointId and channelId" },
-);
-
-const IngressRoutingErrorBase = NamedError.create(
-  "IngressRoutingError",
-  NamedError.Unknown.Schema.shape.data.extend({
-    code: IngressRoutingErrorCode,
-    decision: Ingress.Events.RoutingDecision.schema,
-  }),
-);
-
-export class IngressRoutingError extends IngressRoutingErrorBase {
-  constructor(
-    code: IngressRoutingErrorCode,
-    message: string,
-    decision: Ingress.RoutingDecisionPayload,
-  ) {
-    super({ code, message, decision });
-  }
-
-  get code(): IngressRoutingErrorCode {
-    return this.data.code as IngressRoutingErrorCode;
-  }
-  get decision(): Ingress.RoutingDecisionPayload {
-    return this.data.decision;
-  }
-}
+/** Request matching requires both endpoint and channel scope pins. */
+const ScopedCorrelationClaim = SessionTransition.Correlation.required({
+  endpointId: true,
+  channelId: true,
+});
+type ScopedCorrelation = z.infer<typeof ScopedCorrelationClaim>;
+const RequestActionPayload = z.object({ action: z.json().catch(null).optional() });
 
 type KernelRequestExecution =
   | Readonly<{ kind: "none" }>
@@ -81,12 +37,11 @@ type KernelRequestExecution =
       record: SessionTransition.Request;
     }>;
 
-export type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
+type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
   Readonly<{
     decision: Ingress.RoutingDecisionPayload;
     event: Event;
     requestExecution: KernelRequestExecution;
-    selectedTarget: Ingress.Target;
   }>;
 
 function parseCorrelation(event: Gateway.DeliveredEvent): ScopedCorrelation | undefined {
@@ -138,19 +93,7 @@ function kernelRequestExecution(
   }
 }
 
-function selectedRouteTarget(
-  decision: Ingress.RoutingDecisionPayload,
-  surfaceDefault: Ingress.Target,
-): Ingress.Target {
-  if (decision.outcome !== "route") {
-    return surfaceDefault;
-  }
-  if (decision.stage !== "request_correlation") return surfaceDefault;
-  // A routed request-correlation decision can only come from a matched request.
-  return { kind: "resident" };
-}
-
-type ChannelResolution = ChannelGrantResolution | undefined;
+type ChannelResolution = ReturnType<typeof resolveChannelGrant>;
 
 function channelState(
   resolution: ChannelResolution,
@@ -250,16 +193,15 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   at: number,
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
-  const payload = event.payload;
+  const payload = RequestActionPayload.safeParse(event.payload);
   const parsedAction =
-    payload !== null && typeof payload === "object" && "action" in payload
-      ? SessionTransition.AllowedAction.safeParse(payload.action)
+    payload.success && "action" in payload.data
+      ? SessionTransition.AllowedAction.safeParse(payload.data.action)
       : SessionTransition.AllowedAction.safeParse("report_result");
   const requestedAction = parsedAction.success ? parsedAction.data : "invalid";
   const gatheredRequest = findRequestCandidates(requests.list(), correlation);
   const request = routeRequestState(gatheredRequest);
-  const surfaceDefaultTarget = resolveTarget(event);
-  const target = targetKey(surfaceDefaultTarget);
+  const target = targetKey(resolveTarget(event));
   const surfaceSessionId = SurfaceKey.lookup(surfaceKey);
   const blacklist = blacklistState(event, correlation);
   const channelResolution = resolveChannelGrant({
@@ -304,7 +246,6 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     decision,
     event: routedEvent(event, channelResolution, channel),
     requestExecution,
-    selectedTarget: selectedRouteTarget(decision, surfaceDefaultTarget),
   };
 }
 
@@ -336,71 +277,6 @@ function pinReplyGrantEndpoint(
       ...replyGrantEndpointFacts({ channel: endpoint.channel, externalId: endpoint.externalId }),
     ],
   };
-}
-
-function recordRouteDecided(
-  streamId: string,
-  decision: Ingress.RoutingDecisionPayload,
-): Ingress.RoutingDecisionPayload {
-  // Scoped append port (#707 S8): append + headFact only — the router never
-  // holds the master Storage entry (S1/S2: brain surfaces stay unreachable).
-  const ledger = LedgerAppend.port();
-  if (!ledger) {
-    throw new IngressRoutingError(
-      "route_record_failed",
-      "Storage adapter does not implement ledger append — routing decisions fail closed",
-      decision,
-    );
-  }
-  let appended: ReturnType<typeof ledger.append>;
-  try {
-    appended = ledger.append(Ingress.routeDecidedFact(streamId, decision), 0);
-  } catch (error) {
-    throw new IngressRoutingError(
-      "route_record_failed",
-      `routing decision append failed: ${error instanceof Error ? error.message : String(error)}`,
-      decision,
-    );
-  }
-  if (appended.kind === "appended") return decision;
-  let recorded: Ingress.RoutingDecisionPayload;
-  try {
-    const fact = ledger.headFact(streamId);
-    if (fact === undefined || fact.type !== Ingress.ROUTE_DECIDED_FACT_TYPE) {
-      throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
-    }
-    // Upcast-on-read: pre-0025 facts carry dead optional fields the strict
-    // write schema rejects; the reader strips them. `undefined` means the
-    // bytes were never a valid route.decided of any era.
-    const upcast = Ingress.recordedRoutingDecision(fact.data);
-    if (upcast === undefined) {
-      throw new Error(`stream ${streamId} recorded route.decided fact failed to parse`);
-    }
-    recorded = upcast;
-  } catch (error) {
-    throw new IngressRoutingError(
-      "route_record_failed",
-      `recorded routing decision read failed: ${error instanceof Error ? error.message : String(error)}`,
-      decision,
-    );
-  }
-  const recordedEndpoint = replyGrantEndpointFromFacts(recorded.factsUsed);
-  const freshEndpoint = replyGrantEndpointFromFacts(decision.factsUsed);
-  const endpointEquivalent =
-    recordedEndpoint?.channel === freshEndpoint?.channel &&
-    recordedEndpoint?.externalId === freshEndpoint?.externalId;
-  if (!Ingress.routeDecisionsEquivalent(recorded, decision) || !endpointEquivalent) {
-    // The recorded decision carries perimeter-resolved authority (actorId,
-    // trustTier, inboundTreatment); interpolating either side into the error
-    // would disclose identity and policy treatment to whoever triggered the
-    // redelivery, so the refusal stays typed and value-free.
-    throw new IngressRoutingError(
-      "route_replay_divergent",
-      "redelivered inbound diverges from its recorded routing decision on an execution- or authority-shaping field",
-      decision,
-    );
-  }
-  return decision;
 }
 
 // Correlation is read-only (#215): request ambiguity is recorded solely by the

@@ -2,7 +2,8 @@ import { Ingress, type SessionTransition, type Gateway, type Ledger } from "@ope
 import { LedgerAppend } from "@openomni/ledger";
 import { targetsOfRequest, responderCandidates, ingressEvidence } from "./request/matcher.js";
 import type { GatewayRouterPorts } from "./message-ports.js";
-import { IngressRoutingError, type KernelRouteResolution } from "./routing-resolution.js";
+import type { resolveAndRecordRoute } from "./routing-resolution.js";
+import { IngressRoutingError } from "./routing-error";
 
 // route_correction producer (batch ② commit 4): a routed request-correlated
 // delivery whose reply is rejected fail-closed by kernel request admission leaves a
@@ -75,7 +76,7 @@ export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload):
 }
 
 export async function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
-  resolution: KernelRouteResolution<Event>,
+  resolution: ReturnType<typeof resolveAndRecordRoute<Event>>,
   decision: RoutedDecision,
   requests: GatewayRouterPorts["requests"],
   content: string,

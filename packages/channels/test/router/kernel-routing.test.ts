@@ -8,6 +8,7 @@ import {
   kernelRouter,
   ownerEvent,
   ownerFacts,
+  ownerMessageTargets,
   ownerSender,
   registerOwnerDm,
   resetRouterState,
@@ -80,11 +81,8 @@ describe("GatewayRouter kernel routing", () => {
   });
   test("first admission claims the physical surface for the next event", async () => {
     registerOwnerDm();
-    const first = await kernelRouter().ingest(ownerSender, ownerFacts);
-    const second = await kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "second" });
-    if (first.status !== "executed" || second.status !== "executed")
-      throw new Error("not executed");
-    expect(first.handle.target).toBe(second.handle.target);
+    const [first, second] = await ownerMessageTargets();
+    expect(first).toBe(second);
     expect(commits).toHaveLength(2);
     expect(commits[0]?.sessionId).toBe(commits[1]?.sessionId);
   });

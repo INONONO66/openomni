@@ -42,14 +42,7 @@ describe("TelegramPoller checkpoints", () => {
       () => undefined,
     );
 
-    let failure: unknown;
-    try {
-      await poller.pollOnce("trace-failed-batch");
-    } catch (err) {
-      failure = err;
-    }
-    expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toBe("handoff failed");
+    await expect(poller.pollOnce("trace-failed-batch")).rejects.toThrow("handoff failed");
 
     await poller.pollOnce("trace-retry-batch");
     await poller.pollOnce("trace-after-success");

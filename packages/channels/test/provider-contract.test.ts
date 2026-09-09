@@ -22,21 +22,29 @@ interface ConformanceCase {
   readonly credential: Record<string, string>;
   /** Per-case construction closure — keeps each provider's credential type concrete. */
   readonly build: (publish: PublishPort) => ProviderRuntime;
+  readonly rendered: string;
+  readonly limit: number | null;
 }
 
 const cases: readonly ConformanceCase[] = [
   {
     provider: ChannelProviders.telegram,
+    rendered: "*hi* `code`",
+    limit: 4096,
     credential: { token: "tg-token" },
     build: (publish) => ChannelProviders.telegram.create({ token: "tg-token" }, {}, publish),
   },
   {
     provider: ChannelProviders.discord,
+    rendered: "**hi** `code`",
+    limit: 2000,
     credential: { token: "dc-token" },
     build: (publish) => ChannelProviders.discord.create({ token: "dc-token" }, {}, publish),
   },
   {
     provider: ChannelProviders.github,
+    rendered: "**hi** `code`",
+    limit: null,
     credential: { secret: "hook-secret", token: "api", botUsername: "omni-bot" },
     build: (publish) =>
       ChannelProviders.github.create(
@@ -47,6 +55,8 @@ const cases: readonly ConformanceCase[] = [
   },
   {
     provider: ChannelProviders.slack,
+    rendered: "**hi** `code`",
+    limit: 4000,
     credential: { botToken: "xoxb-test", appToken: "xapp-test" },
     build: (publish) =>
       ChannelProviders.slack.create({ botToken: "xoxb-test", appToken: "xapp-test" }, {}, publish),
@@ -88,15 +98,10 @@ describe("provider conformance", () => {
         expect(kase.provider.settings.safeParse({ knob: "x" }).success).toBe(false);
       });
 
-      test("render policy is a usable dialect mapping with a sane limit", () => {
-        const rendered = kase.provider.capabilities.render.renderMarkdown("**hi** `code`");
-        expect(typeof rendered).toBe("string");
-        expect(rendered.length).toBeGreaterThan(0);
-        const limit = kase.provider.capabilities.render.messageLimit;
-        if (limit !== null) {
-          expect(Number.isInteger(limit)).toBe(true);
-          expect(limit).toBeGreaterThan(0);
-        }
+      test("render policy uses the platform dialect and delivery limit", () => {
+        const policy = kase.provider.capabilities.render;
+        expect(policy.renderMarkdown("**hi** `code`")).toBe(kase.rendered);
+        expect(policy.messageLimit).toBe(kase.limit);
       });
 
       test("preconditions are a verbatim operator checklist", () => {
@@ -107,9 +112,8 @@ describe("provider conformance", () => {
 
       test("construction is pure — nothing published before start", () => {
         let published = 0;
-        const recordingPublish: PublishPort = (...args: Parameters<PublishPort>) => {
+        const recordingPublish: PublishPort = () => {
           published += 1;
-          return noopPublish(...args);
         };
         kase.build(recordingPublish);
         expect(published).toBe(0);

@@ -8,7 +8,7 @@ import { effectiveTrustTier } from "./effective-tier.js";
  * mode never crosses the perimeter; this router owns external mode only.
  * Decision strings, stages, and factsUsed are byte-frozen wire vocabulary.
  */
-export type RouteInbound = {
+type RouteInbound = {
   readonly traceId: string;
   readonly time: number;
   readonly id: string;
