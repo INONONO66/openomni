@@ -1,6 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { Gateway, LedgerSession, PlainValueSchema } from "@openomni/protocol";
-import { ActorRegistry, LedgerAppend, SessionHandleStore, Storage } from "../../src";
+import {
+  ActorRegistry,
+  LedgerAppend,
+  SessionHandleStore,
+  Storage,
+  type SqliteStorageAdapter,
+} from "../../src";
+import type { LedgerAction } from "@openomni/protocol";
 import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { openLedgerDatabase } from "../helpers/ledger";
 import { materializeSession } from "../helpers/session";
@@ -93,6 +100,92 @@ test("materialization refuses a mismatched initial action before creating any ro
     }),
   ).toBeUndefined();
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["source"]);
+});
+
+test("session commit savepoints roll back every refused write unit", () => {
+  Storage.initialize({ dbPath: ":memory:" });
+  const session = materializeSession("savepoint");
+  SessionHandleStore.acquireLease({
+    sessionId: session.id,
+    owner: "owner",
+    expectedFence: 0,
+    now: 1,
+    expiresAt: 100,
+  });
+  const base = {
+    sessionId: session.id,
+    owner: "owner",
+    fence: 1,
+    now: 2,
+    expectedRevision: 1,
+    actions: [],
+    consumeInboxIds: [],
+    state: "idle" as const,
+    releaseLease: true,
+  };
+  expect(SessionHandleStore.commit({ ...base, consumeInboxIds: ["missing"] })).toEqual({
+    ok: false,
+    reason: "inbox",
+    currentFence: 1,
+    currentRevision: 1,
+  });
+  const db = (Storage.get() as SqliteStorageAdapter).testDatabase();
+  db.run(
+    "CREATE TRIGGER refuse_revision BEFORE UPDATE OF revision ON session BEGIN SELECT RAISE(IGNORE); END",
+  );
+  const action: LedgerAction.Append = {
+    id: "refused-action",
+    parentId: null,
+    sessionId: session.id,
+    kind: "tool",
+    intent: { encodingVersion: 1, value: {} },
+    effect: { encodingVersion: 1, value: {} },
+    irreversible: true,
+    ts: 2,
+  };
+  expect(SessionHandleStore.commit({ ...base, actions: [action] })).toMatchObject({
+    reason: "revision",
+  });
+  db.run("DROP TRIGGER refuse_revision");
+  expect(
+    SessionHandleStore.commitInbox({
+      id: "pending",
+      sessionId: session.id,
+      parentActionId: null,
+      kind: "prompt",
+      content: "pending",
+      origin: { encodingVersion: 1, value: {} },
+      createdAt: 3,
+    }),
+  ).toBeDefined();
+  db.run(
+    "CREATE TRIGGER refuse_consume BEFORE UPDATE OF status ON inbox BEGIN SELECT RAISE(IGNORE); END",
+  );
+  expect(
+    SessionHandleStore.commit({
+      ...base,
+      expectedRevision: 2,
+      consumeInboxIds: ["pending"],
+      now: 4,
+    }),
+  ).toMatchObject({ reason: "inbox" });
+  db.run("DROP TRIGGER refuse_consume");
+  const duplicate = {
+    id: `${session.id}:configure`,
+    sessionId: session.id,
+    parentActionId: null,
+    kind: "prompt" as const,
+    content: "duplicate",
+    origin: { encodingVersion: 1 as const, value: {} },
+    createdAt: 5,
+  };
+  expect(
+    SessionHandleStore.commit({ ...base, expectedRevision: 2, receive: duplicate }),
+  ).toMatchObject({ reason: "inbox" });
+  expect(
+    SessionHandleStore.commit({ ...base, expectedRevision: 2, admit: duplicate }),
+  ).toMatchObject({ reason: "inbox" });
+  expect(SessionHandleStore.row(session.id).revision).toBe(2);
 });
 
 test("external reply observations carry the persisted original message identity", () => {
