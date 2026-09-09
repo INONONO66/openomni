@@ -1,5 +1,6 @@
 import { describe, expect, it, mock, spyOn } from "bun:test";
-import { collector, newTraceId, noopSink, scopeObservation } from "../../src/index";
+import { newTraceId, scopeObservation } from "../../src/index";
+import { collector } from "../helpers/observation-collector";
 import { BusEvent, type ObservationSink } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -167,14 +168,6 @@ describe("scoped observations", () => {
     expect(sink.named(OtherEvent.name)).toHaveLength(1);
     sink.reset();
     expect(sink.events).toEqual([]);
-  });
-
-  it("noop sink and its scopes discard observations", () => {
-    const sink = noopSink();
-    expect(() => sink.publish(TestEvent, { component: "test", msg: "discard" })).not.toThrow();
-    expect(() =>
-      sink.scope?.(identity).publish(TestEvent, { component: "test", msg: "discard" }),
-    ).not.toThrow();
   });
 
   it("generates compact trace identifiers", () => {

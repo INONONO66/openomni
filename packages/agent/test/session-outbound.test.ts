@@ -167,3 +167,94 @@ test("restart after receiving commit retries exact bytes without another inbox o
   expect(SessionHandleStore.inboxRows("parent")).toHaveLength(1);
   expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("delivered");
 });
+
+function commissionedChild(runtime: SessionRuntime) {
+  runtimes.push(runtime);
+  session(
+    { id: "parent", role: "resident", runner: async () => ({ kind: "result", text: "parent" }) },
+    runtime,
+  );
+  const actions = Storage.get().actions;
+  if (actions === undefined) throw new Error("missing action adapter");
+  actions.append(
+    {
+      id: "commission-action",
+      parentId: null,
+      sessionId: "parent",
+      kind: "message",
+      intent: {
+        encodingVersion: 1,
+        value: { phase: "intent", value: { messageId: "commission" } },
+      },
+      effect: { encodingVersion: 1, value: { phase: "pending" } },
+      ts: 100,
+      irreversible: true,
+    },
+    SessionHandleStore.row("parent").revision,
+  );
+  const child = session(
+    {
+      id: "child",
+      parentId: "parent",
+      role: "worker",
+      runner: async () => ({ kind: "result", text: "child answer" }),
+    },
+    runtime,
+  );
+  return child.prompt("work", {
+    encodingVersion: 1,
+    value: {
+      kind: "message",
+      messageId: "commission",
+      senderSessionId: "parent",
+      sourceActionId: "commission-action",
+    },
+  });
+}
+
+test("a destination receipt for different bytes is refused and the obligation stays pending", async () => {
+  const prompted = commissionedChild({
+    observations: { publish: () => undefined },
+    clock: () => 100,
+    dispatchOutbound: async ({ message }) =>
+      receiveOutbound({ ...message, content: "tampered answer" }, 100).receipt,
+  });
+  await expect(prompted).rejects.toThrow(
+    "outbound destination receipt does not match its recorded payload",
+  );
+  expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
+  expect(SessionHandleStore.inboxRows("parent").map((row) => row.content)).toEqual([
+    "tampered answer",
+  ]);
+});
+
+test("a lease stolen during dispatch fails both the ack and the release as one aggregate", async () => {
+  const prompted = commissionedChild({
+    observations: { publish: () => undefined },
+    clock: () => 100,
+    dispatchOutbound: async ({ message }) => {
+      const stolen = SessionHandleStore.acquireLease({
+        sessionId: message.sourceSessionId,
+        owner: "other-runtime",
+        expectedFence: SessionHandleStore.row(message.sourceSessionId).leaseFence,
+        now: 100 + SessionHandleStore.LEASE_TTL_MS,
+        expiresAt: 100 + 2 * SessionHandleStore.LEASE_TTL_MS,
+      });
+      if (!stolen.ok) throw new Error("test takeover refused");
+      return receiveOutbound(message, 100).receipt;
+    },
+  });
+  const failure = await prompted.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(failure).toBeInstanceOf(AggregateError);
+  if (!(failure instanceof AggregateError)) throw new Error("unreachable");
+  expect(failure.message).toBe("outbound dispatch and source lease release failed");
+  expect(failure.errors.map((error) => String(error))).toEqual([
+    "SessionCommitError: session commit stale",
+    "SessionCommitError: session commit stale",
+  ]);
+  expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
+  expect(SessionHandleStore.row("child").leaseOwner).toBe("other-runtime");
+});

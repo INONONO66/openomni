@@ -33,14 +33,7 @@ export {
   toolInputSchema,
   toolSpec,
 } from "./tool-dispatcher";
-export {
-  Bus,
-  collector,
-  createObservationBus,
-  newTraceId,
-  noopSink,
-  scopeObservation,
-} from "./observation/bus";
+export { Bus, createObservationBus, newTraceId, scopeObservation } from "./observation/bus";
 export type {
   SessionHandle,
   SessionRunner,

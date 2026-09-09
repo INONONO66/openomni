@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { BusEvent, Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
-import { Bus, collector } from "../../src/index";
+import { Bus } from "../../src/index";
+import { collector } from "../helpers/observation-collector";
 import { Compaction } from "../../src/compaction/compact";
 import { captureBusEvents } from "../helpers/bus-event";
 

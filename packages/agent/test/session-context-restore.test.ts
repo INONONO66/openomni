@@ -106,6 +106,9 @@ describe("restore_context_projection", () => {
       foldSessionHistory("ctx", before.slice(0, before.indexOf(compaction))),
     );
     expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
+    expect(handle.inspect().compactions).toEqual([
+      expect.objectContaining({ compactionId: compaction.id, restoredBy: [nth(appended, 1).id] }),
+    ]);
   });
 
   test("a refused restoration records only the policy decision and changes nothing", async () => {

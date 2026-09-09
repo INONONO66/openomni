@@ -134,7 +134,6 @@ export interface RunState {
   lastCompactionYield?: CompactionYield;
   /** Results of the most recent apply seam, consumed by the window-yield path. */
   lastCompactionIneffective?: boolean;
-  lastCompactionDeferred?: boolean;
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
@@ -254,7 +253,6 @@ export function resetModelWindowGuards(state: RunState): void {
   state.windowYieldDisarmed = undefined;
   state.lastCompactionYield = undefined;
   state.lastCompactionIneffective = undefined;
-  state.lastCompactionDeferred = undefined;
   state.overflowCompactionAttempted = undefined;
 }
 

@@ -51,7 +51,18 @@ describe("compaction boundary integrity", () => {
       sessionID: first.info.sessionID,
       type: "step-start",
     });
-    expect(planAnchoredCut(messages, 1)?.prefixFingerprint).not.toBe(reasoned);
+    const started = planAnchoredCut(messages, 1)?.prefixFingerprint;
+    expect(started).not.toBe(reasoned);
+    first.parts.push({
+      id: "finish",
+      messageID: first.info.id,
+      sessionID: first.info.sessionID,
+      type: "step-finish",
+      reason: "stop",
+      cost: 0,
+      tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+    });
+    expect(planAnchoredCut(messages, 1)?.prefixFingerprint).not.toBe(started);
   });
 
   it("consumes candidates and disables further speculative work", async () => {

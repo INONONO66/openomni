@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Compaction } from "../../src/compaction";
-import { collector } from "../../src/observation/bus";
+import { collector } from "../helpers/observation-collector";
 import { resolveCompactionGeometry } from "../../src/compaction/geometry";
 import { textMessage } from "../helpers/messages";
 

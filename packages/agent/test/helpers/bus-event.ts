@@ -1,5 +1,6 @@
 import type { BusEvent } from "@openomni/protocol";
 import { Bus } from "../../src/index";
+import { bounded } from "./bounded";
 
 const EVENT_TIMEOUT_MS = 1_000;
 
@@ -10,32 +11,24 @@ export function captureBusEvents<T>(
   onEvent?: (event: T) => void,
 ): { readonly events: T[]; readonly done: Promise<readonly T[]>; unsubscribe: () => void } {
   const events: T[] = [];
-  let unsubscribe: () => void = () => undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const done = new Promise<readonly T[]>((resolve, reject) => {
-    timer = setTimeout(() => {
-      unsubscribe();
-      reject(
-        new Error(
-          `Timed out waiting for ${count} ${event.name} event(s); received ${events.length}`,
-        ),
-      );
-    }, EVENT_TIMEOUT_MS);
-    unsubscribe = Bus.subscribe(event, (payload) => {
-      events.push(payload);
-      onEvent?.(payload);
-      if (events.length !== count) return;
-      if (timer !== undefined) clearTimeout(timer);
-      resolve(events);
-    });
+  let settle: (events: readonly T[]) => void = () => undefined;
+  const arrived = new Promise<readonly T[]>((resolve) => {
+    settle = resolve;
   });
+  const unsubscribe = Bus.subscribe(event, (payload) => {
+    events.push(payload);
+    onEvent?.(payload);
+    if (events.length === count) settle(events);
+  });
+  const done = bounded(arrived, `${count} ${event.name} event(s)`, EVENT_TIMEOUT_MS);
 
   return {
     events,
     done,
+    // Releasing the capture also releases the deadline: nothing awaits `done` afterwards.
     unsubscribe: () => {
-      if (timer !== undefined) clearTimeout(timer);
       unsubscribe();
+      settle(events);
     },
   };
 }

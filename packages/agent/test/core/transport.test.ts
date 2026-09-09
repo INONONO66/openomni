@@ -1,7 +1,7 @@
 import { createTestAgent } from "../helpers/test-agent";
 import { describe, expect, it } from "bun:test";
 import type { RunInput } from "@openomni/llm";
-import { collector } from "../../src/index";
+import { collector } from "../helpers/observation-collector";
 import { completeModel, mockProviderModel } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 

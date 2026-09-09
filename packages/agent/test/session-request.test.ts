@@ -139,6 +139,16 @@ it("records one canonical resolution and deduplicates equivalent input after res
       ...persisted,
     ]).resolution,
   ).toBe("rejected");
+  // A recorded input whose durable resolution no longer decodes is not replayed as a success.
+  const corrupted: LedgerAction.Node[] = persisted.map((action) =>
+    action.id === `invocation:input:${payload.answer.inputId}`
+      ? {
+          ...action,
+          effect: { encodingVersion: 1 as const, value: { phase: "state", resolution: "???" } },
+        }
+      : action,
+  );
+  expect(decide(payload, result.request, [original, ...corrupted]).resolution).toBe("rejected");
 });
 it("expires late answers before binding checks without reopening or inbox effects", () => {
   const pending = request();

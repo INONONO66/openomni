@@ -2,7 +2,8 @@ import { describe, expect, it, jest } from "bun:test";
 import { Operational, type Tool } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/test-agent";
 import { createAssistantMessage } from "../../../src/core/message-factory";
-import { Bus, collector } from "../../../src/index";
+import { Bus } from "../../../src/index";
+import { collector } from "../../helpers/observation-collector";
 import {
   createMockLlmConfig,
   createStopOutcome,

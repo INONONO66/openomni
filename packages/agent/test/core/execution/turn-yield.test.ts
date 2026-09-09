@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/test-agent";
-import { collector } from "../../../src/observation/bus";
+import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
 import { completeModel } from "../../helpers/mock-llm";
 

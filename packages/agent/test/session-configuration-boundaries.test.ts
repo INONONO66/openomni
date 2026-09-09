@@ -6,7 +6,7 @@ import {
   type SessionRuntime,
   type SessionHandle,
 } from "../src/session-handle";
-import { collector } from "../src/observation/bus";
+import { collector } from "./helpers/observation-collector";
 import { seedPolicy } from "./helpers/seed-policy";
 import { bounded } from "./helpers/bounded";
 

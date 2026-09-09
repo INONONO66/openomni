@@ -230,41 +230,6 @@ export function scopeObservation(
   return scoped;
 }
 
-interface CollectingObservationSink extends ObservationSink {
-  readonly events: readonly { readonly name: string; readonly data: BusData }[];
-  named(name: string): readonly BusData[];
-  reset(): void;
-}
-
-function observationCollector(): CollectingObservationSink {
-  const events: Array<{ readonly name: string; readonly data: BusData }> = [];
-  return {
-    publish(event, data) {
-      events.push({ name: event.name, data: toBusData(data) });
-    },
-    scope(identity) {
-      return scopeObservation(this, identity);
-    },
-    events,
-    named: (name) => events.filter((event) => event.name === name).map((event) => event.data),
-    reset: () => {
-      events.length = 0;
-    },
-  };
-}
-
-export const collector = observationCollector;
-
 export function newTraceId(): string {
   return crypto.randomUUID().replaceAll("-", "");
 }
-
-function noopObservationSink(): ObservationSink {
-  const sink: ObservationSink = {
-    publish: () => undefined,
-    scope: () => sink,
-  };
-  return sink;
-}
-
-export const noopSink = noopObservationSink;

@@ -2,7 +2,7 @@ import { completeModel, providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it } from "bun:test";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Retry } from "@openomni/llm";
-import { collector } from "../../../src/observation/bus";
+import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
 
 const model = {

@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Compaction, CompactionSession } from "../../src/compaction";
-import { collector } from "../../src/observation/bus";
+import { collector } from "../helpers/observation-collector";
 import { textMessage } from "../helpers/messages";
 
 let sequence = 0;

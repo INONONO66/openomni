@@ -26,18 +26,37 @@ describe("tool calls reach the executor without target gating", () => {
       const executed: string[] = [];
       const results: Tool.Result[] = [];
       let requested = false;
-      const recording = recordingExecutor({ policy: compiledPolicy([{
-        name: "refuse-screen", kind: "tool", phase: "pre", priority: 1, generation: 1,
-        match: { encodingVersion: 1, value: { op: "screen.capture" } },
-        verdict: { encodingVersion: 1, value: { type: "deny", reason: "policy_denied" } },
-      }]) });
-      const dispatcher = createDispatcher([defineTool({
-        name: "screen.capture", description: "Capture screen", category: "query",
-        input: z.object({}), output: z.string(),
-        visibility: { model: ["resident"], cell: [] },
-        execute: async () => { executed.push("screen.capture"); return "image"; },
-        render: (_input, output) => output,
-      })], { executor: recording.executor });
+      const recording = recordingExecutor({
+        policy: compiledPolicy([
+          {
+            name: "refuse-screen",
+            kind: "tool",
+            phase: "pre",
+            priority: 1,
+            generation: 1,
+            match: { encodingVersion: 1, value: { op: "screen.capture" } },
+            verdict: { encodingVersion: 1, value: { type: "deny", reason: "policy_denied" } },
+          },
+        ]),
+      });
+      const dispatcher = createDispatcher(
+        [
+          defineTool({
+            name: "screen.capture",
+            description: "Capture screen",
+            category: "query",
+            input: z.object({}),
+            output: z.string(),
+            visibility: { model: ["resident"], cell: [] },
+            execute: async () => {
+              executed.push("screen.capture");
+              return "image";
+            },
+            render: (_input, output) => output,
+          }),
+        ],
+        { executor: recording.executor },
+      );
       const context = { sessionId: "session-tools", turnId: "turn-tools" };
       const execute = (call: Tool.Call) => dispatcher.execute(call, context);
       const config: ChatAgentConfig = {
@@ -89,10 +108,18 @@ describe("tool calls reach the executor without target gating", () => {
       expect(results).toMatchObject([
         { toolCallId: "call", isError: true, errorKind: "precondition_failed" },
       ]);
-      expect(recording.committed.filter((action) => action.kind === "policy.decision")
-        .map((action) => action.intent.value)).toContainEqual(expect.objectContaining({
-          hook: "tool.pre", op: "screen.capture", verdict: "deny", matchedRuleIds: ["refuse-screen"],
-        }));
+      expect(
+        recording.committed
+          .filter((action) => action.kind === "policy.decision")
+          .map((action) => action.intent.value),
+      ).toContainEqual(
+        expect.objectContaining({
+          hook: "tool.pre",
+          op: "screen.capture",
+          verdict: "deny",
+          matchedRuleIds: ["refuse-screen"],
+        }),
+      );
     });
   }
 });

@@ -310,6 +310,75 @@ describe("Compaction", () => {
       expect(result.messages).toHaveLength(8);
     });
 
+    it("reports nothing reclaimed when the only user boundary is the opening message", async () => {
+      // Snapping lands on index 0: a cut there removes nothing, so the round is
+      // a value-level no-op rather than a refusal or a zero-progress "cut".
+      const completed = captureBusEvents(RunEvents.CompactionCompleted);
+      try {
+        const messages = [
+          makeUserMessage("u0"),
+          ...Array.from({ length: 5 }, (_, i) => makeAssistantMessage(`a${i + 1}`)),
+        ];
+        const result = await Compaction.compact(
+          messages,
+          { contextWindowTokens: 1000, protectRecentMessages: 2 },
+          { traceId: TEST_TRACE_ID, sessionId: "test" },
+          Bus,
+          { trigger: "threshold" },
+        );
+        await completed.done;
+        expect(result.compacted).toBe(false);
+        expect(result.blocked).toBeUndefined();
+        expect(result.messages).toBe(messages);
+        expect(completed.events[0]?.outcome).toBe("nothing_reclaimed");
+      } finally {
+        completed.unsubscribe();
+      }
+    });
+
+    it("reports the elision as reduced when the opening message is the only user boundary", async () => {
+      const completed = captureBusEvents(RunEvents.CompactionCompleted);
+      try {
+        const tool = makeToolAssistantMessage("a1", "call-big");
+        const toolPart = tool.parts.find((part): part is Message.ToolPart => part.type === "tool");
+        if (toolPart?.state.status !== "completed") throw new Error("missing tool fixture");
+        toolPart.state.output = "x".repeat(400);
+        const messages = [
+          makeUserMessage("u0"),
+          tool,
+          makeAssistantMessage("a2"),
+          makeAssistantMessage("a3"),
+        ];
+        const result = await Compaction.compact(
+          messages,
+          {
+            contextWindowTokens: 1000,
+            protectRecentMessages: 2,
+            elideToolOutputs: { minOutputChars: 100, keepHeadChars: 10 },
+          },
+          { traceId: TEST_TRACE_ID, sessionId: "test" },
+          Bus,
+          // Overage far above the ~80-token estimated reclaim: elision alone
+          // cannot settle the round, so the cut is attempted and snaps to 0.
+          { trigger: "threshold", measuredTokens: 5000 },
+        );
+        await completed.done;
+        expect(result.compacted).toBe(true);
+        expect(result.removedCount).toBe(0);
+        expect(result.messages).toHaveLength(4);
+        const kept = result.messages[1]?.parts.find(
+          (part): part is Message.ToolPart => part.type === "tool",
+        );
+        expect(kept?.state.status === "completed" && kept.state.output).toContain(
+          "[output elided by compaction: 400 chars; recall: call-big]",
+        );
+        expect(completed.events[0]?.outcome).toBe("reduced");
+        expect(completed.events[0]?.elidedChars).toBeGreaterThan(300);
+      } finally {
+        completed.unsubscribe();
+      }
+    });
+
     it("keeps the natural cutoff when a summary user message anchors the window", async () => {
       // Pin: with onSummarize present, the prepended summary user message makes
       // any message-boundary cutoff provider-valid — no snap-back happens.

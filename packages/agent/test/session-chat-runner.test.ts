@@ -10,7 +10,6 @@ import {
   createExecutor,
   createSessionChatRunner,
   createTurnDispatcher,
-  noopSink,
   session,
   type Executor,
   type SessionHandle,
@@ -68,7 +67,7 @@ function testExecutor(): Executor {
   return createExecutor({
     policy,
     ledger: recording.ledger,
-    observations: noopSink(),
+    observations: { publish: () => undefined },
     identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
     clock: () => 1,
     entropy: recording.entropy,
@@ -77,7 +76,7 @@ function testExecutor(): Executor {
 
 function config(run: MockLlmFn, executor: Executor = testExecutor(), fallbacks?: Model.Ref[]) {
   return {
-    events: noopSink(),
+    events: { publish: () => undefined },
     executor,
     model: { provider: "anthropic", id: mockProviderModel.id },
     ...(fallbacks === undefined ? {} : { modelFallbacks: fallbacks }),

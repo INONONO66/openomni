@@ -6,7 +6,6 @@ import {
   type SessionTurn,
   type Inbox,
   type LedgerSession,
-  type PlainValue,
 } from "@openomni/protocol";
 import { createExecutor } from "./executor";
 import { foldSessionHistory } from "./session-lifecycle/history";
@@ -152,8 +151,8 @@ export function createSessionTurn(
         );
       });
       let running: Promise<SessionRunnerResult> | undefined;
-      let runnerResult: SessionRunnerResult | undefined;
-      let evaluatedResult: PlainValue | undefined;
+      // The body below always replaces this; an executed outcome never reads the placeholder.
+      let runnerResult: SessionRunnerResult = policyRefusalResult("invalid_output");
       const outcome = await execution.runExisting(
         {
           kind: "turn",
@@ -223,15 +222,14 @@ export function createSessionTurn(
               };
             }
           }
-          evaluatedResult = sessionRunnerResultValue(runnerResult);
-          return evaluatedResult;
+          return sessionRunnerResultValue(runnerResult);
         },
       );
       if (outcome.terminal !== "executed") {
         result = policyRefusalResult(outcome.reason);
-      } else if (runnerResult === undefined || evaluatedResult === undefined) {
-        result = policyRefusalResult("invalid_output");
-      } else if (canonicalDigest(outcome.value) === canonicalDigest(evaluatedResult)) {
+      } else if (
+        canonicalDigest(outcome.value) === canonicalDigest(sessionRunnerResultValue(runnerResult))
+      ) {
         result = runnerResult;
       } else {
         result =

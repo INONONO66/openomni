@@ -67,12 +67,9 @@ export async function applyCompaction(
     measuredTokens !== undefined &&
     compaction?.inFlight() === true &&
     measuredTokens < geometry.graceTokens
-  ) {
-    state.lastCompactionDeferred = true;
+  )
     return "deferred";
-  }
 
-  state.lastCompactionDeferred = undefined;
   const candidate = compaction?.candidate();
   const result = await executeCompaction({
     history: state.messages,

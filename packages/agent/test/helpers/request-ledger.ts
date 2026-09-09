@@ -3,7 +3,6 @@ import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
 import type { SessionRuntime } from "../../src/session-contract";
 import type { SessionTransition } from "@openomni/protocol";
-import { bounded } from "./bounded";
 
 export function requestLedger(
   input: {

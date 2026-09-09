@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { boundedBy } from "./helpers/bounded";
+import { ContextRestoreError } from "../src/compaction/restore";
+import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
 import {
   closeSessions,
   session,
@@ -14,14 +16,17 @@ import {
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   type BusEvent,
+  canonicalDigest,
   type LedgerAction,
   L0Observation,
   PlainValueSchema,
   type ObservationSink,
   type SessionGeneration,
+  type SessionTransition,
   type SessionTurn,
 } from "@openomni/protocol";
 import { Bus, SEEDED_POLICY_ROWS } from "../src/index";
+import { requestBindingDigest } from "../src/session-request";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
 const bounded = boundedBy(SIGNAL_TIMEOUT_MS);
@@ -108,7 +113,7 @@ function residentOptions(id: string, runner: SessionRunner): SessionCreateOption
   return { id, role: "resident", runner, tools: [tool("read")], system };
 }
 
-function policyHook(action: LedgerAction.Node): string | undefined {
+function policyHook(action: Pick<LedgerAction.Append, "kind" | "intent">): string | undefined {
   if (action.kind !== "policy.decision") return undefined;
   const value = action.intent.value;
   if (value === null || Array.isArray(value) || typeof value !== "object") return undefined;
@@ -126,6 +131,7 @@ function commitOpenTurn(input: {
   readonly sessionId: string;
   readonly resultId: string;
   readonly resumeCount: number;
+  readonly toolsHash?: string;
 }): void {
   const created = SessionHandleStore.materialize({
     id: input.sessionId,
@@ -165,7 +171,7 @@ function commitOpenTurn(input: {
             resultId: input.resultId,
             inboxIds: [],
             toolsGeneration: generation.generation,
-            toolsHash: generation.toolsHash,
+            toolsHash: input.toolsHash ?? generation.toolsHash,
             systemHash: generation.systemHash,
             policyGeneration: generation.policyGeneration,
             resumeCount: input.resumeCount,
@@ -183,6 +189,55 @@ function commitOpenTurn(input: {
   });
   if (!committed.ok) throw new Error("crash fixture could not commit its open turn");
   now += SessionHandleStore.LEASE_TTL_MS;
+}
+
+function durableRequest(sessionId: string, turnId: string): SessionTransition.Request {
+  const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
+  const request: SessionTransition.Request = {
+    requestId: `${sessionId}:request`,
+    sessionId,
+    turnId,
+    callId: `${sessionId}:call`,
+    mode: "approval",
+    parsedInput: {},
+    inputHash: canonicalDigest({}),
+    effectHash: canonicalDigest({ category: "mutation" }),
+    generation: 1,
+    toolsGeneration: generation.generation,
+    toolsHash: generation.toolsHash,
+    systemHash: generation.systemHash,
+    domainRevisions: {},
+    deadline: now + 1_000,
+    expectedResponders: ["owner"],
+    correlation: {},
+    allowedActions: ["report_result"],
+    bindingDigest: "",
+    resolution: "first",
+    threshold: 1,
+    seenReplyIds: [],
+    replies: [],
+    state: "open",
+    outcome: null,
+    createdAt: now,
+  };
+  request.bindingDigest = requestBindingDigest(request);
+  return request;
+}
+
+function approvalRequest(sessionId: string, turnId: string): ExecutionApprovalRequest {
+  const durable = durableRequest(sessionId, turnId);
+  return {
+    durable,
+    id: durable.requestId,
+    sessionId,
+    turnId,
+    callId: durable.callId,
+    inputHash: durable.inputHash,
+    generation: 1,
+    revision: 1,
+    policyDecisionId: `${sessionId}:decision`,
+    intent: {},
+  };
 }
 
 describe("durable session handle", () => {
@@ -648,6 +703,76 @@ describe("durable session handle", () => {
     ).toEqual(SessionHandleStore.inboxRows(handle.id).map((row) => row.id));
   });
 
+  test("a turn's ledger refuses a request transition once that turn has sealed", async () => {
+    const entered = signal<SessionRunnerInput>();
+    const runner: SessionRunner = async (input) => {
+      entered.resolve(input);
+      return { kind: "result", text: "done" };
+    };
+    const handle = session(residentOptions("late-transition", runner), runtime);
+    await bounded(handle.prompt("first prompt"), "prompt completion");
+    const input = await bounded(entered.promise, "runner entry");
+    const request = durableRequest(handle.id, input.turnId);
+    const tree = SessionHandleStore.tree(handle.id);
+    if (input.ledger.transition === undefined) throw new Error("missing transition port");
+    const late = input.ledger.transition({ kind: "request.open", request }, "late:open", now);
+    await expect(late).rejects.toBeInstanceOf(SessionCommitError);
+    await expect(late).rejects.toMatchObject({ result: { ok: false, reason: "stale" } });
+    expect(SessionHandleStore.tree(handle.id)).toEqual(tree);
+    expect(SessionHandleStore.requestRows()).toEqual([]);
+  });
+
+  test("an interrupt landing during turn.pre admission seals interrupted without entering the runner", async () => {
+    let runs = 0;
+    const handle = session(
+      residentOptions("interrupt-before-body", async () => {
+        runs += 1;
+        return { kind: "result", text: "ran" };
+      }),
+      runtime,
+    );
+    let interrupted: Promise<void> | undefined;
+    sink.onCommit = (committed) => {
+      if (committed.sessionId !== handle.id || committed.kind !== "policy.decision") return;
+      const action = SessionHandleStore.tree(handle.id).find((node) => node.id === committed.id);
+      if (action === undefined || policyHook(action) !== "turn.pre" || interrupted !== undefined)
+        return;
+      interrupted = handle.interrupt();
+    };
+    const result = await bounded(handle.prompt("never reaches the runner"), "prompt completion");
+    if (interrupted === undefined) throw new Error("turn.pre decision was never observed");
+    await bounded(interrupted, "interrupt receipt");
+    expect(result).toEqual({ kind: "interrupted", text: "" });
+    expect(runs).toBe(0);
+    expect(handle.get().state).toBe("interrupted");
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+  });
+
+  test("a storage failure during turn admission seals the turn as an error", async () => {
+    let runs = 0;
+    const handle = session(
+      residentOptions("admission-storage-failure", async () => {
+        runs += 1;
+        return { kind: "result", text: "ran" };
+      }),
+      runtime,
+    );
+    const sessions = Storage.get().sessions;
+    if (sessions === undefined) throw new Error("missing session adapter");
+    const commit = sessions.commit;
+    const explode = spyOn(sessions, "commit").mockImplementation((input) => {
+      const decision = input.actions.find((action) => action.kind === "policy.decision");
+      if (decision === undefined || policyHook(decision) !== "turn.pre") return commit(input);
+      explode.mockRestore();
+      throw new Error("storage exploded during admission");
+    });
+    const result = await bounded(handle.prompt("admission fails"), "prompt completion");
+    expect(result).toMatchObject({ kind: "error", text: "storage exploded during admission" });
+    expect(runs).toBe(0);
+    expect(handle.get().state).toBe("idle");
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+  });
+
   test("records an idle interrupt as a no-op without resuming the next prompt", async () => {
     const inputs: SessionRunnerInput[] = [];
     const runner: SessionRunner = async (input) => {
@@ -925,6 +1050,47 @@ describe("durable session handle", () => {
     expect(calls).toBe(2);
     expect(handle.get().state).toBe("idle");
     expect(SessionHandleStore.row(handle.id).leaseFence).toBe(leaseBefore + 1);
+  });
+
+  test("a refused retained release surfaces once to the next turn start and then clears", async () => {
+    const entered = signal<void>();
+    const abortSeen = signal<void>();
+    const releaseRunner = signal<void>();
+    let calls = 0;
+    const runner: SessionRunner = async (input) => {
+      calls += 1;
+      if (calls > 1) return { kind: "result", text: "resumed" };
+      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
+      entered.resolve();
+      await releaseRunner.promise;
+      return { kind: "result", text: "late" };
+    };
+    const handle = session(residentOptions("retained-release-refused", runner), runtime);
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "runner entry");
+    await bounded(handle.interrupt(), "interrupt receipt");
+    await bounded(abortSeen.promise, "runner abort signal");
+
+    const sessions = Storage.get().sessions;
+    if (sessions === undefined) throw new Error("missing session adapter");
+    const commit = sessions.commit;
+    const releaseRefused = signal<void>();
+    const refuseRelease = spyOn(sessions, "commit").mockImplementation((input) => {
+      if (input.releaseLease && input.actions.length === 0 && input.sessionId === handle.id) {
+        refuseRelease.mockRestore();
+        releaseRefused.resolve();
+        throw new Error("release refused by storage");
+      }
+      return commit(input);
+    });
+    releaseRunner.resolve();
+    await bounded(Promise.all([running, releaseRefused.promise]), "retained settlement");
+
+    await expect(handle.resume()).rejects.toThrow("release refused by storage");
+    await bounded(handle.resume(), "resume after the surfaced failure");
+    expect(calls).toBe(2);
+    expect(handle.get().state).toBe("idle");
+    expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
   });
 
   test("configure during the ignored-abort window keeps the lease held by the live runner", async () => {
@@ -1334,6 +1500,58 @@ describe("durable session handle", () => {
     expect(hibernations).toBe(2);
   });
 
+  test("a hibernated handle routes restore and close through its live successor", async () => {
+    const hibernated = signal<void>();
+    runtime = { ...runtime, onHibernate: () => hibernated.resolve() };
+    const runner: SessionRunner = async () => ({ kind: "result", text: "complete" });
+    const options = residentOptions("hibernate-successor", runner);
+    const first = session(options, runtime);
+    await bounded(first.prompt("sleep after this"), "first prompt");
+    await bounded(hibernated.promise, "runtime hibernation");
+    const successor = session(options, runtime);
+    expect(successor).not.toBe(first);
+
+    await expect(first.restoreContext("missing-compaction")).rejects.toBeInstanceOf(
+      ContextRestoreError,
+    );
+    await bounded(first.close(), "close through successor");
+    expect(() => successor.prompt("after close")).toThrow("session handle is closed");
+    expect(() => first.prompt("after close")).toThrow("session handle is closed");
+  });
+
+  test("approval answers reach only a turn's live approvals", async () => {
+    const answers: Parameters<ExecutionApprovals["answer"]>[0][] = [];
+    const entered = signal<void>();
+    const release = signal<void>();
+    const runner: SessionRunner = async (input) => {
+      input.bindApprovals?.({
+        pending: () => [],
+        notify: () => undefined,
+        answer: async (answer) => {
+          answers.push(answer);
+        },
+      });
+      entered.resolve();
+      await release.promise;
+      return { kind: "result", text: "done" };
+    };
+    const handle = session(residentOptions("approval-routing", runner), runtime);
+    const answer = {
+      request: approvalRequest(handle.id, "turn"),
+      credential: "owner-token",
+      decision: "approve",
+    } as const;
+    await expect(handle.approvals.answer(answer)).rejects.toMatchObject({
+      code: "stale_approval",
+    });
+    const prompted = handle.prompt("needs approval");
+    await bounded(entered.promise, "runner entry");
+    await bounded(handle.approvals.answer(answer), "routed answer");
+    expect(answers).toEqual([answer]);
+    release.resolve();
+    await bounded(prompted, "prompt completion");
+  });
+
   test("resume after interruption carries no prompt content into the runner", async () => {
     const firstEntered = signal<SessionRunnerInput>();
     const firstAborted = signal<void>();
@@ -1504,6 +1722,85 @@ describe("session crash recovery and observation", () => {
     expect(SessionHandleStore.openTurns(SessionHandleStore.tree("crashed-turn"))).toEqual([]);
   });
 
+  test("boot sweep refuses an open turn whose pinned generation no longer matches the ledger", async () => {
+    commitOpenTurn({
+      sessionId: "drifted-turn",
+      resultId: "drifted-result",
+      resumeCount: 0,
+      toolsHash: "not-the-recorded-tools",
+    });
+    let runs = 0;
+    const sweeping = sweepSessions(
+      () => async () => {
+        runs += 1;
+        return { kind: "result", text: "must not run" };
+      },
+      runtime,
+    );
+    await expect(sweeping).rejects.toThrow("pinned session generation unavailable: 1");
+    expect(runs).toBe(0);
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree("drifted-turn"))).toHaveLength(1);
+  });
+
+  test("a prompt denied at a mid-turn boundary is consumed and fails the runner's drain", async () => {
+    await Storage.withIsolation(async () => {
+      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+      seedPolicy([
+        {
+          name: "deny-boundary-prompt",
+          kind: "prompt",
+          phase: "pre",
+          match: { encodingVersion: 1, value: { op: "inbox", sessionId: "boundary-deny" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason: "late prompt refused" } },
+          priority: 2_000,
+        },
+      ]);
+      commitOpenTurn({ sessionId: "boundary-deny", resultId: "boundary-result", resumeCount: 0 });
+      const isolatedRuntime = { ...runtime };
+      const drained = signal<unknown>();
+      const runner: SessionRunner = async (input) => {
+        SessionHandleStore.commitInbox({
+          id: "boundary-deny:late",
+          sessionId: input.sessionId,
+          kind: "prompt",
+          content: "late prompt",
+          origin: { encodingVersion: 1, value: { source: "test" } },
+          createdAt: now,
+          parentActionId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
+        });
+        try {
+          return { kind: "result", text: JSON.stringify(await input.boundary("after_llm")) };
+        } catch (error) {
+          drained.resolve(error);
+          throw error;
+        }
+      };
+      await bounded(
+        sweepSessions(() => runner, isolatedRuntime),
+        "boot sweep terminal",
+      );
+      expect(await bounded(drained.promise, "boundary refusal")).toMatchObject({
+        name: "SessionPolicyRefusal",
+        reason: "late prompt refused",
+      });
+      const tree = SessionHandleStore.tree("boundary-deny");
+      expect(
+        SessionHandleStore.turnTerminal(tree.find((action) => action.id === "boundary-result")),
+      ).toMatchObject({ kind: "error", text: "session policy refused" });
+      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
+        "turn.pre",
+        "prompt.pre",
+        "turn.post",
+      ]);
+      expect(tree.map(SessionHandleStore.delivery).filter((d) => d !== undefined)).toEqual([]);
+      expect(SessionHandleStore.inboxRows("boundary-deny").map((row) => row.status)).toEqual([
+        "consumed",
+      ]);
+      await closeSessions(isolatedRuntime);
+      Storage.reset();
+    });
+  });
+
   test("boot sweep seals a durable interrupt before admitting an open turn", async () => {
     commitOpenTurn({ sessionId: "cancelled-turn", resultId: "cancelled-result", resumeCount: 0 });
     SessionHandleStore.commitInbox({
@@ -1560,6 +1857,49 @@ describe("session crash recovery and observation", () => {
     });
   });
 
+  test("a resume for an interrupted session without any terminal is consumed as a no-op", async () => {
+    const runs: string[] = [];
+    const handle = session(
+      residentOptions("interrupted-without-terminal", async (input) => {
+        runs.push(input.turnId);
+        return { kind: "result", text: "never" };
+      }),
+      runtime,
+    );
+    const row = SessionHandleStore.row(handle.id);
+    const lease = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "earlier-runtime",
+      expectedFence: row.leaseFence,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    if (!lease.ok) throw new Error("test lease refused");
+    const marked = SessionHandleStore.commit({
+      sessionId: handle.id,
+      owner: "earlier-runtime",
+      fence: lease.fence,
+      now,
+      expectedRevision: SessionHandleStore.row(handle.id).revision,
+      actions: [],
+      consumeInboxIds: [],
+      state: "interrupted",
+      releaseLease: true,
+    });
+    if (!marked.ok) throw new Error("test interrupt refused");
+
+    expect(await bounded(handle.resume(), "resume without terminal")).toBeUndefined();
+    expect(runs).toEqual([]);
+    expect(handle.get().state).toBe("interrupted");
+    expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
+    expect(
+      SessionHandleStore.tree(handle.id)
+        .map(SessionHandleStore.delivery)
+        .filter((delivery): delivery is SessionTurn.Delivery => delivery !== undefined)
+        .map((delivery) => delivery.turnId),
+    ).toEqual(["noop"]);
+  });
+
   test("watch installs its subscription before reading the initial snapshot", () => {
     SessionHandleStore.materialize({
       id: "watch-order",
@@ -1599,17 +1939,13 @@ describe("session crash recovery and observation", () => {
   });
 
   test("watch reports a revision gap and get replaces state after a dropped observation", async () => {
-    SessionHandleStore.materialize({
-      id: "watched-session",
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: 0,
-      actionId: "watched-session:configure",
-      at: now,
-    });
-    const watch = SessionHandleStore.watchSnapshot("watched-session", 1, sink);
+    const handle = session(
+      residentOptions("watched-session", async () => ({ kind: "result", text: "unused" })),
+      runtime,
+    );
+    const configureId = SessionHandleStore.tree(handle.id)[0]?.id;
+    if (configureId === undefined) throw new Error("missing configure action");
+    const watch = handle.watch();
     const observed = signal<SessionTurn.Observation>();
     const stop = watch.subscribe(observed.resolve);
     sink.dropNextCommit = true;
@@ -1621,7 +1957,7 @@ describe("session crash recovery and observation", () => {
       content: "first",
       origin: { encodingVersion: 1, value: { source: "test" } },
       createdAt: now + 1,
-      parentActionId: "watched-session:configure",
+      parentActionId: configureId,
     });
     SessionHandleStore.commitInbox({
       id: "watched-session:prompt-2",
@@ -1639,7 +1975,7 @@ describe("session crash recovery and observation", () => {
       from: watch.snapshot.revision,
       to: 3,
     });
-    expect(SessionHandleStore.getSnapshot("watched-session").revision).toBe(3);
+    expect(handle.get().revision).toBe(3);
     stop();
     watch.unsubscribe();
   });

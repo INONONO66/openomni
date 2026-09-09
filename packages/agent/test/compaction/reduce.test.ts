@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { collector } from "../../src/index";
+import { collector } from "../helpers/observation-collector";
 import { Compaction } from "../../src/compaction/compact";
 import { elideToolOutputs } from "../../src/compaction/reduce";
 import { textMessage, completedToolPart } from "../helpers/messages";
@@ -97,10 +97,15 @@ describe("Compaction.compact with elision configured", () => {
     expect(result.removedCount).toBe(0);
     expect(result.messages).toHaveLength(4);
     expect(sink.events.map((event) => event.name)).toEqual([
-      RunEvents.CompactionStarted.name, RunEvents.CompactionCompleted.name,
+      RunEvents.CompactionStarted.name,
+      RunEvents.CompactionCompleted.name,
     ]);
     expect(RunEvents.CompactionCompleted.schema.parse(sink.events[1]?.data)).toMatchObject({
-      ...trace, outcome: "reduced", messagesBefore: 4, messagesAfter: 4, removedCount: 0,
+      ...trace,
+      outcome: "reduced",
+      messagesBefore: 4,
+      messagesAfter: 4,
+      removedCount: 0,
     });
   });
 
