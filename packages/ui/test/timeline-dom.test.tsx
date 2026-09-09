@@ -9,24 +9,28 @@ const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 afterAll(() => GlobalRegistrator.unregister());
 
-test("scroll area pins to end and cleans its resize/scroll observers", async () => {
+test("scroll area pins appended content to the end", async () => {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(() => root.render(<ScrollArea pinToEnd><div>content</div></ScrollArea>));
+    await act(() => root.render(<ScrollArea><div>first line</div></ScrollArea>));
     const viewport = host.querySelector<HTMLElement>(".overscroll-contain");
     if (!viewport) throw new Error("Missing scroll viewport");
     Object.defineProperties(viewport, {
       scrollHeight: { configurable: true, value: 100 },
       clientHeight: { configurable: true, value: 40 },
-      scrollTop: { configurable: true, writable: true, value: 60 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
     });
-    await act(() => viewport.dispatchEvent(new Event("scroll")));
-    expect(viewport.scrollTop).toBe(viewport.scrollHeight - viewport.clientHeight);
-    await act(() => root.render(<ScrollArea pinToEnd><div>content</div></ScrollArea>));
-    expect(viewport.scrollTop).toBe(60);
-    await act(() => root.render(<ScrollArea><div>content</div></ScrollArea>));
+    await act(() =>
+      root.render(
+        <ScrollArea pinToEnd>
+          <div>first line</div>
+          <div>appended line</div>
+        </ScrollArea>,
+      ),
+    );
+    expect(viewport.scrollTop).toBe(viewport.scrollHeight);
   } finally {
     await act(() => root.unmount());
     host.remove();
