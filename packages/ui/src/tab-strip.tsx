@@ -163,7 +163,7 @@ const ZONE_INSET: Record<WindowPlatform, string> = {
 };
 
 /** The main column's navigation history, as the strip's trio reads it. */
-export interface HistoryControls {
+interface HistoryControls {
   readonly entries: readonly HistoryEntry[];
   readonly currentId: string | null;
   /** The wall clock the menu's relative times are measured against. */
@@ -175,7 +175,7 @@ export interface HistoryControls {
   readonly onJump: (id: string) => void;
 }
 
-export interface TabRecord {
+interface TabRecord {
   readonly id: string;
   readonly title: string;
   readonly icon: ReactNode;

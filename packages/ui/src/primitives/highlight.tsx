@@ -28,7 +28,7 @@ import type { TextTone } from "./surface";
  * scope entirely — the name is a row's own label, and `Text`'s `label` level is
  * what that means in this system. Pinned by packages/ui/test/primitives.test.tsx.
  */
-export interface HighlightRun {
+interface HighlightRun {
   readonly text: string;
   readonly matched: boolean;
 }

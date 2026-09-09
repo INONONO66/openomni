@@ -2,7 +2,7 @@ import { Button as BaseButton } from "@base-ui/react/button";
 import type { ReactNode } from "react";
 import { UI_NAMES } from "../names";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "plain";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "plain";
 
 /**
  * Variants are one plain class map: no cva, no runtime styling library. Base UI
@@ -40,7 +40,7 @@ const BASE = `focus-ring transition-quiet inline-flex shrink-0 items-center just
  * `md`, at the reference's measured 1.5px line (`glyph-stroke`). The 14px
  * glyphs of `sm` and `md` were not measured and keep lucide's own weight.
  */
-export type IconButtonSize = "xs" | "sm" | "base" | "md";
+type IconButtonSize = "xs" | "sm" | "base" | "md";
 
 /** Box and glyph per step; the glyph rule yields to an explicit `size-*` on the svg. */
 const ICON_SIZE: Record<IconButtonSize, string> = {

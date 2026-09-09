@@ -5,7 +5,9 @@
    types the chat adapter targets — and apps/desktop/test/ui-barrel.test.ts
    fails on any name here that the app does not import. */
 
-export { Console, ConsoleContent, type ConsoleShell, type ConsoleStrip } from "./console";
+export { Console, ConsoleContent } from "./console";
+export type ConsoleShell = import("./console").ConsoleShell;
+export type ConsoleStrip = import("./console").ConsoleStrip;
 export { relativeTime } from "./history-menu";
 export { Highlight } from "./primitives/highlight";
 export { Text } from "./primitives/surface";

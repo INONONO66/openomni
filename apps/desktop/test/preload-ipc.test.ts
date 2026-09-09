@@ -1,17 +1,14 @@
 import { afterAll, beforeEach, expect, mock, test } from "bun:test";
-import {
-  GATEWAY_CHANNEL,
-  SHELL_COMMAND_CHANNEL,
-  type DesktopApi,
-  type ShellCommand,
-} from "../src/preload/api";
+import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi } from "../src/preload/api";
+import type { ShellCommand } from "../src/preload/api";
 
-type Wrapper = (event: { readonly senderId: number }, command: ShellCommand) => void;
+type Wrapper = (event: { readonly senderId: number }, command: unknown) => void;
 const listeners = new Set<Wrapper>();
 const registered: { channel: string; wrapper: Wrapper }[] = [];
 const removed: { channel: string; wrapper: Wrapper }[] = [];
 const invoked: string[] = [];
 const exposed = new Map<string, DesktopApi>();
+let gatewayResult: object | undefined = { url: "ws://localhost:3000/ws" };
 
 mock.module("electron", () => ({
   contextBridge: {
@@ -28,7 +25,7 @@ mock.module("electron", () => ({
     },
     invoke: (channel: string) => {
       invoked.push(channel);
-      return Promise.resolve({ url: "ws://localhost:3000/ws" });
+      return Promise.resolve(gatewayResult);
     },
   },
 }));
@@ -37,13 +34,26 @@ mock.module("electron", () => ({
 // evaluates the same preload against a different electron double first in a
 // whole-suite run, and a cache hit would never call this file's exposeInMainWorld.
 const ownInstance: string = "../src/preload/index?preload-ipc";
-await import(ownInstance);
+const loaded: Promise<void> = import(ownInstance).then(() => undefined);
+await loaded;
 afterAll(() => mock.restore());
 beforeEach(() => {
+  gatewayResult = { url: "ws://localhost:3000/ws" };
   listeners.clear();
   registered.length = 0;
   removed.length = 0;
   invoked.length = 0;
+});
+
+test("gateway validates IPC replies and preserves absence", async () => {
+  gatewayResult = { url: 3 };
+  await expect(api().gateway()).rejects.toThrow();
+  gatewayResult = { url: "ws://localhost", token: 9 };
+  await expect(api().gateway()).rejects.toThrow();
+  gatewayResult = undefined;
+  expect(await api().gateway()).toBeUndefined();
+  gatewayResult = { url: "ws://localhost", token: "secret" };
+  expect(await api().gateway()).toEqual({ url: "ws://localhost", token: "secret" });
 });
 
 function api(): DesktopApi {
@@ -52,9 +62,17 @@ function api(): DesktopApi {
   return value;
 }
 
-function emit(command: ShellCommand): void {
+function emit(command: unknown): void {
   for (const wrapper of listeners) wrapper({ senderId: 27 }, command);
 }
+
+test("malformed commands are ignored without blocking valid delivery", () => {
+  const received: ShellCommand[] = [];
+  api().onShellCommand((command) => received.push(command));
+  expect(() => emit({ invalid: true })).not.toThrow();
+  emit("new-tab");
+  expect(received).toEqual(["new-tab"]);
+});
 
 test("bridge exposes only versions, gateway, and value-only command subscription", async () => {
   expect(Object.keys(api()).sort()).toEqual(["gateway", "onShellCommand", "versions"]);

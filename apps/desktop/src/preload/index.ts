@@ -1,15 +1,13 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import {
-  GATEWAY_CHANNEL,
-  SHELL_COMMAND_CHANNEL,
-  type DesktopApi,
-  type GatewayEndpoint,
-  type ShellCommand,
-} from "./api";
+import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi } from "./api";
+import { gatewayEndpointSchema, shellCommandSchema } from "./validation";
 
 const api: DesktopApi = {
   onShellCommand: (listener) => {
-    const wrapper = (_event: IpcRendererEvent, command: ShellCommand) => listener(command);
+    const wrapper = (_event: IpcRendererEvent, command: unknown) => {
+      const result = shellCommandSchema.safeParse(command);
+      if (result.success) listener(result.data);
+    };
     ipcRenderer.on(SHELL_COMMAND_CHANNEL, wrapper);
     return () => {
       ipcRenderer.removeListener(SHELL_COMMAND_CHANNEL, wrapper);
@@ -20,13 +18,7 @@ const api: DesktopApi = {
     chrome: process.versions.chrome ?? "",
     node: process.versions.node ?? "",
   },
-  /**
-   * One `invoke`, no cache. The main process answers from an environment that
-   * was read at boot, so this is cheap, and caching it here would put a second
-   * copy of the answer in the one process that is not allowed to have opinions
-   * about it.
-   */
-  gateway: () => ipcRenderer.invoke(GATEWAY_CHANNEL) as Promise<GatewayEndpoint | undefined>,
+  gateway: async () => gatewayEndpointSchema.parse(await ipcRenderer.invoke(GATEWAY_CHANNEL)),
 };
 
 contextBridge.exposeInMainWorld("desktop", api);

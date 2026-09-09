@@ -40,7 +40,6 @@
     "electron-vite": "^5.0.0",
     "happy-dom": "20.14.0",
     "oxc-transform-react": "^0.148.0",
-    "react-grep": "^0.3.3",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.2"
   }

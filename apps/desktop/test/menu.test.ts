@@ -22,12 +22,7 @@ const bindings: readonly (readonly [ShellCommand, string])[] = [
   ["select-tab-9", "CommandOrControl+9"],
 ];
 
-function flatten(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
-  return items.flatMap((item) => [
-    item,
-    ...(Array.isArray(item.submenu) ? flatten(item.submenu) : []),
-  ]);
-}
+import { flatten } from "./helpers/menu";
 
 function click(item: MenuItemConstructorOptions | undefined): void {
   if (!item?.click) throw new Error("Missing command callback");
@@ -78,9 +73,9 @@ for (const platform of ["darwin", "win32", "linux"] as const) {
         expect(roles).not.toContain("close");
         for (const id of ["file", "view"]) {
           const menu = template.find((item) => item.id === id);
-          expect(menu).toBeDefined();
-          expect(Array.isArray(menu?.submenu)).toBe(true);
-          expect(menu?.role).toBeUndefined();
+          if (!menu) throw new Error(`Missing menu: ${id}`);
+          expect(Array.isArray(menu.submenu)).toBe(true);
+          expect(menu.role).toBeUndefined();
         }
         const view = template.find((item) => item.id === "view");
         if (!Array.isArray(view?.submenu)) throw new Error("Missing explicit View");
