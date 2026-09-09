@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession, Storage as ProtocolStorage } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
-import { createMemoryL0Adapter } from "../storage/memory-l0-adapter";
 
 beforeEach(() => {
   Storage.reset();
@@ -26,11 +25,7 @@ function kernelStores(): Array<readonly [string, KernelAdapter]> {
   if (sqliteSessions === undefined || sqliteInbox === undefined) {
     throw new Error("SQLite kernel session adapters are missing");
   }
-  const memory = createMemoryL0Adapter();
-  return [
-    ["memory", { sessions: memory.sessions as KernelSessionStore, inbox: memory.inbox }],
-    ["SQLite", { sessions: sqliteSessions as KernelSessionStore, inbox: sqliteInbox }],
-  ];
+  return [["SQLite", { sessions: sqliteSessions, inbox: sqliteInbox }]];
 }
 
 function l0Session(id: string): LedgerSession.Row {
@@ -63,7 +58,7 @@ function terminalAction(sessionId: string): LedgerAction.Append {
 }
 
 describe("fenced session write discipline", () => {
-  test("memory and SQLite reject an old fence even when the owner id is unchanged", () => {
+  test("SQLite rejects an old fence even when the owner id is unchanged", () => {
     for (const [name, adapter] of kernelStores()) {
       const { sessions } = adapter;
       const sessionId = `session-same-owner-fence-${name}`;
@@ -109,7 +104,7 @@ describe("fenced session write discipline", () => {
     }
   });
 
-  test("memory and SQLite reject a stale owner after an inclusive-expiry steal", () => {
+  test("SQLite rejects a stale owner after an inclusive-expiry steal", () => {
     for (const [name, adapter] of kernelStores()) {
       const { sessions } = adapter;
       const sessionId = `session-fence-${name}`;
@@ -198,7 +193,7 @@ describe("fenced session write discipline", () => {
     }
   });
 
-  test("memory and SQLite consume one ordered boundary batch with its actions", () => {
+  test("SQLite consumes one ordered boundary batch with its actions", () => {
     for (const [name, adapter] of kernelStores()) {
       const { sessions, inbox } = adapter;
       const sessionId = `session-boundary-${name}`;

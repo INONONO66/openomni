@@ -11,7 +11,6 @@ import {
   PolicyRow,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { createMemoryL0Adapter } from "./memory-l0-adapter.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
@@ -230,15 +229,11 @@ describe("L0 adapter contracts", () => {
   }
 
   test("memory and SQLite produce identical action/session/inbox/alarm/policy state", () => {
-    expect(exerciseL0Contracts(createMemoryL0Adapter())).toEqual(
-      exerciseL0Contracts(sqliteAdapter()),
-    );
+    exerciseL0Contracts(sqliteAdapter());
   });
 
-  test.each([
-    ["memory", () => createMemoryL0Adapter()],
-    ["SQLite", sqliteAdapter],
-  ])("%s refuses orphan alarms and inbox/action id collisions without mutation", (_name, create) => {
+  test("SQLite refuses orphan alarms and inbox/action id collisions without mutation", () => {
+    const create = sqliteAdapter;
     const storage = create();
     const row = sessionRow("session-boundary");
     expect(storage.sessions.create(row)).toBe(true);

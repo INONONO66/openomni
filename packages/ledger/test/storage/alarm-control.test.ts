@@ -3,7 +3,6 @@ import { Database } from "bun:sqlite";
 import { Alarm, LedgerSession, L0Observation } from "@openomni/protocol";
 import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
-import { createMemoryL0Adapter } from "./memory-l0-adapter";
 
 const watchSpec = {
   encodingVersion: 1 as const,
@@ -15,23 +14,19 @@ const watchSpec = {
 };
 
 type Adapter = ReturnType<typeof createSqliteL0Adapters>;
-type Backend = "sqlite" | "memory";
 type Control = "cancel" | "rearm";
 type Kind = Alarm.Kind;
 type Status = Alarm.Status;
 
 /** One backend with an owner session and a capture of every committed action. */
-function openOwner(db: Database, backend: Backend) {
+function openOwner(db: Database) {
   const observations: L0Observation.ActionCommitted[] = [];
-  const adapter =
-    backend === "sqlite"
-      ? createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
-          publish(event, payload) {
-            if (event.name === L0Observation.ActionCommittedEvent.name)
-              observations.push(L0Observation.ActionCommitted.parse(payload));
-          },
-        })
-      : createMemoryL0Adapter();
+  const adapter = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
+    publish(event, payload) {
+      if (event.name === L0Observation.ActionCommittedEvent.name)
+        observations.push(L0Observation.ActionCommitted.parse(payload));
+    },
+  });
   adapter.sessions.create(
     LedgerSession.Row.parse({
       id: "owner",
@@ -130,26 +125,24 @@ function snapshot(
   };
 }
 
-for (const backend of ["sqlite", "memory"] as const) {
-  for (const op of ["cancel", "rearm"] as const) {
-    test(`${backend} alarm ${op} admits only the calling session's armed/paused watches`, () => {
-      using db = new Database(":memory:");
-      initializeSqliteDatabase(db);
-      const { adapter, observations } = openOwner(db, backend);
-      expect(adapter.alarms[op]("missing", "owner", 100)).toBeUndefined();
-      for (const { id, kind, status, sessionId, admitted } of cases) {
-        seedAlarm(adapter, id, kind, status);
-        const before = snapshot(adapter, observations, id);
-        const result = adapter.alarms[op](id, sessionId, 102);
-        if (admitted) {
-          expectTransition(op, before.fence, result);
-        } else {
-          expect(result).toBeUndefined();
-          expect(snapshot(adapter, observations, id)).toEqual(before);
-        }
+for (const op of ["cancel", "rearm"] as const) {
+  test(`SQLite alarm ${op} admits only the calling session's armed/paused watches`, () => {
+    using db = new Database(":memory:");
+    initializeSqliteDatabase(db);
+    const { adapter, observations } = openOwner(db);
+    expect(adapter.alarms[op]("missing", "owner", 100)).toBeUndefined();
+    for (const { id, kind, status, sessionId, admitted } of cases) {
+      seedAlarm(adapter, id, kind, status);
+      const before = snapshot(adapter, observations, id);
+      const result = adapter.alarms[op](id, sessionId, 102);
+      if (admitted) {
+        expectTransition(op, before.fence, result);
+      } else {
+        expect(result).toBeUndefined();
+        expect(snapshot(adapter, observations, id)).toEqual(before);
       }
-    });
-  }
+    }
+  });
 }
 
 function expectTransition(op: Control, fenceBefore: number, result: Alarm.Row | undefined) {

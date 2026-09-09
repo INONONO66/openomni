@@ -6,7 +6,6 @@ import { Bus } from "../helpers/observation";
 import { expectCommitted, requestFixture, requestStateAction } from "../helpers/request";
 import { materializeSession } from "../helpers/session";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
-import { createMemoryL0Adapter } from "../storage/memory-l0-adapter";
 
 function reply(): Inbox.Commit {
   return {
@@ -52,10 +51,9 @@ function openRequest() {
   return { ...fixture, transition };
 }
 
-describe.each(["memory", "sqlite"] as const)("%s canonical request deadline", (backend) => {
+describe("SQLite canonical request deadline", () => {
   beforeEach(() => {
-    if (backend === "memory") Storage.configure(createMemoryL0Adapter());
-    else Storage.initialize({ dbPath: ":memory:" });
+    Storage.initialize({ dbPath: ":memory:" });
   });
   afterEach(() => Storage.reset());
 

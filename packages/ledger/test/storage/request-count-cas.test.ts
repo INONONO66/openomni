@@ -4,14 +4,11 @@ import { SessionHandleStore, Storage } from "../../src/index";
 import { materializeSession } from "../helpers/session";
 import { expectCommitted, requestFixture, requestStateAction } from "../helpers/request";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
-import { createMemoryL0Adapter } from "./memory-l0-adapter";
-
-describe.each(["sqlite", "memory"] as const)("%s global request count CAS", (adapter) => {
+describe("SQLite global request count CAS", () => {
   let path: string;
   beforeEach(() => {
     path = tempDbPath("request-count-cas");
-    if (adapter === "sqlite") Storage.initialize({ dbPath: path });
-    else Storage.configure(createMemoryL0Adapter());
+    Storage.initialize({ dbPath: path });
   });
   afterEach(() => {
     Storage.reset();

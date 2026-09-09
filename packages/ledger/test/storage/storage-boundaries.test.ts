@@ -185,7 +185,107 @@ test("session commit savepoints roll back every refused write unit", () => {
   expect(
     SessionHandleStore.commit({ ...base, expectedRevision: 2, admit: duplicate }),
   ).toMatchObject({ reason: "inbox" });
+  const snapshot = SessionHandleStore.latestGeneration(SessionHandleStore.tree(session.id));
+  const admission = {
+    ...duplicate,
+    sessionId: "admitted-child",
+    sender: { sessionId: session.id, owner: "owner", fence: 1 },
+    limits: { fanout: 4, depth: 4 },
+    createSession: {
+      row: {
+        ...session,
+        id: "admitted-child",
+        parentId: session.id,
+        role: "worker" as const,
+        revision: 0,
+      },
+      initialAction: SessionHandleStore.configureAction({
+        id: "admitted-child:configure",
+        sessionId: "admitted-child",
+        parentId: null,
+        operation: "create",
+        snapshot,
+        at: 5,
+      }),
+    },
+  };
+  expect(
+    SessionHandleStore.commit({ ...base, expectedRevision: 2, admit: admission }),
+  ).toMatchObject({ reason: "inbox" });
+  expect(
+    SessionHandleStore.commit({
+      ...base,
+      expectedRevision: 2,
+      admit: { ...admission, id: "admitted-message" },
+    }),
+  ).toMatchObject({ ok: true });
+  expect(SessionHandleStore.row("admitted-child").revision).toBe(2);
   expect(SessionHandleStore.row(session.id).revision).toBe(2);
+});
+
+test("corrupt session ancestry fails closed before child admission", () => {
+  using db = openLedgerDatabase();
+  const stores = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
+    publish: () => undefined,
+  });
+  db.run("PRAGMA foreign_keys = OFF");
+  stores.sessions.create(
+    LedgerSession.Row.parse({
+      id: "orphan",
+      parentId: "missing",
+      role: "resident",
+      leaseOwner: "worker",
+      leaseFence: 1,
+      leaseExpiresAt: 100,
+      revision: 0,
+      state: "idle",
+    }),
+  );
+  db.run("PRAGMA foreign_keys = ON");
+  const snapshot = SessionHandleStore.generationSnapshot({
+    generation: 1,
+    revertTo: 0,
+    tools: [],
+    system: { preset: "", blocks: [] },
+    policyGeneration: 1,
+  });
+  expect(() =>
+    stores.inbox.commit({
+      id: "child-message",
+      sessionId: "child",
+      parentActionId: null,
+      kind: "prompt",
+      content: "work",
+      origin: { encodingVersion: 1, value: {} },
+      createdAt: 2,
+      sender: { sessionId: "orphan", owner: "worker", fence: 1 },
+      limits: { fanout: 4, depth: 4 },
+      createSession: {
+        row: {
+          id: "child",
+          parentId: "orphan",
+          role: "worker",
+          leaseOwner: null,
+          leaseFence: 0,
+          leaseExpiresAt: null,
+          revision: 0,
+          state: "idle",
+          toolsGeneration: 1,
+          systemHash: snapshot.systemHash,
+          policyGeneration: 1,
+        },
+        initialAction: SessionHandleStore.configureAction({
+          id: "child:configure",
+          sessionId: "child",
+          parentId: null,
+          operation: "create",
+          snapshot,
+          at: 2,
+        }),
+      },
+    }),
+  ).toThrow("session ancestry is missing");
+  expect(stores.sessions.get("child")).toBeUndefined();
 });
 
 test("external reply observations carry the persisted original message identity", () => {
