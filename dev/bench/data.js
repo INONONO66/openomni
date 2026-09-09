@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788888154974,
+  "lastUpdate": 1788927660542,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -68375,6 +68375,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 891217,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b5f8ac6bd27d129dd308fe8082cbec085c830a3",
+          "message": "ci: merge-group + nightly full tier, scoped PR quality (#1020)\n\n* ci: enable scoped PR quality and merge queue tier\n\n* test: type workflow contract assertion\n\n* docs: document CI rerun operations\n\n* ci: run quality fan-in when scripts-coverage is skipped\n\nA skipped need skips a dependent job unless its condition carries a\nstatus-check function, so the 'skipped' branch of the quality fan-in was\nunreachable on non-tooling pull requests and the ci gate would have failed.\nGuard with !cancelled() and require every other need explicitly; replace the\nthree stale 'pull requests skip quality' comments.\n\n* ci: type the workflow contract test with zod and keep the build-restore test's shape\n\n* ci: split ci.ts lane commands out of main so the touched file meets the complexity floors\n\n* ci: keep the cancel-in-progress assertion free of a template placeholder\n\n* ci: keep ci.ts at its minimal gate change; ci.ts complexity/coverage debt stays with #1018",
+          "timestamp": "2026-09-09T13:19:50+09:00",
+          "tree_id": "45e4408ce38b887a7de141262031d3aef3b22958",
+          "url": "https://github.com/INONONO66/openomni/commit/3b5f8ac6bd27d129dd308fe8082cbec085c830a3"
+        },
+        "date": 1788927659352,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 837,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 5916,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2875,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1334887,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 329791,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6732394,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 145,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1116,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 658,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 482510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3356,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18644,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 178180,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 901638,
             "unit": "ns/op"
           }
         ]
