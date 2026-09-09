@@ -7,10 +7,10 @@ import { attachMachineDaemon, createMachineHost, type MachineHandle } from "@ope
 import type { PlainValue } from "@openomni/protocol";
 import { createTools } from "../src/tools/core/catalog";
 import { parseLocus } from "../src/tools/locus";
-import { socketPath } from "../../../packages/machines/test/helpers/socket-path";
+import { socketPath } from "./helpers/socket-path";
 import { executor } from "./helpers/executor";
 
-const origin = { role: "resident", depth: 0, sessionId: "locus" } as const;
+const origin = { role: "resident", sessionId: "locus" } as const;
 const context = { sessionId: "locus", turnId: "turn" };
 
 describe("parseLocus", () => {

@@ -372,8 +372,8 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
   const directory = suite.tempDir("openomni-code-mode-failure-");
   const failure = new Error("U1_INJECTED_CELL_FAILURE");
   try {
-    await runWith({ role: "resident", depth: 0, sessionId: "failure-a" }, "1 + 1");
-    await runWith({ role: "resident", depth: 0, sessionId: "failure-b" }, "2 + 2");
+    await runWith({ role: "resident", sessionId: "failure-a" }, "1 + 1");
+    await runWith({ role: "resident", sessionId: "failure-b" }, "2 + 2");
     expect(witness.pids).toHaveLength(2);
     try {
       throw failure;
@@ -400,7 +400,7 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
   }
 }, 30_000);
 
-const CELL_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
+const CELL_ORIGIN: CatalogOrigin = { role: "resident", sessionId: "cell-e2e" };
 
 /**
  * A real host+daemon pair whose cells go through the production eval
@@ -448,8 +448,8 @@ async function startCellHarness(ports: CatalogPorts) {
 
 test("cells from different sessions never share interpreter state", async () => {
   const { runWith } = await startCellHarness({ llm: async () => "ok" });
-  const sessionA: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
-  const sessionB: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
+  const sessionA: CatalogOrigin = { role: "resident", sessionId: "session-a" };
+  const sessionB: CatalogOrigin = { role: "resident", sessionId: "session-b" };
 
   await runWith(sessionA, "shared = 'mine'\n'set'");
   const sameSession = await runWith(sessionA, "shared");

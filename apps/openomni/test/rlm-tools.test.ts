@@ -33,7 +33,7 @@ function scriptedLlmExecutor(result: Awaited<ReturnType<Executor["run"]>>): Exec
   };
 }
 
-const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
+const RESIDENT = { role: "resident", sessionId: "session-origin" } as const;
 
 describe("the completion tool", () => {
   it("returns the port's answer", async () => {

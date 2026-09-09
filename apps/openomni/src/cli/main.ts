@@ -11,7 +11,7 @@ import { type CliDeps, runCli } from "./commands";
 import { attachConfiguredMachine } from "./machine";
 import type { DaemonIo, DaemonTarget, ExecResult } from "./daemon";
 import { daemonActive, unitPath } from "./daemon";
-import { applyEnvFile, parseEnvFile, writeEnvFile } from "./env-file";
+import { applyEnvFile, mergeEnvFile, writeEnvFile } from "./env-file";
 import type { DoctorPorts } from "./doctor";
 import type { AskOptions } from "./onboard";
 
@@ -101,13 +101,10 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
 
   async function doctorPorts(): Promise<DoctorPorts> {
     const envFilePresent = existsSync(envPath);
-    const effectiveEnv = new Map<string, string>(
-      envFilePresent ? parseEnvFile(await Bun.file(envPath).text()) : [],
+    const effectiveEnv = mergeEnvFile(
+      envFilePresent ? await Bun.file(envPath).text() : "",
+      process.env,
     );
-    // A fully exported environment with no file is a supported shape.
-    for (const [key, value] of Object.entries(process.env)) {
-      if (key.startsWith("OPENOMNI_") && value !== undefined) effectiveEnv.set(key, value);
-    }
     const lingerEnabled = ((): boolean | undefined => {
       if (target.platform !== "linux") return undefined;
       const result = io.exec(["loginctl", "show-user", String(target.uid), "--property=Linger"]);

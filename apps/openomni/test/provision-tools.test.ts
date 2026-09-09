@@ -10,7 +10,7 @@ import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const NOW = 1_756_000_000_000;
-const RESIDENT = { role: "resident", depth: 0, sessionId: "provision-test" } as const;
+const RESIDENT = { role: "resident", sessionId: "provision-test" } as const;
 
 const provisionTool = (name: string, port: ProvisionPort, now: () => number = Date.now) => {
   const run = modelToolOutput("provision", { provisioning: port }, RESIDENT, now);

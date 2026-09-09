@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { toolInputSchema, toolSpec } from "@openomni/agent";
 import type { PlainValue } from "@openomni/protocol";
-import { collectToolSpecs, TOOL_DEFINITIONS } from "./catalog";
+import { collectToolSpecs, createTools, TOOL_DEFINITIONS, type CatalogPorts } from "./catalog";
 
 /** KERNEL §3.4/§3.5: the sealed model door, in catalog order, then the one cell-only tool. */
 const MODEL_DOOR = [
@@ -73,6 +73,20 @@ function operationOps(name: string): readonly string[] {
 }
 
 describe("tool catalog", () => {
+  it("reuses immutable role catalogs and binds only their own ports", async () => {
+    const origin = { role: "resident", sessionId: "catalog-test" } as const;
+    const ports: CatalogPorts = { llm: async ({ prompt }) => `first:${prompt}` };
+    const first = createTools(ports, origin);
+    expect(createTools(ports, { ...origin, sessionId: "other" })).toBe(first);
+    const worker = createTools(ports, { ...origin, role: "worker" });
+    expect(worker.some((tool) => tool.name === "provision")).toBe(false);
+    expect(worker.find((tool) => tool.name === "read")).toBe(first.find((tool) => tool.name === "read"));
+    const replacement = createTools({ llm: async ({ prompt }) => `second:${prompt}` }, origin);
+    expect(replacement).not.toBe(first);
+    expect(replacement.find((tool) => tool.name === "completion")).not.toBe(
+      first.find((tool) => tool.name === "completion"),
+    );
+  });
   it("is sealed at eleven model-door tools plus the cell-only completion", () => {
     expect(TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual([...MODEL_DOOR, ...CELL_ONLY]);
     expect(collectToolSpecs().map((tool) => tool.name)).toEqual([...MODEL_DOOR, ...CELL_ONLY]);
