@@ -4,6 +4,10 @@ import { APIError } from "../../src/error";
 export type APIErrorInput = ConstructorParameters<typeof APIError>[0];
 export const apiError = (input: APIErrorInput) => new APIError(input);
 
+export function sdkError(fields: APIErrorInput): Error & APIErrorInput {
+  return Object.assign(new Error(fields.message), { name: "AI_APICallError" }, fields);
+}
+
 export function rateLimitError(headers?: Record<string, string>) {
   return apiError({
     message: "rate limited",
