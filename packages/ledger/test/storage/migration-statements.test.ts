@@ -21,20 +21,20 @@ test("migration runner preserves quoted semicolons, comments and nested CASE in 
   using db = new Database(":memory:");
   apply(
     db,
-    "
+    `
     -- ignored ; CREATE TRIGGER
-    CREATE TABLE \"source;table\" ([value;column] TEXT);
+    CREATE TABLE "source;table" ([value;column] TEXT);
     CREATE TABLE output (value TEXT);
     /* semicolon ; and BEGIN END */
-    create temporary trigger quoted after insert on \"source;table\"
+    create temporary trigger quoted after insert on "source;table"
     begin
       INSERT INTO output VALUES (CASE WHEN NEW.[value;column] = 'it''s;ok' THEN 'first;value' ELSE 'wrong' END);
       INSERT INTO output VALUES ('second;value');
     end;
-    INSERT INTO \"source;table\" VALUES ('it''s;ok');
-    CREATE TABLE `back;tick` (id TEXT);
-    INSERT INTO `back;tick` VALUES ('last')
-  ",
+    INSERT INTO "source;table" VALUES ('it''s;ok');
+    CREATE TABLE \`back;tick\` (id TEXT);
+    INSERT INTO \`back;tick\` VALUES ('last')
+  `,
   );
   expect(db.query("SELECT value FROM output ORDER BY rowid").all()).toEqual([
     { value: "first;value" },

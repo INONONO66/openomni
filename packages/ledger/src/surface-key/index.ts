@@ -1,14 +1,6 @@
 /**
- * SurfaceKey store: N:1 mapping from surface-specific keys to session IDs.
- * Provides bidirectional lookup for routing events to sessions.
- *
- * Storage semantics only — the pure string codec (parse/fromChannel/create
- * and the key-format documentation) lives in the protocol adapter domain
- * (`Channel.SurfaceKey`, #499 precursor); this store imports it for format
- * validation.
- *
- * Storage: uses Storage.Adapter.surfaceKey (SQLite); a missing sub-adapter
- * fails closed — routing must never fabricate ownership answers (#522).
+ * Persisted N:1 surface-key/session mapping with compare-and-set claims.
+ * Protocol owns key validation. Missing storage fails closed; mapping does not authorize routing.
  */
 
 import { Channel } from "@openomni/protocol";

@@ -74,20 +74,10 @@ export namespace Storage {
     "policies",
   ] as const satisfies readonly (keyof Adapter)[];
 
-  export type ProductionCapability = (typeof requiredProductionCapabilities)[number];
-
-  export function publishObservation<T>(event: BusEvent.Descriptor<T>, data: T): void {
-    try {
-      Storage.get().observationSink?.publish(event, data);
-    } catch {
-      // Observations are lossy and cannot alter a committed product result.
-    }
-  }
-
   class IncompleteAdapterError extends Error {
     readonly code = "incomplete_adapter" as const;
 
-    constructor(readonly capability: ProductionCapability) {
+    constructor(readonly capability: (typeof requiredProductionCapabilities)[number]) {
       super(`Production storage adapter is missing required capability: ${capability}`);
       this.name = "IncompleteAdapterError";
     }

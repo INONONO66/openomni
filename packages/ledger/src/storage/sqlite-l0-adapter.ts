@@ -6,7 +6,7 @@ import { createInbox } from "./sqlite-l0-inbox";
 import { createAlarms } from "./sqlite-l0-alarms";
 import { createPolicies } from "./sqlite-l0-policies";
 
-export interface SqliteL0Adapters {
+interface SqliteL0Adapters {
   sessions: ProtocolStorage.SessionLedgerSubAdapter;
   actions: ProtocolStorage.ActionSubAdapter;
   inbox: ProtocolStorage.InboxSubAdapter;

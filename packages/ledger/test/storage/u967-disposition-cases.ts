@@ -55,16 +55,6 @@ describe("967 WAL rollback crash and resumability", () => {
         stderr: "pipe",
         timeout: 10_000,
       });
-      console.log(
-        JSON.stringify({
-          mode,
-          boundary,
-          exit: result.exitCode,
-          signal: result.signalCode,
-          stdout: result.stdout.toString(),
-          stderr: result.stderr.toString(),
-        }),
-      );
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout.toString()).toContain(`"boundary":"${boundary}"`);
       if (boundary !== "after_commit") expect(snapshotDatabase(fixture.db)).toEqual(before);
@@ -103,9 +93,6 @@ describe("967 WAL rollback crash and resumability", () => {
       stderr: "pipe",
       timeout: 10_000,
     });
-    console.log(
-      JSON.stringify({ rollbackFailure: result.stderr.toString(), exit: result.exitCode }),
-    );
     expect(result.exitCode).toBe(1);
     expect(result.stderr.toString()).toContain("injected_rollback_failure");
     expect(snapshotDatabase(fixture.db)).toEqual(before);
@@ -142,13 +129,6 @@ describe("967 WAL rollback crash and resumability", () => {
         ],
         { stdout: "pipe", stderr: "pipe", timeout: 5_000 },
       );
-      console.log(
-        JSON.stringify({
-          signal,
-          contenderExit: writer.exitCode,
-          contenderError: writer.stderr.toString(),
-        }),
-      );
       expect(writer.exitCode).toBe(1);
       expect(writer.stderr.toString()).toContain("database is locked");
       const errors = new Response(child.stderr).text();
@@ -160,7 +140,7 @@ describe("967 WAL rollback crash and resumability", () => {
         signal += decoder.decode(chunk.value, { stream: true });
       }
       expect(await child.exited).toBe(0);
-      console.log(JSON.stringify({ exit: child.exitCode, stdout: signal, stderr: await errors }));
+      expect(await errors).toBe("");
     } finally {
       reader.releaseLock();
       if (child.exitCode === null) child.kill();

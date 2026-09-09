@@ -17,7 +17,7 @@ export const LEASE_TTL_MS = 30_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const RESUME_BUDGET = 10;
 
-export interface MaterializeInput {
+interface MaterializeInput {
   readonly id: string;
   readonly parentId: string | null;
   readonly role: LedgerSession.Role;

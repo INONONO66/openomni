@@ -10,12 +10,7 @@ function requireAdapter(): NonNullable<Storage.Adapter["actorRegistry"]> {
 }
 
 export namespace ActorRegistry {
-  /**
-   * Presence probe (#707 S8 review fix): the gateway router's actor
-   * resolver keeps its legacy pass-through when no registry sub-adapter is
-   * configured (test fakes) — probed through THIS surface instead of the
-   * master Storage entry, so the router never names Storage at all.
-   */
+  /** Whether the configured storage adapter provides the actor registry. */
   export function isConfigured(): boolean {
     return Storage.get().actorRegistry !== undefined;
   }

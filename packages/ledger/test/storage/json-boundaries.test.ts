@@ -24,7 +24,7 @@ test("actor endpoint filters distinguish no filter from the empty workspace", ()
   using db = openLedgerDatabase();
   const store = createSqliteActorRegistryAdapter(db);
   for (const id of ["a", "b"])
-    store.setIdentity(Actor.Identity.parse({ id, kind: "human", trustTier: "stranger" }));
+    store.setIdentity(Actor.Identity.parse({ id, kind: "human", trustTier: "observer" }));
   for (const [id, actorId, workspace] of [
     ["1", "a", ""],
     ["2", "a", "guild"],
@@ -34,7 +34,7 @@ test("actor endpoint filters distinguish no filter from the empty workspace", ()
       Actor.Endpoint.parse({
         id,
         actorId,
-        workspace,
+        workspace: workspace || undefined,
         channel: "discord",
         externalId: id,
         createdAt: 1,
@@ -56,7 +56,7 @@ test("actor endpoint filters distinguish no filter from the empty workspace", ()
 test("action reads validate scalar driver columns and JSON before replay", () => {
   using db = openLedgerDatabase();
   const store = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
-    publish() {},
+    publish: () => undefined,
   });
   store.sessions.create(
     LedgerSession.Row.parse({

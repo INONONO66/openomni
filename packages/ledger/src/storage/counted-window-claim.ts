@@ -1,5 +1,3 @@
-export type CountedWindowClaimResult = "claimed" | "refused";
-
 /**
  * Atomically claims one item against a counted window.
  *
@@ -13,7 +11,7 @@ export function claimWithinCountedWindow<State>(operations: {
   readWindowState(): State;
   canClaim(state: State): boolean;
   append(): void;
-}): CountedWindowClaimResult {
+}): "claimed" | "refused" {
   return operations.transaction(() => {
     if (operations.alreadyClaimed()) return "claimed";
     const state = operations.readWindowState();

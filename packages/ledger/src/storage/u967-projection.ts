@@ -97,7 +97,7 @@ function validReplies(record: HistoricalRecord): boolean {
   return true;
 }
 
-function validTerminalState(record: HistoricalRecord): boolean {
+function validResolvedState(record: HistoricalRecord): boolean {
   const responders = new Set(record.replies.map((reply) => reply.responderId)).size;
   const resolvedAt = record.resolvedAt;
   const resolvedResponders =
@@ -112,6 +112,19 @@ function validTerminalState(record: HistoricalRecord): boolean {
     record.resolutionPolicy === "all"
       ? record.expectedResponders.length
       : (record.quorum?.threshold ?? 1);
+  return (
+    record.revision > 0 &&
+    record.resolvedAt !== undefined &&
+    record.cancelledAt === undefined &&
+    record.resolvedAt >= record.createdAt &&
+    record.resolvedAt <= record.updatedAt &&
+    record.resolvedAt + record.followUpWindow <= Number.MAX_SAFE_INTEGER &&
+    resolvedResponders >= threshold &&
+    !record.partial
+  );
+}
+
+function validTerminalState(record: HistoricalRecord): boolean {
   switch (record.status) {
     case "open":
       return record.resolvedAt === undefined && record.cancelledAt === undefined && !record.partial;
@@ -133,16 +146,7 @@ function validTerminalState(record: HistoricalRecord): boolean {
         record.partial === record.replies.length > 0
       );
     case "resolved":
-      return (
-        record.revision > 0 &&
-        record.resolvedAt !== undefined &&
-        record.cancelledAt === undefined &&
-        record.resolvedAt >= record.createdAt &&
-        record.resolvedAt <= record.updatedAt &&
-        record.resolvedAt + record.followUpWindow <= Number.MAX_SAFE_INTEGER &&
-        resolvedResponders >= threshold &&
-        !record.partial
-      );
+      return validResolvedState(record);
   }
 }
 

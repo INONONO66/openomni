@@ -75,7 +75,7 @@ export namespace Vault {
    * deliberate exit; string coercion, JSON serialization, and util.inspect
    * (console.log / telemetry dumps) all print `[redacted]`.
    */
-  export class Revealed {
+  class Revealed {
     readonly #value: Uint8Array;
 
     constructor(value: Uint8Array) {
