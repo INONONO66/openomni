@@ -1,4 +1,4 @@
-import type { Message, Transcript } from "@openomni/protocol";
+import { PlainObjectSchema, type Message, type Transcript } from "@openomni/protocol";
 import { stringifyToolOutput } from "../message";
 import type { StreamEvent, StreamEventState, StreamEventContext } from "./stream-events";
 
@@ -34,8 +34,9 @@ export function handleToolCall(
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
-  // ai v6 tool-call chunks carry `input`; the v4 `args` leg fed only tests.
-  const input = (event.input as Record<string, unknown>) || {};
+  // ai v6 tool-call chunks carry `input`: the model's arguments, one JSON
+  // object, parsed here because this is where provider bytes become a fact.
+  const input = PlainObjectSchema.parse(event.input ?? {});
   const callID = String(event.toolCallId);
   state.visibleOutput = true;
   // A tool call is billed assistant output too: the model emitted the name and

@@ -1,5 +1,6 @@
 export * from "./error/index.js";
 export { canonicalDigest, canonicalKey, isPlainValue, PlainValueSchema } from "./json.js";
+export { PlainObjectSchema } from "./json.js";
 export type { PlainObject, PlainValue } from "./json.js";
 export type { Clock, EntropySource, IdSource } from "./platform.js";
 export * from "./tool/index.js";

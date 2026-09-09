@@ -1,6 +1,12 @@
-import { Provider, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
-import { Machine, type Message, type Model } from "@openomni/protocol";
-import { Bus, newTraceId, currentExecutor } from "@openomni/agent";
+import { Provider, run as llmRun, type Run, type RunInput, type Sink } from "@openomni/llm";
+import {
+  Machine,
+  type Message,
+  type Model,
+  type PlainObject,
+  type PlainValue,
+} from "@openomni/protocol";
+import { Bus, newTraceId, currentExecutor, type Executor } from "@openomni/agent";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "@openomni/agent";
 
@@ -66,12 +72,7 @@ function executeCompletion(llm: LlmPort | undefined) {
       );
     }
     calls += 1;
-    const system = [
-      input.system,
-      input.schema === undefined ? undefined : schemaInstruction(input.schema),
-    ]
-      .filter((part): part is string => part !== undefined)
-      .join("\n\n");
+    const system = systemText(input);
     const answer = await llm({
       prompt: input.prompt,
       ...(system === "" ? {} : { system }),
@@ -79,6 +80,14 @@ function executeCompletion(llm: LlmPort | undefined) {
     });
     return input.schema === undefined ? answer : conform(answer, input.schema);
   };
+}
+
+/** The sub-model's system text: the cell's own system text, then the schema instruction when a schema is given. */
+function systemText(input: z.output<typeof Input>): string {
+  const parts: string[] = [];
+  if (input.system !== undefined) parts.push(input.system);
+  if (input.schema !== undefined) parts.push(schemaInstruction(input.schema));
+  return parts.join("\n\n");
 }
 
 /** Cell-only: batching is the cell's `parallel()`, so the input is one prompt. */
@@ -128,83 +137,100 @@ interface ResolvedTextCall {
   readonly sessionId: string;
   readonly signal?: AbortSignal;
   readonly maxTokens?: number;
-  readonly providerOptions?: Record<string, unknown>;
+  readonly providerOptions?: PlainObject;
 }
 
-/** Shared resolved-model, credential, transport, and text-capture path for app-owned one-shot calls. */
-export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): Promise<string> {
+/** Collects the assistant's text as the run streams; tool activity is inert on a toolless step. */
+function textCapture(): { readonly sink: Sink; readonly text: () => string } {
   let answer = "";
   const sink: Sink = {
     onMessage: (message) => {
       if (message.info.role !== "assistant") return;
-      answer = message.parts
-        .filter((part): part is Message.TextPart => part.type === "text")
-        .map((part) => part.text)
-        .join("");
+      answer = message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("");
     },
     onToolCall: () => undefined,
     onToolResult: () => undefined,
   };
+  return { sink, text: () => answer };
+}
+
+/** The run fields a call may leave out; absent stays absent (exact optional properties). */
+function optionalRunFields(
+  call: ResolvedTextCall,
+): Pick<RunInput, "system" | "transport" | "signal" | "maxTokens" | "providerOptions"> {
+  return {
+    ...(call.system === undefined ? {} : { system: call.system }),
+    ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),
+    ...(call.signal === undefined ? {} : { signal: call.signal }),
+    ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
+    ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
+  };
+}
+
+/** A stopped step yields the captured text; every other outcome is the failure it names. */
+function textOutcome(outcome: Run.Outcome, text: string): { readonly text: string } {
+  if (outcome.type === "stop") return { text };
+  if (outcome.type === "error") throw outcome.error;
+  if (outcome.type === "aborted") throw new DOMException("sub-model aborted", "AbortError");
+  throw new Error("sub-model returned continue");
+}
+
+/** The executed value must be the `{ text }` record `textOutcome` produced; anything else is a broken executor. */
+function executedText(value: PlainValue): string {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("invalid sub-model result");
+  }
+  const text = value.text;
+  if (typeof text !== "string") throw new Error("invalid sub-model result");
+  return text;
+}
+
+/** One llm/text operation under the session's attempt authority; the admission re-checks the caller's signal. */
+function admittedTextRun(
+  call: ResolvedTextCall,
+  resolved: Provider.Model,
+  body: () => Promise<{ readonly text: string }>,
+): ReturnType<Executor["run"]> {
+  const executor = currentExecutor();
+  const runAttempts = executor.runAttempts;
+  if (runAttempts === undefined) throw new Error("sub-model requires session attempt authority");
+  const intent = { provider: resolved.providerID, model: resolved.id };
+  return executor.run({ kind: "llm", op: "text", intent, effect: {} }, (parent) =>
+    runAttempts(parent, {
+      prepare: async (attempt) => ({
+        request: { op: "text", intent: { attempt, ...intent }, effect: {} },
+        admit: async () => {
+          call.signal?.throwIfAborted();
+        },
+        body,
+      }),
+    }),
+  );
+}
+
+/** Shared resolved-model, credential, transport, and text-capture path for app-owned one-shot calls. */
+export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): Promise<string> {
+  const capture = textCapture();
   const ref: Model.Ref = { provider: call.model.provider, id: call.model.id };
   const resolved = await (io.resolveModel ?? Provider.resolveModel)(ref);
   const input: RunInput = {
     messages: call.messages,
-    ...(call.system === undefined ? {} : { system: call.system }),
     tools: [],
     toolChoice: "none",
     maxSteps: 1,
     model: resolved,
     auth: { type: "api", key: call.model.apiKey },
     authProvider: call.model.provider,
-    ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),
-    ...(call.signal === undefined ? {} : { signal: call.signal }),
-    ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
-    ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
+    ...optionalRunFields(call),
     trace: { traceId: newTraceId(), sessionId: call.sessionId, runId: crypto.randomUUID() },
     events: Bus,
   };
-  const invoke = async () => {
-    const outcome = await (io.run ?? llmRun)(input, sink);
-    if (outcome.type === "stop") return { text: answer };
-    if (outcome.type === "error") throw outcome.error;
-    if (outcome.type === "aborted") throw new DOMException("sub-model aborted", "AbortError");
-    throw new Error("sub-model returned continue");
-  };
-  const executor = currentExecutor();
-  const runAttempts = executor.runAttempts;
-  if (runAttempts === undefined) throw new Error("sub-model requires session attempt authority");
-  const result = await executor.run(
-    {
-      kind: "llm",
-      op: "text",
-      intent: { provider: resolved.providerID, model: resolved.id },
-      effect: {},
-    },
-    (parent) =>
-      runAttempts(parent, {
-        prepare: async (attempt) => ({
-          request: {
-            op: "text",
-            intent: { attempt, provider: resolved.providerID, model: resolved.id },
-            effect: {},
-          },
-          admit: async () => {
-            call.signal?.throwIfAborted();
-          },
-          body: invoke,
-        }),
-      }),
+  const run = io.run ?? llmRun;
+  const result = await admittedTextRun(call, resolved, async () =>
+    textOutcome(await run(input, capture.sink), capture.text()),
   );
   if (result.terminal !== "executed") throw new Error(`sub-model refused: ${result.reason}`);
-  const value = result.value;
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    typeof value.text !== "string"
-  )
-    throw new Error("invalid sub-model result");
-  return value.text;
+  return executedText(result.value);
 }
 
 export function createCompletionPort(model: ResolvedModel, io: LlmIo = {}): LlmPort {

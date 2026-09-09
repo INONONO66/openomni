@@ -97,6 +97,15 @@ export const PlainValueSchema: z.ZodType<PlainValue, PlainValue> = z.custom<Plai
   { message: "Expected a plain JSON value" },
 );
 
+/** The persisted-fact profile narrowed to one JSON object: tool arguments and other record-shaped facts. */
+export const PlainObjectSchema: z.ZodType<PlainObject, PlainValue> = PlainValueSchema.transform(
+  (value, context) => {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) return value;
+    context.addIssue({ code: "custom", message: "Expected a plain JSON object" });
+    return z.NEVER;
+  },
+);
+
 function renderCanonical(value: unknown): string {
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";

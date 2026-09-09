@@ -1,4 +1,4 @@
-import type { BusEvent, Message, Tool } from "@openomni/protocol";
+import type { BusEvent, Message, PlainObject, Tool } from "@openomni/protocol";
 import { LlmCall, Operational, type Transcript } from "@openomni/protocol";
 import { z } from "zod";
 import type { Sink } from "./sink";
@@ -55,7 +55,8 @@ export interface RunInput {
    * the message finishes with the model's own finishReason. Absent = never.
    */
   shouldYield?: () => boolean;
-  providerOptions?: Record<string, unknown>;
+  /** Provider namespaces forwarded verbatim to the SDK; the shape is the provider's, the values are JSON. */
+  providerOptions?: PlainObject;
   /**
    * The run this call belongs to. Required, and not defaulted: a model round
    * trip that cannot name its run and session produces an assistant message

@@ -14,7 +14,13 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { alarmAppend, alarmOccurrence, inboxAppend } from "./l0-action-builders.js";
+import {
+  alarmAppend,
+  alarmFired,
+  alarmOccurrence,
+  alarmPrompt,
+  inboxAppend,
+} from "./l0-action-builders.js";
 
 const actionRowSchema = LedgerAction.Node;
 const inboxRowSchema = Inbox.Row;
@@ -988,40 +994,10 @@ function fireAlarm(db: Database, input: Alarm.Fire): Alarm.Fired | undefined {
   if (row === undefined || occurrence === undefined) return undefined;
   const session = selectSession(db, row.sessionId);
   if (session === undefined) return undefined;
-  const { status, content, terminal } = occurrence;
-  const fired = appendAction(
-    db,
-    {
-      id: occurrence.actionId,
-      parentId: row.id,
-      sessionId: row.sessionId,
-      kind: status === "paused" ? "alarm.paused" : "alarm.fired",
-      intent: {
-        encodingVersion: 1,
-        value: {
-          alarmId: row.id,
-          epoch: row.epoch,
-          fence: row.fence,
-          sourceKey: input.sourceKey,
-          inboxId: occurrence.inboxId,
-        },
-      },
-      effect: { encodingVersion: 1, value: { status, content } },
-      irreversible: true,
-      ts: input.at,
-    },
-    session.revision,
-  );
+  const { status, terminal } = occurrence;
+  const fired = appendAction(db, alarmFired(row, input, occurrence), session.revision);
   if (fired === undefined) return undefined;
-  const pending: Inbox.Commit = {
-    id: occurrence.inboxId,
-    sessionId: row.sessionId,
-    kind: "prompt",
-    content,
-    origin: { encodingVersion: 1, value: row.id },
-    createdAt: input.at,
-    parentActionId: fired.action.id,
-  };
+  const pending = alarmPrompt(row, input, occurrence);
   const prompt = appendAction(db, inboxAppend(pending), fired.revision);
   if (prompt === undefined) throw new Error("alarm prompt append refused");
   const inbox = insertInbox(db, pending);

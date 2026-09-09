@@ -12,6 +12,17 @@ const mandatoryPolicyRow: PolicyRow.Row = {
   generation: 1,
 };
 
+/** Every write needs the owner's approval before it runs. */
+export const approveWriteRow: PolicyRow.Row = {
+  name: "approve-write",
+  kind: "tool",
+  phase: "pre",
+  match: { encodingVersion: 1, value: { op: "write" } },
+  verdict: { encodingVersion: 1, value: { type: "require_approval", reason: "owner" } },
+  priority: 1,
+  generation: 1,
+};
+
 /** A compiled test policy with the mandatory row plus the supplied behavior rows. */
 export function compiledPolicy(rows: readonly PolicyRow.Row[] = []): CompiledPolicySnapshot {
   return compilePolicySnapshot({

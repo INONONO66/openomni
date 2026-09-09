@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { seedPolicy } from "./helpers/seed-policy";
+import { boundedBy } from "./helpers/bounded";
 import {
   closeSessions,
   session,
@@ -16,13 +18,13 @@ import {
   L0Observation,
   PlainValueSchema,
   type ObservationSink,
-  type PolicyRow,
   type SessionGeneration,
   type SessionTurn,
 } from "@openomni/protocol";
 import { Bus, SEEDED_POLICY_ROWS } from "../src/index";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
+const bounded = boundedBy(SIGNAL_TIMEOUT_MS);
 
 interface Signal<T> {
   readonly promise: Promise<T>;
@@ -35,21 +37,6 @@ function signal<T>(): Signal<T> {
     resolvePromise = resolve;
   });
   return { promise, resolve: resolvePromise };
-}
-
-async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`timed out waiting for ${label}`)),
-      SIGNAL_TIMEOUT_MS,
-    );
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }
 
 class TestObservationSink implements ObservationSink {
@@ -133,12 +120,6 @@ function policyGeneration(action: LedgerAction.Node): number | undefined {
   const value = action.intent.value;
   if (value === null || Array.isArray(value) || typeof value !== "object") return undefined;
   return typeof value.generation === "number" ? value.generation : undefined;
-}
-
-function seedPolicy(rows: readonly Omit<PolicyRow.Row, "generation">[]): void {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
 }
 
 function commitOpenTurn(input: {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
-import { createDispatcher, toolSpec } from "@openomni/agent";
+import { createDispatcher, toolSpec, type Executor } from "@openomni/agent";
 import { createCompletionPort as completionPort } from "../src/tools/completion";
 import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
 
@@ -16,11 +16,21 @@ const COMPLETION_TOOL_NAME = "completion";
 const MAX_COMPLETION_CALLS = 32;
 
 import { admittedOperation } from "./helpers/admitted-operation";
+import { executor as productionExecutor } from "./helpers/executor";
 
 function createCompletionPort(...args: Parameters<typeof completionPort>) {
   const port = completionPort(...args);
   return (call: string | Parameters<typeof port>[0]) =>
     admittedOperation(() => port(typeof call === "string" ? { prompt: call } : call));
+}
+
+/** The production executor with the llm/text operation's result scripted; tool operations stay real. */
+function scriptedLlmExecutor(result: Awaited<ReturnType<Executor["run"]>>): Executor {
+  return {
+    ...productionExecutor,
+    run: (request, body) =>
+      request.kind === "llm" ? Promise.resolve(result) : productionExecutor.run(request, body),
+  };
 }
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -82,14 +92,12 @@ describe("the completion tool", () => {
       output: '{"n":7}',
     });
     expect(seen[0]).toMatchObject({ prompt: "count", model: "mini" });
-    expect(seen[0]?.system?.startsWith("terse\n\n")).toBe(true);
+    expect(seen[0]?.system).toStartWith("terse\n\n");
     expect(seen[0]?.system).toContain(JSON.stringify(schema));
     for (const message of ["does not satisfy the schema", "is not JSON"]) {
-      expect(await run({ prompt: "count", schema })).toMatchObject({
-        isError: true,
-        errorKind: "precondition_failed",
-        output: expect.stringContaining(message),
-      });
+      const result = await run({ prompt: "count", schema });
+      expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+      expect(result.output).toContain(message);
     }
     expect(seen).toHaveLength(3);
     // Without a schema nothing is added to the system text and nothing is parsed.
@@ -210,47 +218,49 @@ describe("the completion port", () => {
     providerID: model.provider,
   });
 
-  it("runs one toolless step under its own trace and returns the assistant text", async () => {
-    let seen: RunInput | undefined;
+  /** A completion port whose run records its input and answers with the given text. */
+  function recordingPort(text: string) {
+    const inputs: RunInput[] = [];
     const port = createCompletionPort(MODEL, {
       resolveModel,
       run: async (input, sink) => {
-        seen = input;
-        sink.onMessage(assistantMessage(input, { id: "sub-reply", text: "the answer" }));
+        inputs.push(input);
+        sink.onMessage(assistantMessage(input, { id: "sub-reply", text }));
         return { type: "stop" };
       },
     });
+    const input = (): RunInput => {
+      const [first] = inputs;
+      if (first === undefined) throw new Error("the port never ran");
+      return first;
+    };
+    return { port, input };
+  }
 
+  it("runs one toolless step under its own trace and returns the assistant text", async () => {
+    const { port, input } = recordingPort("the answer");
     expect(await port("summarize")).toBe("the answer");
-    expect(seen?.tools).toEqual([]);
-    expect(seen?.maxSteps).toBe(1);
-    expect(seen?.auth).toEqual({ type: "api", key: "port-key" });
-    expect(seen?.model).toMatchObject({ id: "port-test", providerID: "fake" });
+    const seen = input();
+    expect(seen.tools).toEqual([]);
+    expect(seen.maxSteps).toBe(1);
+    expect(seen.auth).toEqual({ type: "api", key: "port-key" });
+    expect(seen.model).toMatchObject({ id: "port-test", providerID: "fake" });
     // A nested run must never borrow the turn's identity: the trace is its own.
-    expect(seen?.trace.sessionId).toBe("completion");
-    const parts = seen?.messages[0]?.parts ?? [];
-    expect(parts[0]).toMatchObject({ type: "text", text: "summarize" });
+    expect(seen.trace.sessionId).toBe("completion");
+    expect(seen.messages[0]?.parts[0]).toMatchObject({ type: "text", text: "summarize" });
   });
 
   it("carries a system text and a model id override on the configured provider", async () => {
-    let seen: RunInput | undefined;
-    const port = createCompletionPort(MODEL, {
-      resolveModel,
-      run: async (input, sink) => {
-        seen = input;
-        sink.onMessage(assistantMessage(input, { id: "sub-reply", text: "shaped" }));
-        return { type: "stop" };
-      },
-    });
-
+    const { port, input } = recordingPort("shaped");
     expect(await port({ prompt: "shape it", system: "answer as JSON", model: "port-mini" })).toBe(
       "shaped",
     );
-    expect(seen?.system).toBe("answer as JSON");
-    expect(seen?.model).toMatchObject({ id: "port-mini", providerID: "fake" });
+    const seen = input();
+    expect(seen.system).toBe("answer as JSON");
+    expect(seen.model).toMatchObject({ id: "port-mini", providerID: "fake" });
     // The override never changes whose credential is used.
-    expect(seen?.auth).toEqual({ type: "api", key: "port-key" });
-    expect(seen?.messages[0]?.info).toMatchObject({
+    expect(seen.auth).toEqual({ type: "api", key: "port-key" });
+    expect(seen.messages[0]?.info).toMatchObject({
       role: "user",
       model: { providerID: "fake", modelID: "port-mini" },
     });
@@ -289,6 +299,54 @@ describe("the completion port", () => {
     });
 
     await expect(port("q")).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("rejects a run that asks to continue: a one-step toolless call has nothing to continue", async () => {
+    const port = createCompletionPort(MODEL, {
+      resolveModel,
+      run: async () => ({ type: "continue" }),
+    });
+
+    await expect(port("q")).rejects.toThrow("sub-model returned continue");
+  });
+
+  it("refuses without the session's attempt authority instead of running unrecorded", async () => {
+    let invoked = 0;
+    const port = completionPort(MODEL, {
+      resolveModel,
+      run: async () => {
+        invoked += 1;
+        return { type: "stop" };
+      },
+    });
+    const withoutAttempts: Executor = {
+      run: (request, body) => productionExecutor.run(request, body),
+    };
+
+    await expect(admittedOperation(() => port({ prompt: "q" }), withoutAttempts)).rejects.toThrow(
+      "sub-model requires session attempt authority",
+    );
+    expect(invoked).toBe(0);
+  });
+
+  it("surfaces a refused llm operation as the refusal's reason", async () => {
+    const port = completionPort(MODEL, { resolveModel, run: async () => ({ type: "stop" }) });
+    const refused = scriptedLlmExecutor({ terminal: "blocked_pre", reason: "llm.text denied" });
+
+    await expect(admittedOperation(() => port({ prompt: "q" }), refused)).rejects.toThrow(
+      "sub-model refused: llm.text denied",
+    );
+  });
+
+  it("rejects an executed value that is not the text record the run produces", async () => {
+    const port = completionPort(MODEL, { resolveModel, run: async () => ({ type: "stop" }) });
+
+    for (const value of ["bare text", { answer: "no text field" }] as const) {
+      const executed = scriptedLlmExecutor({ terminal: "executed", value });
+      await expect(admittedOperation(() => port({ prompt: "q" }), executed)).rejects.toThrow(
+        "invalid sub-model result",
+      );
+    }
   });
 });
 

@@ -1,6 +1,6 @@
 import type { CompactionOptions } from "@openomni/agent";
 import { Run, type RunInput } from "@openomni/llm";
-import type { Message } from "@openomni/protocol";
+import type { Message, PlainObject } from "@openomni/protocol";
 import { runResolvedText, type LlmIo } from "../tools/completion";
 
 export type SummarizerErrorKind = "empty" | "overflow";
@@ -30,7 +30,7 @@ const INSTRUCTION =
   "Preserve decisions, open work, identifiers, file paths, and explicit Owner instructions. " +
   "Never invent or infer facts; omit anything that is not supported by the input.";
 
-function reasoningOptions(provider: string): Record<string, unknown> {
+function reasoningOptions(provider: string): PlainObject {
   return provider === "anthropic"
     ? { anthropic: { thinking: { type: "disabled" } } }
     : { openai: { reasoningEffort: "minimal" } };

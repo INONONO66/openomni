@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { seedPolicy } from "./helpers/seed-policy";
+import { receiveOutbound } from "./helpers/receive-outbound";
+import { boundedBy } from "./helpers/bounded";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +20,7 @@ import {
   type SessionTransition,
   type SessionTurn,
 } from "@openomni/protocol";
-import { createExecutor, SEEDED_POLICY_ROWS } from "../src/index";
+import { createExecutor } from "../src/index";
 import type {
   ExecutionApprovalRequest,
   ExecutionApprovals,
@@ -46,6 +49,7 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 
 const SIGNAL_TIMEOUT_MS = 2_000;
+const bounded = boundedBy(SIGNAL_TIMEOUT_MS);
 
 interface Signal<T> {
   readonly promise: Promise<T>;
@@ -56,21 +60,6 @@ interface Signal<T> {
 function signal<T>(): Signal<T> {
   const resolvers = Promise.withResolvers<T>();
   return { promise: resolvers.promise, resolve: resolvers.resolve, reject: resolvers.reject };
-}
-
-async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`timed out waiting for ${label}`)),
-      SIGNAL_TIMEOUT_MS,
-    );
-  });
-  try {
-    return await Promise.race([promise, deadline]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }
 
 const ToolEventCall = z.object({ toolCallId: z.string() }).loose();
@@ -242,12 +231,6 @@ let directory: string;
 let now = 1_000;
 let nextId = 0;
 const runtimes: SessionRuntime[] = [];
-
-function seedPolicy(rows: readonly Omit<PolicyRow.Row, "generation">[] = []): void {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
-}
 
 beforeEach(() => {
   now = 1_000;
@@ -1600,8 +1583,41 @@ function reply(
   };
 }
 
-/** The immutable request prefix of 6.4: cfg, T, q-pre, q (a real tool intent with value {value:"B"}). */
-function seedRequestSession(id: string): void {
+/** The pending turn every 6.x seed opens under its `cfg` boundary at the given generation. */
+function pendingTurn(
+  sessionId: string,
+  turnId: string,
+  boundaryActionId: string,
+  resultId: string,
+  generation: ReturnType<typeof SessionHandleStore.latestGeneration>,
+): LedgerAction.Append {
+  return {
+    id: turnId,
+    sessionId,
+    parentId: boundaryActionId,
+    kind: "turn",
+    intent: {
+      encodingVersion: 1,
+      value: {
+        phase: "intent",
+        resultId,
+        inboxIds: [],
+        resumeCount: 0,
+        boundaryActionId,
+        toolsGeneration: generation.generation,
+        toolsHash: generation.toolsHash,
+        systemHash: generation.systemHash,
+        policyGeneration: 1,
+      },
+    },
+    effect: { encodingVersion: 1, value: { phase: "pending" } },
+    ts: now,
+    irreversible: true,
+  };
+}
+
+/** A fresh resident at G1 whose lease `owner` holds for `leaseMs`: the seed every request fixture starts from. */
+function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs: number) {
   const created = SessionHandleStore.materialize({
     id,
     parentId: null,
@@ -1609,18 +1625,24 @@ function seedRequestSession(id: string): void {
     tools: [],
     system: { preset: "", blocks: [] },
     policyGeneration: 1,
-    actionId: `${id}:cfg`,
+    actionId,
     at: now,
   });
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
   const lease = SessionHandleStore.acquireLease({
     sessionId: id,
-    owner: "o",
+    owner,
     expectedFence: created.row.leaseFence,
     now,
-    expiresAt: now + 30_000,
+    expiresAt: now + leaseMs,
   });
-  if (!lease.ok) throw new Error("seed lease refused");
+  if (!lease.ok) throw new Error(`${owner} lease refused`);
+  return { created, generation, lease };
+}
+
+/** The immutable request prefix of 6.4: cfg, T, q-pre, q (a real tool intent with value {value:"B"}). */
+function seedRequestSession(id: string): void {
+  const { created, generation, lease } = seedLeasedResident(id, `${id}:cfg`, "o", 30_000);
   const turn = `${id}:T`;
   const committed = SessionHandleStore.commit({
     sessionId: id,
@@ -1632,29 +1654,7 @@ function seedRequestSession(id: string): void {
     state: "running",
     releaseLease: true,
     actions: [
-      {
-        id: turn,
-        sessionId: id,
-        parentId: `${id}:cfg`,
-        kind: "turn",
-        intent: {
-          encodingVersion: 1,
-          value: {
-            phase: "intent",
-            resultId: `${id}:R`,
-            inboxIds: [],
-            resumeCount: 0,
-            boundaryActionId: `${id}:cfg`,
-            toolsGeneration: generation.generation,
-            toolsHash: generation.toolsHash,
-            systemHash: generation.systemHash,
-            policyGeneration: 1,
-          },
-        },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: now,
-        irreversible: true,
-      },
+      pendingTurn(id, turn, `${id}:cfg`, `${id}:R`, generation),
       {
         id: `${id}:q-pre`,
         sessionId: id,
@@ -1719,28 +1719,10 @@ function openRequest(port: ReturnType<typeof createSessionRequests>, id: string)
 
 /** Crash-open seed of 6.2: dead owner, T pinned to G1 while the row already points at G2. */
 function seedCrashOpen(id: string): void {
-  const created = SessionHandleStore.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 1,
-    actionId: "cfg",
-    at: now,
-  });
-  const g1 = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: id,
-    owner: "dead",
-    expectedFence: created.row.leaseFence,
-    now,
-    expiresAt: now + 10,
-  });
-  if (!lease.ok) throw new Error("dead lease refused");
+  const { created, generation, lease } = seedLeasedResident(id, "cfg", "dead", 10);
   const g2 = SessionHandleStore.generationSnapshot({
-    generation: g1.generation + 1,
-    revertTo: g1.generation,
+    generation: generation.generation + 1,
+    revertTo: generation.generation,
     tools: [],
     system: { preset: "", blocks: [{ id: "b", source: "fixture", content: "v2" }] },
     policyGeneration: 1,
@@ -1760,29 +1742,7 @@ function seedCrashOpen(id: string): void {
       policyGeneration: g2.policyGeneration,
     },
     actions: [
-      {
-        id: "T",
-        sessionId: id,
-        parentId: "cfg",
-        kind: "turn",
-        intent: {
-          encodingVersion: 1,
-          value: {
-            phase: "intent",
-            resultId: "R",
-            inboxIds: [],
-            resumeCount: 0,
-            boundaryActionId: "cfg",
-            toolsGeneration: g1.generation,
-            toolsHash: g1.toolsHash,
-            systemHash: g1.systemHash,
-            policyGeneration: 1,
-          },
-        },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: now,
-        irreversible: true,
-      },
+      pendingTurn(id, "T", "cfg", "R", generation),
       SessionHandleStore.configureAction({
         id: "cfg2",
         sessionId: id,
@@ -1809,15 +1769,7 @@ function childParentFixture() {
       async dispatchOutbound({ message }) {
         if (!dispatch) throw new Error("process died before wake");
         sent.push(JSON.stringify(message));
-        const received = SessionHandleStore.commitReceivedMessage({
-          id: message.messageId,
-          sessionId: message.destinationSessionId,
-          kind: "prompt",
-          content: message.content,
-          origin: { encodingVersion: 1, value: message },
-          createdAt: now,
-          parentActionId: null,
-        });
+        const received = receiveOutbound(message, now);
         await wakeSession(message.destinationSessionId, parentRunner, value);
         if (loseAck) throw new Error("source ack lost");
         return received.receipt;

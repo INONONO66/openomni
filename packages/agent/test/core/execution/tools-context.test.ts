@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { stringQueryTool } from "../../helpers/query-tool";
 import type { ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
 import { createDispatcher, defineTool, eraseTool } from "../../../src/index";
@@ -49,18 +50,9 @@ describe("tool execution context", () => {
     const controller = new AbortController();
     controller.abort();
     let calls = 0;
-    const definition = defineTool({
-      name: "capture",
-      description: "Capture context",
-      category: "query",
-      input: z.object({}).strict(),
-      output: z.string(),
-      visibility: { model: ["resident"], cell: ["resident"] },
-      execute: async () => {
-        calls += 1;
-        return "unexpected";
-      },
-      render: (_input, output) => output,
+    const definition = stringQueryTool("capture", "Capture context", async () => {
+      calls += 1;
+      return "unexpected";
     });
     const { executor } = recordingExecutor();
     const result = await createDispatcher([eraseTool(definition)], { executor }).execute(

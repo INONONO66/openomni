@@ -278,9 +278,9 @@ describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
   });
 
   test("returns undefined for bytes no era could parse", () => {
-    expect(Ingress.recordedRoutingDecision(undefined)).toBeUndefined();
-    expect(Ingress.recordedRoutingDecision(null)).toBeUndefined();
-    expect(Ingress.recordedRoutingDecision("route")).toBeUndefined();
+    // Non-plain bytes (an array, a non-finite number) are outside the persisted profile.
+    expect(Ingress.recordedRoutingDecision([])).toBeUndefined();
+    expect(Ingress.recordedRoutingDecision({ ...baseDecision, time: Number.NaN })).toBeUndefined();
     expect(Ingress.recordedRoutingDecision({ stage: "blacklist" })).toBeUndefined();
     expect(
       Ingress.recordedRoutingDecision({

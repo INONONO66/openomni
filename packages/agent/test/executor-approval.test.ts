@@ -2,20 +2,10 @@ import { afterEach, beforeEach, expect, it } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { createExecutor, type ExecutorOptions } from "../src/executor";
-import { compiledPolicy } from "./helpers/compiled-policy";
+import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { bounded, requestLedger } from "./helpers/request-ledger";
 
-const policy = compiledPolicy([
-  {
-    name: "approve-write",
-    kind: "tool",
-    phase: "pre",
-    match: { encodingVersion: 1, value: { op: "write" } },
-    verdict: { encodingVersion: 1, value: { type: "require_approval", reason: "owner" } },
-    priority: 1,
-    generation: 1,
-  },
-]);
+const policy = compiledPolicy([approveWriteRow]);
 const evidence = { kind: "owner", principalId: "owner", evidenceId: "auth-1" } as const;
 const request = {
   kind: "tool",

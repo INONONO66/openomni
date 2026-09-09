@@ -1,19 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { seedPolicy as seed } from "./helpers/seed-policy";
+import { nth } from "./helpers/nth";
+import { answerThenCompact } from "./helpers/answer-then-compact";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import {
-  PlainValueSchema,
-  type LedgerAction,
-  type PlainObject,
-  type PolicyRow,
-} from "@openomni/protocol";
-import { createCompactionPlan } from "../src/compaction/durable";
+import type { LedgerAction, PlainObject } from "@openomni/protocol";
 import { ContextRestoreError } from "../src/compaction/restore";
-import { createAssistantMessage } from "../src/core/message-factory";
 import {
   Bus,
   closeSessions,
   createTurnDispatcher,
-  SEEDED_POLICY_ROWS,
   session,
   type SessionRunner,
   type SessionRuntime,
@@ -28,12 +23,6 @@ const runtime: SessionRuntime = {
   processId: "restore-test",
   scheduleHeartbeat: () => () => undefined,
 };
-
-function seed(rows: readonly Omit<PolicyRow.Row, "generation">[] = []): void {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
-}
 
 beforeEach(() => {
   Bus.reset();
@@ -51,24 +40,7 @@ afterEach(async () => {
 /** A turn that answers, then compacts the prompt away behind its own answer, exactly as the real cut records it. */
 const compactingRunner: SessionRunner = async (input) => {
   const { executor } = createTurnDispatcher([], input, runtime);
-  const answer = createAssistantMessage("answer", "", input.sessionId);
-  await executor.run(
-    { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
-    async () => PlainValueSchema.parse(answer),
-  );
-  const prior = foldSessionHistory(input.sessionId, input.ledger.actions?.() ?? []);
-  const plan = createCompactionPlan(prior, [answer], 100);
-  await executor.run(
-    {
-      kind: "compaction",
-      op: "compact",
-      intent: { trigger: "threshold" },
-      effect: {},
-      revertData: () => PlainValueSchema.parse(plan.record.revert),
-    },
-    async () => PlainValueSchema.parse({ ...plan.record, projection: plan.projection }),
-  );
-  return { kind: "result", text: "answer", finishReason: "stop" };
+  return answerThenCompact(executor, input);
 };
 
 function intentRecord(action: LedgerAction.Node): PlainObject {
@@ -87,12 +59,6 @@ function compactionIntent(actions: readonly LedgerAction.Node[]): LedgerAction.N
   return found;
 }
 
-function nth(actions: readonly LedgerAction.Node[], index: number): LedgerAction.Node {
-  const action = actions[index];
-  if (action === undefined) throw new Error(`missing action ${index}`);
-  return action;
-}
-
 /** One prompted session whose first turn compacted; `before` is its action tree at rest. */
 async function compactedSession() {
   const handle = session({ id: "ctx", role: "resident", runner: compactingRunner }, runtime);
@@ -105,7 +71,9 @@ describe("restore_context_projection", () => {
     seed();
     const { handle, before } = await compactedSession();
     const compaction = compactionIntent(before);
-    expect(foldSessionHistory("ctx", before).map((entry) => entry.info.role)).toEqual(["assistant"]);
+    expect(foldSessionHistory("ctx", before).map((entry) => entry.info.role)).toEqual([
+      "assistant",
+    ]);
 
     const outcome = await handle.restoreContext(compaction.id);
 
@@ -134,7 +102,9 @@ describe("restore_context_projection", () => {
     });
     const restored = foldSessionHistory("ctx", after);
     expect(restored.map((entry) => entry.info.role)).toEqual(["user", "assistant"]);
-    expect(restored).toEqual(foldSessionHistory("ctx", before.slice(0, before.indexOf(compaction))));
+    expect(restored).toEqual(
+      foldSessionHistory("ctx", before.slice(0, before.indexOf(compaction))),
+    );
     expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
   });
 

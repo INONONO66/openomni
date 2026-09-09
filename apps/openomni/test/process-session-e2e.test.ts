@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { ownerStart } from "./helpers/owner-start";
 import { Bus } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { rmSync } from "node:fs";
@@ -162,18 +163,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
       },
     },
   });
-  await app.gateway.ingest(
-    { kind: "external", surface: "ws", externalId: "owner" },
-    {
-      eventId: "initial-process",
-      surface: "ws",
-      channelId: "owner",
-      addressees: [],
-      dm: true,
-      payload: {},
-      render: "start",
-    },
-  );
+  await ownerStart(app, "initial-process");
   expect(await received).toEqual({ ok: true });
   const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
   if (child?.parentId === undefined || child.parentId === null)

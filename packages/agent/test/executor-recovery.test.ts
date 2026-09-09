@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { stringQueryTool } from "./helpers/query-tool";
+import { nth } from "./helpers/nth";
 import { LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
-import { z } from "zod";
-import { createTurnDispatcher, defineTool } from "../src/index";
+import { createTurnDispatcher } from "../src/index";
 import { createExecutor, type ExecutorOptions } from "../src/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";
 
@@ -48,12 +49,6 @@ function resultsOf(actions: readonly LedgerAction.Node[], kind: LedgerAction.Kin
   return actions.filter((action) => action.kind === kind && effect(action).phase === "result");
 }
 
-function nth(actions: readonly LedgerAction.Node[], index: number): LedgerAction.Node {
-  const action = actions[index];
-  if (action === undefined) throw new Error(`missing action ${index}`);
-  return action;
-}
-
 function openIntent(
   id: string,
   kind: LedgerAction.Kind,
@@ -97,6 +92,19 @@ const toolRequest = {
   effect: { category: "mutation" },
   toolObservation: { turnId: "turn", callId: "call-1" },
 } as const;
+
+/** A post-phase denial of every write: the terminal is blocked_post, never re-decided. */
+const denyWritePost: Parameters<typeof compiledPolicy>[0] = [
+  {
+    name: "deny-write-post",
+    kind: "tool",
+    phase: "post",
+    match: { encodingVersion: 1, value: { op: "write" } },
+    verdict: { encodingVersion: 1, value: { type: "deny", reason: "post_denied" } },
+    priority: 500,
+    generation: 1,
+  },
+];
 
 describe("completion recovery", () => {
   for (const site of ["before_persist", "after_persist"] as const) {
@@ -224,22 +232,11 @@ describe("completion recovery", () => {
 
   test("a blocked_post terminal lost after persistence is projected back from the ledger, not re-decided", async () => {
     const { actions, options } = harness();
-    const deny: Parameters<typeof compiledPolicy>[0] = [
-      {
-        name: "deny-write-post",
-        kind: "tool",
-        phase: "post",
-        match: { encodingVersion: 1, value: { op: "write" } },
-        verdict: { encodingVersion: 1, value: { type: "deny", reason: "post_denied" } },
-        priority: 500,
-        generation: 1,
-      },
-    ];
     const commit = options.ledger.commit;
     let injected = false;
     const executor = createExecutor({
       ...options,
-      policy: compiledPolicy(deny),
+      policy: compiledPolicy(denyWritePost),
       ledger: {
         ...options.ledger,
         async commit(action) {
@@ -287,18 +284,7 @@ describe("completion recovery", () => {
 
   test("a throwing reverter is never proof of rollback", async () => {
     const { actions, options } = harness();
-    const deny: Parameters<typeof compiledPolicy>[0] = [
-      {
-        name: "deny-write-post",
-        kind: "tool",
-        phase: "post",
-        match: { encodingVersion: 1, value: { op: "write" } },
-        verdict: { encodingVersion: 1, value: { type: "deny", reason: "post_denied" } },
-        priority: 500,
-        generation: 1,
-      },
-    ];
-    const executor = createExecutor({ ...options, policy: compiledPolicy(deny) });
+    const executor = createExecutor({ ...options, policy: compiledPolicy(denyWritePost) });
     const results = await executor.runBatch(
       [
         {
@@ -559,18 +545,9 @@ describe("turn dispatcher recovery", () => {
     let executions = 0;
     const dispatcher = createTurnDispatcher(
       [
-        defineTool({
-          name: "echo",
-          description: "echo",
-          category: "query",
-          input: z.object({}).strict(),
-          output: z.string(),
-          visibility: { model: ["resident"], cell: ["resident"] },
-          execute: async () => {
-            executions += 1;
-            return "ok";
-          },
-          render: (_input, value: PlainValue) => String(value),
+        stringQueryTool("echo", "echo", async () => {
+          executions += 1;
+          return "ok";
         }),
       ],
       {

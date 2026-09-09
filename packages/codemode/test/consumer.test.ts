@@ -3,19 +3,29 @@ import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
-import { createCodemode } from "../src/index";
+import { CodemodeError, createCodemode } from "../src/index";
 
 const silent = {
   publish() {
     return;
   },
 };
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => {
-    resolve = yes;
-  });
-  return { promise, resolve };
+/**
+ * A cell tool that parks its caller: `entered` settles once a cell is inside the
+ * tool, `release` lets the tool answer. `onHold` observes each entry.
+ */
+function holdGate(onHold: () => void = () => undefined) {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const tools: Parameters<typeof createCodemode>[0] = {
+    tools: () => async () => {
+      onHold();
+      entered.resolve();
+      await release.promise;
+      return { status: "completed" };
+    },
+  };
+  return { entered, release, tools };
 }
 async function pair(
   run: (context: {
@@ -77,15 +87,25 @@ async function pair(
   }
 }
 
+/** The CodemodeError an action throws or rejects with; any other outcome fails the test. */
+async function codemodeFailure(action: () => void): Promise<InstanceType<typeof CodemodeError>> {
+  const failure = await Promise.resolve()
+    .then(action)
+    .then(
+      () => undefined,
+      (error: Error) => error,
+    );
+  if (!(failure instanceof CodemodeError))
+    throw new Error(`expected a CodemodeError, got ${String(failure)}`);
+  return failure;
+}
+
 test("SDK handles and Python globals share raw endpoints across two machines", async () => {
   await pair(async ({ mode, a, b }) => {
     expect(mode.listMachines().map((entry) => entry.machineId)).toEqual(["A", "B"]);
     expect(mode.findMachine({ tag: "A" })).toBe(mode.getMachine("A"));
-    expect(() => mode.findMachine({ tag: "missing" })).toThrow(
-      expect.objectContaining({
-        name: "CodemodeError",
-        data: { reason: "machine_not_found", message: expect.any(String) },
-      }),
+    expect((await codemodeFailure(() => mode.findMachine({ tag: "missing" }))).data.reason).toBe(
+      "machine_not_found",
     );
     const bytes = Buffer.from([0, 255, 128, 65]);
     expect(await mode.getMachine("A").write(join(a, "source"), bytes)).toEqual({
@@ -134,8 +154,8 @@ test("SDK handles and Python globals share raw endpoints across two machines", a
 });
 
 test("cancellation crosses the real host/daemon boundary and the next cell recovers", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
+  const gate = holdGate();
+  const { entered, release } = gate;
   await pair(
     async ({ mode }) => {
       const controller = new AbortController();
@@ -152,7 +172,7 @@ test("cancellation crosses the real host/daemon boundary and the next cell recov
         value: "42",
       });
       await mode.close();
-      expect(() => mode.listMachines()).toThrow(expect.objectContaining({ name: "CodemodeError" }));
+      expect(() => mode.listMachines()).toThrow(CodemodeError);
     },
     {
       tools: () => async () => {
@@ -165,56 +185,38 @@ test("cancellation crosses the real host/daemon boundary and the next cell recov
 });
 
 test("host disconnect closes the injected runner and awaits its processes", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
-  await pair(
-    async ({ mode, host, da }) => {
-      // With a wait window the loss surfaces through the background path too.
-      const running = mode.cell.run("tool.hold()", "disconnect", {
-        timeoutMs: 5000,
-        waitMs: 5000,
-      });
-      const outcome = running.then(
-        (result) => {
-          throw new Error(`expected connection loss, received ${result.status}`);
-        },
-        (error: Error) => error,
-      );
-      await entered.promise;
-      host.close();
-      expect(await outcome).toMatchObject({ name: "IpcConnectionError" });
-      await da.closed;
-      release.resolve();
-    },
-    {
-      tools: () => async () => {
-        entered.resolve();
-        await release.promise;
-        return { status: "completed" };
+  const gate = holdGate();
+  const { entered, release } = gate;
+  await pair(async ({ mode, host, da }) => {
+    // With a wait window the loss surfaces through the background path too.
+    const running = mode.cell.run("tool.hold()", "disconnect", {
+      timeoutMs: 5000,
+      waitMs: 5000,
+    });
+    const outcome = running.then(
+      (result) => {
+        throw new Error(`expected connection loss, received ${result.status}`);
       },
-    },
-  );
+      (error: Error) => error,
+    );
+    await entered.promise;
+    host.close();
+    expect(await outcome).toMatchObject({ name: "IpcConnectionError" });
+    await da.closed;
+    release.resolve();
+  }, gate.tools);
 });
 
 test("close cancels live facade work and no kernel starts without a daemon runner call", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
-  await pair(
-    async ({ mode }) => {
-      const running = mode.cell.run("tool.hold()", "closing", { timeoutMs: 5000 });
-      await entered.promise;
-      await mode.close();
-      expect(await running).toMatchObject({ status: "cancelled" });
-      release.resolve();
-    },
-    {
-      tools: () => async () => {
-        entered.resolve();
-        await release.promise;
-        return { status: "completed" };
-      },
-    },
-  );
+  const gate = holdGate();
+  const { entered, release } = gate;
+  await pair(async ({ mode }) => {
+    const running = mode.cell.run("tool.hold()", "closing", { timeoutMs: 5000 });
+    await entered.promise;
+    await mode.close();
+    expect(await running).toMatchObject({ status: "cancelled" });
+    release.resolve();
+  }, gate.tools);
 });
 
 test("tag ambiguity and an unbound machine port are typed, never arbitrary selection", async () => {
@@ -236,19 +238,13 @@ test("tag ambiguity and an unbound machine port are typed, never arbitrary selec
       },
     },
   });
-  expect(() => mode.findMachine({ tag: "same" })).toThrow(
-    expect.objectContaining({
-      name: "CodemodeError",
-      data: { reason: "ambiguous_machine", message: expect.any(String) },
-    }),
+  expect((await codemodeFailure(() => mode.findMachine({ tag: "same" }))).data.reason).toBe(
+    "ambiguous_machine",
   );
   await mode.close();
   const runner = createCodemode();
-  expect(() => runner.listMachines()).toThrow(
-    expect.objectContaining({
-      name: "CodemodeError",
-      data: { reason: "machines_not_bound", message: expect.any(String) },
-    }),
+  expect((await codemodeFailure(() => runner.listMachines())).data.reason).toBe(
+    "machines_not_bound",
   );
   await expect(
     runner.callTool({ cellId: "ghost", name: "x", arguments: {} }),
@@ -279,151 +275,126 @@ test("injected completion batches through parallel and tenant state never crosse
 });
 
 test("run leaves a held cell in the background: peek shows its output so far, stop interrupts it once", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
   let holds = 0;
-  await pair(
-    async ({ mode }) => {
-      // The hold cannot settle until released, so a zero wait answers `running` by construction.
-      const started = await mode.cell.run(
-        "print('started')\nprint('warn', file=__import__('sys').stderr)\ntool.hold()\nprint('never')",
-        "background",
-        { timeoutMs: 5000, waitMs: 0 },
-      );
-      if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
-      await entered.promise;
-      // A cell queued behind the held one is in flight with no output yet; stopping it
-      // before it executes cancels it without ever touching the interpreter.
-      const queued = await mode.cell.run("print('second')", "background", {
-        timeoutMs: 5000,
-        waitMs: 0,
-      });
-      if (queued.status !== "running") throw new Error(`expected running, got ${queued.status}`);
-      const nothing = { stdout: "", stderr: "" };
-      expect(await mode.cell.peek(queued.cellId, "background")).toEqual({
-        status: "running",
-        cellId: queued.cellId,
-        output: nothing,
-      });
-      expect(await mode.cell.stop(queued.cellId, "background")).toEqual({
-        status: "cancelled",
-        cellId: queued.cellId,
-        output: nothing,
-      });
-      const partial = { stdout: "started\n", stderr: "warn\n" };
-      expect(await mode.cell.peek(started.cellId, "background")).toEqual({
-        status: "running",
-        cellId: started.cellId,
-        output: partial,
-      });
-      // Another tenant cannot see, let alone stop, this cell.
-      for (const op of [mode.cell.peek, mode.cell.stop]) {
-        await expect(op(started.cellId, "intruder")).rejects.toMatchObject({
-          name: "CodemodeError",
-          data: { reason: "unknown_cell_id", message: expect.any(String) },
-        });
-      }
-      expect(await mode.cell.stop(started.cellId, "background")).toEqual({
-        status: "cancelled",
-        cellId: started.cellId,
-        output: partial,
-      });
-      // Settled state is handed over once; the code never runs again.
-      await expect(mode.cell.peek(started.cellId, "background")).rejects.toMatchObject({
-        data: { reason: "unknown_cell_id" },
-      });
-      release.resolve();
-      expect(await mode.cell.run("6 * 7", "background")).toMatchObject({
-        status: "completed",
-        value: "42",
-      });
-      expect(holds).toBe(1);
-    },
-    {
-      tools: () => async () => {
-        holds += 1;
-        entered.resolve();
-        await release.promise;
-        return { status: "completed" };
-      },
-    },
-  );
+  const gate = holdGate(() => {
+    holds += 1;
+  });
+  const { entered, release } = gate;
+  await pair(async ({ mode }) => {
+    // The hold cannot settle until released, so a zero wait answers `running` by construction.
+    const started = await mode.cell.run(
+      "print('started')\nprint('warn', file=__import__('sys').stderr)\ntool.hold()\nprint('never')",
+      "background",
+      { timeoutMs: 5000, waitMs: 0 },
+    );
+    if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
+    await entered.promise;
+    // A cell queued behind the held one is in flight with no output yet; stopping it
+    // before it executes cancels it without ever touching the interpreter.
+    const queued = await mode.cell.run("print('second')", "background", {
+      timeoutMs: 5000,
+      waitMs: 0,
+    });
+    if (queued.status !== "running") throw new Error(`expected running, got ${queued.status}`);
+    const nothing = { stdout: "", stderr: "" };
+    expect(await mode.cell.peek(queued.cellId, "background")).toEqual({
+      status: "running",
+      cellId: queued.cellId,
+      output: nothing,
+    });
+    expect(await mode.cell.stop(queued.cellId, "background")).toEqual({
+      status: "cancelled",
+      cellId: queued.cellId,
+      output: nothing,
+    });
+    const partial = { stdout: "started\n", stderr: "warn\n" };
+    expect(await mode.cell.peek(started.cellId, "background")).toEqual({
+      status: "running",
+      cellId: started.cellId,
+      output: partial,
+    });
+    // Another tenant cannot see, let alone stop, this cell.
+    for (const op of [mode.cell.peek, mode.cell.stop]) {
+      const refusal = await codemodeFailure(() => op(started.cellId, "intruder"));
+      expect(refusal.data.reason).toBe("unknown_cell_id");
+    }
+    expect(await mode.cell.stop(started.cellId, "background")).toEqual({
+      status: "cancelled",
+      cellId: started.cellId,
+      output: partial,
+    });
+    // Settled state is handed over once; the code never runs again.
+    await expect(mode.cell.peek(started.cellId, "background")).rejects.toMatchObject({
+      data: { reason: "unknown_cell_id" },
+    });
+    release.resolve();
+    expect(await mode.cell.run("6 * 7", "background")).toMatchObject({
+      status: "completed",
+      value: "42",
+    });
+    expect(holds).toBe(1);
+  }, gate.tools);
 });
 
 test("a peek and a stop racing on one cell hand its settled state to exactly one of them", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
-  await pair(
-    async ({ mode }) => {
-      const started = await mode.cell.run("tool.hold()", "race", { timeoutMs: 5000, waitMs: 0 });
-      if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
-      await entered.promise;
-      // peek is mid round-trip to the daemon when stop claims the entry synchronously.
-      const outcomes = await Promise.allSettled([
-        mode.cell.peek(started.cellId, "race"),
-        mode.cell.stop(started.cellId, "race"),
-      ]);
-      expect(outcomes.map((outcome) => outcome.status)).toEqual(["rejected", "fulfilled"]);
-      expect(outcomes[0]).toMatchObject({
-        reason: { name: "CodemodeError", data: { reason: "unknown_cell_id" } },
-      });
-      expect(outcomes[1]).toMatchObject({
-        value: { status: "cancelled", cellId: started.cellId },
-      });
-      release.resolve();
-    },
-    {
-      tools: () => async () => {
-        entered.resolve();
-        await release.promise;
-        return { status: "completed" };
-      },
-    },
-  );
+  const gate = holdGate();
+  const { entered, release } = gate;
+  await pair(async ({ mode }) => {
+    const started = await mode.cell.run("tool.hold()", "race", { timeoutMs: 5000, waitMs: 0 });
+    if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
+    await entered.promise;
+    // peek is mid round-trip to the daemon when stop claims the entry synchronously.
+    const outcomes = await Promise.allSettled([
+      mode.cell.peek(started.cellId, "race"),
+      mode.cell.stop(started.cellId, "race"),
+    ]);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(["rejected", "fulfilled"]);
+    expect(outcomes[0]).toMatchObject({
+      reason: { name: "CodemodeError", data: { reason: "unknown_cell_id" } },
+    });
+    expect(outcomes[1]).toMatchObject({
+      value: { status: "cancelled", cellId: started.cellId },
+    });
+    release.resolve();
+  }, gate.tools);
 });
 
 test("unread settled cells are retained up to the bound; the oldest is evicted and its id is spent", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
-  await pair(
-    async ({ mode }) => {
-      const ids: string[] = [];
-      // The first cell holds the interpreter, so the 64 queued behind it are `running` by
-      // construction: 65 cells, one more than the facade retains once they settle unread.
-      for (let index = 0; index < 65; index += 1) {
-        const started = await mode.cell.run(index === 0 ? "tool.hold()" : `${index}`, "bound", {
-          timeoutMs: 5000,
-          waitMs: 0,
-        });
-        if (started.status !== "running")
-          throw new Error(`expected running, got ${started.status}`);
-        ids.push(started.cellId);
-      }
-      await entered.promise;
-      release.resolve();
-      // Queued behind all 65 on the same interpreter and connection: when it answers, they
-      // have all settled at the facade.
-      expect(await mode.cell.run("'barrier'", "bound")).toMatchObject({ status: "completed" });
-      await expect(mode.cell.peek(ids[0] ?? "", "bound")).rejects.toMatchObject({
-        data: { reason: "unknown_cell_id" },
-      });
-      expect(await mode.cell.peek(ids[1] ?? "", "bound")).toMatchObject({
-        status: "completed",
-        value: "1",
-      });
-      expect(await mode.cell.peek(ids[64] ?? "", "bound")).toMatchObject({
-        status: "completed",
-        value: "64",
-      });
-    },
-    {
-      tools: () => async () => {
-        entered.resolve();
-        await release.promise;
-        return { status: "completed" };
-      },
-    },
-  );
+  const gate = holdGate();
+  const { entered, release } = gate;
+  await pair(async ({ mode }) => {
+    const ids: string[] = [];
+    const cellId = (index: number): string => {
+      const id = ids[index];
+      if (id === undefined) throw new Error(`no cell was started at ${index}`);
+      return id;
+    };
+    const startRunning = async (code: string): Promise<string> => {
+      const started = await mode.cell.run(code, "bound", { timeoutMs: 5000, waitMs: 0 });
+      if (started.status !== "running") throw new Error(`expected running, got ${started.status}`);
+      return started.cellId;
+    };
+    // The first cell holds the interpreter, so the 64 queued behind it are `running` by
+    // construction: 65 cells, one more than the facade retains once they settle unread.
+    for (let index = 0; index < 65; index += 1)
+      ids.push(await startRunning(index === 0 ? "tool.hold()" : `${index}`));
+    await entered.promise;
+    release.resolve();
+    // Queued behind all 65 on the same interpreter and connection: when it answers, they
+    // have all settled at the facade.
+    expect(await mode.cell.run("'barrier'", "bound")).toMatchObject({ status: "completed" });
+    await expect(mode.cell.peek(cellId(0), "bound")).rejects.toMatchObject({
+      data: { reason: "unknown_cell_id" },
+    });
+    expect(await mode.cell.peek(cellId(1), "bound")).toMatchObject({
+      status: "completed",
+      value: "1",
+    });
+    expect(await mode.cell.peek(cellId(64), "bound")).toMatchObject({
+      status: "completed",
+      value: "64",
+    });
+  }, gate.tools);
 }, 30_000);
 
 test("a run that settles within its wait answers the result and leaves nothing behind", async () => {

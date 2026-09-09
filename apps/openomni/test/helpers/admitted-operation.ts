@@ -1,9 +1,12 @@
-import { createDispatcher, defineTool } from "@openomni/agent";
+import { createDispatcher, defineTool, type Executor } from "@openomni/agent";
 import { z } from "zod";
-import { executor } from "./executor";
+import { executor as productionExecutor } from "./executor";
 
-/** Exercise an app one-shot consumer inside its real tool/executor context. */
-export async function admittedOperation<T>(operation: () => Promise<T>): Promise<T> {
+/** Exercise an app one-shot consumer inside its real tool/executor context (or a scripted executor). */
+export async function admittedOperation<T>(
+  operation: () => Promise<T>,
+  executor: Executor = productionExecutor,
+): Promise<T> {
   let value: T | undefined;
   let failed: Error | undefined;
   const dispatcher = createDispatcher(

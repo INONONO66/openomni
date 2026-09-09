@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Events as EventDescriptors } from "../event/tool.js";
 import { CapabilityId } from "../machine/schema.js";
 import type { TraceContext } from "../trace/index.js";
+import { PlainObjectSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 
 export type ToolCategory = "query" | "mutation" | "authority" | "execution";
@@ -86,12 +87,12 @@ export namespace Tool {
 
   const StatePending = z.object({
     status: z.literal("pending"),
-    input: z.record(z.string(), z.unknown()),
+    input: PlainObjectSchema,
   });
 
   const StateRunning = z.object({
     status: z.literal("running"),
-    input: z.record(z.string(), z.unknown()),
+    input: PlainObjectSchema,
     time: z.object({
       start: EpochMs,
     }),
@@ -99,7 +100,7 @@ export namespace Tool {
 
   const StateCompleted = z.object({
     status: z.literal("completed"),
-    input: z.record(z.string(), z.unknown()),
+    input: PlainObjectSchema,
     output: z.string(),
     title: z.string(),
     metadata: z.record(z.string(), z.unknown()),
@@ -111,7 +112,7 @@ export namespace Tool {
 
   const StateError = z.object({
     status: z.literal("error"),
-    input: z.record(z.string(), z.unknown()),
+    input: PlainObjectSchema,
     error: z.string(),
     time: z.object({
       start: EpochMs,
@@ -130,7 +131,7 @@ export namespace Tool {
   export const Call = z.object({
     id: z.string(),
     tool: z.string(),
-    input: z.record(z.string(), z.unknown()),
+    input: PlainObjectSchema,
   });
   export type Call = z.infer<typeof Call>;
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc";
 import type { BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../src/daemon";
+import { attachMachineDaemon, type CodeRunner } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { socketPath } from "./helpers/socket-path";
 
@@ -59,6 +59,15 @@ function offer(overrides: Partial<Machine.Offer> = {}): Machine.Offer {
   };
 }
 
+/** A daemon offering only the kernel capability, backed by a partial code runner. */
+function attachKernel(path: string, runner: Pick<CodeRunner, "runCode"> & Partial<CodeRunner>) {
+  return attachMachineDaemon({
+    socketPath: path,
+    offer: offer({ offeredCapabilities: ["kernel.py"] }),
+    runner: { peekCode: () => undefined, close: async () => undefined, ...runner },
+  });
+}
+
 async function withHost(
   resolve: (machineId: Machine.MachineId) => Machine.Enrollment | undefined,
   run: (context: {
@@ -66,6 +75,7 @@ async function withHost(
     path: string;
     collector: ReturnType<typeof eventCollector>;
   }) => Promise<void>,
+  callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>,
 ): Promise<void> {
   const collector = eventCollector();
   const path = socketPath();
@@ -74,6 +84,7 @@ async function withHost(
     enrollment: resolve,
     events: collector.sink,
     now: () => 5000,
+    callTool,
   });
   try {
     await run({ host, path, collector });
@@ -169,24 +180,19 @@ describe("machine attach handshake", () => {
     await withHost(
       () => ({ ...enrollment, allowedCapabilities: ["kernel.py"] }),
       async ({ host, path }) => {
-        const daemon = await attachMachineDaemon({
-          socketPath: path,
-          offer: offer({ offeredCapabilities: ["kernel.py"] }),
-          runner: {
-            runCode: async (request) => {
-              entered();
-              await held;
-              return {
-                status: "completed",
-                cellId: request.cellId,
-                output: { stdout: "done\n", stderr: "" },
-              };
-            },
-            peekCode: (cellId) => {
-              peeked.push(cellId);
-              return { stdout: "so far\n", stderr: "warn\n" };
-            },
-            close: async () => undefined,
+        const daemon = await attachKernel(path, {
+          runCode: async (request) => {
+            entered();
+            await held;
+            return {
+              status: "completed",
+              cellId: request.cellId,
+              output: { stdout: "done\n", stderr: "" },
+            };
+          },
+          peekCode: (cellId) => {
+            peeked.push(cellId);
+            return { stdout: "so far\n", stderr: "warn\n" };
           },
         });
         try {
@@ -363,6 +369,52 @@ describe("machine attach handshake", () => {
     } finally {
       rogue.close();
     }
+  });
+
+  test("daemon relays a cell's tool call to the host and cancels the cell on the wire", async () => {
+    const calls: Machine.ToolCall[] = [];
+    const relayed = Promise.withResolvers<void>();
+    await withHost(
+      () => ({ ...enrollment, allowedCapabilities: ["kernel.py"] }),
+      async ({ host, path }) => {
+        const daemon = await attachKernel(path, {
+          runCode: async (request, call, signal) => {
+            const answer = await call({ cellId: request.cellId, name: "answer", arguments: {} });
+            // The abort may already have landed while the tool answer was in flight.
+            if (!signal.aborted)
+              await new Promise<void>((resolve) => {
+                signal.addEventListener("abort", () => resolve(), { once: true });
+              });
+            return {
+              status: "cancelled",
+              cellId: request.cellId,
+              output: { stdout: JSON.stringify(answer), stderr: "" },
+            };
+          },
+        });
+        try {
+          const controller = new AbortController();
+          const running = host
+            .get("mac-studio")
+            .runCode({ cellId: "relay", code: "x", timeoutMs: 5000 }, controller.signal);
+          await relayed.promise;
+          expect(calls).toEqual([{ cellId: "relay", name: "answer", arguments: {} }]);
+          controller.abort();
+          expect(await running).toEqual({
+            status: "cancelled",
+            cellId: "relay",
+            output: { stdout: '{"status":"completed","value":42}', stderr: "" },
+          });
+        } finally {
+          await daemon.close();
+        }
+      },
+      async (call) => {
+        calls.push(call);
+        relayed.resolve();
+        return { status: "completed", value: 42 };
+      },
+    );
   });
 
   test("daemon refuses a host reply that violates Machine.AttachResult", async () => {

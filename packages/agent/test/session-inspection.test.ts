@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { runChatAttempts } from "./helpers/chat-attempts";
+import { seedPolicy } from "./helpers/seed-policy";
+import { answerThenCompact } from "./helpers/answer-then-compact";
+import { approveWriteRow } from "./helpers/compiled-policy";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Run } from "@openomni/llm";
-import {
-  Alarm,
-  L0Observation,
-  PlainValueSchema,
-  type PolicyRow,
-  type SessionHistory,
-} from "@openomni/protocol";
-import { createCompactionPlan } from "../src/compaction/durable";
-import { createAssistantMessage } from "../src/core/message-factory";
+import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
 import {
   Bus,
   closeSessions,
@@ -17,7 +13,6 @@ import {
   foldSessionHistory,
   inspectActions,
   inspectPolicy,
-  SEEDED_POLICY_ROWS,
   session,
   wakeSession,
   type SessionHandle,
@@ -61,14 +56,7 @@ const rows: readonly Omit<PolicyRow.Row, "generation">[] = [
     verdict: { encodingVersion: 1, value: { type: "deny", reason: "not_allowed" } },
     priority: 1,
   },
-  {
-    name: "approve-write",
-    kind: "tool",
-    phase: "pre",
-    match: { encodingVersion: 1, value: { op: "write" } },
-    verdict: { encodingVersion: 1, value: { type: "require_approval", reason: "owner" } },
-    priority: 1,
-  },
+  approveWriteRow,
 ];
 
 function providerFailure(): Run.Failure {
@@ -113,20 +101,12 @@ const parentRunner: SessionRunner = async (input) => {
   if (input.messages.at(-1)?.text !== "hello") return { kind: "result", text: "noted" };
   const { executor } = createTurnDispatcher([], input, runtime);
   let calls = 0;
-  await executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-    executor.runAttempts(parent, {
-      prepare: async (attempt) => ({
-        request: { op: "chat", intent: { attempt }, effect: {} },
-        admit: async () => undefined,
-        body: async () => {
-          calls += 1;
-          bodies += 1;
-          if (calls === 1) throw providerFailure();
-          return { type: "stop" };
-        },
-      }),
-    }),
-  );
+  await runChatAttempts(executor, async () => {
+    calls += 1;
+    bodies += 1;
+    if (calls === 1) throw providerFailure();
+    return { type: "stop" };
+  });
   const opened = committed(input.sessionId, "request");
   const wave = executor.runBatch(
     [
@@ -184,24 +164,7 @@ const parentRunner: SessionRunner = async (input) => {
     { signal: new AbortController().signal },
   );
   if (unknown?.terminal !== "failed") throw new Error("webhook settlement must be uncertain");
-  const answer = createAssistantMessage("answer", "", input.sessionId);
-  await executor.run(
-    { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
-    async () => PlainValueSchema.parse(answer),
-  );
-  const prior = foldSessionHistory(input.sessionId, input.ledger.actions?.() ?? []);
-  const plan = createCompactionPlan(prior, [answer], 100);
-  await executor.run(
-    {
-      kind: "compaction",
-      op: "compact",
-      intent: { trigger: "threshold" },
-      effect: {},
-      revertData: () => PlainValueSchema.parse(plan.record.revert),
-    },
-    async () => PlainValueSchema.parse({ ...plan.record, projection: plan.projection }),
-  );
-  return { kind: "result", text: "answer", finishReason: "stop" };
+  return answerThenCompact(executor, input);
 };
 
 beforeEach(() => {
@@ -210,9 +173,7 @@ beforeEach(() => {
   nextId = 0;
   bodies = 0;
   Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
+  seedPolicy(rows);
 });
 
 afterEach(async () => {
@@ -354,7 +315,9 @@ describe("action-based history and diagnostic projections", () => {
     expect(inspectPolicy(inspection.policy, { generation: 1 })).toEqual([...inspection.policy]);
     for (const decision of inspection.policy) {
       if (decision.subjectActionId === null) continue;
-      expect(inspection.transitions.some((e) => e.actionId === decision.subjectActionId)).toBe(true);
+      expect(inspection.transitions.some((e) => e.actionId === decision.subjectActionId)).toBe(
+        true,
+      );
     }
     const rendered = JSON.stringify(inspection);
     expect(JSON.stringify(SessionHandleStore.tree("parent"))).toContain(SECRET);
