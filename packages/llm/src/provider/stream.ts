@@ -80,9 +80,7 @@ export function streamArguments(
 }
 
 /** v6 block boundaries pass through unchanged; only step marker names differ. */
-export async function* adaptStream(
-  stream: AsyncIterable<TextStreamPart<ToolSet>>,
-): AsyncGenerator<
+export async function* adaptStream(stream: AsyncIterable<TextStreamPart<ToolSet>>): AsyncGenerator<
   | TextStreamPart<ToolSet>
   | (Omit<Extract<TextStreamPart<ToolSet>, { type: "finish-step" }>, "type"> & {
       type: "step-finish";
