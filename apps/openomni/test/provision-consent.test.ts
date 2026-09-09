@@ -14,6 +14,8 @@ const MERGE = {
   args: { endpointId: "ep:mallory", toActorId: "actor:alice" },
 } as const;
 const provision = () => eraseTool(createProvisionTool(provisionPort()));
+/** The provisional contact's current standing in the actor registry. */
+const malloryStanding = () => ActorRegistry.getIdentity("contact:mallory")?.standing;
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
@@ -64,18 +66,18 @@ it("the model cannot mint or decide Owner consent, and workers cannot see provis
       { role: "worker", sessionId: "worker", depth: 1 },
     ).some((tool) => tool.name === "provision"),
   ).toBe(false);
-  expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
+  expect(malloryStanding()).toBe("provisional");
 });
 it("executes exactly the original promotion after authenticated consent", async () => {
   const f = protectedDispatch(provision(), { operation: PROMOTE });
   try {
     const request = await bounded(f.opened);
-    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
+    expect(malloryStanding()).toBe("provisional");
     expect(request.parsedInput).toEqual({ operation: PROMOTE });
     const registered = await f.answer();
     expect(registered.isError).toBeUndefined();
     expect(registered.output).toMatch(/^contact contact:mallory registered \(tier \w+\)$/);
-    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("registered");
+    expect(malloryStanding()).toBe("registered");
     expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("resolved");
     expect(
       f.ledger.actions?.().filter((action) => action.id === `${request.requestId}:application`),
@@ -88,7 +90,7 @@ it("Owner refusal never promotes a provisional contact", async () => {
   const f = protectedDispatch(provision(), { operation: PROMOTE });
   try {
     expect((await f.answer("refuse")).isError).toBe(true);
-    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
+    expect(malloryStanding()).toBe("provisional");
   } finally {
     await f.close();
   }
@@ -174,7 +176,7 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
     expect(
       SessionHandleStore.requestRows().filter((request) => request.state === "open"),
     ).toHaveLength(8);
-    expect(ActorRegistry.getIdentity("contact:mallory")?.standing).toBe("provisional");
+    expect(malloryStanding()).toBe("provisional");
   } finally {
     await Promise.all(pending.map((f) => f.close()));
   }

@@ -92,7 +92,7 @@ describe("the completion tool", () => {
       output: '{"n":7}',
     });
     expect(seen[0]).toMatchObject({ prompt: "count", model: "mini" });
-    expect(seen[0]?.system?.startsWith("terse\n\n")).toBe(true);
+    expect(seen[0]?.system).toStartWith("terse\n\n");
     expect(seen[0]?.system).toContain(JSON.stringify(schema));
     for (const message of ["does not satisfy the schema", "is not JSON"]) {
       const result = await run({ prompt: "count", schema });
@@ -218,47 +218,49 @@ describe("the completion port", () => {
     providerID: model.provider,
   });
 
-  it("runs one toolless step under its own trace and returns the assistant text", async () => {
-    let seen: RunInput | undefined;
+  /** A completion port whose run records its input and answers with the given text. */
+  function recordingPort(text: string) {
+    const inputs: RunInput[] = [];
     const port = createCompletionPort(MODEL, {
       resolveModel,
       run: async (input, sink) => {
-        seen = input;
-        sink.onMessage(assistantMessage(input, { id: "sub-reply", text: "the answer" }));
+        inputs.push(input);
+        sink.onMessage(assistantMessage(input, { id: "sub-reply", text }));
         return { type: "stop" };
       },
     });
+    const input = (): RunInput => {
+      const [first] = inputs;
+      if (first === undefined) throw new Error("the port never ran");
+      return first;
+    };
+    return { port, input };
+  }
 
+  it("runs one toolless step under its own trace and returns the assistant text", async () => {
+    const { port, input } = recordingPort("the answer");
     expect(await port("summarize")).toBe("the answer");
-    expect(seen?.tools).toEqual([]);
-    expect(seen?.maxSteps).toBe(1);
-    expect(seen?.auth).toEqual({ type: "api", key: "port-key" });
-    expect(seen?.model).toMatchObject({ id: "port-test", providerID: "fake" });
+    const seen = input();
+    expect(seen.tools).toEqual([]);
+    expect(seen.maxSteps).toBe(1);
+    expect(seen.auth).toEqual({ type: "api", key: "port-key" });
+    expect(seen.model).toMatchObject({ id: "port-test", providerID: "fake" });
     // A nested run must never borrow the turn's identity: the trace is its own.
-    expect(seen?.trace.sessionId).toBe("completion");
-    const parts = seen?.messages[0]?.parts ?? [];
-    expect(parts[0]).toMatchObject({ type: "text", text: "summarize" });
+    expect(seen.trace.sessionId).toBe("completion");
+    expect(seen.messages[0]?.parts[0]).toMatchObject({ type: "text", text: "summarize" });
   });
 
   it("carries a system text and a model id override on the configured provider", async () => {
-    let seen: RunInput | undefined;
-    const port = createCompletionPort(MODEL, {
-      resolveModel,
-      run: async (input, sink) => {
-        seen = input;
-        sink.onMessage(assistantMessage(input, { id: "sub-reply", text: "shaped" }));
-        return { type: "stop" };
-      },
-    });
-
+    const { port, input } = recordingPort("shaped");
     expect(await port({ prompt: "shape it", system: "answer as JSON", model: "port-mini" })).toBe(
       "shaped",
     );
-    expect(seen?.system).toBe("answer as JSON");
-    expect(seen?.model).toMatchObject({ id: "port-mini", providerID: "fake" });
+    const seen = input();
+    expect(seen.system).toBe("answer as JSON");
+    expect(seen.model).toMatchObject({ id: "port-mini", providerID: "fake" });
     // The override never changes whose credential is used.
-    expect(seen?.auth).toEqual({ type: "api", key: "port-key" });
-    expect(seen?.messages[0]?.info).toMatchObject({
+    expect(seen.auth).toEqual({ type: "api", key: "port-key" });
+    expect(seen.messages[0]?.info).toMatchObject({
       role: "user",
       model: { providerID: "fake", modelID: "port-mini" },
     });
