@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { PlainValueSchema, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { run, type RunInput } from "../src/run";
+import type { StreamEvent } from "../src/processor/stream-events";
 
 async function returnedCalls(
   names: readonly string[],
@@ -36,7 +37,7 @@ async function returnedCalls(
       async createStream() {
         attempts += 1;
         return {
-          fullStream: (async function* () {
+          fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
             for (const [index, name] of wireNames.entries()) {
               const input: PlainObject = { slot: index };
               yield { type: "tool-call", toolCallId: `call-${index}`, toolName: name, input };

@@ -1,4 +1,5 @@
-import { PlainObjectSchema, type Message, type Transcript } from "@openomni/protocol";
+import type { Message, Transcript } from "@openomni/protocol";
+import { OutputPayload, ProviderEvent } from "./event-schema";
 import { stringifyToolOutput } from "../message";
 import type { StreamEvent, StreamEventState, StreamEventContext } from "./stream-events";
 
@@ -30,13 +31,13 @@ export function advancePart(
 }
 
 export function handleToolCall(
-  event: StreamEvent,
+  event: ProviderEvent,
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
   // ai v6 tool-call chunks carry `input`: the model's arguments, one JSON
   // object, parsed here because this is where provider bytes become a fact.
-  const input = PlainObjectSchema.parse(event.input ?? {});
+  const input = event.input ?? {};
   const callID = String(event.toolCallId);
   state.visibleOutput = true;
   // A tool call is billed assistant output too: the model emitted the name and
@@ -60,7 +61,7 @@ export function handleToolCall(
 }
 
 export function handleToolResult(
-  event: StreamEvent,
+  event: ProviderEvent,
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
@@ -122,10 +123,10 @@ export function handleToolResult(
   });
 }
 
-function normalizeOutputPayload(event: StreamEvent): { output: string; isError: boolean } {
+function normalizeOutputPayload(event: ProviderEvent): { output: string; isError: boolean } {
   const raw = event.output;
   if (typeof raw === "object" && raw !== null && "output" in raw) {
-    const payload = raw as { output?: unknown; isError?: unknown };
+    const payload = OutputPayload.parse(raw);
     return {
       output: String(payload.output ?? ""),
       isError: payload.isError === true,
@@ -158,7 +159,7 @@ export async function drainToolSettlements(
   let event: StreamEvent = firstEvent;
   while (state.pendingTools.size > 0) {
     if (event.type === "tool-result" || event.type === "tool-error") {
-      handleToolResult(event, state, context);
+      handleToolResult(ProviderEvent.parse(event), state, context);
       if (state.pendingTools.size === 0) return;
     }
     const remaining = deadline - Date.now();

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Policy } from "@openomni/protocol";
 import { Run, run } from "../src/run";
+import type { StreamEvent } from "../src/processor/stream-events";
 
 const input = {
   messages: [],
@@ -37,7 +38,7 @@ test("the provider produces typed failure facts, never a legacy error shape", as
 test("stop and aborted are produced by the real attempt entry", async () => {
   const stop = await run(input, sink, {
     createStream: async () => ({
-      fullStream: (async function* () {
+      fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
         yield { type: "finish" };
       })(),
     }),

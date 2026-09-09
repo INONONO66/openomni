@@ -1,10 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { anthropicResponse, captureRequest } from "../helpers/provider-fetch";
 import type { Auth } from "../../src/auth";
 import { clientIdentity } from "../../src/provider/identity";
 import type { Provider } from "../../src/provider";
 import { getSDK, type Transport } from "../../src/provider/sdk";
-
-const originalFetch = globalThis.fetch;
 
 function anthropicModel(): Provider.Model {
   return {
@@ -26,37 +25,17 @@ interface CapturedRequest {
  * satisfy an options-level assertion while the header never shipped.
  */
 async function capturedRequest(auth: Auth.Info, transport?: Transport): Promise<CapturedRequest> {
-  let captured: CapturedRequest | undefined;
-  globalThis.fetch = (async (input: unknown, init: { headers?: Record<string, string> }) => {
-    captured = { url: String(input), headers: new Headers(init.headers) };
-    return new Response(
-      JSON.stringify({
-        id: "msg-1",
-        type: "message",
-        role: "assistant",
-        model: "claude-3-haiku",
-        content: [{ type: "text", text: "ok" }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    );
-  }) as unknown as typeof fetch;
-
   const sdk = getSDK(anthropicModel(), auth, transport);
-  await sdk
-    .languageModel("claude-3-haiku")
-    .doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] });
-
-  if (captured === undefined) expect.unreachable("Expected the SDK to issue a request");
-  return captured;
+  return captureRequest(
+    () =>
+      sdk.languageModel("claude-3-haiku").doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      }),
+    anthropicResponse,
+  );
 }
 
 describe("operator transport config", () => {
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
   test("sends operator headers alongside the client identity", async () => {
     const { headers } = await capturedRequest(
       { type: "api", key: "sk-transport-headers" },
@@ -113,5 +92,14 @@ describe("operator transport config", () => {
     expect(tenantA).not.toBe(plain);
     expect(tenantA).not.toBe(tenantB);
     expect(tenantA).toBe(getSDK(anthropicModel(), auth, { headers: { "x-tenant": "a" } }));
+  });
+
+  test("header order does not fork the SDK cache", () => {
+    const auth: Auth.Info = { type: "api", key: "sk-transport-order" };
+
+    const ab = getSDK(anthropicModel(), auth, { headers: { "x-a": "1", "x-b": "2" } });
+    const ba = getSDK(anthropicModel(), auth, { headers: { "x-b": "2", "x-a": "1" } });
+
+    expect(ba).toBe(ab);
   });
 });

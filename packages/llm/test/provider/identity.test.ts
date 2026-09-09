@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { z } from "zod";
+import { anthropicResponse, captureRequest, openAIResponse } from "../helpers/provider-fetch";
 import { arch, platform, release } from "node:os";
 import type { Auth } from "../../src/auth";
 import { clientIdentity } from "../../src/provider/identity";
@@ -7,8 +9,6 @@ import { getLanguage, getSDK } from "../../src/provider/sdk";
 
 /** `pi/<version> (<platform> <kernelRelease>; <arch>)` — the whole contract. */
 const IDENTITY_PATTERN = /^pi\/\d+\.\d+\.\d+ \(.+; .+\)$/;
-
-const originalFetch = globalThis.fetch;
 
 function anthropicModel(): Provider.Model {
   return {
@@ -43,51 +43,27 @@ function openAICompatibleModel(): Provider.Model {
  * a default that the SDK drops on the floor would still pass the latter.
  */
 async function capturedRequestHeaders(auth: Auth.Info): Promise<Headers> {
-  let captured: Headers | undefined;
-  globalThis.fetch = (async (_input: unknown, init: { headers?: Record<string, string> }) => {
-    captured = new Headers(init.headers);
-    return new Response(
-      JSON.stringify({
-        id: "msg-1",
-        type: "message",
-        role: "assistant",
-        model: "claude-3-haiku",
-        content: [{ type: "text", text: "ok" }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    );
-  }) as unknown as typeof fetch;
-
   const sdk = getSDK(anthropicModel(), auth);
-  await sdk
-    .languageModel("claude-3-haiku")
-    .doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] });
-
-  if (captured === undefined) expect.unreachable("Expected the SDK to issue a request");
-  return captured;
+  const { headers } = await captureRequest(
+    () =>
+      sdk.languageModel("claude-3-haiku").doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      }),
+    anthropicResponse,
+  );
+  return headers;
 }
 
 async function capturedOpenAIRequest(
   model: Provider.Model,
-  response: unknown,
 ): Promise<{ readonly url: string; readonly headers: Headers }> {
-  let captured: { readonly url: string; readonly headers: Headers } | undefined;
-  globalThis.fetch = (async (input: unknown, init: { headers?: Record<string, string> }) => {
-    captured = { url: String(input), headers: new Headers(init.headers) };
-    return new Response(JSON.stringify(response), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  }) as unknown as typeof fetch;
-
-  await getLanguage(model, { type: "api", key: `sk-identity-${model.providerID}` }).doGenerate({
-    prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-  });
-
-  if (captured === undefined) expect.unreachable("Expected the SDK to issue a request");
-  return captured;
+  return captureRequest(
+    () =>
+      getLanguage(model, { type: "api", key: `sk-identity-${model.providerID}` }).doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      }),
+    openAIResponse(model.id),
+  );
 }
 
 describe("clientIdentity", () => {
@@ -103,19 +79,15 @@ describe("clientIdentity", () => {
   });
 
   test("reports the package manifest's version", async () => {
-    const manifest = (await Bun.file(new URL("../../package.json", import.meta.url)).json()) as {
-      version: string;
-    };
+    const manifest = z
+      .object({ version: z.string() })
+      .parse(await Bun.file(new URL("../../package.json", import.meta.url)).json());
 
     expect(clientIdentity.version).toBe(manifest.version);
   });
 });
 
 describe("provider SDK client identity header", () => {
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
   test("sends the pi client identity as the default user-agent", async () => {
     const headers = await capturedRequestHeaders({ type: "api", key: "sk-identity-default" });
 
@@ -136,38 +108,14 @@ describe("provider SDK client identity header", () => {
   });
 
   test("sends the identity through the bundled OpenAI Responses path", async () => {
-    const { url, headers } = await capturedOpenAIRequest(openAIModel(), {
-      id: "resp-1",
-      model: "gpt-4o-mini",
-      output: [
-        {
-          type: "message",
-          role: "assistant",
-          id: "msg-1",
-          content: [{ type: "output_text", text: "ok", annotations: [] }],
-        },
-      ],
-      usage: { input_tokens: 1, output_tokens: 1 },
-    });
+    const { url, headers } = await capturedOpenAIRequest(openAIModel());
 
     expect(url).toContain("/responses");
     expect(headers.get("user-agent") ?? "").toStartWith(clientIdentity());
   });
 
   test("sends the identity through the OpenAI-compatible fallback path", async () => {
-    const { url, headers } = await capturedOpenAIRequest(openAICompatibleModel(), {
-      id: "resp-2",
-      model: "gateway-model",
-      output: [
-        {
-          type: "message",
-          role: "assistant",
-          id: "msg-2",
-          content: [{ type: "output_text", text: "ok", annotations: [] }],
-        },
-      ],
-      usage: { input_tokens: 1, output_tokens: 1 },
-    });
+    const { url, headers } = await capturedOpenAIRequest(openAICompatibleModel());
 
     expect(url).toBe("https://gateway.example/v1/responses");
     expect(headers.get("user-agent") ?? "").toStartWith(clientIdentity());

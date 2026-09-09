@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { run } from "../src/run";
+import type { StreamEvent } from "../src/processor/stream-events";
 
 for (const visible of ["none", "text", "tool"] as const) {
   test(`one provider attempt retains ${visible} visibility and billed failure`, async () => {
@@ -17,7 +18,7 @@ for (const visible of ["none", "text", "tool"] as const) {
         createStream: async () => {
           calls += 1;
           return {
-            fullStream: (async function* () {
+            fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
               if (visible === "text") yield { type: "text-delta", text: "visible" };
               if (visible === "tool")
                 yield { type: "tool-call", toolCallId: "call", toolName: "read", input: {} };

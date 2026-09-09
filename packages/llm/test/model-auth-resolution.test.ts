@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { Auth, ModelsDev, Provider } from "../src";
+import { Auth, Provider } from "../src";
+import { ModelsDev } from "../src/model";
 
 const catalog = {
   anthropic: {
@@ -44,6 +45,18 @@ describe("canonical model and provider-bound credentials", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  test("proxy discovery keeps valid IDs when entries are malformed", async () => {
+    spyOn(ModelsDev, "get").mockResolvedValue(catalog);
+    spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://mixed-proxy.example" });
+    spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ data: [{ id: "wanted" }, { id: 42 }, { other: "ignored" }] }),
+    );
+    expect(await Provider.resolveModel({ provider: "anthropic", id: "wanted" })).toMatchObject({
+      id: "wanted",
+      providerID: "anthropic",
+    });
+  });
+
   test("positive proxy discovery retains model identity and reports listing failure", async () => {
     spyOn(ModelsDev, "get").mockResolvedValue(catalog);
     spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://proxy.example" });
@@ -63,7 +76,7 @@ describe("canonical model and provider-bound credentials", () => {
       Provider.resolveModel({ provider: "anthropic", id: "absent" }),
     ).rejects.toMatchObject({
       data: { reason: "proxy_listing_failed" },
-      cause: expect.any(Error),
+      cause: { name: "ProxyModelsError", cause: { message: "connection refused" } },
     });
   });
 

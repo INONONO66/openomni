@@ -1,4 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { jsonSchema, streamText } from "ai";
+import { z } from "zod";
 import { Bus, newTraceId } from "./helpers/observation";
 import { clientIdentity } from "../src/provider/identity";
 import type { Sink } from "../src/sink";
@@ -9,30 +11,29 @@ const TEST_TRACE = {
   runId: "run-transport",
 };
 
-type AiCaptureGlobal = typeof globalThis & {
-  __openomniTransportStreamArgs?: Record<string, unknown>;
-};
+type StreamTextArgs = Parameters<typeof streamText>[0];
 
-const aiCapture = globalThis as AiCaptureGlobal;
+let capturedStreamArgs: StreamTextArgs | undefined;
 
 function mockAiModule() {
   mock.module("ai", () => ({
-    streamText: (args: Record<string, unknown>) => {
-      aiCapture.__openomniTransportStreamArgs = args;
+    streamText: (args: StreamTextArgs) => {
+      capturedStreamArgs = args;
       return {
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<{ type: "finish" }, void, undefined> {
           yield { type: "finish" };
         })(),
       };
     },
-    jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+    jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
     stepCountIs: () => () => true,
   }));
 }
 
 mockAiModule();
 
-let run: typeof import("../src/run").run;
+type RunModule = typeof import("../src/run");
+let run: RunModule["run"];
 
 beforeAll(async () => {
   ({ run } = await import("../src/run"));
@@ -44,15 +45,26 @@ const sink: Sink = {
   onToolResult: () => undefined,
 };
 
+/** The provider SDK keeps its resolved transport on the language model's config. */
+const HeaderValue = z.union([z.string(), z.undefined()]);
+const HeadersFactory = z.function({
+  input: z.tuple([]),
+  output: z.record(z.string(), HeaderValue),
+});
+const TransportConfig = z.object({
+  config: z.object({
+    baseURL: z.string(),
+    headers: z.union([z.record(z.string(), HeaderValue), HeadersFactory]),
+  }),
+});
+
 /** The SDK's own view of where it will send and what it will send with. */
-function resolvedTransport(): { baseURL: string; headers: Record<string, string> } {
-  const streamArgs = aiCapture.__openomniTransportStreamArgs as
-    | { model?: { config?: { baseURL?: string; headers?: unknown } } }
-    | undefined;
-  const config = streamArgs?.model?.config;
-  if (config === undefined) expect.unreachable("Expected streamText to receive a language model");
-  const headers = typeof config.headers === "function" ? config.headers() : config.headers;
-  return { baseURL: String(config.baseURL), headers: headers as Record<string, string> };
+function resolvedTransport(): { baseURL: string; headers: Record<string, string | undefined> } {
+  const { config } = TransportConfig.parse(capturedStreamArgs?.model);
+  return {
+    baseURL: config.baseURL,
+    headers: typeof config.headers === "function" ? config.headers() : config.headers,
+  };
 }
 
 async function runWith(transport?: {
@@ -81,7 +93,7 @@ async function runWith(transport?: {
 describe("run() operator transport threading", () => {
   beforeEach(() => {
     mockAiModule();
-    aiCapture.__openomniTransportStreamArgs = undefined;
+    capturedStreamArgs = undefined;
   });
 
   test("threads the caller's baseUrl and headers into the provider SDK", async () => {

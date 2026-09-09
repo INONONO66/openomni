@@ -1,173 +1,121 @@
-import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelsDev } from "../../src/model";
+import { Catalog } from "../../src/model/schema";
+import snapshot from "../../src/model/models-snapshot.json";
+import { resetCatalog } from "../helpers/model-loader";
+import { mockFetch, jsonResponse } from "../helpers/provider-fetch";
+
+const expectedSnapshot = Catalog.parse(snapshot);
+const fixture = { fixture: { id: "fixture", name: "Fixture", env: [], models: {} } };
 
 describe("ModelsDev", () => {
   let originalEnv: NodeJS.ProcessEnv;
   let directory: string;
   let originalFetch: typeof fetch;
-  const network = mock(() => Promise.reject(new Error("unexpected network request")));
+  const network = mock(() => Promise.reject(new Error("offline")));
 
   beforeEach(() => {
     originalEnv = { ...process.env };
     originalFetch = globalThis.fetch;
     directory = mkdtempSync(join(tmpdir(), "models-test-"));
     process.env.OPENOMNI_MODELS_PATH = join(directory, "models.json");
-    process.env.OPENOMNI_AUTH_FILE = join(directory, "auth.json");
     process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
     network.mockClear();
     globalThis.fetch = Object.assign(network, { preconnect: originalFetch.preconnect });
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    ModelsDev.Data.reset();
+    resetCatalog();
     process.env = originalEnv;
     rmSync(directory, { recursive: true, force: true });
+  });
+
+  it("exposes only the supported catalog operation", () => {
+    expect(Object.keys(ModelsDev)).toEqual(["get"]);
+  });
+
+  it("loads asynchronously", async () => {
+    const pending = ModelsDev.get();
+    expect(pending).toBeInstanceOf(Promise);
+    expect(await pending).toEqual(expectedSnapshot);
+  });
+
+  it("returns decoded provider and model identities", async () => {
+    const data = await ModelsDev.get();
+    expect(data.anthropic?.id).toBe("anthropic");
+    expect(data.anthropic?.models["claude-opus-4-5"]?.id).toBe("claude-opus-4-5");
+  });
+
+  it("returns the same cached result on a second call", async () => {
+    const first = await ModelsDev.get();
+    expect(await ModelsDev.get()).toBe(first);
+  });
+
+  it("coalesces concurrent catalog loads", async () => {
+    const load = mock(() => Promise.resolve(fixture));
+    resetCatalog(load);
+    const first = ModelsDev.get();
+    const second = ModelsDev.get();
+    expect(first).toBe(second);
+    expect(await first).toBe(fixture);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload a completed catalog", async () => {
+    const load = mock(() => Promise.resolve(fixture));
+    resetCatalog(load);
+    await ModelsDev.get();
+    await ModelsDev.get();
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates the next catalog owner from a previous loaded value", async () => {
+    resetCatalog(() => Promise.resolve(fixture));
+    expect(await ModelsDev.get()).toBe(fixture);
+    resetCatalog();
+    expect(await ModelsDev.get()).toEqual(expectedSnapshot);
+  });
+
+  it("uses OPENOMNI_MODELS_PATH for cache location", async () => {
+    process.env.OPENOMNI_MODELS_PATH = join(directory, "custom.json");
+    const cached = {
+      custom: { id: "custom", name: "Custom", env: [], npm: "@ai-sdk/openai", models: {} },
+    };
+    await Bun.write(process.env.OPENOMNI_MODELS_PATH, JSON.stringify(cached));
+    expect(await ModelsDev.get()).toEqual(cached);
     expect(network).not.toHaveBeenCalled();
   });
 
-  describe("public API", () => {
-    it("should expose only the supported catalog operations", () => {
-      expect("init" in ModelsDev).toBe(false);
-    });
+  it("skips fetch when OPENOMNI_DISABLE_MODELS_FETCH is set", async () => {
+    expect(await ModelsDev.get()).toEqual(expectedSnapshot);
+    expect(network).not.toHaveBeenCalled();
   });
 
-  describe("get", () => {
-    it("should be an async function", () => {
-      expect(typeof ModelsDev.get).toBe("function");
-    });
-
-    it("should return an object with provider keys", async () => {
-      const data = await ModelsDev.get();
-      expect(typeof data).toBe("object");
-      expect(data).not.toBeNull();
-    });
-
-    it("should return cached result on second call", async () => {
-      const first = await ModelsDev.get();
-      const second = await ModelsDev.get();
-      expect(first).toBe(second);
-    });
+  it("returns the snapshot when fetch and cache fail", async () => {
+    delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+    expect(await ModelsDev.get()).toEqual(expectedSnapshot);
+    expect(network).toHaveBeenCalledTimes(1);
   });
 
-  describe("Data", () => {
-    it("should be callable like get()", async () => {
-      const data = await ModelsDev.Data();
-      expect(typeof data).toBe("object");
-    });
-
-    it("should have a reset method", () => {
-      expect(typeof ModelsDev.Data.reset).toBe("function");
-    });
-
-    it("should clear cache on reset", async () => {
-      await ModelsDev.get();
-      ModelsDev.Data.reset();
-      const fresh = await ModelsDev.get();
-      expect(typeof fresh).toBe("object");
-    });
+  it("keeps a fetched catalog usable when its cache cannot be written", async () => {
+    delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+    process.env.OPENOMNI_MODELS_PATH = directory;
+    const remote = {
+      openai: { id: "openai", name: "OpenAI", env: [], npm: "@ai-sdk/openai", models: {} },
+    };
+    globalThis.fetch = mockFetch(() => jsonResponse(remote));
+    expect(await ModelsDev.get()).toEqual(remote);
   });
 
-  describe("env flags", () => {
-    it("should use OPENOMNI_MODELS_PATH for cache location", async () => {
-      const fakePath = join(directory, "missing", "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-
-      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = Object.assign(
-        mock(() => Promise.reject(new Error("offline"))),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-        expect(data).not.toBeNull();
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-      }
-    });
-
-    it("should skip fetch when OPENOMNI_DISABLE_MODELS_FETCH is set", async () => {
-      const fakePath = join(directory, "missing", "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      process.env.OPENOMNI_DISABLE_MODELS_FETCH = "true";
-
-      const fetchSpy = Object.assign(
-        mock(() => Promise.resolve(new Response("ok"))),
-        {
-          preconnect: globalThis.fetch.preconnect,
-        },
-      );
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = fetchSpy;
-
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-        expect(fetchSpy).not.toHaveBeenCalled();
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-        delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      }
-    });
-  });
-
-  describe("snapshot fallback", () => {
-    it("should return data from snapshot when fetch and cache fail", async () => {
-      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = Object.assign(
-        mock(() => Promise.reject(new Error("offline"))),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-
-      const fakePath = join(directory, "missing", "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      ModelsDev.Data.reset();
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-        expect(data).not.toBeNull();
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-      }
-    });
-
-    it("should return empty object as final fallback when snapshot unavailable", async () => {
-      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = Object.assign(
-        mock(() => Promise.reject(new Error("offline"))),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-
-      const fakePath = join(directory, "missing", "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      process.env.OPENOMNI_DISABLE_MODELS_FETCH = "true";
-      ModelsDev.Data.reset();
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-        delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      }
-    });
+  it("propagates an unavailable snapshot instead of fabricating an empty catalog", async () => {
+    const error = new Error("snapshot unavailable");
+    resetCatalog(() => Promise.reject(error));
+    await expect(ModelsDev.get()).rejects.toBe(error);
+    expect(network).not.toHaveBeenCalled();
   });
 });

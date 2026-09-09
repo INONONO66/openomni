@@ -1,29 +1,40 @@
-import { APIError, coerceApiError } from "../error";
+import { z } from "zod";
+import { type ApiFailure, apiFailure, coerceApiError, declaredContextOverflow } from "../error";
+import { headerDelay } from "./delay";
+
+const Payload = z.object({
+  type: z.string().catch(""),
+  code: z.string().catch(""),
+  error: z
+    .object({
+      type: z.string().catch(""),
+      code: z.string().catch(""),
+      message: z.string().catch(""),
+    })
+    .catch({ type: "", code: "", message: "" }),
+});
 
 export namespace Retry {
   export const MAX_ATTEMPTS = 3;
 
+  const OVERFLOW_PATTERNS = [
+    "context_length_exceeded",
+    "context length",
+    "context limit",
+    "context window",
+    "maximum context",
+    "prompt is too long",
+    "too many tokens",
+    "token limit",
+    "exceeds the maximum number of tokens",
+    "input is too long",
+  ] as const;
+
   export function isContextOverflow(error: Error): boolean {
-    if (
-      "data" in error &&
-      typeof error.data === "object" &&
-      error.data !== null &&
-      "contextOverflow" in error.data
-    )
-      return error.data.contextOverflow === true;
+    const declared = declaredContextOverflow(error);
+    if (declared !== undefined) return declared;
     const message = error.message.toLowerCase();
-    return [
-      "context_length_exceeded",
-      "context length",
-      "context limit",
-      "context window",
-      "maximum context",
-      "prompt is too long",
-      "too many tokens",
-      "token limit",
-      "exceeds the maximum number of tokens",
-      "input is too long",
-    ].some((pattern) => message.includes(pattern));
+    return OVERFLOW_PATTERNS.some((pattern) => message.includes(pattern));
   }
 
   /** Existing placement/agent machine vocabulary, derived beside provider classification. */
@@ -31,9 +42,15 @@ export namespace Retry {
     error: Error,
   ): "timeout" | "transient_error" | "validation_error" | "context_overflow" {
     if (isContextOverflow(error)) return "context_overflow";
-    const api = apiCause(error);
-    if (api?.data.statusCode === 408) return "timeout";
-    return api !== undefined && !api.data.isRetryable ? "validation_error" : "transient_error";
+    return apiReason(apiCause(error));
+  }
+
+  function apiReason(
+    api: ApiFailure | undefined,
+  ): "timeout" | "transient_error" | "validation_error" {
+    if (api === undefined) return "transient_error";
+    if (api.data.statusCode === 408) return "timeout";
+    return api.data.isRetryable ? "transient_error" : "validation_error";
   }
   export const RETRY_INITIAL_DELAY = 2000;
   export const RETRY_BACKOFF_FACTOR = 2;
@@ -81,25 +98,18 @@ export namespace Retry {
   export const INSTANT_FAILURE_PROBE_DELAY_MS = 250;
   export const INSTANT_FAILURE_STREAK_LIMIT = 3;
 
-  export function isInstantTransportFailure(error: unknown, elapsedMs: number): boolean {
+  export function isInstantTransportFailure<E>(error: E, elapsedMs: number): boolean {
     if (elapsedMs >= INSTANT_FAILURE_WINDOW_MS) return false;
     const providerError = apiCause(error);
-    if (providerError === undefined) return false;
-    // A status code or response headers prove the endpoint answered — that is
-    // an HTTP failure, not a transport one, whatever the timing.
-    return (
-      providerError.data.isRetryable &&
-      providerError.data.statusCode === undefined &&
-      providerError.data.responseHeaders === undefined
-    );
+    return providerError !== undefined && answeredByTransport(providerError.data);
   }
 
-  /**
-   * The retry vocabulary (#532 candidate 3). Every member has a producing
-   * branch in classify() and a consuming case in the processor's typed
-   * switch — reasons are branched on as literals, never as prose. Human
-   * prose lives only in Decision.detail.
-   */
+  /** A status code or response headers prove the endpoint answered: HTTP, not transport. */
+  function answeredByTransport(data: ApiFailure["data"]): boolean {
+    return data.isRetryable && data.statusCode === undefined && data.responseHeaders === undefined;
+  }
+
+  /** Consumers branch on this closed vocabulary, never on detail prose. */
   export type Reason =
     | "rate_limit"
     | "overloaded"
@@ -120,80 +130,96 @@ export namespace Retry {
       }
     | { readonly retry: false; readonly reason: Reason; readonly detail?: string };
 
-  /**
-   * Typed retry decision (#532 candidate 3): classification + delay in one
-   * call, failing fast when the server asks for a wait above the cap.
-   */
-  export function decide(
+  /** Terminal classification precedes probes, headers and backoff. */
+  export function decide<E>(
     attempt: number,
-    error: unknown,
+    error: E,
     instantFailureStreak = 0,
     fallbackAvailable = false,
   ): Decision {
-    const providerError = apiCause(error);
-    const reason = classify(providerError);
-    if (reason === "non_retryable") {
-      if (fallbackAvailable && providerError?.data.statusCode === 400)
-        return { retry: true, reason: "validation_error", delayMs: 0 };
-      return { retry: false, reason };
-    }
-    // Terminal before any delay is considered: a spent balance is not a wait,
-    // so neither a retry-after header nor the transport-streak probe applies.
-    if (reason === "billing") {
-      return {
-        retry: false,
-        reason,
-        detail:
-          "the account's quota or billing balance is exhausted — retrying cannot restore it; top up or raise the limit",
-      };
-    }
-    // A moderation verdict is a judgment about THIS request, not a capacity
-    // condition: the identical prompt earns the identical refusal, so it is
-    // terminal before any delay too.
-    if (reason === "content_policy") {
-      return {
-        retry: false,
-        reason,
-        detail:
-          "the provider refused this request on content policy grounds — the same prompt will be refused again; change what is being asked",
-      };
-    }
-    if (instantFailureStreak >= INSTANT_FAILURE_STREAK_LIMIT) {
-      return {
-        retry: false,
-        reason,
-        detail: `${instantFailureStreak} consecutive transport failures under ${INSTANT_FAILURE_WINDOW_MS}ms — the endpoint is refusing connections, retrying cannot help`,
-      };
-    }
-    if (instantFailureStreak > 0) {
-      return { retry: true, reason, delayMs: INSTANT_FAILURE_PROBE_DELAY_MS };
-    }
-    const header = headerDelay(providerError);
-    if (header !== undefined) {
-      if (header.ms > RETRY_HEADER_DELAY_CAP) {
-        // Only an explicit retry-after directive fails fast; an out-of-range
-        // ratelimit reset is an inference we made, so it demotes to backoff
-        // rather than killing the run.
-        if (header.directive) {
-          return {
-            retry: false,
-            reason,
-            detail: `server asked to wait ${header.ms}ms, above the ${RETRY_HEADER_DELAY_CAP}ms cap`,
-          };
-        }
-        return { retry: true, reason, delayMs: backoffDelayMs(attempt), retryAfterOverCap: true };
-      }
-      return { retry: true, reason, delayMs: Math.max(0, header.ms) };
-    }
-    return { retry: true, reason, delayMs: backoffDelayMs(attempt) };
+    return decideFor(attempt, apiCause(error), instantFailureStreak, fallbackAvailable);
   }
 
-  /**
-   * How much of a ladder delay jitter may subtract. Full jitter (down to 0)
-   * would let a retry land on the same tick as the failure it is backing off
-   * from; a quarter is enough to break the fleet-wide stampede that identical
-   * exponential delays produce, while keeping the backoff's shape.
-   */
+  const TERMINAL_DETAIL = {
+    billing:
+      "the account's quota or billing balance is exhausted — retrying cannot restore it; top up or raise the limit",
+    content_policy:
+      "the provider refused this request on content policy grounds — the same prompt will be refused again; change what is being asked",
+  } as const;
+
+  function decideFor(
+    attempt: number,
+    providerError: ApiFailure | undefined,
+    instantFailureStreak: number,
+    fallbackAvailable: boolean,
+  ): Decision {
+    const reason = classify(providerError);
+    switch (reason) {
+      case "non_retryable":
+        return nonRetryable(providerError, fallbackAvailable);
+      case "billing":
+      case "content_policy":
+        return { retry: false, reason, detail: TERMINAL_DETAIL[reason] };
+      default:
+        return retryable(attempt, reason, providerError, instantFailureStreak);
+    }
+  }
+
+  function retryable(
+    attempt: number,
+    reason: RetryableReason,
+    providerError: ApiFailure | undefined,
+    instantFailureStreak: number,
+  ): Decision {
+    return (
+      streakDecision(instantFailureStreak, reason) ??
+      selectDelay(attempt, reason, headerDelay(providerError))
+    );
+  }
+
+  /** A 400 with a fallback candidate is worth one immediate re-route; nothing else is. */
+  function nonRetryable(
+    providerError: ApiFailure | undefined,
+    fallbackAvailable: boolean,
+  ): Decision {
+    if (fallbackAvailable && providerError?.data.statusCode === 400)
+      return { retry: true, reason: "validation_error", delayMs: 0 };
+    return { retry: false, reason: "non_retryable" };
+  }
+
+  function streakDecision(streak: number, reason: RetryableReason): Decision | undefined {
+    if (streak >= INSTANT_FAILURE_STREAK_LIMIT) {
+      return {
+        retry: false,
+        reason,
+        detail: `${streak} consecutive transport failures under ${INSTANT_FAILURE_WINDOW_MS}ms — the endpoint is refusing connections, retrying cannot help`,
+      };
+    }
+    return streak > 0
+      ? { retry: true, reason, delayMs: INSTANT_FAILURE_PROBE_DELAY_MS }
+      : undefined;
+  }
+
+  function selectDelay(
+    attempt: number,
+    reason: RetryableReason,
+    header: ReturnType<typeof headerDelay>,
+  ): Decision {
+    if (header === undefined) return { retry: true, reason, delayMs: backoffDelayMs(attempt) };
+    if (header.ms <= RETRY_HEADER_DELAY_CAP)
+      return { retry: true, reason, delayMs: Math.max(0, header.ms) };
+    // Explicit directives fail fast; inferred resets demote to backoff.
+    if (header.directive) {
+      return {
+        retry: false,
+        reason,
+        detail: `server asked to wait ${header.ms}ms, above the ${RETRY_HEADER_DELAY_CAP}ms cap`,
+      };
+    }
+    return { retry: true, reason, delayMs: backoffDelayMs(attempt), retryAfterOverCap: true };
+  }
+
+  /** Jitter subtracts at most one quarter of the ladder delay. */
   export const RETRY_JITTER_RATIO = 0.25;
 
   /**
@@ -205,157 +231,61 @@ export namespace Retry {
       RETRY_INITIAL_DELAY * RETRY_BACKOFF_FACTOR ** (attempt - 1),
       RETRY_MAX_DELAY_NO_HEADERS,
     );
-    // Rounded: the delay is a millisecond wait and a published `backoffMs`,
-    // and a fractional tail is noise in both.
     return Math.round(ladder * (1 - Math.random() * RETRY_JITTER_RATIO));
   }
 
   /** Provider-directed delay retained on the terminal typed failure. */
-  export function retryAfterMs(error: unknown): number | undefined {
-    const apiError = APIError.isInstance(error) ? error : undefined;
-    return headerDelay(apiError)?.ms;
+  export function retryAfterMs<E>(error: E): number | undefined {
+    return headerDelay(apiFailure(error))?.ms;
   }
 
-  /** Directive: explicit retry-after vs an inferred ratelimit reset. */
-  function headerDelay(
-    error?: InstanceType<typeof APIError>,
-  ): { ms: number; directive: boolean } | undefined {
-    const headers = error?.data.responseHeaders;
-    if (!headers) return undefined;
-
-    const retryAfterMs = headers["retry-after-ms"];
-    if (retryAfterMs) {
-      const parsedMs = Number.parseFloat(retryAfterMs);
-      if (!Number.isNaN(parsedMs)) {
-        return { ms: parsedMs, directive: true };
-      }
-    }
-
-    const retryAfter = headers["retry-after"];
-    if (retryAfter) {
-      const parsedSeconds = Number.parseFloat(retryAfter);
-      if (!Number.isNaN(parsedSeconds)) {
-        return { ms: Math.ceil(parsedSeconds * 1000), directive: true };
-      }
-      const parsed = Date.parse(retryAfter) - Date.now();
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        return { ms: Math.ceil(parsed), directive: true };
-      }
-    }
-
-    // Structured ratelimit resets are the fallback signal when retry-after is
-    // absent: Anthropic sends RFC3339 timestamps, OpenAI sends Go-style
-    // durations ("1s", "1m30s"). Take the earliest reset across buckets.
-    let earliest: number | undefined;
-    for (const [name, value] of Object.entries(headers)) {
-      if (!/^(anthropic-ratelimit|x-ratelimit)-.*reset/.test(name)) continue;
-      const ms = parseResetValue(value);
-      if (ms === undefined) continue;
-      if (earliest === undefined || ms < earliest) earliest = ms;
-    }
-    return earliest === undefined ? undefined : { ms: earliest, directive: false };
-  }
-
-  function parseResetValue(value: string): number | undefined {
-    // Durations before Date.parse: a bare number like "2027" would otherwise
-    // parse as a year.
-    const duration = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?(?:(\d+)ms)?$/.exec(value.trim());
-    if (duration && duration[0] !== "") {
-      // A non-empty match necessarily populated at least one capture: every
-      // accepted character belongs to one of h/m/s/ms.
-      const [, h, m, s, ms] = duration;
-      return (
-        Number(h ?? 0) * 3_600_000 +
-        Number(m ?? 0) * 60_000 +
-        Math.ceil(Number(s ?? 0) * 1000) +
-        Number(ms ?? 0)
-      );
-    }
-    if (!/[-T:]/.test(value)) return undefined; // timestamps only — never bare numbers
-    const asDate = Date.parse(value);
-    if (!Number.isNaN(asDate)) {
-      const ms = asDate - Date.now();
-      return ms > 0 ? Math.ceil(ms) : undefined;
-    }
-    return undefined;
-  }
-
-  /**
-   * How deep a cause chain is walked before giving up. A wrapper layer per
-   * package is the realistic shape (`llm` failure inside an app-level error);
-   * the bound also makes a self-referential `cause` terminate.
-   */
+  /** Bound traversal even for cyclic cause chains. */
   const MAX_CAUSE_DEPTH = 8;
+  const Caused = z.object({ cause: z.instanceof(Object) });
 
-  /**
-   * The classification entry point for callers OUTSIDE the retry loop: hosts
-   * deciding what to tell a user when a run died. Unlike {@link decide} it
-   * takes any thrown value — the typed APIError, a raw AI SDK provider error
-   * (coerced), or either of those wrapped as the `cause` of a higher layer's
-   * failure — and answers with the same closed vocabulary the retry loop
-   * branches on. Hosts get the class here instead of re-matching provider
-   * prose, which is exactly the drift this vocabulary exists to prevent.
-   */
-  export function classifyFailure(error: unknown): Reason {
+  /** Host-facing classification shares the retry decision's provider decoder. */
+  export function classifyFailure<E>(error: E): Reason {
     return classify(apiCause(error));
   }
 
-  function apiCause(error: unknown): InstanceType<typeof APIError> | undefined {
-    let current: unknown = error;
-    for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+  function apiCause<E>(error: E): ApiFailure | undefined {
+    let current: object | undefined = z.instanceof(Object).safeParse(error).data;
+    for (let depth = 0; depth < MAX_CAUSE_DEPTH && current !== undefined; depth += 1) {
       const apiError = coerceApiError(current);
       if (apiError !== undefined) return apiError;
-      if (typeof current !== "object" || current === null || !("cause" in current)) break;
-      const cause = (current as { cause?: unknown }).cause;
-      if (cause === current || cause === undefined) break;
-      current = cause;
+      current = nextCause(current);
     }
     return undefined;
   }
 
-  function classify(error: unknown): Reason {
-    if (!APIError.isInstance(error)) {
-      return "non_retryable";
-    }
+  function nextCause(current: object): object | undefined {
+    const cause = Caused.safeParse(current).data?.cause;
+    return cause === current ? undefined : cause;
+  }
 
-    // Balance exhaustion outranks the provider's retryable flag: a 429 whose
-    // body says the quota is spent is not a wait, and burning the ladder on it
-    // only delays the operator's one real remedy.
-    if (isBillingExhaustion(error.data.message) || isBillingExhaustion(error.data.responseBody)) {
-      return "billing";
-    }
+  function classify(error: ApiFailure | undefined): Reason {
+    if (error === undefined) return "non_retryable";
+    // Billing and moderation outrank the provider's retryable flag.
+    return terminalClass(error.data) ?? retryableClass(error.data);
+  }
 
-    // Moderation outranks the retryable flag for the same reason billing
-    // does: the verdict is about the request, and no wait changes it.
-    if (
-      isContentPolicyRefusal(error.data.statusCode, error.data.message) ||
-      isContentPolicyRefusal(error.data.statusCode, error.data.responseBody)
-    ) {
+  function terminalClass(data: ApiFailure["data"]): Reason | undefined {
+    const payloads = [data.message, data.responseBody];
+    if (payloads.some(isBillingExhaustion)) return "billing";
+    if (payloads.some((payload) => isContentPolicyRefusal(data.statusCode, payload)))
       return "content_policy";
-    }
+    return data.isRetryable ? undefined : "non_retryable";
+  }
 
-    if (!error.data.isRetryable) {
-      return "non_retryable";
-    }
-
-    const sniffed =
-      classifyErrorPayload(error.data.message) ?? classifyErrorPayload(error.data.responseBody);
-    if (sniffed !== undefined) {
-      return sniffed;
-    }
-
-    // Status outranks a payload the sniffer found no specific signal in: an
-    // Anthropic 429 body ({error:{type:"rate_limit_error"}}) must classify as
-    // a rate limit, not fall into the generic server-error bucket.
-    const status = error.data.statusCode;
-    if (status === 429) {
-      return "rate_limit";
-    }
-
-    // 5xx, plus the residue the provider marked retryable (408/409,
-    // x-should-retry, network failures) without a recognizable class — no
-    // consumer distinguishes these, so they share the server_error bucket.
-    return "server_error";
+  /**
+   * Status is the fallback when the payload has no recognized signal: 429 is a
+   * rate limit; 5xx plus the residue the provider marked retryable (408/409,
+   * x-should-retry, network failures) share the server_error bucket since no
+   * consumer distinguishes them.
+   */
+  function retryableClass(data: ApiFailure["data"]): RetryableReason {
+    const sniffed = classifyErrorPayload(data.message) ?? classifyErrorPayload(data.responseBody);
+    return sniffed ?? (data.statusCode === 429 ? "rate_limit" : "server_error");
   }
 
   /**
@@ -400,57 +330,52 @@ export namespace Retry {
     statusCode: number | undefined,
     payload: string | undefined,
   ): boolean {
-    if (payload === undefined || statusCode === undefined) return false;
-    if (statusCode < 400 || statusCode >= 500) return false;
+    if (payload === undefined || !isClientError(statusCode)) return false;
     const haystack = payload.toLowerCase();
     return CONTENT_POLICY_PATTERNS.some((pattern) => haystack.includes(pattern));
   }
 
-  function classifyErrorPayload(payload: string | undefined): RetryableReason | undefined {
-    if (!payload) return undefined;
+  function isClientError(statusCode: number | undefined): boolean {
+    return statusCode !== undefined && statusCode >= 400 && statusCode < 500;
+  }
 
-    let json: unknown;
+  function classifyErrorPayload(payload: string | undefined): RetryableReason | undefined {
+    const body = parsePayload(payload);
+    return body === undefined ? undefined : bodyClass(body);
+  }
+
+  function bodyClass(body: z.infer<typeof Payload>): RetryableReason | undefined {
+    if (isRateLimitBody(body)) return "rate_limit";
+    if (isOverloadedBody(body)) return "overloaded";
+    // A generic error body carries no class of its own — defer to status.
+    return isServerErrorBody(body) ? "server_error" : undefined;
+  }
+
+  function isOverloadedBody(body: z.infer<typeof Payload>): boolean {
+    return body.code.includes("exhausted") || body.code.includes("unavailable");
+  }
+
+  function parsePayload(payload: string | undefined): z.infer<typeof Payload> | undefined {
+    if (!payload) return undefined;
     try {
-      json = JSON.parse(payload);
+      return Payload.parse(JSON.parse(payload));
     } catch {
       return undefined;
     }
+  }
 
-    if (!json || typeof json !== "object") {
-      return undefined;
-    }
+  function isRateLimitBody(body: z.infer<typeof Payload>): boolean {
+    if (body.type !== "error") return false;
+    const { type, code } = body.error;
+    return (
+      type === "too_many_requests" || type.includes("rate_limit") || code.includes("rate_limit")
+    );
+  }
 
-    const body = json as {
-      type?: unknown;
-      code?: unknown;
-      error?: { type?: unknown; code?: unknown; message?: unknown };
-    };
-    const code = typeof body.code === "string" ? body.code : "";
-    const errorType = typeof body.error?.type === "string" ? body.error.type : "";
-    const errorCode = typeof body.error?.code === "string" ? body.error.code : "";
-    const errorMessage = typeof body.error?.message === "string" ? body.error.message : "";
-
-    if (
-      body.type === "error" &&
-      (errorType === "too_many_requests" ||
-        errorType.includes("rate_limit") ||
-        errorCode.includes("rate_limit"))
-    ) {
-      return "rate_limit";
-    }
-
-    if (code.includes("exhausted") || code.includes("unavailable")) {
-      return "overloaded";
-    }
-
-    if (
-      errorMessage.includes("no_kv_space") ||
-      (body.type === "error" && errorType === "server_error")
-    ) {
-      return "server_error";
-    }
-
-    // A generic error body carries no class of its own — defer to status.
-    return undefined;
+  function isServerErrorBody(body: z.infer<typeof Payload>): boolean {
+    return (
+      body.error.message.includes("no_kv_space") ||
+      (body.type === "error" && body.error.type === "server_error")
+    );
   }
 }

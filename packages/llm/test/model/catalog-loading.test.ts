@@ -3,17 +3,25 @@ import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { PlainObject } from "@openomni/protocol";
 import { ModelsDev } from "../../src/model";
+import { Catalog } from "../../src/model/schema";
+import { resetCatalog } from "../helpers/model-loader";
 
-type RemoteCatalogCase = {
+type RemoteCatalogCase<Selected> = {
   readonly name: string;
-  readonly catalog: Record<string, unknown>;
-  readonly select: (data: Record<string, ModelsDev.Provider>) => unknown;
-  readonly expected: unknown;
+  /** The JSON body the remote catalog answers with. */
+  readonly catalog: PlainObject;
+  readonly select: (data: Record<string, ModelsDev.Provider>) => Selected;
+  readonly expected: Selected;
 };
 
-const remoteCatalogCases: RemoteCatalogCase[] = [
-  {
+function remoteCase<Selected>(testCase: RemoteCatalogCase<Selected>): RemoteCatalogCase<Selected> {
+  return testCase;
+}
+
+const remoteCatalogCases = [
+  remoteCase({
     name: "prefers a successful fetch over the bundled snapshot",
     catalog: {
       "test-network-provider": {
@@ -39,8 +47,8 @@ const remoteCatalogCases: RemoteCatalogCase[] = [
       name: "Network Provider",
       npm: "@ai-sdk/openai",
     },
-  },
-  {
+  }),
+  remoteCase({
     name: "drops custom providers without a bundled SDK",
     catalog: {
       custom: {
@@ -53,8 +61,8 @@ const remoteCatalogCases: RemoteCatalogCase[] = [
     },
     select: (data) => data.custom,
     expected: undefined,
-  },
-  {
+  }),
+  remoteCase({
     name: "removes model-level provider packages",
     catalog: {
       openai: {
@@ -73,7 +81,7 @@ const remoteCatalogCases: RemoteCatalogCase[] = [
     },
     select: (data) => data.openai?.models["gpt-test"],
     expected: { id: "gpt-test", name: "GPT Test" },
-  },
+  }),
 ];
 
 describe("ModelsDev catalog loading", () => {
@@ -81,7 +89,7 @@ describe("ModelsDev catalog loading", () => {
   let testCacheDir: string | undefined;
 
   beforeEach(() => {
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
 
   afterEach(async () => {
@@ -92,7 +100,7 @@ describe("ModelsDev catalog loading", () => {
     }
   });
 
-  async function writeCacheCatalog(content: unknown): Promise<void> {
+  async function writeCacheCatalog(content: string | PlainObject): Promise<void> {
     testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-cache-"));
     process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
     process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
@@ -166,7 +174,7 @@ describe("ModelsDev catalog loading", () => {
       });
 
       const snapshot = (await import("../../src/model/models-snapshot.json")).default;
-      await expect(ModelsDev.get()).resolves.toEqual(snapshot);
+      await expect(ModelsDev.get()).resolves.toEqual(Catalog.parse(snapshot));
     });
 
     it("should drop malformed model records from trusted providers", async () => {
@@ -188,24 +196,18 @@ describe("ModelsDev catalog loading", () => {
     });
 
     it("should not let prototype keys mutate sanitized catalog objects", async () => {
-      await writeCacheCatalog(`{
-          "__proto__": {
-            id: "__proto__",
-            name: "Polluted",
-            env: [],
-            npm: "@ai-sdk/openai",
-            models: {
-              "__proto__": {
-                id: "__proto__",
-                name: "Polluted Model",
-              },
-            },
-          }
-        }`);
-
+      const provider = {
+        id: "safe",
+        name: "Safe",
+        env: [],
+        npm: "@ai-sdk/openai",
+        models: { ["__proto__"]: { id: "bad", name: "Bad" }, safe: { id: "safe", name: "Safe" } },
+      };
+      await writeCacheCatalog(JSON.stringify({ ["__proto__"]: provider, safe: provider }));
       const data = await ModelsDev.get();
+      expect(Object.keys(data)).toEqual(["safe"]);
+      expect(Object.keys(data.safe?.models ?? {})).toEqual(["safe"]);
       expect(Reflect.ownKeys(data).includes("__proto__")).toBe(false);
-      expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
     });
   });
 });

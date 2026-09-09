@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { NamedError, ProviderError, APIError, coerceApiError } from "../src/error";
+import { NamedError, APIError, coerceApiError } from "../src/error";
+import { sdkError } from "./helpers/retry";
 
 describe("coerceApiError", () => {
   test("passes through protocol APIError instances", () => {
@@ -8,26 +9,26 @@ describe("coerceApiError", () => {
   });
 
   test("coerces AI SDK APICallError-shaped errors with lowercased headers", () => {
-    const sdkError = Object.assign(new Error("Overloaded"), {
-      name: "AI_APICallError",
+    const failure = sdkError({
+      message: "sdk fixture",
       isRetryable: true,
       statusCode: 529,
       responseHeaders: { "Retry-After-Ms": "1200" },
       responseBody: '{"type":"error"}',
     });
 
-    const coerced = coerceApiError(sdkError);
+    const coerced = coerceApiError(failure);
 
     expect(coerced).toBeDefined();
     expect(APIError.isInstance(coerced)).toBe(true);
     expect(coerced?.data).toMatchObject({
-      message: "Overloaded",
+      message: "sdk fixture",
       isRetryable: true,
       statusCode: 529,
       responseHeaders: { "retry-after-ms": "1200" },
       responseBody: '{"type":"error"}',
     });
-    expect(coerced?.cause).toBe(sdkError);
+    expect(coerced?.cause).toBe(failure);
   });
 
   test("returns undefined for errors without retry metadata", () => {
@@ -56,26 +57,6 @@ describe("NamedError", () => {
     expect(NamedError.Unknown.isInstance({ name: "UnknownError" })).toBe(false);
     expect(NamedError.Unknown.isInstance({ name: "Other" })).toBe(false);
     expect(NamedError.Unknown.isInstance(null)).toBe(false);
-  });
-});
-
-describe("ProviderError", () => {
-  test("construction and properties", () => {
-    const err = new ProviderError({
-      message: "unknown provider",
-      provider: "gemini",
-    });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("ProviderError");
-    expect(err.data.message).toBe("unknown provider");
-    expect(err.data.provider).toBe("gemini");
-  });
-
-  test("isInstance type guard", () => {
-    const err = new ProviderError({ message: "test", provider: "x" });
-    expect(ProviderError.isInstance(err)).toBe(true);
-    expect(ProviderError.isInstance(new NamedError.Unknown({ message: "x" }))).toBe(false);
   });
 });
 
