@@ -253,7 +253,7 @@ export class GitHubAdapter implements Channel.Surface {
           repo: prepared.content.repo,
           issue: prepared.content.issueNumber,
           error: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
+          ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
         },
       });
       if (prepared.deliveryId && prepared.dedupeToken !== undefined) {

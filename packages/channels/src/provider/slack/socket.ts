@@ -117,7 +117,7 @@ export class SlackSocket {
         time: Date.now(),
         component: "server",
         msg: "slack server requested reconnect",
-        context: { reason: envelope.reason },
+        context: { ...(envelope.reason === undefined ? {} : { reason: envelope.reason }) },
       });
       ws.close(4000);
       return;
