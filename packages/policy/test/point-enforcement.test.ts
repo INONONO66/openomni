@@ -27,6 +27,15 @@ function catchCompile(run: () => void): PolicyCompileError {
   throw new Error("expected policy compile failure");
 }
 
+async function catchAppend(run: () => Promise<number>): Promise<PolicyCompileError> {
+  try {
+    await run();
+  } catch (error) {
+    if (PolicyCompileError.isInstance(error)) return error;
+  }
+  throw new Error("expected append failure");
+}
+
 describe("policy row compiler enforcement", () => {
   it("cannot disable the mandatory rule and fails closed with exact fields", () => {
     const error = catchCompile(() =>
@@ -178,12 +187,7 @@ describe("policy row compiler enforcement", () => {
     source.append = () => false;
     const compiler = createPolicyCompiler({ source });
 
-    let error: PolicyCompileError | undefined;
-    try {
-      await compiler.append([]);
-    } catch (caught) {
-      if (PolicyCompileError.isInstance(caught)) error = caught;
-    }
+    const error = await catchAppend(() => compiler.append([]));
 
     expect(error).toMatchObject({
       data: { code: "snapshot_append_failed", generation: 2, ruleName: "compaction" },
@@ -197,15 +201,10 @@ describe("policy row compiler enforcement", () => {
     };
     const compiler = createPolicyCompiler({ source });
 
-    let error: PolicyCompileError | undefined;
-    try {
-      await compiler.append([]);
-    } catch (caught) {
-      if (PolicyCompileError.isInstance(caught)) error = caught;
-    }
+    const error = await catchAppend(() => compiler.append([]));
 
-    expect(error?.code).toBe("snapshot_load_failed");
-    expect(error?.generation).toBe(0);
+    expect(error.code).toBe("snapshot_load_failed");
+    expect(error.generation).toBe(0);
   });
 
   it("ships every kernel limit as seeded policy data", () => {

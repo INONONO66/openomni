@@ -53,6 +53,17 @@ export class MemoryPolicyRows implements Pick<Storage.PolicyRowSubAdapter, "appe
   }
 }
 
+export function unrelatedRows(count: number): PolicyRow.Row[] {
+  return Array.from({ length: count }, (_, index) =>
+    atGeneration(
+      draft(`unrelated-${index}`, index % 2 === 0 ? "llm" : "prompt", "pre", {
+        type: "allow",
+      }),
+      1,
+    ),
+  );
+}
+
 export const compaction = draft(
   "compaction",
   "turn",

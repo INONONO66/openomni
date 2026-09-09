@@ -4,7 +4,7 @@ import {
   createPolicyCompiler,
   type PolicyEvaluationInput,
 } from "../src/index";
-import { atGeneration, compaction, draft, MemoryPolicyRows } from "./row-fixtures";
+import { atGeneration, compaction, draft, MemoryPolicyRows, unrelatedRows } from "./row-fixtures";
 
 const request: PolicyEvaluationInput = {
   kind: "tool",
@@ -131,14 +131,7 @@ describe("compiled policy snapshot determinism", () => {
   });
 
   it("reads exactly one kind/phase/op bucket and never reads storage on the hot path", () => {
-    const unrelated = Array.from({ length: 220 }, (_, index) =>
-      atGeneration(
-        draft(`unrelated-${index}`, index % 2 === 0 ? "llm" : "prompt", "pre", {
-          type: "allow",
-        }),
-        1,
-      ),
-    );
+    const unrelated = unrelatedRows(220);
     const source = new MemoryPolicyRows([...initialRows(), ...unrelated]);
     const compiler = createPolicyCompiler({ source, mandatory: ["compaction"] });
     const evaluator = compiler.pin(1);

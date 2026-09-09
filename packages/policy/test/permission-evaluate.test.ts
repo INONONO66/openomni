@@ -7,7 +7,7 @@ const it = test;
 describe("evaluatePermission", () => {
   const request = (
     resource: string,
-    input?: Record<string, unknown>,
+    input?: Record<string, string | number | boolean | null>,
   ): Policy.EvaluationRequest => ({
     action: "tool.call",
     resource,

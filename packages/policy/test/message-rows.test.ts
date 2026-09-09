@@ -13,7 +13,6 @@ const workerRule = {
 } as const;
 
 test("message policy selects worker actor denial without matching external senders", () => {
-  // Given one B rule in the existing compiled row snapshot.
   const policy = compilePolicySnapshot({
     generation: 1,
     rows: [
@@ -32,7 +31,6 @@ test("message policy selects worker actor denial without matching external sende
       ),
     ],
   });
-  // When session and external inputs enter the same compiled bucket.
   const worker = policy.evaluate({
     kind: "message",
     phase: "pre",
@@ -62,7 +60,6 @@ test("message policy selects worker actor denial without matching external sende
       replyCorrelation: true,
     },
   });
-  // Then the selector evaluates exactly the matching table.
   expect(worker.verdict).toBe("deny");
   expect(worker.matchedRuleIds).toEqual(["worker-actor-deny"]);
   expect(external.matchedRuleIds).toEqual([]);
@@ -80,12 +77,10 @@ test("send_message cannot bypass admission by omitting its authenticated context
 });
 
 test("message post denial is rejected during compilation", () => {
-  // Given a post row that attempts to deny an already committed letter.
   const rows = [
     atGeneration(compaction, 1),
     atGeneration(draft("late-denial", "message", "post", { type: "deny" }), 1),
   ];
-  // When it is compiled, then it fails before any delivery.
   expect(() => compilePolicySnapshot({ generation: 1, rows })).toThrow(
     expect.objectContaining({ code: "invalid_verdict" }),
   );
