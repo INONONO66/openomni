@@ -33,7 +33,6 @@ export function matchesMessage(
   switch (rule.table) {
     case "A": return matchesExternal(rule, context);
     case "B": return matchesSession(rule, context);
-    default: return exhaustive(rule);
   }
 }
 
@@ -76,10 +75,5 @@ function sessionCheck(
     case "depth": return context.depth <= check.max;
     case "deadline": return context.withinParentDeadline;
     case "actor_send": return context.actorSendAllowed === true;
-    default: return exhaustive(check);
   }
-}
-
-function exhaustive(value: never): never {
-  throw new TypeError(`Invalid message policy variant: ${String(value)}`);
 }

@@ -167,7 +167,7 @@ describe("policy row compiler enforcement", () => {
           draft("redact", "tool", "post", {
             type: "transform",
             name: "redact",
-            paths: ["secret.token", "list.token", "missing.token"],
+            paths: ["secret.token.value", "list.token.value", "missing.token"],
           }),
           1,
         ),

@@ -420,12 +420,11 @@ function redact(value: PlainValue, paths: readonly string[], replacement?: Plain
     if (leaf === undefined || leaf.length === 0) continue;
     let parent: PlainValue | undefined = output;
     for (const field of fields) {
-      if (parent === null || Array.isArray(parent) || typeof parent !== "object") {
+      if (parent !== null && typeof parent === "object" && !Array.isArray(parent)) {
+        parent = parent[field];
+      } else {
         parent = undefined;
-        break;
       }
-      parent = parent[field];
-      if (parent === undefined) break;
     }
     if (
       parent === undefined ||
