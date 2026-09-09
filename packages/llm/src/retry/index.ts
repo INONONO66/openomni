@@ -1,4 +1,15 @@
+import { z } from "zod";
 import { APIError, coerceApiError } from "../error";
+
+const Payload = z.object({
+  type: z.string().catch(""),
+  code: z.string().catch(""),
+  error: z.object({
+    type: z.string().catch(""),
+    code: z.string().catch(""),
+    message: z.string().catch(""),
+  }).catch({ type: "", code: "", message: "" }),
+});
 
 export namespace Retry {
   export const MAX_ATTEMPTS = 3;
@@ -409,26 +420,13 @@ export namespace Retry {
   function classifyErrorPayload(payload: string | undefined): RetryableReason | undefined {
     if (!payload) return undefined;
 
-    let json: unknown;
+    let body: z.infer<typeof Payload>;
     try {
-      json = JSON.parse(payload);
+      body = Payload.parse(JSON.parse(payload));
     } catch {
       return undefined;
     }
-
-    if (!json || typeof json !== "object") {
-      return undefined;
-    }
-
-    const body = json as {
-      type?: unknown;
-      code?: unknown;
-      error?: { type?: unknown; code?: unknown; message?: unknown };
-    };
-    const code = typeof body.code === "string" ? body.code : "";
-    const errorType = typeof body.error?.type === "string" ? body.error.type : "";
-    const errorCode = typeof body.error?.code === "string" ? body.error.code : "";
-    const errorMessage = typeof body.error?.message === "string" ? body.error.message : "";
+    const { code, error: { type: errorType, code: errorCode, message: errorMessage } } = body;
 
     if (
       body.type === "error" &&

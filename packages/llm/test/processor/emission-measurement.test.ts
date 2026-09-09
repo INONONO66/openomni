@@ -8,15 +8,7 @@ import type { Sink } from "../../src/sink";
 import { Processor } from "../../src/processor";
 import { Bus } from "../helpers/observation";
 
-/**
- * #545 T2 measurement harness: streams a fixed synthetic 2000-delta/3-part
- * scenario and reports how much the sink actually receives. Run the same
- * harness on a scratch checkout of main (without the boundary-count
- * assertion) to get the before numbers for the PR body.
- *
- * Emission volume = onMessage call count and total serialized bytes
- * (sum of JSON.stringify(message).length per call) as the allocation proxy.
- */
+// Emission count depends on part boundaries, not token volume.
 
 const DELTA = "tok ";
 const REASONING_DELTAS = 400;
@@ -49,12 +41,10 @@ function scenario(): Array<Record<string, unknown>> {
 describe("Processor emission measurement (#545 T2)", () => {
   test("2000-delta/3-part scenario: onMessage volume", async () => {
     let onMessageCalls = 0;
-    let serializedBytes = 0;
     let lastMessage: Message.WithParts | undefined;
     const sink: Sink = {
       onMessage: (message) => {
         onMessageCalls += 1;
-        serializedBytes += JSON.stringify(message).length;
         lastMessage = message;
       },
       onToolCall: () => undefined,
@@ -77,10 +67,6 @@ describe("Processor emission measurement (#545 T2)", () => {
     });
 
     await processor.process({ system: "", promptText: "" });
-
-    console.log(
-      `[measurement] onMessage calls: ${onMessageCalls}, serialized bytes: ${serializedBytes}`,
-    );
 
     // Content sanity: the boundary snapshots still deliver the full text.
     const texts = (lastMessage?.parts ?? [])

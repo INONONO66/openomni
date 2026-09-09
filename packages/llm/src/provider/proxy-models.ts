@@ -36,17 +36,7 @@ function credentialFingerprint(apiKey: string | undefined): string {
     .digest("hex");
 }
 
-function readModelIds(value: unknown): string[] {
-  if (typeof value !== "object" || value === null || !("data" in value)) return [];
-  const data = value.data;
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((item) => {
-      if (typeof item !== "object" || item === null || !("id" in item)) return undefined;
-      return typeof item.id === "string" ? item.id : undefined;
-    })
-    .filter((id): id is string => Boolean(id));
-}
+const ModelListing = z.object({ data: z.array(z.object({ id: z.string().min(1) })) });
 
 export async function fetchProxyModels(baseURL: string, apiKey?: string): Promise<string[]> {
   const url = normalizeModelsURL(baseURL);
@@ -76,9 +66,9 @@ export async function fetchProxyModels(baseURL: string, apiKey?: string): Promis
     });
   }
 
-  let body: unknown;
+  let body: z.infer<typeof ModelListing>;
   try {
-    body = await response.json();
+    body = ModelListing.parse(await response.json());
   } catch (cause) {
     throw new ProxyModelsError(
       { message: "proxy model listing returned invalid JSON", url },
@@ -86,7 +76,7 @@ export async function fetchProxyModels(baseURL: string, apiKey?: string): Promis
     );
   }
 
-  const ids = readModelIds(body);
+  const ids = body.data.map(({ id }) => id);
   modelCache.set(cacheKey, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
   return ids;
 }

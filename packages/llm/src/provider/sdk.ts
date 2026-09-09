@@ -9,7 +9,7 @@ type SdkOptions = {
   apiKey?: string;
   baseURL?: string;
   headers?: Record<string, string>;
-  [key: string]: unknown;
+  name?: string;
 };
 /**
  * Operator-supplied transport config for one provider call. The package stays
@@ -53,7 +53,7 @@ type CustomModelLoader = (sdk: ProviderSDK, modelID: string) => ResolvedLanguage
 
 interface CustomLoaderResult {
   getModel?: CustomModelLoader;
-  options?: Record<string, unknown>;
+  options?: SdkOptions;
 }
 
 // A Map for the same reason as BUNDLED_PROVIDERS above: a plain Record
@@ -126,7 +126,7 @@ function providerOptions(
     ...customOptions,
     headers: {
       "user-agent": clientIdentity(),
-      ...(customOptions.headers as Record<string, string> | undefined),
+      ...customOptions.headers,
       ...transport?.headers,
     },
   };
@@ -178,7 +178,7 @@ export function getLanguage(
   transport?: Transport,
 ): ResolvedLanguageModel {
   const modelID = model.api?.id ?? model.id;
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${authFingerprint(auth)}:${transportFingerprint(transport)}`;
+  const cacheKey = `${sdkCacheKey(model, auth, transport)}:${modelID}`;
   const cached = getCached(LANGUAGE_CACHE, cacheKey);
   if (cached) return cached;
 

@@ -30,52 +30,38 @@ export const ProviderError = NamedError.create(
   }),
 );
 
-/**
- * Coerce an AI SDK provider error (AI_APICallError and shape-compatible
- * wrappers) into the protocol APIError so retry classification can read
- * statusCode/isRetryable/responseHeaders. AI SDK errors carry these fields
- * directly on the error object, not under `.data`, and their `name` never
- * matches APIError.isInstance — without this coercion no real provider
- * error is ever classified as retryable.
- */
+const ErrorFacts = z.object({
+  aborted: z.boolean().optional().catch(undefined),
+  contextOverflow: z.boolean().optional().catch(undefined),
+});
+const WrappedFacts = z.object({ data: ErrorFacts });
+
+/** Named errors carry facts under data; SDK errors carry them directly. */
+export function errorFacts(error: unknown): z.infer<typeof ErrorFacts> {
+  const wrapped = WrappedFacts.safeParse(error);
+  return wrapped.success ? wrapped.data.data : ErrorFacts.catch({}).parse(error);
+}
+
+const ResponseHeaders = z.record(z.string(), z.string().optional().catch(undefined))
+  .catch({})
+  .transform((headers) => {
+    const result: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (value !== undefined) result[key.toLowerCase()] = value;
+    }
+    return Object.keys(result).length === 0 ? undefined : result;
+  });
+const ProviderFailure = ErrorFacts.extend({
+  message: z.string(),
+  isRetryable: z.boolean(),
+  statusCode: z.number().optional().catch(undefined),
+  responseHeaders: ResponseHeaders,
+  responseBody: z.string().optional().catch(undefined),
+});
+
+/** Decode SDK error fields before retry classification, preserving the native cause. */
 export function coerceApiError(error: unknown): InstanceType<typeof APIError> | undefined {
   if (APIError.isInstance(error)) return error;
-  if (typeof error !== "object" || error === null) return undefined;
-
-  const candidate = error as {
-    message?: unknown;
-    isRetryable?: unknown;
-    statusCode?: unknown;
-    responseHeaders?: unknown;
-    responseBody?: unknown;
-    aborted?: unknown;
-    contextOverflow?: unknown;
-  };
-  if (typeof candidate.message !== "string" || typeof candidate.isRetryable !== "boolean") {
-    return undefined;
-  }
-
-  const responseHeaders: Record<string, string> = {};
-  if (typeof candidate.responseHeaders === "object" && candidate.responseHeaders !== null) {
-    for (const [key, value] of Object.entries(candidate.responseHeaders)) {
-      if (typeof value === "string") responseHeaders[key.toLowerCase()] = value;
-    }
-  }
-
-  return new APIError(
-    {
-      message: candidate.message,
-      isRetryable: candidate.isRetryable,
-      ...(typeof candidate.statusCode === "number" && { statusCode: candidate.statusCode }),
-      ...(Object.keys(responseHeaders).length > 0 && { responseHeaders }),
-      ...(typeof candidate.responseBody === "string" && {
-        responseBody: candidate.responseBody,
-      }),
-      ...(typeof candidate.aborted === "boolean" && { aborted: candidate.aborted }),
-      ...(typeof candidate.contextOverflow === "boolean" && {
-        contextOverflow: candidate.contextOverflow,
-      }),
-    },
-    { cause: error },
-  );
+  const candidate = ProviderFailure.safeParse(error);
+  return candidate.success ? new APIError(candidate.data, { cause: error }) : undefined;
 }

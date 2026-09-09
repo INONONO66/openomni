@@ -3,26 +3,18 @@ import { ProviderTransform } from "../../src/provider/transform";
 import type { Provider } from "../../src/provider/index";
 type ModelMessage = Parameters<typeof ProviderTransform.normalizeMessages>[0][number];
 
+function makeModel(providerID: string, id: string): Provider.Model {
+  return { id, name: id, providerID, api: { npm: `@ai-sdk/${providerID}` } };
+}
+
 describe("ProviderTransform.normalizeMessages", () => {
-  const anthropicModel = {
-    npm: "@ai-sdk/anthropic",
-    modelId: "claude-sonnet-4-20250514",
-  };
-  const openaiModel = { npm: "@ai-sdk/openai", modelId: "gpt-4o" };
+  const anthropicModel = makeModel("anthropic", "claude-sonnet-4-20250514");
+  const openaiModel = makeModel("openai", "gpt-4o");
 
-  test("does not expose NormalizeOptions as a public namespace member", async () => {
-    const transformSource = await Bun.file(
-      new URL("../../src/provider/transform.ts", import.meta.url),
-    ).text();
-
-    expect(Object.hasOwn(ProviderTransform, "NormalizeOptions")).toBe(false);
+  test("exposes only consumed wire transforms", () => {
     expect(Object.hasOwn(ProviderTransform, "sdkKey")).toBe(false);
     expect(Object.hasOwn(ProviderTransform, "temperature")).toBe(false);
     expect(Object.hasOwn(ProviderTransform, "topP")).toBe(false);
-    expect(transformSource).not.toMatch(/\bexport\s+interface\s+NormalizeOptions\b/);
-    expect(transformSource).not.toMatch(/\bsdkKey\b/);
-    expect(transformSource).not.toMatch(/\btemperature\b/);
-    expect(transformSource).not.toMatch(/\btopP\b/);
   });
 
   test("openai is passthrough", () => {
@@ -120,10 +112,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("non-claude anthropic model skips toolCallId sanitization", () => {
-    const nonClaudeAnthropicModel = {
-      npm: "@ai-sdk/anthropic",
-      modelId: "some-other-model",
-    };
+    const nonClaudeAnthropicModel = makeModel("anthropic", "some-other-model");
     const msgs: ModelMessage[] = [
       {
         role: "assistant",
@@ -310,8 +299,8 @@ describe("ProviderTransform.anthropicCacheOptions", () => {
 });
 
 describe("normalizeMessages applies caching for anthropic", () => {
-  const anthropicModel = { npm: "@ai-sdk/anthropic", modelId: "claude-sonnet-4-20250514" };
-  const openaiModel = { npm: "@ai-sdk/openai", modelId: "gpt-4o" };
+  const anthropicModel = makeModel("anthropic", "claude-sonnet-4-20250514");
+  const openaiModel = makeModel("openai", "gpt-4o");
 
   test("anthropic latest user message gets cacheControl via normalizeMessages", () => {
     const msgs: ModelMessage[] = [

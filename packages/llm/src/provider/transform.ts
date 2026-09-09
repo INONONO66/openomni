@@ -2,11 +2,6 @@ import type { SDKMessage } from "../message";
 import type { Provider } from "./index";
 
 export namespace ProviderTransform {
-  interface NormalizeOptions {
-    npm: string;
-    modelId: string;
-  }
-
   type SDKMessageWithProviderOptions = SDKMessage & {
     readonly providerOptions?: Record<string, unknown>;
   };
@@ -18,21 +13,10 @@ export namespace ProviderTransform {
 
   export function normalizeMessages(
     msgs: SDKMessage[],
-    model: Provider.Model | NormalizeOptions,
+    model: Provider.Model,
   ): SDKMessage[] {
-    let npm: string | undefined;
-    let modelId: string;
-
-    if ("api" in model && model.api) {
-      npm = model.api.npm;
-      modelId = model.id;
-    } else {
-      npm = (model as NormalizeOptions).npm;
-      modelId = (model as NormalizeOptions).modelId;
-    }
-
-    if (isAnthropicPackage(npm)) {
-      return normalizeAnthropic(msgs, { npm: npm || "", modelId });
+    if (isAnthropicPackage(model.api?.npm)) {
+      return normalizeAnthropic(msgs, model.id);
     }
 
     return msgs;
@@ -42,7 +26,7 @@ export namespace ProviderTransform {
     return npm === "@ai-sdk/anthropic";
   }
 
-  function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {
+  function normalizeAnthropic(msgs: SDKMessage[], modelId: string): SDKMessage[] {
     let result = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -67,7 +51,7 @@ export namespace ProviderTransform {
       })
       .filter((msg): msg is SDKMessage => msg !== undefined && msg.content !== "");
 
-    if (model.modelId.includes("claude")) {
+    if (modelId.includes("claude")) {
       result = result.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           return { ...msg, content: msg.content.map(sanitizeAssistantContentPart) };

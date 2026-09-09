@@ -4,6 +4,8 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelsDev } from "../../src/model";
+import { Catalog } from "../../src/model/schema";
+import { resetCatalog } from "../helpers/model-loader";
 
 type RemoteCatalogCase = {
   readonly name: string;
@@ -81,7 +83,7 @@ describe("ModelsDev catalog loading", () => {
   let testCacheDir: string | undefined;
 
   beforeEach(() => {
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
 
   afterEach(async () => {
@@ -166,7 +168,7 @@ describe("ModelsDev catalog loading", () => {
       });
 
       const snapshot = (await import("../../src/model/models-snapshot.json")).default;
-      await expect(ModelsDev.get()).resolves.toEqual(snapshot);
+      await expect(ModelsDev.get()).resolves.toEqual(Catalog.parse(snapshot));
     });
 
     it("should drop malformed model records from trusted providers", async () => {

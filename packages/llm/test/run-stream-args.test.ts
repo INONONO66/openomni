@@ -226,11 +226,7 @@ describe("run() streamText arguments", () => {
   });
 
   test("passes providerOptions as the nested streamText key, never a top-level spread", async () => {
-    // Regression (#audit M1): providerOptions used to be spread into the
-    // top-level streamText args. The AI SDK reads provider namespaces from
-    // the nested `providerOptions` key, so operator config like
-    // {anthropic:{thinking:...}} was silently ignored — and config keys
-    // could clobber wired args (abortSignal, maxRetries, tools).
+    // Provider namespace objects must never replace call-owned SDK arguments.
     await run(
       {
         trace: TEST_TRACE,
@@ -239,10 +235,9 @@ describe("run() streamText arguments", () => {
         tools: [{ name: "lookup", description: "look", inputSchema: { type: "object" } }],
         providerOptions: {
           anthropic: { thinking: { type: "enabled", budgetTokens: 1024 } },
-          // Keys that would clobber wired args under the old top-level spread:
-          abortSignal: "clobbered",
-          maxRetries: 99,
-          tools: "clobbered",
+          abortSignal: { clobbered: true },
+          maxRetries: { clobbered: true },
+          tools: { clobbered: true },
         },
         auth: { type: "api", key: "test-key-run" },
         model: {
@@ -263,9 +258,9 @@ describe("run() streamText arguments", () => {
     };
     expect(streamArgs.providerOptions).toEqual({
       anthropic: { thinking: { type: "enabled", budgetTokens: 1024 } },
-      abortSignal: "clobbered",
-      maxRetries: 99,
-      tools: "clobbered",
+      abortSignal: { clobbered: true },
+      maxRetries: { clobbered: true },
+      tools: { clobbered: true },
     });
     // Wired args survive untouched.
     expect(streamArgs.maxRetries).toBe(0);

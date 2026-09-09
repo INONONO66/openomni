@@ -867,10 +867,7 @@ describe("Processor", () => {
       expect(processor.message.finish).toBe("error");
     });
 
-    test("retries raw AI SDK provider errors (AI_APICallError shape)", async () => {
-      // Regression: production errors come from the AI SDK, whose name is
-      // AI_APICallError and whose retry fields live on the error object, not
-      // under .data. Without coercion, no real provider error ever retried.
+    test("propagates raw AI SDK provider errors after exactly one attempt", async () => {
       let attemptCount = 0;
       const sdkError = Object.assign(new Error("Overloaded"), {
         name: "AI_APICallError",
@@ -897,8 +894,7 @@ describe("Processor", () => {
     });
 
     test("published part snapshots are frozen at publish time", async () => {
-      // Regression: parts are copy-on-write; a consumer that stores an early
-      // snapshot must not observe later mutations through shared references.
+      // Retained snapshots must not change when later deltas arrive.
       const snapshots: Message.WithParts[] = [];
       const sink: Sink = {
         onMessage: (message) => snapshots.push(message),
@@ -928,7 +924,7 @@ describe("Processor", () => {
       expect(textAt(1)).toBe("Hello World");
     });
 
-    test("handles retryable errors with retry logic", async () => {
+    test("propagates retryable errors without scheduling another attempt", async () => {
       let attemptCount = 0;
 
       const processor = createProcessor({

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Auth } from "../../src/auth";
 import { ModelsDev } from "../../src/model";
+import { resetCatalog } from "../helpers/model-loader";
 import { Provider } from "../../src/provider/index";
 import {
   enrichWithCatalog,
@@ -17,17 +18,19 @@ const originalFetch = globalThis.fetch;
 function stubFetch(
   handler: (input: FetchArgs[0], init?: FetchArgs[1]) => Response | Promise<Response>,
 ): void {
-  globalThis.fetch = handler as typeof fetch;
+  globalThis.fetch = Object.assign(async (...args: FetchArgs) => handler(...args), {
+    preconnect: originalFetch.preconnect,
+  });
 }
 
 describe("proxy-models", () => {
   beforeEach(() => {
     globalThis.fetch = originalFetch;
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
 
   describe("fetchProxyModels", () => {
@@ -152,8 +155,8 @@ describe("proxy-models", () => {
       });
 
       try {
-        ModelsDev.Data.reset();
-        await ModelsDev.Data();
+        resetCatalog();
+        await ModelsDev.get();
         await Auth.set("openai", {
           type: "proxy",
           baseURL: "http://localhost:3199/v1",

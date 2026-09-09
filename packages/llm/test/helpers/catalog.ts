@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, mock } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ModelsDev } from "../../src/model";
+import { resetCatalog } from "./model-loader";
 
 /** Registers per-test catalog/auth isolation and rejects unexpected network use. */
 export function usePrivateCatalog(): void {
@@ -40,12 +40,12 @@ export function usePrivateCatalog(): void {
     );
     network.mockClear();
     globalThis.fetch = Object.assign(network, { preconnect: savedFetch.preconnect });
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
 
   afterEach(() => {
     globalThis.fetch = savedFetch;
-    ModelsDev.Data.reset();
+    resetCatalog();
     process.env = savedEnv;
     rmSync(directory, { recursive: true, force: true });
     expect(network).not.toHaveBeenCalled();
