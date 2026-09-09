@@ -1,7 +1,4 @@
-// Worker-process transport contract (#496). Protocol-only and bidirectional:
-// server → owner-device reverse connections ride the same client/server pair.
-// Driver-band packages (channels, remote, browser, machines, …) consume this
-// barrel as a published contract; it never grows a kernel/ledger/policy import.
+// Published protocol-only transport contract; product semantics stay in consumers.
 export { connectIpcClient, type IpcClient } from "./client";
 export { IpcRemoteError } from "./errors";
 export { createIpcServer, type IpcServer } from "./server";

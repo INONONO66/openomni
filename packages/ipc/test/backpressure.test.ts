@@ -6,8 +6,7 @@ import { createIpcServer } from "../src/server";
 import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
-// Big enough to overflow any kernel socket buffer: Bun sockets do NOT buffer
-// partial writes, so pre-fix the tail of this frame was silently dropped.
+// Large enough to exercise partial writes and the server's per-connection queue.
 const BIG_PAYLOAD = "x".repeat(8 * 1024 * 1024);
 
 describe("server write backpressure (Bun partial writes)", () => {
@@ -50,8 +49,7 @@ describe("server write backpressure (Bun partial writes)", () => {
 
     const response = frame as { id?: string; result?: { data?: string } };
     expect(response.id).toBe(request.id);
-    // Byte-exact receipt — pre-fix the frame arrived truncated, desyncing
-    // the NDJSON stream. Compare via boolean so a failure doesn't dump 8 MiB.
+    // Compare via boolean so a failure does not dump 8 MiB.
     expect(response.result?.data?.length).toBe(BIG_PAYLOAD.length);
     expect(response.result?.data === BIG_PAYLOAD).toBe(true);
   }, 15_000);
@@ -81,9 +79,7 @@ describe("server write backpressure (Bun partial writes)", () => {
     socket.write(`${JSON.stringify(request)}\n`);
     await within(responseIssued.promise, "server queuing first large frame");
 
-    // The big response is now partially queued. A notification issued NOW
-    // must land after it — pre-fix it interleaved into the middle of the
-    // queued frame and corrupted both.
+    // The notification must land after the queued response.
     expect(srv.notify("after.big", { marker: true })).toBe(true);
     socket.resume();
     await within(bothFramesReceived.promise, "ordered response and notification", 10_000);

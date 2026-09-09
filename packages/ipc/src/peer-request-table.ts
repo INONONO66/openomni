@@ -1,4 +1,5 @@
 import { Ipc, type IdSource } from "@openomni/protocol";
+import type { z } from "zod";
 
 import { IpcRemoteError, IpcTimeoutError } from "./errors";
 
@@ -11,12 +12,15 @@ type PendingCall<TPeer> = {
 
 type SendFrame<TPeer> = (peer: TPeer, frame: Ipc.Request | Ipc.Response | Ipc.Notification) => void;
 
+export type RequestParser = <T>(schema: z.ZodType<T>) => T;
+
 type RequestHandler<TPeer> = (
   peer: TPeer,
   method: string,
   params: Record<string, unknown> | undefined,
   respond: (result: unknown) => void,
   notify: (method: string, params?: Record<string, unknown>) => void,
+  parse: RequestParser,
 ) => void | Promise<void>;
 
 type NotificationHandler<TPeer> = (
@@ -127,6 +131,7 @@ export class PeerRequestTable<TPeer = undefined> {
     const notify = (method: string, params?: Record<string, unknown>) => {
       this.options.send(peer, Ipc.createNotification(method, params));
     };
+    const parse: RequestParser = <T>(schema: z.ZodType<T>): T => schema.parse(request.params);
     const failRequest = (error: unknown) => {
       this.options.send(
         peer,
@@ -139,7 +144,14 @@ export class PeerRequestTable<TPeer = undefined> {
     };
 
     try {
-      const result = this.options.onRequest(peer, request.method, request.params, respond, notify);
+      const result = this.options.onRequest(
+        peer,
+        request.method,
+        request.params,
+        respond,
+        notify,
+        parse,
+      );
       if (result instanceof Promise) result.catch(failRequest);
     } catch (error) {
       failRequest(error);

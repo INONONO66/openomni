@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
+import type { z } from "zod";
 
 import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PeerRequestTable } from "./peer-request-table";
+import { PeerRequestTable, type RequestParser } from "./peer-request-table";
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
@@ -21,7 +22,7 @@ function unlinkIfExists(socketPath: string): void {
   }
 }
 
-export interface IpcServerOptions {
+interface IpcServerOptions {
   /**
    * Fires once per connection after it is torn down (close or error). The
    * connection's in-flight requests have already been failed when this runs.
@@ -35,6 +36,7 @@ type RequestHandler = (
   respond: (result: unknown) => void,
   notify: (method: string, params?: Record<string, unknown>) => void,
   connectionId: string,
+  parse: RequestParser,
 ) => void | Promise<void>;
 
 export interface IpcServer {
@@ -60,8 +62,8 @@ function probeSocketLive(socketPath: string): Promise<boolean> {
     const probe = new net.Socket();
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // Install this before the timer/connect listeners: Bun 1.3.6 may emit a
-    // refused-connect error during the initial connection turn.
+    // Install this before the timer/connect listeners so refused-connect
+    // errors cannot be emitted before they are observed.
     probe.once("error", () => settle(false));
     const settle = (live: boolean) => {
       if (settled) return;
@@ -148,8 +150,8 @@ export async function createIpcServer(
   const peer = new PeerRequestTable<ConnectionState>({
     send: sendFrame,
     samePeer: (pendingPeer, inboundPeer) => pendingPeer.id === inboundPeer.id,
-    onRequest: (state, method, params, respond, notify) =>
-      handler(method, params, respond, notify, state.id),
+    onRequest: (state, method, params, respond, notify, parse) =>
+      handler(method, params, respond, notify, state.id, parse),
     onNotification: (state, method, params) =>
       handler(
         method,
@@ -157,6 +159,7 @@ export async function createIpcServer(
         () => undefined,
         () => undefined,
         state.id,
+        <T>(schema: z.ZodType<T>) => schema.parse(params),
       ),
   });
 

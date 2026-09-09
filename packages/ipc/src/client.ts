@@ -1,7 +1,7 @@
 import net from "node:net";
 import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PeerRequestTable } from "./peer-request-table";
+import { PeerRequestTable, type RequestParser } from "./peer-request-table";
 
 export interface IpcClient {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
@@ -9,13 +9,14 @@ export interface IpcClient {
   readonly connected: boolean;
 }
 
-export type ConnectIpcClientOptions = {
+type ConnectIpcClientOptions = {
   connectTimeoutMs?: number;
   onDisconnect?: () => void;
   onRequest?: (
     method: string,
     params: Record<string, unknown> | undefined,
     respond: (result: unknown) => void,
+    parse: RequestParser,
   ) => void | Promise<void>;
   onNotification?: (
     method: string,
@@ -31,8 +32,8 @@ export function connectIpcClient(
   const connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
 
   return new Promise((resolve, reject) => {
-    // Register listeners before initiating the connection; Bun 1.3.6 may
-    // emit a refused-connect error during the initial connection turn.
+    // Register listeners before initiating the connection so refused-connect
+    // errors cannot be emitted before they are observed.
     const socket = new net.Socket();
     const decoder = new LineDecoder();
     let connected = false;
@@ -56,7 +57,8 @@ export function connectIpcClient(
     peer = new PeerRequestTable({
       send: (_peer, frame) => socket.write(encode(frame)),
       onRequest: opts.onRequest
-        ? (_peer, method, params, respond) => opts.onRequest?.(method, params, respond)
+        ? (_peer, method, params, respond, _notify, parse) =>
+            opts.onRequest?.(method, params, respond, parse)
         : undefined,
       onNotification: (_peer, method, params) => opts.onNotification?.(method, params),
       missingRequestHandlerMessage: (method) => `client has no request handler for ${method}`,

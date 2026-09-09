@@ -10,12 +10,16 @@ import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 function connect(socketPath: string): Promise<net.Socket> {
-  const socket = net.createConnection(socketPath);
-  return new Promise((resolve) => socket.once("connect", () => resolve(socket)));
+  const socket = new net.Socket();
+  return new Promise((resolve, reject) => {
+    socket.once("connect", () => resolve(socket));
+    socket.once("error", reject);
+    socket.connect(socketPath);
+  });
 }
 
-async function exchange(socketPath: string, line: string): Promise<Record<string, unknown>> {
-  const socket = await connect(socketPath);
+async function exchange(socketPath: string, line: string): Promise<Ipc.Response> {
+  const socket = new net.Socket();
   const decoder = new LineDecoder();
   return new Promise((resolve, reject) => {
     // Bounded failure guard: resolution is event-driven (first decoded frame); the timer only
@@ -23,14 +27,15 @@ async function exchange(socketPath: string, line: string): Promise<Record<string
     const timeout = setTimeout(() => reject(new Error("IPC response timeout")), 1_000);
     socket.on("data", (chunk) => {
       const frame = decoder.push(chunk).frames[0];
-      if (frame && typeof frame === "object") {
+      const parsed = Ipc.Response.safeParse(frame);
+      if (parsed.success) {
         clearTimeout(timeout);
         socket.destroy();
-        resolve(frame as Record<string, unknown>);
+        resolve(parsed.data);
       }
     });
     socket.once("error", reject);
-    socket.write(line);
+    socket.connect(socketPath, () => socket.write(line));
   });
 }
 
@@ -43,7 +48,7 @@ describe("server edge branches", () => {
     for (const s of servers.splice(0)) s.close();
   });
 
-  for (const method of ["machine.run_cell", "machine.call_tool"] as const) {
+  for (const method of ["request.one", "request.two"] as const) {
     test(`${method} without a connected client rejects with IpcConnectionError`, async () => {
       const srv = await createIpcServer(socketPathForTest(`noclient-${method}`), () => undefined);
       servers.push(srv);
@@ -66,10 +71,10 @@ describe("server edge branches", () => {
     const srv = await createIpcServer(socketPathForTest("timeout"), () => undefined);
     servers.push(srv);
     rawSockets.push(await connect(srv.socketPath));
-    await expect(srv.call("machine.run_cell", {}, 30)).rejects.toThrow(IpcTimeoutError);
+    await expect(srv.call("request.timeout", {}, 30)).rejects.toThrow(IpcTimeoutError);
 
     const client = await connectIpcClient(srv.socketPath);
-    await expect(client.call("machine.attach", {}, 30)).rejects.toBeInstanceOf(IpcTimeoutError);
+    await expect(client.call("request.attach", {}, 30)).rejects.toBeInstanceOf(IpcTimeoutError);
     client.close();
   });
 
@@ -140,7 +145,7 @@ describe("server edge branches", () => {
     await expect(
       within(disconnected.promise, "disconnect after data callback error"),
     ).resolves.toBe("conn-1");
-    await expect(srv.call("machine.run_cell", {})).rejects.toThrow("no connected client");
+    await expect(srv.call("request.callback", {})).rejects.toThrow("no connected client");
   });
 
   test("a client that errors mid-connection is removed and the server keeps serving", async () => {
@@ -171,9 +176,9 @@ describe("server edge branches", () => {
       second.once("data", (chunk) => resolve(String(chunk)));
     });
     second.write(
-      `${JSON.stringify(Ipc.createRequest("request-run-cell", "machine.run_cell", {}))}\n`,
+      `${JSON.stringify(Ipc.createRequest("request-handler", "request.handler", {}))}\n`,
     );
-    const frame = JSON.parse(await reply);
+    const frame = Ipc.Response.parse(JSON.parse(await reply));
     expect(frame.type).toBe("response");
     expect(frame.result).toEqual({ ok: true });
   });

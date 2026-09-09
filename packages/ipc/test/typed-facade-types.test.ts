@@ -31,7 +31,6 @@ test("typed facade rejects schema-invalid calls while generic calls remain valid
     throw new Error(`typed facade compile fixture failed:\n${output}`);
   }
 
-  expect(result.exitCode).toBe(0);
 }, 15_000);
 
 test("typed facade round-trips a known method through the public transport barrel", async () => {

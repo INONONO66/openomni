@@ -12,7 +12,7 @@ export function encode(msg: unknown): Uint8Array {
   return encoder.encode(`${JSON.stringify(msg)}\n`);
 }
 
-export type DecodedChunk = {
+type DecodedChunk = {
   /** Every parseable frame in the chunk, delivered immediately, in wire order. */
   frames: unknown[];
   /** Each non-JSON line, truncated to MALFORMED_REPORT_CHARS for reporting — never re-queued. */
@@ -20,7 +20,7 @@ export type DecodedChunk = {
 };
 
 /** Stream-agnostic newline framing with streaming UTF-8 decoding. */
-export class LineSplitter {
+class LineSplitter {
   private buffer = "";
   private decoder = new TextDecoder();
 

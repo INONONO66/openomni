@@ -88,9 +88,6 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     if (!survivorConnectionId) throw new Error("survivor connection id was never captured");
 
     dying.close();
-    // Pre-fix: with a survivor still connected, the dead connection's
-    // in-flight request lingered to IpcTimeoutError — misfiling a transport
-    // loss as slowness.
     await expect(inFlight).rejects.toBeInstanceOf(IpcConnectionError);
 
     // The surviving connection is still usable.
@@ -108,8 +105,6 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     const client = await connectIpcClient(socketPath, {});
     clients.push(client);
 
-    // Pre-fix: the request was silently dropped and the server's call aged
-    // out as a timeout.
     const error = await srv.call("do-thing", {}, 2_000).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(IpcRemoteError);
     expect((error as Error).message).toContain("client has no request handler for do-thing");
@@ -138,9 +133,6 @@ describe("failure classes stay honest (#606 re-audit)", () => {
       }
     });
 
-    // Pre-fix: the malformed line's throw re-queued the trailing response for
-    // the NEXT data event that never came, so the call stalled to
-    // IpcTimeoutError. Skip-and-report must resolve it from the same chunk.
     expect(await srv.call("ping", {}, 2_000)).toEqual({ via: "raw" });
   });
 
@@ -183,22 +175,20 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
   test("a client that sent an oversize frame fails fast, not by burning its timeout", async () => {
     const socketPath = socketPathForTest("oversize-client");
-    const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
-      respond({ ok: true }),
+    const disconnected = deferred();
+    const srv = await createIpcServer(
+      socketPath,
+      (_method, _params, respond) => respond({ ok: true }),
+      { onDisconnect: disconnected.resolve },
     );
     servers.push(srv);
     const client = await connectIpcClient(socketPath);
     clients.push(client);
 
-    // Pre-fix the server kept the desynced connection open and the pending
-    // aged out over the full 30s timeout; now the symmetric close rejects it
-    // as a connection loss within the test's own budget.
-    const disconnected = client
-      .call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000)
-      .catch((e: unknown) => e);
-    const error = await within(disconnected, "client rejection after oversize frame", 12_000);
-    expect(error).toBeInstanceOf(IpcConnectionError);
-  }, 15_000);
+    const call = client.call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000);
+    await within(disconnected.promise, "server disconnect after oversize frame", 12_000);
+    await expect(call).rejects.toBeInstanceOf(IpcConnectionError);
+  });
 
   test("an error frame carrying the request's id settles the requester's pending", async () => {
     const socketPath = socketPathForTest("correlated-4000");
@@ -300,8 +290,6 @@ describe("LineDecoder malformed-frame isolation (#606 re-audit, #685 skip-and-re
     const good2 = { id: "2", kind: "b" };
     const chunk = `${JSON.stringify(good1)}\n{not json}\n${JSON.stringify(good2)}\n{"id":"3"`;
 
-    // Pre-fix: the throw discarded good1 (frames parsed before the bad line)
-    // and re-queued good2 for a later push. Skip-and-report delivers both now.
     const result = decoder.push(chunk);
     expect(result.frames).toEqual([good1, good2]);
     expect(result.malformed).toHaveLength(1);
@@ -332,10 +320,6 @@ describe("client remote-error path (#606 audit)", () => {
     const client = await connectIpcClient(socketPath, {});
     clients.push(client);
 
-    // Pin: pre-fix this path was untested repo-wide (deleting the mapping
-    // made remote failures resolve `undefined` with every suite green), and
-    // the rejection class was IpcConnectionError — misfiling a healthy
-    // connection's remote failure as a transport problem.
     const error = await client.call("do-thing", {}, 2_000).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(IpcRemoteError);
     expect((error as Error).message).toContain("remote refused do-thing");
