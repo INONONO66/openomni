@@ -16,10 +16,10 @@ const INDEX_HTML = join(import.meta.dir, "..", "src", "renderer", "index.html");
 async function policy(): Promise<Readonly<Record<string, readonly string[]>>> {
   const html = await Bun.file(INDEX_HTML).text();
   const content = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/s.exec(html)?.[1];
-  expect(content, "the renderer declares a Content-Security-Policy").toBeDefined();
+  if (content === undefined) throw new Error("Renderer Content-Security-Policy is missing");
 
   const directives: Record<string, readonly string[]> = {};
-  for (const directive of (content ?? "").split(";")) {
+  for (const directive of content.split(";")) {
     const [name, ...values] = directive.trim().split(/\s+/);
     if (name !== undefined && name.length > 0) directives[name] = values;
   }

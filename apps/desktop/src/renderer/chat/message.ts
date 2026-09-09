@@ -25,16 +25,12 @@ import type { UIMessage } from "ai";
  * string is what the surface needs, and an epoch millisecond is the only thing
  * a model server can honestly send.
  *
- * `tokens` has no row in the transcript today. It is carried because the turn
- * is the only place the count is still attributable, and dropping it at the
- * boundary would mean re-deriving it from a stream that has already closed.
  */
 export interface TurnMetadata {
   /** Wall clock of the turn's first token, epoch ms. */
   readonly startedAt?: number;
   /** How long the turn took, in ms. */
   readonly elapsedMs?: number;
-  readonly tokens?: { readonly in: number; readonly out: number };
 }
 
 /**

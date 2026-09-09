@@ -69,8 +69,8 @@ describe("fonts are bundled, never fetched", () => {
 
     // A devDependency would type-check and then be missing from a consumer's
     // install, which is a broken render rather than a build failure.
-    expect(manifest.dependencies?.pretendard).toBeDefined();
-    expect(manifest.dependencies?.["@fontsource-variable/jetbrains-mono"]).toBeDefined();
+    expect(manifest.dependencies?.pretendard).toBe("^1.3.9");
+    expect(manifest.dependencies?.["@fontsource-variable/jetbrains-mono"]).toBe("^5.3.0");
   });
 
   test("Given the imported font stylesheets, When read from node_modules, Then their faces are local files", async () => {

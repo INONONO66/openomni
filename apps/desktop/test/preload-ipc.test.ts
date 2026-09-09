@@ -12,6 +12,7 @@ const registered: { channel: string; wrapper: Wrapper }[] = [];
 const removed: { channel: string; wrapper: Wrapper }[] = [];
 const invoked: string[] = [];
 const exposed = new Map<string, DesktopApi>();
+let gatewayResult: object | undefined = { url: "ws://localhost:3000/ws" };
 
 mock.module("electron", () => ({
   contextBridge: {
@@ -28,7 +29,7 @@ mock.module("electron", () => ({
     },
     invoke: (channel: string) => {
       invoked.push(channel);
-      return Promise.resolve({ url: "ws://localhost:3000/ws" });
+      return Promise.resolve(gatewayResult);
     },
   },
 }));
@@ -40,10 +41,22 @@ const ownInstance: string = "../src/preload/index?preload-ipc";
 await import(ownInstance);
 afterAll(() => mock.restore());
 beforeEach(() => {
+  gatewayResult = { url: "ws://localhost:3000/ws" };
   listeners.clear();
   registered.length = 0;
   removed.length = 0;
   invoked.length = 0;
+});
+
+test("gateway validates IPC replies and preserves absence", async () => {
+  gatewayResult = { url: 3 };
+  await expect(api().gateway()).rejects.toThrow();
+  gatewayResult = { url: "ws://localhost", token: 9 };
+  await expect(api().gateway()).rejects.toThrow();
+  gatewayResult = undefined;
+  expect(await api().gateway()).toBeUndefined();
+  gatewayResult = { url: "ws://localhost", token: "secret" };
+  expect(await api().gateway()).toEqual({ url: "ws://localhost", token: "secret" });
 });
 
 function api(): DesktopApi {

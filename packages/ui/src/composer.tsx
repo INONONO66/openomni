@@ -187,6 +187,12 @@ export function composerKey(
  * This component is DATA-BLIND. It does not know what a session is, what a
  * model is, or what happens when it sends — it takes strings and calls back.
  */
+function resizeField(node: HTMLTextAreaElement): void {
+  node.style.height = "auto";
+  const line = Number.parseFloat(getComputedStyle(node).lineHeight) || 21;
+  node.style.height = `${Math.min(node.scrollHeight, line * MAX_LINES)}px`;
+}
+
 export function Composer({
   value,
   onValueChange,
@@ -244,16 +250,8 @@ export function Composer({
   useEffect(() => {
     const node = field.current;
     if (node === null) return;
-    node.style.height = "auto";
-    const line = Number.parseFloat(getComputedStyle(node).lineHeight) || 21;
-    node.style.height = `${Math.min(node.scrollHeight, line * MAX_LINES)}px`;
+    resizeField(node);
   }, []);
-
-  const grow = (node: HTMLTextAreaElement) => {
-    node.style.height = "auto";
-    const line = Number.parseFloat(getComputedStyle(node).lineHeight) || 21;
-    node.style.height = `${Math.min(node.scrollHeight, line * MAX_LINES)}px`;
-  };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     const action = composerKey(event, { sendable, hasDecision: pending.length > 0 });
@@ -281,7 +279,7 @@ export function Composer({
             disabled={sending || disabled}
             onChange={(event) => {
               onValueChange(event.target.value);
-              grow(event.currentTarget);
+              resizeField(event.currentTarget);
             }}
             onKeyDown={onKeyDown}
             placeholder={placeholder}

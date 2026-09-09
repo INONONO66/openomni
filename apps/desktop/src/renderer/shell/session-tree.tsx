@@ -9,14 +9,11 @@ import {
   SidebarSection,
   Text,
   TreeRow,
-  StatusGlyph,
 } from "@openomni/ui";
-import { sessionGlyphProps } from "./session-glyph";
+import { SessionRow } from "./session-row";
 import { Settings } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { ATTENTION_LABEL } from "../attention/order";
-import { rowDensity } from "../attention/reason";
-import { SessionSecondary } from "./session-secondary";
 import type { Boundary, Ordered } from "../attention";
 import { highlightRuns } from "../search";
 import type { FilteredSession } from "../search";
@@ -207,7 +204,7 @@ export function SessionTree({
                           const session = sessionById.get(entry.id);
                           if (!session) return null;
                           return (
-                            <SessionRow
+                            <SearchSessionRow
                               active={entry.id === state.activeId}
                               current={entry.id === selectedId}
                               now={now}
@@ -245,7 +242,7 @@ export function SessionTree({
  * fill rather than inventing a second highlight: two different marks for "the
  * one you are on" is one mark too many in a column this quiet.
  */
-function SessionRow({
+function SearchSessionRow({
   session,
   now,
   entry,
@@ -265,17 +262,13 @@ function SessionRow({
   readonly registerRef: (id: SessionId, node: HTMLButtonElement | null) => void;
 }) {
   return (
-    <TreeRow
+    <SessionRow
+      session={session}
+      now={now}
       aria-selected={active}
       current={current || active}
       id={rowId(session.id)}
       level={1}
-      secondary={
-        rowDensity(session) === "double" ? (
-          <SessionSecondary session={session} now={now} />
-        ) : undefined
-      }
-      trailing={<StatusGlyph {...sessionGlyphProps(session.phase)} />}
       onClick={(event) => onSelect(session.id, event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => onKeyDown(event, session.id)}
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}
@@ -291,7 +284,7 @@ function SessionRow({
         runs={highlightRuns(session.title, entry.spans)}
         tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
       />
-    </TreeRow>
+    </SessionRow>
   );
 }
 

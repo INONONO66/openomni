@@ -6,6 +6,7 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 
 const realClient = { createRoot, hydrateRoot };
 import { GATEWAY_CHANNEL, type DesktopApi, type GatewayEndpoint } from "../src/preload/api";
+import { parseWindowBounds } from "../src/main/window-bounds";
 
 type Globals = { document?: object; window?: object; desktop?: DesktopApi };
 const ENVIRONMENT = ["OPENOMNI_WS_URL", "OPENOMNI_WS_TOKEN", "ELECTRON_RENDERER_URL"] as const;
@@ -33,8 +34,8 @@ type DebugListeners = { [K in keyof DebugEvents]?: (...args: DebugEvents[K]) => 
 /** Fire the webContents debug listener registered under `name` with `args`. */
 function fireDebug<K extends keyof DebugEvents>(listeners: DebugListeners | undefined, name: K, ...args: DebugEvents[K]): void {
   const listener = listeners?.[name];
-  expect(listener).toBeDefined();
-  listener?.(...args);
+  if (!listener) throw new Error(`Missing debug listener: ${name}`);
+  listener(...args);
 }
 
 test("desktop entries register IPC before window creation and render without awaiting the gateway", async () => {
@@ -133,8 +134,8 @@ test("desktop entries register IPC before window creation and render without awa
       invoke: (channel: string): Promise<GatewayEndpoint | undefined> => {
         order.push("invoke");
         const handler = handlers.get(channel);
-        expect(handler).toBeDefined();
-        return Promise.resolve(handler?.());
+        if (!handler) throw new Error(`Missing IPC handler: ${channel}`);
+        return Promise.resolve(handler());
       },
     },
   }));
@@ -177,7 +178,7 @@ test("desktop entries register IPC before window creation and render without awa
     });
     expect(loaded[0]?.endsWith("/renderer/index.html")).toBe(true);
     const first = windows[0];
-    expect(first).toBeDefined();
+    if (!first) throw new Error("Main entry did not create a window");
     first?.listeners.get("ready-to-show")?.();
     expect(first?.show).toHaveBeenCalledTimes(1);
     expect(first?.webContents.setBackgroundThrottling).toHaveBeenCalledWith(true);
@@ -185,7 +186,7 @@ test("desktop entries register IPC before window creation and render without awa
     first?.listeners.get("move")?.();
     first?.listeners.get("resize")?.();
     jest.runAllTimers();
-    expect(JSON.parse(readFileSync(join(userData, "window-bounds.json"), "utf8"))).toMatchObject({
+    expect(parseWindowBounds(readFileSync(join(userData, "window-bounds.json"), "utf8"))).toMatchObject({
       width: 1200,
       height: 800,
     });
@@ -214,8 +215,8 @@ test("desktop entries register IPC before window creation and render without awa
     error.mockRestore();
     process.env.OPENOMNI_WS_URL = "ws://127.0.0.1:43211/ws";
     await import("../src/preload/index");
-    expect(exposed).toBeDefined();
-    expect(await exposed?.gateway()).toEqual({
+    if (!exposed) throw new Error("Preload did not expose the desktop bridge");
+    expect(await exposed.gateway()).toEqual({
       url: "ws://127.0.0.1:43210/ws",
       token: "entry-token",
     });
