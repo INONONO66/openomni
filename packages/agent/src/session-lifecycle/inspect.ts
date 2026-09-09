@@ -20,11 +20,13 @@ export function inspectActions(
 ): Omit<SessionHistory.Inspection, "children"> {
   const byId = new Map(actions.map((action) => [action.id, action]));
   const turns = new Map<string, string | null>();
+  const parentOf = (action: LedgerAction.Node) =>
+    action.parentId === null ? undefined : byId.get(action.parentId);
   const turnOf = (action: LedgerAction.Node | undefined): string | null => {
     if (action === undefined) return null;
     const known = turns.get(action.id);
     if (known !== undefined) return known;
-    const turnId = ownTurnId(action) ?? turnOf(byId.get(action.parentId ?? ""));
+    const turnId = ownTurnId(action) ?? turnOf(parentOf(action));
     turns.set(action.id, turnId);
     return turnId;
   };
@@ -140,7 +142,7 @@ function causeOf(
     return { kind: "inbox", inboxIds: [inboxId] };
   if (action.kind === "prompt" && action.parentId === null)
     return { kind: "inbox", inboxIds: [action.id] };
-  const inboxIds = Array.isArray(intent.inboxIds) ? intent.inboxIds.filter(isText) : [];
+  const inboxIds = Array.isArray(intent.inboxIds) ? intent.inboxIds.flatMap(texts) : [];
   if (action.parentId !== null) return { kind: "action", actionId: action.parentId };
   if (inboxIds.length > 0) return { kind: "inbox", inboxIds };
   return { kind: "root" };
@@ -156,6 +158,14 @@ function outcomeOf(
   if (outbound !== undefined) return outbound.state === "delivered" ? "executed" : "pending";
   // A pre denial commits no intent; its decision is the call's only terminal record.
   if (action.kind === "policy.decision") return preDenial(object(action.intent.value));
+  return recordedOutcome(action, effect);
+}
+
+/** The outcome an action's own record states: its turn terminal, a pending phase, or a settled terminal. */
+function recordedOutcome(
+  action: LedgerAction.Node,
+  effect: PlainObject,
+): SessionHistory.Outcome | null {
   const terminal = SessionHandleStore.turnTerminal(action);
   if (terminal !== undefined) return TURN_OUTCOMES[terminal.kind];
   if (effect.phase === "pending") return "pending";
@@ -196,7 +206,10 @@ function reasonOf(intent: PlainObject, effect: PlainObject): string | null {
   return text(error.name) ?? text(effect.reason) ?? text(effect.status) ?? null;
 }
 
-function peerOf(intent: PlainObject, outbound: SessionTransition.Outbound | undefined): string | null {
+function peerOf(
+  intent: PlainObject,
+  outbound: SessionTransition.Outbound | undefined,
+): string | null {
   if (outbound !== undefined) return outbound.message.destinationSessionId;
   return (
     text(intent.sourceSessionId) ??
@@ -305,8 +318,8 @@ function object(value: PlainValue | undefined): PlainObject {
     : {};
 }
 
-function isText(value: PlainValue): value is string {
-  return typeof value === "string";
+function texts(value: PlainValue): string[] {
+  return typeof value === "string" ? [value] : [];
 }
 
 function text(value: PlainValue | undefined): string | undefined {

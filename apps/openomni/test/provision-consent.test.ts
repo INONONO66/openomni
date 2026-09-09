@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "bun:test";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { createDispatcher, eraseTool } from "@openomni/agent";
+import type { PlainObject } from "@openomni/protocol";
 import { createProvisionTool, PROVISION_POLICY_ROWS } from "../src/tools/provision";
 import { createTools } from "../src/tools/core/catalog";
 import { executor } from "./helpers/executor";
@@ -42,11 +43,12 @@ it("consent is a require_approval policy row on the two contact authority ops, n
 });
 it("the model cannot mint or decide Owner consent, and workers cannot see provision", async () => {
   const dispatcher = createDispatcher([provision()], { executor });
-  for (const operation of [
+  const forged: readonly PlainObject[] = [
     { op: "request", args: { actorId: "contact:mallory" } },
     { op: "decide", args: { approvalId: "invented", decision: "approved" } },
     { op: "contact_promote", args: { actorId: "contact:mallory", approvalId: "invented" } },
-  ]) {
+  ];
+  for (const operation of forged) {
     expect(
       (
         await dispatcher.execute(

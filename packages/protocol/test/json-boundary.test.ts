@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalDigest, canonicalKey, isPlainValue, PlainValueSchema } from "../src/index.js";
+import {
+  canonicalDigest,
+  canonicalKey,
+  isPlainValue,
+  PlainObjectSchema,
+  PlainValueSchema,
+} from "../src/index.js";
 
 describe("plain JSON owner", () => {
   test("the typed key profile retains its established bytes", () => {
@@ -14,6 +20,17 @@ describe("plain JSON owner", () => {
     expect(() => canonicalKey({ gap: undefined } as never)).toThrow(
       "canonical key accepts plain JSON values only",
     );
+  });
+
+  test("the object profile admits one JSON record and refuses every other JSON value", () => {
+    const record = { tool: "read", args: { path: "/tmp/x", lines: [1, 2] } };
+    expect(PlainObjectSchema.parse(record)).toEqual(record);
+    for (const value of ["text", 1, true, null, [record]]) {
+      const parsed = PlainObjectSchema.safeParse(value);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.message).toBe("Expected a plain JSON object");
+    }
+    expect(PlainObjectSchema.safeParse({ gap: undefined }).success).toBe(false);
   });
 
   test("rejects values whose property descriptors cannot be read", () => {
