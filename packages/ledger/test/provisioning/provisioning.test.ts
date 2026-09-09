@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { createDecipheriv, type DecipherGCM } from "node:crypto";
 import { expectNamedFailure } from "../helpers/errors";
 import { useSqliteStorage } from "../helpers/storage";
 import { inspect } from "node:util";
@@ -163,22 +164,37 @@ describe("Vault envelope crypto", () => {
     );
   });
 
-  test("authentication failures preserve their native error as cause", () => {
+  test("authentication failures preserve the exact native error as cause", () => {
     const kek = kekFixture(1);
     const envelope = Vault.seal(new TextEncoder().encode("value"), kek);
     const tampered = new Uint8Array(envelope.ciphertext);
     tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
+    let originalNativeError: Error | undefined;
+    const spyFactory = (algorithm: "aes-256-gcm", key: Uint8Array, iv: Uint8Array): DecipherGCM => {
+      const decipher = createDecipheriv(algorithm, key, iv);
+      const nativeFinal = decipher.final.bind(decipher);
+      function wrappedFinal(): Buffer<ArrayBuffer>;
+      function wrappedFinal(outputEncoding: BufferEncoding): string;
+      function wrappedFinal(outputEncoding?: BufferEncoding): Buffer<ArrayBuffer> | string {
+        try {
+          return outputEncoding === undefined ? nativeFinal() : nativeFinal(outputEncoding);
+        } catch (error) {
+          if (error instanceof Error) originalNativeError = error;
+          throw error;
+        }
+      }
+      decipher.final = wrappedFinal;
+      return decipher;
+    };
     let failure: Provisioning.VaultError | undefined;
     try {
-      Vault.open({ ...envelope, ciphertext: tampered }, kek);
+      Vault.open({ ...envelope, ciphertext: tampered }, kek, spyFactory);
     } catch (error) {
       if (!Provisioning.VaultError.isInstance(error)) throw error;
       failure = error;
     }
-    expect(failure).toBeDefined();
-    const cause = failure?.cause;
-    expect(cause).toBeInstanceOf(Error);
-    expect(failure?.cause).toBe(cause);
+    expect(originalNativeError).toBeInstanceOf(Error);
+    expect(failure?.cause).toBe(originalNativeError);
   });
 
   test("a truncated packed blob is a typed unopenable, not a crash", () => {
