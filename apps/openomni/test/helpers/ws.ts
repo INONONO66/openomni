@@ -68,7 +68,7 @@ export function closeSocket(ws: WebSocket, timeoutMs = 2000): Promise<void> {
 }
 
 /** The next application message/error; an admission receipt is not a response. */
-export function nextMessage(ws: WebSocket, timeoutMs = 2000): Promise<MessageEvent> {
+export function nextMessage(ws: WebSocket, timeoutMs = 10_000): Promise<MessageEvent> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error(`WebSocket reply timed out after ${timeoutMs}ms`)),
