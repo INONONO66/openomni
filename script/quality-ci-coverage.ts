@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { digest, jsonArray, jsonBoolean, jsonObject, jsonString } from "./quality-inventory";
 import { recordObject } from "./quality-ci-input";
 import { completeDocument, requireMeasurement, sameMembers, type Identity } from "./quality-ci-receipt";
-import { parseNativeLcov, type NativeLines } from "./quality-native-lcov";
+import { mergeNativeLines, parseNativeLcov, type NativeLines } from "./quality-native-lcov";
 import { coverageLanes } from "./topology";
 import { scriptPartitions } from "./scripts-lanes";
 
@@ -52,14 +52,12 @@ export function readNativeCoverage(options: {
 		return { lane, lcovHash: digest(lcov), files };
 	});
 	const lines = new Map<string, Map<number, number>>();
-	for (const file of receipts.flatMap((row) => row.files)) {
+	for (const file of mergeNativeLines(receipts.flatMap((row) => row.files))) {
 		if (!identity.paths.includes(file.path)) continue;
 		const length = readFileSync(resolve(options.root, file.path), "utf8").split("\n").length;
 		const counters = lines.get(file.path) ?? new Map<number, number>();
 		for (const row of file.lines) {
 			requireMeasurement(row.line <= length, "LCOV line outside original source");
-			const previous = counters.get(row.line);
-			requireMeasurement(previous === undefined || previous === row.hits, "conflicting native coverage ownership");
 			counters.set(row.line, row.hits);
 		}
 		lines.set(file.path, counters);

@@ -3,6 +3,26 @@ import { requireMeasurement } from "./quality-ci-receipt";
 
 export type NativeLines = { path: string; lines: { line: number; hits: number }[] };
 
+/** Merge only lanes that executed the file; when several did, shared DA lines are executable. */
+export function mergeNativeLines(records: readonly NativeLines[]): NativeLines[] {
+	const byPath = new Map<string, NativeLines[]>();
+	for (const record of records) (byPath.get(record.path) ?? (byPath.set(record.path, []), byPath.get(record.path)!)).push(record);
+	return [...byPath].map(([path, candidates]) => {
+		const executed = candidates.filter((record) => record.lines.some((row) => row.hits > 0));
+		if (!executed.length) return { path, lines: [] };
+		const shared = new Set(executed[0]!.lines.map((row) => row.line));
+		for (const record of executed.slice(1)) {
+			const present = new Set(record.lines.map((row) => row.line));
+			for (const line of shared) if (!present.has(line)) shared.delete(line);
+		}
+		const lines = [...shared].sort((a, b) => a - b).map((line) => ({
+			line,
+			hits: Math.max(...executed.map((record) => record.lines.find((row) => row.line === line)?.hits ?? 0)),
+		}));
+		return { path, lines };
+	});
+}
+
 function count(value: string): number {
 	requireMeasurement(/^\d+$/.test(value), "invalid LCOV count");
 	const result = Number(value);

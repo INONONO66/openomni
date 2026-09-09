@@ -19,6 +19,7 @@ import {
 } from "./quality-inventory";
 import { qualitySource } from "./quality-source";
 import { origins } from "./check-types-census";
+import { mergeNativeLines, type NativeLines } from "./quality-native-lcov";
 
 const gates = [
   "type",
@@ -392,22 +393,21 @@ export function touchedLines(
 /** The measurement's saved native coverage: `{ receipts: [{ files: [{ path, lines }] }] }`. */
 export function readExecuted(path: string): Executed {
   const document = jsonObject(decodeJson(readFileSync(path, "utf8")));
-  const result = new Map<string, Map<number, number>>();
+  const records: NativeLines[] = [];
   for (const receipt of jsonArray(document.receipts, jsonObject)) {
     for (const file of jsonArray(receipt.files, jsonObject)) {
       const source = jsonString(file.path);
-      const lines = result.get(source) ?? new Map<number, number>();
-      for (const entry of jsonArray(file.lines, jsonObject)) {
+      const lines = jsonArray(file.lines, jsonObject).map((entry) => {
         const line = jsonNumber(entry.line), hits = jsonNumber(entry.hits);
         if (!Number.isSafeInteger(line) || line < 1 || !Number.isSafeInteger(hits) || hits < 0)
           fail("invalid native coverage line");
-        const previous = lines.get(line);
-        if (previous !== undefined && previous !== hits) fail("conflicting native coverage ownership");
-        lines.set(line, hits);
-      }
-      result.set(source, lines);
+        return { line, hits };
+      });
+      records.push({ path: source, lines });
     }
   }
+  const result = new Map<string, Map<number, number>>();
+  for (const file of mergeNativeLines(records)) result.set(file.path, new Map(file.lines.map((row) => [row.line, row.hits])));
   return result;
 }
 /** The complete source inventory a current receipt must enumerate. */

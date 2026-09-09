@@ -294,7 +294,7 @@ test("Git changes are rename-aware and hunk-anchored; the CLI applies growth, no
     expect(owned.exitCode).toBe(1);
     expect(owned.stdout.toString().trim().split("\n").slice(0, -1)).toEqual(["type script/moved.ts:13 unknown:x 1"]);
     write(current);
-    writeFileSync(join(root, "evidence.json"), JSON.stringify(coverage([{ line: 13, hits: 0 }, { line: 5, hits: 0 }])));
+    writeFileSync(join(root, "evidence.json"), JSON.stringify(coverage([{ line: 13, hits: 0 }, { line: 5, hits: 1 }])));
     const unexecuted = Bun.spawnSync([process.execPath, join(import.meta.dir, "quality-ratchet.ts"), ...args(["--coverage", "evidence.json"])]);
     expect(unexecuted.exitCode).toBe(1);
     expect(unexecuted.stdout.toString().trim().split("\n").slice(0, -1)).toEqual([
@@ -388,7 +388,7 @@ test("synthetic regression fails closed end to end: a measured owned top type in
   }
 });
 
-test("native coverage evidence rejects conflicting lane hit counts and malformed lines", () => {
+test("native coverage unions executing lanes and ignores never-loaded lanes", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-ratchet-lcov-"));
   try {
     const path = join(root, "coverage.json");
@@ -401,7 +401,14 @@ test("native coverage evidence rejects conflicting lane hit counts and malformed
         ],
       }),
     );
-    expect(() => readExecuted(path)).toThrow("conflicting native coverage ownership");
+    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2]]));
+    writeFileSync(path, JSON.stringify({ receipts: [
+      { files: [{ path: "a.ts", lines: [{ line: 1, hits: 0 }, { line: 2, hits: 1 }] }] },
+      { files: [{ path: "a.ts", lines: [{ line: 1, hits: 2 }] }] },
+    ] }));
+    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2]]));
+    writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "never.ts", lines: [{ line: 1, hits: 0 }] }] }] }));
+    expect(readExecuted(path).get("never.ts")).toEqual(new Map());
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 0, hits: 1 }] }] }] }));
     expect(() => readExecuted(path)).toThrow();
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 1, hits: -1 }] }] }] }));
