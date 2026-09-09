@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readNativeCoverage } from "./quality-ci-coverage";
 import { fingerprint } from "./quality-ci-input";
 import { mergeMeasurements, normalizeTypes } from "./quality-ci-receipt";
-import { decodeJson } from "./quality-inventory";
+import { decodeJson, digest } from "./quality-inventory";
+import { parseNativeLcov } from "./quality-native-lcov";
 import {
   baselineAt,
   changedFiles,
@@ -294,7 +296,7 @@ test("Git changes are rename-aware and hunk-anchored; the CLI applies growth, no
     expect(owned.exitCode).toBe(1);
     expect(owned.stdout.toString().trim().split("\n").slice(0, -1)).toEqual(["type script/moved.ts:13 unknown:x 1"]);
     write(current);
-    writeFileSync(join(root, "evidence.json"), JSON.stringify(coverage([{ line: 13, hits: 0 }, { line: 5, hits: 0 }])));
+    writeFileSync(join(root, "evidence.json"), JSON.stringify(coverage([{ line: 13, hits: 0 }, { line: 5, hits: 1 }])));
     const unexecuted = Bun.spawnSync([process.execPath, join(import.meta.dir, "quality-ratchet.ts"), ...args(["--coverage", "evidence.json"])]);
     expect(unexecuted.exitCode).toBe(1);
     expect(unexecuted.stdout.toString().trim().split("\n").slice(0, -1)).toEqual([
@@ -388,7 +390,7 @@ test("synthetic regression fails closed end to end: a measured owned top type in
   }
 });
 
-test("native coverage evidence takes the best hit count across lanes and rejects malformed lines", () => {
+test("native coverage unions executing lanes and ignores never-loaded lanes", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-ratchet-lcov-"));
   try {
     const path = join(root, "coverage.json");
@@ -401,13 +403,57 @@ test("native coverage evidence takes the best hit count across lanes and rejects
         ],
       }),
     );
-    const executed = readExecuted(path);
-    expect([...(executed.get("a.ts") ?? [])]).toEqual([[1, 2], [2, 1]]);
-    expect(executed.get("b.ts")?.size).toBe(0);
+    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2]]));
+    writeFileSync(path, JSON.stringify({ receipts: [
+      { files: [{ path: "a.ts", lines: [{ line: 1, hits: 0 }, { line: 2, hits: 1 }] }] },
+      { files: [{ path: "a.ts", lines: [{ line: 1, hits: 2 }] }] },
+    ] }));
+    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2]]));
+    writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "never.ts", lines: [{ line: 1, hits: 0 }] }] }] }));
+    expect(readExecuted(path).get("never.ts")).toEqual(new Map([[1, 0]]));
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 0, hits: 1 }] }] }] }));
     expect(() => readExecuted(path)).toThrow();
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 1, hits: -1 }] }] }] }));
     expect(() => readExecuted(path)).toThrow();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.each([3, 0])("saved CI coverage retains coverage and CRAP growth with %i target hits in either lane order", (hits) => {
+  const root = mkdtempSync(join(tmpdir(), "quality-ratchet-guard-"));
+  try {
+    const target = "packages/machines/src/a.ts", anchor = "script/anchor.ts", run = "native-run";
+    const identity = { paths: [target, anchor], typescript: [target, anchor], inventoryHash: "a".repeat(64), contractHash: "b".repeat(64) };
+    mkdirSync(join(root, "packages/machines/src"), { recursive: true }); mkdirSync(join(root, "script"));
+    writeFileSync(join(root, target), "export const loaded = 1;\nexport const missing = () => 2;\n// artifact\n");
+    writeFileSync(join(root, anchor), "export const anchor = 1;\n");
+    const make = (lane: string, lcov: string) => ({ version: 1, complete: true, lane, run, runtime: Bun.version, inventoryHash: identity.inventoryHash, lcovHash: digest(lcov), lcov, files: parseNativeLcov(lcov, lane) });
+    const records = [
+      make("packages/machines", `SF:src/a.ts\nDA:1,${hits}\nDA:2,0\nLF:2\nLH:${hits > 0 ? 1 : 0}\nend_of_record\n`),
+      make("script", "SF:anchor.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\nSF:../packages/machines/src/a.ts\nDA:1,0\nDA:3,0\nLF:2\nLH:0\nend_of_record\n"),
+    ];
+    for (const row of records) writeFileSync(join(root, `${row.lane.replaceAll("/", "-")}.json`), JSON.stringify(row));
+    const baseline = { ...receipt([], ["coverage", "crap"]), inventory: [target] };
+    const crap = { ...at("crap", target, "ArrowFunction:missing", 110, 2), endLine: 2 };
+    const current = { ...baseline, findings: [at("coverage", target, "unproven-statement:missing", 1, 2), crap] };
+    const changes = [{ path: target, previous: target, ranges: [{ start: 2, count: 1 }] }];
+    const expected = hits > 0 ? new Map([[1, 3], [2, 0]]) : new Map([[1, 0], [2, 0], [3, 0]]);
+    for (const lanes of [records, [...records].reverse()]) {
+      const plan = join(root, "plan.json"), evidence = join(root, "coverage.json");
+      writeFileSync(plan, JSON.stringify({ matrix: { include: lanes.map(({ lane }) => ({ dir: lane, coverage: true })) } }));
+      const aggregate = readNativeCoverage({ root, directory: root, plan, run }, identity);
+      expect(aggregate.receipts.map(({ lane }) => lane)).toEqual(lanes.map(({ lane }) => lane));
+      writeFileSync(evidence, JSON.stringify({ receipts: aggregate.receipts }));
+      const executed = readExecuted(evidence);
+      expect(executed.get(target)).toEqual(expected);
+      expect(executed.get(target)).toEqual(aggregate.lines.get(target));
+      expect(executed.get(target)?.get(2)).toBe(0);
+      expect(growth(baseline, current, changes, executed)).toEqual([
+        crap,
+        { gate: "coverage", path: target, line: 2, symbol: "unexecuted-line", value: 1 },
+      ]);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
