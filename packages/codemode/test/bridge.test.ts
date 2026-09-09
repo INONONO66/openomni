@@ -28,7 +28,6 @@ describe("interpreter bridge ownership", () => {
       );
       await callEntered.promise;
       const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel, "process"));
-      if (!child) throw new Error("expected a running Python process");
       child.stdin?.write(
         `${JSON.stringify({ callId: "not-in-flight", status: "completed", value: "stray" })}\n`,
       );
@@ -71,7 +70,6 @@ describe("interpreter bridge ownership", () => {
       );
       await callEntered.promise;
       const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel, "process"));
-      if (!child) throw new Error("expected a running Python process");
       const callbacks = [
         ...z
           .object({

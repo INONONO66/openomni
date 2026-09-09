@@ -420,12 +420,8 @@ export class PythonKernel {
       let frame: z.infer<typeof Frame>;
       try {
         frame = Frame.parse(JSON.parse(line));
-      } catch (error) {
-        this.settleWithParseFailure(
-          process,
-          pending,
-          error instanceof Error ? error : new Error(String(error)),
-        );
+      } catch {
+        this.settleWithParseFailure(process, pending, new Error("invalid driver frame"));
         return;
       }
       // A tool call leaves the cell pending — including its deadline, so a cell
@@ -445,9 +441,9 @@ export class PythonKernel {
       pending.inFlight.clear();
       try {
         pending.resolve(frame.result);
-      } catch (error) {
+      } catch {
         this.discard(process);
-        pending.reject(error instanceof Error ? error : new Error(String(error)));
+        pending.reject(new Error("invalid cell result"));
       }
     });
 
@@ -500,12 +496,8 @@ export class PythonKernel {
             callId: frame.callId,
           })}\n`,
         );
-      } catch (error) {
-        this.settleWithParseFailure(
-          process,
-          pending,
-          error instanceof Error ? error : new Error(String(error)),
-        );
+      } catch {
+        this.settleWithParseFailure(process, pending, new Error("driver write failed"));
       }
       return;
     }
@@ -516,23 +508,21 @@ export class PythonKernel {
       .then(() =>
         pending.callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments }),
       )
-      .catch(
-        (error: Error): Machine.ToolCallResult => ({
-          status: "failed",
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      )
+      .catch((): Machine.ToolCallResult => ({
+        status: "failed",
+        error: "tool call failed",
+      }))
       .then((answer) => {
         // The cell may already have timed out and taken its interpreter with
         // it; a callId removed from this cell's map no longer owns an answer.
         if (this.pending !== pending || !pending.inFlight.has(frame.callId)) return;
         process.stdin.write(`${JSON.stringify({ ...answer, callId: frame.callId })}\n`);
       })
-      .catch((error: Error) => {
+      .catch(() => {
         // A synchronous serialization/write failure is a kernel-channel failure,
         // but a stale process has already been deliberately discarded.
         if (this.pending === pending && pending.inFlight.has(frame.callId)) {
-          this.settleWithParseFailure(process, pending, error);
+          this.settleWithParseFailure(process, pending, new Error("driver write failed"));
         }
       });
     pending.inFlight.set(frame.callId, task);

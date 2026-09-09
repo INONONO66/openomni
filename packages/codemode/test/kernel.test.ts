@@ -150,7 +150,7 @@ describe("code-mode kernel substrate", () => {
           },
           noTools,
         ),
-      ).rejects.toBeInstanceOf(SyntaxError);
+      ).rejects.toMatchObject({ message: "invalid driver frame" });
       await expect(
         kernel.run(
           { cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 },
