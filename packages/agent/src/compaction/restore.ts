@@ -24,7 +24,7 @@ const RecordedCompaction: z.ZodType<CompactionRecord> = z.object({
   revert: RevertRecipe,
 });
 
-export class ContextRestoreError extends Error {
+class ContextRestoreError extends Error {
   readonly code = "context_restore_refused";
   constructor(readonly reason: "unknown_compaction" | "not_executed") {
     super(`context restore refused: ${reason}`);

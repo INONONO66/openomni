@@ -2,11 +2,11 @@ import { describe, expect, it } from "bun:test";
 import {
   createDispatcher,
   createTurnDispatcher,
-  ExecutorContextError,
   currentExecutor,
   defineTool,
   type Executor,
 } from "../src/index";
+import { ExecutorContextError } from "../src/executor-context";
 import { z } from "zod";
 import {
   allowAllPolicy,

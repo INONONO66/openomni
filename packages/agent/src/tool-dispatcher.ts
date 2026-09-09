@@ -1,6 +1,6 @@
 import { executeToolBody, ToolBodyOutcome } from "./tool-body";
 import { activeExecutor, ExecutorContextError } from "./executor-context";
-export { currentExecutor, ExecutorContextError } from "./executor-context";
+export { currentExecutor } from "./executor-context";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   type AnyToolDefinition,

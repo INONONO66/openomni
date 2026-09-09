@@ -10,12 +10,10 @@ import {
   createExecutor,
   createSessionChatRunner,
   createTurnDispatcher,
-  session,
   type Executor,
-  type SessionHandle,
-  type SessionRunnerInput,
   type SessionRuntime,
 } from "../src/index";
+import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
 import { recordingLedger } from "./helpers/compiled-policy";
 import {
   completeModel,

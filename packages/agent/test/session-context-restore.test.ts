@@ -4,15 +4,14 @@ import { nth } from "./helpers/nth";
 import { answerThenCompact } from "./helpers/answer-then-compact";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import type { LedgerAction, PlainObject } from "@openomni/protocol";
-import { ContextRestoreError } from "../src/compaction/restore";
 import {
   Bus,
   closeSessions,
   createTurnDispatcher,
-  session,
   type SessionRunner,
   type SessionRuntime,
 } from "../src/index";
+import { session } from "../src/session-handle";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 
 let nextId = 0;
@@ -137,7 +136,11 @@ describe("restore_context_projection", () => {
     const { handle, before } = await compactedSession();
     const compaction = compactionIntent(before);
 
-    await expect(handle.restoreContext("nope")).rejects.toBeInstanceOf(ContextRestoreError);
+    await expect(handle.restoreContext("nope")).rejects.toMatchObject({
+      name: "ContextRestoreError",
+      code: "context_restore_refused",
+      reason: "unknown_compaction",
+    });
     const result = before.find(
       (action) => action.kind === "compaction" && action.parentId === compaction.id,
     );

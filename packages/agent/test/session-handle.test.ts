@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { boundedBy } from "./helpers/bounded";
-import { ContextRestoreError } from "../src/compaction/restore";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
 import {
   closeSessions,
@@ -1539,9 +1538,11 @@ describe("durable session handle", () => {
     const successor = session(options, runtime);
     expect(successor).not.toBe(first);
 
-    await expect(first.restoreContext("missing-compaction")).rejects.toBeInstanceOf(
-      ContextRestoreError,
-    );
+    await expect(first.restoreContext("missing-compaction")).rejects.toMatchObject({
+      name: "ContextRestoreError",
+      code: "context_restore_refused",
+      reason: "unknown_compaction",
+    });
     await bounded(first.close(), "close through successor");
     expect(() => successor.prompt("after close")).toThrow("session handle is closed");
     expect(() => first.prompt("after close")).toThrow("session handle is closed");

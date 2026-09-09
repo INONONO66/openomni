@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { createObservationBus } from "../../src/index";
+import { createObservationBus } from "../../src/observation/bus";
 import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
 

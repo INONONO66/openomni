@@ -1,9 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
-import {
-  createExecutor,
-  type ExecutionLedger,
-  UnregisteredExecutionKindError,
-} from "../../../src/index";
+import { createExecutor } from "../../../src/index";
+import type { ExecutionLedger } from "../../../src/executor";
 import { compilePolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 
@@ -76,9 +73,12 @@ describe("the single L2 executor's four-kind verdict model", () => {
     const { actions, executor } = harness([]);
     const body = mock(async () => ({ ok: true }));
 
-    expect(
-      executor.run({ kind: "channel.send", op: "test", intent: {}, effect: {} }, body),
-    ).rejects.toEqual(
+    const refused = executor.run(
+      { kind: "channel.send", op: "test", intent: {}, effect: {} },
+      body,
+    );
+    await expect(refused).rejects.toBeInstanceOf(Error);
+    await expect(refused).rejects.toEqual(
       expect.objectContaining({
         name: "UnregisteredExecutionKindError",
         code: "unregistered_execution_kind",
@@ -87,7 +87,6 @@ describe("the single L2 executor's four-kind verdict model", () => {
     );
     expect(body).toHaveBeenCalledTimes(0);
     expect(actions).toHaveLength(0);
-    expect(new UnregisteredExecutionKindError("x")).toBeInstanceOf(Error);
   });
 
   it("registers extension kinds as declarative data", async () => {

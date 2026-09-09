@@ -14,7 +14,7 @@ import { requireCommit } from "./session-record";
 import { requestBindingDigest } from "./session-request";
 import { commitSessionRequest } from "./session-admission";
 
-export interface SessionRequestPort {
+interface SessionRequestPort {
   list(): readonly SessionTransition.Request[];
   timeout(requestId: string, at: number): void;
   open(input: {

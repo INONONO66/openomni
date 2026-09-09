@@ -13,7 +13,7 @@ import {
  * action list: it reads no store, runs no body and appends nothing. Payloads
  * are reduced to identities, hashes, terminals and reasons.
  */
-export function inspectActions(
+function inspectActions(
   sessionId: string,
   parentId: string | null,
   actions: readonly LedgerAction.Node[],
@@ -69,20 +69,6 @@ export function inspectSession(
 }
 
 /** Policy decisions narrowed by generation, matched rule and verdict. */
-export function inspectPolicy(
-  decisions: readonly SessionHistory.PolicyDecision[],
-  filter: SessionHistory.PolicyFilter = {},
-): SessionHistory.PolicyDecision[] {
-  const { generation, ruleId, verdict } = SessionHistory.PolicyFilter.parse(filter);
-  return decisions.filter((decision) =>
-    all(
-      generation === undefined || decision.generation === generation,
-      ruleId === undefined || decision.matchedRuleIds.includes(ruleId),
-      verdict === undefined || decision.verdict === verdict,
-    ),
-  );
-}
-
 function all(...checks: readonly boolean[]): boolean {
   return checks.every((check) => check);
 }

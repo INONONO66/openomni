@@ -8,7 +8,7 @@ import { runWaveBodies, waveBodyScope, type WaveControl } from "./core/execution
 const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
 
-export class UnregisteredExecutionKindError extends Error {
+class UnregisteredExecutionKindError extends Error {
   readonly code = "unregistered_execution_kind";
 
   constructor(readonly kind: string) {
@@ -56,10 +56,6 @@ const RESULT_ECHO_KINDS = new Set<string>(["compaction", "tool", "message"]);
 function ambientSignal(): AbortSignal {
   const scope = waveBodyScope.getStore();
   return scope === undefined ? new AbortController().signal : scope.signal;
-}
-
-function definedSignals(...signals: readonly (AbortSignal | undefined)[]): AbortSignal[] {
-  return signals.filter((signal): signal is AbortSignal => signal !== undefined);
 }
 
 function policyPoint(
@@ -227,9 +223,12 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
   ): Promise<readonly ExecutionBatchResult[]> {
     const controller = new AbortController();
     const inherited = waveBodyScope.getStore();
-    const signal = AbortSignal.any(
-      definedSignals(control.signal, controller.signal, options.signal, inherited?.signal),
-    );
+    const signal = AbortSignal.any([
+      control.signal,
+      controller.signal,
+      ...(options.signal === undefined ? [] : [options.signal]),
+      ...(inherited === undefined ? [] : [inherited.signal]),
+    ]);
     try {
       return await executeBatch(items, { signal, retain: retainFor(inherited, control) });
     } finally {

@@ -38,7 +38,7 @@ function isEventData<T, U>(
   return expected.name === published.name;
 }
 
-export interface ObservationBus extends ObservationSink {
+interface ObservationBus extends ObservationSink {
   subscribe<T>(
     event: BusEvent.Descriptor<T>,
     handler: (data: T) => void,
@@ -49,7 +49,7 @@ export interface ObservationBus extends ObservationSink {
   withIsolation<T>(operation: () => T): T;
 }
 
-export namespace ObservationBus {
+namespace ObservationBus {
   export interface PublishedDescriptor {
     readonly name: string;
     readonly schema: { readonly safeParse: (value: BusData) => ParseResult<BusData> };
