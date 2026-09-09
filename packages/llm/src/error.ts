@@ -22,14 +22,6 @@ export const APIError = NamedError.create(
   }),
 );
 
-export const ProviderError = NamedError.create(
-  "ProviderError",
-  z.object({
-    message: z.string(),
-    provider: z.string(),
-  }),
-);
-
 const ErrorFacts = z.object({
   aborted: z.boolean().optional().catch(undefined),
   contextOverflow: z.boolean().optional().catch(undefined),

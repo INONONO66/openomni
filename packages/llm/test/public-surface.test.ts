@@ -70,7 +70,6 @@ describe("@openomni/llm root public surface", () => {
       // #606 re-audit).
       "APIError",
       "NamedError",
-      "ProviderError",
       "TokenTracker",
     ] as const;
 

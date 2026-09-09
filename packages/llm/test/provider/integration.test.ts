@@ -71,32 +71,6 @@ describe("Provider Integration", () => {
     }
   });
 
-  const listCases: Array<{
-    name: string;
-    requests: Array<{ provider: "anthropic" | "openai"; auth?: "proxy" | "api" }>;
-  }> = [
-    {
-      name: "each provider",
-      requests: [{ provider: "anthropic" }, { provider: "openai" }],
-    },
-    {
-      name: "both proxy and api auth types",
-      requests: [
-        { provider: "openai", auth: "proxy" },
-        { provider: "openai", auth: "api" },
-      ],
-    },
-  ];
-
-  it.each(listCases)("should list models for $name", async ({ requests }) => {
-    for (const { provider, auth } of requests) {
-      const models = await Provider.listModels(provider, auth);
-      expect(models.length).toBeGreaterThan(0);
-      expect(models.every((model) => Provider.Model.safeParse(model).success)).toBe(true);
-      expect(models.every((model) => model.providerID === provider)).toBe(true);
-    }
-  });
-
   it("maps custom models without stale removed-provider npm metadata", () => {
     const model = Provider.fromModelsDevModel(
       { id: "custom", name: "Custom", env: [], api: "http://localhost:8317/v1", models: {} },

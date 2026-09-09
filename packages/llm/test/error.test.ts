@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NamedError, ProviderError, APIError, coerceApiError } from "../src/error";
+import { NamedError, APIError, coerceApiError } from "../src/error";
 import { sdkError } from "./helpers/retry";
 
 describe("coerceApiError", () => {
@@ -57,26 +57,6 @@ describe("NamedError", () => {
     expect(NamedError.Unknown.isInstance({ name: "UnknownError" })).toBe(false);
     expect(NamedError.Unknown.isInstance({ name: "Other" })).toBe(false);
     expect(NamedError.Unknown.isInstance(null)).toBe(false);
-  });
-});
-
-describe("ProviderError", () => {
-  test("construction and properties", () => {
-    const err = new ProviderError({
-      message: "unknown provider",
-      provider: "gemini",
-    });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("ProviderError");
-    expect(err.data.message).toBe("unknown provider");
-    expect(err.data.provider).toBe("gemini");
-  });
-
-  test("isInstance type guard", () => {
-    const err = new ProviderError({ message: "test", provider: "x" });
-    expect(ProviderError.isInstance(err)).toBe(true);
-    expect(ProviderError.isInstance(new NamedError.Unknown({ message: "x" }))).toBe(false);
   });
 });
 

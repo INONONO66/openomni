@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NamedError, ProviderError } from "../error";
+import { NamedError } from "../error";
 import { ModelsDev } from "../model";
 import { Auth } from "../auth/storage";
 import { enrichWithCatalog, fetchProxyModels } from "./proxy-models";
@@ -113,34 +113,6 @@ export namespace Provider {
       model: input.id,
       reason: "model_not_found",
     });
-  }
-
-  export async function listModels(
-    providerID: string,
-    authType?: "proxy" | "api",
-  ): Promise<Model[]> {
-    const data = await ModelsDev.get();
-    const provider = data[providerID];
-    if (!provider) {
-      throw new ProviderError({
-        message: `Unknown provider: ${providerID}`,
-        provider: providerID,
-      });
-    }
-    const models = catalogModels(provider);
-    if (authType === "proxy") {
-      const auth = await Auth.get(providerID);
-      if (auth?.type === "proxy") {
-        // fetchProxyModels throws ProxyModelsError on any listing failure —
-        // never falls back to the full models.dev catalog, which would
-        // present every model as "available on this proxy". An empty
-        // (successful) listing is likewise honest: the proxy hosts nothing.
-        const proxyModelIds = await fetchProxyModels(auth.baseURL, auth.apiKey);
-        return enrichWithCatalog(proxyModelIds, models, providerID);
-      }
-    }
-
-    return Object.values(models);
   }
 }
 

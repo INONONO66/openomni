@@ -6,11 +6,7 @@ import { Auth } from "../../src/auth";
 import { ModelsDev } from "../../src/model";
 import { resetCatalog } from "../helpers/model-loader";
 import { Provider } from "../../src/provider/index";
-import {
-  enrichWithCatalog,
-  fetchProxyModels,
-  ProxyModelsError,
-} from "../../src/provider/proxy-models";
+import { enrichWithCatalog, fetchProxyModels } from "../../src/provider/proxy-models";
 
 type FetchArgs = Parameters<typeof fetch>;
 const originalFetch = globalThis.fetch;
@@ -90,11 +86,10 @@ describe("proxy-models", () => {
         },
         (cause: unknown) => cause,
       );
-      expect(ProxyModelsError.isInstance(error)).toBe(true);
-      if (ProxyModelsError.isInstance(error)) {
-        expect(error.data.status).toBe(401);
-        expect(error.data.url).toBe("http://localhost:3102/v1/models");
-      }
+      expect(error).toMatchObject({
+        name: "ProxyModelsError",
+        data: { status: 401, url: "http://localhost:3102/v1/models" },
+      });
     });
 
     it.each([
@@ -118,8 +113,8 @@ describe("proxy-models", () => {
     });
   });
 
-  describe("Provider.listModels proxy discovery", () => {
-    it("returns only models advertised by the configured proxy", async () => {
+  describe("Provider.resolveModel proxy discovery", () => {
+    it("resolves a model advertised only by the configured proxy", async () => {
       const directory = mkdtempSync(join(tmpdir(), "openomni-proxy-registry-"));
       const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
       const previousModelsPath = process.env.OPENOMNI_MODELS_PATH;
@@ -162,9 +157,9 @@ describe("proxy-models", () => {
           baseURL: "http://localhost:3199/v1",
           apiKey: "proxy-key",
         });
-        const models = await Provider.listModels("openai", "proxy");
+        const model = await Provider.resolveModel({ provider: "openai", id: "proxy-only-model" });
 
-        expect(models.map((model) => model.id)).toEqual(["proxy-only-model"]);
+        expect(model).toMatchObject({ id: "proxy-only-model", providerID: "openai" });
       } finally {
         if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
         else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;

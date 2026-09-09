@@ -4,10 +4,10 @@ import type { Provider } from "./index";
 
 /**
  * A proxy that cannot list its models must fail loudly: swallowing the
- * failure into an empty list made listModels() fall through to the full
- * models.dev catalog, presenting every model as "available on this proxy".
+ * failure into an empty list made proxy model resolution fall through to the
+ * full models.dev catalog, presenting every model as "available on this proxy".
  */
-export const ProxyModelsError = NamedError.create(
+const ProxyModelsError = NamedError.create(
   "ProxyModelsError",
   z.object({
     message: z.string(),

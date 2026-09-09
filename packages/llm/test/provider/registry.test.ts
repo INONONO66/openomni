@@ -45,28 +45,6 @@ const sdkCases: Array<{
   },
 ];
 
-const modelListCases: Array<{
-  name: string;
-  provider: "anthropic" | "openai";
-  auth?: "proxy" | "api";
-  properties: boolean;
-}> = [
-  { name: "model definitions from ModelsDev", provider: "anthropic", properties: true },
-  { name: "OpenAI model definitions", provider: "openai", properties: false },
-  {
-    name: "OpenAI models for proxy auth type without CODEX filter",
-    provider: "openai",
-    auth: "proxy",
-    properties: false,
-  },
-  {
-    name: "all OpenAI models for API auth type",
-    provider: "openai",
-    auth: "api",
-    properties: false,
-  },
-];
-
 describe("Provider Registry", () => {
   usePrivateCatalog();
 
@@ -101,23 +79,6 @@ describe("Provider Registry", () => {
           `No bundled provider for npm package: ${npm}`,
         );
       }
-    });
-  });
-
-  describe("listModels", () => {
-    it.each(modelListCases)("should return $name", async ({ provider, auth, properties }) => {
-      const models = await Provider.listModels(provider, auth);
-      expect(models).toBeDefined();
-      expect(Array.isArray(models)).toBe(true);
-      expect(models.length).toBeGreaterThan(0);
-      if (properties) {
-        expect(models[0]).toHaveProperty("id");
-        expect(models[0]).toHaveProperty("name");
-      }
-    });
-
-    it("should throw error for unknown provider", async () => {
-      return expect(Provider.listModels("unknown")).rejects.toThrow("Unknown provider: unknown");
     });
   });
 });
