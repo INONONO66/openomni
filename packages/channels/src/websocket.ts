@@ -30,6 +30,36 @@ interface WebSocketUpgradeOptions {
   data: WsConnectionData;
 }
 
+const RequestAnswerFrame = Gateway.RequestAnswer.extend({
+  type: z.literal("request_answer"),
+  kind: z.json().optional(),
+}).transform(
+  (frame): Gateway.RequestAnswer => ({
+    kind: "request_answer",
+    inputId: frame.inputId,
+    request: frame.request,
+    decision: frame.decision,
+    credential: frame.credential,
+  }),
+);
+const TextFrame = z
+  .object({
+    type: z
+      .json()
+      .optional()
+      .refine((type) => type !== "request_answer"),
+    text: z.string().min(1),
+    eventId: z.string().min(1).optional().catch(undefined),
+    replyToId: z.string().min(1).optional().catch(undefined),
+  })
+  .transform((frame) => ({
+    kind: "message" as const,
+    text: frame.text,
+    eventId: frame.eventId,
+    replyToId: frame.replyToId,
+  }));
+const WebSocketFrame = z.union([RequestAnswerFrame, TextFrame]);
+
 export class WebSocketHandler {
   /**
    * Live connections by declared externalId, last-wins: a reconnect replaces
@@ -162,34 +192,36 @@ export class WebSocketHandler {
         ws.send(JSON.stringify({ type: "error", message: "invalid websocket frame" }));
         return;
       }
-      const parsed = parsedResult.data;
+      const frame = WebSocketFrame.safeParse(parsedResult.data);
+      if (!frame.success) {
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message:
+              parsedResult.data.type === "request_answer"
+                ? "invalid request_answer frame"
+                : "text field required",
+          }),
+        );
+        return;
+      }
+      const parsed = frame.data;
       const sender = {
         kind: "external",
         surface: "ws",
         externalId: ws.data.externalId,
       } as const;
-      if (parsed.type === "request_answer") {
-        const { type: _type, ...fields } = parsed;
-        const answer = Gateway.RequestAnswer.safeParse({ ...fields, kind: "request_answer" });
-        if (!answer.success) {
-          ws.send(JSON.stringify({ type: "error", message: "invalid request_answer frame" }));
-          return;
-        }
+      if (parsed.kind === "request_answer") {
         if (this.config.onRequestAnswer === undefined) {
           ws.send(JSON.stringify({ type: "error", message: "request_answer unavailable" }));
           return;
         }
         try {
-          const result = await this.config.onRequestAnswer(sender, answer.data);
-          ws.send(JSON.stringify({ type: "receipt", inputId: answer.data.inputId, result }));
+          const result = await this.config.onRequestAnswer(sender, parsed);
+          ws.send(JSON.stringify({ type: "receipt", inputId: parsed.inputId, result }));
         } catch {
           ws.send(JSON.stringify({ type: "error", message: "request_answer failed" }));
         }
-        return;
-      }
-
-      if (typeof parsed.text !== "string" || !parsed.text) {
-        ws.send(JSON.stringify({ type: "error", message: "text field required" }));
         return;
       }
 
@@ -198,17 +230,12 @@ export class WebSocketHandler {
       await this.handler({
         sender,
         facts: {
-          eventId:
-            typeof parsed.eventId === "string" && parsed.eventId.length > 0
-              ? parsed.eventId
-              : crypto.randomUUID(),
+          eventId: parsed.eventId ?? crypto.randomUUID(),
           surface: "ws",
           channelId: surfaceKey,
           addressees: [],
           dm: true,
-          ...(typeof parsed.replyToId === "string" && parsed.replyToId.length > 0
-            ? { reply: { chain: [parsed.replyToId] } }
-            : {}),
+          ...(parsed.replyToId !== undefined ? { reply: { chain: [parsed.replyToId] } } : {}),
           payload: { websocket: { authenticated: ws.data.authenticated } },
           render: parsed.text,
         },

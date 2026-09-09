@@ -128,15 +128,17 @@ export class SocketReconnectShell {
     });
     await this.delay(backoffMs);
     if (this.active) {
-      reconnect(traceId).catch((err) =>
+      try {
+        await reconnect(traceId);
+      } catch (error) {
         this.publish(Operational.Events.Error, {
           traceId,
           time: Date.now(),
           component: "server",
           msg: this.messages.reconnectFailed,
-          context: { err: String(err) },
-        }),
-      );
+          context: { err: String(error) },
+        });
+      }
     }
   }
 

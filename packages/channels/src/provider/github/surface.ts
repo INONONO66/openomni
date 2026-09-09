@@ -24,6 +24,7 @@ interface GitHubAuthOptions {
 
 /** Every webhook payload carries `action`; unsupported events may not — optional keeps the event-key log honest. */
 const EventActionSchema = z.object({ action: z.string().optional() });
+const WebhookBodySchema = z.record(z.string(), z.json());
 
 function actionOf(raw: object): string | undefined {
   const parsed = EventActionSchema.safeParse(raw);
@@ -148,19 +149,23 @@ export class GitHubAdapter implements Channel.Surface {
     });
     if (auth.response) return auth.response;
 
-    let raw: unknown;
+    let body: ReturnType<typeof WebhookBodySchema.safeParse>;
     try {
-      raw = JSON.parse(auth.body ?? "") as unknown;
+      body = WebhookBodySchema.safeParse(JSON.parse(auth.body ?? ""));
     } catch {
       return new Response("Invalid JSON", { status: 400 });
     }
-    const preparation = this.prepareWebhook(request, raw, traceId);
+    const preparation = this.prepareWebhook(request, body, traceId);
     if ("response" in preparation) return preparation.response;
 
     return this.dispatchWebhook(preparation);
   }
 
-  private prepareWebhook(request: Request, body: unknown, traceId: string): WebhookPreparation {
+  private prepareWebhook(
+    request: Request,
+    body: ReturnType<typeof WebhookBodySchema.safeParse>,
+    traceId: string,
+  ): WebhookPreparation {
     const deliveryId = request.headers.get("x-github-delivery");
     const dedupeAcquisition = deliveryId === null ? undefined : this.dedupe.acquire(deliveryId);
     if (dedupeAcquisition?.duplicate) {
@@ -171,9 +176,8 @@ export class GitHubAdapter implements Channel.Surface {
     const event = request.headers.get("x-github-event");
     if (!event) return { response: new Response("Missing event", { status: 400 }) };
 
-    const rawResult = z.record(z.string(), z.json()).safeParse(body);
-    if (!rawResult.success) return { response: new Response("Unsupported event", { status: 200 }) };
-    const raw = rawResult.data;
+    if (!body.success) return { response: new Response("Unsupported event", { status: 200 }) };
+    const raw = body.data;
     const eventKey = `${event}.${actionOf(raw)}`;
     this.publish(Operational.Events.Info, {
       traceId,
@@ -196,7 +200,7 @@ export class GitHubAdapter implements Channel.Surface {
       ...new Set(
         [...content.text.matchAll(/@([a-zA-Z0-9][a-zA-Z0-9-]*)/g)]
           .map((match) => match[1])
-          .filter((id): id is string => id !== undefined),
+          .filter((id: string | undefined): id is string => id !== undefined),
       ),
     ];
     const inbound: Channel.InboundMessage = {

@@ -30,7 +30,7 @@ const principal = {
 let directory: string;
 let dbPath: string;
 let at: number;
-const stops: (() => void)[] = [];
+const stops: (() => void | Promise<void>)[] = [];
 
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "owner-answer-"));
@@ -39,8 +39,8 @@ beforeEach(() => {
   Storage.initialize({ dbPath });
 });
 
-afterEach(() => {
-  for (const stop of stops.splice(0)) stop();
+afterEach(async () => {
+  for (const stop of stops.splice(0)) await stop();
   Storage.reset();
   rmSync(directory, { recursive: true, force: true });
 });
@@ -104,6 +104,13 @@ function approval() {
 
 function envelope(request: SessionTransition.Request, decision: "approve" | "refuse" = "approve") {
   return { kind: "request_answer", inputId: "answer-1", request, decision, credential } as const;
+}
+
+function wireAnswer(
+  request: SessionTransition.Request,
+  decision: "approve" | "refuse" = "approve",
+) {
+  return Gateway.RequestAnswer.omit({ kind: true }).strip().parse(envelope(request, decision));
 }
 
 function router(
@@ -171,9 +178,7 @@ async function connect(
     fetch: (request, instance) => handler.handleUpgrade(request, instance),
     websocket: handler.ws,
   });
-  stops.push(() => {
-    server.stop(true);
-  });
+  stops.push(() => server.stop(true));
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?actor=owner-console`, [
     "auth",
     "upgrade-secret",
@@ -207,7 +212,7 @@ test.each([
   const messages: Channel.InboundMessage[] = [];
   const logs: string[] = [];
   const { socket } = await connect(gateway, messages, logs);
-  const { kind: _kind, ...answer } = envelope(request, decision);
+  const answer = wireAnswer(request, decision);
   const receipt = await frame(socket, { type: "request_answer", ...answer });
   expect(receipt).toMatchObject({
     type: "receipt",
@@ -235,11 +240,11 @@ test.each([
 test("same typed answer survives SQLite and gateway restart with a fresh owner clock", async () => {
   const request = approval();
   const first = await connect(router());
-  const { kind: _kind, ...answer } = envelope(request);
+  const answer = wireAnswer(request);
   const wire = { type: "request_answer", ...answer };
   expect(await frame(first.socket, wire)).toMatchObject({ result: { status: "executed" } });
   const before = SessionHandleStore.tree(request.sessionId);
-  first.server.stop(true);
+  await first.server.stop(true);
   Storage.reset();
   Storage.initialize({ dbPath });
   at = 20;
@@ -257,7 +262,7 @@ test("wrong frame credential is refused without recording or leaking it", async 
   const request = approval();
   const before = SessionHandleStore.tree(request.sessionId);
   const { socket } = await connect(router());
-  const { kind: _kind, ...answer } = envelope(request);
+  const answer = wireAnswer(request);
   const result = await frame(socket, {
     type: "request_answer",
     ...answer,
@@ -270,7 +275,7 @@ test("wrong frame credential is refused without recording or leaking it", async 
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
 });
 
-test("session sender, missing authenticator, and non-Owner evidence fail closed", async () => {
+test("session sender, malformed input, missing authenticator, and non-Owner evidence fail closed", async () => {
   const request = approval();
   let calls = 0;
   const gateway = router({
@@ -283,6 +288,10 @@ test("session sender, missing authenticator, and non-Owner evidence fail closed"
   ).toEqual({
     status: "blocked_pre",
     reasonCode: "request_answer.session_sender",
+  });
+  expect(await gateway.ingest(sender, { ...envelope(request), inputId: "" })).toEqual({
+    status: "blocked_pre",
+    reasonCode: "request_answer.invalid",
   });
   expect(calls).toBe(0);
   expect(await makeRouter().ingest(sender, envelope(request))).toEqual({
@@ -392,9 +401,10 @@ test("plain text preserves stable driver event ID and cannot enter Owner authent
 test("typed frames reject missing input identity and untrusted principal fields", async () => {
   const request = approval();
   const { socket } = await connect(router());
-  const { kind: _kind, ...answer } = envelope(request);
+  const answer = wireAnswer(request);
   for (const value of [
     { ...answer, inputId: undefined },
+    { ...answer, inputId: undefined, text: "must not become a plain message" },
     { ...answer, principal },
   ]) {
     expect(await frame(socket, { type: "request_answer", ...value })).toEqual({

@@ -187,15 +187,19 @@ async function duplicateAmbiguous(context: ScenarioContext) {
     ],
     quorum: {
       unchanged,
-      after: {
-        state: after?.state ?? "",
-        replies: after?.replies.length ?? 0,
-        responders: new Set(after?.replies.map((reply) => reply.responderId)).size,
-        threshold: after?.threshold ?? 0,
-      },
+      after: quorumState(after),
     },
     workerAllocated: false,
     allocationDelta,
+  };
+}
+
+function quorumState(request: ReturnType<typeof SessionHandleStore.requestById>) {
+  return {
+    state: request?.state ?? "",
+    replies: request?.replies.length ?? 0,
+    responders: new Set(request?.replies.map((reply) => reply.responderId)).size,
+    threshold: request?.threshold ?? 0,
   };
 }
 

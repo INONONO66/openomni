@@ -23,10 +23,13 @@ beforeEach(() => {
 afterEach(() => Storage.reset());
 
 test.each([
-  "report_result",
-  "ask_clarification",
-  "invalid",
-] as const)("raw request reply preserves the requested %s action", async (action) => {
+  ["report_result", "report_result"],
+  ["ask_clarification", "ask_clarification"],
+  ["invalid", "invalid"],
+  [null, "invalid"],
+  [0, "invalid"],
+  [{ unexpected: true }, "invalid"],
+] as const)("raw request reply projects %j as %s", async (action, expectedAction) => {
   // Given a durable request accepting only report_result.
   await openRequest("request-raw-action", {
     sessionId: "request-owner",
@@ -117,13 +120,13 @@ test.each([
       outcome: "block",
       factsUsed: [
         "request:request:request-raw-action",
-        `request.action:${action}`,
+        `request.action:${expectedAction}`,
         "request.action:disallowed",
       ],
     });
     expect(outcome).toBeInstanceOf(IngressRoutingError);
     if (!(outcome instanceof IngressRoutingError)) throw new Error("expected routing rejection");
-    expect(outcome.code).toBe("route_blocked");
+    expect(outcome.data.code).toBe("route_blocked");
     expect(commits).toHaveLength(0);
     expect(SessionHandleStore.requestById("request-raw-action")).toMatchObject({
       state: "open",

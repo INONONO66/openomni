@@ -75,9 +75,7 @@ describe("WebSocketHandler authentication", () => {
     expect(
       handler.handleUpgrade(new Request("http://localhost/ws?actor=alice"), upgrade.server),
     ).toBeUndefined();
-    expect(upgrade.options?.data).toMatchObject({
-      externalId: expect.stringMatching(/^connection:/),
-    });
+    expect(upgrade.options?.data.externalId).toMatch(/^connection:/);
     expect(upgrade.options?.data).not.toMatchObject({ externalId: "alice" });
   });
 });
@@ -99,7 +97,12 @@ describe("WebSocketHandler ingress and receipts", () => {
     };
   }
 
-  it("emits Gateway.IngressFacts and an accepted receipt", async () => {
+  it.each([
+    "frame-7",
+    "",
+    0,
+    null,
+  ])("validates optional frame identifiers %j before emitting facts", async (identifier) => {
     let inbound: Channel.InboundMessage | undefined;
     const handler = new WebSocketHandler(async (message) => {
       inbound = message;
@@ -110,7 +113,10 @@ describe("WebSocketHandler ingress and receipts", () => {
       externalId: "connection:c1",
     });
 
-    handler.ws.message(ws, JSON.stringify({ text: "done", replyToId: "frame-7" }));
+    handler.ws.message(
+      ws,
+      JSON.stringify({ text: "done", eventId: identifier, replyToId: identifier }),
+    );
     await framed;
 
     expect(inbound).toMatchObject({
@@ -119,10 +125,16 @@ describe("WebSocketHandler ingress and receipts", () => {
         surface: "ws",
         channelId: "ws::dm:c1",
         dm: true,
-        reply: { chain: ["frame-7"] },
         render: "done",
       },
     });
+    if (identifier === "frame-7") {
+      expect(inbound?.facts.eventId).toBe(identifier);
+      expect(inbound?.facts.reply).toEqual({ chain: [identifier] });
+    } else {
+      expect(inbound?.facts.eventId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(inbound?.facts.reply).toBeUndefined();
+    }
     expect(sent).toEqual([JSON.stringify({ type: "receipt", status: "accepted" })]);
   });
 

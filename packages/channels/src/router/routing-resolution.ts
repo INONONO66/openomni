@@ -28,19 +28,13 @@ const ingressRoutingErrorCodes = [
 type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];
 const IngressRoutingErrorCode = z.enum(ingressRoutingErrorCodes);
 
-/**
- * #498 C3: ingress correlation claims reuse THE one SessionTransition.Correlation shape.
- * A claim envelope must carry its endpoint+channel scope pins — kept as a
- * local type-narrowing refine at this call site so no second correlation
- * shape is exported.
- */
-type ScopedCorrelation = SessionTransition.Correlation &
-  Readonly<{ endpointId: string; channelId: string }>;
-const ScopedCorrelationClaim = SessionTransition.Correlation.refine(
-  (value): value is ScopedCorrelation =>
-    value.endpointId !== undefined && value.channelId !== undefined,
-  { message: "correlation claims require endpointId and channelId" },
-);
+/** Request matching requires both endpoint and channel scope pins. */
+const ScopedCorrelationClaim = SessionTransition.Correlation.required({
+  endpointId: true,
+  channelId: true,
+});
+type ScopedCorrelation = z.infer<typeof ScopedCorrelationClaim>;
+const RequestActionPayload = z.object({ action: z.json().catch(null).optional() });
 
 const IngressRoutingErrorBase = NamedError.create(
   "IngressRoutingError",
@@ -62,6 +56,7 @@ export class IngressRoutingError extends IngressRoutingErrorBase {
   get code(): IngressRoutingErrorCode {
     return this.data.code;
   }
+
   get decision(): Ingress.RoutingDecisionPayload {
     return this.data.decision;
   }
@@ -84,7 +79,6 @@ export type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway
     decision: Ingress.RoutingDecisionPayload;
     event: Event;
     requestExecution: KernelRequestExecution;
-    selectedTarget: Ingress.Target;
   }>;
 
 function parseCorrelation(event: Gateway.DeliveredEvent): ScopedCorrelation | undefined {
@@ -134,18 +128,6 @@ function kernelRequestExecution(
         record: resolution.candidate.request,
       };
   }
-}
-
-function selectedRouteTarget(
-  decision: Ingress.RoutingDecisionPayload,
-  surfaceDefault: Ingress.Target,
-): Ingress.Target {
-  if (decision.outcome !== "route") {
-    return surfaceDefault;
-  }
-  if (decision.stage !== "request_correlation") return surfaceDefault;
-  // A routed request-correlation decision can only come from a matched request.
-  return { kind: "resident" };
 }
 
 type ChannelResolution = ChannelGrantResolution | undefined;
@@ -248,16 +230,15 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   at: number,
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
-  const payload = event.payload;
+  const payload = RequestActionPayload.safeParse(event.payload);
   const parsedAction =
-    payload !== null && typeof payload === "object" && "action" in payload
-      ? SessionTransition.AllowedAction.safeParse(payload.action)
+    payload.success && "action" in payload.data
+      ? SessionTransition.AllowedAction.safeParse(payload.data.action)
       : SessionTransition.AllowedAction.safeParse("report_result");
   const requestedAction = parsedAction.success ? parsedAction.data : "invalid";
   const gatheredRequest = findRequestCandidates(requests.list(), correlation);
   const request = routeRequestState(gatheredRequest);
-  const surfaceDefaultTarget = resolveTarget(event);
-  const target = targetKey(surfaceDefaultTarget);
+  const target = targetKey(resolveTarget(event));
   const surfaceSessionId = SurfaceKey.lookup(surfaceKey);
   const blacklist = blacklistState(event, correlation);
   const channelResolution = resolveChannelGrant({
@@ -302,7 +283,6 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     decision,
     event: routedEvent(event, channelResolution, channel),
     requestExecution,
-    selectedTarget: selectedRouteTarget(decision, surfaceDefaultTarget),
   };
 }
 

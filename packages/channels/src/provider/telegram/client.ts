@@ -138,8 +138,7 @@ export class TelegramClient implements ChannelClient {
       );
     }
 
-    const raw: unknown = await response.json();
-    const envelope = EnvelopeSchema.safeParse(raw);
+    const envelope = EnvelopeSchema.safeParse(await response.json());
     if (!envelope.success) {
       throw new Error(`Telegram API ${method} returned a malformed envelope`);
     }

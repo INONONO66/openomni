@@ -1,5 +1,6 @@
 import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { sendText } from "../../support/send-text";
 import { RetryExhaustedError } from "../../support/fetch-retry";
@@ -115,24 +116,17 @@ export class SlackAdapter implements Channel.Surface {
     const normalizer = this.normalizer;
     const botUserId = this.botUserId;
     if (!(normalizer && botUserId)) return;
-    // Socket Mode is at-least-once (unacked envelopes redeliver): dedupe by
-    // the platform-unique (channel, ts) pair before anything acts.
-    const acquisition = this.dedupe.acquire(`${event.channel}:${event.ts}`);
-    if (acquisition.duplicate) return;
-    const dedupeToken = acquisition.token;
-
-    const inbound = normalizer.normalize(event);
-    if (!inbound) return;
-
-    this.handleIncoming(inbound).catch((err) => {
-      this.dedupe.forget(`${event.channel}:${event.ts}`, dedupeToken);
-      this.publish(Operational.Events.Error, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "slack message handling failed",
-        context: { err: String(err) },
-      });
+    void handoffInbound({
+      dedupe: this.dedupe,
+      key: `${event.channel}:${event.ts}`,
+      traceId,
+      publish: this.publish,
+      errorMessage: "slack message handling failed",
+      rethrowFailure: false,
+      handle: async () => {
+        const inbound = normalizer.normalize(event);
+        if (inbound) await this.handleIncoming(inbound);
+      },
     });
   }
 

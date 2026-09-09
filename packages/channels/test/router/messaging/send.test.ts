@@ -413,9 +413,9 @@ describe("durable send admission faults", () => {
       },
       grants: () => grants,
       budgets: () => {
-        const { ledger: _ledger, ...withoutLedger } = detached;
         Storage.configure({
-          ...withoutLedger,
+          ...detached,
+          ledger: undefined,
           transaction: detached.transaction.bind(detached),
         });
         return [
@@ -632,14 +632,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
           })(),
         });
 
-  let injected: unknown;
-  try {
-    await messaging.send(input);
-  } catch (error) {
-    injected = error;
-  }
-  expect(injected).toBeInstanceOf(Error);
-  expect((injected as Error).message).toBe(`fault:${point}`);
+  await expect(messaging.send(input)).rejects.toThrow(`fault:${point}`);
   const resumed = await messaging.send(input);
 
   return {

@@ -19,10 +19,10 @@ describe("GitHubClient", () => {
     expect(published).toEqual([
       {
         name: "operational.warn",
-        data: expect.objectContaining({
+        data: {
           traceId: "trace-github-test",
           context: { repo: "openomni/project", issueNumber: 7 },
-        }),
+        },
       },
     ]);
   });

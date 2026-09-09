@@ -88,15 +88,14 @@ export class SlackSocket {
   }
 
   private parseEnvelope(data: string): SocketEnvelope | undefined {
-    let raw: unknown;
+    let envelope: ReturnType<typeof SocketEnvelopeSchema.safeParse>;
     try {
-      raw = JSON.parse(data) as unknown;
+      envelope = SocketEnvelopeSchema.safeParse(JSON.parse(data));
     } catch {
       // One malformed frame must not become an uncaught listener throw.
       this.shell.warnDrop("slack socket frame was not valid JSON; dropped");
       return undefined;
     }
-    const envelope = SocketEnvelopeSchema.safeParse(raw);
     if (!envelope.success) {
       this.shell.warnDrop("slack socket frame had no envelope shape; dropped");
       return undefined;

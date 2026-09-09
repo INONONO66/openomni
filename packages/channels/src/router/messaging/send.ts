@@ -419,7 +419,8 @@ function recordSent(
   ports: MessagingPorts,
 ): SendReceipt {
   const { input, target, grant } = authorization;
-  const { request, value: delivery } = delivered;
+  const request = delivered.request;
+  const delivery = delivered.value;
   ports.publish(MessagingEvents.Sent, {
     messageId: input.messageId,
     traceId: input.traceId,

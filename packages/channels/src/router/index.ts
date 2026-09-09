@@ -15,7 +15,6 @@ import { executeRequestRoute, requireRoutedDecision } from "./routing-execution"
 import type { GatewayRouter, GatewayRouterPorts } from "./message-ports";
 
 export type { ChannelDeliveryRoute, GatewayRouter, GatewayRouterPorts } from "./message-ports";
-export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route";
 
 function transformedContent(
   intent: LedgerAction.Receipt,

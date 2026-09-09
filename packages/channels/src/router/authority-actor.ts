@@ -1,6 +1,6 @@
 import { Actor, type Ingress, resolveTarget, type Gateway } from "@openomni/protocol";
 
-type ActorRecord = Ingress.Actor;
+type ActorRecord = Pick<Ingress.Actor, "trustTier" | "role">;
 
 const topLevelTrustTiers = new Set<Actor.TrustTier>(["owner", "co_owner", "manager"]);
 const evidenceOnlyTrustTiers = new Set<Actor.TrustTier>(["collaborator", "observer"]);
