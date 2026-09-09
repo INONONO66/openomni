@@ -28,7 +28,7 @@ import {
   renderSystemdUnit,
   unitPath,
 } from "../src/cli/daemon";
-import { applyEnvFile, parseEnvFile, renderEnvFile, writeEnvFile } from "../src/cli/env-file";
+import { applyEnvFile, mergeEnvFile, parseEnvFile, renderEnvFile, writeEnvFile } from "../src/cli/env-file";
 import { ConfigurationError, parseWsPort } from "../src/config";
 import { runDoctor } from "../src/cli/doctor";
 import { processEntryPath } from "../src/process-entry-path";
@@ -109,6 +109,14 @@ describe("env file", () => {
     expect(
       readdirSync(dirname(path)).filter((name) => name.startsWith(`${basename(path)}.`)),
     ).toEqual([]);
+  });
+
+  test("merge preserves explicit empty values and does not mutate process env", () => {
+    const env = { OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: undefined };
+    expect(Object.fromEntries(mergeEnvFile("OPENOMNI_MODEL_ID=file\nOPENOMNI_WS_PORT=4000", env))).toEqual({
+      OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: "4000",
+    });
+    expect(env).toEqual({ OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: undefined });
   });
 
   test("apply fills only unset keys; process env wins; missing file is a no-op", () => {
@@ -423,6 +431,13 @@ describe("onboarding", () => {
         scriptedAsk({ "Model id": "m", "Model API key": "k", "WebSocket port": "0" }),
       ),
     ).rejects.toThrow("1 to 65535");
+  });
+
+  test.each(["1", "65535", "3e3", "0xBB8"])("onboarding uses the startup parser for %s", async (port) => {
+    const entries = await gatherOnboarding(scriptedAsk({
+      "Model id": "m", "Model API key": "k", "WebSocket port": port,
+    }));
+    expect(entries.find((entry) => entry.key === "OPENOMNI_WS_PORT")?.value).toBe(port);
   });
 
   test("secret prompts are flagged so the terminal never echoes them", async () => {

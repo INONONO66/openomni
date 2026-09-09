@@ -1,20 +1,4 @@
-/**
- * What a person is told when a turn's model calls ran out of road.
- *
- * A terminal LLM failure used to throw out of the agent, get recorded as a
- * component failure, and reach the gateway as a dropped result — the channel
- * user saw NOTHING. Silence is the worst possible answer: it is
- * indistinguishable from the agent ignoring them, and it hides the one fact
- * that determines what the operator should do next.
- *
- * The classification is NOT re-derived here. `@openomni/llm` owns the closed
- * failure vocabulary the retry loop already branches on (`Retry.Reason`,
- * including the `billing` class), and `Retry.classifyFailure` is its entry for
- * callers outside the loop: it coerces raw AI SDK errors and walks the cause
- * chain. This module only decides the WORDS for a class someone else named,
- * and the attempt count comes from the agent run's own decided facts
- * (`failureFacts`) rather than from a guess.
- */
+/** Channel rendering of kernel-classified failures; raw provider details stay private. */
 
 import { failureFacts } from "@openomni/agent";
 import { Retry } from "@openomni/llm";
@@ -102,9 +86,10 @@ function paymentRequired(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 8; depth += 1) {
     if (typeof current !== "object" || current === null) return false;
-    const record = current as Error & { statusCode?: number; data?: { statusCode?: number } };
-    if (record.statusCode === 402 || record.data?.statusCode === 402) return true;
-    const cause = record.cause;
+    if ("statusCode" in current && current.statusCode === 402) return true;
+    if ("data" in current && typeof current.data === "object" && current.data !== null &&
+      "statusCode" in current.data && current.data.statusCode === 402) return true;
+    const cause = "cause" in current ? current.cause : undefined;
     if (cause === undefined || cause === current) return false;
     current = cause;
   }

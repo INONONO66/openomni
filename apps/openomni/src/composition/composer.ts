@@ -1,30 +1,4 @@
-/**
- * Composition substrate — reversible effect ownership for the sole app's
- * boot and shutdown.
- *
- * The gap this closes (implementation-status: dynamic composition) has three
- * clauses; this module owns the first — *reversible registration ownership*.
- * Everything boot builds that must later be torn down (the bus journal, the
- * delegation kernel's timers, the machine host, the ws server, channel
- * surfaces) is acquired inside a fiber and released by that fiber, in exact
- * reverse order. Before this, both the boot-rollback path and the stop path
- * restated the teardown sequence by hand, so a new stage could leak by
- * forgetting one line in two places.
- *
- * Two boundaries are deliberate and load-bearing:
- *
- * - Durable facts are not effects. Actor registration, ledger writes, and
- *   journal rows are history; disposing a fiber releases runtime handles
- *   (listeners, timers, sockets, observers) and never reaches back to erase
- *   what was recorded.
- * - There is no silent default. A fiber either mounted and owns its effects,
- *   or it failed and its effects already ran. Nothing here fabricates a
- *   half-present stage.
- *
- * Reactive dependency activation and generation draining land with their
- * first consumers (channel surfaces, delegation drivers) — this module grows
- * when a second consumer exists, not before.
- */
+/** Reverse-order ownership of boot effects; disposal never erases durable facts. */
 
 /** Where a fiber is in its life. */
 type FiberState = "mounting" | "active" | "failed" | "disposed";

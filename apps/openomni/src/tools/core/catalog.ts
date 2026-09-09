@@ -18,7 +18,6 @@ import { createWriteTool } from "../write";
 
 export interface CatalogOrigin {
   readonly role: LedgerSession.Role;
-  readonly depth: number;
   readonly sessionId: string;
 }
 
@@ -32,16 +31,15 @@ export interface CatalogPorts {
   readonly clock?: () => number;
 }
 
-/**
- * The static catalog (KERNEL §3.4): the eleven model-door tools in this order,
- * then the cell-only completion. Every tool is constructed regardless of which
- * ports the composition wired, and a tool whose port is absent refuses at
- * execution. Nothing silently disappears.
- */
+const catalogs = new WeakMap<CatalogPorts, Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>>>();
+
+/** Immutable ports own one catalog; session composition owns cell binding. */
 export function createTools(
   ports: CatalogPorts,
   origin: CatalogOrigin,
 ): readonly AnyToolDefinition[] {
+  const cached = catalogs.get(ports);
+  if (cached !== undefined) return cached[origin.role];
   const tools: AnyToolDefinition[] = [
     eraseTool(createReadTool(ports)),
     eraseTool(createWriteTool(ports)),
@@ -56,18 +54,18 @@ export function createTools(
     eraseTool(createProvisionTool(ports.provisioning)),
     eraseTool(createCompletionTool(ports.llm)),
   ];
-  const visible = tools.filter(
-    (tool) =>
-      tool.visibility.model.includes(origin.role) || tool.visibility.cell.includes(origin.role),
+  const visible = (role: LedgerSession.Role) => tools.filter(
+    (tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role),
   );
-  ports.cells?.bindTools(origin.sessionId, visible);
-  return visible;
+  const catalog = { resident: visible("resident"), worker: visible("worker") };
+  catalogs.set(ports, catalog);
+  return catalog[origin.role];
 }
 
 /** Schema-only exhaustive list used by repository conformance tooling. */
 export const TOOL_DEFINITIONS: readonly AnyToolDefinition[] = createTools(
   {},
-  { role: "resident", depth: 0, sessionId: "catalog" },
+  { role: "resident", sessionId: "catalog" },
 );
 
 export function collectToolSpecs(): readonly Tool.Spec[] {

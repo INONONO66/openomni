@@ -98,19 +98,14 @@ export function commandSource(
       // awaiting PTY EOF; waiting for EOF first lets HUP-ignoring descendants hang.
       await killCommandGroup(child.pid);
       await child.exited;
-      // Cancellation has no remaining output to drain. Retire the master after
-      // the owned group was signalled and the leader reaped, even if Bun omits EOF.
-      if (closing) {
-        terminal?.close();
-        eof.resolve();
-      }
-      await eof.promise;
-      terminal?.close();
+
     })();
     return shutdown;
   }
   const settled = child.exited.then(async (code) => {
     await terminate();
+    await eof.promise;
+    terminal?.close();
     if (!closing) exit(code);
   });
   void settled.catch((error: Error) => failure(error));
@@ -118,6 +113,10 @@ export function commandSource(
     async close() {
       closing = true;
       await terminate();
+      // Cancellation must release a drain already awaiting EOF. Putting this
+      // in cached terminate() can miss close() after the child was reaped.
+      terminal?.close();
+      eof.resolve();
       await settled;
     },
   };

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandSource, pathSource } from "../src/composition/alarm-sources";
 import { alarmPathEvent, alarmSummary } from "./helpers/alarm-payload";
+import { eventSignal } from "./helpers/event-signal";
 
 test("alarm JSON boundary validates values instead of assigning a payload type", () => {
   expect(() =>
@@ -18,8 +19,7 @@ test("alarm JSON boundary validates values instead of assigning a payload type",
 });
 
 test("PTY callback faults surface a typed boundary failure", async () => {
-  const failed = Promise.withResolvers<Error>();
-  const timer = setTimeout(() => failed.reject(new Error("PTY fault signal missing")), 5000);
+  const failed = eventSignal<Error>("PTY callback failure");
   const source = commandSource(
     "printf 'LINE\\n'; read hold",
     () => {
@@ -31,15 +31,13 @@ test("PTY callback faults surface a typed boundary failure", async () => {
   try {
     expect(await failed.promise).toMatchObject({ name: "AlarmSourceError", site: "pty.data" });
   } finally {
-    clearTimeout(timer);
     await source.close();
   }
 });
 
 test("owned PTY drains the final UTF-8 line before reporting the child's exit status", async () => {
-  const exited = Promise.withResolvers<number>();
+  const exited = eventSignal<number>("PTY drained exit");
   const lines: string[] = [];
-  const timer = setTimeout(() => exited.reject(new Error("PTY exit signal missing")), 5000);
   const source = commandSource(
     "printf '\\342\\230\\203 final'; exit 7",
     (line) => lines.push(line),
@@ -50,7 +48,26 @@ test("owned PTY drains the final UTF-8 line before reporting the child's exit st
     expect(await exited.promise).toBe(7);
     expect(lines).toEqual(["\u2603 final"]);
   } finally {
-    clearTimeout(timer);
+    await source.close();
+  }
+});
+
+test("PTY cancellation settles from a subscribed line signal without requiring natural EOF", async () => {
+  const ready = eventSignal<string>("PTY ready");
+  const errors: Error[] = [];
+  const exits: number[] = [];
+  const source = commandSource("printf 'READY\\n'; read hold", ready.resolve, (code) => exits.push(code), (error) => {
+    errors.push(error);
+    ready.reject(error);
+  });
+  try {
+    expect(await ready.promise).toBe("READY");
+    const closed = eventSignal<void>("PTY cancelled");
+    void Promise.all([source.close(), source.close()]).then(() => closed.resolve(), closed.reject);
+    await closed.promise;
+    expect(errors).toEqual([]);
+    expect(exits).toEqual([]);
+  } finally {
     await source.close();
   }
 });

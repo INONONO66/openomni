@@ -109,7 +109,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
     const run = modelToolOutput(
       "eval",
       { cells },
-      { role: "resident", depth: 0, sessionId: "qa-one" },
+      { role: "resident", sessionId: "qa-one" },
     );
     const result = await run({ operation: { op: "run", code, timeout: 10 } });
     expect(result).toBe("(['A', 'B'], [0, 255, 128, 65], 4, b'out', b'err', 7, '42')");
@@ -117,7 +117,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
     const other = await modelToolOutput(
       "eval",
       { cells },
-      { role: "resident", depth: 0, sessionId: "qa-two" },
+      { role: "resident", sessionId: "qa-two" },
     )({ operation: { op: "run", code: "state", timeout: 1 } });
     expect(other).toContain("NameError");
     const write = await host

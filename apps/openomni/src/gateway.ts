@@ -100,10 +100,10 @@ export function createResidentGateway(
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,
-): GatewayRouter {
-  registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
+): GatewayRouter & { close(): void } {
+  const close = registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
   const externalRun = createIngressExecutor(ports.clock ?? Date.now);
-  return createGatewayRouter({
+  const gateway = createGatewayRouter({
     ...ports,
     requests: ports.requests ?? createSessionRequests({ observations: Bus, clock: ports.clock }),
     sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
@@ -128,4 +128,5 @@ export function createResidentGateway(
           },
         }),
   });
+  return { ...gateway, close };
 }
