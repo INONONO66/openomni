@@ -1,4 +1,4 @@
-export interface GatewayEndpoint {
+interface GatewayEndpoint {
   readonly url: string;
   readonly token?: string;
 }

@@ -97,9 +97,9 @@ test("mounted hover reveals, cancels across hot zones and dismisses on Escape, p
     try {
       await pointer(element(host, '[data-ui="Sidebar.Edge"]'), "pointerover");
       expect(schedule).toHaveBeenCalledTimes(1);
-      expect(jest.getTimerCount()).toBe(1);
       await act(() => root.unmount());
       expect(clear).toHaveBeenCalledTimes(1);
+      expect(clear).toHaveBeenCalledWith(schedule.mock.results[0]?.value);
     } finally {
       clear.mockRestore();
       schedule.mockRestore();

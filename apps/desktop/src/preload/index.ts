@@ -4,8 +4,10 @@ import { gatewayEndpointSchema, shellCommandSchema } from "./validation";
 
 const api: DesktopApi = {
   onShellCommand: (listener) => {
-    const wrapper = (_event: IpcRendererEvent, command: ShellCommand) =>
-      listener(shellCommandSchema.parse(command));
+    const wrapper = (_event: IpcRendererEvent, command: unknown) => {
+      const result = shellCommandSchema.safeParse(command);
+      if (result.success) listener(result.data);
+    };
     ipcRenderer.on(SHELL_COMMAND_CHANNEL, wrapper);
     return () => {
       ipcRenderer.removeListener(SHELL_COMMAND_CHANNEL, wrapper);

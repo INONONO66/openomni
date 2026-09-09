@@ -23,6 +23,9 @@ test("scroll area pins to end and cleans its resize/scroll observers", async () 
       scrollTop: { configurable: true, writable: true, value: 60 },
     });
     await act(() => viewport.dispatchEvent(new Event("scroll")));
+    expect(viewport.scrollTop).toBe(viewport.scrollHeight - viewport.clientHeight);
+    await act(() => root.render(<ScrollArea pinToEnd><div>content</div></ScrollArea>));
+    expect(viewport.scrollTop).toBe(60);
     await act(() => root.render(<ScrollArea><div>content</div></ScrollArea>));
   } finally {
     await act(() => root.unmount());

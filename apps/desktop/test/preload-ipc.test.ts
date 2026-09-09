@@ -1,12 +1,8 @@
 import { afterAll, beforeEach, expect, mock, test } from "bun:test";
-import {
-  GATEWAY_CHANNEL,
-  SHELL_COMMAND_CHANNEL,
-  type DesktopApi,
-  type ShellCommand,
-} from "../src/preload/api";
+import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi } from "../src/preload/api";
+import type { ShellCommand } from "../src/preload/api";
 
-type Wrapper = (event: { readonly senderId: number }, command: ShellCommand) => void;
+type Wrapper = (event: { readonly senderId: number }, command: unknown) => void;
 const listeners = new Set<Wrapper>();
 const registered: { channel: string; wrapper: Wrapper }[] = [];
 const removed: { channel: string; wrapper: Wrapper }[] = [];
@@ -66,9 +62,17 @@ function api(): DesktopApi {
   return value;
 }
 
-function emit(command: ShellCommand): void {
+function emit(command: unknown): void {
   for (const wrapper of listeners) wrapper({ senderId: 27 }, command);
 }
+
+test("malformed commands are ignored without blocking valid delivery", () => {
+  const received: ShellCommand[] = [];
+  api().onShellCommand((command) => received.push(command));
+  expect(() => emit({ invalid: true })).not.toThrow();
+  emit("new-tab");
+  expect(received).toEqual(["new-tab"]);
+});
 
 test("bridge exposes only versions, gateway, and value-only command subscription", async () => {
   expect(Object.keys(api()).sort()).toEqual(["gateway", "onShellCommand", "versions"]);

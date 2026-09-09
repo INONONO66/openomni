@@ -62,6 +62,7 @@ test("desktop entries register IPC before window creation and render without awa
     constructor(
       readonly options: {
         titleBarStyle: string;
+        backgroundColor: string;
         webPreferences: { contextIsolation: boolean; sandbox: boolean; nodeIntegration: boolean };
       },
     ) {
@@ -176,6 +177,7 @@ test("desktop entries register IPC before window creation and render without awa
     await import("../src/main/index");
     await ready.promise;
     expect(windows).toHaveLength(1);
+    expect(windows[0]?.options.backgroundColor).toBe("#0A0A0C");
     expect(windows[0]?.options.webPreferences).toMatchObject({
       contextIsolation: true,
       sandbox: true,

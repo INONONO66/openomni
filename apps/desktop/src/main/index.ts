@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, Menu, app, ipcMain } from "electron";
+import { BrowserWindow, Menu, app, ipcMain, nativeTheme } from "electron";
 import { GATEWAY_CHANNEL } from "../preload/api";
 import { resolveGatewayEndpoint } from "./gateway-endpoint";
 import { buildMenuTemplate, createShellCommandSender } from "./menu";
@@ -29,6 +29,8 @@ let lastFocusedWindowId: number | null = null;
 
 if (development) app.commandLine.appendSwitch("remote-debugging-port", "9333");
 
+const BACKGROUND = { dark: "#0A0A0C", light: "#EFEFF0" } as const;
+
 const boundsFile = () => join(app.getPath("userData"), "window-bounds.json");
 
 function readBounds() {
@@ -45,6 +47,7 @@ function createWindow(): void {
     minWidth: WINDOW_MIN.width,
     minHeight: WINDOW_MIN.height,
     show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light,
     // Custom chrome: the native title bar is hidden and the traffic lights sit
     // in the 42px tab strip (`--shell-top` / `--spacing-shell-strip` in
     // @openomni/ui), which drags the window via `-webkit-app-region` (see

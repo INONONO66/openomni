@@ -21,7 +21,7 @@ export type Effect =
   | { readonly kind: "close" }
   | { readonly kind: "select"; readonly id: SessionId };
 
-export interface Transition {
+interface Transition {
   readonly state: SearchState;
   readonly effects: readonly Effect[];
 }
