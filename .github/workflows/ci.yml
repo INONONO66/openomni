@@ -404,7 +404,10 @@ jobs:
     # full on merge_group/main/schedule/dispatch (docs/ci.md, "CI tiers and merge queue").
     if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Publisher is a whole-program reachability census; splitting roots would
+    # change negative findings. Keep it intact and allow the cancelled baseline
+    # run (34310546345) its documented headroom.
+    timeout-minutes: ${{ matrix.leg == 'publisher' && 30 || 20 }}
     strategy:
       fail-fast: false
       matrix:

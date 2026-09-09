@@ -55,6 +55,14 @@ export const scriptsLanes = {
 } as const;
 export type ScriptsLane = keyof typeof scriptsLanes;
 export const scriptPartitions = ["scripts-contracts", "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3"] as const;
+// Longest-first packing from run 34313881130's per-file timings: 280/280/296s.
+// No cold --timings file can silently fall back to hashing the two slowest together.
+export const scriptToolingPartitions = {
+  "scripts-tooling-1": ["check-census.test.ts", "quality-ratchet.test.ts", "quality-metrics/tool.test.ts", "quality-ci-metrics.test.ts", "quality-ci-legs.test.ts", "quality-schema.test.ts", "quality-json.test.ts", "quality-mutation-workflow.test.ts", "quality-inventory.test.ts", "quality-ci-receipt.test.ts", "quality-source.test.ts"],
+  "scripts-tooling-2": ["run-quality-mutations.test.ts", "quality-measure.test.ts", "census-program.test.ts", "coverage-ratchet.test.ts", "check-quality-python.test.ts", "coverage-source-inventory.test.ts", "conformance/summarize-benchmark-runs.test.ts", "quality-native-process.test.ts", "quality-coverage-record.test.ts", "quality-ci-coverage.test.ts", "quality-native-mutation.test.ts", "quality-plan.test.ts", "quality-ci-bound.test.ts"],
+  "scripts-tooling-3": ["check-types-census.test.ts", "check-quality-coverage.test.ts", "quality-metrics/type-trivia.test.ts", "quality-metrics/declaration-erasure.test.ts", "check-quality-metrics.test.ts"],
+} as const;
+export type ScriptToolingPartition = keyof typeof scriptToolingPartitions;
 export const scriptContracts = [
   ["check-dead-exports.ts", "--self-test"],
   ["check-deps.ts", "--self-test"],
@@ -74,6 +82,7 @@ export function scriptTests(lane: ScriptsLane, actual = [...new Bun.Glob("**/*.t
 export function scriptTestCommand(partition: string) {
   if (!scriptPartitions.some((key) => key === partition)) throw new Error(`invalid script partition: ${partition}`);
   const tooling = partition !== "scripts-contracts";
-  const tests = scriptTests(tooling ? "scripts-tooling" : "scripts-contracts");
-  return ["bun", "test", ...tests.map((path) => `./${path}`), "--timeout", "15000", "--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage", ...(tooling ? [`--shard=${partition.slice(-1)}/3`, `--timings=${join("coverage", "timings.json")}`, "--update-timings"] : [])];
+  const lane = scriptTests(tooling ? "scripts-tooling" : "scripts-contracts");
+  const tests = tooling ? scriptToolingPartitions[partition as ScriptToolingPartition] : lane;
+  return ["bun", "test", ...tests.map((path) => `./${path}`), "--timeout", "15000", "--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage", ...(tooling ? [`--timings=${join("coverage", "timings.json")}`, "--update-timings"] : [])];
 }

@@ -1,11 +1,16 @@
 name: Benchmark
 
-# Performance comparisons run after merge or on demand, not as PR admission.
+# PR measurements are limited to benchmark inputs; main and scheduled runs stay full.
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '23 3 * * 0'
+  pull_request:
     paths:
-      - packages/**
+      - packages/ledger/**
+      - packages/agent/**
+      - packages/protocol/**
       - script/**
       - package.json
       - bun.lock

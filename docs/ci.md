@@ -98,10 +98,15 @@ test rejects missing, duplicate and newly unassigned `script/**/*.test.ts` files
 ledger contracts and repository-consumer tests; its command also runs dead-export,
 dependency and import-cycle self-tests plus ledger rename/schema checks.
 `scripts-tooling` contains census, mutation, metrics, coverage and quality engine
-self-tests. It runs only when `toolingTests` is true, as three matrix shards using
-`--shard=i/3 --timings=coverage/timings.json --update-timings`. Bun 1.4.1 requires
-a filename for `--timings`. No tests, including the intentional 20-second hang,
-are removed or skipped.
+self-tests. It runs only when `toolingTests` is true, as three explicit matrix
+partitions. The file lists are packed longest-first from run 34313881130's
+per-file measurements (280/280/296 seconds), separating `check-census.test.ts`
+from `run-quality-mutations.test.ts`. They still emit
+`--timings=coverage/timings.json --update-timings`, but do not use `--shard`:
+an absent timing input previously fell back to hashing both slowest files into
+shard 2. Contract tests reject unassigned or duplicate files across partitions
+and verify the actual commands select every recursive test exactly once.
+No tests, including the intentional 20-second hang, are removed or skipped.
 
 Each script partition has a separate run/runtime/inventory-bound receipt.
 `quality-coverage-record.ts merge` requires contracts and shards 1, 2 and 3,
@@ -131,7 +136,19 @@ runs the ratchet. Its `quality-measurements` artifact retains `quality-results/`
 `quality-legs/`, and `ci-plan.json`, including available results on failure.
 Per-leg artifacts and measurements are retained for 14 days.
 
-Quality Static legs and Quality finish have 20-minute timeouts. Quality Gates
+Publisher has a 30-minute timeout; other Quality Static legs and Quality finish
+retain 20 minutes. `check-census.ts --class publisher` has no shard/root-selection
+CLI. Its Provenance constructor computes shared points-to and reachability
+fixpoints, including cross-root event registration/emission. `publisherCensus`
+then reports declarations with no reachable publisher: these negative findings
+cannot be unioned across root subsets (one subset's missing publisher may exist
+in another). Invocation rows also retain the graph's selected root and complete
+implementation set, not independently unionable per-root provenance. `--plan`
+only filters findings after constructing that complete graph. Splitting output
+afterwards would duplicate the expensive graph work, not shorten the critical
+path. We retain the intact census rather than claim byte identity for an unsafe
+split. Run 34310546345 was cancelled at the previous 20-minute limit.
+Quality Gates
 and script contracts/tooling shards have 15 minutes; workspace tests have 30.
 Script Coverage has five minutes.
 The final CI gate requires Quality Static, Quality Gates, and Quality to succeed
@@ -168,8 +185,10 @@ All finding fragments, values, multiplicities and coverage floors are unchanged.
 Adding hashes is not finding growth. A later merged change can invalidate a proof:
 remeasure that scope or use the full tier, then refresh proofs from that verified
 measurement. Never label changed-but-unmeasured source as unchanged.
-Full mutation runs in the explicit `quality-mutation` scheduled/manual workflow,
-not in PR admission. It retains failed/incomplete process evidence and fails
+Full mutation runs in the explicit `quality-mutation` daily scheduled/manual
+workflow, not in PR admission. On 2026-09-09 the workflow API reported zero runs:
+the active workflow was added on September 7 UTC and its first Sunday trigger
+had not arrived. Daily scheduling closes that initial evidence gap. It retains failed/incomplete process evidence and fails
 closed until a complete campaign and reviewed baseline exist; a missing baseline
 is not a zero-survivor claim. A PR pilot is never reported as zero survivors.
 

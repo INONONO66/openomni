@@ -2,7 +2,8 @@ name: quality-mutation
 
 on:
   schedule:
-    - cron: '41 2 * * 0'
+    # Daily evidence: the initial weekly schedule had no runs as of 2026-09-09.
+    - cron: '41 2 * * *'
   workflow_dispatch:
 
 permissions:
