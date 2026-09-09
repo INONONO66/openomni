@@ -9,17 +9,19 @@ import { parseNativeLcov } from "./quality-native-lcov";
 test("coverage aggregation unions executing lanes and drops zero-only files", () => {
 	const root = mkdtempSync(join(tmpdir(), "quality-aggregate-union-"));
 	try {
-		const run = "native-run", identity = { paths: ["packages/machines/a.ts", "script/a.ts"], typescript: [], inventoryHash: "a".repeat(64), contractHash: "b".repeat(64) };
+		const run = "native-run", identity = { paths: ["packages/machines/a.ts", "script/a.ts", "script/never.ts"], typescript: [], inventoryHash: "a".repeat(64), contractHash: "b".repeat(64) };
 		mkdirSync(join(root, "packages/machines"), { recursive: true }); mkdirSync(join(root, "script"));
-		writeFileSync(join(root, "packages/machines/a.ts"), "export const a = 1;\n"); writeFileSync(join(root, "script/a.ts"), "export const a = 1;\n");
+		writeFileSync(join(root, "packages/machines/a.ts"), "export const a = 1;\n"); writeFileSync(join(root, "script/a.ts"), "export const a = 1;\nexport const b = 2;\n"); writeFileSync(join(root, "script/never.ts"), "export const never = 1;\n");
 		const plan = join(root, "plan.json"); writeFileSync(plan, JSON.stringify({ matrix: { include: [{ dir: "packages/machines", coverage: true }, { dir: "script", coverage: true }] } }));
 		const make = (lane: string, lcov: string) => ({ version: 1, complete: true, lane, run, runtime: Bun.version, inventoryHash: identity.inventoryHash, lcovHash: digest(lcov), lcov, files: parseNativeLcov(lcov, lane) });
-		const machine = make("packages/machines", "SF:a.ts\nDA:1,2\nLF:1\nLH:1\nend_of_record\nSF:../script/a.ts\nDA:1,0\nLF:1\nLH:0\nend_of_record\n");
+		const machine = make("packages/machines", "SF:a.ts\nDA:1,2\nLF:1\nLH:1\nend_of_record\nSF:../../script/a.ts\nDA:1,0\nDA:2,0\nLF:2\nLH:0\nend_of_record\nSF:../../script/never.ts\nDA:1,0\nLF:1\nLH:0\nend_of_record\n");
 		const script = make("script", "SF:../packages/machines/a.ts\nDA:1,3\nLF:1\nLH:1\nend_of_record\nSF:a.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\n");
 		writeFileSync(join(root, "packages-machines.json"), JSON.stringify(machine)); writeFileSync(join(root, "script.json"), JSON.stringify(script));
 		const result = readNativeCoverage({ root, directory: root, plan, run }, identity);
 		expect(result.lines.get("packages/machines/a.ts")?.get(1)).toBe(3);
 		expect(result.lines.get("script/a.ts")?.get(1)).toBe(1);
+		expect(result.lines.get("script/a.ts")?.has(2)).toBe(false);
+		expect(result.lines.get("script/never.ts")).toEqual(new Map([[1, 0]]));
 	} finally { rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -9,7 +9,12 @@ export function mergeNativeLines(records: readonly NativeLines[]): NativeLines[]
 	for (const record of records) (byPath.get(record.path) ?? (byPath.set(record.path, []), byPath.get(record.path)!)).push(record);
 	return [...byPath].map(([path, candidates]) => {
 		const executed = candidates.filter((record) => record.lines.some((row) => row.hits > 0));
-		if (!executed.length) return { path, lines: [] };
+		if (!executed.length) {
+			const lines = new Map<number, number>();
+			for (const record of candidates)
+				for (const row of record.lines) lines.set(row.line, 0);
+			return { path, lines: [...lines].sort(([a], [b]) => a - b).map(([line, hits]) => ({ line, hits })) };
+		}
 		const shared = new Set(executed[0]!.lines.map((row) => row.line));
 		for (const record of executed.slice(1)) {
 			const present = new Set(record.lines.map((row) => row.line));

@@ -408,7 +408,7 @@ test("native coverage unions executing lanes and ignores never-loaded lanes", ()
     ] }));
     expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2]]));
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "never.ts", lines: [{ line: 1, hits: 0 }] }] }] }));
-    expect(readExecuted(path).get("never.ts")).toEqual(new Map());
+    expect(readExecuted(path).get("never.ts")).toEqual(new Map([[1, 0]]));
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 0, hits: 1 }] }] }] }));
     expect(() => readExecuted(path)).toThrow();
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 1, hits: -1 }] }] }] }));
