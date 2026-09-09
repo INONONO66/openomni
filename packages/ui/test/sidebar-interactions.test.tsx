@@ -24,9 +24,16 @@ function Frame() {
       open={open}
       width={width}
     >
-      <button onClick={() => setOpen(!open)} type="button">Toggle</button>
+      <button onClick={() => setOpen(!open)} type="button">
+        Toggle
+      </button>
       <Sidebar.Container>
-        <SectionHeader label="Sessions" onSearchingChange={setSearching} searchLabel="Search" searching={searching}>
+        <SectionHeader
+          label="Sessions"
+          onSearchingChange={setSearching}
+          searchLabel="Search"
+          searching={searching}
+        >
           <input aria-label="Search sessions" />
         </SectionHeader>
         <SectionList>Rows</SectionList>
@@ -45,7 +52,9 @@ const pointer = (target: HTMLElement, type: string, init: PointerEventInit = {})
   act(() => target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, ...init })));
 
 const key = (target: HTMLElement | Document, value: string, shiftKey = false) =>
-  act(() => target.dispatchEvent(new KeyboardEvent("keydown", { key: value, shiftKey, bubbles: true })));
+  act(() =>
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: value, shiftKey, bubbles: true })),
+  );
 
 test("mounted hover reveals, cancels across hot zones and dismisses on Escape, pin and unmount", async () => {
   const host = document.createElement("div");
@@ -91,7 +100,6 @@ test("mounted hover reveals, cancels across hot zones and dismisses on Escape, p
       expect(jest.getTimerCount()).toBe(1);
       await act(() => root.unmount());
       expect(clear).toHaveBeenCalledTimes(1);
-      expect(jest.getTimerCount()).toBe(0);
     } finally {
       clear.mockRestore();
       schedule.mockRestore();

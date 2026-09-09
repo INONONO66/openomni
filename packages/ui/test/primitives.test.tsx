@@ -5,17 +5,31 @@ import { attributes, classes } from "./markup";
 
 describe("IconButton", () => {
   test("xs reserves a 20px box and a 12px glyph", () => {
-    const tokens = classes(<IconButton label="Close" size="xs"><svg aria-hidden="true" /></IconButton>, "button");
+    const tokens = classes(
+      <IconButton label="Close" size="xs">
+        <svg aria-hidden="true" />
+      </IconButton>,
+      "button",
+    );
     expect(tokens).toContain("size-control-xs");
     expect(tokens).toContain("[&_svg:not([class*='size-'])]:size-3");
   });
   test("Given a label, When rendered, Then it names itself and stays square", () => {
-    const button = <IconButton label="New session" size="sm"><svg aria-hidden="true" /></IconButton>;
+    const button = (
+      <IconButton label="New session" size="sm">
+        <svg aria-hidden="true" />
+      </IconButton>
+    );
     expect(attributes(button, "button")[0]?.["aria-label"]).toBe("New session");
     expect(classes(button, "button")).toContain("size-control-sm");
   });
   test("Given no variant, When rendered, Then it is ghost with the shared state set", () => {
-    const tokens = classes(<IconButton label="Close"><svg aria-hidden="true" /></IconButton>, "button");
+    const tokens = classes(
+      <IconButton label="Close">
+        <svg aria-hidden="true" />
+      </IconButton>,
+      "button",
+    );
     expect(tokens).not.toContain("bg-accent");
     expect(tokens).toContain("hover:bg-hover");
     expect(tokens).toContain("active:bg-active");
@@ -39,11 +53,23 @@ describe("CodeFence", () => {
 
 describe("CodeToken", () => {
   test("Given every tone, When rendered, Then none of them spends chroma", () => {
-    for (const tone of ["plain", "keyword", "string", "number", "comment", "fn", "punct"] as const) {
-      expect(classes(<CodeToken tone={tone}>x</CodeToken>).filter((token) => token.includes("accent"))).toEqual([]);
+    for (const tone of [
+      "plain",
+      "keyword",
+      "string",
+      "number",
+      "comment",
+      "fn",
+      "punct",
+    ] as const) {
+      expect(
+        classes(<CodeToken tone={tone}>x</CodeToken>).filter((token) => token.includes("accent")),
+      ).toEqual([]);
     }
   });
   test("Given distinct tones, When rendered, Then they are still distinguishable", () => {
-    expect(classes(<CodeToken tone="keyword">x</CodeToken>)).not.toEqual(classes(<CodeToken tone="comment">x</CodeToken>));
+    expect(classes(<CodeToken tone="keyword">x</CodeToken>)).not.toEqual(
+      classes(<CodeToken tone="comment">x</CodeToken>),
+    );
   });
 });

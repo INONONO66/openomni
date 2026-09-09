@@ -1,15 +1,11 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import {
-  GATEWAY_CHANNEL,
-  SHELL_COMMAND_CHANNEL,
-  type DesktopApi,
-  type ShellCommand,
-} from "./api";
+import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi, type ShellCommand } from "./api";
 import { gatewayEndpointSchema, shellCommandSchema } from "./validation";
 
 const api: DesktopApi = {
   onShellCommand: (listener) => {
-    const wrapper = (_event: IpcRendererEvent, command: ShellCommand) => listener(shellCommandSchema.parse(command));
+    const wrapper = (_event: IpcRendererEvent, command: ShellCommand) =>
+      listener(shellCommandSchema.parse(command));
     ipcRenderer.on(SHELL_COMMAND_CHANNEL, wrapper);
     return () => {
       ipcRenderer.removeListener(SHELL_COMMAND_CHANNEL, wrapper);

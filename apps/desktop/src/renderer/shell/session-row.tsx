@@ -18,9 +18,15 @@ export function SessionRow({
   return (
     <TreeRow
       {...props}
-      secondary={rowDensity(session) === "double" ? (
-        <SessionSecondary session={session} now={now} {...(project === undefined ? {} : { project })} />
-      ) : undefined}
+      secondary={
+        rowDensity(session) === "double" ? (
+          <SessionSecondary
+            session={session}
+            now={now}
+            {...(project === undefined ? {} : { project })}
+          />
+        ) : undefined
+      }
       trailing={<StatusGlyph {...sessionGlyphProps(session.phase)} />}
     />
   );

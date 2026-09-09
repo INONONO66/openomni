@@ -61,7 +61,9 @@ beforeEach(() => {
   }
   subscriptions = 0;
   Object.defineProperty(browser, "desktop", {
-    value: commandBridge(listeners, () => { subscriptions += 1; }),
+    value: commandBridge(listeners, () => {
+      subscriptions += 1;
+    }),
   });
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
   client = new QueryClient({ defaultOptions: { queries: { gcTime: Number.POSITIVE_INFINITY } } });

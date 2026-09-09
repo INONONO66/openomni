@@ -33,36 +33,54 @@ describe("Text", () => {
 });
 
 describe("Highlight", () => {
-  const runs = [{ text: "led", matched: true }, { text: "ger append path", matched: false }] as const;
+  const runs = [
+    { text: "led", matched: true },
+    { text: "ger append path", matched: false },
+  ] as const;
   test("Given matched runs, When rendered, Then emphasis is weight and tone, never a fill", () => {
     const tokens = classes(<Highlight runs={runs} />);
     expect(tokens).toContain("font-medium");
     expect(tokens).toContain("text-fg");
-    expect(tokens.filter((token) => token.startsWith("bg-") || token.includes("accent") || token === "underline")).toEqual([]);
+    expect(
+      tokens.filter(
+        (token) => token.startsWith("bg-") || token.includes("accent") || token === "underline",
+      ),
+    ).toEqual([]);
   });
   test("Given a rest tone, When rendered, Then only the unmatched remainder takes it", () => {
     const label = <Highlight runs={runs} tone="muted" />;
     expect(classes(label, '[data-ui="Highlight"]')).toContain("text-fg-muted");
     expect(attributes(label, '[data-ui="Highlight"] > span').map((run) => run.class)).toEqual([
-      "font-medium text-fg", "font-normal",
+      "font-medium text-fg",
+      "font-normal",
     ]);
   });
   test("Given every run, When rendered, Then the full label survives in order", () => {
-    expect(textContent(<Highlight runs={runs} />, '[data-ui="Highlight"]')).toBe(runs.map((run) => run.text).join(""));
+    expect(textContent(<Highlight runs={runs} />, '[data-ui="Highlight"]')).toBe(
+      runs.map((run) => run.text).join(""),
+    );
   });
   test("Given no match, When rendered, Then nothing is emphasised", () => {
-    expect(classes(<Highlight runs={[{ text: "ledger append path", matched: false }]} />)).not.toContain("font-medium");
+    expect(
+      classes(<Highlight runs={[{ text: "ledger append path", matched: false }]} />),
+    ).not.toContain("font-medium");
   });
 });
 
 describe("ScrollArea", () => {
   test("Given content, When rendered, Then the viewport is the single scrolling element", () => {
-    const area = <ScrollArea className="fixture-root" contentClassName="fixture-content">rows</ScrollArea>;
+    const area = (
+      <ScrollArea className="fixture-root" contentClassName="fixture-content">
+        rows
+      </ScrollArea>
+    );
     expect(attributes(area, ".fixture-root")).toHaveLength(1);
     expect(textContent(area, ".fixture-content")).toBe("rows");
     const viewports = attributes(area, ".overscroll-contain");
     expect(viewports).toHaveLength(1);
-    const style = Object.fromEntries((viewports[0]?.style ?? "").split(";").map((declaration) => declaration.split(":")));
+    const style = Object.fromEntries(
+      (viewports[0]?.style ?? "").split(";").map((declaration) => declaration.split(":")),
+    );
     expect(style.overflow).toBe("scroll");
   });
 });

@@ -125,8 +125,11 @@ async function offeredProtocols(token?: string) {
   });
   if (selected.kind !== "gateway") throw new Error("Expected a configured gateway");
   const sent = selected.transport.sendMessages({
-    trigger: "submit-message", chatId: "chat-1", messageId: undefined,
-    messages: [...PROMPT], abortSignal: undefined,
+    trigger: "submit-message",
+    chatId: "chat-1",
+    messageId: undefined,
+    messages: [...PROMPT],
+    abortSignal: undefined,
   });
   await wire.seen;
   await sent;

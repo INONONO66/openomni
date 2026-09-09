@@ -29,13 +29,17 @@ test("bridge validates gateway and preserves command delivery and disposal", asy
   const gateway = () => Promise.resolve({ url: "ws://localhost" });
   const onShellCommand = (listener: (command: "new-tab") => void) => {
     listener("new-tab");
-    return () => { delivered = "disposed"; };
+    return () => {
+      delivered = "disposed";
+    };
   };
   expose({ gateway, onShellCommand });
   const bridge = desktopBridge();
   if (!bridge) throw new Error("Missing bridge");
   expect(await bridge.gateway()).toEqual({ url: "ws://localhost" });
-  const dispose = bridge.onShellCommand((command) => { delivered = command; });
+  const dispose = bridge.onShellCommand((command) => {
+    delivered = command;
+  });
   expect(delivered).toBe("new-tab");
   dispose();
   expect(delivered).toBe("disposed");

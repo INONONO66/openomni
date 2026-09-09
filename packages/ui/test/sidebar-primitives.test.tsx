@@ -60,7 +60,9 @@ describe("sidebar navigation controls", () => {
     expect(closed.some((element) => "data-searching" in element)).toBe(false);
     expect(closed.some((element) => element["aria-live"] === "polite")).toBe(true);
     expect(open.find((element) => element.role === "combobox")).toMatchObject({
-      "aria-expanded": "true", "aria-controls": "results", "aria-activedescendant": "row-1",
+      "aria-expanded": "true",
+      "aria-controls": "results",
+      "aria-activedescendant": "row-1",
     });
   });
   test("section and footer preserve their structural slots", () => {
@@ -89,7 +91,9 @@ describe("drawn primitive behavior", () => {
     );
     expect(html.some((element) => element["data-mark"] === "add")).toBe(true);
     expect(html.some((element) => element["data-mark-char"] === "remove")).toBe(true);
-    expect(html.find((element) => element["aria-label"] === "line 2")?.["aria-pressed"]).toBe("true");
+    expect(html.find((element) => element["aria-label"] === "line 2")?.["aria-pressed"]).toBe(
+      "true",
+    );
   });
   test("status shapes use distinct machine attributes", () => {
     const html = attributes(
@@ -99,15 +103,17 @@ describe("drawn primitive behavior", () => {
         <StatusDot shape="slashed" tier="settled" />
       </>,
     );
-    expect(html.flatMap((element) => element["data-status-dot"] ?? [])).toEqual(["running", "ring", "slashed"]);
+    expect(html.flatMap((element) => element["data-status-dot"] ?? [])).toEqual([
+      "running",
+      "ring",
+      "slashed",
+    ]);
     expect(classes(<StatusDot shape="pulse" tier="live" />)).toContain("text-accent");
     expect(attributes(<StatusDot shape="slashed" tier="settled" />, "mask")).toHaveLength(1);
   });
   test("epoch rule is inert without destination and a button with one", () => {
     const inert = attributes(<EpochRule label="compacted" />);
-    const jump = attributes(
-      <EpochRule label="resumed" meta="3h" onJump={() => undefined} />,
-    );
+    const jump = attributes(<EpochRule label="resumed" meta="3h" onJump={() => undefined} />);
     expect(inert.some((element) => "data-epoch-rule" in element)).toBe(true);
     expect(inert.some((element) => element.type === "button")).toBe(false);
     expect(jump.filter((element) => element.type === "button")).toHaveLength(1);
@@ -129,7 +135,9 @@ describe("history menu first paint", () => {
       <HistoryMenu entries={entries} currentId="20" now={0} onJump={() => undefined} />,
     );
     for (const markup of [empty, html]) {
-      expect(markup.find((element) => element["aria-haspopup"] === "menu")?.["aria-expanded"]).toBe("false");
+      expect(markup.find((element) => element["aria-haspopup"] === "menu")?.["aria-expanded"]).toBe(
+        "false",
+      );
       expect(markup.filter((element) => element.role === "menuitem")).toEqual([]);
     }
   });

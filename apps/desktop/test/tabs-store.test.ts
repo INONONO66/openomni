@@ -295,7 +295,9 @@ describe("ordinal selection and positional cycling", () => {
   });
 
   test("1..8 select ordinals, 9 selects last beyond nine, invalid values are no-ops", () => {
-    const tabs = Array.from({ length: 11 }, (_: undefined, index: number) => openSession(`s${index}`));
+    const tabs = Array.from({ length: 11 }, (_: undefined, index: number) =>
+      openSession(`s${index}`),
+    );
     for (let ordinal = 1; ordinal <= 8; ordinal += 1) {
       activateTabAt(ordinal);
       expect(tabs[ordinal - 1]).toBe(currentTab());

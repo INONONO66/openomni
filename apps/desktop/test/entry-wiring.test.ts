@@ -20,7 +20,8 @@ function snapshotHost(globals: Globals): () => void {
     else target[key] = value;
   };
   return () => {
-    for (const key of ["document", "window", "desktop"] as const) restore(globals, key, previous[key]);
+    for (const key of ["document", "window", "desktop"] as const)
+      restore(globals, key, previous[key]);
     for (const [key, value] of environment) restore(process.env, key, value);
   };
 }
@@ -32,7 +33,11 @@ interface DebugEvents {
 }
 type DebugListeners = { [K in keyof DebugEvents]?: (...args: DebugEvents[K]) => void };
 /** Fire the webContents debug listener registered under `name` with `args`. */
-function fireDebug<K extends keyof DebugEvents>(listeners: DebugListeners | undefined, name: K, ...args: DebugEvents[K]): void {
+function fireDebug<K extends keyof DebugEvents>(
+  listeners: DebugListeners | undefined,
+  name: K,
+  ...args: DebugEvents[K]
+): void {
   const listener = listeners?.[name];
   if (!listener) throw new Error(`Missing debug listener: ${name}`);
   listener(...args);
@@ -186,7 +191,9 @@ test("desktop entries register IPC before window creation and render without awa
     first?.listeners.get("move")?.();
     first?.listeners.get("resize")?.();
     jest.runAllTimers();
-    expect(parseWindowBounds(readFileSync(join(userData, "window-bounds.json"), "utf8"))).toMatchObject({
+    expect(
+      parseWindowBounds(readFileSync(join(userData, "window-bounds.json"), "utf8")),
+    ).toMatchObject({
       width: 1200,
       height: 800,
     });
@@ -206,7 +213,12 @@ test("desktop entries register IPC before window creation and render without awa
     const log = spyOn(console, "log").mockImplementation(() => undefined);
     const error = spyOn(console, "error").mockImplementation(() => undefined);
     const debug = windows[0]?.debug;
-    fireDebug(debug, "console-message", { level: 1, message: "fixture", sourceId: "test", lineNumber: 2 });
+    fireDebug(debug, "console-message", {
+      level: 1,
+      message: "fixture",
+      sourceId: "test",
+      lineNumber: 2,
+    });
     fireDebug(debug, "render-process-gone", {}, { reason: "crashed", exitCode: 1 });
     fireDebug(debug, "did-fail-load", {}, 3, "failed", "test");
     expect(log).toHaveBeenCalledTimes(1);

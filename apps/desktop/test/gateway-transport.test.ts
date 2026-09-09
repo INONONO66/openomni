@@ -175,7 +175,8 @@ class ControlledSocket {
 function controlledTurn(messages = [userMessage("first")]) {
   ControlledSocket.instances.length = 0;
   const transport = createGatewayChatTransport({
-    url: "ws://controlled", WebSocketImpl: ControlledSocket,
+    url: "ws://controlled",
+    WebSocketImpl: ControlledSocket,
   });
   const sending = send(transport, messages);
   const controlled = ControlledSocket.instances[0];
@@ -191,19 +192,28 @@ describe("createGatewayChatTransport", () => {
     expect(controlled.sent).toEqual([{ text: "" }]);
     controlled.respond("empty");
     expect((await collect(stream)).map((chunk) => chunk.type)).toEqual([
-      "start", "text-start", "text-delta", "text-end", "finish",
+      "start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
     ]);
     expect(await transport.reconnectToStream({ chatId: "chat-1" })).toBeNull();
   });
 
   test("close before opening rejects and failed send closes its socket", async () => {
     ControlledSocket.instances.length = 0;
-    const transport = createGatewayChatTransport({ url: "ws://controlled", WebSocketImpl: ControlledSocket });
+    const transport = createGatewayChatTransport({
+      url: "ws://controlled",
+      WebSocketImpl: ControlledSocket,
+    });
     const opening = send(transport, [userMessage("opening")]);
     const first = ControlledSocket.instances[0];
     if (!first) throw new Error("Missing opening socket");
     const rejected = opening.then(
-      () => { throw new Error("Opening unexpectedly succeeded"); },
+      () => {
+        throw new Error("Opening unexpectedly succeeded");
+      },
       (error: Error) => error,
     );
     first.finishClose();

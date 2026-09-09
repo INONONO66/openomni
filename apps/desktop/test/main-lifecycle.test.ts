@@ -142,7 +142,9 @@ test.each([
     const close = flatten(menu).find((item) => item.id === "close-tab");
     if (!close?.click) throw new Error("Missing close-tab command");
     const closeClick = close.click;
-    const dispatch = (): void => { Reflect.apply(closeClick, undefined, []); };
+    const dispatch = (): void => {
+      Reflect.apply(closeClick, undefined, []);
+    };
     dispatch();
     expect(sent).toEqual([]);
     first.emit("focus");

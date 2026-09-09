@@ -11,5 +11,7 @@ const bridgeSchema = z.object({
 
 /** Browser previews have no bridge; malformed bridges are configuration errors. */
 export function desktopBridge() {
-  return bridgeSchema.optional().parse(Reflect.get(typeof window === "undefined" ? globalThis : window, "desktop"));
+  return bridgeSchema
+    .optional()
+    .parse(Reflect.get(typeof window === "undefined" ? globalThis : window, "desktop"));
 }

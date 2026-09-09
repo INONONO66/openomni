@@ -57,7 +57,9 @@ beforeEach(() => {
   subscriptions = 0;
   Object.defineProperty(window, "desktop", {
     configurable: true,
-    value: commandBridge(listeners, () => { subscriptions += 1; }),
+    value: commandBridge(listeners, () => {
+      subscriptions += 1;
+    }),
   });
 });
 afterEach(async () => {

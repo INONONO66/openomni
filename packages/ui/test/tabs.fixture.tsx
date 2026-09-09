@@ -70,12 +70,17 @@ test("composer measures mount/input height and dispatches focused keyboard decis
   computed.lineHeight = "20px";
   const style = spyOn(globalThis, "getComputedStyle").mockReturnValue(computed);
   const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
-  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => height });
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get: () => height,
+  });
   const submitted: string[] = [];
   const decisions: string[] = [];
   let draft = "initial";
   const props = {
-    onValueChange: (value: string) => { draft = value; },
+    onValueChange: (value: string) => {
+      draft = value;
+    },
     onSubmit: () => submitted.push(draft),
     onApprove: (id: string) => decisions.push(`approve:${id}`),
     onDeny: (id: string) => decisions.push(`deny:${id}`),
@@ -95,7 +100,12 @@ test("composer measures mount/input height and dispatches focused keyboard decis
     expect(draft).toBe("edited");
     expect(field.style.height).toBe("21px");
     const key = async (key: string, extra: KeyboardEventInit = {}) => {
-      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...extra });
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+        ...extra,
+      });
       await act(() => field.dispatchEvent(event));
       return event.defaultPrevented;
     };
@@ -105,7 +115,13 @@ test("composer measures mount/input height and dispatches focused keyboard decis
     await mounted.render(<Composer {...props} value="" />);
     expect(await key("Enter")).toBe(true);
     expect(submitted).toEqual(["edited"]);
-    await mounted.render(<Composer {...props} value="" pending={[{ toolId: "approval-1", summary: "fixture", reason: "fixture" }]} />);
+    await mounted.render(
+      <Composer
+        {...props}
+        value=""
+        pending={[{ toolId: "approval-1", summary: "fixture", reason: "fixture" }]}
+      />,
+    );
     await key("Enter", { ctrlKey: true });
     await key("Backspace", { metaKey: true });
     expect(decisions).toEqual(["approve:approval-1", "deny:approval-1"]);

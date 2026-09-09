@@ -52,7 +52,7 @@ export function SessionTree({
   readonly route: Route | null;
   readonly collapsedProjectIds: ReadonlySet<ProjectId | null>;
   readonly onToggleProject: (id: ProjectId | null) => void;
-  
+
   readonly onSelect: (id: SessionId, boundary?: Boundary | null, newTab?: boolean) => void;
   /** `newTab` is the ⌘/Ctrl-click intent: open the route in a new tab instead of moving this one. */
   readonly onNavigate: (route: Route, newTab: boolean) => void;
@@ -140,7 +140,6 @@ export function SessionTree({
         </SectionHeader>
         <SectionList>
           <div aria-label="Sessions" id={TREE_ID} role="tree">
-            
             {sessions.length === 0 && (
               <Text as="p" className="px-2" level="meta" tone="faint">
                 No sessions yet — press +
@@ -241,7 +240,6 @@ function SearchSessionRow({
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}
       role="treeitem"
     >
-      
       <Highlight
         className="block min-w-0 truncate"
         runs={highlightRuns(session.title, entry.spans)}
