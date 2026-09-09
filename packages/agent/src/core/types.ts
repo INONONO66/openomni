@@ -3,6 +3,7 @@ import type {
   BusEvent,
   LedgerAction,
   Model,
+  PlainObject,
   PlainValue,
   Policy,
   Token,
@@ -78,13 +79,14 @@ export interface ChatAgentConfig {
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   signal?: AbortSignal;
   /**
-   * Provider-SDK options, forwarded verbatim to the llm call. Untyped on
-   * purpose: the shape is the PROVIDER's, it differs per provider and per SDK
-   * version, and no Zod schema in this repo describes it. Validation is the
-   * host's — whoever reads the operator's config owns rejecting a bad value;
-   * neither this loop nor the llm package inspects it.
+   * Provider-SDK options, forwarded verbatim to the llm call. JSON-shaped
+   * but otherwise undescribed on purpose: the shape is the PROVIDER's, it
+   * differs per provider and per SDK version, and no Zod schema in this repo
+   * describes it. Validation is the host's — whoever reads the operator's
+   * config owns rejecting a bad value; neither this loop nor the llm package
+   * inspects it.
    */
-  providerOptions?: Record<string, unknown>;
+  providerOptions?: PlainObject;
   auth?: RunInput["auth"];
   /**
    * Operator-supplied provider endpoint and headers, resolved by the host and

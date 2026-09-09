@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
-import { createDispatcher, toolSpec } from "@openomni/agent";
+import { createDispatcher, toolSpec, type Executor } from "@openomni/agent";
 import { createCompletionPort as completionPort } from "../src/tools/completion";
 import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
 
@@ -16,11 +16,21 @@ const COMPLETION_TOOL_NAME = "completion";
 const MAX_COMPLETION_CALLS = 32;
 
 import { admittedOperation } from "./helpers/admitted-operation";
+import { executor as productionExecutor } from "./helpers/executor";
 
 function createCompletionPort(...args: Parameters<typeof completionPort>) {
   const port = completionPort(...args);
   return (call: string | Parameters<typeof port>[0]) =>
     admittedOperation(() => port(typeof call === "string" ? { prompt: call } : call));
+}
+
+/** The production executor with the llm/text operation's result scripted; tool operations stay real. */
+function scriptedLlmExecutor(result: Awaited<ReturnType<Executor["run"]>>): Executor {
+  return {
+    ...productionExecutor,
+    run: (request, body) =>
+      request.kind === "llm" ? Promise.resolve(result) : productionExecutor.run(request, body),
+  };
 }
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -289,6 +299,54 @@ describe("the completion port", () => {
     });
 
     await expect(port("q")).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("rejects a run that asks to continue: a one-step toolless call has nothing to continue", async () => {
+    const port = createCompletionPort(MODEL, {
+      resolveModel,
+      run: async () => ({ type: "continue" }),
+    });
+
+    await expect(port("q")).rejects.toThrow("sub-model returned continue");
+  });
+
+  it("refuses without the session's attempt authority instead of running unrecorded", async () => {
+    let invoked = 0;
+    const port = completionPort(MODEL, {
+      resolveModel,
+      run: async () => {
+        invoked += 1;
+        return { type: "stop" };
+      },
+    });
+    const withoutAttempts: Executor = {
+      run: (request, body) => productionExecutor.run(request, body),
+    };
+
+    await expect(admittedOperation(() => port({ prompt: "q" }), withoutAttempts)).rejects.toThrow(
+      "sub-model requires session attempt authority",
+    );
+    expect(invoked).toBe(0);
+  });
+
+  it("surfaces a refused llm operation as the refusal's reason", async () => {
+    const port = completionPort(MODEL, { resolveModel, run: async () => ({ type: "stop" }) });
+    const refused = scriptedLlmExecutor({ terminal: "blocked_pre", reason: "llm.text denied" });
+
+    await expect(admittedOperation(() => port({ prompt: "q" }), refused)).rejects.toThrow(
+      "sub-model refused: llm.text denied",
+    );
+  });
+
+  it("rejects an executed value that is not the text record the run produces", async () => {
+    const port = completionPort(MODEL, { resolveModel, run: async () => ({ type: "stop" }) });
+
+    for (const value of ["bare text", { answer: "no text field" }] as const) {
+      const executed = scriptedLlmExecutor({ terminal: "executed", value });
+      await expect(admittedOperation(() => port({ prompt: "q" }), executed)).rejects.toThrow(
+        "invalid sub-model result",
+      );
+    }
   });
 });
 

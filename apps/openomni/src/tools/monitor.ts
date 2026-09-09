@@ -65,7 +65,8 @@ export const monitorTool = defineTool({
   output: Alarm.Row,
   visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
   sequential: true,
-  async execute({ operation: args }, context) {
+  async execute(request, context) {
+    const args = request.operation;
     const alarms = Storage.get().alarms;
     if (alarms === undefined) throw new ToolRefused("monitor", "alarm storage unavailable");
     context.signal.throwIfAborted();
@@ -75,7 +76,7 @@ export const monitorTool = defineTool({
       if (row === undefined) throw new ToolRefused("monitor", "alarm control refused");
       return row;
     }
-    const { kind: _kind, ...fields } = args.source;
+    const { kind, ...fields } = args.source;
     const watch = Alarm.Watch.parse({ ...fields, description: args.description });
     const actions = SessionHandleStore.tree(context.sessionId);
     const turn = SessionHandleStore.turnIntent(

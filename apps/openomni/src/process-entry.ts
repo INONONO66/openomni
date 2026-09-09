@@ -10,7 +10,7 @@ import { createGatewayRouter } from "@openomni/channels";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
-import { createCompletionPort } from "./tools/completion";
+import { createCompletionPort, type LlmPort } from "./tools/completion";
 import { createResident } from "./resident";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
@@ -52,22 +52,21 @@ export async function serveProcessSession(
     ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>
       gateway.ingest(...args),
   };
+  // The process's one sub-model seam: the configured model's credential and transport, real I/O.
+  const llm: LlmPort = createCompletionPort(
+    {
+      ...request.model,
+      apiKey: request.apiKey,
+      ...(request.transport === undefined ? {} : { transport: request.transport }),
+    },
+    {},
+  );
   const resident = createResident({
     model: request.model,
     apiKey: request.apiKey,
     ...(request.transport === undefined ? {} : { transport: request.transport }),
     sessionRuntime: runtime,
-    tools: {
-      messages,
-      llm: createCompletionPort(
-        {
-          ...request.model,
-          apiKey: request.apiKey,
-          ...(request.transport === undefined ? {} : { transport: request.transport }),
-        },
-        {},
-      ),
-    },
+    tools: { messages, llm },
   });
   const gateway = createGatewayRouter({
     sink: Bus.publish,
