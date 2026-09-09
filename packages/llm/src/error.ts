@@ -26,12 +26,19 @@ const ErrorFacts = z.object({
   aborted: z.boolean().optional().catch(undefined),
   contextOverflow: z.boolean().optional().catch(undefined),
 });
+export type ErrorFacts = z.infer<typeof ErrorFacts>;
 const WrappedFacts = z.object({ data: ErrorFacts });
 
 /** Named errors carry facts under data; SDK errors carry them directly. */
-export function errorFacts(error: unknown): z.infer<typeof ErrorFacts> {
+export function errorFacts<E>(error: E): ErrorFacts {
   const wrapped = WrappedFacts.safeParse(error);
   return wrapped.success ? wrapped.data.data : ErrorFacts.catch({}).parse(error);
+}
+
+/** Only a typed named-error `data.contextOverflow` fact decides; anything else defers. */
+export function declaredContextOverflow<E>(error: E): boolean | undefined {
+  const wrapped = WrappedFacts.safeParse(error);
+  return wrapped.success ? wrapped.data.data.contextOverflow : undefined;
 }
 
 const ResponseHeaders = z
@@ -52,9 +59,18 @@ const ProviderFailure = ErrorFacts.extend({
   responseBody: z.string().optional().catch(undefined),
 });
 
+export type ApiFailure = InstanceType<typeof APIError>;
+const ApiFailureInstance = z.custom<ApiFailure>(APIError.isInstance);
+
+/** The typed failure itself, or undefined for anything else. */
+export function apiFailure<E>(error: E): ApiFailure | undefined {
+  return ApiFailureInstance.safeParse(error).data;
+}
+
 /** Decode SDK error fields before retry classification, preserving the native cause. */
-export function coerceApiError(error: unknown): InstanceType<typeof APIError> | undefined {
-  if (APIError.isInstance(error)) return error;
+export function coerceApiError<E>(error: E): ApiFailure | undefined {
+  const typed = apiFailure(error);
+  if (typed !== undefined) return typed;
   const candidate = ProviderFailure.safeParse(error);
   return candidate.success ? new APIError(candidate.data, { cause: error }) : undefined;
 }
