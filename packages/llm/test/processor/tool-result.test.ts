@@ -356,4 +356,35 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       expect(state.error).toBe("interrupted");
     }
   });
+
+  test("a stream that fails inside the grace window settles the pending tool as interrupted", async () => {
+    const messages: Message.WithParts[] = [];
+    const abortController = new AbortController();
+    const processor = createProcessor({
+      abort: abortController.signal,
+      sink: captureSink(messages),
+      createStream: async () => ({
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-hang",
+            toolName: "slow_tool",
+            input: {},
+          };
+          abortController.abort();
+          yield { type: "text-delta", id: "t1", text: "..." };
+          // The transport dies while the consumer is still draining for the result.
+          throw new Error("connection reset during drain");
+        })(),
+      }),
+    });
+
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
+      name: "AbortError",
+    });
+
+    const state = lastToolState(messages);
+    expect(state?.status).toBe("error");
+    if (state?.status === "error") expect(state.error).toBe("interrupted");
+  });
 });

@@ -93,4 +93,13 @@ describe("operator transport config", () => {
     expect(tenantA).not.toBe(tenantB);
     expect(tenantA).toBe(getSDK(anthropicModel(), auth, { headers: { "x-tenant": "a" } }));
   });
+
+  test("header order does not fork the SDK cache", () => {
+    const auth: Auth.Info = { type: "api", key: "sk-transport-order" };
+
+    const ab = getSDK(anthropicModel(), auth, { headers: { "x-a": "1", "x-b": "2" } });
+    const ba = getSDK(anthropicModel(), auth, { headers: { "x-b": "2", "x-a": "1" } });
+
+    expect(ba).toBe(ab);
+  });
 });

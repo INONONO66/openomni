@@ -137,14 +137,11 @@ function assembleAssistantMessages(
 
 function messageToSDK(msg: Message.WithParts, model: Provider.Model): SDKMessage[] {
   if (msg.parts.length === 0) return [];
-  if (msg.info.role === "user") {
-    const content = msg.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
-    return content.length > 0 ? [{ role: "user", content }] : [];
-  }
   if (msg.info.role === "assistant") {
     return buildAssistantMessage({ info: msg.info, parts: msg.parts }, model);
   }
-  return [];
+  const content = msg.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
+  return content.length > 0 ? [{ role: "user", content }] : [];
 }
 
 export function toModelMessages(

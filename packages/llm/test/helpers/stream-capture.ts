@@ -5,6 +5,7 @@ import { run, type RunInput } from "../../src/run";
 import type { StreamEvent } from "../../src/processor/stream-events";
 import type { Sink } from "../../src/sink";
 import { collector } from "./observation";
+import { capturingSink } from "./processor";
 
 export type Condition = (input: { steps: Array<{ usage?: { inputTokens?: number } }> }) => boolean;
 interface Arguments {
@@ -22,11 +23,6 @@ export function useStreamCapture() {
   let args: Arguments | undefined;
   let stepCount: number | undefined;
   let chunks: StreamEvent[];
-  const sink: Sink = {
-    onMessage: () => undefined,
-    onToolCall: () => undefined,
-    onToolResult: () => undefined,
-  };
   const events = collector();
   beforeEach(() => {
     args = undefined;
@@ -66,7 +62,7 @@ export function useStreamCapture() {
     stream(events: StreamEvent[]) {
       chunks = events;
     },
-    run(overrides: Partial<RunInput> = {}, output: Sink = sink) {
+    run(overrides: Partial<RunInput> = {}, output: Sink = capturingSink().sink) {
       return run(
         {
           trace: {
