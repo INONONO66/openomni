@@ -45,6 +45,18 @@ describe("canonical model and provider-bound credentials", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  test("proxy discovery keeps valid IDs when entries are malformed", async () => {
+    spyOn(ModelsDev, "get").mockResolvedValue(catalog);
+    spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://mixed-proxy.example" });
+    spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ data: [{ id: "wanted" }, { id: 42 }, { other: "ignored" }] }),
+    );
+    expect(await Provider.resolveModel({ provider: "anthropic", id: "wanted" })).toMatchObject({
+      id: "wanted",
+      providerID: "anthropic",
+    });
+  });
+
   test("positive proxy discovery retains model identity and reports listing failure", async () => {
     spyOn(ModelsDev, "get").mockResolvedValue(catalog);
     spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://proxy.example" });

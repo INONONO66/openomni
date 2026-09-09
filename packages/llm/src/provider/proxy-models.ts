@@ -36,7 +36,8 @@ function credentialFingerprint(apiKey: string | undefined): string {
     .digest("hex");
 }
 
-const ModelListing = z.object({ data: z.array(z.object({ id: z.string().min(1) })) });
+const ModelEntry = z.object({ id: z.string().min(1) }).passthrough();
+const ModelListing = z.object({ data: z.array(z.record(z.string(), z.json())) });
 
 export async function fetchProxyModels(baseURL: string, apiKey?: string): Promise<string[]> {
   const url = normalizeModelsURL(baseURL);
@@ -76,7 +77,10 @@ export async function fetchProxyModels(baseURL: string, apiKey?: string): Promis
     );
   }
 
-  const ids = body.data.map(({ id }) => id);
+  const ids = body.data.flatMap((entry) => {
+    const parsed = ModelEntry.safeParse(entry);
+    return parsed.success ? [parsed.data.id] : [];
+  });
   modelCache.set(cacheKey, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
   return ids;
 }

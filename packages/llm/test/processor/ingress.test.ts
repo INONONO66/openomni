@@ -9,10 +9,16 @@ describe("processor ingress", () => {
   test.each([
     { type: "text-start", providerMetadata: ["not-an-object"] },
     { type: "tool-call", toolCallId: "bad", toolName: "lookup", input: [1] },
-    { type: "tool-result", toolCallId: "bad", output: () => 1 },
-    { type: "error", error: Symbol("not-json") },
+    { type: "tool-result", toolCallId: "bad", isError: "yes" },
+    { type: "text-start", id: 42 },
   ])("refuses malformed wire fields %s", (event) => {
     expect(ProviderEvent.safeParse(event).success).toBe(false);
+  });
+
+  test("accepts opaque SDK tool output and error values", () => {
+    expect(ProviderEvent.safeParse({ type: "tool-result", output: 123n }).success).toBe(true);
+    expect(ProviderEvent.safeParse({ type: "tool-result", output: new Date() }).success).toBe(true);
+    expect(ProviderEvent.safeParse({ type: "error", error: Symbol("sdk-error") }).success).toBe(true);
   });
 
   test("a rejected nested payload fails the attempt before projecting", async () => {

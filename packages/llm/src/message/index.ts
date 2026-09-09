@@ -1,4 +1,4 @@
-import type { Message, PlainObject, PlainValue } from "@openomni/protocol";
+import type { Message, PlainObject } from "@openomni/protocol";
 import type { ModelMessage } from "ai";
 import type { Provider } from "../provider";
 import { ProviderTransform } from "../provider/transform";
@@ -66,7 +66,18 @@ function buildToolResultBlock(result: {
   };
 }
 
-export function stringifyToolOutput(output: PlainValue | Error | undefined): string {
+export type SDKToolValue =
+  | string
+  | number
+  | bigint
+  | boolean
+  | symbol
+  | null
+  | Date
+  | object
+  | (() => void);
+
+export function stringifyToolOutput(output: SDKToolValue | Error | undefined): string {
   if (typeof output === "string") return output;
   if (output == null) return "";
   if (output instanceof Error) return output.message || String(output);
