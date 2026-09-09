@@ -18,6 +18,8 @@ import {
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
+import { entropyOf } from "./core/entropy";
+import { settled } from "./core/settled";
 import {
   createExecutor,
   type DurableExecutor,
@@ -347,7 +349,7 @@ export function createDispatcher(
       });
     };
     const wave = Promise.resolve().then(execute);
-    options?.trackWave?.(wave.then(() => undefined));
+    options?.trackWave?.(settled(wave));
     return wave;
   }
 
@@ -386,12 +388,12 @@ export function createDispatcher(
     },
     execute(call, context) {
       const wave = dispatch(call, context, "model").then(renderedResult);
-      options?.trackWave?.(wave.then(() => undefined));
+      options?.trackWave?.(settled(wave));
       return wave;
     },
     executeCell(call, context) {
       const wave = dispatch(call, context, "cell");
-      options?.trackWave?.(wave.then(() => undefined));
+      options?.trackWave?.(settled(wave));
       return wave;
     },
   };
@@ -422,7 +424,7 @@ interface TurnDispatchInput {
 
 function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string | undefined) {
   const groups = new Map<string, { action: LedgerAction.Node; call: Tool.Call }[]>();
-  const settled = new Set(
+  const settledIntents = new Set(
     actions
       .filter((action) => {
         const effect = action.effect.value;
@@ -450,7 +452,7 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
       typeof intent.waveId !== "string"
     )
       continue;
-    if (settled.has(action.id)) continue;
+    if (settledIntents.has(action.id)) continue;
     const parsed = PlainValueSchema.parse(intent.value);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
       throw new Error(`invalid durable invocation: ${action.id}`);
@@ -509,7 +511,7 @@ export function createTurnDispatcher(
       systemHash: input.systemHash,
     },
     clock: runtime.clock ?? Date.now,
-    entropy: runtime.entropy ?? (() => crypto.randomUUID()),
+    entropy: entropyOf(runtime),
   });
   if (executor.approvals !== undefined) input.bindApprovals?.(executor.approvals);
   const pinnedNames =

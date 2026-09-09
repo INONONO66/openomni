@@ -173,15 +173,10 @@ function deliveryCause(
     : undefined;
 }
 
-function recordedInboxIds(intent: PlainObject): string[] {
-  return Array.isArray(intent.inboxIds) ? intent.inboxIds.flatMap(texts) : [];
-}
-
-function lineageCause(action: LedgerAction.Node, intent: PlainObject): SessionHistory.Cause {
+function lineageCause(action: LedgerAction.Node): SessionHistory.Cause {
   if (action.parentId !== null) return { kind: "action", actionId: action.parentId };
-  if (action.kind === "prompt") return { kind: "inbox", inboxIds: [action.id] };
-  const inboxIds = recordedInboxIds(intent);
-  return inboxIds.length > 0 ? { kind: "inbox", inboxIds } : { kind: "root" };
+  // Turns always descend from `session.configure`, so a root action is never a turn with inbox ids.
+  return action.kind === "prompt" ? { kind: "inbox", inboxIds: [action.id] } : { kind: "root" };
 }
 
 function causeOf(
@@ -189,9 +184,7 @@ function causeOf(
   intent: PlainObject,
   effect: PlainObject,
 ): SessionHistory.Cause {
-  return (
-    alarmCause(action, intent) ?? deliveryCause(action, effect) ?? lineageCause(action, intent)
-  );
+  return alarmCause(action, intent) ?? deliveryCause(action, effect) ?? lineageCause(action);
 }
 
 function outboundOutcome(outbound: SessionTransition.Outbound): SessionHistory.Outcome {
@@ -417,10 +410,6 @@ function compactionsOf(
 
 function object(value: PlainValue | undefined): PlainObject {
   return Array.isArray(value) || typeof value !== "object" || value === null ? {} : value;
-}
-
-function texts(value: PlainValue): string[] {
-  return typeof value === "string" ? [value] : [];
 }
 
 function text(value: PlainValue | undefined): string | undefined {

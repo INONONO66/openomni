@@ -11,16 +11,14 @@ export function captureBusEvents<T>(
   onEvent?: (event: T) => void,
 ): { readonly events: T[]; readonly done: Promise<readonly T[]>; unsubscribe: () => void } {
   const events: T[] = [];
-  let settle: (events: readonly T[]) => void = () => undefined;
-  const arrived = new Promise<readonly T[]>((resolve) => {
-    settle = resolve;
-  });
+  const arrived = Promise.withResolvers<readonly T[]>();
+  const settle = arrived.resolve;
   const unsubscribe = Bus.subscribe(event, (payload) => {
     events.push(payload);
     onEvent?.(payload);
     if (events.length === count) settle(events);
   });
-  const done = bounded(arrived, `${count} ${event.name} event(s)`, EVENT_TIMEOUT_MS);
+  const done = bounded(arrived.promise, `${count} ${event.name} event(s)`, EVENT_TIMEOUT_MS);
 
   return {
     events,

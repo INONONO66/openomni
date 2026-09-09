@@ -7,6 +7,7 @@ import {
   type Inbox,
   type LedgerSession,
 } from "@openomni/protocol";
+import { settled } from "./core/settled";
 import { createExecutor } from "./executor";
 import { foldSessionHistory } from "./session-lifecycle/history";
 import { sessionStopEvidence } from "./session-stop-evidence";
@@ -105,10 +106,7 @@ export function createSessionTurn(
     };
     const trackWave = (wave: Promise<void>) => {
       waves.add(wave);
-      void wave.then(
-        () => waves.delete(wave),
-        () => waves.delete(wave),
-      );
+      void settled(wave).then(() => waves.delete(wave));
     };
     const policy = pinPolicy(input.generation.policyGeneration);
     const ledger = createExecutionLedger(input.turnId);
@@ -287,27 +285,22 @@ export function createSessionTurn(
       // settles, stop the heartbeat and release the lease. Every turn start
       // waits on it, so a resume can only run once this executor is genuinely
       // gone - session-wide single flight without an unbounded caller wait.
-      state.retainedRunner = interruptedRunner
-        .then(
-          () => undefined,
-          () => undefined,
-        )
-        .then(async () => {
-          state.liveInterruptRunner = undefined;
-          state.stopHeartbeat?.();
-          state.stopHeartbeat = undefined;
-          try {
-            await releaseHeldLease();
-          } catch (error) {
-            // Storage refused/failed the release: never wedge the controller on
-            // a detached promise. Finalize in-memory state here and surface the
-            // failure to the next caller that starts a turn.
-            state.retainedFailure = error instanceof Error ? error : new Error(String(error));
-          } finally {
-            state.retainedRunner = undefined;
-          }
-          if (state.active === undefined) await hibernate(SessionHandleStore.row(sessionId));
-        });
+      state.retainedRunner = settled(interruptedRunner).then(async () => {
+        state.liveInterruptRunner = undefined;
+        state.stopHeartbeat?.();
+        state.stopHeartbeat = undefined;
+        try {
+          await releaseHeldLease();
+        } catch (error) {
+          // Storage refused/failed the release: never wedge the controller on
+          // a detached promise. Finalize in-memory state here and surface the
+          // failure to the next caller that starts a turn.
+          state.retainedFailure = error instanceof Error ? error : new Error(String(error));
+        } finally {
+          state.retainedRunner = undefined;
+        }
+        if (state.active === undefined) await hibernate(SessionHandleStore.row(sessionId));
+      });
     }
     return result;
   }

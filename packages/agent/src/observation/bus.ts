@@ -195,6 +195,7 @@ export function scopeObservation(
     ((error, eventName) =>
       console.warn("observation emit failed", { eventName, error: String(error) }));
 
+  const subscribe = sink.subscribe?.bind(sink);
   const scoped: ObservationSink = {
     publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
       try {
@@ -215,17 +216,7 @@ export function scopeObservation(
     scope(childIdentity) {
       return scopeObservation(sink, { ...identity, ...childIdentity }, options);
     },
-    ...(sink.subscribe === undefined
-      ? {}
-      : {
-          subscribe<T>(
-            event: BusEvent.Descriptor<T>,
-            handler: (data: T) => void,
-            subscriptionOptions?: { match?: Partial<T> },
-          ): () => void {
-            return sink.subscribe?.(event, handler, subscriptionOptions) ?? (() => undefined);
-          },
-        }),
+    ...(subscribe === undefined ? {} : { subscribe }),
   };
   return scoped;
 }

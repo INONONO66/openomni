@@ -6,6 +6,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { waveBodyScope } from "./core/execution/tool-wave";
+import { settled } from "./core/settled";
 
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({ status: z.literal("timed_out") }).strict(),
@@ -70,12 +71,7 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
   const rawExecution = Promise.resolve(definition.execute(input, scopedContext));
   const execution = settledExecution(rawExecution);
   // Ownership follows raw settlement, independent of fallible result conversion.
-  waveBodyScope.getStore()?.retain?.(
-    rawExecution.then(
-      () => undefined,
-      () => undefined,
-    ),
-  );
+  waveBodyScope.getStore()?.retain?.(settled(rawExecution));
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
     controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));

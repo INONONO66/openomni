@@ -1214,6 +1214,34 @@ describe("durable session handle", () => {
     expect(maximumActive).toBe(1);
   });
 
+  test("close() returns once a positive grace window lapses while the runner still ignores abort", async () => {
+    const entered = signal<void>();
+    const releaseRunner = signal<void>();
+    const hibernated = signal<void>();
+    const runner: SessionRunner = async () => {
+      entered.resolve();
+      await releaseRunner.promise;
+      return { kind: "result", text: "late" };
+    };
+    const handle = session(residentOptions("close-after-positive-grace", runner), {
+      ...runtime,
+      closeGraceMs: 1,
+      onHibernate: () => hibernated.resolve(),
+    });
+
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "runner entry");
+    // The interrupt seals the turn while the abort-ignoring runner stays retained,
+    // so close() can only return once the grace timer lapses.
+    await bounded(handle.interrupt(), "interrupt receipt");
+    await bounded(handle.close(), "close after grace lapse");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+
+    releaseRunner.resolve();
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+  });
+
   test("close() returns after the grace window while the lease stays held until the abort-ignoring runner settles", async () => {
     const entered = signal<void>();
     const releaseRunner = signal<void>();
@@ -1523,9 +1551,10 @@ describe("durable session handle", () => {
     const answers: Parameters<ExecutionApprovals["answer"]>[0][] = [];
     const entered = signal<void>();
     const release = signal<void>();
+    const livePending: ExecutionApprovalRequest[] = [];
     const runner: SessionRunner = async (input) => {
       input.bindApprovals?.({
-        pending: () => [],
+        pending: () => livePending,
         notify: () => undefined,
         answer: async (answer) => {
           answers.push(answer);
@@ -1536,16 +1565,20 @@ describe("durable session handle", () => {
       return { kind: "result", text: "done" };
     };
     const handle = session(residentOptions("approval-routing", runner), runtime);
+    const request = approvalRequest(handle.id, "turn");
+    livePending.push(request);
     const answer = {
-      request: approvalRequest(handle.id, "turn"),
+      request,
       credential: "owner-token",
       decision: "approve",
     } as const;
+    expect(handle.approvals.pending()).toEqual([]);
     await expect(handle.approvals.answer(answer)).rejects.toMatchObject({
       code: "stale_approval",
     });
     const prompted = handle.prompt("needs approval");
     await bounded(entered.promise, "runner entry");
+    expect(handle.approvals.pending()).toBe(livePending);
     await bounded(handle.approvals.answer(answer), "routed answer");
     expect(answers).toEqual([answer]);
     release.resolve();

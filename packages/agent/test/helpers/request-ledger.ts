@@ -3,6 +3,7 @@ import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
 import type { SessionRuntime } from "../../src/session-contract";
 import type { SessionTransition } from "@openomni/protocol";
+import { collector } from "./observation-collector";
 
 export function requestLedger(
   input: {
@@ -76,7 +77,7 @@ export function requestLedger(
   }
   const runtime: SessionRuntime = {
     clock,
-    observations: { publish: () => undefined },
+    observations: collector(),
     requestDomainRevisions: input.domainRevisions,
   };
   const ledger: ExecutionLedger = {

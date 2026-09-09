@@ -12,6 +12,7 @@ import type {
   SessionControllerLifecycle,
   SessionSystem,
 } from "./session-contract";
+import { entropyOf } from "./core/entropy";
 import { toolSnapshot } from "./session-record";
 import { createController } from "./session-controller";
 export { SessionCommitError } from "./session-contract";
@@ -95,7 +96,7 @@ class SessionRegistry {
 
   declare(options: SessionCreateOptions): SessionHandle {
     if (this.closed) throw new Error("session registry is closed");
-    const entropy = this.runtime.entropy ?? (() => crypto.randomUUID());
+    const entropy = entropyOf(this.runtime);
     const id = options.id ?? entropy();
     const existing = this.entries.get(id);
     if (existing !== undefined) {
