@@ -131,6 +131,10 @@ const precedenceCases = Object.freeze([
 ]) satisfies readonly PrecedenceCase[];
 
 describe("resolveRoute precedence", () => {
+  it("the rejection fixture refuses a fulfilled operation", async () => {
+    await expect(rejected(Promise.resolve("accepted"), z.instanceof(Error))).rejects.toThrow();
+  });
+
   for (const testCase of precedenceCases) {
     it(testCase.name, () => {
       // Given
