@@ -11,6 +11,7 @@ import {
   openSync,
   renameSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -115,6 +116,50 @@ describe("machine fs request boundary", () => {
 });
 
 describe("daemon filesystem driver", () => {
+  test("walks nested links, normalizes targets, and preserves links to the root", async () => {
+    await withFixture(async ({ root }) => {
+      mkdirSync(join(root, "nested"));
+      writeFileSync(join(root, "note"), "x");
+      symlinkSync(realpathSync(root), join(root, "absolute"));
+      symlinkSync("./../note", join(root, "nested", "relative"));
+      symlinkSync("../../outside", join(root, "escape"));
+      const driver = createFsDriver(new Map([["docs", root]]));
+      try {
+        for (const path of ["absolute/note", "nested/relative"])
+          expect(await driver({ op: "read", export: "docs", path })).toMatchObject({
+            status: "completed", value: { data: "eA==" },
+          });
+        expect(await driver({ op: "stat", export: "docs", path: "absolute" })).toMatchObject({
+          status: "completed", value: { kind: "symlink" },
+        });
+        expect(await driver({ op: "stat", export: "docs", path: "escape" })).toMatchObject({
+          status: "refused", reason: "path_escapes_export",
+        });
+      } finally {
+        driver.close();
+      }
+    });
+  });
+
+  test("bounds both root and request symlink expansion and unwinds preserved descriptors", async () => {
+    await withFixture(async ({ root }) => {
+      symlinkSync("cycle", join(root, "cycle"));
+      expect(() => createFsDriver(new Map([["docs", join(root, "cycle")]]))).toThrow();
+      const driver = createFsDriver(new Map([["docs", root]]));
+      try {
+        expect(await driver({ op: "stat", export: "docs", path: "cycle" })).toMatchObject({
+          status: "refused", reason: "io_error",
+        });
+        expect(spawnSync("mkfifo", [join(root, "pipe")]).status).toBe(0);
+        expect(await driver({ op: "stat", export: "docs", path: "pipe" })).toMatchObject({
+          status: "completed", value: { kind: "other" },
+        });
+      } finally {
+        driver.close();
+      }
+    });
+  });
+
   test("rejects a schema-bypassing lexical escape at the driver boundary", async () => {
     await withFixture(async ({ root }) => {
       const fsOp = createFsDriver(new Map([["docs", root]]));
