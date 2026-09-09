@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788938511912,
+  "lastUpdate": 1788939030319,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -68657,6 +68657,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 960062,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85efb3d0aa7bf4556fe247f4b8354348cc4ae66a",
+          "message": "fix(quality): clear kernel-lane ratchet debt from the Quality-skip window (#1018) (#1021)\n\n* fix(quality): type the llm providerOptions boundary, split runResolvedText, consume LlmPort (#1018)\n\n- providerOptions is PlainObject at the agent config, llm run and app\n  boundaries: JSON-shaped provider namespaces, no unknown reach.\n- runResolvedText splits into textCapture, optionalRunFields, textOutcome,\n  executedText and admittedTextRun; every branch is exercised (continue,\n  missing attempt authority, refused operation, malformed executed value).\n- process-entry names the completion port as LlmPort where it is composed.\n- monitor destructures the source kind without an unused-prefix binding.\n\n* fix(quality): JSON-typed tool arguments, flat session-history fold, inspect helpers (#1018)\n\n- Tool.Call/Tool.State input is PlainObjectSchema: the model's arguments are\n  one JSON object, parsed where provider stream bytes become a fact\n  (llm tool-events) instead of cast to Record<string, unknown>.\n- foldSessionHistory is a flat loop over pure helpers (opensTurn,\n  deliveredPrompt, assistantSnapshot, upsertMessage, compactionProjection,\n  toolSettlement, settleToolParts, cancelOpenToolParts); same fold.\n- inspect: parentOf lifts the parent lookup out of turnOf, recordedOutcome\n  splits outcomeOf, texts replaces the isText predicate.\n- PlainObjectSchema is a transform over the persisted PlainValue profile;\n  its rejection path is covered.\n\n* fix(quality): typed endpoint failures, flat filesystem helpers, matcher-free codemode assertions (#1018)\n\n- fileOperation/eval catch typed rejections (Error) and translate through\n  fileRefusal / cellOperation; no catch-bound unknown in tool code.\n- filesystem() delegates to remoteHost, remoteRead, remoteList and nodeKind;\n  every helper stays at cyclomatic <= 4 with the same refusals.\n- codemode consumer test reads CodemodeError data through codemodeFailure\n  instead of expect.objectContaining/any; rlm completion test asserts the\n  output text directly. New eval-tool-failure test covers the rethrow path.\n\n* fix(quality): typed assertions in provision/rlm/codemode tests (#1018)\n\n* fix(quality): recordedRoutingDecision reads persisted bytes through the plain-object profile (#1018)\n\n* fix(quality): daemon wire handlers per method, cover cancel/duplicate/tool relay (#1018)\n\n* test(agent): prove pre-attempt compaction and context admission refusal (#1018)\n\n* fix(quality): alarmFired/alarmPrompt builders shared by sqlite and memory L0 adapters (#1018)\n\n* test(agent): share answerThenCompact, denyWritePost and bounded helpers across suites (#1018)\n\n* test(agent): share approveWriteRow, nth, seedLeasedResident, receiveOutbound fixtures (#1018)\n\n* test: share ownerStart ingress fixture, use Promise.withResolvers over local deferred (#1018)\n\n* test(ledger): declarative alarm-control admission matrix (#1018)\n\n* test: relay/cancel through the real machine host; no renamed destructure in lifecycle seed (#1018)\n\n* test(agent): suite-local bounded wrappers keep call sites, shared seedPolicy helper (#1018)\n\n* test: boundedBy, pendingTurn and attachKernel fixtures remove residual clones (#1018)\n\n* test(agent): runChatAttempts and stringQueryTool fixtures replace the last clone groups (#1018)\n\n* test(ledger): alarm-control snapshot carries the fence (#1018)\n\n* fix(quality): keep protocol barrel line and plain destructure off the literal-zero type target (#1018)",
+          "timestamp": "2026-09-09T16:29:21+09:00",
+          "tree_id": "cc7a7a2dd2ac43beec070bcc2586dab5cd4e31d3",
+          "url": "https://github.com/INONONO66/openomni/commit/85efb3d0aa7bf4556fe247f4b8354348cc4ae66a"
+        },
+        "date": 1788939028926,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 851,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 5473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 2951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1310960,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 335691,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6671399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 141,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1140,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 668,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 494575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 180939,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 918769,
             "unit": "ns/op"
           }
         ]
