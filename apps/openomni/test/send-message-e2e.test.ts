@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { ownerStart } from "./helpers/owner-start";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -121,18 +122,7 @@ test("a child session terminal commits exactly one parent reply with the origina
       },
     },
   });
-  await app.gateway.ingest(
-    { kind: "external", surface: "ws", externalId: "owner" },
-    {
-      eventId: "initial",
-      surface: "ws",
-      channelId: "owner",
-      addressees: [],
-      dm: true,
-      payload: {},
-      render: "start",
-    },
-  );
+  await ownerStart(app, "initial");
   expect(await completed).toEqual({ ok: true });
   const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
   if (child?.parentId === null || child?.parentId === undefined)

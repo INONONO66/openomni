@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { ownerStart } from "./helpers/owner-start";
 import { Bus } from "@openomni/agent";
 import { ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway, SessionTransition } from "@openomni/protocol";
@@ -87,18 +88,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
         },
       },
     });
-    await app.gateway.ingest(
-      { kind: "external", surface: "ws", externalId: "owner" },
-      {
-        eventId: "initial",
-        surface: "ws",
-        channelId: "owner",
-        addressees: [],
-        dm: true,
-        payload: {},
-        render: "start",
-      },
-    );
+    await ownerStart(app, "initial");
     if (kind === "interrupted") {
       const childId = await entered.promise;
       const handle = app.sessions.get(childId);

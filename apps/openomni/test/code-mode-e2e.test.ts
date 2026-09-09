@@ -402,14 +402,6 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
 
 const CELL_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => {
-    resolve = yes;
-  });
-  return { promise, resolve };
-}
-
 /**
  * A real host+daemon pair whose cells go through the production eval
  * executor, with the catalog's ports swapped for fakes — the same seam
@@ -475,8 +467,8 @@ test("cells from different sessions never share interpreter state", async () => 
  * so the one-second `timeout` is exactly what makes run answer `running`.
  */
 test("eval run answers running after its wait; peek shows the output so far; stop interrupts once", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
   let calls = 0;
   const { run, execute } = await startCellHarness({
     llm: async () => {
@@ -508,8 +500,8 @@ test("eval run answers running after its wait; peek shows the output so far; sto
 }, 40_000);
 
 test("eval peek and stop racing on one cell: exactly one is answered, the other finds the id spent", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
   const { run, execute } = await startCellHarness({
     llm: async () => {
       entered.resolve();

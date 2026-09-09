@@ -10,20 +10,13 @@ const silent = {
     return;
   },
 };
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => {
-    resolve = yes;
-  });
-  return { promise, resolve };
-}
 /**
  * A cell tool that parks its caller: `entered` settles once a cell is inside the
  * tool, `release` lets the tool answer. `onHold` observes each entry.
  */
 function holdGate(onHold: () => void = () => undefined) {
-  const entered = deferred<void>();
-  const release = deferred<void>();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
   const tools: Parameters<typeof createCodemode>[0] = {
     tools: () => async () => {
       onHold();
