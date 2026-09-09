@@ -3,6 +3,7 @@ import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
 import type { SessionRuntime } from "../../src/session-contract";
 import type { SessionTransition } from "@openomni/protocol";
+import { bounded } from "./bounded";
 
 export function requestLedger(
   input: {
@@ -126,14 +127,4 @@ export function requestLedger(
     entropy: () => crypto.randomUUID(),
     clock,
   };
-}
-
-export function bounded<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("request event deadline")), 3000);
-    }),
-  ]).finally(() => clearTimeout(timer));
 }
