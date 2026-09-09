@@ -75,7 +75,7 @@ const CUSTOM_LOADERS = new Map<string, () => CustomLoaderResult>([
     "openai",
     () => ({
       getModel(sdk: ProviderSDK, modelID: string) {
-        if (!isOpenAIProvider(sdk)) {
+        if (!("responses" in sdk)) {
           throw new Error("OpenAI responses model loader requires responses support");
         }
         return sdk.responses(modelID);
@@ -220,7 +220,7 @@ function resolveLanguageModel(
   auth: Auth.Info,
   custom: CustomLoaderResult | undefined,
 ): ResolvedLanguageModel {
-  if (providerID === "openai" && auth.type === "proxy" && isOpenAIProvider(sdk)) {
+  if (providerID === "openai" && auth.type === "proxy" && "responses" in sdk) {
     return sdk.chat(modelID);
   }
   if (custom?.getModel) {
@@ -229,6 +229,3 @@ function resolveLanguageModel(
   return sdk.languageModel(modelID);
 }
 
-function isOpenAIProvider(sdk: ProviderSDK): sdk is OpenAIProvider {
-  return "responses" in sdk;
-}

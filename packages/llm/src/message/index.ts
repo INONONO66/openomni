@@ -92,10 +92,6 @@ function buildToolResult(result: Message.ToolPart): ToolMessage {
 
 type AssistantWithParts = { info: Message.AssistantMessage; parts: Message.Part[] };
 
-function isAssistantMessage(msg: Message.WithParts): msg is AssistantWithParts {
-  return msg.info.role === "assistant";
-}
-
 function buildAssistantMessage(msg: AssistantWithParts, model: Provider.Model): SDKMessage[] {
   if (msg.info.finish === "error") return [];
   const resendSignature = msg.info.providerID === model.providerID && msg.info.modelID === model.id;
@@ -142,13 +138,12 @@ function assembleAssistantMessages(
 function messageToSDK(msg: Message.WithParts, model: Provider.Model): SDKMessage[] {
   if (msg.parts.length === 0) return [];
   if (msg.info.role === "user") {
-    const content = msg.parts
-      .filter((p): p is Message.TextPart => p.type === "text")
-      .map((p) => p.text)
-      .join("\n");
+    const content = msg.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
     return content.length > 0 ? [{ role: "user", content }] : [];
   }
-  if (isAssistantMessage(msg)) return buildAssistantMessage(msg, model);
+  if (msg.info.role === "assistant") {
+    return buildAssistantMessage({ info: msg.info, parts: msg.parts }, model);
+  }
   return [];
 }
 

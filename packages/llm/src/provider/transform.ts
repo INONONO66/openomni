@@ -42,7 +42,7 @@ export namespace ProviderTransform {
         if (filtered.length === 0) return undefined;
         return buildMessageWithContent(msg, filtered);
       })
-      .filter((msg): msg is SDKMessage => msg !== undefined && msg.content !== "");
+      .flatMap((msg) => (msg === undefined || msg.content === "" ? [] : [msg]));
 
     if (modelId.includes("claude")) {
       result = result.map((msg) => {
@@ -144,27 +144,42 @@ export namespace ProviderTransform {
     if (msg.role === "assistant") {
       return {
         ...msg,
-        content: content.filter(isAssistantContentPart),
+        content: content.flatMap((part) => {
+          const assistantPart = assistantContentPart(part);
+          return assistantPart === undefined ? [] : [assistantPart];
+        }),
       };
     }
     return {
       ...msg,
-      content: content.filter(isToolContentPart),
+      content: content.flatMap((part) => {
+        const toolPart = toolContentPart(part);
+        return toolPart === undefined ? [] : [toolPart];
+      }),
     };
   }
 
-  function isAssistantContentPart(part: NormalizableContentPart): part is AssistantContentPart {
-    return (
-      part.type === "text" ||
-      part.type === "file" ||
-      part.type === "reasoning" ||
-      part.type === "tool-call" ||
-      part.type === "tool-result" ||
-      part.type === "tool-approval-request"
-    );
+  function assistantContentPart(part: NormalizableContentPart): AssistantContentPart | undefined {
+    switch (part.type) {
+      case "text":
+      case "file":
+      case "reasoning":
+      case "tool-call":
+      case "tool-result":
+      case "tool-approval-request":
+        return part;
+      default:
+        return undefined;
+    }
   }
 
-  function isToolContentPart(part: NormalizableContentPart): part is ToolContentPart {
-    return part.type === "tool-result" || part.type === "tool-approval-response";
+  function toolContentPart(part: NormalizableContentPart): ToolContentPart | undefined {
+    switch (part.type) {
+      case "tool-result":
+      case "tool-approval-response":
+        return part;
+      default:
+        return undefined;
+    }
   }
 }
