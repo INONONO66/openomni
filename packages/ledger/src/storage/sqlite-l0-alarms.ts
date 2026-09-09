@@ -5,13 +5,8 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import {
-  alarmAppend,
-  alarmFired,
-  alarmOccurrence,
-  alarmPrompt,
-  inboxAppend,
-} from "./l0-action-builders.js";
+import { alarmAppend, alarmFired, alarmPrompt, inboxAppend } from "./l0-action-builders.js";
+import { alarmOccurrence } from "./alarm-occurrence";
 import { AlarmSqlRow, decodeAlarm } from "./sqlite-l0-rows";
 import { selectSession, appendAction, insertInbox } from "./sqlite-l0-write";
 import { publishCommitted } from "./sqlite-l0-observation";

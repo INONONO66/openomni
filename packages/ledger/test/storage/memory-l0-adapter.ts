@@ -13,10 +13,10 @@ import {
 import {
   alarmAppend,
   alarmFired,
-  alarmOccurrence,
   alarmPrompt,
   inboxAppend,
 } from "../../src/storage/l0-action-builders.js";
+import { alarmOccurrence } from "../../src/storage/alarm-occurrence";
 
 export interface MemoryL0Adapter {
   transaction<T>(operation: () => T): T;

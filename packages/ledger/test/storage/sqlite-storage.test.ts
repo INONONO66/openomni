@@ -408,20 +408,6 @@ describe("SqliteStorageAdapter", () => {
     });
   });
 
-  describe("clear", () => {
-    test("clears all data from all tables", () => {
-      seedHistoricalRows(storageDb(adapter));
-      adapter.surfaceKey?.claim("channel:1", "s1");
-      adapter.clear();
-
-      expect(adapter.sessions.list()).toEqual([]);
-      expect(storageDb(adapter).query("SELECT * FROM session").all()).toEqual([]);
-      expect(storageDb(adapter).query("SELECT * FROM message").all()).toEqual([]);
-      expect(storageDb(adapter).query("SELECT * FROM part").all()).toEqual([]);
-      expect(adapter.surfaceKey?.lookup("channel:1")).toBeUndefined();
-    });
-  });
-
   describe("close", () => {
     test("close() does not throw", () => {
       expect(() => adapter.close()).not.toThrow();

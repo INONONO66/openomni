@@ -6,7 +6,7 @@ import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter"
 import { createSqliteReplyGrantAdapter } from "./sqlite-reply-grant-adapter";
 import { createSqliteProvisioningAdapter } from "./sqlite-provisioning-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
-import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
+import { initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
 import { createSqliteL0Adapters } from "./sqlite-l0-adapter";
 import type { ObservationSink } from "@openomni/protocol";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
@@ -79,10 +79,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   /** Test-only seam for schema/retention characterization; never used by product stores. */
   testDatabase(): Database {
     return this.db;
-  }
-
-  clear(): void {
-    clearSqliteStorage(this.db);
   }
 
   transaction<T>(fn: () => T): T {

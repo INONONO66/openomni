@@ -50,26 +50,6 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: REQUEST_MIGRATION },
 ];
 
-const CLEAR_ORDER = [
-  "reply_grant",
-  "secret",
-  "channel_instance",
-  "person",
-  "ledger_event",
-  "ledger_head",
-  "event_chain",
-  "channel_grant",
-  "blacklist",
-  "actor_endpoint",
-  "actor_identity",
-  "egress_debit",
-
-  "surface_key",
-  "part",
-  "message",
-  "session",
-] as const;
-
 export function preflightSqliteDatabase(db: Database) {
   return preflight967(db, ORDERED_MIGRATIONS);
 }
@@ -104,13 +84,6 @@ export function initializeSqliteDatabase(
           ORDERED_MIGRATIONS.findIndex((migration) => migration.name === REPLY_GRANT_MIGRATION) + 1,
         );
   Migration.applyOrdered(db, MIGRATION_DIR, migrations, prepare967);
-}
-
-/** @internal Test-only fixture reset (Adapter.clear) — no production caller. */
-export function clearSqliteStorage(db: Database): void {
-  for (const table of CLEAR_ORDER) {
-    db.query(`DELETE FROM ${table}`).run();
-  }
 }
 
 function applyConnectionPragmas(db: Database, synchronous: "FULL" | "NORMAL"): void {
