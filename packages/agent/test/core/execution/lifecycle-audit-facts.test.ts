@@ -4,7 +4,7 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
-import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
+import { mockLlm } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 function measuredMessage(outputTokens: number): Message.WithParts {
@@ -32,14 +32,10 @@ describe("canonical lifecycle audit facts", () => {
       await runTestAgent(runInput([{ role: "user", content: "continue once" }]), {
         events: Bus,
         model: { provider: "test", id: "model" },
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async (_input, sink) => {
-            calls += 1;
-            sink.onMessage(measuredMessage(calls === 1 ? 3 : 4));
-            return calls === 1 ? { type: "continue" } : { type: "stop" };
-          },
+        llm: mockLlm(async (_input, sink) => {
+          calls += 1;
+          sink.onMessage(measuredMessage(calls === 1 ? 3 : 4));
+          return calls === 1 ? { type: "continue" } : { type: "stop" };
         }),
       });
       await done.promise;

@@ -7,9 +7,8 @@ import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
 import {
   completeModel,
-  createMockLlmConfig,
+  mockLlm,
   createStopOutcome,
-  mockProviderData,
   mockProviderModel,
   type MockLlmFn,
 } from "./helpers/mock-llm";
@@ -20,11 +19,7 @@ function agent(run: MockLlmFn) {
   return createTestAgent({
     events: Bus,
     model,
-    llm: createMockLlmConfig({
-      getModels: async () => mockProviderData,
-      fromModelsDevModel: () => mockProviderModel,
-      run,
-    }),
+    llm: mockLlm(run),
   });
 }
 
@@ -62,13 +57,9 @@ describe("ChatAgent public run contract", () => {
       transport,
       providerOptions: { temperature: 0 },
       toolChoice: "none",
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (input, sink) => {
-          observed = input;
-          return completeModel(input, sink);
-        },
+      llm: mockLlm(async (input, sink) => {
+        observed = input;
+        return completeModel(input, sink);
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(observed).toMatchObject({
@@ -88,13 +79,9 @@ describe("ChatAgent public run contract", () => {
       onStepFinish: (step) => {
         seen.push(step);
       },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (_input, sink) => {
-          sink.onMessage(createAssistantMessage("done", "", "session"));
-          return createStopOutcome();
-        },
+      llm: mockLlm(async (_input, sink) => {
+        sink.onMessage(createAssistantMessage("done", "", "session"));
+        return createStopOutcome();
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(seen).toEqual(result.steps);
@@ -174,13 +161,9 @@ describe("ChatAgent public run contract", () => {
           requires: [],
         },
       ],
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => {
-          calls += 1;
-          return createStopOutcome();
-        },
+      llm: mockLlm(async () => {
+        calls += 1;
+        return createStopOutcome();
       }),
     });
     try {
@@ -220,12 +203,8 @@ describe("ChatAgent provider boundary failures", () => {
       events: Bus,
       model,
       signal: controller.signal,
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => {
-          return outcome as never;
-        },
+      llm: mockLlm(async () => {
+        return outcome as never;
       }),
     });
 
@@ -298,13 +277,9 @@ describe("ChatAgent loop controls", () => {
       events: Bus,
       model,
       budget: { maxToolCalls: 7 },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (input, sink) => {
-          maxSteps = input.maxSteps;
-          return completeModel(input, sink);
-        },
+      llm: mockLlm(async (input, sink) => {
+        maxSteps = input.maxSteps;
+        return completeModel(input, sink);
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(maxSteps).toBe(7);
@@ -319,13 +294,9 @@ describe("ChatAgent loop controls", () => {
         events: Bus,
         model,
         signal: controller.signal,
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => {
-            calls += 1;
-            return createStopOutcome();
-          },
+        llm: mockLlm(async () => {
+          calls += 1;
+          return createStopOutcome();
         }),
       }).run(runInput([{ role: "user", content: "hello" }])),
     ).rejects.toThrow("aborted");

@@ -5,13 +5,7 @@ import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { createAssistantMessage } from "../../src/core/message-factory";
 import { Bus } from "../../src/index";
-import {
-  completeModel,
-  createMockLlmConfig,
-  createStopOutcome,
-  mockProviderData,
-  mockProviderModel,
-} from "../helpers/mock-llm";
+import { completeModel, mockLlm, createStopOutcome } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 
 function stepSnapshot(id: string, text: string, reason: "tool-calls" | "stop"): Message.WithParts {
@@ -45,18 +39,14 @@ describe("mid-turn steering", () => {
       events: Bus,
       model,
       steeringPending: () => pending,
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (input, sink) => {
-          calls += 1;
-          yielded.push(input.shouldYield?.());
-          if (calls === 1) {
-            pending = false;
-            sink.onMessage(stepSnapshot("first", "working", "tool-calls"));
-          } else sink.onMessage(stepSnapshot("second", "done", "stop"));
-          return createStopOutcome();
-        },
+      llm: mockLlm(async (input, sink) => {
+        calls += 1;
+        yielded.push(input.shouldYield?.());
+        if (calls === 1) {
+          pending = false;
+          sink.onMessage(stepSnapshot("first", "working", "tool-calls"));
+        } else sink.onMessage(stepSnapshot("second", "done", "stop"));
+        return createStopOutcome();
       }),
     }).run(runInput([{ role: "user", content: "start" }]));
     expect(result.finishReason).toBe("stop");
@@ -70,13 +60,9 @@ describe("mid-turn steering", () => {
     await createTestAgent({
       events: Bus,
       model,
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (input, sink) => {
-          callback = input.shouldYield;
-          return completeModel(input, sink);
-        },
+      llm: mockLlm(async (input, sink) => {
+        callback = input.shouldYield;
+        return completeModel(input, sink);
       }),
     }).run(runInput([{ role: "user", content: "start" }]));
     expect(callback).toBeUndefined();
@@ -95,15 +81,11 @@ describe("mid-turn steering", () => {
       const running = createTestAgent({
         events: Bus,
         model,
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async (input, sink) => {
-            calls += 1;
-            return calls === 1
-              ? { type: "error", error: providerFailure("transient blip") }
-              : completeModel(input, sink);
-          },
+        llm: mockLlm(async (input, sink) => {
+          calls += 1;
+          return calls === 1
+            ? { type: "error", error: providerFailure("transient blip") }
+            : completeModel(input, sink);
         }),
       }).run(runInput([{ role: "user", content: "start" }]));
       await retry.promise;

@@ -4,7 +4,7 @@ import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/test-agent";
 import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
-import { completeModel } from "../../helpers/mock-llm";
+import { completeModel, windowedLlm } from "../../helpers/mock-llm";
 import { assistantWithParts } from "../../helpers/messages";
 
 function assistant(reason: string, inputTokens = 900): Message.WithParts {
@@ -44,18 +44,10 @@ describe("window and steering yield", () => {
     await runTestAgent(runInput([{ role: "user", content: "go" }]), {
       events: collector(),
       model: { provider: "provider", id: "model" },
-      llm: {
-        resolveModel: async () => ({
-          id: "model",
-          name: "model",
-          providerID: "provider",
-          limit: { context: 1000, output: 100 },
-        }),
-        run: async (input, sink) => {
-          arms.push(input.yieldAtInputTokens);
-          return completeModel(input, sink);
-        },
-      },
+      llm: windowedLlm(async (input, sink) => {
+        arms.push(input.yieldAtInputTokens);
+        return completeModel(input, sink);
+      }),
     });
     expect(arms).toEqual([450]);
   });
@@ -66,21 +58,13 @@ describe("window and steering yield", () => {
     await runTestAgent(runInput([{ role: "user", content: "go" }]), {
       events: collector(),
       model: { provider: "provider", id: "model" },
-      llm: {
-        resolveModel: async () => ({
-          id: "model",
-          name: "model",
-          providerID: "provider",
-          limit: { context: 1000, output: 100 },
-        }),
-        run: async (input, sink: Sink) => {
-          calls += 1;
-          arms.push(input.yieldAtInputTokens);
-          if (calls !== 1) return completeModel(input, sink);
-          sink.onMessage(assistant("tool-calls"));
-          return { type: "stop" };
-        },
-      },
+      llm: windowedLlm(async (input, sink: Sink) => {
+        calls += 1;
+        arms.push(input.yieldAtInputTokens);
+        if (calls !== 1) return completeModel(input, sink);
+        sink.onMessage(assistant("tool-calls"));
+        return { type: "stop" };
+      }),
     });
     expect(arms).toEqual([450, undefined]);
   });
@@ -107,21 +91,13 @@ describe("window and steering yield", () => {
           speculate: false,
           onSummarize: async () => "window checkpoint",
         },
-        llm: {
-          resolveModel: async () => ({
-            id: "model",
-            name: "model",
-            providerID: "provider",
-            limit: { context: 1000, output: 100 },
-          }),
-          run: async (input, sink: Sink) => {
-            calls += 1;
-            seen.push(input.messages.length);
-            if (calls !== 1) return completeModel(input, sink);
-            sink.onMessage(assistant("tool-calls"));
-            return { type: "stop" };
-          },
-        },
+        llm: windowedLlm(async (input, sink: Sink) => {
+          calls += 1;
+          seen.push(input.messages.length);
+          if (calls !== 1) return completeModel(input, sink);
+          sink.onMessage(assistant("tool-calls"));
+          return { type: "stop" };
+        }),
       },
     );
     expect(seen[1]).toBeLessThan(seen[0] ?? 0);
@@ -161,18 +137,10 @@ describe("window and steering yield", () => {
             return "unused";
           },
         },
-        llm: {
-          resolveModel: async () => ({
-            id: "model",
-            name: "model",
-            providerID: "provider",
-            limit: { context: 100_000, output: 100 },
-          }),
-          run: async (_input, sink: Sink) => {
-            sink.onMessage(assistant("stop", 55_000));
-            return { type: "stop" };
-          },
-        },
+        llm: windowedLlm(async (_input, sink: Sink) => {
+          sink.onMessage(assistant("stop", 55_000));
+          return { type: "stop" };
+        }, 100_000),
       },
     );
     expect(calls).toBe(1);
@@ -185,20 +153,12 @@ describe("window and steering yield", () => {
       events: collector(),
       model: { provider: "provider", id: "model" },
       budget: { maxToolCalls: -1 },
-      llm: {
-        resolveModel: async () => ({
-          id: "model",
-          name: "model",
-          providerID: "provider",
-          limit: { context: 1000, output: 100 },
-        }),
-        run: async (input, sink: Sink) => {
-          calls += 1;
-          if (calls !== 1) return completeModel(input, sink);
-          sink.onMessage(assistantWithReasons(Array.from({ length: 30 }, () => "tool-calls")));
-          return { type: "stop" };
-        },
-      },
+      llm: windowedLlm(async (input, sink: Sink) => {
+        calls += 1;
+        if (calls !== 1) return completeModel(input, sink);
+        sink.onMessage(assistantWithReasons(Array.from({ length: 30 }, () => "tool-calls")));
+        return { type: "stop" };
+      }),
     });
     expect(calls).toBe(2);
     expect(result.finishReason).toBe("stop");
@@ -268,25 +228,17 @@ describe("window and steering yield", () => {
           speculate: false,
           onSummarize: async () => "must not run",
         },
-        llm: {
-          resolveModel: async () => ({
-            id: "model",
-            name: "model",
-            providerID: "provider",
-            limit: { context: 1000, output: 100 },
-          }),
-          run: async (input, sink: Sink) => {
-            calls += 1;
-            if (calls === 1) {
-              input.shouldYield?.();
-              pending = false;
-              sink.onMessage(assistant("tool-calls"));
-            } else {
-              sink.onMessage(assistant("stop", 100));
-            }
-            return { type: "stop" };
-          },
-        },
+        llm: windowedLlm(async (input, sink: Sink) => {
+          calls += 1;
+          if (calls === 1) {
+            input.shouldYield?.();
+            pending = false;
+            sink.onMessage(assistant("tool-calls"));
+          } else {
+            sink.onMessage(assistant("stop", 100));
+          }
+          return { type: "stop" };
+        }),
       },
     );
     expect(calls).toBe(2);

@@ -4,13 +4,7 @@ import { Operational } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
-import {
-  completeModel,
-  createMockLlmConfig,
-  createStopOutcome,
-  mockProviderData,
-  mockProviderModel,
-} from "../../helpers/mock-llm";
+import { completeModel, mockLlm, createStopOutcome } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -43,11 +37,7 @@ describe("one terminal record per started run", () => {
       const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: completeModel,
-        }),
+        llm: mockLlm(completeModel),
       });
       expect(result.finishReason).toBe("stop");
       expect(await terminal.promise).toMatchObject({
@@ -69,13 +59,9 @@ describe("one terminal record per started run", () => {
         events: Bus,
         model,
         budget: { maxTurns: 0 },
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => {
-            calls += 1;
-            return createStopOutcome();
-          },
+        llm: mockLlm(async () => {
+          calls += 1;
+          return createStopOutcome();
         }),
       }).catch((error: Error) => error);
       expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
@@ -106,14 +92,10 @@ describe("one terminal record per started run", () => {
       const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => ({
-            type: "error",
-            error: providerFailure("connection timeout", { statusCode: 408 }),
-          }),
-        }),
+        llm: mockLlm(async () => ({
+          type: "error",
+          error: providerFailure("connection timeout", { statusCode: 408 }),
+        })),
       });
       await first.promise;
       jest.advanceTimersByTime(1_000);
@@ -148,14 +130,10 @@ describe("one terminal record per started run", () => {
         events: Bus,
         model,
         signal: controller.signal,
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => ({
-            type: "error",
-            error: providerFailure("connection timeout", { statusCode: 408 }),
-          }),
-        }),
+        llm: mockLlm(async () => ({
+          type: "error",
+          error: providerFailure("connection timeout", { statusCode: 408 }),
+        })),
       });
       await retry.promise;
       controller.abort();
@@ -185,11 +163,7 @@ describe("one terminal record per started run", () => {
           events: Bus,
           model,
           signal: controller.signal,
-          llm: createMockLlmConfig({
-            getModels: async () => mockProviderData,
-            fromModelsDevModel: () => mockProviderModel,
-            run: async () => createStopOutcome(),
-          }),
+          llm: mockLlm(async () => createStopOutcome()),
         }),
       ).rejects.toThrow("aborted");
       expect(retries).toEqual([]);

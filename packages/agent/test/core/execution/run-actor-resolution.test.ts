@@ -3,12 +3,7 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { Bus, newTraceId } from "../../../src/index";
 import { runTestAgent } from "../../helpers/test-agent";
 import type { RunTrace } from "../../../src/core/execution/state";
-import {
-  createMockLlmConfig,
-  completeModel,
-  mockProviderData,
-  mockProviderModel,
-} from "../../helpers/mock-llm";
+import { mockLlm, completeModel } from "../../helpers/mock-llm";
 
 // Actor attribution comes only from the validated trace.
 async function observedActorId(trace: RunTrace): Promise<string> {
@@ -27,11 +22,7 @@ async function observedActorId(trace: RunTrace): Promise<string> {
       {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: completeModel,
-        }),
+        llm: mockLlm(completeModel),
       },
     );
   } finally {

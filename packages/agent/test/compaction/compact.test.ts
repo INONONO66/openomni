@@ -2,7 +2,8 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "../../src/index";
-import { Compaction, type CompactionOptions } from "../../src/compaction/compact";
+import { Compaction } from "../../src/compaction/compact";
+import type { ResolvedCompactionOptions } from "../../src/compaction/contract";
 import {
   estimateMessagesTokens,
   isIneffectiveCompaction,
@@ -41,7 +42,7 @@ function textsOf(messages: readonly Message.WithParts[]): string[] {
 }
 
 /** One threshold-triggered compaction over `messages` observed on the shared bus. */
-function compactThreshold(messages: Message.WithParts[], options: CompactionOptions) {
+function compactThreshold(messages: Message.WithParts[], options: ResolvedCompactionOptions) {
   return Compaction.compact(messages, options, { traceId: TEST_TRACE_ID, sessionId: "test" }, Bus, {
     trigger: "threshold",
   });

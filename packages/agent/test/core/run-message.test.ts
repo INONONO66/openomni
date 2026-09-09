@@ -3,24 +3,14 @@ import { createTestAgent } from "../helpers/test-agent";
 import { describe, expect, it } from "bun:test";
 import { createAssistantMessage } from "../../src/core/message-factory";
 import { Bus } from "../../src/index";
-import {
-  createMockLlmConfig,
-  createStopOutcome,
-  mockProviderData,
-  mockProviderModel,
-  type MockLlmFn,
-} from "../helpers/mock-llm";
+import { mockLlm, createStopOutcome, type MockLlmFn } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 
 function agent(run: MockLlmFn) {
   return createTestAgent({
     events: Bus,
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-    llm: createMockLlmConfig({
-      getModels: async () => mockProviderData,
-      fromModelsDevModel: () => mockProviderModel,
-      run,
-    }),
+    llm: mockLlm(run),
   });
 }
 
@@ -52,13 +42,9 @@ describe("run terminal message result contract", () => {
       events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       budget: { maxTurns: 0 },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => {
-          calls += 1;
-          return createStopOutcome();
-        },
+      llm: mockLlm(async () => {
+        calls += 1;
+        return createStopOutcome();
       }),
     });
     await expect(

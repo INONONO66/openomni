@@ -2,12 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
-import {
-  createMockLlmConfig,
-  createStopOutcome,
-  mockProviderData,
-  mockProviderModel,
-} from "../../helpers/mock-llm";
+import { mockLlm, createStopOutcome } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 describe("run stop outcomes", () => {
@@ -15,13 +10,9 @@ describe("run stop outcomes", () => {
     const result = await runTestAgent(runInput([{ role: "user", content: "hello" }]), {
       events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (_input, sink) => {
-          sink.onMessage(createAssistantMessage("original", "", "session"));
-          return createStopOutcome();
-        },
+      llm: mockLlm(async (_input, sink) => {
+        sink.onMessage(createAssistantMessage("original", "", "session"));
+        return createStopOutcome();
       }),
     });
     expect(result.finishReason).toBe("stop");
@@ -38,18 +29,14 @@ describe("run stop outcomes", () => {
         steps.push(step.content);
       },
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (_input, sink) => {
-          calls += 1;
-          if (calls === 1) {
-            sink.onMessage(createAssistantMessage("first", "", "session"));
-            return { type: "continue" };
-          }
-          sink.onMessage(createAssistantMessage("", "", "session"));
-          return createStopOutcome();
-        },
+      llm: mockLlm(async (_input, sink) => {
+        calls += 1;
+        if (calls === 1) {
+          sink.onMessage(createAssistantMessage("first", "", "session"));
+          return { type: "continue" };
+        }
+        sink.onMessage(createAssistantMessage("", "", "session"));
+        return createStopOutcome();
       }),
     }).catch((error: Error) => error);
     expect(result).toMatchObject({ code: "agent_stop", reason: "exact_repeat" });

@@ -2,12 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
-import {
-  createMockLlmConfig,
-  completeModel,
-  mockProviderData,
-  mockProviderModel,
-} from "../../helpers/mock-llm";
+import { mockLlm, completeModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 describe("turn provenance", () => {
@@ -21,13 +16,9 @@ describe("turn provenance", () => {
       {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async (input, sink) => {
-            messages = [...input.messages];
-            return completeModel(input, sink);
-          },
+        llm: mockLlm(async (input, sink) => {
+          messages = [...input.messages];
+          return completeModel(input, sink);
         }),
       },
     );

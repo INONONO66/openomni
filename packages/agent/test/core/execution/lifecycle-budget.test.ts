@@ -4,12 +4,7 @@ import { runTestAgent } from "../../helpers/test-agent";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { Bus } from "../../../src/index";
 import { collector } from "../../helpers/observation-collector";
-import {
-  createMockLlmConfig,
-  createStopOutcome,
-  mockProviderData,
-  mockProviderModel,
-} from "../../helpers/mock-llm";
+import { mockLlm, createStopOutcome } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 describe("run budget terminal facts", () => {
@@ -52,45 +47,41 @@ describe("run budget terminal facts", () => {
           },
         ],
         toolExecutor,
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async (input, sink) => {
-            modelCalls += 1;
-            input.shouldYield?.();
-            const call = { id: `call-${modelCalls}`, tool: "lookup", input: {} };
-            const message = createAssistantMessage("", "", "session");
-            sink.onMessage({
-              ...message,
-              parts: [
-                ...message.parts,
-                {
-                  id: `tool-${modelCalls}`,
-                  sessionID: "session",
-                  messageID: message.info.id,
-                  type: "tool",
-                  callID: call.id,
-                  tool: call.tool,
-                  state: { status: "pending", input: call.input },
+        llm: mockLlm(async (input, sink) => {
+          modelCalls += 1;
+          input.shouldYield?.();
+          const call = { id: `call-${modelCalls}`, tool: "lookup", input: {} };
+          const message = createAssistantMessage("", "", "session");
+          sink.onMessage({
+            ...message,
+            parts: [
+              ...message.parts,
+              {
+                id: `tool-${modelCalls}`,
+                sessionID: "session",
+                messageID: message.info.id,
+                type: "tool",
+                callID: call.id,
+                tool: call.tool,
+                state: { status: "pending", input: call.input },
+              },
+              {
+                id: `step-${modelCalls}`,
+                sessionID: "session",
+                messageID: message.info.id,
+                type: "step-finish",
+                reason: "tool-calls",
+                cost: 0,
+                tokens: {
+                  input: 0,
+                  output: 0,
+                  reasoning: 0,
+                  cache: { read: 0, write: 0 },
                 },
-                {
-                  id: `step-${modelCalls}`,
-                  sessionID: "session",
-                  messageID: message.info.id,
-                  type: "step-finish",
-                  reason: "tool-calls",
-                  cost: 0,
-                  tokens: {
-                    input: 0,
-                    output: 0,
-                    reasoning: 0,
-                    cache: { read: 0, write: 0 },
-                  },
-                },
-              ],
-            });
-            return createStopOutcome();
-          },
+              },
+            ],
+          });
+          return createStopOutcome();
         }),
       }).catch((error: Error) => error);
 
@@ -114,13 +105,9 @@ describe("run budget terminal facts", () => {
       events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       budget: { maxTurns: 0 },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => {
-          calls += 1;
-          return createStopOutcome();
-        },
+      llm: mockLlm(async () => {
+        calls += 1;
+        return createStopOutcome();
       }),
     }).catch((error: Error) => error);
     expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
@@ -137,13 +124,9 @@ describe("run budget terminal facts", () => {
         events,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         budget: { maxWallTimeMs: 0 },
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => {
-            calls += 1;
-            return createStopOutcome();
-          },
+        llm: mockLlm(async () => {
+          calls += 1;
+          return createStopOutcome();
         }),
       }).catch((error: Error) => error);
 
@@ -169,11 +152,7 @@ describe("run budget terminal facts", () => {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         budget: { maxTurns: 0 },
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => createStopOutcome(),
-        }),
+        llm: mockLlm(async () => createStopOutcome()),
       }).catch((error: Error) => error);
       expect(await warning.promise).toMatchObject({
         traceId: input.traceContext.traceId,

@@ -99,3 +99,25 @@ export function createMockLlmConfig(options: {
     },
   };
 }
+
+/** An llm config whose resolved "provider/model" advertises a `context`-token window. */
+export function windowedLlm(run: MockLlmFn, context = 1000): ChatAgentConfig["llm"] {
+  return {
+    resolveModel: async () => ({
+      id: "model",
+      name: "model",
+      providerID: "provider",
+      limit: { context, output: 100 },
+    }),
+    run,
+  };
+}
+
+/** The catalog-resolved anthropic haiku mock with `run` as its provider behavior. */
+export function mockLlm(run: MockLlmFn): NonNullable<ChatAgentConfig["llm"]> {
+  return createMockLlmConfig({
+    getModels: async () => mockProviderData,
+    fromModelsDevModel: () => mockProviderModel,
+    run,
+  });
+}

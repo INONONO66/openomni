@@ -8,6 +8,7 @@ import {
   session,
   SessionCommitError,
   type SessionCreateOptions,
+  type SessionHandle,
   type SessionRunner,
   type SessionRunnerInput,
   type SessionRuntime,
