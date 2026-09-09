@@ -95,3 +95,50 @@ export function alarmOccurrence(row: Alarm.Row, input: Alarm.Fire): AlarmOccurre
     };
   return { ...identity, status: "armed", terminal: false, content: input.content };
 }
+
+/** The `alarm.fired`/`alarm.paused` action one admitted occurrence commits under its alarm. */
+export function alarmFired(
+  row: Alarm.Row,
+  input: Alarm.Fire,
+  occurrence: AlarmOccurrence,
+): LedgerAction.Append {
+  return {
+    id: occurrence.actionId,
+    parentId: row.id,
+    sessionId: row.sessionId,
+    kind: occurrence.status === "paused" ? "alarm.paused" : "alarm.fired",
+    intent: {
+      encodingVersion: 1,
+      value: {
+        alarmId: row.id,
+        epoch: row.epoch,
+        fence: row.fence,
+        sourceKey: input.sourceKey,
+        inboxId: occurrence.inboxId,
+      },
+    },
+    effect: {
+      encodingVersion: 1,
+      value: { status: occurrence.status, content: occurrence.content },
+    },
+    irreversible: true,
+    ts: input.at,
+  };
+}
+
+/** The prompt the occurrence leaves in the session inbox, parented on its fired action. */
+export function alarmPrompt(
+  row: Alarm.Row,
+  input: Alarm.Fire,
+  occurrence: AlarmOccurrence,
+): Inbox.Commit {
+  return {
+    id: occurrence.inboxId,
+    sessionId: row.sessionId,
+    kind: "prompt",
+    content: occurrence.content,
+    origin: { encodingVersion: 1, value: row.id },
+    createdAt: input.at,
+    parentActionId: occurrence.actionId,
+  };
+}

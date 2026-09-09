@@ -10,7 +10,13 @@ import {
   SessionTurn,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { alarmAppend, alarmOccurrence, inboxAppend } from "../../src/storage/l0-action-builders.js";
+import {
+  alarmAppend,
+  alarmFired,
+  alarmOccurrence,
+  alarmPrompt,
+  inboxAppend,
+} from "../../src/storage/l0-action-builders.js";
 
 export interface MemoryL0Adapter {
   transaction<T>(operation: () => T): T;
@@ -412,42 +418,16 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           if (row === undefined || occurrence === undefined) return undefined;
           const session = sessionRows.get(row.sessionId);
           if (session === undefined) return undefined;
-          const { status, content, terminal } = occurrence;
+          const { status, terminal } = occurrence;
           const fired = appendMemoryAction(
             sessionRows,
             actionRows,
             alarmRows,
-            {
-              id: occurrence.actionId,
-              parentId: row.id,
-              sessionId: row.sessionId,
-              kind: status === "paused" ? "alarm.paused" : "alarm.fired",
-              intent: {
-                encodingVersion: 1,
-                value: {
-                  alarmId: row.id,
-                  epoch: row.epoch,
-                  fence: row.fence,
-                  sourceKey: input.sourceKey,
-                  inboxId: occurrence.inboxId,
-                },
-              },
-              effect: { encodingVersion: 1, value: { status, content } },
-              irreversible: true,
-              ts: input.at,
-            },
+            alarmFired(row, input, occurrence),
             session.revision,
           );
           if (fired === undefined) return undefined;
-          const pending: Inbox.Commit = {
-            id: occurrence.inboxId,
-            sessionId: row.sessionId,
-            kind: "prompt",
-            content,
-            origin: { encodingVersion: 1, value: row.id },
-            createdAt: input.at,
-            parentActionId: occurrence.actionId,
-          };
+          const pending = alarmPrompt(row, input, occurrence);
           const prompt = appendMemoryAction(
             sessionRows,
             actionRows,
@@ -460,7 +440,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
             id: pending.id,
             sessionId: pending.sessionId,
             kind: pending.kind,
-            content,
+            content: pending.content,
             origin: pending.origin,
             createdAt: pending.createdAt,
             status: "pending",
