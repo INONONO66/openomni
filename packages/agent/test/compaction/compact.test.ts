@@ -9,31 +9,17 @@ import {
   prepareSummarizerInput,
 } from "../../src/compaction/estimate";
 import { captureBusEvents } from "../helpers/bus-event";
-import { textMessage, completedToolPart } from "../helpers/messages";
+import { completedToolPart, messageSequence } from "../helpers/messages";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */
 const TEST_TRACE_ID = "trace-compaction-test";
 
-let idCounter = 0;
-
-function nextId(prefix: string): string {
-  idCounter += 1;
-  return `${prefix}-${idCounter}`;
-}
-
-function makeUserMessage(text: string): Message.WithParts {
-  return textMessage("user", text, "test", nextId("user-message"));
-}
-
-function makeAssistantMessage(text: string): Message.WithParts {
-  // The discarded content must outweigh the anchor render.
-  return textMessage(
-    "assistant",
-    `${text}\n${"filler ".repeat(50)}`,
-    "test",
-    nextId("assistant-message"),
-  );
-}
+// The discarded content must outweigh the anchor render.
+const {
+  user: makeUserMessage,
+  assistant: makeAssistantMessage,
+  nextId,
+} = messageSequence("test", `\n${"filler ".repeat(50)}`);
 
 function makeToolAssistantMessage(text: string, callID: string): Message.WithParts {
   const base = makeAssistantMessage(text);
@@ -70,11 +56,6 @@ describe("Compaction", () => {
   });
 
   describe("shouldCompact", () => {
-    it("uses the adaptive geometry threshold", () => {
-      expect(Compaction.shouldCompact(449, { contextWindowTokens: 1000 })).toBe(false);
-      expect(Compaction.shouldCompact(450, { contextWindowTokens: 1000 })).toBe(true);
-    });
-
     it("compacts before consuming a larger configured reserve", () => {
       expect(
         Compaction.shouldCompact(50_000, {

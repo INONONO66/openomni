@@ -5,27 +5,17 @@ import { runTestAgent } from "../../helpers/test-agent";
 import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
 import { completeModel } from "../../helpers/mock-llm";
+import { assistantWithParts } from "../../helpers/messages";
 
 function assistant(reason: string, inputTokens = 900): Message.WithParts {
   return assistantWithReasons([reason], inputTokens);
 }
 
 function assistantWithReasons(reasons: readonly string[], inputTokens = 900): Message.WithParts {
-  return {
-    info: {
-      id: "yield-assistant",
-      sessionID: "yield-session",
-      role: "assistant",
-      time: { created: 1 },
-      parentID: "",
-      modelID: "model",
-      providerID: "provider",
-      agent: "test",
-      path: { cwd: "/", root: "/" },
-      cost: 0,
-      tokens: { input: inputTokens, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
+  return assistantWithParts(
+    "yield-assistant",
+    "yield-session",
+    [
       {
         id: "yield-text",
         sessionID: "yield-session",
@@ -43,7 +33,9 @@ function assistantWithReasons(reasons: readonly string[], inputTokens = 900): Me
         tokens: { input: inputTokens, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
       })),
     ],
-  };
+    inputTokens,
+    1,
+  );
 }
 
 describe("window and steering yield", () => {

@@ -1,24 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { measuredContextTokens } from "../../src/compaction/measure";
+import { assistantWithParts } from "../helpers/messages";
 
 function message(parts: Message.Part[], totalInput: number): Message.WithParts {
-  return {
-    info: {
-      id: "measure-message",
-      sessionID: "measure-session",
-      role: "assistant",
-      time: { created: 1 },
-      parentID: "",
-      modelID: "model",
-      providerID: "provider",
-      agent: "test",
-      path: { cwd: "/", root: "/" },
-      cost: 0,
-      tokens: { input: totalInput, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts,
-  };
+  return assistantWithParts("measure-message", "measure-session", parts, totalInput);
 }
 
 function step(input: number, read: number, write: number): Message.StepFinishPart {

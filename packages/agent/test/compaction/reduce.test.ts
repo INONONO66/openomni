@@ -3,22 +3,13 @@ import type { Message } from "@openomni/protocol";
 import { collector } from "../helpers/observation-collector";
 import { Compaction } from "../../src/compaction/compact";
 import { elideToolOutputs } from "../../src/compaction/reduce";
-import { textMessage, completedToolPart } from "../helpers/messages";
+import { completedToolPart, messageSequence } from "../helpers/messages";
 import { RunEvents } from "../../src/core/execution/events";
 
-const sessionID = "reduce-session";
-let idCounter = 0;
-
-function userMessage(text: string): Message.WithParts {
-  idCounter += 1;
-  const id = `reduce-user-${idCounter}`;
-  return textMessage("user", text, sessionID, id);
-}
+const { user: userMessage, assistant } = messageSequence("reduce-session");
 
 function toolMessage(output: string): Message.WithParts {
-  idCounter += 1;
-  const id = `reduce-tool-${idCounter}`;
-  const message = textMessage("assistant", "", sessionID, id);
+  const message = assistant("");
   return { info: message.info, parts: [completedToolPart(message, output)] };
 }
 

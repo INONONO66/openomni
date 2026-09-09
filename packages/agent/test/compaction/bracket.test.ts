@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { BusEvent, Message } from "@openomni/protocol";
+import type { BusEvent } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "../../src/index";
 import { collector } from "../helpers/observation-collector";
 import { Compaction } from "../../src/compaction/compact";
 import { captureBusEvents } from "../helpers/bus-event";
 
-import { textMessage } from "../helpers/messages";
+import { messageSequence } from "../helpers/messages";
 
 // Every compaction has one start and one terminal event, including failures.
 
@@ -17,19 +17,9 @@ const IDENTITY = {
   actorId: "actor-bracket-test",
 } as const;
 
-let idCounter = 0;
-function nextId(prefix: string): string {
-  idCounter += 1;
-  return `${prefix}-${idCounter}`;
-}
-
-function makeUserMessage(text: string): Message.WithParts {
-  return textMessage("user", text, IDENTITY.sessionId, nextId("user-message"));
-}
-
-function makeAssistantMessage(text: string): Message.WithParts {
-  return textMessage("assistant", text, IDENTITY.sessionId, nextId("assistant-message"));
-}
+const { user: makeUserMessage, assistant: makeAssistantMessage } = messageSequence(
+  IDENTITY.sessionId,
+);
 
 interface StartedEvent {
   traceId: string;

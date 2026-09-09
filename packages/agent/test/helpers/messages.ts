@@ -50,3 +50,61 @@ export function completedToolPart(
     },
   };
 }
+
+/** An assistant message whose info carries `inputTokens` and whose parts are supplied by the caller. */
+export function assistantWithParts(
+  id: string,
+  sessionID: string,
+  parts: Message.Part[],
+  inputTokens: number,
+  outputTokens = 0,
+): Message.WithParts {
+  return {
+    info: {
+      id,
+      sessionID,
+      role: "assistant",
+      time: { created: 1 },
+      parentID: "",
+      modelID: "model",
+      providerID: "provider",
+      agent: "test",
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: {
+        input: inputTokens,
+        output: outputTokens,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    },
+    parts,
+  };
+}
+
+/** Id-sequenced user/assistant text messages for one session; `pad` is appended to assistant text. */
+export function messageSequence(
+  sessionID: string,
+  pad = "",
+): {
+  user(text: string): Message.WithParts;
+  assistant(text: string): Message.WithParts;
+  nextId(prefix: string): string;
+} {
+  let counter = 0;
+  const nextId = (prefix: string): string => {
+    counter += 1;
+    return `${prefix}-${counter}`;
+  };
+  return {
+    nextId,
+    user: (text) => textMessage("user", text, sessionID, nextId("user-message")),
+    assistant: (text) =>
+      textMessage(
+        "assistant",
+        pad === "" ? text : `${text}${pad}`,
+        sessionID,
+        nextId("assistant-message"),
+      ),
+  };
+}
