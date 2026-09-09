@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LlmCall, Operational, type Message, type Tool } from "@openomni/protocol";
+import { LlmCall, Operational, type BusEvent, type Message, type Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { APIError } from "../../src/error";
 import { useProcessor, streamOf, statusStates, processorInfo } from "../helpers/processor";
@@ -18,12 +18,11 @@ describe("Processor telemetry", () => {
 
   test("publishes idle before a microtask queued by message.finished", async () => {
     const order: string[] = [];
-    const orderedEvents = {
-      publish(event: { name: string }, data: unknown) {
-        const state = (data as { context?: { stateType?: string } }).context?.stateType;
-        if (event.name === Operational.Events.Info.name && state === "idle") {
-          order.push("idle");
-        }
+    const orderedEvents: BusEvent.Sink = {
+      publish(event, data) {
+        if (event.name !== Operational.Events.Info.name) return;
+        const info = Operational.Events.Info.schema.parse(data);
+        if (info.context?.stateType === "idle") order.push("idle");
       },
     };
     const processor = createProcessor({
@@ -137,7 +136,7 @@ describe("Processor telemetry", () => {
     await processor.process({ system: "", promptText: "" });
 
     const textAt = (index: number) =>
-      snapshots[index]?.parts.find((part): part is Message.TextPart => part.type === "text")?.text;
+      snapshots[index]?.parts.flatMap((part) => (part.type === "text" ? [part.text] : []))[0];
     // Boundary snapshots: the open part stays empty in the first snapshot
     // even after the part later completed with the full text.
     expect(textAt(0)).toBe("");

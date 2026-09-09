@@ -45,8 +45,9 @@ export function capturingSink() {
   const sink: Sink = {
     onMessage(message) {
       messages.push(message);
-      const text = message.parts.find((part): part is Message.TextPart => part.type === "text");
-      textTimeline.push(text?.text);
+      textTimeline.push(
+        message.parts.flatMap((part) => (part.type === "text" ? [part.text] : []))[0],
+      );
     },
     onToolCall: (call) => {
       toolCalls.push(call);

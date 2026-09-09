@@ -80,13 +80,7 @@ describe("proxy-models", () => {
 
     it("throws a typed error on auth failure (401) instead of returning []", async () => {
       stubFetch(() => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }));
-      const error = await fetchProxyModels("http://localhost:3102/v1").then(
-        () => {
-          throw new Error("expected fetchProxyModels to reject");
-        },
-        (cause: unknown) => cause,
-      );
-      expect(error).toMatchObject({
+      await expect(fetchProxyModels("http://localhost:3102/v1")).rejects.toMatchObject({
         name: "ProxyModelsError",
         data: { status: 401, url: "http://localhost:3102/v1/models" },
       });

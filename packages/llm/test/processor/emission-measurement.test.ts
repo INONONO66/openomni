@@ -15,8 +15,8 @@ const DELTA = "tok ";
 const REASONING_DELTAS = 400;
 const TEXT_DELTAS_PER_BLOCK = 800;
 
-function scenario(): Array<Record<string, unknown>> {
-  const chunks: Array<Record<string, unknown>> = [{ type: "step-start" }];
+function scenario(): StreamEvent[] {
+  const chunks: StreamEvent[] = [{ type: "step-start" }];
   chunks.push({ type: "reasoning-start", id: "r1", providerMetadata: {} });
   for (let i = 0; i < REASONING_DELTAS; i++) {
     chunks.push({ type: "reasoning-delta", id: "r1", text: DELTA });
@@ -70,17 +70,17 @@ describe("Processor emission measurement (#545 T2)", () => {
     await processor.process({ system: "", promptText: "" });
 
     // Content sanity: the boundary snapshots still deliver the full text.
-    const texts = (lastMessage?.parts ?? [])
-      .filter((part): part is Message.TextPart => part.type === "text")
-      .map((part) => part.text);
+    const texts = (lastMessage?.parts ?? []).flatMap((part) =>
+      part.type === "text" ? [part.text] : [],
+    );
     expect(texts).toEqual([
       DELTA.repeat(TEXT_DELTAS_PER_BLOCK).trimEnd(),
       DELTA.repeat(TEXT_DELTAS_PER_BLOCK).trimEnd(),
     ]);
-    const reasoning = (lastMessage?.parts ?? []).find(
-      (part): part is Message.ReasoningPart => part.type === "reasoning",
+    const reasoning = (lastMessage?.parts ?? []).flatMap((part) =>
+      part.type === "reasoning" ? [part.text] : [],
     );
-    expect(reasoning?.text).toBe(DELTA.repeat(REASONING_DELTAS).trimEnd());
+    expect(reasoning).toEqual([DELTA.repeat(REASONING_DELTAS).trimEnd()]);
 
     // Boundary-only emission: 2000 deltas may not inflate the call count.
     // step-start(1) + reasoning open/close(2) + two text blocks(4) +

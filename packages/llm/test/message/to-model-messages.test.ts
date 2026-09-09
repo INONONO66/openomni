@@ -259,8 +259,8 @@ describe("toModelMessages tool-name wire sanitization (all providers)", () => {
 
   test("serializes failed tool history as an error result", () => {
     const message = assistantWithDottedToolCall();
-    const tool = message.parts.find((part): part is Message.ToolPart => part.type === "tool");
-    if (tool === undefined) throw new Error("expected tool part");
+    const tool = message.parts.find((part) => part.type === "tool");
+    if (tool?.type !== "tool") throw new Error("expected tool part");
     tool.state = {
       status: "error",
       input: tool.state.input,
@@ -337,7 +337,7 @@ describe("toModelMessages reasoning signature resend gate (#532 candidate 10)", 
 
     const block = reasoningBlockOf(result);
     expect(block).toMatchObject({ type: "reasoning", text: "step by step" });
-    expect((block as { providerOptions?: unknown }).providerOptions).toBeUndefined();
+    expect(block?.providerOptions).toBeUndefined();
   });
 
   test("withholds the signature when the outgoing provider differs", () => {
@@ -351,6 +351,6 @@ describe("toModelMessages reasoning signature resend gate (#532 candidate 10)", 
     const result = toModelMessages([reasoningMessage()], openaiModel);
 
     const block = reasoningBlockOf(result);
-    expect((block as { providerOptions?: unknown }).providerOptions).toBeUndefined();
+    expect(block?.providerOptions).toBeUndefined();
   });
 });

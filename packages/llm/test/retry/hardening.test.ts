@@ -7,7 +7,7 @@ function retryableError(overrides: Partial<APIErrorInput> = {}) {
   return apiError({ message: "boom", isRetryable: true, ...overrides });
 }
 
-function delayOf(attempt: number, error: unknown): number {
+function delayOf<E>(attempt: number, error: E): number {
   const decision = Retry.decide(attempt, error);
   if (!decision.retry) throw new Error(`expected a retry decision, got ${decision.reason}`);
   return decision.delayMs;
