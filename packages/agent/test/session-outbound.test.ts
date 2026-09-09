@@ -13,6 +13,28 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+/** The parent's pending "commission" message action that a child's outbound reply answers. */
+function appendCommission(): void {
+  const actions = Storage.get().actions;
+  if (actions === undefined) throw new Error("missing action adapter");
+  actions.append(
+    {
+      id: "commission-action",
+      parentId: null,
+      sessionId: "parent",
+      kind: "message",
+      intent: {
+        encodingVersion: 1,
+        value: { phase: "intent", value: { messageId: "commission" } },
+      },
+      effect: { encodingVersion: 1, value: { phase: "pending" } },
+      ts: 100,
+      irreversible: true,
+    },
+    SessionHandleStore.row("parent").revision,
+  );
+}
+
 const runtimes: SessionRuntime[] = [];
 const directories: string[] = [];
 beforeEach(() => {
@@ -102,24 +124,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
   }
   const first = runtime(100, true);
   session({ id: "parent", role: "resident", runner: parentRunner }, first);
-  const actions = Storage.get().actions;
-  if (actions === undefined) throw new Error("missing action adapter");
-  actions.append(
-    {
-      id: "commission-action",
-      parentId: null,
-      sessionId: "parent",
-      kind: "message",
-      intent: {
-        encodingVersion: 1,
-        value: { phase: "intent", value: { messageId: "commission" } },
-      },
-      effect: { encodingVersion: 1, value: { phase: "pending" } },
-      ts: 100,
-      irreversible: true,
-    },
-    SessionHandleStore.row("parent").revision,
-  );
+  appendCommission();
   const child = session(
     {
       id: "child",
@@ -170,24 +175,7 @@ function commissionedChild(runtime: SessionRuntime) {
     { id: "parent", role: "resident", runner: async () => ({ kind: "result", text: "parent" }) },
     runtime,
   );
-  const actions = Storage.get().actions;
-  if (actions === undefined) throw new Error("missing action adapter");
-  actions.append(
-    {
-      id: "commission-action",
-      parentId: null,
-      sessionId: "parent",
-      kind: "message",
-      intent: {
-        encodingVersion: 1,
-        value: { phase: "intent", value: { messageId: "commission" } },
-      },
-      effect: { encodingVersion: 1, value: { phase: "pending" } },
-      ts: 100,
-      irreversible: true,
-    },
-    SessionHandleStore.row("parent").revision,
-  );
+  appendCommission();
   const child = session(
     {
       id: "child",

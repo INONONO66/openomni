@@ -185,7 +185,7 @@ describe("Compaction.compact with elision configured", () => {
 
   it("keeps the round to elision alone when the estimated reclaim covers the overage", async () => {
     // measured: overage 20 tokens; elision nets 439 chars ≈ 110 tokens
-    const { sink, result } = await compactElided("x".repeat(500), 100);
+    const { result } = await compactElided("x".repeat(500), 100);
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBe(0);

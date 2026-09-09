@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
-import { createDispatcher, defineTool } from "../src/index";
+import { createDispatcher } from "../src/index";
+import { valueTool } from "./helpers/query-tool";
 import { allowAllPolicy as allowAll, opPhaseOf, turnExecutor } from "./helpers/compiled-policy";
-import { z } from "zod";
 
 const denyPre = compilePolicySnapshot({
   generation: 1,
@@ -23,18 +23,13 @@ const denyPre = compilePolicySnapshot({
 });
 
 function echoTool(onRun: () => void) {
-  return defineTool({
+  return valueTool({
     name: "echo",
     description: "Echo input",
-    category: "query",
-    input: z.object({ value: z.string() }).strict(),
-    output: z.string(),
-    visibility: { model: ["resident"], cell: ["resident"] },
-    execute: async ({ value }) => {
+    execute: async (value) => {
       onRun();
       return value;
     },
-    render: (_input, value) => value,
   });
 }
 

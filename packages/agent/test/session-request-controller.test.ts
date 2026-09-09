@@ -2,9 +2,9 @@ import { afterEach, beforeEach, expect, it } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
-import { z } from "zod";
 import { session, closeSessions, type SessionRuntime } from "../src/session-handle";
-import { createTurnDispatcher, defineTool, eraseTool, sessionTool } from "../src/tool-dispatcher";
+import { createTurnDispatcher, eraseTool, sessionTool } from "../src/tool-dispatcher";
+import { valueTool } from "./helpers/query-tool";
 import { createSessionRequests } from "../src/session-requests";
 import { bounded } from "./helpers/bounded";
 
@@ -40,22 +40,15 @@ function setup() {
     scheduleHeartbeat: () => () => undefined,
   };
   const tool = eraseTool(
-    defineTool(
-      {
-        name: "protected",
-        description: "protected",
-        category: "mutation",
-        input: z.object({ value: z.string() }).strict(),
-        output: z.string(),
-        visibility: { model: ["resident"], cell: ["resident"] },
-        execute: async ({ value }) => {
-          effects.push(value);
-          return value;
-        },
-        render: (_input, value) => value,
+    valueTool({
+      name: "protected",
+      category: "mutation",
+      execute: async (value) => {
+        effects.push(value);
+        return value;
       },
-      () => ({ required: true, domainRevisions: {} }),
-    ),
+      approval: () => ({ required: true, domainRevisions: {} }),
+    }),
   );
   const handle = session(
     {

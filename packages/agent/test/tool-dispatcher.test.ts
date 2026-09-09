@@ -9,6 +9,7 @@ import {
   toolSpec,
 } from "../src/index";
 import { recordingExecutor } from "./helpers/compiled-policy";
+import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";
 
 function dispatcher(definitions: Parameters<typeof createDispatcher>[0]) {
@@ -21,15 +22,12 @@ function definition(options: {
   readonly execute?: () => Promise<string>;
   readonly render?: (value: string) => string;
 }) {
-  return defineTool({
+  return valueTool({
     name: options.name ?? "echo",
     description: "Echo a value",
-    category: options.category ?? "query",
-    input: z.object({ value: z.string() }).strict(),
-    output: z.string(),
-    visibility: { model: ["resident"], cell: ["resident"] },
+    ...(options.category === undefined ? {} : { category: options.category }),
     execute: options.execute ?? (async () => "ok"),
-    render: (_input, value) => options.render?.(value) ?? value,
+    ...(options.render === undefined ? {} : { render: options.render }),
   });
 }
 
