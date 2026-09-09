@@ -98,6 +98,19 @@ const toolRequest = {
   toolObservation: { turnId: "turn", callId: "call-1" },
 } as const;
 
+/** A post-phase denial of every write: the terminal is blocked_post, never re-decided. */
+const denyWritePost: Parameters<typeof compiledPolicy>[0] = [
+  {
+    name: "deny-write-post",
+    kind: "tool",
+    phase: "post",
+    match: { encodingVersion: 1, value: { op: "write" } },
+    verdict: { encodingVersion: 1, value: { type: "deny", reason: "post_denied" } },
+    priority: 500,
+    generation: 1,
+  },
+];
+
 describe("completion recovery", () => {
   for (const site of ["before_persist", "after_persist"] as const) {
     test(`a result commit throwing ${site} keeps one terminal and never replays the body`, async () => {
@@ -224,22 +237,11 @@ describe("completion recovery", () => {
 
   test("a blocked_post terminal lost after persistence is projected back from the ledger, not re-decided", async () => {
     const { actions, options } = harness();
-    const deny: Parameters<typeof compiledPolicy>[0] = [
-      {
-        name: "deny-write-post",
-        kind: "tool",
-        phase: "post",
-        match: { encodingVersion: 1, value: { op: "write" } },
-        verdict: { encodingVersion: 1, value: { type: "deny", reason: "post_denied" } },
-        priority: 500,
-        generation: 1,
-      },
-    ];
     const commit = options.ledger.commit;
     let injected = false;
     const executor = createExecutor({
       ...options,
-      policy: compiledPolicy(deny),
+      policy: compiledPolicy(denyWritePost),
       ledger: {
         ...options.ledger,
         async commit(action) {
@@ -287,18 +289,7 @@ describe("completion recovery", () => {
 
   test("a throwing reverter is never proof of rollback", async () => {
     const { actions, options } = harness();
-    const deny: Parameters<typeof compiledPolicy>[0] = [
-      {
-        name: "deny-write-post",
-        kind: "tool",
-        phase: "post",
-        match: { encodingVersion: 1, value: { op: "write" } },
-        verdict: { encodingVersion: 1, value: { type: "deny", reason: "post_denied" } },
-        priority: 500,
-        generation: 1,
-      },
-    ];
-    const executor = createExecutor({ ...options, policy: compiledPolicy(deny) });
+    const executor = createExecutor({ ...options, policy: compiledPolicy(denyWritePost) });
     const results = await executor.runBatch(
       [
         {

@@ -1,15 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { answerThenCompact } from "./helpers/answer-then-compact";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Run } from "@openomni/llm";
-import {
-  Alarm,
-  L0Observation,
-  PlainValueSchema,
-  type PolicyRow,
-  type SessionHistory,
-} from "@openomni/protocol";
-import { createCompactionPlan } from "../src/compaction/durable";
-import { createAssistantMessage } from "../src/core/message-factory";
+import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
 import {
   Bus,
   closeSessions,
@@ -184,24 +177,7 @@ const parentRunner: SessionRunner = async (input) => {
     { signal: new AbortController().signal },
   );
   if (unknown?.terminal !== "failed") throw new Error("webhook settlement must be uncertain");
-  const answer = createAssistantMessage("answer", "", input.sessionId);
-  await executor.run(
-    { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
-    async () => PlainValueSchema.parse(answer),
-  );
-  const prior = foldSessionHistory(input.sessionId, input.ledger.actions?.() ?? []);
-  const plan = createCompactionPlan(prior, [answer], 100);
-  await executor.run(
-    {
-      kind: "compaction",
-      op: "compact",
-      intent: { trigger: "threshold" },
-      effect: {},
-      revertData: () => PlainValueSchema.parse(plan.record.revert),
-    },
-    async () => PlainValueSchema.parse({ ...plan.record, projection: plan.projection }),
-  );
-  return { kind: "result", text: "answer", finishReason: "stop" };
+  return answerThenCompact(executor, input);
 };
 
 beforeEach(() => {
@@ -354,7 +330,9 @@ describe("action-based history and diagnostic projections", () => {
     expect(inspectPolicy(inspection.policy, { generation: 1 })).toEqual([...inspection.policy]);
     for (const decision of inspection.policy) {
       if (decision.subjectActionId === null) continue;
-      expect(inspection.transitions.some((e) => e.actionId === decision.subjectActionId)).toBe(true);
+      expect(inspection.transitions.some((e) => e.actionId === decision.subjectActionId)).toBe(
+        true,
+      );
     }
     const rendered = JSON.stringify(inspection);
     expect(JSON.stringify(SessionHandleStore.tree("parent"))).toContain(SECRET);
