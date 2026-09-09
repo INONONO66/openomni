@@ -41,22 +41,6 @@ export const RunEvents = {
     }),
     { visibility: "llm_reason" },
   ),
-  BudgetWarning: BusEvent.define(
-    "agent.budget.warning",
-    AgentBase.extend({
-      remaining: z.string(),
-      threshold: z.number(),
-    }),
-    { visibility: "llm_reason" },
-  ),
-  BudgetReassurance: BusEvent.define(
-    "agent.budget.reassurance",
-    AgentBase.extend({
-      remaining: z.string(),
-      threshold: z.number(),
-    }),
-    { visibility: "ephemeral" },
-  ),
   /**
    * The compaction lock bracket. `started` is published before any
    * compaction work; `completed` is the operation's last record on every

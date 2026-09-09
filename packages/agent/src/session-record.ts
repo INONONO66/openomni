@@ -6,8 +6,8 @@ import {
   type LedgerAction,
   type LedgerSession,
   type PlainValue,
-  type PlainObject,
 } from "@openomni/protocol";
+import { z } from "zod";
 import { RunReasonCode } from "./core/policy/reason-codes";
 import {
   SessionCommitError,
@@ -286,118 +286,39 @@ export function sessionRunnerResultValue(result: SessionRunnerResult): PlainValu
   };
 }
 
+const SessionUsage = z.strictObject({
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  totalTokens: z.number(),
+  reasoningTokens: z.number().optional(),
+  cacheReadTokens: z.number().optional(),
+  cacheWriteTokens: z.number().optional(),
+});
+
+const SessionResult = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("result"),
+    text: z.string(),
+    finishReason: z.enum(["stop", "max-steps", RunReasonCode.Stalled]).optional(),
+    usage: SessionUsage.optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("waiting"),
+    text: z.string(),
+    reason: z.literal("live_wait"),
+    alarmIds: z.array(z.string()).nonempty(),
+  }),
+  z.strictObject({ kind: z.literal("interrupted"), text: z.string().optional() }),
+  z.strictObject({
+    kind: z.literal("error"),
+    text: z.string(),
+    reported: z.literal(true).optional(),
+  }),
+]);
+
 export function sessionRunnerResultFromValue(value: PlainValue): SessionRunnerResult | undefined {
-  if (!plainObject(value) || typeof value.kind !== "string") return undefined;
-  if (value.kind === "interrupted") {
-    if (!onlyKeys(value, ["kind", "text"])) return undefined;
-    if ("text" in value && typeof value.text !== "string") return undefined;
-    return { kind: "interrupted", ...(typeof value.text === "string" ? { text: value.text } : {}) };
-  }
-  if (value.kind === "error") {
-    if (!onlyKeys(value, ["kind", "text", "reported"]) || typeof value.text !== "string") {
-      return undefined;
-    }
-    if ("reported" in value && value.reported !== true) return undefined;
-    return {
-      kind: "error",
-      text: value.text,
-      ...(value.reported === true ? { reported: true as const } : {}),
-    };
-  }
-  if (value.kind === "waiting") {
-    if (
-      !onlyKeys(value, ["kind", "text", "reason", "alarmIds"]) ||
-      typeof value.text !== "string" ||
-      value.reason !== "live_wait" ||
-      !Array.isArray(value.alarmIds) ||
-      value.alarmIds.length === 0 ||
-      !value.alarmIds.every((id) => typeof id === "string")
-    )
-      return undefined;
-    return {
-      kind: "waiting",
-      text: value.text,
-      reason: "live_wait",
-      alarmIds: value.alarmIds.filter((id): id is string => typeof id === "string"),
-    };
-  }
-  if (value.kind !== "result") return undefined;
-  if (!onlyKeys(value, ["kind", "text", "finishReason", "usage"])) return undefined;
-  if (typeof value.text !== "string") return undefined;
-  const finishReason = value.finishReason;
-  if (
-    finishReason !== undefined &&
-    finishReason !== "stop" &&
-    finishReason !== "max-steps" &&
-    finishReason !== RunReasonCode.Stalled
-  ) {
-    return undefined;
-  }
-  const usage = value.usage === undefined ? undefined : sessionUsageFromValue(value.usage);
-  if (value.usage !== undefined && usage === undefined) return undefined;
-  return {
-    kind: "result",
-    text: value.text,
-    ...(finishReason === undefined ? {} : { finishReason }),
-    ...(usage === undefined ? {} : { usage }),
-  };
-}
-
-type SessionUsage = NonNullable<Extract<SessionRunnerResult, { readonly kind: "result" }>["usage"]>;
-
-function sessionUsageFromValue(value: PlainValue): SessionUsage | undefined {
-  if (
-    !plainObject(value) ||
-    !onlyKeys(value, [
-      "inputTokens",
-      "outputTokens",
-      "totalTokens",
-      "reasoningTokens",
-      "cacheReadTokens",
-      "cacheWriteTokens",
-    ])
-  ) {
-    return undefined;
-  }
-  const inputTokens = value.inputTokens;
-  const outputTokens = value.outputTokens;
-  const totalTokens = value.totalTokens;
-  if (!finiteNumber(inputTokens) || !finiteNumber(outputTokens) || !finiteNumber(totalTokens)) {
-    return undefined;
-  }
-  const reasoningTokens = optionalFiniteNumber(value, "reasoningTokens");
-  const cacheReadTokens = optionalFiniteNumber(value, "cacheReadTokens");
-  const cacheWriteTokens = optionalFiniteNumber(value, "cacheWriteTokens");
-  if (reasoningTokens === false || cacheReadTokens === false || cacheWriteTokens === false) {
-    return undefined;
-  }
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens,
-    ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
-    ...(cacheReadTokens === undefined ? {} : { cacheReadTokens }),
-    ...(cacheWriteTokens === undefined ? {} : { cacheWriteTokens }),
-  };
-}
-
-function optionalFiniteNumber(value: PlainObject, key: string): number | undefined | false {
-  if (!(key in value)) return undefined;
-  const candidate = value[key];
-  return finiteNumber(candidate) ? candidate : false;
-}
-
-function finiteNumber(value: PlainValue | undefined): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function plainObject(value: PlainValue): value is PlainObject {
-  return value !== null && !Array.isArray(value) && typeof value === "object";
-}
-
-function onlyKeys(value: PlainObject, keys: readonly string[]): boolean {
-  const allowed = new Set(keys);
-  return Object.keys(value).every((key) => allowed.has(key));
+  const result = SessionResult.safeParse(value);
+  return result.success ? result.data : undefined;
 }
 
 export function generationForOpen(open: SessionHandleStore.OpenTurn): SessionGeneration.Snapshot {

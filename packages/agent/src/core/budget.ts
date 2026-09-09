@@ -35,14 +35,8 @@ export function effectiveBudgetThresholds(budget?: Actor.Profile.BudgetThreshold
 
 export type BudgetStatus = "ok" | "reassurance" | "warning" | "exceeded";
 
-/**
- * The default budget ceilings, written once. Both {@link evaluateBudget}
- * (enforcement) and {@link describeBudgetRemaining} (narration) read these —
- * they used to carry their own copies of the same four literals, so a change
- * to one silently made the narration contradict the enforcement (#606
- * re-audit). Exported so tests can pin the two sites against each other.
- */
-export const BUDGET_DEFAULTS = {
+// Enforcement and narration share the same ceilings.
+const BUDGET_DEFAULTS = {
   maxTurns: 24,
   maxToolCalls: 40,
   maxWallTimeMs: 5 * 60 * 1000,
@@ -73,34 +67,27 @@ export function effectiveMaxToolCalls(budget?: AgentBudget): number {
  * {@link publishBudgetTelemetry}, the single production consumer.
  */
 export function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluation {
-  const maxWallTimeMs = budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs;
-  const maxTurns = budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns;
-  const maxToolCalls = effectiveMaxToolCalls(budget);
-  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs;
   const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
     effectiveBudgetThresholds(budget);
-
   const elapsedMs = Date.now() - state.startTime;
-
-  const exceeded = (exceededLimit: ExceededLimit): BudgetEvaluation => ({
-    status: "exceeded",
-    elapsedMs,
-    maxRatio: 1,
-    exceededLimit,
-  });
-
-  if (maxWallTimeMs !== -1 && elapsedMs >= maxWallTimeMs) return exceeded("wall time");
-  if (maxTurns !== -1 && state.turns >= maxTurns) return exceeded("turns");
-  if (maxToolCalls !== -1 && state.toolCalls >= maxToolCalls) return exceeded("tool calls");
-  if (maxToolRuntimeMs !== -1 && state.toolRuntimeMs >= maxToolRuntimeMs) {
-    return exceeded("tool wall time");
-  }
-
+  const limits: readonly [ExceededLimit, number, number][] = [
+    ["wall time", elapsedMs, budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs],
+    ["turns", state.turns, budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns],
+    ["tool calls", state.toolCalls, effectiveMaxToolCalls(budget)],
+    [
+      "tool wall time",
+      state.toolRuntimeMs,
+      budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs,
+    ],
+  ];
   const ratios: number[] = [];
-  if (maxWallTimeMs !== -1) ratios.push(elapsedMs / maxWallTimeMs);
-  if (maxTurns !== -1) ratios.push(state.turns / maxTurns);
-  if (maxToolCalls !== -1) ratios.push(state.toolCalls / maxToolCalls);
-  if (maxToolRuntimeMs !== -1) ratios.push(state.toolRuntimeMs / maxToolRuntimeMs);
+  for (const [exceededLimit, consumed, maximum] of limits) {
+    if (maximum === -1) continue;
+    if (consumed >= maximum) {
+      return { status: "exceeded", elapsedMs, maxRatio: 1, exceededLimit };
+    }
+    ratios.push(consumed / maximum);
+  }
 
   if (ratios.length === 0) return { status: "ok", elapsedMs, maxRatio: 0 };
 

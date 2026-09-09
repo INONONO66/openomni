@@ -1,4 +1,5 @@
 import { canonicalDigest, type Message } from "@openomni/protocol";
+import { latestCompactionAnchorId } from "./candidate";
 
 export type CanonicalConversationEntry = Message.WithParts;
 
@@ -66,7 +67,7 @@ export function createCompactionPlan(
       },
       revert: {
         removedEntries,
-        priorAnchorEntryId: latestAnchorId(removedEntries),
+        priorAnchorEntryId: latestCompactionAnchorId(removedEntries) ?? null,
       },
     },
   };
@@ -104,23 +105,6 @@ function sharedSuffixLength(
     count += 1;
   }
   return count;
-}
-
-function isAnchorEntry(entry: CanonicalConversationEntry): boolean {
-  return (
-    entry.info.role === "user" &&
-    entry.parts.some((part) => part.type === "text" && part.metadata?.compactionAnchor === true)
-  );
-}
-
-function latestAnchorId(entries: readonly CanonicalConversationEntry[]): string | null {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
-    if (entry !== undefined && isAnchorEntry(entry)) {
-      return entry.info.id;
-    }
-  }
-  return null;
 }
 
 function compactionSummary(entries: readonly CanonicalConversationEntry[]): string {
