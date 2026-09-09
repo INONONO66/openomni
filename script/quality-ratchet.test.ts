@@ -388,7 +388,7 @@ test("synthetic regression fails closed end to end: a measured owned top type in
   }
 });
 
-test("native coverage evidence takes the best hit count across lanes and rejects malformed lines", () => {
+test("native coverage evidence rejects conflicting lane hit counts and malformed lines", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-ratchet-lcov-"));
   try {
     const path = join(root, "coverage.json");
@@ -401,9 +401,7 @@ test("native coverage evidence takes the best hit count across lanes and rejects
         ],
       }),
     );
-    const executed = readExecuted(path);
-    expect([...(executed.get("a.ts") ?? [])]).toEqual([[1, 2], [2, 1]]);
-    expect(executed.get("b.ts")?.size).toBe(0);
+    expect(() => readExecuted(path)).toThrow("conflicting native coverage ownership");
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 0, hits: 1 }] }] }] }));
     expect(() => readExecuted(path)).toThrow();
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 1, hits: -1 }] }] }] }));

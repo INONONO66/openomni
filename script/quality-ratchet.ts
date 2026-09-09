@@ -401,7 +401,9 @@ export function readExecuted(path: string): Executed {
         const line = jsonNumber(entry.line), hits = jsonNumber(entry.hits);
         if (!Number.isSafeInteger(line) || line < 1 || !Number.isSafeInteger(hits) || hits < 0)
           fail("invalid native coverage line");
-        lines.set(line, Math.max(lines.get(line) ?? 0, hits));
+        const previous = lines.get(line);
+        if (previous !== undefined && previous !== hits) fail("conflicting native coverage ownership");
+        lines.set(line, hits);
       }
       result.set(source, lines);
     }

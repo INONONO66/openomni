@@ -58,7 +58,9 @@ export function readNativeCoverage(options: {
 		const counters = lines.get(file.path) ?? new Map<number, number>();
 		for (const row of file.lines) {
 			requireMeasurement(row.line <= length, "LCOV line outside original source");
-			counters.set(row.line, Math.max(counters.get(row.line) ?? 0, row.hits));
+			const previous = counters.get(row.line);
+			requireMeasurement(previous === undefined || previous === row.hits, "conflicting native coverage ownership");
+			counters.set(row.line, row.hits);
 		}
 		lines.set(file.path, counters);
 	}
