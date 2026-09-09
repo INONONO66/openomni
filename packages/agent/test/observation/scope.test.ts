@@ -89,7 +89,10 @@ describe("scoped observations", () => {
     ]);
   });
 
-  it("contains failures from the default and caller-provided error reporters", () => {
+  it.each([
+    new Error("reporter failed"), Symbol("reporter"), { toString: 0 }, null, undefined,
+    false, 1, 1n, "reporter", () => undefined,
+  ])("contains reporter failure without changing its identity: %p", (reporterFailure) => {
     const warn = mock(() => undefined);
     const originalWarn = console.warn;
     console.warn = warn;
@@ -111,7 +114,6 @@ describe("scoped observations", () => {
       console.warn = originalWarn;
     }
 
-    const reporterFailure = new Error("reporter failed");
     const errorLog = spyOn(console, "error").mockImplementation(() => undefined);
     const scoped = scopeObservation(hostile, identity, {
       onError() {
@@ -127,6 +129,8 @@ describe("scoped observations", () => {
         eventName: TestEvent.name,
         error: { errors: [expect.objectContaining({ message: "sink failed" }), reporterFailure] },
       });
+      const logged = z.object({ error: z.instanceof(AggregateError) }).parse(errorLog.mock.calls[0]?.[1]);
+      expect(logged.error.errors[1]).toBe(reporterFailure);
     } finally {
       errorLog.mockRestore();
     }

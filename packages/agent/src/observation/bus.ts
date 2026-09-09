@@ -157,10 +157,11 @@ function reportObservationFailure(
   try {
     report(error, eventName);
   } catch (reporterError) {
+    const reportedFailure = toBusData(reporterError);
     console.error("observation error reporter failed", {
       eventName,
       error: new AggregateError(
-        [error, reporterError],
+        [error, reportedFailure],
         "observation delivery and reporting failed",
       ),
     });
