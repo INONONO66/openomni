@@ -89,7 +89,6 @@ export class GitHubAdapter implements Channel.Surface {
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
     githubToken?: string,
-    _botUsername?: string,
     private readonly authOptions: GitHubAuthOptions = {},
   ) {
     this.client = new GitHubClient(publish, githubToken);

@@ -73,6 +73,16 @@ export function kernelRouter(): GatewayRouter {
   return router;
 }
 
+export async function ownerMessageTargets(
+  secondFacts: Gateway.IngressFacts = { ...ownerFacts, eventId: "second" },
+) {
+  const first = await kernelRouter().ingest(ownerSender, ownerFacts);
+  const second = await kernelRouter().ingest(ownerSender, secondFacts);
+  if (first.status !== "executed" || second.status !== "executed")
+    throw new Error("owner fixture was not admitted");
+  return [first.handle.target, second.handle.target] as const;
+}
+
 // L1/executor recording ports. Routing, identity, Request, grants and delivery remain real.
 // The real compiler evaluates perimeter A rows and actor grants; app tests cover the full executor/tree.
 export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): GatewayRouter {

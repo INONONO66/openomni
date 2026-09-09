@@ -4,6 +4,51 @@ import { GitHubClient } from "../src/provider/github/client";
 import { fetchWithRetry } from "../src/support/fetch-retry";
 
 describe("GitHubClient", () => {
+  it("reconciles encoded delivery markers across comment pages without prefix collisions", async () => {
+    const realFetch = globalThis.fetch;
+    const pages: number[] = [];
+    const posted: string[] = [];
+    const firstPage = Array.from<undefined, { body: string }>({ length: 100 }, (_, index) => ({
+      body: `other-${index}`,
+    }));
+    globalThis.fetch = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        if (init?.method === "GET") {
+          const page = Number(new URL(String(input)).searchParams.get("page"));
+          pages.push(page);
+          if (page === 1) return Response.json(firstPage);
+          if (page === 2) return Response.json(posted.map((body) => ({ body })));
+          throw new Error("unexpected comment page");
+        }
+        const data = z.object({ body: z.string() }).parse(JSON.parse(String(init?.body)));
+        posted.push(data.body);
+        return Response.json({ id: posted.length });
+      },
+      { preconnect: realFetch.preconnect },
+    );
+    try {
+      const client = new GitHubClient(() => undefined, "token");
+      expect(await client.postComment("owner/repo", 1, "answer", "trace", "id:long")).toEqual({
+        value: "accepted",
+        externalMessageId: "1",
+      });
+      expect(await client.postComment("owner/repo", 1, "answer", "trace", "id:long")).toEqual({
+        value: "accepted",
+      });
+      expect(await client.postComment("owner/repo", 1, "answer", "trace", "id")).toEqual({
+        value: "accepted",
+        externalMessageId: "2",
+      });
+      expect(posted).toEqual([
+        "answer\n\n<!-- openomni-delivery:id%3Along -->",
+        "answer\n\n<!-- openomni-delivery:id -->",
+      ]);
+      expect(pages).toEqual([1, 2, 1, 2, 1, 2]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("records a warn instead of silently skipping a reply without a token (#606)", async () => {
     const schema = z.object({
       traceId: z.string(),
@@ -14,7 +59,7 @@ describe("GitHubClient", () => {
       published.push({ name: descriptor.name, data: schema.parse(data) });
     });
 
-    await client.postComment("openomni/project", 7, "the answer", "trace-github-test");
+    await client.postComment("openomni/project", 7, "the answer", "trace-github-test", "delivery");
 
     expect(published).toEqual([
       {

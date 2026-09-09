@@ -6,6 +6,16 @@ import { createExistingAgentMessaging } from "../../src/router/messaging/send";
 import { makeRouter, resetStores } from "./_router-fixture";
 import { originalAction, requestPort } from "../helpers/requests";
 
+function registerTelegramTarget(): void {
+  ActorRegistry.registerIdentity({ id: "target", kind: "human", trustTier: "collaborator" });
+  ActorRegistry.registerEndpoint({
+    id: "endpoint",
+    actorId: "target",
+    channel: "telegram",
+    externalId: "1",
+  });
+}
+
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
@@ -14,13 +24,7 @@ afterEach(() => {
 
 test("router opens the immutable original message action before real Telegram delivery", async () => {
   resetStores();
-  ActorRegistry.registerIdentity({ id: "target", kind: "human", trustTier: "collaborator" });
-  ActorRegistry.registerEndpoint({
-    id: "endpoint",
-    actorId: "target",
-    channel: "telegram",
-    externalId: "1",
-  });
+  registerTelegramTarget();
   let observedRequestId: string | undefined;
   globalThis.fetch = (async (input) => {
     if (!String(input).endsWith("/sendMessage")) throw new Error("unexpected transport request");
@@ -169,13 +173,7 @@ test.each([
   "rejected",
 ] as const)("%s receipt with external id never becomes accepted on retry", async (value) => {
   resetStores();
-  ActorRegistry.registerIdentity({ id: "target", kind: "human", trustTier: "collaborator" });
-  ActorRegistry.registerEndpoint({
-    id: "endpoint",
-    actorId: "target",
-    channel: "telegram",
-    externalId: "1",
-  });
+  registerTelegramTarget();
   originalAction("original", "source");
   let attempts = 0;
   const requests = requestPort();

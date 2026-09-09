@@ -27,7 +27,6 @@ const SendInput = Gateway.SendInput;
 type SendInput = z.infer<typeof SendInput>;
 type SendReceipt = Gateway.SendReceipt;
 type SenderTargetGrant = Gateway.SenderTargetGrant;
-type SocialBudget = Gateway.SocialBudget;
 
 /** Policy-intent class of a send, inferred from `operation` when not explicit (#219). */
 function sendClassOf(input: SendInput): MessageClass {
@@ -62,25 +61,13 @@ export type MessagingPorts = Readonly<{
    * construction — there is no ownerless send path, so "no owner" cannot be
    * silently skipped (fail-closed, rule 7). At-least-once delivery: retries
    * carry the same `message.idempotencyKey` so a concrete owner can provide
-   * bounded dedupe or platform read-back; the guarantee remains at-least-once
-   * when composition does not forward the key.
+   * bounded dedupe or platform read-back.
    */
   deliver: (message: OutboundMessage) => DeliveryReceipt | Promise<DeliveryReceipt>;
-  /** Policy-plane grant source; evaluated fresh on every send. */
-  grants: () => readonly SenderTargetGrant[];
-  /**
-   * Owner-declared active-egress budget source (#219), evaluated fresh on
-   * every send — the HOW-OFTEN axis, orthogonal to `grants` (the MAY-I axis).
-   * OPTIONAL: when absent the #219 gate is entirely bypassed (pure additive,
-   * backward-compat — existing sends behave exactly as before). When present,
-   * the gate engages and the fail-safe default applies: a COLD-proactive send
-   * to a target with no budget entry is suppressed `budget_exhausted`. Replies
-   * (reply-scoped grant instances) always bypass the gate.
-   */
-  budgets?: () => readonly SocialBudget[];
   /** Injected observation sink (messaging.sent / messaging.denied) — channels never imports the observation channel. */
   publish: BusEvent.Sink["publish"];
-}>;
+}> &
+  Pick<NonNullable<GatewayRouterPorts["messaging"]>, "grants" | "budgets">;
 
 type SendAuthorityInput = Pick<SendInput, "senderId" | "target" | "operation" | "at">;
 

@@ -99,6 +99,13 @@ test("first quorum reply commits input but leaves the request open", async () =>
   expect(SessionHandleStore.requestById("quorum")?.replies).toHaveLength(1);
 });
 
+async function expectStableReplyReplay(): Promise<void> {
+  const before = SessionHandleStore.tree("request-owner");
+  await kernelRouter().ingest(sender, facts("reply"));
+  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+}
+
 test("duplicate unresolved reply reuses its receipt without another durable input", async () => {
   await openRequest("duplicate", {
     expectedResponders: ["actor-external-worker", "b"],
@@ -106,10 +113,7 @@ test("duplicate unresolved reply reuses its receipt without another durable inpu
     threshold: 2,
   });
   await kernelRouter().ingest(sender, facts("reply"));
-  const before = SessionHandleStore.tree("request-owner");
-  await kernelRouter().ingest(sender, facts("reply"));
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+  await expectStableReplyReplay();
   expect(SessionHandleStore.requestById("duplicate")?.replies).toHaveLength(1);
   expect(commits).toHaveLength(1);
 });
@@ -159,10 +163,7 @@ test("resolved reply redelivery preserves the original request revision", async 
   await openRequest("redelivery");
   await kernelRouter().ingest(sender, facts("reply"));
   const resolved = SessionHandleStore.requestById("redelivery");
-  const before = SessionHandleStore.tree("request-owner");
-  await kernelRouter().ingest(sender, facts("reply"));
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+  await expectStableReplyReplay();
   expect(SessionHandleStore.requestById("redelivery")).toEqual(resolved);
   // Kernel admission and receiving inbox are one durable transition.
   expect(commits).toHaveLength(1);

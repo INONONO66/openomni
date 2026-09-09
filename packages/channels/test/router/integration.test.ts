@@ -4,6 +4,7 @@ import {
   commits,
   kernelRouter,
   ownerFacts,
+  ownerMessageTargets,
   ownerSender,
   resetRouterState,
 } from "./_router-fixture";
@@ -21,26 +22,20 @@ beforeEach(() => {
 
 describe("GatewayRouter conversation isolation", () => {
   test("same physical surface routes later messages to the same session", async () => {
-    const first = await kernelRouter().ingest(ownerSender, ownerFacts);
-    const second = await kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "second" });
-    if (first.status !== "executed" || second.status !== "executed")
-      throw new Error("not executed");
-    expect(first.handle.target).toBe(second.handle.target);
+    const [first, second] = await ownerMessageTargets();
+    expect(first).toBe(second);
     expect(commits).toHaveLength(2);
   });
   test.each([
     "workspaceId",
     "channelId",
   ] as const)("different %s isolates the target session", async (field) => {
-    const first = await kernelRouter().ingest(ownerSender, ownerFacts);
-    const second = await kernelRouter().ingest(ownerSender, {
+    const [first, second] = await ownerMessageTargets({
       ...ownerFacts,
       eventId: "second",
       [field]: "other",
     });
-    if (first.status !== "executed" || second.status !== "executed")
-      throw new Error("not executed");
-    expect(first.handle.target).not.toBe(second.handle.target);
+    expect(first).not.toBe(second);
   });
   test("allowlist refuses strangers while admitting the authenticated listed sender", async () => {
     ChannelGrantStore.put({

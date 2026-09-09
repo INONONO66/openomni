@@ -96,6 +96,17 @@ describe("TelegramAdapter dedupe (D1)", () => {
   });
 });
 
+function expectStaleReleasePreservesReplacement(
+  dedupe: Dedupe,
+  first: ReturnType<Dedupe["acquire"]>,
+) {
+  const second = dedupe.acquire("same-id");
+  expect(second.duplicate).toBe(false);
+  if (first.duplicate) throw new Error("first acquisition was not accepted");
+  dedupe.forget("same-id", first.token);
+  expect(dedupe.acquire("same-id").duplicate).toBe(true);
+}
+
 const config = {};
 type DeliveryOwner = Readonly<{
   deliver(
@@ -164,7 +175,7 @@ describe("outbound adapter delivery dedupe capability", () => {
 
   test.each(
     owners,
-  )("%s remains at-least-once when no idempotency key is supplied", async (_name, fixture) => {
+  )("%s delivers independently for distinct idempotency keys", async (_name, fixture) => {
     const { owner, outboundCalls } = fixture();
 
     await owner.deliver("recipient-1", "hello", "gateway-message-2");
@@ -213,12 +224,7 @@ describe("outbound adapter delivery dedupe capability", () => {
       const dedupe = new Dedupe(5);
       const first = dedupe.acquire("same-id");
       now += 6;
-      const second = dedupe.acquire("same-id");
-
-      expect(second.duplicate).toBe(false);
-      if (first.duplicate) throw new Error("first acquisition was not accepted");
-      dedupe.forget("same-id", first.token);
-      expect(dedupe.acquire("same-id").duplicate).toBe(true);
+      expectStaleReleasePreservesReplacement(dedupe, first);
     } finally {
       Date.now = originalNow;
     }
@@ -229,11 +235,6 @@ describe("outbound adapter delivery dedupe capability", () => {
     const first = dedupe.acquire("same-id");
     for (let index = 0; index < 99; index += 1) dedupe.acquire(`other-${index}`);
     dedupe.acquire("eviction-trigger");
-    const second = dedupe.acquire("same-id");
-
-    expect(second.duplicate).toBe(false);
-    if (first.duplicate) throw new Error("first acquisition was not accepted");
-    dedupe.forget("same-id", first.token);
-    expect(dedupe.acquire("same-id").duplicate).toBe(true);
+    expectStaleReleasePreservesReplacement(dedupe, first);
   });
 });

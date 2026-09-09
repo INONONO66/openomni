@@ -41,6 +41,17 @@ function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["
   return { router, commits };
 }
 
+function sendToChild(router: ReturnType<typeof createGatewayRouter>, content: string) {
+  return router.ingest(
+    { kind: "session", id: "parent" },
+    {
+      to: { kind: "session", id: "child" },
+      type: "message",
+      content,
+    },
+  );
+}
+
 test("session ingest commits once through the injected inbox without a channel driver", async () => {
   const { router, commits } = recordingRouter(
     async (_sender, request, body) => ({
@@ -50,10 +61,7 @@ test("session ingest commits once through the injected inbox without a channel d
     }),
     { sessionId: "parent", owner: "process", fence: 1 },
   );
-  const result: Gateway.IngestResult = await router.ingest(
-    { kind: "session", id: "parent" },
-    { to: { kind: "session", id: "child" }, type: "message", content: "work" },
-  );
+  const result: Gateway.IngestResult = await sendToChild(router, "work");
   expect(result).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(commits).toHaveLength(1);
   expect(commits[0]).toMatchObject({
@@ -84,10 +92,7 @@ test.each([
       value: await body(messageExecutionReceipt("source", "parent", transformed)),
     };
   });
-  const result = router.ingest(
-    { kind: "session", id: "parent" },
-    { to: { kind: "session", id: "child" }, type: "message", content: "secret" },
-  );
+  const result = sendToChild(router, "secret");
   if (field === "target") {
     await expect(result).rejects.toThrow("message routing transform requires readmission");
     expect(commits).toHaveLength(0);
@@ -102,10 +107,7 @@ test("post-execution denial retains the delivery handle and committed effect", a
     await body(messageExecutionReceipt("source", "parent", request.intent));
     return { terminal: "blocked_post", matchedRuleIds: ["post-rule"], reason: "post-denial" };
   });
-  const result = await router.ingest(
-    { kind: "session", id: "parent" },
-    { to: { kind: "session", id: "child" }, type: "message", content: "work" },
-  );
+  const result = await sendToChild(router, "work");
   expect(result).toMatchObject({
     status: "blocked_post",
     reasonCode: "post-denial",

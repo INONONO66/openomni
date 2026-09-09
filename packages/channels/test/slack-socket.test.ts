@@ -95,6 +95,26 @@ function collectPublishes() {
 
 const immediateDelay = () => Promise.resolve();
 
+function messageEnvelope(envelopeId: string, ts: string): SocketEnvelope {
+  return {
+    type: "events_api",
+    envelope_id: envelopeId,
+    payload: { event: { type: "message", channel: "C1", ts, text: "hi", user: "U1" } },
+  };
+}
+
+async function startReady(
+  fake: FakeSlack,
+  socket: SlackSocket,
+): Promise<ServerWebSocket<undefined>> {
+  const opened = fake.opens.next().then((ws) => {
+    ws.send(JSON.stringify({ type: "hello" }));
+    return ws;
+  });
+  const [ws] = await Promise.all([opened, socket.start()]);
+  return ws;
+}
+
 describe("SlackSocket", () => {
   const cleanups: Array<() => Promise<void>> = [];
   afterEach(async () => {
@@ -131,37 +151,23 @@ describe("SlackSocket", () => {
     ws.send(JSON.stringify({ type: "hello" }));
     await started;
 
-    const envelope = {
-      type: "events_api",
-      envelope_id: "env-1",
-      payload: { event: { type: "message", channel: "C1", ts: "1.0", text: "hi", user: "U1" } },
-    };
+    const envelope = messageEnvelope("env-1", "1.0");
     ws.send(JSON.stringify(envelope));
 
     expect(await fake.acks.next()).toEqual({ envelope_id: "env-1" });
-    expect((await events.next()).envelope_id).toBe("env-1");
+    expect(await events.next()).toEqual(envelope);
   });
 
   it("disconnect frame closes the socket and a new connection comes up", async () => {
     const { fake, events, socket, fetchCount } = harness();
-    const started = socket.start();
-    const ws1 = await fake.opens.next();
-    ws1.send(JSON.stringify({ type: "hello" }));
-    await started;
-
+    const ws1 = await startReady(fake, socket);
     ws1.send(JSON.stringify({ type: "disconnect", envelope_id: "env-d", reason: "refresh" }));
     expect(await fake.acks.next()).toEqual({ envelope_id: "env-d" });
     expect(await fake.closes.next()).toBe(4000);
 
     const ws2 = await fake.opens.next();
     ws2.send(JSON.stringify({ type: "hello" }));
-    ws2.send(
-      JSON.stringify({
-        type: "events_api",
-        envelope_id: "env-2",
-        payload: { event: { type: "message", channel: "C1", ts: "2.0", text: "hi", user: "U1" } },
-      }),
-    );
+    ws2.send(JSON.stringify(messageEnvelope("env-2", "2.0")));
     expect((await events.next()).envelope_id).toBe("env-2");
     expect(fetchCount()).toBe(2);
   });
@@ -175,21 +181,11 @@ describe("SlackSocket", () => {
           ? Promise.reject(new Error("slack api down"))
           : Promise.resolve(fakeSlack.url),
     });
-    const started = socket.start();
-    const ws1 = await fake.opens.next();
-    ws1.send(JSON.stringify({ type: "hello" }));
-    await started;
-
+    const ws1 = await startReady(fake, socket);
     ws1.send(JSON.stringify({ type: "disconnect", reason: "refresh" }));
     const ws2 = await fake.opens.next();
     ws2.send(JSON.stringify({ type: "hello" }));
-    ws2.send(
-      JSON.stringify({
-        type: "events_api",
-        envelope_id: "env-3",
-        payload: { event: { type: "message", channel: "C1", ts: "3.0", text: "hi", user: "U1" } },
-      }),
-    );
+    ws2.send(JSON.stringify(messageEnvelope("env-3", "3.0")));
     expect((await events.next()).envelope_id).toBe("env-3");
     expect(logs.filter((log) => log.event === Operational.Events.Error.name)).toEqual([
       { event: Operational.Events.Error.name, error: String(new Error("slack api down")) },
@@ -205,13 +201,7 @@ describe("SlackSocket", () => {
     await started;
 
     ws.send("this is not json");
-    ws.send(
-      JSON.stringify({
-        type: "events_api",
-        envelope_id: "env-4",
-        payload: { event: { type: "message", channel: "C1", ts: "4.0", text: "hi", user: "U1" } },
-      }),
-    );
+    ws.send(JSON.stringify(messageEnvelope("env-4", "4.0")));
     expect((await events.next()).envelope_id).toBe("env-4");
     expect(logs.filter((log) => log.event === Operational.Events.Warn.name)).toHaveLength(1);
   });
@@ -239,13 +229,7 @@ describe("SlackSocket", () => {
     ws.send(JSON.stringify({ type: "hello" }));
     await started;
 
-    ws.send(
-      JSON.stringify({
-        type: "events_api",
-        envelope_id: "env-5",
-        payload: { event: { type: "message", channel: "C1", ts: "5.0", text: "hi", user: "U1" } },
-      }),
-    );
+    ws.send(JSON.stringify(messageEnvelope("env-5", "5.0")));
     expect(await fake.acks.next()).toEqual({ envelope_id: "env-5" });
     // The ack arrived over the wire AFTER dispatch ran locally, so the error is recorded by now.
     expect(logs).toContainEqual({

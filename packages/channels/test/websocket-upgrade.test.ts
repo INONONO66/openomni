@@ -1,24 +1,12 @@
 import { expect, it } from "bun:test";
 import { connect } from "node:net";
-import { WebSocketHandler } from "../src/websocket";
+import { authenticatedWebSocketServer } from "./helpers/websocket-server";
 
 it.each([
   "auth, secret-token",
   "other, auth, secret-token",
 ])("negotiates exactly one auth response header for %s", async (protocols) => {
-  const handler = new WebSocketHandler(
-    async () => undefined,
-    () => undefined,
-    {
-      token: "secret-token",
-    },
-  );
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    websocket: handler.ws,
-    fetch: (request, bunServer) => handler.handleUpgrade(request, bunServer),
-  });
+  const server = authenticatedWebSocketServer();
   const socket = connect({ host: server.url.hostname, port: Number(server.url.port) });
   const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
   let timer: ReturnType<typeof setTimeout> | undefined;
