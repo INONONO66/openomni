@@ -1,7 +1,7 @@
 import net from "node:net";
 import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PeerRequestTable, type RequestParser } from "./peer-request-table";
+import { PeerRequestTable } from "./peer-request-table";
 
 export interface IpcClient {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
@@ -16,7 +16,6 @@ type ConnectIpcClientOptions = {
     method: string,
     params: Record<string, unknown> | undefined,
     respond: (result: unknown) => void,
-    parse: RequestParser,
   ) => void | Promise<void>;
   onNotification?: (
     method: string,
@@ -57,8 +56,7 @@ export function connectIpcClient(
     peer = new PeerRequestTable({
       send: (_peer, frame) => socket.write(encode(frame)),
       onRequest: opts.onRequest
-        ? (_peer, method, params, respond, _notify, parse) =>
-            opts.onRequest?.(method, params, respond, parse)
+        ? (_peer, method, params, respond) => opts.onRequest?.(method, params, respond)
         : undefined,
       onNotification: (_peer, method, params) => opts.onNotification?.(method, params),
       missingRequestHandlerMessage: (method) => `client has no request handler for ${method}`,

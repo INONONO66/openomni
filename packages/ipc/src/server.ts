@@ -1,11 +1,10 @@
 import fs from "node:fs";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
-import type { z } from "zod";
 
 import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PeerRequestTable, type RequestParser } from "./peer-request-table";
+import { PeerRequestTable } from "./peer-request-table";
 
 /** Remove the socket file, tolerating a concurrent removal (ENOENT). */
 function unlinkIfExists(socketPath: string): void {
@@ -32,7 +31,6 @@ type RequestHandler = (
   respond: (result: unknown) => void,
   notify: (method: string, params?: Record<string, unknown>) => void,
   connectionId: string,
-  parse: RequestParser,
 ) => void | Promise<void>;
 
 export interface IpcServer {
@@ -139,15 +137,15 @@ export async function createIpcServer(
     }
   }
 
-  function sendFrame(state: ConnectionState, msg: unknown): void {
+  function sendFrame(state: ConnectionState, msg: IpcMessage): void {
     send(state, encode(msg));
   }
 
   const peer = new PeerRequestTable<ConnectionState>({
     send: sendFrame,
     samePeer: (pendingPeer, inboundPeer) => pendingPeer.id === inboundPeer.id,
-    onRequest: (state, method, params, respond, notify, parse) =>
-      handler(method, params, respond, notify, state.id, parse),
+    onRequest: (state, method, params, respond, notify) =>
+      handler(method, params, respond, notify, state.id),
     onNotification: (state, method, params) =>
       handler(
         method,
@@ -155,7 +153,6 @@ export async function createIpcServer(
         () => undefined,
         () => undefined,
         state.id,
-        <T>(schema: z.ZodType<T>) => schema.parse(params),
       ),
   });
 

@@ -16,9 +16,9 @@ describe("IPC bidirectional", () => {
 
     const received = { method: "", params: { msg: "" } };
     const client = await connectIpcClient(socketPath, {
-      onRequest(method, _params, respond, parse) {
+      onRequest(method, params, respond) {
         received.method = method;
-        received.params = parse(z.object({ msg: z.string() }));
+        received.params = z.object({ msg: z.string() }).parse(params);
         respond({ echo: received.params.msg });
       },
     });
@@ -92,8 +92,8 @@ describe("IPC bidirectional", () => {
     servers.push(srv);
 
     const client = await connectIpcClient(socketPath, {
-      onRequest(_method, _params, respond, parse) {
-        respond({ doubled: parse(z.object({ n: z.number() })).n * 2 });
+      onRequest(_method, params, respond) {
+        respond({ doubled: z.object({ n: z.number() }).parse(params).n * 2 });
       },
     });
     clients.push(client);

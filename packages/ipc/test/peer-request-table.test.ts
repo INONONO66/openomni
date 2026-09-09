@@ -115,8 +115,8 @@ describe("PeerRequestTable", () => {
     const sent: Frame[] = [];
     const table = new PeerRequestTable<string>({
       send: (_peer, frame) => sent.push(frame),
-      onRequest: (_peer, _method, _params, respond, _notify, parse) => {
-        const params = parse(z.object({ value: z.number() }));
+      onRequest: (_peer, _method, rawParams, respond) => {
+        const params = z.object({ value: z.number() }).parse(rawParams);
         respond({ doubled: params.value * 2 });
       },
     });
