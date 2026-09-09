@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { posix } from "node:path";
 import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
+import type { z } from "zod";
 import { MachineRefusalError } from "./errors";
 import { createFsDriver } from "./fs";
 import { execute } from "./exec";
@@ -25,6 +26,14 @@ export interface MachineDaemonOptions {
   readonly runner?: CodeRunner;
   readonly attachTimeoutMs?: number;
 }
+type WireParse = <T>(schema: z.ZodType<T>) => T;
+type WireResult =
+  | Machine.FsResult
+  | Machine.ExecResult
+  | Machine.CancelResult
+  | Machine.PeekResult
+  | Machine.CellResult;
+
 export interface MachineDaemon {
   readonly attachment: Machine.AttachResult;
   readonly closed: Promise<void>;
@@ -98,6 +107,97 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
       throw new MachineRefusalError({ reason: "closed", message: "daemon connection is closed" });
     return client;
   }
+  /** Tracks an execution so close() can await it, and releases it once settled. */
+  async function tracked<T extends Machine.CellResult | Machine.ExecResult>(
+    execution: Promise<T>,
+  ): Promise<T> {
+    pending.add(execution);
+    try {
+      return await execution;
+    } finally {
+      pending.delete(execution);
+    }
+  }
+  async function fsOp(request: Machine.FsRequest): Promise<Machine.FsResult> {
+    const capability =
+      request.op === "write"
+        ? Machine.WellKnownCapability.fsWrite
+        : Machine.WellKnownCapability.fsRead;
+    if (!has(capability))
+      return {
+        status: "refused",
+        reason: "fs_not_available",
+        message: `${capability} is not available`,
+      };
+    const offered = offer.exports?.find((entry) => entry.name === request.export);
+    if (
+      attachment.status !== "attached" ||
+      !attachment.effectiveExports.includes(request.export) ||
+      offered === undefined ||
+      options.fsExports?.get(request.export) !== offered.path
+    )
+      return {
+        status: "refused",
+        reason: "export_not_available",
+        message: `export is not available: ${request.export}`,
+      };
+    return filesystem(request);
+  }
+  async function exec(request: Machine.ExecRequest): Promise<Machine.ExecResult> {
+    if (!has(Machine.WellKnownCapability.shellExec))
+      return { status: "refused", reason: "exec_not_available" };
+    const cwd = openCwd(request.cwd);
+    if ("status" in cwd) return cwd;
+    const execution = execute({ ...request, cwd: cwd.cwd }, lifetime.signal);
+    cwd.close();
+    return tracked(execution);
+  }
+  function cancelCode(request: z.infer<typeof Machine.CancelCode>): Machine.CancelResult {
+    const cell = cells.get(request.cellId);
+    cell?.abort();
+    return { cancelled: cell !== undefined };
+  }
+  function peekCode(request: z.infer<typeof Machine.PeekCode>): Machine.PeekResult {
+    // A queued cell is in flight without output yet; a settled one is not running.
+    return {
+      running: cells.has(request.cellId),
+      output: options.runner?.peekCode(request.cellId) ?? { stdout: "", stderr: "" },
+    };
+  }
+  async function callTool(
+    call: Machine.ToolCall,
+    timeoutMs: number,
+  ): Promise<Machine.ToolCallResult> {
+    return Machine.ToolCallResult.parse(
+      await typedCall(requireClient(), Machine.WireMethod.CallTool, call, timeoutMs),
+    );
+  }
+  async function runCode(request: Machine.CellRequest): Promise<Machine.CellResult> {
+    if (!has(Machine.WellKnownCapability.pythonKernel) || options.runner === undefined)
+      return { status: "refused", reason: "kernel_not_available" };
+    if (cells.has(request.cellId))
+      throw new MachineRefusalError({ reason: "invalid_response", message: "duplicate cell id" });
+    const cell = new AbortController();
+    cells.set(request.cellId, cell);
+    const execution = options.runner.runCode(
+      request,
+      (call) => callTool(call, request.timeoutMs),
+      cell.signal,
+    );
+    try {
+      return Machine.CellResult.parse(await tracked(execution));
+    } finally {
+      cells.delete(request.cellId);
+    }
+  }
+  /** Each wire method parses its own request at the socket boundary, then serves it. */
+  const wire: Readonly<Record<string, ((parse: WireParse) => Promise<WireResult>) | undefined>> = {
+    [Machine.WireMethod.FsOp]: (parse) => fsOp(parse(Machine.FsRequest)),
+    [Machine.WireMethod.Exec]: (parse) => exec(parse(Machine.ExecRequest)),
+    [Machine.WireMethod.CancelCode]: async (parse) => cancelCode(parse(Machine.CancelCode)),
+    [Machine.WireMethod.PeekCode]: async (parse) => peekCode(parse(Machine.PeekCode)),
+    [Machine.WireMethod.RunCode]: (parse) => runCode(parse(Machine.CellRequest)),
+  };
   try {
     client = await connectIpcClient(options.socketPath, {
       onDisconnect: () => {
@@ -105,117 +205,13 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
       },
       onRequest: async (method, params, respond) => {
         await attached;
-        if (method === Machine.WireMethod.FsOp) {
-          const request = Machine.FsRequest.parse(params);
-          const capability =
-            request.op === "write"
-              ? Machine.WellKnownCapability.fsWrite
-              : Machine.WellKnownCapability.fsRead;
-          if (!has(capability)) {
-            respond({
-              status: "refused",
-              reason: "fs_not_available",
-              message: `${capability} is not available`,
-            } satisfies Machine.FsResult);
-            return;
-          }
-          const offered = offer.exports?.find((entry) => entry.name === request.export);
-          if (
-            attachment.status !== "attached" ||
-            !attachment.effectiveExports.includes(request.export) ||
-            offered === undefined ||
-            options.fsExports?.get(request.export) !== offered.path
-          ) {
-            respond({
-              status: "refused",
-              reason: "export_not_available",
-              message: `export is not available: ${request.export}`,
-            } satisfies Machine.FsResult);
-            return;
-          }
-          respond(await filesystem(request));
-          return;
-        }
-        if (method === Machine.WireMethod.Exec) {
-          const request = Machine.ExecRequest.parse(params);
-          if (!has(Machine.WellKnownCapability.shellExec)) {
-            respond({
-              status: "refused",
-              reason: "exec_not_available",
-            } satisfies Machine.ExecResult);
-            return;
-          }
-          const cwd = openCwd(request.cwd);
-          if ("status" in cwd) {
-            respond(cwd);
-            return;
-          }
-          const execution = execute({ ...request, cwd: cwd.cwd }, lifetime.signal);
-          cwd.close();
-          pending.add(execution);
-          try {
-            respond(await execution);
-          } finally {
-            pending.delete(execution);
-          }
-          return;
-        }
-        if (method === Machine.WireMethod.CancelCode) {
-          const request = Machine.CancelCode.parse(params);
-          const cell = cells.get(request.cellId);
-          cell?.abort();
-          respond({ cancelled: cell !== undefined } satisfies Machine.CancelResult);
-          return;
-        }
-        if (method === Machine.WireMethod.PeekCode) {
-          const request = Machine.PeekCode.parse(params);
-          // A queued cell is in flight without output yet; a settled one is not running.
-          respond({
-            running: cells.has(request.cellId),
-            output: options.runner?.peekCode(request.cellId) ?? { stdout: "", stderr: "" },
-          } satisfies Machine.PeekResult);
-          return;
-        }
-        if (method !== Machine.WireMethod.RunCode)
+        const serve = wire[method];
+        if (serve === undefined)
           throw new MachineRefusalError({
             reason: "invalid_method",
             message: `invalid method: ${method}`,
           });
-        const request = Machine.CellRequest.parse(params);
-        if (!has(Machine.WellKnownCapability.pythonKernel) || options.runner === undefined) {
-          respond({
-            status: "refused",
-            reason: "kernel_not_available",
-          } satisfies Machine.CellResult);
-          return;
-        }
-        if (cells.has(request.cellId))
-          throw new MachineRefusalError({
-            reason: "invalid_response",
-            message: "duplicate cell id",
-          });
-        const cell = new AbortController();
-        cells.set(request.cellId, cell);
-        const execution = options.runner.runCode(
-          request,
-          async (call) =>
-            Machine.ToolCallResult.parse(
-              await typedCall(
-                requireClient(),
-                Machine.WireMethod.CallTool,
-                call,
-                request.timeoutMs,
-              ),
-            ),
-          cell.signal,
-        );
-        pending.add(execution);
-        try {
-          respond(Machine.CellResult.parse(await execution));
-        } finally {
-          cells.delete(request.cellId);
-          pending.delete(execution);
-        }
+        respond(await serve(<T>(schema: z.ZodType<T>): T => schema.parse(params)));
       },
     });
     attachment = Machine.AttachResult.parse(
