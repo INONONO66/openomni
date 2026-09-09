@@ -3,6 +3,10 @@ import { ZodError } from "zod";
 import { Tool } from "../src/tool/index.js";
 import type { PlainValue } from "../src/json.js";
 
+function expectInvalidState(state: unknown): void {
+  expect(() => Tool.State.parse(state)).toThrow(ZodError);
+}
+
 describe("Tool shared contracts", () => {
   test("parses tool config shared by execution and ingress", () => {
     const config = Tool.Config.parse({
@@ -144,15 +148,13 @@ describe("Tool.StateCompleted", () => {
   });
 
   test("rejects missing time", () => {
-    expect(() =>
-      Tool.State.parse({
-        status: "completed",
-        input: {},
-        output: "done",
-        title: "Demo Task",
-        metadata: {},
-      }),
-    ).toThrow(ZodError);
+    expectInvalidState({
+      status: "completed",
+      input: {},
+      output: "done",
+      title: "Demo Task",
+      metadata: {},
+    });
   });
 });
 
@@ -181,13 +183,7 @@ describe("Tool.StateError", () => {
   });
 
   test("rejects missing time", () => {
-    expect(() =>
-      Tool.State.parse({
-        status: "error",
-        input: {},
-        error: "failed",
-      }),
-    ).toThrow(ZodError);
+    expectInvalidState({ status: "error", input: {}, error: "failed" });
   });
 });
 

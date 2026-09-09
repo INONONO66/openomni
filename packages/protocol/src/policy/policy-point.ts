@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toolResultSchema } from "../tool/result.js";
 import { PolicyDefinition, policyKernelVersion } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
 
@@ -323,15 +324,7 @@ const toolSpec = z.object({
   labels: z.array(z.string()).optional(),
   prompt: z.string().optional(),
 });
-const toolResult = z.object({
-  id: z.string(),
-  toolCallId: z.string(),
-  // #500 C4: additive-optional denormalized tool name, mirrored from Tool.Result.
-  toolName: z.string().optional(),
-  output: z.string(),
-  isError: z.boolean().optional(),
-  settlement: z.enum(["settled", "unknown"]).optional(),
-});
+const toolResult = toolResultSchema();
 
 // Structural validator shape, written inline at every type position: a named
 // interface here either leaks a private name into the emitted declaration

@@ -1,5 +1,17 @@
 import { describe, test, expect } from "bun:test";
 import { Ingress } from "../src/ingress/index.js";
+import { expectParseFailure } from "./helpers/schema.js";
+
+function directEvent() {
+  return {
+    id: "event-1",
+    traceId: "trace-test",
+    surface: "cli",
+    mode: "direct",
+    payload: { query: "What is 2+2?" },
+    agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
+  };
+}
 
 describe("AgentDef", () => {
   test("should parse agent with only model required", () => {
@@ -121,19 +133,7 @@ describe("Ingress meta contracts", () => {
 
 describe("DirectEvent", () => {
   test("should parse valid direct event with agent", () => {
-    const event = Ingress.DirectEventSchema.parse({
-      id: "event-1",
-      traceId: "trace-test",
-      surface: "cli",
-      mode: "direct",
-      payload: { query: "What is 2+2?" },
-      agent: {
-        model: {
-          provider: "anthropic",
-          id: "claude-3-5-sonnet",
-        },
-      },
-    });
+    const event = Ingress.DirectEventSchema.parse(directEvent());
     expect(event.mode).toBe("direct");
     expect(event.agent.model.id).toBe("claude-3-5-sonnet");
   });
@@ -141,19 +141,7 @@ describe("DirectEvent", () => {
 
 describe("DirectEvent validation", () => {
   test("should parse direct event", () => {
-    const event = Ingress.DirectEventSchema.parse({
-      id: "event-1",
-      traceId: "trace-test",
-      surface: "cli",
-      mode: "direct",
-      payload: { query: "What is 2+2?" },
-      agent: {
-        model: {
-          provider: "anthropic",
-          id: "claude-3-5-sonnet",
-        },
-      },
-    });
+    const event = Ingress.DirectEventSchema.parse(directEvent());
     expect(event.mode).toBe("direct");
   });
 
@@ -231,13 +219,3 @@ describe("DirectEvent validation", () => {
     );
   });
 });
-
-function expectParseFailure(parse: () => unknown): void {
-  let failed = false;
-  try {
-    parse();
-  } catch {
-    failed = true;
-  }
-  expect(failed).toBe(true);
-}

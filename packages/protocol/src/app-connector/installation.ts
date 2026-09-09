@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { Policy } from "../policy/index.js";
-import { Definition, nonEmptyString, positiveInteger } from "./definition.js";
+import { Definition, nonEmptyString, positiveInteger, Requires } from "./definition.js";
 
 export const InstallationStatus = z.enum([
   "registered",
@@ -12,15 +11,10 @@ export const InstallationStatus = z.enum([
 ]);
 export type InstallationStatus = z.infer<typeof InstallationStatus>;
 
-export const Consent = z
-  .object({
-    grantedBy: nonEmptyString,
-    grantedAt: positiveInteger,
-    credentials: z.array(nonEmptyString).optional(),
-    capabilities: z.array(nonEmptyString).optional(),
-    permissions: z.array(Policy.Permission).optional(),
-  })
-  .strict();
+export const Consent = Requires.extend({
+  grantedBy: nonEmptyString,
+  grantedAt: positiveInteger,
+});
 export type Consent = z.infer<typeof Consent>;
 
 const WorkspaceIdentity = z

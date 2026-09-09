@@ -78,6 +78,37 @@ function validConnector(): Record<string, unknown> {
   };
 }
 
+function installation(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "install-app-codex",
+    connectorId: "app.example-connector",
+    connectorVersion: "1.0.0",
+    endpointId: "endpoint:install-app-codex",
+    definition: validConnector(),
+    status: "registered",
+    registeredBy: "act_owner",
+    createdAt: 100,
+    updatedAt: 100,
+    ...overrides,
+  };
+}
+
+function expectInvalidInstallation(overrides: Record<string, unknown>, path: string): void {
+  const result = AppConnector.Installation.safeParse(installation(overrides));
+  expect(result.success).toBe(false);
+  if (!result.success) expect(issuePaths(result.error).includes(path)).toBe(true);
+}
+
+function withReadBackRequests(readBackRequests: unknown[]) {
+  return {
+    ...validConnector(),
+    evidence: {
+      emits: ["exit_code"],
+      completionReport: { finalMessage: "stdout", readBackRequests },
+    },
+  };
+}
+
 describe("AppConnector protocol domain", () => {
   describe("AppConnector.Installation", () => {
     it("parses a registered connector installation record", () => {
@@ -134,78 +165,21 @@ describe("AppConnector protocol domain", () => {
     });
 
     it("rejects installation records whose embedded definition does not match the connector id", () => {
-      // Given
-      const installation = {
-        id: "install-app-codex",
-        connectorId: "app.example-worker",
-        connectorVersion: "1.0.0",
-        endpointId: "endpoint:install-app-codex",
-        definition: { ...validConnector(), id: "app.other" },
-        status: "registered",
-        registeredBy: "act_owner",
-        createdAt: 100,
-        updatedAt: 100,
-      };
-
-      // When
-      const result = AppConnector.Installation.safeParse(installation);
-
-      // Then
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        const paths = issuePaths(result.error);
-        expect(paths.includes("definition.id")).toBe(true);
-      }
+      expectInvalidInstallation(
+        {
+          connectorId: "app.example-worker",
+          definition: { ...validConnector(), id: "app.other" },
+        },
+        "definition.id",
+      );
     });
 
     it("rejects installation records whose embedded definition does not match the connector version", () => {
-      // Given
-      const installation = {
-        id: "install-app-codex",
-        connectorId: "app.example-connector",
-        connectorVersion: "2.0.0",
-        endpointId: "endpoint:install-app-codex",
-        definition: validConnector(),
-        status: "registered",
-        registeredBy: "act_owner",
-        createdAt: 100,
-        updatedAt: 100,
-      };
-
-      // When
-      const result = AppConnector.Installation.safeParse(installation);
-
-      // Then
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        const paths = issuePaths(result.error);
-        expect(paths.includes("definition.version")).toBe(true);
-      }
+      expectInvalidInstallation({ connectorVersion: "2.0.0" }, "definition.version");
     });
 
     it("rejects enabled installation records without owner consent", () => {
-      // Given
-      const installation = {
-        id: "install-app-codex",
-        connectorId: "app.example-connector",
-        connectorVersion: "1.0.0",
-        endpointId: "endpoint:install-app-codex",
-        definition: validConnector(),
-        status: "enabled",
-        registeredBy: "act_owner",
-        createdAt: 100,
-        updatedAt: 100,
-      };
-
-      // When
-      const result = AppConnector.Installation.safeParse(installation);
-
-      // Then
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        const paths = issuePaths(result.error);
-        expect(paths.includes("consent")).toBe(true);
-      }
+      expectInvalidInstallation({ status: "enabled" }, "consent");
     });
   });
 
@@ -288,39 +262,24 @@ describe("AppConnector protocol domain", () => {
     });
 
     it("accepts templated completion read-back request builders", () => {
-      // Given
-      const connector = validConnector();
-
-      // When
-      const result = AppConnector.Definition.safeParse({
-        ...connector,
-        evidence: {
-          emits: ["exit_code"],
-          completionReport: {
-            finalMessage: "stdout",
-            readBackRequests: [
-              {
-                claimIndex: 0,
-                criterionIndex: 0,
-                request: {
-                  kind: "citation_match",
-                  target: "{{output.url}}",
-                  quotedText: "{{output.marker}}",
-                },
-              },
-              {
-                claimIndex: 1,
-                criterionIndex: 1,
-                request: {
-                  kind: "api_query",
-                  target: "{{output.apiUrl}}",
-                  method: "HEAD",
-                },
-              },
-            ],
+      const result = AppConnector.Definition.safeParse(
+        withReadBackRequests([
+          {
+            claimIndex: 0,
+            criterionIndex: 0,
+            request: {
+              kind: "citation_match",
+              target: "{{output.url}}",
+              quotedText: "{{output.marker}}",
+            },
           },
-        },
-      });
+          {
+            claimIndex: 1,
+            criterionIndex: 1,
+            request: { kind: "api_query", target: "{{output.apiUrl}}", method: "HEAD" },
+          },
+        ]),
+      );
 
       // Then
       expect(result.success).toBe(true);
@@ -330,30 +289,15 @@ describe("AppConnector protocol domain", () => {
     });
 
     it("rejects unsupported completion read-back builder methods", () => {
-      // Given
-      const connector = validConnector();
-
-      // When
-      const result = AppConnector.Definition.safeParse({
-        ...connector,
-        evidence: {
-          emits: ["exit_code"],
-          completionReport: {
-            finalMessage: "stdout",
-            readBackRequests: [
-              {
-                claimIndex: 0,
-                criterionIndex: 0,
-                request: {
-                  kind: "api_query",
-                  target: "{{output.apiUrl}}",
-                  method: "POST",
-                },
-              },
-            ],
+      const result = AppConnector.Definition.safeParse(
+        withReadBackRequests([
+          {
+            claimIndex: 0,
+            criterionIndex: 0,
+            request: { kind: "api_query", target: "{{output.apiUrl}}", method: "POST" },
           },
-        },
-      });
+        ]),
+      );
 
       // Then
       expect(result.success).toBe(false);

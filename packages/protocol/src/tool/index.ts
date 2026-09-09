@@ -4,6 +4,7 @@ import { CapabilityId } from "../machine/schema.js";
 import type { TraceContext } from "../trace/index.js";
 import { PlainObjectSchema, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
+import { toolResultSchema } from "./result.js";
 
 export type ToolCategory = "query" | "mutation" | "authority" | "execution";
 export type ToolRole = "resident" | "worker";
@@ -148,20 +149,7 @@ export namespace Tool {
     readonly traceContext?: Pick<TraceContext.Type, "traceId" | "sessionId" | "runId">;
   }
 
-  export const Result = z.object({
-    id: z.string(),
-    toolCallId: z.string(),
-    /**
-     * #500 C4: denormalized tool name, populated by producers that have the
-     * name in hand at result construction. Additive-optional — readers must
-     * tolerate absence (older producers, and paths where only the call id
-     * survives).
-     */
-    toolName: z.string().optional(),
-    output: z.string(),
-    isError: z.boolean().optional(),
-    settlement: z.enum(["settled", "unknown"]).optional(),
-  });
+  export const Result = toolResultSchema();
   export type Result = z.infer<typeof Result>;
 
   /**

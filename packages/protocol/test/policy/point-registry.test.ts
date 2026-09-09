@@ -19,6 +19,16 @@ const expectedPointIds = [
   "run.error.error",
 ] as const;
 
+function registryContracts() {
+  // Discover points from the registry so additions cannot escape these assertions.
+  const entries = Object.entries(Policy.PolicyPoint.Registry);
+  expect(entries.length).toBeGreaterThan(0);
+  return entries.map(([pointId, contract]) => {
+    expect(contract).toBeDefined();
+    return { pointId, contract };
+  });
+}
+
 describe("PolicyPoint registry", () => {
   test("accepts only canonical 3-tier point IDs", () => {
     expect(Policy.PolicyPoint.Id.parse("tool.native.pre")).toBe("tool.native.pre");
@@ -89,16 +99,7 @@ describe("PolicyPoint registry", () => {
     );
     expect(roundTripped).toEqual(Policy.PolicyPoint.Registry);
 
-    // Derived from the registry itself, not the expected list — a NEW point
-    // cannot dodge this assertion by not being enumerated here.
-    const pointIds = Object.keys(Policy.PolicyPoint.Registry) as Array<
-      keyof typeof Policy.PolicyPoint.Registry
-    >;
-    expect(pointIds.length).toBeGreaterThan(0);
-    for (const pointId of pointIds) {
-      const contract = Policy.PolicyPoint.Registry[pointId];
-      expect(contract).toBeDefined();
-      if (contract === undefined) continue;
+    for (const { pointId, contract } of registryContracts()) {
       expect(contract.id).toBe(pointId);
       expect(contract.version).toBe(1);
       expect(Policy.PolicyPoint.Contract.safeParse(contract).success).toBe(true);
@@ -106,16 +107,7 @@ describe("PolicyPoint registry", () => {
   });
 
   test("preserves every v1 input schema identifier", () => {
-    // Derived from the registry itself, not the expected list — a NEW point
-    // cannot dodge this assertion by not being enumerated here.
-    const pointIds = Object.keys(Policy.PolicyPoint.Registry) as Array<
-      keyof typeof Policy.PolicyPoint.Registry
-    >;
-    expect(pointIds.length).toBeGreaterThan(0);
-    for (const pointId of pointIds) {
-      const contract = Policy.PolicyPoint.Registry[pointId];
-      expect(contract).toBeDefined();
-      if (contract === undefined) continue;
+    for (const { pointId, contract } of registryContracts()) {
       expect(contract.inputSchema).toBe(`policy.point.${pointId}.input.v1`);
     }
   });
@@ -139,14 +131,7 @@ describe("PolicyPoint registry", () => {
 
 describe("model.override point admission (#753)", () => {
   test("connection.llm.pre allows model.override; every other point refuses it", () => {
-    // Derived from the registry itself, not the expected list — a NEW point
-    // cannot dodge this assertion by not being enumerated here.
-    const pointIds = Object.keys(Policy.PolicyPoint.Registry) as Array<
-      keyof typeof Policy.PolicyPoint.Registry
-    >;
-    expect(pointIds.length).toBeGreaterThan(0);
-    for (const pointId of pointIds) {
-      const contract = Policy.PolicyPoint.Registry[pointId];
+    for (const { pointId, contract } of registryContracts()) {
       const allowed = contract.allowedEffects.includes("model.override");
       expect({ pointId, allowed }).toEqual({
         pointId,

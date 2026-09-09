@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Ingress } from "../src/ingress/index.js";
+import { expectParseFailure } from "./helpers/schema.js";
 
 describe("InternalEventSchema", () => {
   test("parses valid internal event", () => {
@@ -56,13 +57,3 @@ describe("InternalEventSchema", () => {
     expect(result.activation?.trigger?.id).toBe("job-1");
   });
 });
-
-function expectParseFailure(parse: () => unknown): void {
-  let failed = false;
-  try {
-    parse();
-  } catch {
-    failed = true;
-  }
-  expect(failed).toBe(true);
-}

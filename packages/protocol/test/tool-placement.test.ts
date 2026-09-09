@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Tool } from "../src/tool/index.js";
+import { expectIssue } from "./helpers/schema.js";
 
 describe("Tool.Placement", () => {
   test("the three placements parse and anything else is refused", () => {
@@ -29,13 +30,10 @@ describe("Tool.Placement", () => {
       inputSchema: {},
       requires: ["NotACapability"],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe(
-        "capability id must be dot-namespaced lowercase (e.g. fs.read)",
-      );
-      expect(result.error.issues[0]?.path.join(".")).toBe("requires.0");
-    }
+    expectIssue(result, {
+      message: "capability id must be dot-namespaced lowercase (e.g. fs.read)",
+      path: "requires.0",
+    });
   });
 
   test("executableNames yields the catalog name and its dot-free spelling", () => {
