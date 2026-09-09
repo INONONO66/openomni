@@ -34,7 +34,7 @@ type WireResult =
   | Machine.PeekResult
   | Machine.CellResult;
 
-interface MachineDaemon {
+export interface MachineDaemon {
   readonly attachment: Machine.AttachResult;
   readonly closed: Promise<void>;
   close(): Promise<void>;

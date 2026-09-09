@@ -10,7 +10,7 @@ import { socketPath } from "./helpers/socket-path";
 
 interface RecordedEvent {
   readonly name: string;
-  readonly payload: Record<string, unknown>;
+  readonly payload: object;
 }
 
 function eventCollector() {
@@ -18,7 +18,7 @@ function eventCollector() {
   const waiters: Array<{ name: string; resolve: (event: RecordedEvent) => void }> = [];
   const sink: BusEvent.Sink = {
     publish(descriptor, payload) {
-      const event = { name: descriptor.name, payload: payload as Record<string, unknown> };
+      const event = { name: descriptor.name, payload };
       events.push(event);
       for (let i = waiters.length - 1; i >= 0; i -= 1) {
         const waiter = waiters[i];
