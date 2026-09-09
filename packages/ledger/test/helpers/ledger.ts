@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { z } from "zod";
 import type { Ledger as LedgerTypes, PlainValue } from "@openomni/protocol";
 
 interface FixtureInput {
@@ -48,10 +49,10 @@ export function appendChain(
       }),
       head,
     );
-    if (outcome.kind !== "appended") {
-      throw new Error(`fixture appendChain hit ${outcome.kind} at head ${head}`);
-    }
-    outcomes.push(outcome);
+    const appended = z
+      .object({ kind: z.literal("appended"), seq: z.number(), eventHash: z.string() })
+      .parse(outcome);
+    outcomes.push(appended);
   }
   return outcomes;
 }
