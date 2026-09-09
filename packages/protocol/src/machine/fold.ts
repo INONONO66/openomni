@@ -1,5 +1,10 @@
 import type { CapabilityId, Enrollment, ExportName, MachineId, Offer } from "./schema.js";
 
+function intersect<T extends string>(allowed: readonly T[], offered: readonly T[]): T[] {
+  const permitted = new Set(allowed);
+  return [...new Set(offered.filter((value) => permitted.has(value)))].sort();
+}
+
 export type EffectiveOutcome =
   | {
       /** The capability set every placement/authorization decision reads. */
@@ -28,11 +33,10 @@ export function effectiveCapabilities(enrollment: Enrollment, offer: Offer): Eff
       offered: offer.machineId,
     };
   }
-  const allowed = new Set(enrollment.allowedCapabilities);
   return {
     kind: "effective",
     machineId: enrollment.machineId,
-    capabilities: [...new Set(offer.offeredCapabilities.filter((id) => allowed.has(id)))].sort(),
+    capabilities: intersect(enrollment.allowedCapabilities, offer.offeredCapabilities),
   };
 }
 
@@ -64,14 +68,12 @@ export function effectiveExports(enrollment: Enrollment, offer: Offer): Effectiv
       offered: offer.machineId,
     };
   }
-  const allowed = new Set(enrollment.allowedExports ?? []);
   return {
     kind: "effective",
     machineId: enrollment.machineId,
-    exports: [
-      ...new Set(
-        (offer.exports ?? []).map((entry) => entry.name).filter((name) => allowed.has(name)),
-      ),
-    ].sort(),
+    exports: intersect(
+      enrollment.allowedExports ?? [],
+      (offer.exports ?? []).map((entry) => entry.name),
+    ),
   };
 }
