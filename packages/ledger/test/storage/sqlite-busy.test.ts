@@ -35,7 +35,9 @@ describe("isSqliteBusyError", () => {
       // Empirical pin: bun:sqlite throws SQLiteError { code: "SQLITE_BUSY",
       // errno: 5, message: "database is locked" } — the predicate's contract.
       expect(thrown).toBeInstanceOf(Error);
-      expect((thrown as { code?: unknown }).code).toBe("SQLITE_BUSY");
+      if (!(thrown instanceof Error) || !("code" in thrown))
+        throw new Error("missing driver error code");
+      expect(thrown.code).toBe("SQLITE_BUSY");
       expect(isSqliteBusyError(thrown)).toBe(true);
     } finally {
       contender.close();

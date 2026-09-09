@@ -43,9 +43,10 @@ describe("Storage.initialize", () => {
       adapter.close();
     }
 
-    expect((refusal as Error).name).toBe("IncompleteAdapterError");
+    if (!(refusal instanceof Error)) throw new Error("expected incomplete adapter refusal");
+    expect(refusal.name).toBe("IncompleteAdapterError");
     expect(refusal).toMatchObject({ code: "incomplete_adapter", capability: "actions" });
-    expect((refusal as Error).message).toBe(
+    expect(refusal.message).toBe(
       "Production storage adapter is missing required capability: actions",
     );
     expect(() => Storage.get()).toThrow("Storage.get() called before initialize()");

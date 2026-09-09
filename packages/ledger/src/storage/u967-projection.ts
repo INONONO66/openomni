@@ -44,7 +44,7 @@ type HistoricalRecord = z.infer<typeof HistoricalProjection>;
 export function terminalComplete(record: HistoricalRecord): boolean {
   return (
     validTimes(record) &&
-    validResponders(record) &&
+    new Set(record.allowedActions).size === record.allowedActions.length &&
     validReplies(record) &&
     validTerminalState(record)
   );
@@ -63,19 +63,6 @@ function validTimes(record: HistoricalRecord): boolean {
   return (
     !times.some((time) => time > Number.MAX_SAFE_INTEGER) && record.updatedAt >= record.createdAt
   );
-}
-
-function validResponders(record: HistoricalRecord): boolean {
-  if (
-    new Set(record.expectedResponders).size !== record.expectedResponders.length ||
-    new Set(record.allowedActions).size !== record.allowedActions.length
-  )
-    return false;
-  if (record.resolutionPolicy === "quorum") {
-    if (record.quorum === undefined || record.quorum.expected !== record.expectedResponders.length)
-      return false;
-  } else if (record.quorum !== undefined) return false;
-  return true;
 }
 
 function validReplies(record: HistoricalRecord): boolean {

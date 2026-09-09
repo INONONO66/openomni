@@ -1,6 +1,6 @@
 # packages/ledger
 
-Durable state substrate. Depends only on `@openomni/protocol`; application composition and execution belong outside ledger. Request-storage cutover updated on `kernel/969-delegation-inbox`, 2026-09-07.
+Durable state substrate. Depends only on `@openomni/protocol`; application composition and execution belong outside ledger. Storage boundaries and sub-adapter ownership updated on `q945/ledger`, 2026-09-09.
 
 ## Ownership
 
@@ -14,8 +14,14 @@ src/
   session/kernel.ts         # SessionHandleStore: materialize, fenced commit, snapshots
   storage/storage.ts        # Adapter contract, scoped initialization/reset
   storage/sqlite-storage.ts # Production adapter wiring and connection lifetime
-  storage/sqlite-l0-adapter.ts # Canonical session/action/inbox/alarm/policy SQL
+  storage/sqlite-l0-adapter.ts # Canonical sub-adapter composition
+  storage/sqlite-l0-{sessions,actions,inbox,alarms,policies}.ts # Per-surface operations
+  storage/sqlite-l0-write.ts # Shared transaction-local write invariants
+  storage/sqlite-l0-rows.ts # Validated SQLite row and replay codecs
+  storage/sqlite-l0-observation.ts # Lossy post-commit publication
+  storage/sqlite-json-data.ts # Validated stored JSON and aggregate counts
   storage/migration-runner.ts # Ordered transactional migration runner
+  storage/migration-statements.ts # Quote/comment-aware statement boundaries
   storage/sqlite-schema-lifecycle.ts # PRAGMAs, migration list, test-only clear
   ledger-core/              # Hash-chained decision facts and revision CAS
   actor/                    # Identity and endpoint facts
@@ -23,9 +29,7 @@ src/
   channel-grant/            # Raw channel grants
   provisioning/             # Person/channel declarations and vault rows
   surface-key/              # Perimeter surface-to-session identity mapping
-  delegation/               # Durable delegation records
   egress/                   # Perimeter social-budget debits
-  worker-run/               # Frozen historical worker-run archive
 ```
 
 ## Session authority
@@ -51,6 +55,7 @@ src/
 - Own adapter lifetime through every operation. `Storage.reset()` closes its adapter; close is idempotent. Close before replacing an adapter. Benchmarks run each measured task before resetting its connection.
 - `SurfaceKey` owns only the perimeter mapping, not session materialization. Routing, trust, admission, waiting precedence and product lifecycle decisions belong in their owning domains.
 - Request state is derived from canonical session action history, not a replacement standalone store. Frozen archival history cannot authorize execution.
+- Stored JSON is decoded into validated plain values before row/domain assembly. Migration statement parsing preserves the existing corpus's executed statement bytes; applied migration semantics and schema fingerprints are unchanged.
 - Do not write ad-hoc delegated state beside canonical session actions. Do not add a second completion or terminal authority.
 
 ## Verification

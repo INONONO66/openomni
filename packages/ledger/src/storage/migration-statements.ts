@@ -1,5 +1,6 @@
 // Execute statements separately so failures stop and roll back the migration.
-const tokens = /--[^\n]*|\/\*[\s\S]*?\*\/|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]|[A-Za-z_]\w*|[^\s]/g;
+const tokens =
+  /--[^\n]*|\/\*[\s\S]*?\*\/|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]|[A-Za-z_]\w*|[^\s]/g;
 
 // Preserve the shipped sqlite_schema bytes: historical execution omitted full-line comments.
 function withoutLineComments(sql: string): string {

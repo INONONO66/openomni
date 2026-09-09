@@ -80,20 +80,16 @@ test("child identity and first inbox are visible together at the commit signal",
   );
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     if (event.sessionId !== "child") return;
-    try {
-      expect(SessionHandleStore.row("child").parentId).toBe("parent");
-      expect(SessionHandleStore.inboxRows("child")).toHaveLength(1);
-      observations.push(event.id);
-      if (event.id === "letter") observed.resolve();
-    } catch (error) {
-      observed.reject(error);
-    }
+    observations.push(event.id);
+    if (event.id === "letter") observed.resolve();
   });
   try {
     const committed = SessionHandleStore.commitInbox(childMessage());
     await observed.promise;
     expect(committed.id).toBe("letter");
     expect(observations).toEqual(["child:configure", "letter"]);
+    expect(SessionHandleStore.row("child").parentId).toBe("parent");
+    expect(SessionHandleStore.inboxRows("child")).toHaveLength(1);
   } finally {
     clearTimeout(timeout);
     unsubscribe();
@@ -219,7 +215,7 @@ test("the commit transaction rechecks fanout and releases capacity after termina
 });
 
 test("root configuration and first inbox use the same atomic inbox port", () => {
-  const { sender: _sender, ...root } = childMessage();
+  const root = { ...childMessage(), sender: undefined };
   root.createSession.row.parentId = null;
   root.createSession.row.role = "resident";
   expect(SessionHandleStore.commitInbox(root).id).toBe("letter");
