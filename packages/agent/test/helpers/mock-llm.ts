@@ -16,6 +16,17 @@ export function createStopOutcome(): Run.Outcome {
   return { type: "stop" };
 }
 
+export function countingStopLlm() {
+  let calls = 0;
+  return {
+    get calls() { return calls; },
+    llm: mockLlm(async () => {
+      calls += 1;
+      return createStopOutcome();
+    }),
+  };
+}
+
 export function providerFailure(
   message: string,
   options: {

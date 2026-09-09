@@ -1,5 +1,10 @@
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type PolicyRow } from "@openomni/protocol";
+import type { DurableExecutor } from "../../src/executor-contract";
+
+export function runTestOperation(executor: DurableExecutor, kind: LedgerAction.Kind, body: () => Promise<{ ok: boolean }>) {
+  return executor.run({ kind, op: "test", intent: { requested: true }, effect: { completed: true } }, body);
+}
 import { createExecutor, type Executor } from "../../src/index";
 import type { ExecutorOptions } from "../../src/executor-contract";
 import { collector } from "./observation-collector";

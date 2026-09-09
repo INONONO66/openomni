@@ -140,18 +140,10 @@ test("visible output makes a provider failure terminal without a second admissio
   const failure = providerFailure(true);
   let calls = 0;
   await expect(
-    executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-      executor.runAttempts(parent, {
-        prepare: async () => ({
-          request: { op: "chat", intent: {}, effect: {} },
-          admit: async () => undefined,
-          body: async () => {
-            calls += 1;
-            throw failure;
-          },
-        }),
-      }),
-    ),
+    runChatAttempts(executor, async () => {
+      calls += 1;
+      throw failure;
+    }, undefined, {}),
   ).rejects.toBe(failure);
   expect(calls).toBe(1);
   expect(waits).toEqual([]);
@@ -162,18 +154,10 @@ test("retry cap retains three failed children and never invokes a fourth body", 
   const { executor, committed, waits } = harness();
   let calls = 0;
   await expect(
-    executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-      executor.runAttempts(parent, {
-        prepare: async () => ({
-          request: { op: "chat", intent: {}, effect: {} },
-          admit: async () => undefined,
-          body: async () => {
-            calls += 1;
-            throw providerFailure();
-          },
-        }),
-      }),
-    ),
+    runChatAttempts(executor, async () => {
+      calls += 1;
+      throw providerFailure();
+    }, undefined, {}),
   ).rejects.toBeInstanceOf(Run.FailureError);
   expect(calls).toBe(3);
   expect(waits).toEqual([0, 0]);
@@ -240,17 +224,9 @@ test("interrupt cancels an exactly registered backoff without another provider a
         registered.resolve();
       }),
   });
-  const running = executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-    executor.runAttempts(parent, {
-      prepare: async () => ({
-        request: { op: "chat", intent: {}, effect: {} },
-        admit: async () => undefined,
-        body: async () => {
-          throw providerFailure();
-        },
-      }),
-    }),
-  );
+  const running = runChatAttempts(executor, async () => {
+    throw providerFailure();
+  }, undefined, {});
   const terminal = running.catch((error: Error) => error);
   await registered.promise;
   controller.abort();

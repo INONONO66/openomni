@@ -6,6 +6,7 @@ import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
 import { completeModel, windowedLlm } from "../../helpers/mock-llm";
 import { assistantWithParts } from "../../helpers/messages";
+import { toolBudgetConfig } from "../../helpers/run-config";
 
 function assistant(reason: string, inputTokens = 900): Message.WithParts {
   return assistantWithReasons([reason], inputTokens);
@@ -150,9 +151,7 @@ describe("window and steering yield", () => {
   it("treats unlimited tool calls as a window yield, never a step-cap terminal", async () => {
     let calls = 0;
     const result = await runTestAgent(runInput([{ role: "user", content: "go" }]), {
-      events: collector(),
-      model: { provider: "provider", id: "model" },
-      budget: { maxToolCalls: -1 },
+      ...toolBudgetConfig(-1),
       llm: windowedLlm(async (input, sink: Sink) => {
         calls += 1;
         if (calls !== 1) return completeModel(input, sink);
@@ -190,9 +189,7 @@ describe("window and steering yield", () => {
   it("keeps the step cap terminal when steering also fired", async () => {
     let calls = 0;
     const result = await runTestAgent(runInput([{ role: "user", content: "go" }]), {
-      events: collector(),
-      model: { provider: "provider", id: "model" },
-      budget: { maxToolCalls: 1 },
+      ...toolBudgetConfig(1),
       steeringPending: () => true,
       llm: {
         resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),

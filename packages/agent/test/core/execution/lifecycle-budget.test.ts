@@ -4,7 +4,7 @@ import { runTestAgent } from "../../helpers/test-agent";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { Bus } from "../../../src/index";
 import { collector } from "../../helpers/observation-collector";
-import { mockLlm, createStopOutcome } from "../../helpers/mock-llm";
+import { mockLlm, createStopOutcome, countingStopLlm } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 describe("run budget terminal facts", () => {
@@ -103,20 +103,17 @@ describe("run budget terminal facts", () => {
     const events = collector();
     const busEvents: string[] = [];
     const unsubscribe = Bus.observe((event) => busEvents.push(event.name));
-    let calls = 0;
+    const provider = countingStopLlm();
     try {
       const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         budget: { maxWallTimeMs: 0 },
-        llm: mockLlm(async () => {
-          calls += 1;
-          return createStopOutcome();
-        }),
+        llm: provider.llm,
       }).catch((error: Error) => error);
 
       expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
-      expect(calls).toBe(0);
+      expect(provider.calls).toBe(0);
       expect(events.named(Operational.Events.Warn.name)).toHaveLength(1);
       expect(events.named(Operational.Events.Warn.name)[0]).toMatchObject({
         msg: "budget exceeded: wall time",

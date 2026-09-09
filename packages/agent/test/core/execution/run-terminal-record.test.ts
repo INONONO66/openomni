@@ -4,7 +4,7 @@ import { Operational } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
-import { completeModel, mockLlm, createStopOutcome } from "../../helpers/mock-llm";
+import { completeModel, mockLlm, countingStopLlm, createStopOutcome } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -71,19 +71,16 @@ describe("one terminal record per started run", () => {
 
   it("records budget error without invoking the model", async () => {
     const records = observeRunTerminals();
-    let calls = 0;
+    const provider = countingStopLlm();
     try {
       const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
         budget: { maxTurns: 0 },
-        llm: mockLlm(async () => {
-          calls += 1;
-          return createStopOutcome();
-        }),
+        llm: provider.llm,
       }).catch((error: Error) => error);
       expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
-      expect(calls).toBe(0);
+      expect(provider.calls).toBe(0);
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
       records.unsubscribe();

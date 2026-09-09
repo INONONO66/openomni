@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { createExecutor } from "../../../src/index";
+import { runTestOperation } from "../../helpers/compiled-policy";
 import type { ExecutionLedger } from "../../../src/executor";
 import { compilePolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
@@ -234,10 +235,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       ]);
       const body = mock(async () => ({ ok: true }));
 
-      const result = await executor.run(
-        { kind, op: "test", intent: { requested: true }, effect: { completed: true } },
-        body,
-      );
+      const result = await runTestOperation(executor, kind, body);
 
       expect(result).toMatchObject({ terminal: "blocked_pre", reason: "pre blocked" });
       expect(body).toHaveBeenCalledTimes(0);
@@ -249,10 +247,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       const { actions, executor } = harness([]);
       const body = mock(async () => ({ ok: true }));
 
-      const result = await executor.run(
-        { kind, op: "test", intent: { requested: true }, effect: { completed: true } },
-        body,
-      );
+      const result = await runTestOperation(executor, kind, body);
 
       expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
       expect(body).toHaveBeenCalledTimes(1);
