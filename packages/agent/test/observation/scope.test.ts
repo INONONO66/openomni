@@ -45,6 +45,20 @@ describe("scoped observations", () => {
     ]);
   });
 
+  it("preserves strict descriptor payload fields while stamping scope identity", () => {
+    const StrictEvent = BusEvent.define(
+      "test.scope.strict",
+      z.object({ component: z.string(), msg: z.string() }).strict(),
+    );
+    const received: unknown[] = [];
+    const scoped = scopeObservation({
+      publish: (_event, data) => received.push(data),
+      scope: () => scoped,
+    }, identity, { clock: () => 42, entropy: () => "event-strict" });
+    scoped.publish(StrictEvent, { component: "test", msg: "strict", extra: "kept" } as never);
+    expect(received[0]).toMatchObject({ component: "test", msg: "strict", extra: "kept" });
+  });
+
   it("merges child identity while retaining parent fields", () => {
     const sink = collector();
     const parent = scopeObservation(sink, identity, {

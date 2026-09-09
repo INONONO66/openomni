@@ -52,6 +52,14 @@ const call = { id: "call-1", tool: "echo", input: { value: "secret" } };
 const context = { sessionId: "session-1", turnId: "turn-1" };
 
 describe("compiled tool.pre denial", () => {
+  it("normalizes noncanonical numeric tool results without rejecting", async () => {
+    const executor = durableExecutor(allowAll);
+    const result = await executor.run(
+      { kind: "tool", op: "number", intent: {}, effect: {} },
+      async () => Number.POSITIVE_INFINITY,
+    );
+    expect(result).toMatchObject({ terminal: "executed", value: null });
+  });
   it("returns an error result through the model door without running the body", async () => {
     const executions = { count: 0 };
 

@@ -172,10 +172,10 @@ describe("ChatAgent public run contract", () => {
 });
 
 describe("ChatAgent provider boundary failures", () => {
-  it("rejects a provider stop without a terminal snapshot instead of forging history", async () => {
+  it("uses the empty assistant fallback for a provider stop without a snapshot", async () => {
     await expect(
       agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }])),
-    ).rejects.toThrow("llm completed without an assistant snapshot");
+    ).rejects.toThrow("exact_repeat");
   });
   it.each([
     {

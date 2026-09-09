@@ -1,12 +1,12 @@
 import { buildSystemPrompt, prepareTurnTools } from "./tools";
 import type { RunInput, Sink } from "@openomni/llm";
-import type { Message, BusEvent } from "@openomni/protocol";
+import { type Message, Operational, type BusEvent } from "@openomni/protocol";
 import { assistantTextOf, createTrackingSink, recordAssistant } from "./turn-assistant";
 import { effectiveMaxToolCalls, publishBudgetTelemetry } from "../budget";
 import type { CompactionSession } from "../../compaction";
 import { applyCompaction, prepareCompactionAfterContinue } from "./turn-compaction";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
-import { createUserMessage, withMessageId } from "../message-factory";
+import { createAssistantMessage, createUserMessage, withMessageId } from "../message-factory";
 import { settleModelTools } from "./tool-wave";
 import { AgentStopError, type StopVerdict } from "./stop-chain";
 import * as Retry from "../retry";
@@ -158,8 +158,7 @@ export async function handleStop(
   compaction: CompactionSession | undefined,
 ): Promise<StopOutcome> {
   const assistantIndex = state.messages.length;
-  const snapshot = turn.turnAssistant.message;
-  if (snapshot === undefined) throw new Error("llm completed without an assistant snapshot");
+  const snapshot = resolveTurnAssistant(config.events, state, turn, agentBase);
   const initialAssistant = await recordAssistant(config, snapshot);
   turn.turnAssistant.message = initialAssistant;
   appendRunMessages(state, [initialAssistant]);
@@ -234,6 +233,24 @@ export function handleContinue(
 ): void {
   emitTurnComplete(events, state, agentBase, turnUsage);
   advanceRunTurn(state);
+}
+
+function resolveTurnAssistant(
+  events: BusEvent.Sink,
+  state: RunState,
+  turn: TurnArtifacts,
+  agentBase: AgentRunBase,
+): Message.WithParts {
+  if (turn.turnAssistant.message !== undefined) return turn.turnAssistant.message;
+  events.publish(Operational.Events.Error, {
+    traceId: agentBase.traceId,
+    time: Date.now(),
+    sessionId: agentBase.sessionId,
+    component: "agent.turn",
+    msg: "llm sink emitted no assistant snapshot — test stub?",
+  });
+  const parentID = state.messages.at(-1)?.info.id ?? "";
+  return createAssistantMessage("", parentID, state.sessionId);
 }
 
 export async function drainStepBoundary(
