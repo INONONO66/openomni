@@ -5,7 +5,7 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
+import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows.js";
 import {
   sessionSelect,
   insertSession,
@@ -14,8 +14,8 @@ import {
   appendAction,
   commitSession,
   openChildCount,
-} from "./sqlite-l0-write";
-import { publishCommitted } from "./sqlite-l0-observation";
+} from "./sqlite-l0-write.js";
+import { publishCommitted } from "./sqlite-l0-observation.js";
 
 export function createSessions(
   db: Database,

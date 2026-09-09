@@ -1,5 +1,11 @@
 import { type Alarm, type Inbox, LedgerAction } from "@openomni/protocol";
-import type { AlarmOccurrence } from "./alarm-occurrence";
+type AlarmOccurrence = {
+  readonly actionId: string;
+  readonly inboxId: string;
+  readonly status: Alarm.Status;
+  readonly content: string;
+  readonly terminal: boolean;
+};
 
 export function inboxAppend(row: Inbox.Commit): LedgerAction.Append {
   return LedgerAction.Append.parse({

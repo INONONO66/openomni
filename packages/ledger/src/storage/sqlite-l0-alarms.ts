@@ -6,9 +6,9 @@ import {
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
 import { alarmAppend, alarmFired, alarmPrompt, inboxAppend } from "./l0-action-builders.js";
-import { alarmOccurrence } from "./alarm-occurrence";
-import { AlarmSqlRow, decodeAlarm } from "./sqlite-l0-rows";
-import { selectSession, appendAction, insertInbox } from "./sqlite-l0-write";
+import alarmOccurrence from "./alarm-occurrence.js";
+import { AlarmSqlRow, decodeAlarm } from "./sqlite-l0-rows.js";
+import { selectSession, appendAction, insertInbox } from "./sqlite-l0-write.js";
 import { publishCommitted } from "./sqlite-l0-observation";
 
 function selectAlarm(db: Database, id: string): Alarm.Row | undefined {

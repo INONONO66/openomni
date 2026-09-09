@@ -4,9 +4,9 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { ActionSqlRow, decodeAction } from "./sqlite-l0-rows";
-import { appendAction } from "./sqlite-l0-write";
-import { publishCommitted } from "./sqlite-l0-observation";
+import { ActionSqlRow, decodeAction } from "./sqlite-l0-rows.js";
+import { appendAction } from "./sqlite-l0-write.js";
+import { publishCommitted } from "./sqlite-l0-observation.js";
 
 export function createActions(
   db: Database,

@@ -9,7 +9,10 @@ export interface AlarmOccurrence {
 }
 
 /** Durable identity, fence, dedupe and notification-budget admission for one alarm occurrence. */
-export function alarmOccurrence(row: Alarm.Row, input: Alarm.Fire): AlarmOccurrence | undefined {
+export default function alarmOccurrence(
+  row: Alarm.Row,
+  input: Alarm.Fire,
+): AlarmOccurrence | undefined {
   if (
     row.status !== "armed" ||
     row.epoch !== input.epoch ||

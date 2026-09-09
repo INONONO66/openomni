@@ -6,9 +6,9 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { ActionSqlRow, InboxSqlRow, decodeAction, decodeInbox } from "./sqlite-l0-rows";
-import { commitInbox } from "./sqlite-l0-write";
-import { publishCommitted } from "./sqlite-l0-observation";
+import { ActionSqlRow, InboxSqlRow, decodeAction, decodeInbox } from "./sqlite-l0-rows.js";
+import { commitInbox } from "./sqlite-l0-write.js";
+import { publishCommitted } from "./sqlite-l0-observation.js";
 
 export function createInbox(
   db: Database,

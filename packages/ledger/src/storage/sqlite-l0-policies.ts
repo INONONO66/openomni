@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { PolicyRow, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { PolicySqlRow, decodePolicy } from "./sqlite-l0-rows";
+import { PolicySqlRow, decodePolicy } from "./sqlite-l0-rows.js";
 
 export function createPolicies(
   db: Database,

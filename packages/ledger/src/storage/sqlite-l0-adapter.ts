@@ -1,10 +1,10 @@
 import type { Database } from "bun:sqlite";
 import type { ObservationSink, Storage as ProtocolStorage } from "@openomni/protocol";
-import { createSessions } from "./sqlite-l0-sessions";
-import { createActions } from "./sqlite-l0-actions";
-import { createInbox } from "./sqlite-l0-inbox";
-import { createAlarms } from "./sqlite-l0-alarms";
-import { createPolicies } from "./sqlite-l0-policies";
+import { createSessions } from "./sqlite-l0-sessions.js";
+import { createActions } from "./sqlite-l0-actions.js";
+import { createInbox } from "./sqlite-l0-inbox.js";
+import { createAlarms } from "./sqlite-l0-alarms.js";
+import { createPolicies } from "./sqlite-l0-policies.js";
 
 interface SqliteL0Adapters {
   sessions: ProtocolStorage.SessionLedgerSubAdapter;
