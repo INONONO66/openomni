@@ -116,9 +116,9 @@ export class DiscordGateway {
 
   private wireSocket(ws: WebSocket, settle: SocketSettle): void {
     ws.addEventListener("message", (event) => {
-      let raw: object;
+      let raw: unknown;
       try {
-        raw = JSON.parse(String(event.data)) as object;
+        raw = JSON.parse(String(event.data)) as unknown;
       } catch {
         // One malformed frame must not become an uncaught listener throw;
         // drop it — the gateway's own heartbeat/close handling recovers.
@@ -130,7 +130,7 @@ export class DiscordGateway {
         this.shell.warnDrop("discord gateway frame had no op envelope; dropped");
         return;
       }
-      if (this.handlePayload(frame.data, raw)) settle.resolveOnce();
+      if (this.handlePayload(frame.data)) settle.resolveOnce();
     });
 
     ws.addEventListener("close", async (event) => {
@@ -154,12 +154,12 @@ export class DiscordGateway {
   }
 
   /** Routes one gateway payload; returns true when the connection is ready. */
-  private handlePayload(frame: GatewayFrame, raw: object): boolean {
+  private handlePayload(frame: GatewayFrame): boolean {
     // typeof guard, not `!== null`: a MISSING s would otherwise assign
     // undefined, and `seq: undefined` in RESUME gets dropped by
     // JSON.stringify — the same serialization class as the #520 token bug.
     if (typeof frame.s === "number") this.sequence = frame.s;
-    const d = Reflect.get(raw, "d");
+    const d = frame.d;
 
     switch (frame.op) {
       case GatewayOp.HELLO: {

@@ -29,7 +29,7 @@ export async function fetchWithRetry(
     /** The logical request's trace (D11): every retry of one request shares this ONE id — never re-minted per attempt. */
     traceId: string;
     /** retry-after seconds from 429 body; defaults to 5s */
-    parseRetryAfter?: (body: object) => number;
+    parseRetryAfter?: (body: unknown) => number;
     retries?: number;
     label?: string;
     /** band contract: telemetry goes through the injected observation port */
@@ -48,7 +48,7 @@ export async function fetchWithRetry(
 
     let retryAfter = 5;
     if (options.parseRetryAfter) {
-      const body = (await response.json().catch(() => null)) as object | null;
+      const body: unknown = await response.json().catch(() => null);
       if (body !== null) {
         try {
           retryAfter = options.parseRetryAfter(body);

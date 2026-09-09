@@ -9,7 +9,6 @@ const GitHubIssueSchema = z.object({
   body: z.string().nullish(),
   // Presence flag only — an issue payload carrying `pull_request` is a PR.
   pull_request: z.object({}).optional(),
-  labels: z.array(z.object({ name: z.string() })).optional(),
   user: GitHubUserSchema,
 });
 
@@ -46,9 +45,7 @@ export type GitHubIssuePayload = z.infer<
 export interface GitHubEventContent {
   text: string;
   sender: string;
-  senderType: string;
   repo: string;
   issueNumber: number;
   issueKind: "issue" | "pr";
-  labels: string[];
 }

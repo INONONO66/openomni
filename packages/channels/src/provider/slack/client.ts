@@ -108,7 +108,7 @@ export class SlackClient implements ChannelClient {
         rejected: res.status >= 400 && res.status < 500,
       });
     }
-    const raw = (await res.json()) as object;
+    const raw: unknown = await res.json();
     const envelope = EnvelopeSchema.safeParse(raw);
     if (!envelope.success) {
       throw new SlackApiError({ message: `slack ${method} returned a malformed envelope` });

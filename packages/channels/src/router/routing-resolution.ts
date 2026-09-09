@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   type Gateway,
   Ingress,
@@ -24,11 +25,8 @@ const ingressRoutingErrorCodes = [
   "route_replay_divergent",
   "request_reply_rejected",
 ] as const;
-export type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];
-const IngressRoutingErrorCode = NamedError.Unknown.Schema.shape.data.shape.message.refine(
-  (value): value is IngressRoutingErrorCode =>
-    ingressRoutingErrorCodes.includes(value as IngressRoutingErrorCode),
-);
+type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];
+const IngressRoutingErrorCode = z.enum(ingressRoutingErrorCodes);
 
 /**
  * #498 C3: ingress correlation claims reuse THE one SessionTransition.Correlation shape.
@@ -62,7 +60,7 @@ export class IngressRoutingError extends IngressRoutingErrorBase {
   }
 
   get code(): IngressRoutingErrorCode {
-    return this.data.code as IngressRoutingErrorCode;
+    return this.data.code;
   }
   get decision(): Ingress.RoutingDecisionPayload {
     return this.data.decision;

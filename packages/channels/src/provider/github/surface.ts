@@ -39,11 +39,9 @@ function issueContent(
   return {
     text,
     sender: user.login,
-    senderType: user.type,
     repo: payload.repository.full_name,
     issueNumber: payload.issue.number,
     issueKind: payload.issue.pull_request ? "pr" : "issue",
-    labels: (payload.issue.labels ?? []).map((label) => label.name),
   };
 }
 
@@ -150,13 +148,19 @@ export class GitHubAdapter implements Channel.Surface {
     });
     if (auth.response) return auth.response;
 
-    const preparation = this.prepareWebhook(request, auth.body ?? "", traceId);
+    let raw: unknown;
+    try {
+      raw = JSON.parse(auth.body ?? "") as unknown;
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+    const preparation = this.prepareWebhook(request, raw, traceId);
     if ("response" in preparation) return preparation.response;
 
     return this.dispatchWebhook(preparation);
   }
 
-  private prepareWebhook(request: Request, body: string, traceId: string): WebhookPreparation {
+  private prepareWebhook(request: Request, body: unknown, traceId: string): WebhookPreparation {
     const deliveryId = request.headers.get("x-github-delivery");
     const dedupeAcquisition = deliveryId === null ? undefined : this.dedupe.acquire(deliveryId);
     if (dedupeAcquisition?.duplicate) {
@@ -167,7 +171,9 @@ export class GitHubAdapter implements Channel.Surface {
     const event = request.headers.get("x-github-event");
     if (!event) return { response: new Response("Missing event", { status: 400 }) };
 
-    const raw = z.record(z.string(), z.json()).parse(JSON.parse(body));
+    const rawResult = z.record(z.string(), z.json()).safeParse(body);
+    if (!rawResult.success) return { response: new Response("Unsupported event", { status: 200 }) };
+    const raw = rawResult.data;
     const eventKey = `${event}.${actionOf(raw)}`;
     this.publish(Operational.Events.Info, {
       traceId,

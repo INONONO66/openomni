@@ -1,7 +1,7 @@
 import type { Actor } from "@openomni/protocol";
 import { BlacklistStore } from "@openomni/ledger";
 
-export interface BlacklistMatchInput {
+interface BlacklistMatchInput {
   readonly actorId?: string;
   readonly endpointId?: string;
   readonly channel?: string;

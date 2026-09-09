@@ -1,22 +1,14 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
+import { z } from "zod";
 import { DiscordGateway } from "../src/provider/discord/gateway";
-import { GatewayOp } from "../src/provider/discord/types";
+import { GatewayFrameSchema, GatewayOp } from "../src/provider/discord/types";
 import type { SocketReconnectShell } from "../src/support/socket-shell";
 import type { PublishPort } from "../src/types";
 
 const noopPublish: PublishPort = () => undefined;
 
-/**
- * #520 state-machine pins over a real WebSocket against a scripted fake
- * Discord gateway. The two production defects this suite exists for:
- *   1. HEARTBEAT_ACK never reached the watchdog flag → every connection was
- *      force-closed after ~2 heartbeat intervals;
- *   2. RESUME serialized `token: undefined` (dropped by JSON.stringify) →
- *      every resume degraded to re-identify.
- */
-
-type Payload = { op: number; d?: unknown; s?: number | null; t?: string | null };
+type Payload = z.infer<typeof GatewayFrameSchema>;
 
 type NativeClose = { code: number; reason: string; wasClean: boolean; phase: string };
 const serverTraces = new WeakMap<ServerWebSocket<unknown>, (event: string, data: object) => void>();
@@ -31,7 +23,7 @@ type FakeGateway = {
   waitFor(predicate: (payload: Payload) => boolean, count?: number): Promise<Payload>;
   waitForClose(): Promise<number>;
   pendingCloseWaiters(): number;
-  stop(): void;
+  stop(): Promise<void>;
 };
 
 class EventStream<Value> {
@@ -44,12 +36,12 @@ class EventStream<Value> {
 
   waitFor(predicate: (value: Value) => boolean, count = 1, timeoutMs = 10_000): Promise<Value> {
     return new Promise<Value>((resolve, reject) => {
-      const subscriber = { predicate, remaining: count, resolve, timer: undefined } as {
+      const subscriber: {
         predicate: (value: Value) => boolean;
         remaining: number;
         resolve: (value: Value) => void;
         timer: ReturnType<typeof setTimeout> | undefined;
-      };
+      } = { predicate, remaining: count, resolve, timer: undefined };
       // Resolution is event-driven; this timer only rejects when the signal never fires.
       subscriber.timer = setTimeout(() => {
         this.subscribers.delete(subscriber);
@@ -126,7 +118,7 @@ function createFakeGateway(options: {
         });
       },
       message(ws, message) {
-        const payload = JSON.parse(String(message)) as Payload;
+        const payload = GatewayFrameSchema.parse(JSON.parse(String(message)));
         received.push(payload);
         record("server.receive", payload);
         if (payload.op === GatewayOp.HEARTBEAT && options.ackHeartbeats) {
@@ -160,10 +152,7 @@ function createFakeGateway(options: {
     waitFor: (predicate, count) => payloadEvents.waitFor(predicate, count),
     waitForClose: () => closeEvents.waitFor(() => true),
     pendingCloseWaiters: () => closeEvents.pending(),
-    stop: () => {
-      server.stop(true);
-      console.error("discord gateway fixture trace", JSON.stringify({ url, events }));
-    },
+    stop: () => server.stop(true),
   };
 }
 
@@ -192,7 +181,6 @@ function createTracedGateway(
         const close = { code: event.code, reason: event.reason, wasClean: event.wasClean, phase };
         local.nativeCloses.push(close);
         local.record("client.close", { id, ...close });
-        console.error("discord gateway native close", JSON.stringify({ url, id, ...close }));
       });
       wire(ws, {
         ...settle,
@@ -239,17 +227,7 @@ function createMissedAckHarness(local: FakeGateway) {
     get nativeClose() {
       return local.nativeCloses.at(-1);
     },
-    async start() {
-      try {
-        await gateway.start();
-      } catch (error) {
-        console.error(
-          "discord gateway test start failure",
-          JSON.stringify(local.nativeCloses.at(-1)),
-        );
-        throw error;
-      }
-    },
+    start: () => gateway.start(),
     stop() {
       // Stop before releasing backoff, including when start/assertions fail.
       gateway.stop();
@@ -278,9 +256,9 @@ describe("discord gateway state machine (#520)", () => {
   let fake: FakeGateway | undefined;
   let gateway: DiscordGateway | undefined;
 
-  afterEach(() => {
+  afterEach(async () => {
     gateway?.stop();
-    fake?.stop();
+    await fake?.stop();
     gateway = undefined;
     fake = undefined;
   });
@@ -311,7 +289,7 @@ describe("discord gateway state machine (#520)", () => {
     );
     await gateway.start();
     const identify = await identifyReceived;
-    expect((identify.d as { token: string }).token).toBe("test-token");
+    expect(z.object({ token: z.string() }).parse(identify.d).token).toBe("test-token");
 
     // Pin for defect 1: before the ack was wired, the watchdog closed the
     // socket on the SECOND interval. Five heartbeat events on one live socket
@@ -375,7 +353,7 @@ describe("discord gateway state machine (#520)", () => {
         onReady: () => undefined,
       },
       (_event, data) => {
-        const payload = data as { msg?: unknown };
+        const payload = z.object({ msg: z.string() }).parse(data);
         if (payload.msg === "discord session resumed") sessionResumed.resolve();
       },
       immediateDelay,
@@ -387,7 +365,9 @@ describe("discord gateway state machine (#520)", () => {
     await sessionResumed.promise;
     // Pin for defect 2: the payload carries the REAL token (the old router
     // serialized `token: undefined`, which JSON.stringify drops entirely).
-    const d = resume.d as { token: string; session_id: string; seq: number };
+    const d = z
+      .object({ token: z.string(), session_id: z.string(), seq: z.number() })
+      .parse(resume.d);
     expect(Object.keys(d)).toContain("token");
     expect(d.token).toBe("test-token");
     expect(d.session_id).toBe("sess-3");

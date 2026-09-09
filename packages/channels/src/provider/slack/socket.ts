@@ -12,7 +12,7 @@ const SLACK_SHELL_MESSAGES = {
   socketError: "slack websocket error",
 } as const;
 
-export interface SocketCallbacks {
+interface SocketCallbacks {
   /** `traceId` is minted per envelope — the first frame of an inbound Slack event (D11 origin). */
   onEvent: (envelope: SocketEnvelope, traceId: string) => void;
 }
@@ -88,9 +88,9 @@ export class SlackSocket {
   }
 
   private parseEnvelope(data: string): SocketEnvelope | undefined {
-    let raw: object;
+    let raw: unknown;
     try {
-      raw = JSON.parse(data) as object;
+      raw = JSON.parse(data) as unknown;
     } catch {
       // One malformed frame must not become an uncaught listener throw.
       this.shell.warnDrop("slack socket frame was not valid JSON; dropped");

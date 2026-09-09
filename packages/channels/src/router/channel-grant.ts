@@ -1,7 +1,7 @@
 import type { Actor } from "@openomni/protocol";
 import { ChannelGrantStore } from "@openomni/ledger";
 
-export interface ChannelGrantMatchInput {
+interface ChannelGrantMatchInput {
   readonly surface: string;
   readonly workspace?: string;
   readonly channel?: string;

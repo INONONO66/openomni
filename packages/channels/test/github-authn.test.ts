@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
 import { GitHubAdapter } from "../src/provider/github/surface";
+import { signGitHubBody } from "./helpers/github";
 
 type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
@@ -15,7 +16,7 @@ describe("GitHubAdapter channel-authn", () => {
     const request = new Request("http://localhost/github/webhook", {
       method: "POST",
       headers: {
-        "x-hub-signature-256": await signGitHubBody(body),
+        "x-hub-signature-256": signGitHubBody(body, secret),
         "x-github-event": "unknown",
       },
       body,
@@ -92,19 +93,4 @@ function createAdapter(
   });
   adapter.onMessage(async () => undefined);
   return adapter;
-}
-
-async function signGitHubBody(body: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-  return `sha256=${Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")}`;
 }

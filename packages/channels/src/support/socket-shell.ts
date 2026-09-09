@@ -11,7 +11,7 @@ export interface SocketSettle {
 }
 
 /** The per-surface log lines the shell speaks with — pinned by the surface tests. */
-export interface SocketShellMessages {
+interface SocketShellMessages {
   /** URL fetch rejected during a reconnect; retrying under backoff. */
   readonly urlFetchFailed: string;
   /** Connection closed; a reconnect is scheduled. */

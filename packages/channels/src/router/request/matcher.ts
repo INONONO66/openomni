@@ -15,7 +15,7 @@ export type ResponderTarget = Readonly<{
   tokenHash?: string;
 }>;
 
-export type SenderEvidence = Readonly<{
+type SenderEvidence = Readonly<{
   /** Bearer credential presented via correlation. */
   tokenHash?: string;
   /** Endpoint the sender claims via correlation (consistency-checked, not proof). */

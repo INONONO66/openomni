@@ -1,5 +1,6 @@
+import { z } from "zod";
 import { newTraceId } from "./support/trace";
-import { Channel, Gateway, Operational, type PlainValue } from "@openomni/protocol";
+import { Channel, Gateway, Operational } from "@openomni/protocol";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
 import type { PublishPort } from "./types";
 
@@ -156,11 +157,12 @@ export class WebSocketHandler {
 
   private async handleMessage(ws: WsConnection, raw: string): Promise<void> {
     try {
-      const parsed = JSON.parse(raw) as PlainValue;
-      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      const parsedResult = z.record(z.string(), z.json()).safeParse(JSON.parse(raw));
+      if (!parsedResult.success) {
         ws.send(JSON.stringify({ type: "error", message: "invalid websocket frame" }));
         return;
       }
+      const parsed = parsedResult.data;
       const sender = {
         kind: "external",
         surface: "ws",
