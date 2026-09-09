@@ -1,29 +1,25 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { describe, test, expect } from "bun:test";
+import { z } from "zod";
 import { connectIpcClient } from "../src/client";
 import { createIpcServer } from "../src/server";
 import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
+import { transportFixture } from "./helpers/transport";
 
 describe("IPC bidirectional", () => {
-  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
-  const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
-
-  afterEach(() => {
-    for (const c of clients.splice(0)) c.close();
-    for (const s of servers.splice(0)) s.close();
-  });
+  const { servers, clients } = transportFixture();
 
   test("client receives incoming Request → onRequest fires → response sent back", async () => {
     const socketPath = socketPathForTest("req");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
-    const received = { method: "", params: undefined as Record<string, unknown> | undefined };
+    const received = { method: "", params: { msg: "" } };
     const client = await connectIpcClient(socketPath, {
-      onRequest(method, params, respond) {
+      onRequest(method, _params, respond, parse) {
         received.method = method;
-        received.params = params;
-        respond({ echo: params?.msg });
+        received.params = parse(z.object({ msg: z.string() }));
+        respond({ echo: received.params.msg });
       },
     });
     clients.push(client);
@@ -41,13 +37,13 @@ describe("IPC bidirectional", () => {
     servers.push(srv);
 
     let notifMethod = "";
-    let notifParams: Record<string, unknown> | undefined;
+    let notifParams: { key: string } | undefined;
 
     const notifReceived = deferred();
     const client = await connectIpcClient(socketPath, {
       onNotification(method, params) {
         notifMethod = method;
-        notifParams = params;
+        notifParams = z.object({ key: z.string() }).parse(params);
         notifReceived.resolve();
       },
     });
@@ -96,8 +92,8 @@ describe("IPC bidirectional", () => {
     servers.push(srv);
 
     const client = await connectIpcClient(socketPath, {
-      onRequest(_method, params, respond) {
-        respond({ doubled: ((params?.n as number) ?? 0) * 2 });
+      onRequest(_method, _params, respond, parse) {
+        respond({ doubled: parse(z.object({ n: z.number() })).n * 2 });
       },
     });
     clients.push(client);

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { Ipc } from "@openomni/protocol";
+import type { z } from "zod";
 import { connectIpcClient, createIpcServer, typedCall } from "../src/index";
 import { socketPath } from "./helpers/socket-path";
 
@@ -30,16 +31,15 @@ test("typed facade rejects schema-invalid calls while generic calls remain valid
     const output = `${result.stdout.toString()}${result.stderr.toString()}`;
     throw new Error(`typed facade compile fixture failed:\n${output}`);
   }
-
 }, 15_000);
 
 test("typed facade round-trips a known method through the public transport barrel", async () => {
   const path = socketPath("typed-call");
   const params = { cellId: "typed-cell", code: "21 * 2", timeoutMs: 1_000 };
-  const observed: Array<{ method: string; params: unknown }> = [];
+  const observed: Array<{ method: string; params: z.infer<typeof Ipc.Methods["machine.run_code"]["params"]> }> = [];
   const server = await createIpcServer(path, (method, received, respond) => {
-    observed.push({ method, params: received });
     const request = Ipc.Methods["machine.run_code"].params.parse(received);
+    observed.push({ method, params: request });
     respond(
       Ipc.Methods["machine.run_code"].result.parse({
         status: "completed",

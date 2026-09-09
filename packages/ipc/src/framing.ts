@@ -42,13 +42,6 @@ class LineSplitter {
     return lines;
   }
 
-  /** Return trailing non-newline-terminated data without flushing partial UTF-8 bytes. */
-  finish(): string | undefined {
-    const trailing = this.buffer || undefined;
-    this.reset();
-    return trailing;
-  }
-
   reset(): void {
     this.buffer = "";
     this.decoder = new TextDecoder();

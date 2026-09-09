@@ -1,23 +1,16 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcProtocolError, IpcRemoteError } from "../src/errors";
 import { LineDecoder, encode } from "../src/framing";
 import { createIpcServer } from "../src/server";
-import { deferred, within } from "./helpers/signal";
+import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
+import { connectRaw, transportFixture } from "./helpers/transport";
 
 describe("failure classes stay honest (#606 re-audit)", () => {
-  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
-  const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
-  const rawSockets: net.Socket[] = [];
-
-  afterEach(() => {
-    for (const s of rawSockets.splice(0)) s.destroy();
-    for (const c of clients.splice(0)) c.close();
-    for (const s of servers.splice(0)) s.close();
-  });
+  const { servers, clients, rawSockets } = transportFixture();
 
   test("public IPC errors use the shared serializable error contract", () => {
     const connection = new IpcConnectionError("closed");
@@ -105,24 +98,22 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     const client = await connectIpcClient(socketPath, {});
     clients.push(client);
 
-    const error = await srv.call("do-thing", {}, 2_000).catch((caught: unknown) => caught);
+    const error = await captureError(srv.call("do-thing", {}, 2_000));
     expect(error).toBeInstanceOf(IpcRemoteError);
-    expect((error as Error).message).toContain("client has no request handler for do-thing");
+    expect(error.message).toContain("client has no request handler for do-thing");
   });
 
-  test("a valid response sharing a chunk with a bad line still resolves the call", async () => {
-    const socketPath = socketPathForTest("shared-chunk");
-    const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
-      respond({ ok: true });
-    });
+  async function malformedPeer(label: string) {
+    const srv = await createIpcServer(socketPathForTest(label), () => undefined);
     servers.push(srv);
-
-    // Raw socket client: answer the server's request with ONE chunk that puts
-    // a malformed line ahead of the valid response.
-    const socket = net.createConnection(socketPath);
+    const socket = await connectRaw(srv.socketPath);
     rawSockets.push(socket);
+    return { srv, socket };
+  }
+
+  test("a valid response sharing a chunk with a bad line still resolves the call", async () => {
+    const { srv, socket } = await malformedPeer("shared-chunk");
     const decoder = new LineDecoder();
-    await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
     socket.on("data", (chunk) => {
       const { frames } = decoder.push(chunk);
       for (const raw of frames) {
@@ -137,14 +128,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   });
 
   test("each malformed line is answered with its own 4001 error frame", async () => {
-    const socketPath = socketPathForTest("per-line-4001");
-    const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
-      respond({ ok: true });
-    });
-    servers.push(srv);
-
-    const socket = net.createConnection(socketPath);
-    rawSockets.push(socket);
+    const { socket } = await malformedPeer("per-line-4001");
     const decoder = new LineDecoder();
     const errorFrames: { id: string; code: number | undefined }[] = [];
     const twoErrors = new Promise<void>((resolve) => {
@@ -158,10 +142,8 @@ describe("failure classes stay honest (#606 re-audit)", () => {
         }
       });
     });
-    await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
-
     socket.write("garbage-one\ngarbage-two\n");
-    await twoErrors;
+    await within(twoErrors, "both malformed-line responses");
     expect(errorFrames).toEqual([
       { id: "unknown", code: 4001 },
       { id: "unknown", code: 4001 },
@@ -175,7 +157,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
   test("a client that sent an oversize frame fails fast, not by burning its timeout", async () => {
     const socketPath = socketPathForTest("oversize-client");
-    const disconnected = deferred();
+    const disconnected = deferred<string>();
     const srv = await createIpcServer(
       socketPath,
       (_method, _params, respond) => respond({ ok: true }),
@@ -186,8 +168,12 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     clients.push(client);
 
     const call = client.call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000);
-    await within(disconnected.promise, "server disconnect after oversize frame", 12_000);
-    await expect(call).rejects.toBeInstanceOf(IpcConnectionError);
+    // Observe rejection immediately: FIN must fail the request even with unsent bytes.
+    const rejected = captureError(call);
+    const [error] = await within(
+      Promise.all([rejected, disconnected.promise]), "oversize FIN and server disconnect", 12_000,
+    );
+    expect(error).toBeInstanceOf(IpcConnectionError);
   });
 
   test("an error frame carrying the request's id settles the requester's pending", async () => {
@@ -213,10 +199,10 @@ describe("failure classes stay honest (#606 re-audit)", () => {
       clients.push(client);
       // A correlated 4000 must reject the pending NOW — "unknown" would let
       // the 30s timeout burn instead.
-      const error = await client.call("anything", {}, 30_000).catch((e: unknown) => e);
+      const error = await captureError(client.call("anything", {}, 30_000));
       expect(error).toBeInstanceOf(IpcRemoteError);
       expect((error as IpcRemoteError).code).toBe(4000);
-      expect((error as Error).message).toContain("peer rejected the frame");
+      expect(error.message).toContain("peer rejected the frame");
     } finally {
       rawServer.close();
     }
@@ -232,7 +218,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     servers.push(srv);
 
     // conn A receives the server's request and answers LAST.
-    const connA = net.createConnection(socketPath);
+    const connA = await connectRaw(socketPath);
     rawSockets.push(connA);
     const decoderA = new LineDecoder();
     let requestId: string | undefined;
@@ -247,11 +233,8 @@ describe("failure classes stay honest (#606 re-audit)", () => {
         }
       });
     });
-    await new Promise<void>((resolve) => connA.once("connect", () => resolve()));
-
-    const connB = net.createConnection(socketPath);
+    const connB = await connectRaw(socketPath);
     rawSockets.push(connB);
-    await new Promise<void>((resolve) => connB.once("connect", () => resolve()));
 
     // Unpinned: the request routes to the first connection (conn A).
     const inFlight = srv.call("job", {}, 5_000);
@@ -264,7 +247,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
         settled = true;
       },
     );
-    await gotRequest;
+    await within(gotRequest, "owning connection receiving the request");
     if (!requestId) throw new Error("request id was never captured");
 
     // conn B echoes conn A's request id. A following notification on the
@@ -302,13 +285,7 @@ describe("LineDecoder malformed-frame isolation (#606 re-audit, #685 skip-and-re
 });
 
 describe("client remote-error path (#606 audit)", () => {
-  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
-  const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
-
-  afterEach(() => {
-    for (const c of clients.splice(0)) c.close();
-    for (const s of servers.splice(0)) s.close();
-  });
+  const { servers, clients } = transportFixture();
 
   test("an error frame REJECTS the call as IpcRemoteError — never resolves undefined", async () => {
     const socketPath = socketPathForTest("reject");
@@ -320,9 +297,9 @@ describe("client remote-error path (#606 audit)", () => {
     const client = await connectIpcClient(socketPath, {});
     clients.push(client);
 
-    const error = await client.call("do-thing", {}, 2_000).catch((caught: unknown) => caught);
+    const error = await captureError(client.call("do-thing", {}, 2_000));
     expect(error).toBeInstanceOf(IpcRemoteError);
-    expect((error as Error).message).toContain("remote refused do-thing");
+    expect(error.message).toContain("remote refused do-thing");
     expect(error).not.toBeInstanceOf(IpcConnectionError);
     expect((error as IpcRemoteError).code).toBe(1000);
   });
@@ -340,9 +317,9 @@ describe("client remote-error path (#606 audit)", () => {
     });
     clients.push(client);
 
-    const error = await srv.call("do-thing", {}, 2_000).catch((e: unknown) => e);
+    const error = await captureError(srv.call("do-thing", {}, 2_000));
     expect(error).toBeInstanceOf(IpcRemoteError);
     expect(error).not.toBeInstanceOf(IpcConnectionError);
-    expect(String((error as Error).message)).toContain("client handler refused");
+    expect(error.message).toContain("client handler refused");
   });
 });

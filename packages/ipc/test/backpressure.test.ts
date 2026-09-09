@@ -1,96 +1,74 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import net from "node:net";
+import { describe, expect, test } from "bun:test";
 import { Ipc } from "@openomni/protocol";
+import { z } from "zod";
 import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
 import { deferred, within } from "./helpers/signal";
-import { socketPath as socketPathForTest } from "./helpers/socket-path";
+import { socketPath } from "./helpers/socket-path";
+import { connectRaw, transportFixture } from "./helpers/transport";
 
-// Large enough to exercise partial writes and the server's per-connection queue.
+// Exceeds the Unix socket send buffer, forcing Bun's partial-write/drain path.
 const BIG_PAYLOAD = "x".repeat(8 * 1024 * 1024);
+const LargeResponse = Ipc.Response.extend({ result: z.object({ data: z.string() }) });
 
-describe("server write backpressure (Bun partial writes)", () => {
-  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
-  const rawSockets: net.Socket[] = [];
+describe("server write backpressure", () => {
+  const { servers, rawSockets } = transportFixture();
 
-  afterEach(() => {
-    for (const s of rawSockets.splice(0)) s.destroy();
-    for (const s of servers.splice(0)) s.close();
-  });
-
-  test("a multi-megabyte response reaches a slow reader byte-exact", async () => {
-    const socketPath = socketPathForTest("big-frame");
-    const responseIssued = deferred();
-    const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
+  async function slowReader() {
+    const issued = deferred();
+    const server = await createIpcServer(socketPath("backpressure"), (_method, _params, respond) => {
       respond({ data: BIG_PAYLOAD });
-      responseIssued.resolve();
+      issued.resolve();
     });
-    servers.push(srv);
-
-    const socket = net.createConnection(socketPath);
+    servers.push(server);
+    const socket = await connectRaw(server.socketPath);
     rawSockets.push(socket);
-    await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
-
-    // Slow reader: stop consuming BEFORE the server writes. The kernel
-    // accepts only one socket buffer's worth synchronously; everything
-    // else must survive in the server's write queue until drain.
-    const decoder = new LineDecoder();
-    const frameReceived = deferred<unknown>();
-    socket.on("data", (chunk) => {
-      const { frames } = decoder.push(chunk);
-      if (frames.length > 0) frameReceived.resolve(frames[0]);
-    });
     socket.pause();
+    return { server, socket, issued };
+  }
+
+  test("a multi-megabyte response reaches a paused reader byte-exact", async () => {
+    const { socket, issued } = await slowReader();
+    const decoder = new LineDecoder();
+    const received = deferred<z.infer<typeof LargeResponse>>();
+    socket.on("data", (chunk) => {
+      for (const frame of decoder.push(chunk).frames) received.resolve(LargeResponse.parse(frame));
+    });
     const request = Ipc.createRequest("request-big-1", "get-big", {});
     socket.write(`${JSON.stringify(request)}\n`);
-    await within(responseIssued.promise, "server issuing queued large response");
+    await within(issued.promise, "server issuing queued response");
     socket.resume();
-    const frame = await within(frameReceived.promise, "complete large response", 10_000);
-
-    const response = frame as { id?: string; result?: { data?: string } };
+    const response = await within(received.promise, "complete large response", 10_000);
     expect(response.id).toBe(request.id);
-    // Compare via boolean so a failure does not dump 8 MiB.
-    expect(response.result?.data?.length).toBe(BIG_PAYLOAD.length);
-    expect(response.result?.data === BIG_PAYLOAD).toBe(true);
+    expect(response.result.data.length).toBe(BIG_PAYLOAD.length);
+    // Avoid dumping megabytes when the byte comparison fails.
+    expect(response.result.data === BIG_PAYLOAD).toBe(true);
   }, 15_000);
 
-  test("a frame written while earlier bytes are still queued arrives after them, intact", async () => {
-    const socketPath = socketPathForTest("ordering");
-    const responseIssued = deferred();
-    const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
-      respond({ data: BIG_PAYLOAD });
-      responseIssued.resolve();
-    });
-    servers.push(srv);
-
-    const socket = net.createConnection(socketPath);
-    rawSockets.push(socket);
-    await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
-
+  test("a notification cannot interleave with an earlier queued response", async () => {
+    const { server, socket, issued } = await slowReader();
     const decoder = new LineDecoder();
-    const frames: unknown[] = [];
-    const bothFramesReceived = deferred();
+    const response = deferred<z.infer<typeof LargeResponse>>();
+    const notification = deferred<Ipc.Notification>();
+    const order: string[] = [];
     socket.on("data", (chunk) => {
-      frames.push(...decoder.push(chunk).frames);
-      if (frames.length >= 2) bothFramesReceived.resolve();
+      for (const frame of decoder.push(chunk).frames) {
+        const parsed = z.union([LargeResponse, Ipc.Notification]).parse(frame);
+        order.push(parsed.type);
+        if (parsed.type === "response") response.resolve(parsed);
+        else notification.resolve(parsed);
+      }
     });
-    socket.pause();
-    const request = Ipc.createRequest("request-big-2", "get-big", {});
-    socket.write(`${JSON.stringify(request)}\n`);
-    await within(responseIssued.promise, "server queuing first large frame");
-
-    // The notification must land after the queued response.
-    expect(srv.notify("after.big", { marker: true })).toBe(true);
+    socket.write(`${JSON.stringify(Ipc.createRequest("request-big-2", "get-big", {}))}\n`);
+    await within(issued.promise, "first response queued");
+    expect(server.notify("after.big", { marker: true })).toBe(true);
     socket.resume();
-    await within(bothFramesReceived.promise, "ordered response and notification", 10_000);
-
-    const [first, second] = frames as [
-      { id?: string; result?: { data?: string } },
-      { type?: string; method?: string; params?: { marker?: boolean } },
-    ];
-    expect(first.id).toBe(request.id);
-    expect(first.result?.data === BIG_PAYLOAD).toBe(true);
-    expect(second.type).toBe("notification");
+    const [first, second] = await within(
+      Promise.all([response.promise, notification.promise]), "ordered frames", 10_000,
+    );
+    expect(order).toEqual(["response", "notification"]);
+    expect(first.id).toBe("request-big-2");
+    expect(first.result.data === BIG_PAYLOAD).toBe(true);
     expect(second.method).toBe("after.big");
     expect(second.params).toEqual({ marker: true });
   }, 15_000);
