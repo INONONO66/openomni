@@ -10,14 +10,14 @@ import { socketPath } from "./helpers/socket-path";
 import { MachineCellError } from "../src/errors";
 import { kernelEnrollment } from "./helpers";
 
-interface RecordedEvent {
+type RecordedEvent<T> = {
   readonly name: string;
-  readonly payload: object;
-}
+  readonly payload: T;
+};
 
 function eventCollector() {
-  const events: RecordedEvent[] = [];
-  const waiters: Array<{ name: string; resolve: (event: RecordedEvent) => void }> = [];
+  const events: RecordedEvent<unknown>[] = [];
+  const waiters: Array<{ name: string; resolve: (event: RecordedEvent<unknown>) => void }> = [];
   const sink: BusEvent.Sink = {
     publish(descriptor, payload) {
       const event = { name: descriptor.name, payload };
@@ -35,7 +35,7 @@ function eventCollector() {
     sink,
     events,
     /** Resolves on the NEXT event of this name (bounded by bun's test timeout). */
-    next(name: string): Promise<RecordedEvent> {
+    next(name: string): Promise<RecordedEvent<unknown>> {
       return new Promise((resolve) => {
         waiters.push({ name, resolve });
       });
