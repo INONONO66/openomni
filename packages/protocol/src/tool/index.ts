@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Events as EventDescriptors } from "../event/tool.js";
 import { CapabilityId } from "../machine/schema.js";
 import type { TraceContext } from "../trace/index.js";
-import { PlainObjectSchema } from "../json.js";
+import { PlainObjectSchema, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 
 export type ToolCategory = "query" | "mutation" | "authority" | "execution";
@@ -103,7 +103,7 @@ export namespace Tool {
     input: PlainObjectSchema,
     output: z.string(),
     title: z.string(),
-    metadata: z.record(z.string(), z.unknown()),
+    metadata: z.record(z.string(), PlainValueSchema),
     time: z.object({
       start: EpochMs,
       end: EpochMs,
@@ -195,7 +195,7 @@ export namespace Tool {
   export const Spec = z.object({
     name: z.string(),
     description: z.string().optional(),
-    inputSchema: z.record(z.string(), z.unknown()),
+    inputSchema: PlainObjectSchema,
     safe: z.boolean().optional(),
     sequential: z.literal(true).optional(),
     labels: z.array(z.string()).optional(),
