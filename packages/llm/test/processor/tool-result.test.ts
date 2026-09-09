@@ -264,38 +264,43 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
     return parts.flatMap((part) => (part.type === "tool" ? [part.state] : []))[0];
   }
 
-  test("tool result already in the stream at abort settles as completed", async () => {
+  const PENDING_CALL = { toolCallId: "call-grace", toolName: "write_file" } as const;
+
+  /**
+   * Streams one tool call, aborts, buffers an unrelated event, then streams
+   * whatever `tail` produces — what the provider does while the grace drain
+   * is pulling. Resolves with the final snapshots once the attempt has
+   * rejected with the abort.
+   */
+  async function abortWithPendingTool(
+    tail: () => Promise<StreamEvent[]>,
+  ): Promise<Message.WithParts[]> {
     const messages: Message.WithParts[] = [];
     const abortController = new AbortController();
-
     const processor = createProcessor({
       abort: abortController.signal,
       sink: captureSink(messages),
       createStream: async () => ({
         fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-grace",
-            toolName: "write_file",
-            input: { path: "/tmp/x" },
-          };
+          yield { type: "tool-call", ...PENDING_CALL, input: { path: "/tmp/x" } };
           abortController.abort();
           // The grace drain must skip unrelated buffered events and keep
           // pulling until the exact pending tool settles.
           yield { type: "text-delta", id: "buffered-text", text: "ignored during abort" };
-          yield {
-            type: "tool-result",
-            toolCallId: "call-grace",
-            toolName: "write_file",
-            output: { output: "written", isError: false },
-          };
+          yield* await tail();
         })(),
       }),
     });
-
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
       name: "AbortError",
     });
+    return messages;
+  }
+
+  test("tool result already in the stream at abort settles as completed", async () => {
+    const messages = await abortWithPendingTool(async () => [
+      { type: "tool-result", ...PENDING_CALL, output: { output: "written", isError: false } },
+    ]);
 
     // The tool DID run (the SDK executes between tool-call and tool-result);
     // recording it as interrupted would misreport a real side effect.
@@ -308,8 +313,6 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
   });
 
   test("tool result that never arrives settles as interrupted when the grace timer fires", async () => {
-    const messages: Message.WithParts[] = [];
-    const abortController = new AbortController();
     const scheduledDelays: number[] = [];
     const timerHandle = setTimeout(() => undefined, 0);
     clearTimeout(timerHandle);
@@ -324,28 +327,8 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       ),
     );
 
-    const processor = createProcessor({
-      abort: abortController.signal,
-      sink: captureSink(messages),
-      createStream: async () => ({
-        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-hang",
-            toolName: "slow_tool",
-            input: {},
-          };
-          abortController.abort();
-          yield { type: "text-delta", id: "t1", text: "..." };
-          // Result never arrives: block until the consumer stops pulling.
-          await new Promise(() => undefined);
-        })(),
-      }),
-    });
-
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      name: "AbortError",
-    });
+    // Result never arrives: block until the consumer stops pulling.
+    const messages = await abortWithPendingTool(() => new Promise(() => undefined));
     expect(scheduledDelays).toContain(250);
 
     const state = lastToolState(messages);
@@ -358,30 +341,10 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
   });
 
   test("a stream that fails inside the grace window settles the pending tool as interrupted", async () => {
-    const messages: Message.WithParts[] = [];
-    const abortController = new AbortController();
-    const processor = createProcessor({
-      abort: abortController.signal,
-      sink: captureSink(messages),
-      createStream: async () => ({
-        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-hang",
-            toolName: "slow_tool",
-            input: {},
-          };
-          abortController.abort();
-          yield { type: "text-delta", id: "t1", text: "..." };
-          // The transport dies while the consumer is still draining for the result.
-          throw new Error("connection reset during drain");
-        })(),
-      }),
-    });
-
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      name: "AbortError",
-    });
+    // The transport dies while the consumer is still draining for the result.
+    const messages = await abortWithPendingTool(() =>
+      Promise.reject(new Error("connection reset during drain")),
+    );
 
     const state = lastToolState(messages);
     expect(state?.status).toBe("error");

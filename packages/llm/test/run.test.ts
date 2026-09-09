@@ -22,16 +22,20 @@ let capturedStreamArgs: StreamTextArgs | undefined;
 
 let mockStreamChunks: StreamEvent[] = [{ type: "finish" }];
 
+/** What the mocked `streamText` hands back: the chunks as the SDK's fullStream. */
+function streamOf(chunks: StreamEvent[]) {
+  return {
+    fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
+      yield* chunks;
+    })(),
+  };
+}
+
 function mockAiModule() {
   mock.module("ai", () => ({
     streamText: (args: StreamTextArgs) => {
       capturedStreamArgs = args;
-      const chunks = mockStreamChunks;
-      return {
-        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
-          yield* chunks;
-        })(),
-      };
+      return streamOf(mockStreamChunks);
     },
     jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
     stepCountIs: (stepCount: number) => {
@@ -346,7 +350,7 @@ describe("run", () => {
     mock.module("ai", () => ({
       streamText: () => {
         call++;
-        const chunks: StreamEvent[] =
+        return streamOf(
           call === 1
             ? [
                 {
@@ -370,12 +374,8 @@ describe("run", () => {
                   usage: { inputTokens: 200, outputTokens: 60 },
                 },
                 { type: "finish" },
-              ];
-        return {
-          fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
-            yield* chunks;
-          })(),
-        };
+              ],
+        );
       },
       jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
       stepCountIs: () => () => false,
