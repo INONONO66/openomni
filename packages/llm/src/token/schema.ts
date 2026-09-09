@@ -2,12 +2,21 @@ import { z } from "zod";
 
 /**
  * What a provider can put in an accounting slot before sanitizing: a JSON-shaped
- * tree whose numbers may be non-finite. `Count` decides what is usable.
+ * tree whose numbers may be non-finite and whose optional fields may be explicit
+ * undefined, as the SDK's usage and metadata objects are. `Count` decides what is usable.
  */
-export type Reported = null | boolean | number | string | Reported[] | { [key: string]: Reported };
+export type Reported =
+  | undefined
+  | null
+  | boolean
+  | number
+  | string
+  | Reported[]
+  | { [key: string]: Reported };
 const ReportedNumber = z.custom<number>((value) => typeof value === "number");
 export const Reported: z.ZodType<Reported> = z.lazy(() =>
   z.union([
+    z.undefined(),
     z.null(),
     z.boolean(),
     ReportedNumber,

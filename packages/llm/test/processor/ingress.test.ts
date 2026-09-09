@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ProviderEvent } from "../../src/processor/event-schema";
 import { useProcessor, capturingSink, processorInfo, streamOf } from "../helpers/processor";
 
 describe("processor ingress", () => {
@@ -8,11 +9,24 @@ describe("processor ingress", () => {
     { type: "text-start", providerMetadata: ["not-an-object"] },
     { type: "tool-call", toolCallId: "bad", toolName: "lookup", input: [1] },
     { type: "tool-result", toolCallId: "bad", output: () => 1 },
-  ])("rejects malformed provider fields before projecting %s", async (event) => {
+    { type: "error", error: Symbol("not-json") },
+  ])("refuses malformed wire fields %s", (event) => {
+    expect(ProviderEvent.safeParse(event).success).toBe(false);
+  });
+
+  test("a rejected nested payload fails the attempt before projecting", async () => {
     const capture = capturingSink();
-    const processor = createProcessor({ sink: capture.sink, createStream: streamOf([event]) });
+    const processor = createProcessor({
+      sink: capture.sink,
+      createStream: streamOf([
+        { type: "tool-call", toolCallId: "bad", toolName: "lookup", input: {} },
+        { type: "tool-result", toolCallId: "bad", output: { output: "x", isError: "yes" } },
+      ]),
+    });
     await expect(processor.process({ system: "", promptText: "" })).rejects.toThrow();
-    expect(capture.finalParts()).toEqual([]);
+    expect(capture.finalParts().filter((part) => part.type === "tool")).toMatchObject([
+      { callID: "bad", state: { status: "error", error: "Processing was interrupted" } },
+    ]);
     expect(processor.message.finish).toBe("error");
   });
 

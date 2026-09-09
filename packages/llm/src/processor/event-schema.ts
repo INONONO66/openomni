@@ -14,7 +14,7 @@ export const ProviderEvent = z.object({
   isError: z.boolean().optional(),
   message: z.string().optional(),
   finishReason: z.string().optional(),
-  providerMetadata: PlainObjectSchema.optional(),
+  providerMetadata: z.record(z.string(), Reported).optional(),
   usage: Reported.optional(),
   error: z.union([z.instanceof(Error), z.json()]).optional(),
 });

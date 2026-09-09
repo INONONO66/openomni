@@ -1,4 +1,4 @@
-import type { PlainValue, Token } from "@openomni/protocol";
+import type { Token } from "@openomni/protocol";
 import { UsageResponse, type Reported } from "./schema";
 
 /** A step's locally estimated counts, in the same units as provider accounting. */
@@ -30,7 +30,7 @@ export namespace TokenTracker {
   /** Required unusable counts remain undefined so the fold estimates them, never silently zeroes them. */
   export function extractUsage(response: {
     readonly usage?: Reported;
-    readonly providerMetadata?: PlainValue;
+    readonly providerMetadata?: Reported;
   }): Omit<Token.ProviderUsage, "inputTokens" | "outputTokens"> & {
     readonly inputTokens: number | undefined;
     readonly outputTokens: number | undefined;
