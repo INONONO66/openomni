@@ -1736,10 +1736,10 @@ function openRequest(port: ReturnType<typeof createSessionRequests>, id: string)
 
 /** Crash-open seed of 6.2: dead owner, T pinned to G1 while the row already points at G2. */
 function seedCrashOpen(id: string): void {
-  const { created, generation: g1, lease } = seedLeasedResident(id, "cfg", "dead", 10);
+  const { created, generation, lease } = seedLeasedResident(id, "cfg", "dead", 10);
   const g2 = SessionHandleStore.generationSnapshot({
-    generation: g1.generation + 1,
-    revertTo: g1.generation,
+    generation: generation.generation + 1,
+    revertTo: generation.generation,
     tools: [],
     system: { preset: "", blocks: [{ id: "b", source: "fixture", content: "v2" }] },
     policyGeneration: 1,
@@ -1772,9 +1772,9 @@ function seedCrashOpen(id: string): void {
             inboxIds: [],
             resumeCount: 0,
             boundaryActionId: "cfg",
-            toolsGeneration: g1.generation,
-            toolsHash: g1.toolsHash,
-            systemHash: g1.systemHash,
+            toolsGeneration: generation.generation,
+            toolsHash: generation.toolsHash,
+            systemHash: generation.systemHash,
             policyGeneration: 1,
           },
         },

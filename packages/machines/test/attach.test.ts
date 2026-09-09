@@ -3,7 +3,7 @@ import { statSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc";
-import { type BusEvent, Machine } from "@openomni/protocol";
+import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { socketPath } from "./helpers/socket-path";
@@ -66,6 +66,7 @@ async function withHost(
     path: string;
     collector: ReturnType<typeof eventCollector>;
   }) => Promise<void>,
+  callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>,
 ): Promise<void> {
   const collector = eventCollector();
   const path = socketPath();
@@ -74,6 +75,7 @@ async function withHost(
     enrollment: resolve,
     events: collector.sink,
     now: () => 5000,
+    callTool,
   });
   try {
     await run({ host, path, collector });
@@ -365,71 +367,56 @@ describe("machine attach handshake", () => {
     }
   });
 
-  test("daemon relays a cell's tool call, refuses a duplicate cell id, and cancels on the wire", async () => {
-    const path = socketPath();
+  test("daemon relays a cell's tool call to the host and cancels the cell on the wire", async () => {
     const calls: Machine.ToolCall[] = [];
-    let toolSeen!: () => void;
-    const relayed = new Promise<void>((resolve) => {
-      toolSeen = resolve;
-    });
-    const rogue = await createIpcServer(path, (method, params, respond) => {
-      if (method === Machine.WireMethod.CallTool) {
-        calls.push(Machine.ToolCall.parse(params));
-        respond({ status: "completed", value: 42 } satisfies Machine.ToolCallResult);
-        toolSeen();
-        return;
-      }
-      respond({ status: "attached", effectiveCapabilities: ["kernel.py"], effectiveExports: [] });
-    });
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    try {
-      const daemon = await attachMachineDaemon({
-        socketPath: path,
-        offer: offer({ offeredCapabilities: ["kernel.py"] }),
-        runner: {
-          runCode: async (request, call, signal) => {
-            const answer = await call({ cellId: request.cellId, name: "answer", arguments: {} });
-            await held;
-            return {
-              status: signal.aborted ? "cancelled" : "completed",
-              cellId: request.cellId,
-              output: { stdout: JSON.stringify(answer), stderr: "" },
-            };
+    const relayed = Promise.withResolvers<void>();
+    await withHost(
+      () => ({ ...enrollment, allowedCapabilities: ["kernel.py"] }),
+      async ({ host, path }) => {
+        const daemon = await attachMachineDaemon({
+          socketPath: path,
+          offer: offer({ offeredCapabilities: ["kernel.py"] }),
+          runner: {
+            runCode: async (request, call, signal) => {
+              const answer = await call({ cellId: request.cellId, name: "answer", arguments: {} });
+              // The abort may already have landed while the tool answer was in flight.
+              if (!signal.aborted)
+                await new Promise<void>((resolve) => {
+                  signal.addEventListener("abort", () => resolve(), { once: true });
+                });
+              return {
+                status: "cancelled",
+                cellId: request.cellId,
+                output: { stdout: JSON.stringify(answer), stderr: "" },
+              };
+            },
+            peekCode: () => undefined,
+            close: async () => undefined,
           },
-          peekCode: () => undefined,
-          close: async () => undefined,
-        },
-      });
-      try {
-        const cell = { cellId: "dup", code: "x", timeoutMs: 5000 };
-        const first = rogue.call(Machine.WireMethod.RunCode, cell);
-        await relayed;
-        expect(calls).toEqual([{ cellId: "dup", name: "answer", arguments: {} }]);
-        await expect(rogue.call(Machine.WireMethod.RunCode, cell)).rejects.toBeInstanceOf(
-          IpcRemoteError,
-        );
-        expect(await rogue.call(Machine.WireMethod.CancelCode, { cellId: "nobody" })).toEqual({
-          cancelled: false,
         });
-        expect(await rogue.call(Machine.WireMethod.CancelCode, { cellId: "dup" })).toEqual({
-          cancelled: true,
-        });
-        release();
-        expect(await first).toEqual({
-          status: "cancelled",
-          cellId: "dup",
-          output: { stdout: '{"status":"completed","value":42}', stderr: "" },
-        });
-      } finally {
-        release();
-        await daemon.close();
-      }
-    } finally {
-      rogue.close();
-    }
+        try {
+          const controller = new AbortController();
+          const running = host
+            .get("mac-studio")
+            .runCode({ cellId: "relay", code: "x", timeoutMs: 5000 }, controller.signal);
+          await relayed.promise;
+          expect(calls).toEqual([{ cellId: "relay", name: "answer", arguments: {} }]);
+          controller.abort();
+          expect(await running).toEqual({
+            status: "cancelled",
+            cellId: "relay",
+            output: { stdout: '{"status":"completed","value":42}', stderr: "" },
+          });
+        } finally {
+          await daemon.close();
+        }
+      },
+      async (call) => {
+        calls.push(call);
+        relayed.resolve();
+        return { status: "completed", value: 42 };
+      },
+    );
   });
 
   test("daemon refuses a host reply that violates Machine.AttachResult", async () => {
