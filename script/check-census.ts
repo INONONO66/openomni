@@ -276,6 +276,13 @@ function implementation(node: ts.Node): boolean {
     !!node.body
   );
 }
+function exitsBefore(parent: ts.Block | ts.SourceFile, child: ts.Node): boolean {
+  for (const statement of parent.statements) {
+    if (statement === child) return false;
+    if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) return true;
+  }
+  return false;
+}
 function scope(node: ts.Node): ts.Node {
   let current = node.parent;
   while (current && !ts.isSourceFile(current) && !isFunction(current)) current = current.parent;
@@ -519,6 +526,7 @@ class Provenance {
   readonly checker: ts.TypeChecker;
   readonly sourceFiles: ts.SourceFile[];
   readonly reachable = new Map<ts.Node, { root: Locus; chain: Locus[] }>();
+  private readonly activeBranches = new Set<ts.Node>();
   readonly calls: ts.CallExpression[] = [];
   readonly errors: Problem[] = [];
   readonly aliases: Locus[] = [];
@@ -936,22 +944,24 @@ class Provenance {
   }
   private activeBranch(node: ts.Node): boolean {
     if (this.missingOptionalReceiver(node)) return false;
+    // The ancestor walk reads the syntax tree, checker declarations and the
+    // root set. Roots only grow during the fixpoint, so an active verdict stays
+    // active and is cached; an inactive verdict (e.g. an `import.meta.main`
+    // branch before its file is registered as a root) may flip and is recomputed.
+    if (this.activeBranches.has(node)) return true;
+    const verdict = this.structurallyActive(node);
+    if (verdict) this.activeBranches.add(node);
+    return verdict;
+  }
+  private structurallyActive(node: ts.Node): boolean {
     let child = node;
     for (
       let parent = node.parent;
       parent && !isFunction(parent);
       child = parent, parent = parent.parent
     ) {
-      if (ts.isBlock(parent) || ts.isSourceFile(parent)) {
-        const index = parent.statements.findIndex((statement) => statement === child);
-        if (
-          index > 0 &&
-          parent.statements
-            .slice(0, index)
-            .some((statement) => ts.isReturnStatement(statement) || ts.isThrowStatement(statement))
-        )
-          return false;
-      }
+      if ((ts.isBlock(parent) || ts.isSourceFile(parent)) && exitsBefore(parent, child))
+        return false;
       if (!this.activeConditional(parent, child, node)) return false;
     }
     return true;

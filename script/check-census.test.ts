@@ -817,6 +817,19 @@ test("R3 Python thread start, inactive branches and cursors have separate effect
   }
 }, 180_000);
 
+test("import.meta.main branch evaluated before its file becomes a spawned root still counts", () => {
+  using fixture = new Fixture({
+    "src/adapter.ts": adapter,
+    "src/entry.ts":
+      'import { write } from "./adapter"; export const ENTRY = "entry"; if (import.meta.main) { console.log(write()); }',
+    "src/main.ts":
+      'import {spawnSync} from "node:child_process"; import { ENTRY } from "./entry"; console.log(ENTRY); const child=spawnSync(process.execPath,["src/entry.ts"],{stdio:"inherit"}); if(child.status!==0)throw new Error("child failed");',
+  });
+  const result = fixture.run("store", fixture.schema());
+  expect(result.code).toBe(0);
+  expect(result.output).toContain('"productionWrites":[{');
+}, 180_000);
+
 test("R3 child Python source is rooted in its actual spawn invocation", () => {
   using fixture = new Fixture({
     "src/main.ts":
