@@ -2,7 +2,7 @@ import { providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it, jest } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent, runUserMessage } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
 import { completeModel, mockLlm, countingStopLlm, createStopOutcome } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
@@ -73,12 +73,12 @@ describe("one terminal record per started run", () => {
     const records = observeRunTerminals();
     const provider = countingStopLlm();
     try {
-      const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      const result = await runUserMessage({
         events: Bus,
         model,
         budget: { maxTurns: 0 },
         llm: provider.llm,
-      }).catch((error: Error) => error);
+      }, "hi").catch((error: Error) => error);
       expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
       expect(provider.calls).toBe(0);
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);

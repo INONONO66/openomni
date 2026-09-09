@@ -90,7 +90,7 @@ export function assistantWithParts(
   parts: Message.Part[],
   inputTokens: number,
   outputTokens = 0,
-): Message.WithParts {
+): Message.WithParts & { info: Message.AssistantMessage } {
   return {
     info: {
       id,
@@ -111,6 +111,16 @@ export function assistantWithParts(
       },
     },
     parts,
+  };
+}
+
+export function streamingAssistantInfo(id: string, input: number, output: number): Message.Info {
+  return {
+    ...assistantWithParts(id, "test", [], input, output).info,
+    time: { created: Date.now() },
+    modelID: "claude-3-haiku-20240307",
+    providerID: "anthropic",
+    path: { cwd: "", root: "" },
   };
 }
 

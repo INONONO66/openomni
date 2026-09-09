@@ -11,6 +11,7 @@ import {
 } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 import { Bus } from "../../src/index";
+import { streamingAssistantInfo } from "../helpers/messages";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -60,24 +61,7 @@ describe("ChatAgent.run() streaming", () => {
   it("streams assistant text to the sink and returns the result", async () => {
     mockRunFn = async (_input, sink) => {
       sink.onMessage({
-        info: {
-          id: "msg-1",
-          sessionID: "test",
-          role: "assistant",
-          time: { created: Date.now() },
-          parentID: "",
-          modelID: "claude-3-haiku-20240307",
-          providerID: "anthropic",
-          agent: "test",
-          path: { cwd: "", root: "" },
-          cost: 0,
-          tokens: {
-            input: 10,
-            output: 5,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-        },
+        info: streamingAssistantInfo("msg-1", 10, 5),
         parts: [
           {
             id: "p1",
@@ -106,24 +90,7 @@ describe("ChatAgent.run() streaming", () => {
       const call = { id: "call-1", tool: "test_tool", input: { q: "test" } };
       if (step === 1) sink.onToolCall(call);
       sink.onMessage({
-        info: {
-          id: "msg-2",
-          sessionID: "test",
-          role: "assistant",
-          time: { created: Date.now() },
-          parentID: "",
-          modelID: "claude-3-haiku-20240307",
-          providerID: "anthropic",
-          agent: "test",
-          path: { cwd: "", root: "" },
-          cost: 0,
-          tokens: {
-            input: 5,
-            output: 3,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-        },
+        info: streamingAssistantInfo("msg-2", 5, 3),
         parts: [
           ...(step === 1
             ? [

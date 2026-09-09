@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from "bun:test";
 import { Operational, type Tool } from "@openomni/protocol";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent, runUserMessage } from "../../helpers/test-agent";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { Bus } from "../../../src/index";
 import { collector } from "../../helpers/observation-collector";
@@ -105,12 +105,12 @@ describe("run budget terminal facts", () => {
     const unsubscribe = Bus.observe((event) => busEvents.push(event.name));
     const provider = countingStopLlm();
     try {
-      const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      const result = await runUserMessage({
         events,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         budget: { maxWallTimeMs: 0 },
         llm: provider.llm,
-      }).catch((error: Error) => error);
+      }, "hi").catch((error: Error) => error);
 
       expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
       expect(provider.calls).toBe(0);

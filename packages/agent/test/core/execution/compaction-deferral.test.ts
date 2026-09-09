@@ -1,14 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { CompactionSession } from "../../../src/compaction/speculate";
-import { resolveCompactionGeometry } from "../../../src/compaction/geometry";
-import { applyCompaction } from "../../../src/core/execution/turn-compaction";
-import { createRunState, recordCallContext } from "../../../src/core/execution/state";
+import { applyThreshold, stateAtGrace } from "../../helpers/compaction-seam";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import { RunEvents } from "../../../src/core/execution/events";
 import { Bus } from "../../../src/index";
 import { captureBusEvents } from "../../helpers/bus-event";
 import { textMessage } from "../../helpers/messages";
-import { runInput } from "../../helpers/run-input";
 
 const WINDOW = 1000;
 
@@ -45,18 +42,10 @@ describe("compaction apply seam deferral", () => {
     const release = Promise.withResolvers<void>();
     const session = inFlightSession(release.promise);
     expect(session.inFlight()).toBe(true);
-    const state = createRunState(runInput([{ role: "user", content: "hi" }]));
-    const geometry = resolveCompactionGeometry({ contextWindowTokens: WINDOW });
-    recordCallContext(state, geometry.graceTokens - 1);
+    const state = stateAtGrace(WINDOW, -1);
     const started = captureBusEvents(RunEvents.CompactionStarted);
     try {
-      const outcome = await applyCompaction(
-        state,
-        config(),
-        { traceId: "trace", sessionId: state.sessionId, runId: "run", actorId: "actor" },
-        session,
-        "threshold",
-      );
+      const outcome = await applyThreshold(state, config(), session);
       expect(outcome).toBe("deferred");
       expect(started.events).toHaveLength(0);
     } finally {
@@ -69,18 +58,10 @@ describe("compaction apply seam deferral", () => {
   it("runs the merge once the measured window reaches grace even with a cut in flight", async () => {
     const release = Promise.withResolvers<void>();
     const session = inFlightSession(release.promise);
-    const state = createRunState(runInput([{ role: "user", content: "hi" }]));
-    const geometry = resolveCompactionGeometry({ contextWindowTokens: WINDOW });
-    recordCallContext(state, geometry.graceTokens);
+    const state = stateAtGrace(WINDOW, 0);
     const started = captureBusEvents(RunEvents.CompactionStarted);
     try {
-      const outcome = await applyCompaction(
-        state,
-        config(),
-        { traceId: "trace", sessionId: state.sessionId, runId: "run", actorId: "actor" },
-        session,
-        "threshold",
-      );
+      const outcome = await applyThreshold(state, config(), session);
       await started.done;
       expect(outcome).toBe("none");
       expect(started.events[0]?.trigger).toBe("threshold");

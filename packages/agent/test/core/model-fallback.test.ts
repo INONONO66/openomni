@@ -1,4 +1,4 @@
-import { createTestAgent } from "../helpers/test-agent";
+import { createTestAgent, runUserMessage } from "../helpers/test-agent";
 import { describe, expect, it, jest } from "bun:test";
 import type { Sink } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
@@ -64,9 +64,7 @@ describe("model fallback via placement", () => {
     it(`selects the expected retry model for ${scenario.reason}`, async () => {
       const { resolved, llm } = fallbackHarness(scenario.reason);
       const result = await afterFirstRetry(() =>
-        createTestAgent({ events: Bus, model: primary, modelFallbacks: [fallback], llm }).run(
-          runInput([{ role: "user", content: "go" }]),
-        ),
+        runUserMessage({ events: Bus, model: primary, modelFallbacks: [fallback], llm }, "go"),
       );
       expect(result.finishReason).toBe("stop");
       expect(resolved).toEqual(scenario.expected);
@@ -106,9 +104,7 @@ describe("model fallback via placement", () => {
       }),
     };
     const result = await afterFirstRetry(() =>
-      createTestAgent({ events: Bus, model: primary, modelFallbacks: [fallback], llm }).run(
-        runInput([{ role: "user", content: "go" }]),
-      ),
+      runUserMessage({ events: Bus, model: primary, modelFallbacks: [fallback], llm }, "go"),
     );
     expect(result.finishReason).toBe("stop");
     expect(arms).toEqual([450, undefined, 225]);

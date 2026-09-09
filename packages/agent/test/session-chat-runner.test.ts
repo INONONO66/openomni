@@ -15,6 +15,7 @@ import {
 } from "../src/index";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
 import { turnExecutor } from "./helpers/compiled-policy";
+import { recordingChatRunner } from "./helpers/session-chat";
 import {
   completeModel,
   createMockLlmConfig,
@@ -171,17 +172,8 @@ describe("session chat runner", () => {
   });
 
   it("passes boundary messages into the model and returns its terminal result", async () => {
-    const modelInputs: string[] = [];
     const boundaries: string[] = [];
-    const runner = createSessionChatRunner({
-      prepare: () => ({
-        config: config(async (input, sink) => {
-          modelInputs.push(JSON.stringify(input.messages));
-          return completeModel(input, sink);
-        }),
-        traceContext,
-      }),
-    });
+    const { runner, modelInputs } = recordingChatRunner(config, traceContext);
 
     const result = await runner(
       input(async (boundary) => {
@@ -203,17 +195,8 @@ describe("session chat runner", () => {
   });
 
   it("starts another model turn when a post-model boundary supplies continuation", async () => {
-    const modelInputs: string[] = [];
     let afterLlm = 0;
-    const runner = createSessionChatRunner({
-      prepare: () => ({
-        config: config(async (input, sink) => {
-          modelInputs.push(JSON.stringify(input.messages));
-          return completeModel(input, sink);
-        }),
-        traceContext,
-      }),
-    });
+    const { runner, modelInputs } = recordingChatRunner(config, traceContext);
 
     const result = await runner(
       input(async (boundary) => {
