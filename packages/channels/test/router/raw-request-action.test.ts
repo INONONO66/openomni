@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { ActorRegistry, Storage, SessionHandleStore } from "@openomni/ledger";
 import { type Gateway, type Inbox, Ingress } from "@openomni/protocol";
 import { createGatewayRouter } from "../../src/router";
-import { IngressRoutingError } from "../../src/router/routing-resolution";
+import { IngressRoutingError } from "../../src/router/routing-error";
 
 beforeEach(() => {
   Storage.reset();

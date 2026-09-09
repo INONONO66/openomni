@@ -5,7 +5,7 @@ import { authenticateWebSocketUpgrade } from "./authn/websocket";
 import type { ChannelAuthnDecisionObserver } from "./authn/types";
 import type { PublishPort } from "./types";
 
-export interface WebSocketConfig {
+interface WebSocketConfig {
   token?: string;
   onAuthDecision?: ChannelAuthnDecisionObserver;
   /** Compose with the same gateway.ingest used by ordinary channel messages. */

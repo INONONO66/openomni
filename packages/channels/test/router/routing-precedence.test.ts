@@ -4,7 +4,7 @@ import { resolveRoute, type RouteState } from "../../src/router/resolve-route.js
 
 type RouteInbound = Parameters<typeof resolveRoute>[0];
 import { requireRoutedDecision } from "../../src/router/routing-execution.js";
-import { IngressRoutingError } from "../../src/router/routing-resolution";
+import { IngressRoutingError } from "../../src/router/routing-error";
 
 function routingError(decision: Ingress.RoutingDecisionPayload): IngressRoutingError {
   try {

@@ -67,6 +67,13 @@ beforeEach(() => {
   registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
 });
 
+test("preflight reads authority without debiting, opening requests, or delivering", () => {
+  expect(messaging().preflight(buildAwaitedSendInput())).toBeUndefined();
+  expect(inspectDebitCount()).toBe(0);
+  expect(SessionHandleStore.requestRows()).toHaveLength(0);
+  expect(deliveries).toEqual([]);
+});
+
 test("receipt assertions reject wrong discriminants and denial codes", async () => {
   grants = [];
   const denied = await messaging().send(buildSendInput());

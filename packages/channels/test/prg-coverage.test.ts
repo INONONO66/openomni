@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { DiscordClient } from "../src/provider/discord/client";
 import { DiscordAdapter } from "../src/provider/discord/surface";
-import type { GatewayCallbacks } from "../src/provider/discord/gateway";
+import type { DiscordGateway } from "../src/provider/discord/gateway";
+
+type GatewayCallbacks = ConstructorParameters<typeof DiscordGateway>[2];
 import { DiscordProvider } from "../src/provider/discord/provider";
 import { SlackProvider } from "../src/provider/slack/provider";
 import { TelegramClient } from "../src/provider/telegram/client";

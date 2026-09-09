@@ -20,7 +20,7 @@ const DISCORD_SHELL_MESSAGES = {
   socketError: "discord websocket error",
 } as const;
 
-export interface GatewayCallbacks {
+interface GatewayCallbacks {
   /** `traceId` is minted per dispatch — the first frame of an inbound gateway event (D11 origin). */
   onDispatch: (event: string, data: object, traceId: string) => void;
   onReady: (info: { botId: string; botUsername: string }) => void;

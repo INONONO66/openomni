@@ -2,31 +2,20 @@ import { z } from "zod";
 import {
   type Gateway,
   Ingress,
-  NamedError,
   SessionTransition,
   resolveTarget,
   targetKey,
   type BusEvent,
 } from "@openomni/protocol";
-import { LedgerAppend, SurfaceKey } from "@openomni/ledger";
+import { SurfaceKey } from "@openomni/ledger";
+import { recordRouteDecided } from "./route-record";
 import { applyChannelGrantTreatment } from "./authority.js";
 import { matchBlacklist } from "./blacklist.js";
 import { resolveChannelGrant } from "./channel-grant.js";
-import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messaging/reply-grant.js";
+import { replyGrantEndpointFacts } from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findRequestCandidates, type RequestResolution } from "./request/correlation.js";
 import type { GatewayRouterPorts } from "./message-ports.js";
-
-const ingressRoutingErrorCodes = [
-  "route_blocked",
-  "route_ambiguous",
-  "route_record_failed",
-  /** Redelivered inbound whose fresh decision diverges from the recorded route.decided fact — fail closed, no action, no second fact (#510 review fix F2). */
-  "route_replay_divergent",
-  "request_reply_rejected",
-] as const;
-type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];
-const IngressRoutingErrorCode = z.enum(ingressRoutingErrorCodes);
 
 /** Request matching requires both endpoint and channel scope pins. */
 const ScopedCorrelationClaim = SessionTransition.Correlation.required({
@@ -35,32 +24,6 @@ const ScopedCorrelationClaim = SessionTransition.Correlation.required({
 });
 type ScopedCorrelation = z.infer<typeof ScopedCorrelationClaim>;
 const RequestActionPayload = z.object({ action: z.json().catch(null).optional() });
-
-const IngressRoutingErrorBase = NamedError.create(
-  "IngressRoutingError",
-  NamedError.Unknown.Schema.shape.data.extend({
-    code: IngressRoutingErrorCode,
-    decision: Ingress.Events.RoutingDecision.schema,
-  }),
-);
-
-export class IngressRoutingError extends IngressRoutingErrorBase {
-  constructor(
-    code: IngressRoutingErrorCode,
-    message: string,
-    decision: Ingress.RoutingDecisionPayload,
-  ) {
-    super({ code, message, decision });
-  }
-
-  get code(): IngressRoutingErrorCode {
-    return this.data.code;
-  }
-
-  get decision(): Ingress.RoutingDecisionPayload {
-    return this.data.decision;
-  }
-}
 
 type KernelRequestExecution =
   | Readonly<{ kind: "none" }>
@@ -74,7 +37,7 @@ type KernelRequestExecution =
       record: SessionTransition.Request;
     }>;
 
-export type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
+type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
   Readonly<{
     decision: Ingress.RoutingDecisionPayload;
     event: Event;
@@ -314,71 +277,6 @@ function pinReplyGrantEndpoint(
       ...replyGrantEndpointFacts({ channel: endpoint.channel, externalId: endpoint.externalId }),
     ],
   };
-}
-
-function recordRouteDecided(
-  streamId: string,
-  decision: Ingress.RoutingDecisionPayload,
-): Ingress.RoutingDecisionPayload {
-  // Scoped append port (#707 S8): append + headFact only — the router never
-  // holds the master Storage entry (S1/S2: brain surfaces stay unreachable).
-  const ledger = LedgerAppend.port();
-  if (!ledger) {
-    throw new IngressRoutingError(
-      "route_record_failed",
-      "Storage adapter does not implement ledger append — routing decisions fail closed",
-      decision,
-    );
-  }
-  let appended: ReturnType<typeof ledger.append>;
-  try {
-    appended = ledger.append(Ingress.routeDecidedFact(streamId, decision), 0);
-  } catch (error) {
-    throw new IngressRoutingError(
-      "route_record_failed",
-      `routing decision append failed: ${error instanceof Error ? error.message : String(error)}`,
-      decision,
-    );
-  }
-  if (appended.kind === "appended") return decision;
-  let recorded: Ingress.RoutingDecisionPayload;
-  try {
-    const fact = ledger.headFact(streamId);
-    if (fact === undefined || fact.type !== Ingress.ROUTE_DECIDED_FACT_TYPE) {
-      throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
-    }
-    // Upcast-on-read: pre-0025 facts carry dead optional fields the strict
-    // write schema rejects; the reader strips them. `undefined` means the
-    // bytes were never a valid route.decided of any era.
-    const upcast = Ingress.recordedRoutingDecision(fact.data);
-    if (upcast === undefined) {
-      throw new Error(`stream ${streamId} recorded route.decided fact failed to parse`);
-    }
-    recorded = upcast;
-  } catch (error) {
-    throw new IngressRoutingError(
-      "route_record_failed",
-      `recorded routing decision read failed: ${error instanceof Error ? error.message : String(error)}`,
-      decision,
-    );
-  }
-  const recordedEndpoint = replyGrantEndpointFromFacts(recorded.factsUsed);
-  const freshEndpoint = replyGrantEndpointFromFacts(decision.factsUsed);
-  const endpointEquivalent =
-    recordedEndpoint?.channel === freshEndpoint?.channel &&
-    recordedEndpoint?.externalId === freshEndpoint?.externalId;
-  if (!Ingress.routeDecisionsEquivalent(recorded, decision) || !endpointEquivalent) {
-    // The recorded decision carries perimeter-resolved authority (actorId,
-    // trustTier, inboundTreatment); interpolating either side into the error
-    // would disclose identity and policy treatment to whoever triggered the
-    // redelivery, so the refusal stays typed and value-free.
-    throw new IngressRoutingError(
-      "route_replay_divergent",
-      "redelivered inbound diverges from its recorded routing decision on an execution- or authority-shaping field",
-      decision,
-    );
-  }
-  return decision;
 }
 
 // Correlation is read-only (#215): request ambiguity is recorded solely by the

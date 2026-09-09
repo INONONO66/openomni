@@ -1,330 +1,47 @@
-import { z } from "zod";
+import type { z } from "zod";
 import {
   Gateway,
   MessagingEvents,
   canonicalKey,
-  type Actor,
   type BusEvent,
   type SessionTransition,
 } from "@openomni/protocol";
-import { ActorRegistry, EgressBudgetStore, LedgerAppend } from "@openomni/ledger";
+import { LedgerAppend } from "@openomni/ledger";
 import type { GatewayRouterPorts } from "../message-ports.js";
 import type { DeliveryReceipt } from "../../support/deliver";
-import {
-  deliverySurfaceKey,
-  hasScopedSenderTargetCandidate,
-  resolveScopedSenderTargetGrant,
-  resolveSenderTargetGrant,
-} from "./grant.js";
-import { evaluateSocialBudget } from "./social-budget.js";
+import { authorizeSend } from "./authorize";
+import { admitSend } from "./admission";
 
 type DeliveryTarget = Gateway.DeliveryTarget;
-type MessageClass = Gateway.MessageClass;
 type MessageDenialCode = Gateway.MessageDenialCode;
-type MessageOperation = Gateway.MessageOperation;
-type MessageTarget = Gateway.MessageTarget;
 const SendInput = Gateway.SendInput;
 type SendInput = z.infer<typeof SendInput>;
 type SendReceipt = Gateway.SendReceipt;
-type SenderTargetGrant = Gateway.SenderTargetGrant;
-
-/** Policy-intent class of a send, inferred from `operation` when not explicit (#219). */
-function sendClassOf(input: SendInput): MessageClass {
-  return input.class ?? (input.operation === "awaited" ? "converse" : "notify");
-}
-
-/**
- * Existing-agent messaging service (#215). One send reaches exactly one
- * already-allocated actor endpoint or fails closed with a typed denial —
- * grant first, then target resolution, then delivery. Awaited delivery
- * appends exactly one request via the injected kernel requests.open; fire-and-forget records the
- * audit event only. This module allocates nothing: it never touches
- * worker/session/executor/budget stores, and the driver's
- * `allocationDelta: 0` receipt plus the messaging test suite pin that.
- */
+type SendAuthorityInput = Parameters<typeof authorizeSend>[0];
+type AuthorizedSend = Parameters<typeof admitSend>[0];
 
 type OutboundMessage = Readonly<{
   messageId: string;
-  /** Stable gateway idempotency key. Delivery owners must reconcile/dedupe retries under this key. */
   idempotencyKey: string;
   senderId: string;
-  operation: MessageOperation;
+  operation: Gateway.MessageOperation;
   body: string;
   target: DeliveryTarget;
   requestId?: string;
 }>;
 
-export type MessagingPorts = Readonly<{
+type MessagingPorts = Readonly<{
   requests: GatewayRouterPorts["requests"];
-  /**
-   * Concrete delivery owner (server channel / API / connector). Required at
-   * construction — there is no ownerless send path, so "no owner" cannot be
-   * silently skipped (fail-closed, rule 7). At-least-once delivery: retries
-   * carry the same `message.idempotencyKey` so a concrete owner can provide
-   * bounded dedupe or platform read-back.
-   */
+  /** Delivery owners reconcile retries using the stable idempotency key. */
   deliver: (message: OutboundMessage) => DeliveryReceipt | Promise<DeliveryReceipt>;
-  /** Injected observation sink (messaging.sent / messaging.denied) — channels never imports the observation channel. */
   publish: BusEvent.Sink["publish"];
 }> &
   Pick<NonNullable<GatewayRouterPorts["messaging"]>, "grants" | "budgets">;
 
-type SendAuthorityInput = Pick<SendInput, "senderId" | "target" | "operation" | "at">;
-
-export type ExistingAgentMessaging = Readonly<{
+type ExistingAgentMessaging = Readonly<{
   preflight: (input: SendAuthorityInput) => MessageDenialCode | undefined;
   send: (input: SendInput) => Promise<SendReceipt>;
 }>;
-
-type TargetDenialCode = Extract<
-  MessageDenialCode,
-  "target_missing" | "target_stale" | "target_ambiguous"
->;
-
-type TargetResolution =
-  | Readonly<{ ok: true; target: DeliveryTarget }>
-  | Readonly<{ ok: false; code: TargetDenialCode; reason: string }>;
-
-function deliveryTarget(actorId: string, endpoint: Actor.Endpoint): DeliveryTarget {
-  return {
-    actorId,
-    endpointId: endpoint.id,
-    channel: endpoint.channel,
-    externalId: endpoint.externalId,
-  };
-}
-
-/**
- * Resolves the explicit target to ONE allocated actor endpoint:
- * - unknown actorId               -> target_missing
- * - pinned endpoint gone/re-bound -> target_stale (the reference outlived the allocation)
- * - actor without any endpoint    -> target_stale
- * - several endpoints, no pin     -> target_ambiguous (resolution never guesses)
- */
-function resolveExistingTarget(target: MessageTarget): TargetResolution {
-  const identity = ActorRegistry.getIdentity(target.actorId);
-  if (identity === undefined) {
-    return {
-      ok: false,
-      code: "target_missing",
-      reason: `actor ${target.actorId} is not a registered identity`,
-    };
-  }
-  if (target.endpointId !== undefined) {
-    const endpoint = ActorRegistry.getEndpoint(target.endpointId);
-    if (endpoint === undefined) {
-      return {
-        ok: false,
-        code: "target_stale",
-        reason: `pinned endpoint ${target.endpointId} no longer exists`,
-      };
-    }
-    if (endpoint.actorId !== target.actorId) {
-      return {
-        ok: false,
-        code: "target_stale",
-        reason: `pinned endpoint ${target.endpointId} no longer belongs to ${target.actorId}`,
-      };
-    }
-    return { ok: true, target: deliveryTarget(target.actorId, endpoint) };
-  }
-  const endpoints = ActorRegistry.listEndpoints(target.actorId);
-  const [endpoint, ...rest] = endpoints;
-  if (endpoint === undefined) {
-    return {
-      ok: false,
-      code: "target_stale",
-      reason: `actor ${target.actorId} has no allocated endpoint`,
-    };
-  }
-  if (rest.length > 0) {
-    return {
-      ok: false,
-      code: "target_ambiguous",
-      reason: `actor ${target.actorId} is reachable at ${endpoints.length} endpoints — pin target.endpointId`,
-    };
-  }
-  return { ok: true, target: deliveryTarget(target.actorId, endpoint) };
-}
-
-const SEND_ADMITTED_FACT = "gateway.send.admitted";
-
-const SendAdmission = z.object({
-  signature: z.string(),
-  budgeted: z.boolean(),
-  sendClass: Gateway.MessageClass,
-});
-type SendAdmission = z.infer<typeof SendAdmission>;
-
-class SendAdmissionConflict extends Error {}
-
-function sendStreamId(messageId: string): string {
-  return `gateway_send:${encodeURIComponent(messageId)}`;
-}
-
-function sendSignature(input: SendInput, target: DeliveryTarget): string {
-  return JSON.stringify({
-    messageId: input.messageId,
-    senderId: input.senderId,
-    operation: input.operation,
-    class: input.class,
-    body: input.body,
-    target,
-    requestSpec: input.requestSpec,
-  });
-}
-
-function existingAdmission(input: SendInput, target: DeliveryTarget): SendAdmission | undefined {
-  const ledger = LedgerAppend.port();
-  if (ledger === undefined) {
-    throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
-  }
-  const streamId = sendStreamId(input.messageId);
-  const fact = ledger.headFact(streamId);
-  if (fact === undefined) return undefined;
-  if (fact.type !== SEND_ADMITTED_FACT) {
-    throw new Error(`unexpected fact type on send stream ${streamId}: ${fact.type}`);
-  }
-  const parsed = SendAdmission.safeParse(fact.data);
-  if (!parsed.success) throw new Error(`corrupt send admission fact on ${streamId}`);
-  const admission = parsed.data;
-  if (admission.signature !== sendSignature(input, target)) {
-    throw new SendAdmissionConflict(
-      `message id ${input.messageId} was already admitted with different content`,
-    );
-  }
-  return admission;
-}
-
-function recordAdmission(
-  input: SendInput,
-  target: DeliveryTarget,
-  budgeted: boolean,
-  sendClass: MessageClass,
-): SendAdmission {
-  const ledger = LedgerAppend.port();
-  if (ledger === undefined) {
-    throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
-  }
-  const streamId = sendStreamId(input.messageId);
-  const admission = { signature: sendSignature(input, target), budgeted, sendClass } as const;
-  const appended = ledger.append({ streamId, type: SEND_ADMITTED_FACT, data: { ...admission } }, 0);
-  if (appended.kind === "appended") return admission;
-  const raced = existingAdmission(input, target);
-  if (raced === undefined) {
-    throw new Error(`send admission conflicted without a recorded fact on ${streamId}`);
-  }
-  return raced;
-}
-
-function debitRow(input: SendInput, sendClass: MessageClass): Gateway.EgressDebitRow {
-  return {
-    id: `gateway-send:${input.messageId}`,
-    senderId: input.senderId,
-    targetActorId: input.target.actorId,
-    class: sendClass,
-    at: input.at,
-  };
-}
-
-type DenySend = (input: SendInput, code: MessageDenialCode, reason: string) => SendReceipt;
-
-interface AuthorizedSend {
-  readonly input: SendInput;
-  readonly target: DeliveryTarget;
-  readonly grant: SenderTargetGrant;
-}
-
-/** Resolves sender authority and its exact allocated endpoint without mutating durable state. */
-function authorizeSend(
-  input: SendAuthorityInput,
-  ports: MessagingPorts,
-):
-  | { readonly ok: true; readonly target: DeliveryTarget; readonly grant: SenderTargetGrant }
-  | { readonly ok: false; readonly code: MessageDenialCode; readonly reason: string } {
-  const grants = ports.grants();
-  const claim = {
-    senderId: input.senderId,
-    targetActorId: input.target.actorId,
-    operation: input.operation,
-    at: input.at,
-  };
-  const grant = resolveSenderTargetGrant(grants, claim);
-  if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
-    return {
-      ok: false,
-      code: "ungranted",
-      reason: `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
-    };
-  }
-  const resolution = resolveExistingTarget(input.target);
-  if (!resolution.ok) return resolution;
-
-  if (grant === undefined) {
-    const surfaceKey = deliverySurfaceKey(resolution.target);
-    const scopedGrant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
-    if (scopedGrant === undefined) {
-      return {
-        ok: false,
-        code: "ungranted",
-        reason: `reply-scoped grant does not cover surface ${surfaceKey} — replies stay inside the initiating container`,
-      };
-    }
-    return { ok: true, target: resolution.target, grant: scopedGrant };
-  }
-
-  return { ok: true, target: resolution.target, grant };
-}
-
-/** Records all admission debits before the delivery effect. */
-function admitSend(
-  authorization: AuthorizedSend,
-  ports: MessagingPorts,
-  deny: DenySend,
-): SendAdmission | SendReceipt {
-  const { input, target, grant } = authorization;
-  const sendClass = sendClassOf(input);
-  let admission: SendAdmission | undefined;
-  try {
-    admission = existingAdmission(input, target);
-  } catch (error) {
-    if (error instanceof SendAdmissionConflict && input.operation === "awaited") {
-      return deny(input, "request_duplicate", error.message);
-    }
-    throw error;
-  }
-  if (admission !== undefined) {
-    repairBudgetDebit(input, admission);
-    return admission;
-  }
-
-  const budgeted = ports.budgets !== undefined && grant.replyScope === undefined;
-  if (budgeted) {
-    const budget = ports
-      .budgets?.()
-      .find((candidate) => candidate.targetActorId === input.target.actorId);
-    const budgetClaim = EgressBudgetStore.claim(
-      debitRow(input, sendClass),
-      input.at - (budget?.windowMs ?? 0),
-      (state) => evaluateSocialBudget(budget, state, { class: sendClass, at: input.at }),
-    );
-    if (budgetClaim.kind === "refused") {
-      return deny(
-        input,
-        budgetClaim.reason.suppress,
-        `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${budgetClaim.reason.suppress})`,
-      );
-    }
-  }
-  admission = recordAdmission(input, target, budgeted, sendClass);
-  repairBudgetDebit(input, admission);
-  return admission;
-}
-
-function repairBudgetDebit(input: SendInput, admission: SendAdmission): void {
-  if (!admission.budgeted) return;
-  EgressBudgetStore.claim(debitRow(input, admission.sendClass), input.at, () => "allow");
-}
 
 /** Kernel records the original action suspension before the physical effect. */
 function openSendRequest(
@@ -435,6 +152,7 @@ function recordSent(
   };
 }
 
+/** Grant first, transactional admission/request opening second, physical delivery last. */
 export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAgentMessaging {
   function deny(input: SendInput, code: MessageDenialCode, reason: string): SendReceipt {
     ports.publish(MessagingEvents.Denied, {
@@ -458,13 +176,11 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 
   async function send(rawInput: SendInput): Promise<SendReceipt> {
     const input = SendInput.parse(rawInput);
-    const checked = authorizeSend(input, ports);
+    const checked = authorizeSend(input, ports.grants());
     if (!checked.ok) return deny(input, checked.code, checked.reason);
     const authorization = { input, target: checked.target, grant: checked.grant };
     const { target } = authorization;
-
-    // The synchronous kernel port joins request/alarm state to the perimeter
-    // admission and debit transaction; no promise may escape this write unit.
+    // No promise may escape the admission/debit/request write unit.
     const opened = LedgerAppend.transaction(() => {
       const admission = admitSend(authorization, ports, deny);
       if ("kind" in admission) return { denied: admission };
@@ -477,7 +193,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 
   return {
     preflight(input) {
-      const checked = authorizeSend(input, ports);
+      const checked = authorizeSend(input, ports.grants());
       return checked.ok ? undefined : checked.code;
     },
     send,

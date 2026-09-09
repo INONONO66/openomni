@@ -1,7 +1,7 @@
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
 import { z } from "zod";
-import { Dedupe, type DedupeToken } from "../../support/dedupe";
+import { Dedupe } from "../../support/dedupe";
 import { requireHandler } from "../../support/handler-frame";
 import { GitHubClient } from "./client";
 import { GitHubWebhookPayloadSchemas } from "./types";
@@ -70,7 +70,7 @@ function extractContent(event: string, raw: object): GitHubEventContent | null {
 type PreparedWebhook = Readonly<{
   traceId: string;
   deliveryId: string | null;
-  dedupeToken: DedupeToken | undefined;
+  dedupeToken: symbol | undefined;
   content: GitHubEventContent;
   inbound: Channel.InboundMessage;
 }>;
