@@ -9,29 +9,39 @@ const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 afterAll(() => GlobalRegistrator.unregister());
 
-test("scroll area pins appended content to the end", async () => {
+test("scroll area pins content appended after opening to the end", async () => {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
+  const originalResizeObserver = globalThis.ResizeObserver;
+  let resize: (() => void) | undefined;
+  globalThis.ResizeObserver = class {
+    constructor(callback: () => void) {
+      resize = callback;
+    }
+    observe() {
+      // The test invokes the captured callback after appending content.
+    }
+    disconnect() {
+      // No observer resources exist in this deterministic test double.
+    }
+  } as unknown as typeof ResizeObserver;
+  let height = 100;
   try {
-    await act(() => root.render(<ScrollArea><div>first line</div></ScrollArea>));
+    await act(() => root.render(<ScrollArea pinToEnd><div>first line</div></ScrollArea>));
     const viewport = host.querySelector<HTMLElement>(".overscroll-contain");
     if (!viewport) throw new Error("Missing scroll viewport");
     Object.defineProperties(viewport, {
-      scrollHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, get: () => height },
       clientHeight: { configurable: true, value: 40 },
       scrollTop: { configurable: true, writable: true, value: 0 },
     });
-    await act(() =>
-      root.render(
-        <ScrollArea pinToEnd>
-          <div>first line</div>
-          <div>appended line</div>
-        </ScrollArea>,
-      ),
-    );
+    height = 160;
+    await act(() => root.render(<ScrollArea pinToEnd><div>first line</div><div>appended line</div></ScrollArea>));
+    await act(() => resize?.());
     expect(viewport.scrollTop).toBe(viewport.scrollHeight);
   } finally {
+    globalThis.ResizeObserver = originalResizeObserver;
     await act(() => root.unmount());
     host.remove();
   }

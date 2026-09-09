@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi, type ShellCommand } from "./api";
+import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi } from "./api";
 import { gatewayEndpointSchema, shellCommandSchema } from "./validation";
 
 const api: DesktopApi = {
