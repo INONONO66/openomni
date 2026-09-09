@@ -200,7 +200,8 @@ export async function run(
     return { type: "aborted" };
   }
 
-  const { traceId, sessionId: sessionID, runId } = input.trace;
+  const { traceId, runId } = input.trace;
+  const sessionID = input.trace.sessionId;
   if (traceId.length === 0 || sessionID.length === 0 || runId.length === 0) {
     throw new Error("llm run requires a non-empty traceId, sessionId, and runId");
   }

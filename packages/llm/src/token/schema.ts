@@ -13,8 +13,13 @@ export type Reported =
   | string
   | Reported[]
   | { [key: string]: Reported };
-const ReportedNumber = z.custom<number>((value) => typeof value === "number");
-export const Reported: z.ZodType<Reported> = z.lazy(() =>
+const ReportedNumber = z.union([
+  z.number(),
+  z.nan(),
+  z.literal(Number.POSITIVE_INFINITY),
+  z.literal(Number.NEGATIVE_INFINITY),
+]);
+export const Reported: z.ZodType<Reported, Reported> = z.lazy(() =>
   z.union([
     z.undefined(),
     z.null(),

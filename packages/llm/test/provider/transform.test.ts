@@ -118,8 +118,9 @@ describe("ProviderTransform.normalizeMessages", () => {
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, nonClaudeAnthropicModel);
-    const part = (result[0]?.content as Array<Record<string, unknown>>)[0];
-    expect(part?.toolCallId).toBe("call.with.dots");
+    const content = result[0]?.content;
+    if (!Array.isArray(content)) throw new TypeError("expected array content");
+    expect(content[0]).toMatchObject({ toolCallId: "call.with.dots" });
   });
 
   test("preserves non-text parts like tool-call in anthropic filtering", () => {
@@ -190,10 +191,10 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
 
-    expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions).toBeUndefined();
+    expect(result[1]?.providerOptions).toBeUndefined();
     expect(result[2]).toEqual({ role: "user", content: "msg3", ...EXPECTED_OPTS });
-    expect((result[3] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[3]?.providerOptions).toBeUndefined();
   });
 
   test("tool and assistant messages are never marked", () => {
@@ -214,14 +215,14 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
     expect(result[0]).toEqual({ role: "user", content: "run tool", ...EXPECTED_OPTS });
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
-    expect((result[2] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[1]?.providerOptions).toBeUndefined();
+    expect(result[2]?.providerOptions).toBeUndefined();
   });
 
   test("history without a user message is returned unchanged", () => {
     const msgs: ModelMessage[] = [{ role: "assistant", content: "solo" }];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
-    expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions).toBeUndefined();
   });
 
   test("does not mutate original messages", () => {
@@ -240,7 +241,7 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
       } as ModelMessage,
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
-    expect((result[0] as Record<string, unknown>).providerOptions).toEqual({
+    expect(result[0]?.providerOptions).toEqual({
       anthropic: { foo: "bar", cacheControl: { type: "ephemeral", ttl: "1h" } },
     });
   });
@@ -285,14 +286,11 @@ describe("normalizeMessages applies caching for anthropic", () => {
       { role: "assistant", content: "yo" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect(
-      (
-        (result[0] as Record<string, unknown>).providerOptions as
-          | Record<string, Record<string, unknown>>
-          | undefined
-      )?.anthropic?.cacheControl,
-    ).toEqual({ type: "ephemeral", ttl: "1h" });
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions?.anthropic?.cacheControl).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
+    expect(result[1]?.providerOptions).toBeUndefined();
   });
 
   test("openai messages do not get cacheControl", () => {
@@ -301,7 +299,7 @@ describe("normalizeMessages applies caching for anthropic", () => {
       { role: "user", content: "hi" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, openaiModel);
-    expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions).toBeUndefined();
+    expect(result[1]?.providerOptions).toBeUndefined();
   });
 });

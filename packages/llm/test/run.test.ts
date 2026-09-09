@@ -3,6 +3,8 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
+import type { jsonSchema, StepResult, streamText, ToolSet } from "ai";
+import type { StreamEvent } from "../src/processor/stream-events";
 import type { Sink } from "../src/sink";
 import { Bus, collector } from "./helpers/observation";
 import { Auth } from "../src/auth";
@@ -13,30 +15,26 @@ const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "r
 
 let run: typeof import("../src/run").run;
 
-type AiCaptureGlobal = typeof globalThis & {
-  __openomniAiStreamArgs?: Record<string, unknown>;
-};
+type StreamTextArgs = Parameters<typeof streamText>[0];
 
-const aiCapture = globalThis as AiCaptureGlobal;
+let capturedStreamArgs: StreamTextArgs | undefined;
 
-type StreamChunk = { type: string; [key: string]: unknown };
-
-let mockStreamChunks: StreamChunk[] = [{ type: "finish" }];
+let mockStreamChunks: StreamEvent[] = [{ type: "finish" }];
 
 function mockAiModule() {
   mock.module("ai", () => ({
-    streamText: (args: Record<string, unknown>) => {
-      aiCapture.__openomniAiStreamArgs = args;
+    streamText: (args: StreamTextArgs) => {
+      capturedStreamArgs = args;
       const chunks = mockStreamChunks;
       return {
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield* chunks;
         })(),
       };
     },
-    jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+    jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
     stepCountIs: (stepCount: number) => {
-      return (input: { steps: unknown[] }) => input.steps.length === stepCount;
+      return (input: { steps: readonly StepResult<ToolSet>[] }) => input.steps.length === stepCount;
     },
   }));
 }
@@ -67,7 +65,7 @@ describe("run", () => {
     capturedMessages = [];
     capturedToolCalls = [];
     capturedToolResults = [];
-    aiCapture.__openomniAiStreamArgs = undefined;
+    capturedStreamArgs = undefined;
 
     mockSink = {
       onMessage: (message: Message.WithParts) => {
@@ -83,7 +81,7 @@ describe("run", () => {
   });
 
   afterEach(() => {
-    aiCapture.__openomniAiStreamArgs = undefined;
+    capturedStreamArgs = undefined;
   });
 
   test("returns RunOutcome with stop type", async () => {
@@ -258,7 +256,7 @@ describe("run", () => {
       );
 
       expect(outcome.type).toBe("error");
-      expect(aiCapture.__openomniAiStreamArgs).toBeUndefined();
+      expect(capturedStreamArgs).toBeUndefined();
     } finally {
       if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
       else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
@@ -284,7 +282,7 @@ describe("run", () => {
 
     expect(outcome.type).toBe("aborted");
     expect(capturedToolCalls.length).toBe(0);
-    expect(aiCapture.__openomniAiStreamArgs).toBeUndefined();
+    expect(capturedStreamArgs).toBeUndefined();
   });
 
   test("calls sink methods during execution", async () => {
@@ -347,7 +345,7 @@ describe("run", () => {
     mock.module("ai", () => ({
       streamText: () => {
         call++;
-        const chunks: StreamChunk[] =
+        const chunks: StreamEvent[] =
           call === 1
             ? [
                 {
@@ -373,12 +371,12 @@ describe("run", () => {
                 { type: "finish" },
               ];
         return {
-          fullStream: (async function* () {
+          fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
             yield* chunks;
           })(),
         };
       },
-      jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+      jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
       stepCountIs: () => () => false,
     }));
 
