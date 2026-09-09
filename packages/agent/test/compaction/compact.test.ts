@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "../../src/index";
-import { Compaction } from "../../src/compaction/compact";
+import { Compaction, type CompactionOptions } from "../../src/compaction/compact";
 import {
   estimateMessagesTokens,
   isIneffectiveCompaction,
@@ -25,6 +25,26 @@ function makeToolAssistantMessage(text: string, callID: string): Message.WithPar
   const base = makeAssistantMessage(text);
   const toolPart = completedToolPart(base, "file contents", callID, { path: "/tmp/a" });
   return { info: base.info, parts: [...base.parts, toolPart] };
+}
+
+/** `count` messages alternating user/assistant, each naming its index. */
+function alternating(count: number): Message.WithParts[] {
+  return Array.from({ length: count }, (_, i) =>
+    i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
+  );
+}
+
+function textsOf(messages: readonly Message.WithParts[]): string[] {
+  return messages.flatMap((m) =>
+    m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+  );
+}
+
+/** One threshold-triggered compaction over `messages` observed on the shared bus. */
+function compactThreshold(messages: Message.WithParts[], options: CompactionOptions) {
+  return Compaction.compact(messages, options, { traceId: TEST_TRACE_ID, sessionId: "test" }, Bus, {
+    trigger: "threshold",
+  });
 }
 
 describe("Compaction", () => {
@@ -86,35 +106,21 @@ describe("Compaction", () => {
   describe("compact", () => {
     it("does not compact when messages count is within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b")];
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 6,
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 6,
+      });
       expect(result.compacted).toBe(false);
       expect(result.removedCount).toBe(0);
       expect(result.messages).toHaveLength(2);
     });
 
     it("removes oldest non-system messages beyond protectRecent", async () => {
-      const messages = Array.from({ length: 10 }, (_, i) =>
-        i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
-      );
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 4,
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const messages = alternating(10);
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 4,
+      });
       expect(result.compacted).toBe(true);
       expect(result.removedCount).toBe(6);
       expect(result.messages).toHaveLength(4);
@@ -131,21 +137,13 @@ describe("Compaction", () => {
         makeUserMessage("recent-7"),
         makeAssistantMessage("recent-8"),
       ];
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 6,
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 6,
+      });
       expect(result.compacted).toBe(true);
       expect(result.messages).toHaveLength(6);
-      const texts = result.messages.flatMap((m) =>
-        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
-      );
+      const texts = textsOf(result.messages);
       expect(texts).toContain("recent-3");
       expect(texts).not.toContain("old-1");
     });
@@ -193,20 +191,12 @@ describe("Compaction", () => {
     });
 
     it("inserts summary message when onSummarize is provided", async () => {
-      const messages = Array.from({ length: 8 }, (_, i) =>
-        i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
-      );
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 4,
-          onSummarize: async () => "Summary of removed messages",
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const messages = alternating(8);
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 4,
+        onSummarize: async () => "Summary of removed messages",
+      });
       expect(result.compacted).toBe(true);
       const allTexts = result.messages.flatMap((m) =>
         m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
@@ -216,16 +206,10 @@ describe("Compaction", () => {
 
     it("does not compact when non-system messages are within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b"), makeUserMessage("c")];
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 6,
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 6,
+      });
       expect(result.compacted).toBe(false);
     });
   });
@@ -246,16 +230,10 @@ describe("Compaction", () => {
         makeUserMessage("u6"),
         makeAssistantMessage("a7"),
       ];
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 3,
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 3,
+      });
       expect(result.compacted).toBe(true);
       expect(result.messages[0]?.info.role).toBe("user");
       expect(result.removedCount).toBe(4);
@@ -276,16 +254,10 @@ describe("Compaction", () => {
       // run.completion.pre is fail-closed — a throw here kills a live run over
       // housekeeping. The refusal is a value the policy records.
       const messages = Array.from({ length: 8 }, (_, i) => makeAssistantMessage(`a${i}`));
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 3,
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 3,
+      });
       expect(result.compacted).toBe(false);
       expect(result.blocked).toBe("no_user_boundary");
       expect(result.messages).toHaveLength(8);
@@ -373,26 +345,18 @@ describe("Compaction", () => {
         makeUserMessage("u6"),
         makeAssistantMessage("a7"),
       ];
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 3,
-          onSummarize: async () => "anchored",
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 3,
+        onSummarize: async () => "anchored",
+      });
       expect(result.compacted).toBe(true);
       // L2: the cut span's user messages (u0, u2, u4) survive verbatim, so
       // only the two assistant messages are dropped into the anchor.
       expect(result.removedCount).toBe(2);
       expect(result.messages).toHaveLength(7);
       expect(result.messages[0]?.info.role).toBe("user");
-      const texts = result.messages.flatMap((m) =>
-        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
-      );
+      const texts = textsOf(result.messages);
       expect(texts).toContain("u0");
       expect(texts).toContain("u2");
       expect(texts).toContain("u4");
@@ -400,20 +364,12 @@ describe("Compaction", () => {
     });
 
     it("threads the history session id into the summary message", async () => {
-      const messages = Array.from({ length: 8 }, (_, i) =>
-        i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
-      );
-      const result = await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 4,
-          onSummarize: async () => "summary",
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
-      );
+      const messages = alternating(8);
+      const result = await compactThreshold(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 4,
+        onSummarize: async () => "summary",
+      });
       const summary = result.messages[0];
       expect(summary?.info.role).toBe("user");
       // History carries sessionID "test"; the summary must not introduce a
@@ -459,9 +415,7 @@ describe("Compaction", () => {
       // Every user message survives byte-exact, in order, after the anchor —
       // each preceded by its policy-injected time marker (#737), which is a
       // separate part and never touches the user's bytes.
-      const texts = result.messages.flatMap((m) =>
-        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
-      );
+      const texts = textsOf(result.messages);
       expect(texts[0]).toContain("anchor-v1");
       expect(texts[1]).toMatch(/^\[recorded \d{4}-\d{2}-\d{2}\]$/);
       expect(texts[2]).toBe(userText);
@@ -729,9 +683,7 @@ describe("Compaction", () => {
         Bus,
         { trigger: "threshold" },
       );
-      const texts = result.messages.flatMap((m) =>
-        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
-      );
+      const texts = textsOf(result.messages);
       expect(texts).toContain(newestText);
       expect(texts).not.toContain("old-user");
     });

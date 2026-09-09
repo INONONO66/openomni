@@ -66,23 +66,24 @@ describe("elideToolOutputs", () => {
 describe("Compaction.compact with elision configured", () => {
   const trace = { traceId: "trace-reduce", sessionId: "session-reduce" };
 
-  it("reduces instead of cutting while there is something to elide", async () => {
+  /** One threshold round over a 4-message history whose only tool output is `output`. */
+  async function compactElided(output: string, measuredTokens?: number) {
     const sink = collector();
-    const messages = [
-      userMessage("u0"),
-      toolMessage("x".repeat(500)),
-      userMessage("u1"),
-      userMessage("u2"),
-    ];
-
+    const messages = [userMessage("u0"), toolMessage(output), userMessage("u1"), userMessage("u2")];
     const result = await Compaction.compact(
       messages,
       { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
       trace,
       sink,
-
-      { trigger: "threshold" },
+      measuredTokens === undefined
+        ? { trigger: "threshold" }
+        : { trigger: "threshold", measuredTokens },
     );
+    return { sink, messages, result };
+  }
+
+  it("reduces instead of cutting while there is something to elide", async () => {
+    const { sink, result } = await compactElided("x".repeat(500));
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBe(0);
@@ -101,22 +102,7 @@ describe("Compaction.compact with elision configured", () => {
   });
 
   it("falls back to the cut once elision has nothing left", async () => {
-    const sink = collector();
-    const messages = [
-      userMessage("u0"),
-      toolMessage("small"),
-      userMessage("u1"),
-      userMessage("u2"),
-    ];
-
-    const result = await Compaction.compact(
-      messages,
-      { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
-      trace,
-      sink,
-
-      { trigger: "threshold" },
-    );
+    const { sink, result } = await compactElided("small");
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBeGreaterThan(0);
@@ -155,22 +141,8 @@ describe("Compaction.compact with elision configured", () => {
     // left to elide" never fires. When the estimated net reclaim (chars/4)
     // falls short of the measured overage, the cut runs on the already-elided
     // history in the same round.
-    const sink = collector();
-    const messages = [
-      userMessage("u0"),
-      toolMessage("x".repeat(500)),
-      userMessage("u1"),
-      userMessage("u2"),
-    ];
-
-    const result = await Compaction.compact(
-      messages,
-      { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
-      trace,
-      sink,
-
-      { trigger: "threshold", measuredTokens: 10_000 }, // measured: overage ~9920 tokens; elision nets 439 chars ≈ 110 tokens
-    );
+    // measured: overage ~9920 tokens; elision nets 439 chars ≈ 110 tokens
+    const { sink, result } = await compactElided("x".repeat(500), 10_000);
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBeGreaterThan(0);
@@ -212,22 +184,8 @@ describe("Compaction.compact with elision configured", () => {
   });
 
   it("keeps the round to elision alone when the estimated reclaim covers the overage", async () => {
-    const sink = collector();
-    const messages = [
-      userMessage("u0"),
-      toolMessage("x".repeat(500)),
-      userMessage("u1"),
-      userMessage("u2"),
-    ];
-
-    const result = await Compaction.compact(
-      messages,
-      { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
-      trace,
-      sink,
-
-      { trigger: "threshold", measuredTokens: 100 }, // measured: overage 20 tokens; elision nets 439 chars ≈ 110 tokens
-    );
+    // measured: overage 20 tokens; elision nets 439 chars ≈ 110 tokens
+    const { sink, result } = await compactElided("x".repeat(500), 100);
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBe(0);
