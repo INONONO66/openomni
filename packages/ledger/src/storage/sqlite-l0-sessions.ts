@@ -12,7 +12,6 @@ import {
   selectSessionSql,
   selectSession,
   appendAction,
-  SessionCommitRefused,
   commitSession,
   openChildCount,
 } from "./sqlite-l0-write";
@@ -151,13 +150,13 @@ export function createSessions(
     },
     commit(input) {
       const request = LedgerSession.Commit.parse(input);
-      let outcome: LedgerSession.CommitResult | undefined;
-      try {
-        outcome = transaction(() => commitSession(db, request));
-      } catch (error) {
-        if (error instanceof SessionCommitRefused) outcome = error.result;
-        else throw error;
-      }
+      const outcome = transaction(() => {
+        db.exec("SAVEPOINT session_commit");
+        const result = commitSession(db, request);
+        if (result?.ok === false) db.exec("ROLLBACK TO session_commit");
+        db.exec("RELEASE session_commit");
+        return result;
+      });
       if (outcome?.ok === true) {
         for (const receipt of outcome.receipts) publishCommitted(db, observationSink, receipt);
       }

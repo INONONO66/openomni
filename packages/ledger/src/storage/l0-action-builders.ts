@@ -32,7 +32,7 @@ export function alarmAppend(input: Alarm.Arm): LedgerAction.Append {
   });
 }
 
-export interface AlarmOccurrence {
+interface AlarmOccurrence {
   readonly actionId: string;
   readonly inboxId: string;
   readonly status: Alarm.Status;

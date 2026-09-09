@@ -34,7 +34,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
   const alarmRows = new Map<string, Alarm.Row>();
   const policyRows = new Map<string, PolicyRow.Row>();
 
-  const transaction = <T>(operation: () => T): T => {
+  const transaction = <T>(operation: () => T, accept: (result: T) => boolean = () => true): T => {
     const before = {
       sessions: new Map(sessionRows),
       actions: new Map(actionRows),
@@ -45,7 +45,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     let committed = false;
     try {
       const result = operation();
-      committed = true;
+      committed = accept(result);
       return result;
     } finally {
       if (!committed) {
@@ -174,8 +174,8 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     },
     commit(input) {
       const request = LedgerSession.Commit.parse(input);
-      try {
-        return transaction(() => {
+      return transaction(
+        () => {
           const current = sessionRows.get(request.sessionId);
           if (current === undefined) return undefined;
           const result = commitMemorySession(
@@ -189,17 +189,14 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           const receipts = [...result.receipts];
           if (request.receive !== undefined) {
             const received = adapter.inbox.commit(request.receive);
-            if (received === undefined) {
-              throw new MemorySessionCommitRefused(memoryRefusal("inbox", current));
-            }
+            if (received === undefined) return memoryRefusal("inbox", current);
             const action = actionRows.get(received.id);
             if (action === undefined) throw new Error("receiving inbox action is missing");
             receipts.push({ action, revision: action.ordinal });
           }
           if (request.admit !== undefined) {
             const received = adapter.inbox.commit(request.admit);
-            if (received === undefined)
-              throw new MemorySessionCommitRefused(memoryRefusal("inbox", current));
+            if (received === undefined) return memoryRefusal("inbox", current);
             for (const action of adapter.actions.tree(received.sessionId))
               receipts.push({ action, revision: action.ordinal });
           }
@@ -210,11 +207,9 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
             : row;
           sessionRows.set(final.id, final);
           return { ok: true as const, row: final, receipts };
-        });
-      } catch (error) {
-        if (error instanceof MemorySessionCommitRefused) return error.result;
-        throw error;
-      }
+        },
+        (result) => result?.ok !== false,
+      );
     },
   };
 
@@ -707,12 +702,6 @@ function validSessionInboxOwnership(request: LedgerSession.Commit): boolean {
   )
     return false;
   return true;
-}
-
-class MemorySessionCommitRefused extends Error {
-  constructor(readonly result: LedgerSession.CommitResult) {
-    super("session commit refused");
-  }
 }
 
 function pendingRequestCount(

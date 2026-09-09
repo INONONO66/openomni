@@ -117,13 +117,6 @@ function projectRequestDeadline(db: Database, action: LedgerAction.Append): void
   );
 }
 
-export class SessionCommitRefused extends Error {
-  constructor(readonly result: LedgerSession.CommitResult) {
-    super("session commit refused");
-    this.name = "SessionCommitRefused";
-  }
-}
-
 export function commitSession(
   db: Database,
   request: LedgerSession.Commit,
@@ -146,9 +139,7 @@ export function commitSession(
   let revision = current.revision;
   for (const action of request.actions) {
     const receipt = appendAction(db, action, revision);
-    if (receipt === undefined) {
-      throw new SessionCommitRefused(refusedSessionCommit("revision", current));
-    }
+    if (receipt === undefined) return refusedSessionCommit("revision", current);
     receipts.push(receipt);
     revision = receipt.revision;
   }
@@ -159,22 +150,18 @@ export function commitSession(
          WHERE id = ? AND session_id = ? AND status = 'pending'`,
       )
       .run(request.owner, request.now, id, request.sessionId);
-    if (consumed.changes !== 1) {
-      throw new SessionCommitRefused(refusedSessionCommit("inbox", current));
-    }
+    if (consumed.changes !== 1) return refusedSessionCommit("inbox", current);
   }
 
   if (request.receive !== undefined) {
     const received = commitInbox(db, request.receive);
-    if (received === undefined)
-      throw new SessionCommitRefused(refusedSessionCommit("inbox", current));
+    if (received === undefined) return refusedSessionCommit("inbox", current);
     receipts.push(...received.receipts);
     revision = received.receipts.at(-1)?.revision ?? revision;
   }
   if (request.admit !== undefined) {
     const admitted = commitInbox(db, request.admit);
-    if (admitted === undefined)
-      throw new SessionCommitRefused(refusedSessionCommit("inbox", current));
+    if (admitted === undefined) return refusedSessionCommit("inbox", current);
     receipts.push(...admitted.receipts);
   }
   const generation = request.generation ?? current;
@@ -198,9 +185,7 @@ export function commitSession(
       revision,
       request.now,
     );
-  if (updated.changes !== 1) {
-    throw new SessionCommitRefused(refusedSessionCommit("stale", current));
-  }
+  if (updated.changes !== 1) return refusedSessionCommit("stale", current);
   const row = selectSession(db, request.sessionId);
   if (row === undefined) throw new Error("committed session disappeared");
   return { ok: true, row, receipts };
