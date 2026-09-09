@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { nth } from "./helpers/nth";
 import { answerThenCompact } from "./helpers/answer-then-compact";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import type { LedgerAction, PlainObject, PolicyRow } from "@openomni/protocol";
@@ -62,12 +63,6 @@ function compactionIntent(actions: readonly LedgerAction.Node[]): LedgerAction.N
   );
   if (found === undefined) throw new Error("missing compaction intent");
   return found;
-}
-
-function nth(actions: readonly LedgerAction.Node[], index: number): LedgerAction.Node {
-  const action = actions[index];
-  if (action === undefined) throw new Error(`missing action ${index}`);
-  return action;
 }
 
 /** One prompted session whose first turn compacted; `before` is its action tree at rest. */

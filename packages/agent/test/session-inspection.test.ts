@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { answerThenCompact } from "./helpers/answer-then-compact";
+import { approveWriteRow } from "./helpers/compiled-policy";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Run } from "@openomni/llm";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
@@ -54,14 +55,7 @@ const rows: readonly Omit<PolicyRow.Row, "generation">[] = [
     verdict: { encodingVersion: 1, value: { type: "deny", reason: "not_allowed" } },
     priority: 1,
   },
-  {
-    name: "approve-write",
-    kind: "tool",
-    phase: "pre",
-    match: { encodingVersion: 1, value: { op: "write" } },
-    verdict: { encodingVersion: 1, value: { type: "require_approval", reason: "owner" } },
-    priority: 1,
-  },
+  approveWriteRow,
 ];
 
 function providerFailure(): Run.Failure {

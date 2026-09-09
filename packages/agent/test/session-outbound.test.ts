@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { receiveOutbound } from "./helpers/receive-outbound";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   session,
@@ -94,15 +95,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
       clock: () => at,
       async dispatchOutbound({ message }) {
         sent.push(JSON.stringify(message));
-        const received = SessionHandleStore.commitReceivedMessage({
-          id: message.messageId,
-          sessionId: message.destinationSessionId,
-          kind: "prompt",
-          content: message.content,
-          origin: { encodingVersion: 1, value: message },
-          createdAt: at,
-          parentActionId: null,
-        });
+        const received = receiveOutbound(message, at);
         await wakeSession(message.destinationSessionId, parentRunner, value);
         if (loseAck) throw new Error("source ack lost");
         return received.receipt;

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { nth } from "./helpers/nth";
 import { LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { createTurnDispatcher, defineTool } from "../src/index";
@@ -46,12 +47,6 @@ function intentOf(action: LedgerAction.Node): PlainObject {
 
 function resultsOf(actions: readonly LedgerAction.Node[], kind: LedgerAction.Kind) {
   return actions.filter((action) => action.kind === kind && effect(action).phase === "result");
-}
-
-function nth(actions: readonly LedgerAction.Node[], index: number): LedgerAction.Node {
-  const action = actions[index];
-  if (action === undefined) throw new Error(`missing action ${index}`);
-  return action;
 }
 
 function openIntent(

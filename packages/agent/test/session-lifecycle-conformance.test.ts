@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { receiveOutbound } from "./helpers/receive-outbound";
 import { bounded } from "./helpers/bounded";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1610,8 +1611,8 @@ function reply(
   };
 }
 
-/** The immutable request prefix of 6.4: cfg, T, q-pre, q (a real tool intent with value {value:"B"}). */
-function seedRequestSession(id: string): void {
+/** A fresh resident at G1 whose lease `owner` holds for `leaseMs`: the seed every request fixture starts from. */
+function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs: number) {
   const created = SessionHandleStore.materialize({
     id,
     parentId: null,
@@ -1619,18 +1620,24 @@ function seedRequestSession(id: string): void {
     tools: [],
     system: { preset: "", blocks: [] },
     policyGeneration: 1,
-    actionId: `${id}:cfg`,
+    actionId,
     at: now,
   });
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
   const lease = SessionHandleStore.acquireLease({
     sessionId: id,
-    owner: "o",
+    owner,
     expectedFence: created.row.leaseFence,
     now,
-    expiresAt: now + 30_000,
+    expiresAt: now + leaseMs,
   });
-  if (!lease.ok) throw new Error("seed lease refused");
+  if (!lease.ok) throw new Error(`${owner} lease refused`);
+  return { created, generation, lease };
+}
+
+/** The immutable request prefix of 6.4: cfg, T, q-pre, q (a real tool intent with value {value:"B"}). */
+function seedRequestSession(id: string): void {
+  const { created, generation, lease } = seedLeasedResident(id, `${id}:cfg`, "o", 30_000);
   const turn = `${id}:T`;
   const committed = SessionHandleStore.commit({
     sessionId: id,
@@ -1729,25 +1736,7 @@ function openRequest(port: ReturnType<typeof createSessionRequests>, id: string)
 
 /** Crash-open seed of 6.2: dead owner, T pinned to G1 while the row already points at G2. */
 function seedCrashOpen(id: string): void {
-  const created = SessionHandleStore.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 1,
-    actionId: "cfg",
-    at: now,
-  });
-  const g1 = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: id,
-    owner: "dead",
-    expectedFence: created.row.leaseFence,
-    now,
-    expiresAt: now + 10,
-  });
-  if (!lease.ok) throw new Error("dead lease refused");
+  const { created, generation: g1, lease } = seedLeasedResident(id, "cfg", "dead", 10);
   const g2 = SessionHandleStore.generationSnapshot({
     generation: g1.generation + 1,
     revertTo: g1.generation,
@@ -1819,15 +1808,7 @@ function childParentFixture() {
       async dispatchOutbound({ message }) {
         if (!dispatch) throw new Error("process died before wake");
         sent.push(JSON.stringify(message));
-        const received = SessionHandleStore.commitReceivedMessage({
-          id: message.messageId,
-          sessionId: message.destinationSessionId,
-          kind: "prompt",
-          content: message.content,
-          origin: { encodingVersion: 1, value: message },
-          createdAt: now,
-          parentActionId: null,
-        });
+        const received = receiveOutbound(message, now);
         await wakeSession(message.destinationSessionId, parentRunner, value);
         if (loseAck) throw new Error("source ack lost");
         return received.receipt;
