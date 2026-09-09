@@ -13,7 +13,8 @@ import { newTraceId } from "./helpers/observation";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
-let run: typeof import("../src/run").run;
+type RunModule = typeof import("../src/run");
+let run: RunModule["run"];
 
 type StreamTextArgs = Parameters<typeof streamText>[0];
 

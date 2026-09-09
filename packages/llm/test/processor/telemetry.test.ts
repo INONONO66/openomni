@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LlmCall, Operational, type BusEvent, type Message, type Tool } from "@openomni/protocol";
+import { z } from "zod";
 import type { Sink } from "../../src/sink";
 import { APIError } from "../../src/error";
 import { useProcessor, streamOf, statusStates, processorInfo } from "../helpers/processor";
@@ -18,11 +19,11 @@ describe("Processor telemetry", () => {
 
   test("publishes idle before a microtask queued by message.finished", async () => {
     const order: string[] = [];
+    const IdleContext = z.object({ context: z.object({ stateType: z.literal("idle") }) });
     const orderedEvents: BusEvent.Sink = {
       publish(event, data) {
         if (event.name !== Operational.Events.Info.name) return;
-        const info = Operational.Events.Info.schema.parse(data);
-        if (info.context?.stateType === "idle") order.push("idle");
+        if (IdleContext.safeParse(data).success) order.push("idle");
       },
     };
     const processor = createProcessor({

@@ -32,7 +32,8 @@ function mockAiModule() {
 
 mockAiModule();
 
-let run: typeof import("../src/run").run;
+type RunModule = typeof import("../src/run");
+let run: RunModule["run"];
 
 beforeAll(async () => {
   ({ run } = await import("../src/run"));
@@ -45,13 +46,15 @@ const sink: Sink = {
 };
 
 /** The provider SDK keeps its resolved transport on the language model's config. */
-const HeadersFactory = z.custom<() => Record<string, string | undefined>>(
-  (value) => typeof value === "function",
-);
+const HeaderValue = z.union([z.string(), z.undefined()]);
+const HeadersFactory = z.function({
+  input: z.tuple([]),
+  output: z.record(z.string(), HeaderValue),
+});
 const TransportConfig = z.object({
   config: z.object({
     baseURL: z.string(),
-    headers: z.union([z.record(z.string(), z.string()), HeadersFactory]),
+    headers: z.union([z.record(z.string(), HeaderValue), HeadersFactory]),
   }),
 });
 
