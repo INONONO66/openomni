@@ -48,6 +48,10 @@ describe("plain JSON owner", () => {
 
   test("canonical digest rejects values outside the JSON grammar", () => {
     expect(() => canonicalDigest(undefined)).toThrow();
+    expect(() => canonicalDigest(new Date(0))).toThrow("canonical JSON accepts plain objects only");
+    expect(() => canonicalDigest({ missing: undefined })).toThrow(
+      "canonical JSON cannot express undefined at missing",
+    );
   });
 
   test("canonical digest bytes remain pinned independently of object key order", () => {
