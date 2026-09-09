@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788927660542,
+  "lastUpdate": 1788930775885,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -68469,6 +68469,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 901638,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c55e0e1f41327b7d1537f60a1ce3b07d7a388f5",
+          "message": "perf(census): cache active branch verdicts across fixpoint passes (#1022)\n\nPublisher census 15m49s -> 5m26s with byte-identical findings and invocations.\nOnly active verdicts are cached: roots grow monotonically, so an import.meta.main\nbranch may turn active later and must be recomputed while inactive.\n\nCo-authored-by: ino <ino@users.noreply.github.com>",
+          "timestamp": "2026-09-09T14:11:20+09:00",
+          "tree_id": "9d35156ec1614e7bbe47a0e63d7ee0842ae774b6",
+          "url": "https://github.com/INONONO66/openomni/commit/8c55e0e1f41327b7d1537f60a1ce3b07d7a388f5"
+        },
+        "date": 1788930774698,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 848,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 6258,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 3230,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1348830,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 330063,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6578120,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 143,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1103,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 456953,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3431,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18138,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 172325,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 862968,
             "unit": "ns/op"
           }
         ]
