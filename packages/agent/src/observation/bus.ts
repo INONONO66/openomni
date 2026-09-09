@@ -38,7 +38,7 @@ function isEventData<T, U>(
   return expected.name === published.name;
 }
 
-interface ObservationBus extends ObservationSink {
+export interface ObservationBus extends ObservationSink {
   subscribe<T>(
     event: BusEvent.Descriptor<T>,
     handler: (data: T) => void,

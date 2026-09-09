@@ -4,6 +4,7 @@ import { commitSessionRequest } from "../../src/session-admission";
 import type { SessionRuntime } from "../../src/session-contract";
 import type { SessionTransition } from "@openomni/protocol";
 import { collector } from "./observation-collector";
+export { bounded } from "./bounded";
 
 export function requestLedger(
   input: {
