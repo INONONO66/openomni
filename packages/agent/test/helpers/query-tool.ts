@@ -1,6 +1,20 @@
 import { z } from "zod";
 import { defineTool } from "../../src/index";
 import type { ExecutionRequest } from "../../src/executor-contract";
+import type { ToolExecutionContext } from "@openomni/protocol";
+
+export function timedQueryTool(description: string, execute: (input: Record<string, never>, context: ToolExecutionContext) => Promise<string>) {
+  return defineTool({
+    name: "timed",
+    description,
+    category: "query",
+    visibility: { model: ["resident"], cell: ["resident"] },
+    input: z.object({}),
+    output: z.string(),
+    render: (_input, output) => output,
+    execute,
+  });
+}
 
 /** A resident-visible query tool with no input that returns a string. */
 export function stringQueryTool(name: string, description: string, execute: () => Promise<string>) {

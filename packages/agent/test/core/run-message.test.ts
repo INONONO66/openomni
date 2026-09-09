@@ -1,7 +1,7 @@
 import { providerFailure } from "../helpers/mock-llm";
 import { createTestAgent } from "../helpers/test-agent";
 import { describe, expect, it } from "bun:test";
-import { createAssistantMessage } from "../../src/core/message-factory";
+import { assistantTextSnapshot } from "../helpers/messages";
 import { Bus } from "../../src/index";
 import { mockLlm, createStopOutcome, type MockLlmFn } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
@@ -17,15 +17,7 @@ function agent(run: MockLlmFn) {
 describe("run terminal message result contract", () => {
   it("returns stop, text, steps, and usage from the terminal assistant snapshot", async () => {
     const result = await agent(async (_input, sink) => {
-      const message = createAssistantMessage("the answer is 42", "", "session");
-      if (message.info.role !== "assistant") throw new Error("expected assistant message");
-      sink.onMessage({
-        ...message,
-        info: {
-          ...message.info,
-          tokens: { input: 20, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
-        },
-      });
+      sink.onMessage(assistantTextSnapshot("the answer is 42", 20, 10));
       return createStopOutcome();
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(result).toMatchObject({

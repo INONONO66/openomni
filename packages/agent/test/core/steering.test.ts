@@ -1,32 +1,11 @@
 import { providerFailure } from "../helpers/mock-llm";
 import { createTestAgent } from "../helpers/test-agent";
 import { describe, expect, it, jest } from "bun:test";
-import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
-import { createAssistantMessage } from "../../src/core/message-factory";
+import { stepSnapshot } from "../helpers/messages";
 import { Bus } from "../../src/index";
 import { completeModel, mockLlm, createStopOutcome } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
-
-function stepSnapshot(id: string, text: string, reason: "tool-calls" | "stop"): Message.WithParts {
-  const message = createAssistantMessage(text, "", "session");
-  return {
-    ...message,
-    info: { ...message.info, id },
-    parts: [
-      ...message.parts.map((part) => ({ ...part, messageID: id })),
-      {
-        id: `${id}-step`,
-        sessionID: "session",
-        messageID: id,
-        type: "step-finish",
-        reason,
-        cost: 0,
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 

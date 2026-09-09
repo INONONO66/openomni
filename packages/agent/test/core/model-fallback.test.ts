@@ -1,35 +1,16 @@
 import { createTestAgent } from "../helpers/test-agent";
 import { describe, expect, it, jest } from "bun:test";
 import type { Sink } from "@openomni/llm";
-import type { Message, Model } from "@openomni/protocol";
+import type { Model } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { createAssistantMessage } from "../../src/core/message-factory";
 import { Bus } from "../../src/index";
 import { createStopOutcome, providerFailure, type MockLlmFn } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
+import { stepSnapshot } from "../helpers/messages";
 
 const primary = { provider: "anthropic", id: "primary-model" };
 const fallback = { provider: "openai", id: "fallback-model" };
-
-function stepSnapshot(id: string, text: string, reason: "tool-calls" | "stop"): Message.WithParts {
-  const message = createAssistantMessage(text, "", "session");
-  return {
-    ...message,
-    info: { ...message.info, id },
-    parts: [
-      ...message.parts.map((part) => ({ ...part, messageID: id })),
-      {
-        id: `${id}-step`,
-        sessionID: "session",
-        messageID: id,
-        type: "step-finish",
-        reason,
-        cost: 0,
-        tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 function fallbackHarness(errorMessage: string) {
   const resolved: Model.Ref[] = [];
@@ -110,11 +91,11 @@ describe("model fallback via placement", () => {
         calls += 1;
         arms.push(input.yieldAtInputTokens);
         if (calls === 1) {
-          sink.onMessage(stepSnapshot("first", "working", "tool-calls"));
+          sink.onMessage(stepSnapshot("first", "working", "tool-calls", 10, 5));
           return createStopOutcome();
         }
         if (calls === 2) return { type: "error", error: providerFailure("transient blip") };
-        sink.onMessage(stepSnapshot("third", "done", "stop"));
+        sink.onMessage(stepSnapshot("third", "done", "stop", 10, 5));
         return createStopOutcome();
       }) as MockLlmFn,
       resolveModel: async (model: Model.Ref) => ({

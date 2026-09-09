@@ -4,23 +4,14 @@ import { createDispatcher, defineTool, ToolRefused } from "../../../src/index";
 import { z } from "zod";
 import {
   actionCommitGate,
+  accountOutputDeniedPolicy,
   compiledPolicy,
   recordingExecutor,
   recordingToolObservations,
 } from "../../helpers/compiled-policy";
 
 const blockedPost = recordingExecutor({
-  policy: compiledPolicy([
-    {
-      name: "deny-account-output",
-      kind: "tool",
-      phase: "post",
-      match: { encodingVersion: 1, value: { op: "account" } },
-      verdict: { encodingVersion: 1, value: { type: "deny", reason: "output_denied" } },
-      priority: 1,
-      generation: 1,
-    },
-  ]),
+  policy: accountOutputDeniedPolicy(),
 }).executor;
 
 const definition = defineTool({
@@ -65,17 +56,7 @@ describe("tool post-policy refusal", () => {
     const observations = recordingToolObservations();
     const resultCommit = actionCommitGate("account:result");
     const recording = recordingExecutor({
-      policy: compiledPolicy([
-        {
-          name: "deny-account-output",
-          kind: "tool",
-          phase: "post",
-          match: { encodingVersion: 1, value: { op: "account" } },
-          verdict: { encodingVersion: 1, value: { type: "deny", reason: "output_denied" } },
-          priority: 1,
-          generation: 1,
-        },
-      ]),
+      policy: accountOutputDeniedPolicy(),
       onCommit: resultCommit.onCommit,
       onObservation: observations.observe,
     });

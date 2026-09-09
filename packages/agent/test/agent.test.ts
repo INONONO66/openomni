@@ -13,6 +13,7 @@ import {
   type MockLlmFn,
 } from "./helpers/mock-llm";
 import { runInput } from "./helpers/run-input";
+import { assistantTextSnapshot } from "./helpers/messages";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 function agent(run: MockLlmFn) {
@@ -26,15 +27,7 @@ function agent(run: MockLlmFn) {
 describe("ChatAgent public run contract", () => {
   it("returns terminal text, step, and token usage", async () => {
     const result = await agent(async (_input, sink) => {
-      const message = createAssistantMessage("answer", "", "session");
-      if (message.info.role !== "assistant") throw new Error("expected assistant message");
-      sink.onMessage({
-        ...message,
-        info: {
-          ...message.info,
-          tokens: { input: 8, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-        },
-      });
+      sink.onMessage(assistantTextSnapshot("answer", 8, 5));
       return createStopOutcome();
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(result).toMatchObject({

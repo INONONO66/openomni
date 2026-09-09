@@ -34,6 +34,18 @@ export function compiledPolicy(rows: readonly PolicyRow.Row[] = []): CompiledPol
   });
 }
 
+export function accountOutputDeniedPolicy() {
+  return compiledPolicy([{
+    name: "deny-account-output",
+    kind: "tool",
+    phase: "post",
+    match: { encodingVersion: 1, value: { op: "account" } },
+    verdict: { encodingVersion: 1, value: { type: "deny", reason: "output_denied" } },
+    priority: 1,
+    generation: 1,
+  }]);
+}
+
 /** An "allow everything" compiled policy for tests. */
 export const allowAllPolicy = compiledPolicy();
 
