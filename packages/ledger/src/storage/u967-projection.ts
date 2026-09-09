@@ -1,6 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
 import { HistoricalWait } from "./historical-request-format";
+import {
+  historicalWaitFields,
+  historicalMismatch,
+  historicalDuplicateRows,
+} from "./historical-projections";
 
 // Offline projection boundary only, reusing the surviving field schemas.
 // No runtime store reads historical owners through this boundary.
@@ -15,53 +20,37 @@ export const DispositionCandidates = z.array(
 );
 export type DispositionCandidates = z.infer<typeof DispositionCandidates>;
 
-const projections = [
-  ["id", "id"],
-  ["owner_kind", "ownerRef.kind"],
-  ["owner_id", "ownerRef.id"],
-  ["origin_message_id", "originMessageId"],
-  ["revision", "revision"],
-  ["status", "status"],
-  ["partial", "partial"],
-  ["endpoint_id", "correlation.endpointId"],
-  ["channel_id", "correlation.channelId"],
-  ["reply_to_message_id", "correlation.replyToMessageId"],
-  ["thread_id", "correlation.threadId"],
-  ["token_hash", "correlation.tokenHash"],
-  ["external_conversation_id", "correlation.externalConversationId"],
-  ["expires_at", "expiresAt"],
-  ["time_created", "createdAt"],
-  ["time_updated", "updatedAt"],
-] as const;
+const projections = [["id", "id"], ["status", "status"], ...historicalWaitFields] as const;
 
 function validJson(db: Database, table: "wait"): boolean {
   using invalid = db.prepare<{ invalid: number }, []>(
     `SELECT 1 AS invalid FROM ${table} WHERE NOT json_valid(data) LIMIT 1`,
   );
   if (invalid.get()) return false;
-  using duplicates = db.prepare<
-    { duplicate: number },
-    []
-  >(`SELECT 1 AS duplicate FROM ${table}, json_tree(${table}.data) AS tree
-    WHERE tree.key IS NOT NULL GROUP BY ${table}.rowid, tree.parent, tree.key
-    HAVING count(*) > 1 LIMIT 1`);
+  using duplicates = db.prepare<{ id: string }, []>(`${historicalDuplicateRows(table)} LIMIT 1`);
   return duplicates.get() === null;
 }
 
 function coherentWaits(db: Database): boolean {
-  const mismatch = projections.map(
-    ([column, field]) => `${column} IS NOT json_extract(data, '$.${field}')`,
-  );
-  mismatch.push(
-    "follow_up_until IS NOT (json_extract(data, '$.resolvedAt') + json_extract(data, '$.followUpWindow'))",
-  );
+  const mismatch = historicalMismatch(projections, true);
   using statement = db.prepare<{ mismatch: number }, []>(
     `SELECT 1 AS mismatch FROM wait WHERE ${mismatch.join(" OR ")} LIMIT 1`,
   );
   return statement.get() === null;
 }
 
-export function terminalComplete(record: z.infer<typeof HistoricalProjection>): boolean {
+type HistoricalRecord = z.infer<typeof HistoricalProjection>;
+
+export function terminalComplete(record: HistoricalRecord): boolean {
+  return (
+    validTimes(record) &&
+    validResponders(record) &&
+    validReplies(record) &&
+    validTerminalState(record)
+  );
+}
+
+function validTimes(record: HistoricalRecord): boolean {
   const times = [
     record.createdAt,
     record.updatedAt,
@@ -71,8 +60,12 @@ export function terminalComplete(record: z.infer<typeof HistoricalProjection>): 
     record.cancelledAt ?? 0,
     ...record.replies.map((reply) => reply.receivedAt),
   ];
-  if (times.some((time) => time > Number.MAX_SAFE_INTEGER) || record.updatedAt < record.createdAt)
-    return false;
+  return (
+    !times.some((time) => time > Number.MAX_SAFE_INTEGER) && record.updatedAt >= record.createdAt
+  );
+}
+
+function validResponders(record: HistoricalRecord): boolean {
   if (
     new Set(record.expectedResponders).size !== record.expectedResponders.length ||
     new Set(record.allowedActions).size !== record.allowedActions.length
@@ -82,6 +75,10 @@ export function terminalComplete(record: z.infer<typeof HistoricalProjection>): 
     if (record.quorum === undefined || record.quorum.expected !== record.expectedResponders.length)
       return false;
   } else if (record.quorum !== undefined) return false;
+  return true;
+}
+
+function validReplies(record: HistoricalRecord): boolean {
   if (new Set(record.replies.map((reply) => reply.replyKey)).size !== record.replies.length)
     return false;
   if (
@@ -97,6 +94,10 @@ export function terminalComplete(record: z.infer<typeof HistoricalProjection>): 
     )
   )
     return false;
+  return true;
+}
+
+function validTerminalState(record: HistoricalRecord): boolean {
   const responders = new Set(record.replies.map((reply) => reply.responderId)).size;
   const resolvedAt = record.resolvedAt;
   const resolvedResponders =

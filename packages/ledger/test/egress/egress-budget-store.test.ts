@@ -32,7 +32,7 @@ describe("EgressBudgetStore", () => {
   });
 
   test("an empty ledger presents a zero state to the first claim", () => {
-    let observed: unknown;
+    let observed: ReturnType<typeof EgressBudgetStore.read> | undefined;
     const result = EgressBudgetStore.claim(row("first"), NOW - WINDOW, (state) => {
       observed = state;
       return "allow";
@@ -50,7 +50,7 @@ describe("EgressBudgetStore", () => {
       () => "allow",
     );
 
-    let observed: unknown;
+    let observed: ReturnType<typeof EgressBudgetStore.read> | undefined;
     const probe = EgressBudgetStore.claim(row("probe"), NOW - WINDOW, (state) => {
       observed = state;
       return "inspect" as const;
@@ -68,7 +68,7 @@ describe("EgressBudgetStore", () => {
     EgressBudgetStore.claim(row("a", { targetActorId: "t1" }), NOW - WINDOW, () => "allow");
     EgressBudgetStore.claim(row("b", { targetActorId: "t2" }), NOW - WINDOW, () => "allow");
 
-    let observed: unknown;
+    let observed: ReturnType<typeof EgressBudgetStore.read> | undefined;
     EgressBudgetStore.claim(row("probe", { targetActorId: "other" }), NOW - WINDOW, (state) => {
       observed = state;
       return "inspect" as const;
@@ -185,12 +185,8 @@ describe("EgressBudgetStore", () => {
   });
 
   test("fails closed when the sub-adapter is absent", () => {
-    Storage.configure({
-      transaction: (op: () => unknown) => op(),
-      session: {} as never,
-      message: {} as never,
-      part: {} as never,
-    } as never);
+    Storage.reset();
+    Storage.configure({ transaction: (operation) => operation() });
     expect(() => EgressBudgetStore.claim(row("missing"), 0, () => "allow")).toThrow(
       "does not implement egressBudget",
     );

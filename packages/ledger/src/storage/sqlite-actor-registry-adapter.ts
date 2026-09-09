@@ -1,6 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { SqliteJsonDataRowSchema, SqliteJsonDataRowsSchema } from "./sqlite-json-data";
+import { sqliteJsonData, SqliteCountRow } from "./sqlite-json-data";
+
+const IdentityRow = sqliteJsonData(Actor.Identity);
+const EndpointRow = sqliteJsonData(Actor.Endpoint);
 
 function workspaceKey(workspace: string | undefined): string {
   return workspace ?? "";
@@ -11,10 +14,11 @@ export function createSqliteActorRegistryAdapter(
 ): ProtocolStorage.ActorRegistrySubAdapter {
   return {
     getIdentity(id) {
-      const row = SqliteJsonDataRowSchema.nullable().parse(
-        db.query("SELECT data FROM actor_identity WHERE id = ?").get(id),
+      return (
+        IdentityRow.nullable().parse(
+          db.query("SELECT data FROM actor_identity WHERE id = ?").get(id),
+        ) ?? undefined
       );
-      return row ? Actor.Identity.parse(JSON.parse(row.data)) : undefined;
     },
     setIdentity(identity) {
       const now = Date.now();
@@ -40,10 +44,11 @@ export function createSqliteActorRegistryAdapter(
       return db.query("DELETE FROM actor_identity WHERE id = ?").run(id).changes > 0;
     },
     getEndpoint(id) {
-      const row = SqliteJsonDataRowSchema.nullable().parse(
-        db.query("SELECT data FROM actor_endpoint WHERE id = ?").get(id),
+      return (
+        EndpointRow.nullable().parse(
+          db.query("SELECT data FROM actor_endpoint WHERE id = ?").get(id),
+        ) ?? undefined
       );
-      return row ? Actor.Endpoint.parse(JSON.parse(row.data)) : undefined;
     },
     setEndpoint(endpoint) {
       const now = Date.now();
@@ -70,7 +75,7 @@ export function createSqliteActorRegistryAdapter(
       );
     },
     findEndpoint(channel, externalId, workspace) {
-      const row = SqliteJsonDataRowSchema.nullable().parse(
+      const row = EndpointRow.nullable().parse(
         db
           .query(
             `SELECT data FROM actor_endpoint
@@ -78,56 +83,35 @@ export function createSqliteActorRegistryAdapter(
           )
           .get(channel, workspaceKey(workspace), externalId),
       );
-      return row ? Actor.Endpoint.parse(JSON.parse(row.data)) : undefined;
+      return row ?? undefined;
     },
     listEndpoints(actorId, workspace) {
-      const workspaceFilter = workspaceKey(workspace);
-      const rows = SqliteJsonDataRowsSchema.parse(
-        actorId === undefined && workspace === undefined
-          ? db.query("SELECT data FROM actor_endpoint ORDER BY time_created ASC, id ASC").all()
-          : actorId === undefined
-            ? db
-                .query(
-                  `SELECT data FROM actor_endpoint
-                   WHERE workspace = ?
-                   ORDER BY time_created ASC, id ASC`,
-                )
-                .all(workspaceFilter)
-            : workspace === undefined
-              ? db
-                  .query(
-                    `SELECT data FROM actor_endpoint
-                     WHERE actor_id = ?
-                     ORDER BY time_created ASC, id ASC`,
-                  )
-                  .all(actorId)
-              : db
-                  .query(
-                    `SELECT data FROM actor_endpoint
-                     WHERE actor_id = ? AND workspace = ?
-                     ORDER BY time_created ASC, id ASC`,
-                  )
-                  .all(actorId, workspaceFilter),
+      return EndpointRow.array().parse(
+        db
+          .query(
+            `SELECT data FROM actor_endpoint
+         WHERE (? IS NULL OR actor_id = ?) AND (? IS NULL OR workspace = ?)
+         ORDER BY time_created ASC, id ASC`,
+          )
+          .all(actorId ?? null, actorId ?? null, workspace ?? null, workspaceKey(workspace)),
       );
-      return rows.map((row) => Actor.Endpoint.parse(JSON.parse(row.data)));
     },
     removeEndpoint(id) {
       return db.query("DELETE FROM actor_endpoint WHERE id = ?").run(id).changes > 0;
     },
     countProvisionalSince(channel, workspace, since) {
-      // #P3 §8.12 mint-volume bound: standing lives in the identity JSON —
-      // json_extract keeps the count schema-free (no column migration for a
-      // sweepable-row feature).
-      const row = db
-        .query(
-          `SELECT COUNT(*) AS count
+      const row = SqliteCountRow.parse(
+        db
+          .query(
+            `SELECT COUNT(*) AS count
            FROM actor_identity i
            JOIN actor_endpoint e ON e.actor_id = i.id
            WHERE e.channel = ? AND e.workspace = ?
              AND json_extract(i.data, '$.standing') = 'provisional'
              AND i.time_created >= ?`,
-        )
-        .get(channel, workspaceKey(workspace), since) as { count: number };
+          )
+          .get(channel, workspaceKey(workspace), since),
+      );
       return row.count;
     },
   };

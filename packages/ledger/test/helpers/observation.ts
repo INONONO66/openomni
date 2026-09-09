@@ -1,17 +1,18 @@
-import type { BusEvent } from "@openomni/protocol";
+import { type BusEvent, type PlainValue, PlainValueSchema } from "@openomni/protocol";
 
-type Datum = object | string | number | boolean | bigint | symbol | null | undefined;
-type Subscriber = (event: BusEvent.Descriptor<never>, data: never) => void;
-type Observer = (event: { readonly name: string }, data: Datum) => void;
-
+type Subscriber = (data: PlainValue) => void;
 const subscriptions = new Map<string, Set<Subscriber>>();
-const observers = new Set<Observer>();
+let delivery = Promise.resolve();
+let generation = 0;
 
 function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-  for (const observer of [...observers]) queueMicrotask(() => observer(event, data as Datum));
-  for (const subscriber of [...(subscriptions.get(event.name) ?? [])]) {
-    queueMicrotask(() => subscriber(event as BusEvent.Descriptor<never>, data as never));
-  }
+  const parsed = PlainValueSchema.parse(event.schema.parse(data));
+  const listeners = [...(subscriptions.get(event.name) ?? [])];
+  const epoch = generation;
+  delivery = delivery.then(() => {
+    if (epoch !== generation) return;
+    for (const subscriber of listeners) subscriber(parsed);
+  });
 }
 
 function subscribe<T>(
@@ -19,30 +20,34 @@ function subscribe<T>(
   handler: (data: T) => void,
   options?: { match?: Partial<T> },
 ): () => void {
+  const expected = options?.match === undefined ? undefined : PlainValueSchema.parse(options.match);
   const set = subscriptions.get(event.name) ?? new Set<Subscriber>();
-  const subscriber: Subscriber = (_descriptor, data) => {
-    if (options?.match !== undefined && !matches(data, options.match)) return;
-    handler(data);
+  const subscriber: Subscriber = (data) => {
+    if (expected !== undefined && !matches(data, expected)) return;
+    handler(event.schema.parse(data));
   };
   set.add(subscriber);
   subscriptions.set(event.name, set);
-  return () => set.delete(subscriber);
+  return () => {
+    set.delete(subscriber);
+    if (set.size === 0) subscriptions.delete(event.name);
+  };
 }
 
-function matches<T>(data: T, expected: Partial<T>): boolean {
-  if (data === null || typeof data !== "object") return false;
-  return Object.entries(expected).every(([key, value]) => Reflect.get(data, key) === value);
+function matches(data: PlainValue, expected: PlainValue): boolean {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return false;
+  if (expected === null || typeof expected !== "object" || Array.isArray(expected)) return false;
+  return Object.entries(expected).every(([key, value]) => data[key] === value);
 }
 
 export const Bus = {
   publish,
   subscribe,
-  observe(observer: Observer): () => void {
-    observers.add(observer);
-    return () => observers.delete(observer);
-  },
+  flush: () => delivery,
+  listenerCount: () => [...subscriptions.values()].reduce((count, set) => count + set.size, 0),
   reset(): void {
+    generation += 1;
     subscriptions.clear();
-    observers.clear();
+    delivery = Promise.resolve();
   },
 };
