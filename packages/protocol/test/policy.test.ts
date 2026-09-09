@@ -474,7 +474,7 @@ describe("Policy schemas", () => {
         labels: ["security", "audit"],
       });
       expect(result.policies.length).toBe(2);
-      expect(result.policies[0]!).toEqual({ id: "policy-1", required: true });
+      expect(result.policies[0]).toEqual({ id: "policy-1", required: true });
       expect(result.labels).toEqual(["security", "audit"]);
     });
 
