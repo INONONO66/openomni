@@ -8,7 +8,7 @@ import { z } from "zod";
 import { createTurnDispatcher, defineTool, eraseTool } from "../src/tool-dispatcher";
 import { createSessionRequests } from "../src/session-requests";
 import { compiledPolicy } from "./helpers/compiled-policy";
-import { requestLedger } from "./helpers/request-ledger";
+import { requestLedger, crashAfterRequestOpen } from "./helpers/request-ledger";
 import { bounded } from "./helpers/bounded";
 
 let directory: string;
@@ -105,22 +105,8 @@ function ownerAnswer(request: SessionTransition.Request): SessionTransition.Answ
 it("reopens SQLite and resumes the exact original wave without a model reconstruction", async () => {
   const bodies: string[] = [];
   const initial = requestLedger();
-  const transition = initial.ledger.transition;
-  if (transition === undefined) throw new Error("missing transition port");
   const crashed = dispatcher(
-    {
-      ...initial,
-      ledger: {
-        ...initial.ledger,
-        async transition(payload, inputId, at) {
-          const result = await transition(payload, inputId, at);
-          if (payload.kind === "request.open")
-            throw new Error("process lost after durable suspension");
-          return result;
-        },
-      },
-    },
-    bodies,
+    crashAfterRequestOpen(initial, "process lost after durable suspension"), bodies,
   );
   await expect(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
@@ -217,22 +203,7 @@ it("a committed application claim prevents replay after result persistence fails
 });
 it("a gateway answer cannot borrow another live owner's lease", async () => {
   const initial = requestLedger();
-  const transition = initial.ledger.transition;
-  if (transition === undefined) throw new Error("missing transition");
-  const crashed = dispatcher(
-    {
-      ...initial,
-      ledger: {
-        ...initial.ledger,
-        async transition(payload, inputId, at) {
-          const result = await transition(payload, inputId, at);
-          if (payload.kind === "request.open") throw new Error("lost");
-          return result;
-        },
-      },
-    },
-    [],
-  );
+  const crashed = dispatcher(crashAfterRequestOpen(initial, "lost"), []);
   await expect(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
   ).rejects.toThrow("lost");

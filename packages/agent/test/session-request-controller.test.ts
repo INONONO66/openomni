@@ -7,6 +7,7 @@ import { createTurnDispatcher, eraseTool, sessionTool } from "../src/tool-dispat
 import { valueTool } from "./helpers/query-tool";
 import { createSessionRequests } from "../src/session-requests";
 import { bounded } from "./helpers/bounded";
+import { suspendedRequest } from "./helpers/suspended-request";
 
 let runtime: SessionRuntime;
 beforeEach(() => {
@@ -95,11 +96,7 @@ function answer(request: SessionTransition.Request): SessionTransition.Answer {
 }
 it("the injected gateway port uses the live controller's fence and releases the original call", async () => {
   const f = setup();
-  const running = f.handle.prompt("perform original call");
-  await bounded(f.suspended);
-  const request = SessionHandleStore.requestRows(f.handle.id)[0];
-  if (request === undefined) throw new Error("missing request");
-  const fence = SessionHandleStore.row(f.handle.id).leaseFence;
+  const { running, request, fence } = await suspendedRequest(f.handle, f.suspended);
   expect(f.effects).toEqual([]);
   expect(await createSessionRequests(runtime).answer(answer(request))).toBe("resolved");
   await bounded(running);
@@ -109,10 +106,7 @@ it("the injected gateway port uses the live controller's fence and releases the 
 });
 it("configuration drift refuses consent while interruption cancels the whole suspended call", async () => {
   const f = setup();
-  const running = f.handle.prompt("perform original call");
-  await bounded(f.suspended);
-  const request = SessionHandleStore.requestRows(f.handle.id)[0];
-  if (request === undefined) throw new Error("missing request");
+  const { running, request } = await suspendedRequest(f.handle, f.suspended);
   await f.handle.system.blocks.set([{ id: "new", source: "owner", content: "changed" }]);
   expect(await createSessionRequests(runtime).answer(answer(request))).toBe("rejected");
   expect(f.effects).toEqual([]);
@@ -136,12 +130,7 @@ it("configuration drift refuses consent while interruption cancels the whole sus
 });
 it("does not reacquire an expired lease under a still-live suspended runner", async () => {
   const f = setup();
-  const running = f.handle.prompt("perform original call");
-  const settled = Promise.allSettled([running]);
-  await bounded(f.suspended);
-  const request = SessionHandleStore.requestRows(f.handle.id)[0];
-  if (request === undefined) throw new Error("missing request");
-  const fence = SessionHandleStore.row(f.handle.id).leaseFence;
+  const { settled, request, fence } = await suspendedRequest(f.handle, f.suspended);
   f.setClock(40_000);
   await expect(createSessionRequests(runtime).answer(answer(request))).rejects.toMatchObject({
     name: "SessionLeaseError",

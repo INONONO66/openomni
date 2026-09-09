@@ -6,6 +6,7 @@ import { Bus } from "../../../src/index";
 import { collector } from "../../helpers/observation-collector";
 import { mockLlm, createStopOutcome, countingStopLlm } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
+import { expectUncalledBudget } from "../../helpers/execution-assertions";
 
 describe("run budget terminal facts", () => {
   it("charges successful and failed tools across turns before the next admission", async () => {
@@ -112,8 +113,7 @@ describe("run budget terminal facts", () => {
         llm: provider.llm,
       }, "hi").catch((error: Error) => error);
 
-      expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
-      expect(provider.calls).toBe(0);
+      expectUncalledBudget(result, provider.calls);
       expect(events.named(Operational.Events.Warn.name)).toHaveLength(1);
       expect(events.named(Operational.Events.Warn.name)[0]).toMatchObject({
         msg: "budget exceeded: wall time",

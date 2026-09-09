@@ -2,6 +2,8 @@ import { expect, it, jest } from "bun:test";
 import { Tool } from "@openomni/protocol";
 import { createDispatcher, defineTool } from "../../../src/index";
 import { z } from "zod";
+import { dispatchEcho } from "../../helpers/echo-dispatch";
+import { expectFailedToolCommit } from "../../helpers/execution-assertions";
 import {
   actionCommitGate,
   compiledPolicy,
@@ -110,13 +112,9 @@ it("publishes one error completion after a failed tool result commits", async ()
     executor: recording.executor,
   });
 
-  const result = await dispatcher.execute(
-    { id: "call-1", tool: "echo", input: { text: "fail" } },
-    { sessionId: "session-1", turnId: "turn-1" },
-  );
+  const result = await dispatchEcho(dispatcher, "fail");
 
-  expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
-  expect(recording.committed.filter((action) => action.kind === "tool")).toHaveLength(2);
+  expectFailedToolCommit(result, recording.committed);
   expect(observations.names).toEqual([Tool.Events.Started.name, Tool.Events.Completed.name]);
 });
 
@@ -138,10 +136,7 @@ it("publishes TimedOut and Completed exactly once after the timeout result commi
       timeoutMs: 50,
     });
 
-    const running = dispatcher.execute(
-      { id: "call-1", tool: "echo", input: { text: "stall" } },
-      { sessionId: "session-1", turnId: "turn-1" },
-    );
+    const running = dispatchEcho(dispatcher, "stall");
     await startedSeen.promise;
     jest.advanceTimersByTime(50);
     await resultCommit.reached;
@@ -149,8 +144,7 @@ it("publishes TimedOut and Completed exactly once after the timeout result commi
     resultCommit.release();
     const result = await running;
 
-    expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
-    expect(recording.committed.filter((action) => action.kind === "tool")).toHaveLength(2);
+    expectFailedToolCommit(result, recording.committed);
     expect(observations.names).toEqual([
       Tool.Events.Started.name,
       Tool.Events.TimedOut.name,

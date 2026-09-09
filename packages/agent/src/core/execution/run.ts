@@ -84,8 +84,8 @@ export async function runAgent(
       maxAttempts: LlmRetry.MAX_ATTEMPTS,
     };
     emitRunFailed(config.events, base, cause.message, facts);
-    if (Run.FailureError.isInstance(error))
-      Retry.attachFailureFacts(cause, { ...facts, llm: true });
+    const llmFailure: boolean = Run.FailureError.isInstance(error);
+    if (llmFailure) Retry.attachFailureFacts(cause, { ...facts, llm: true });
     throw error;
   } finally {
     compaction?.abort();

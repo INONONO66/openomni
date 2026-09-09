@@ -6,6 +6,22 @@ import type { SessionTransition } from "@openomni/protocol";
 import { collector } from "./observation-collector";
 export { bounded } from "./bounded";
 
+export function crashAfterRequestOpen(initial: ReturnType<typeof requestLedger>, message: string) {
+  const transition = initial.ledger.transition;
+  if (transition === undefined) throw new Error("missing transition port");
+  return {
+    ...initial,
+    ledger: {
+      ...initial.ledger,
+      async transition(...args: Parameters<typeof transition>) {
+        const result = await transition(...args);
+        if (args[0].kind === "request.open") throw new Error(message);
+        return result;
+      },
+    },
+  };
+}
+
 export function requestLedger(
   input: {
     id?: string;

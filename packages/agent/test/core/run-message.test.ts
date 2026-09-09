@@ -15,6 +15,13 @@ function agent(run: MockLlmFn) {
 }
 
 describe("run terminal message result contract", () => {
+  it.each([[0, 7], [11, 0]])("preserves asymmetric snapshot usage %i/%i", async (input, output) => {
+    const result = await agent(async (_input, sink) => {
+      sink.onMessage(assistantTextSnapshot("counted", input, output));
+      return createStopOutcome();
+    }).run(runInput([{ role: "user", content: "count" }]));
+    expect(result.usage).toMatchObject({ inputTokens: input, outputTokens: output, totalTokens: input + output });
+  });
   it("returns stop, text, steps, and usage from the terminal assistant snapshot", async () => {
     const result = await agent(async (_input, sink) => {
       sink.onMessage(assistantTextSnapshot("the answer is 42", 20, 10));
