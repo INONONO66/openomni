@@ -7,7 +7,7 @@ import { advanceRunTurn, createRunState, recordRunTurn } from "../../../src/core
 import { Bus } from "../../../src/index";
 import {
   createMockLlmConfig,
-  createStopOutcome,
+  completeModel,
   mockProviderData,
   mockProviderModel,
 } from "../../helpers/mock-llm";
@@ -41,10 +41,10 @@ describe("turn budget across retries", () => {
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
-          run: async () => {
+          run: async (input, sink) => {
             calls += 1;
             if (calls === 1) throw providerFailure("transient provider hiccup");
-            return createStopOutcome();
+            return completeModel(input, sink);
           },
         }),
       });

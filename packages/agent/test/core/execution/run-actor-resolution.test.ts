@@ -5,28 +5,21 @@ import { runTestAgent } from "../../helpers/test-agent";
 import type { RunTrace } from "../../../src/core/execution/state";
 import {
   createMockLlmConfig,
-  createStopOutcome,
+  completeModel,
   mockProviderData,
   mockProviderModel,
 } from "../../helpers/mock-llm";
 
-/**
- * Actor resolution order (#606 re-audit): `trace.agentName` when present,
- * otherwise the run identity. The former `input.metadata?.actorId` leg — an
- * unvalidated side-channel with zero producers — is deleted; nothing outside
- * the trace may name the actor.
- */
+// Actor attribution comes only from the validated trace.
 async function observedActorId(trace: RunTrace): Promise<string> {
   const actorIds: string[] = [];
   const stop = Bus.observe((event, payload) => {
     if (event.name !== RunEvents.TurnStart.name) return;
-    actorIds.push((payload as { actorId: string }).actorId);
+    const { actorId } = RunEvents.TurnStart.schema.parse(payload);
+    if (actorId !== undefined) actorIds.push(actorId);
   });
   try {
     await runTestAgent(
-      // The metadata side-channel is gone from ChatAgentInput entirely —
-      // smuggling an actorId through it is now a compile error, not merely
-      // ignored at runtime.
       {
         messages: [{ role: "user", content: "hi" }],
         traceContext: trace,
@@ -37,7 +30,7 @@ async function observedActorId(trace: RunTrace): Promise<string> {
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
-          run: async () => createStopOutcome(),
+          run: completeModel,
         }),
       },
     );

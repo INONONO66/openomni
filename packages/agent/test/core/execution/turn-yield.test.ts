@@ -4,6 +4,7 @@ import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/test-agent";
 import { collector } from "../../../src/observation/bus";
 import { runInput } from "../../helpers/run-input";
+import { completeModel } from "../../helpers/mock-llm";
 
 function assistant(reason: string, inputTokens = 900): Message.WithParts {
   return assistantWithReasons([reason], inputTokens);
@@ -58,9 +59,9 @@ describe("window and steering yield", () => {
           providerID: "provider",
           limit: { context: 1000, output: 100 },
         }),
-        run: async (input) => {
+        run: async (input, sink) => {
           arms.push(input.yieldAtInputTokens);
-          return { type: "stop" };
+          return completeModel(input, sink);
         },
       },
     });
@@ -83,7 +84,8 @@ describe("window and steering yield", () => {
         run: async (input, sink: Sink) => {
           calls += 1;
           arms.push(input.yieldAtInputTokens);
-          if (calls === 1) sink.onMessage(assistant("tool-calls"));
+          if (calls !== 1) return completeModel(input, sink);
+          sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
         },
       },
@@ -123,7 +125,8 @@ describe("window and steering yield", () => {
           run: async (input, sink: Sink) => {
             calls += 1;
             seen.push(input.messages.length);
-            if (calls === 1) sink.onMessage(assistant("tool-calls"));
+            if (calls !== 1) return completeModel(input, sink);
+            sink.onMessage(assistant("tool-calls"));
             return { type: "stop" };
           },
         },
@@ -197,11 +200,10 @@ describe("window and steering yield", () => {
           providerID: "provider",
           limit: { context: 1000, output: 100 },
         }),
-        run: async (_input, sink: Sink) => {
+        run: async (input, sink: Sink) => {
           calls += 1;
-          if (calls === 1) {
-            sink.onMessage(assistantWithReasons(Array.from({ length: 30 }, () => "tool-calls")));
-          }
+          if (calls !== 1) return completeModel(input, sink);
+          sink.onMessage(assistantWithReasons(Array.from({ length: 30 }, () => "tool-calls")));
           return { type: "stop" };
         },
       },
@@ -221,11 +223,10 @@ describe("window and steering yield", () => {
         resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
         run: async (input, sink: Sink) => {
           calls += 1;
-          if (calls === 1) {
-            input.shouldYield?.();
-            pending = false;
-            sink.onMessage(assistant("tool-calls"));
-          }
+          if (calls !== 1) return completeModel(input, sink);
+          input.shouldYield?.();
+          pending = false;
+          sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
         },
       },

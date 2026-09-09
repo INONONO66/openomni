@@ -6,6 +6,7 @@ import { RunEvents } from "../../src/core/execution/events";
 import { createAssistantMessage } from "../../src/core/message-factory";
 import { Bus } from "../../src/index";
 import {
+  completeModel,
   createMockLlmConfig,
   createStopOutcome,
   mockProviderData,
@@ -72,9 +73,9 @@ describe("mid-turn steering", () => {
       llm: createMockLlmConfig({
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => {
+        run: async (input, sink) => {
           callback = input.shouldYield;
-          return createStopOutcome();
+          return completeModel(input, sink);
         },
       }),
     }).run(runInput([{ role: "user", content: "start" }]));
@@ -97,11 +98,11 @@ describe("mid-turn steering", () => {
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
-          run: async () => {
+          run: async (input, sink) => {
             calls += 1;
             return calls === 1
               ? { type: "error", error: providerFailure("transient blip") }
-              : createStopOutcome();
+              : completeModel(input, sink);
           },
         }),
       }).run(runInput([{ role: "user", content: "start" }]));

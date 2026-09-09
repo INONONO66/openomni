@@ -19,7 +19,7 @@ import {
   type SessionRunner,
   type SessionRuntime,
 } from "../src/index";
-import { bounded } from "./helpers/request-ledger";
+import { bounded } from "./helpers/bounded";
 
 const SECRET = "sk-live-credential-never-shown";
 let nextId = 0;

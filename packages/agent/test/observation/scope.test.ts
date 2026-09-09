@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, mock, spyOn } from "bun:test";
 import { collector, newTraceId, noopSink, scopeObservation } from "../../src/index";
 import { BusEvent, type ObservationSink } from "@openomni/protocol";
 import { z } from "zod";
@@ -79,11 +79,15 @@ describe("scoped observations", () => {
 
     expect(() => Reflect.apply(scoped.publish, scoped, [TestEvent, null])).not.toThrow();
     expect(() => Reflect.apply(scoped.publish, scoped, [TestEvent, []])).not.toThrow();
+    expect(() =>
+      Reflect.apply(scoped.publish, scoped, [TestEvent, { component: 1, msg: "bad" }]),
+    ).not.toThrow();
     expect(() => scoped.publish(TestEvent, { component: "test", msg: "valid" })).not.toThrow();
 
     expect(errors).toEqual([
       { name: TestEvent.name, type: "TypeError" },
       { name: TestEvent.name, type: "TypeError" },
+      { name: TestEvent.name, type: "ZodError" },
       { name: TestEvent.name, type: "Error" },
     ]);
   });
@@ -110,14 +114,25 @@ describe("scoped observations", () => {
       console.warn = originalWarn;
     }
 
+    const reporterFailure = new Error("reporter failed");
+    const errorLog = spyOn(console, "error").mockImplementation(() => undefined);
     const scoped = scopeObservation(hostile, identity, {
       onError() {
-        throw new Error("reporter failed");
+        throw reporterFailure;
       },
     });
-    expect(() =>
-      scoped.publish(TestEvent, { component: "test", msg: "custom reporter" }),
-    ).not.toThrow();
+    try {
+      expect(() =>
+        scoped.publish(TestEvent, { component: "test", msg: "custom reporter" }),
+      ).not.toThrow();
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      expect(errorLog.mock.calls[0]?.[1]).toMatchObject({
+        eventName: TestEvent.name,
+        error: { errors: [expect.objectContaining({ message: "sink failed" }), reporterFailure] },
+      });
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 
   it("forwards subscriptions when the underlying sink supports them", () => {

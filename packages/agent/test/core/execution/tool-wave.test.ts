@@ -5,15 +5,7 @@ import { createExecutor } from "../../../src/executor";
 import { createDispatcher, defineTool } from "../../../src/tool-dispatcher";
 import { z } from "zod";
 
-function bounded<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("retention signal deadline")), 5000);
-    }),
-  ]).finally(() => clearTimeout(timer));
-}
+import { bounded } from "../../helpers/bounded";
 
 for (const door of ["cell", "wave"] as const) {
   for (const reason of ["Error", "plain-value"] as const) {

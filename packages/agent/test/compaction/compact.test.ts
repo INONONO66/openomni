@@ -9,6 +9,7 @@ import {
   prepareSummarizerInput,
 } from "../../src/compaction/estimate";
 import { captureBusEvents } from "../helpers/bus-event";
+import { textMessage, completedToolPart } from "../helpers/messages";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */
 const TEST_TRACE_ID = "trace-compaction-test";
@@ -21,74 +22,22 @@ function nextId(prefix: string): string {
 }
 
 function makeUserMessage(text: string): Message.WithParts {
-  const id = nextId("user-message");
-  const sessionID = "test";
-  const info: Message.UserMessage = {
-    id,
-    sessionID,
-    role: "user",
-    time: { created: Date.now() },
-    agent: "test",
-    model: { providerID: "", modelID: "" },
-  };
-  const part: Message.TextPart = {
-    id: nextId("user-part"),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text,
-  };
-  return { info, parts: [part] };
+  return textMessage("user", text, "test", nextId("user-message"));
 }
 
 function makeAssistantMessage(text: string): Message.WithParts {
-  const id = nextId("assistant-message");
-  const sessionID = "test";
-  // Realistic bulk: the progress guard (review #721 M1) rightly refuses a
-  // cut whose anchor render outweighs what it drops — production assistant
-  // turns are never 2 chars, so fixtures must not be either.
-  const bulked = `${text}\n${"filler ".repeat(50)}`;
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: Date.now() },
-    parentID: "",
-    modelID: "",
-    providerID: "",
-    agent: "test",
-    path: { cwd: "/", root: "/" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  };
-  const part: Message.TextPart = {
-    id: nextId("assistant-part"),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text: bulked,
-  };
-  return { info, parts: [part] };
+  // The discarded content must outweigh the anchor render.
+  return textMessage(
+    "assistant",
+    `${text}\n${"filler ".repeat(50)}`,
+    "test",
+    nextId("assistant-message"),
+  );
 }
 
 function makeToolAssistantMessage(text: string, callID: string): Message.WithParts {
   const base = makeAssistantMessage(text);
-  const toolPart: Message.ToolPart = {
-    id: nextId("tool-part"),
-    sessionID: "test",
-    messageID: base.info.id,
-    type: "tool",
-    callID,
-    tool: "read_file",
-    state: {
-      status: "completed",
-      input: { path: "/tmp/a" },
-      output: "file contents",
-      title: "read_file",
-      metadata: {},
-      time: { start: 1, end: 2 },
-    },
-  };
+  const toolPart = completedToolPart(base, "file contents", callID, { path: "/tmp/a" });
   return { info: base.info, parts: [...base.parts, toolPart] };
 }
 

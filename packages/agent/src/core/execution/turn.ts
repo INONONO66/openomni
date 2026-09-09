@@ -1,12 +1,12 @@
 import { buildSystemPrompt, prepareTurnTools } from "./tools";
 import { accumulateUsage, type RunInput, type Sink } from "@openomni/llm";
-import { Message, type BusEvent, Operational, PlainValueSchema } from "@openomni/protocol";
+import { Message, type BusEvent, PlainValueSchema } from "@openomni/protocol";
 import { effectiveMaxToolCalls, publishBudgetTelemetry } from "../budget";
 import { Compaction, type CompactionSession } from "../../compaction";
 import { executeCompaction } from "../../compaction/execute-cut";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
 import { measuredContextTokens } from "../../compaction/measure";
-import { createAssistantMessage, createUserMessage, withMessageId } from "../message-factory";
+import { createUserMessage, withMessageId } from "../message-factory";
 import { settleModelTools } from "./tool-wave";
 import { AgentStopError } from "./stop-chain";
 import * as Retry from "../retry";
@@ -238,10 +238,9 @@ export async function handleStop(
   compaction: CompactionSession | undefined,
 ): Promise<StopOutcome> {
   const assistantIndex = state.messages.length;
-  const initialAssistant = await recordAssistant(
-    config,
-    resolveTurnAssistant(config.events, state, turn, agentBase),
-  );
+  const snapshot = turn.turnAssistant.message;
+  if (snapshot === undefined) throw new Error("llm completed without an assistant snapshot");
+  const initialAssistant = await recordAssistant(config, snapshot);
   turn.turnAssistant.message = initialAssistant;
   appendRunMessages(state, [initialAssistant]);
   const afterModelPrompts = await drainStepBoundary(state, config, "after_llm");
@@ -303,14 +302,7 @@ export async function handleStop(
     : result;
 }
 
-/**
- * The text a turn actually produced: the text parts of its boundary snapshot,
- * empty when the turn produced none (or, on the TEST-STUB-ONLY missing-
- * snapshot path, when there is no snapshot at all — see
- * {@link resolveTurnAssistant}). Never falls back to `state.lastAssistantText`;
- * that field is the run's last produced text, kept for guard/abort results,
- * and reusing it as a turn's own output forges history (#audit M3).
- */
+// A turn's text comes only from its snapshot, never the prior turn's text.
 function assistantTextOf(message: Message.WithParts | undefined): string {
   if (message === undefined) return "";
   return message.parts
@@ -420,33 +412,6 @@ export async function applyCompaction(
   if (!result.compacted) return "none";
   applyCompactionMessages(state, result.messages);
   return "compacted";
-}
-
-/**
- * The turn's assistant message is the llm fold's boundary snapshot — the one
- * source of truth for what enters history (#546). The empty-text fallback is
- * a TEST-STUB-ONLY path: every production processor exit emits a finished
- * snapshot (#557), so a missing snapshot means the configured llm run never
- * drove the sink. It is loud (Operational.Events.Error) and deliberately does NOT
- * reuse lastAssistantText, which may still hold the PREVIOUS turn's text —
- * resurrecting it would forge history.
- */
-function resolveTurnAssistant(
-  events: BusEvent.Sink,
-  state: RunState,
-  turn: TurnArtifacts,
-  agentBase: AgentRunBase,
-): Message.WithParts {
-  if (turn.turnAssistant.message !== undefined) return turn.turnAssistant.message;
-  events.publish(Operational.Events.Error, {
-    traceId: agentBase.traceId,
-    time: Date.now(),
-    sessionId: agentBase.sessionId,
-    component: "agent.turn",
-    msg: "llm sink emitted no assistant snapshot — test stub?",
-  });
-  const parentID = state.messages.at(-1)?.info.id ?? "";
-  return createAssistantMessage("", parentID, state.sessionId);
 }
 
 export async function drainStepBoundary(

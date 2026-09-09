@@ -2,48 +2,18 @@ import { describe, expect, it, jest } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Compaction, CompactionSession } from "../../src/compaction";
 import { collector } from "../../src/observation/bus";
+import { textMessage } from "../helpers/messages";
 
 let sequence = 0;
 function message(role: "user" | "assistant", text: string): Message.WithParts {
   sequence += 1;
   const id = `spec-${sequence}`;
-  if (role === "user") {
-    return {
-      info: {
-        id,
-        sessionID: "spec-session",
-        role,
-        time: { created: 1 },
-        agent: "test",
-        model: { providerID: "", modelID: "" },
-      },
-      parts: [{ id: `${id}-text`, sessionID: "spec-session", messageID: id, type: "text", text }],
-    };
-  }
-  return {
-    info: {
-      id,
-      sessionID: "spec-session",
-      role,
-      time: { created: 1 },
-      parentID: "",
-      modelID: "m",
-      providerID: "p",
-      agent: "test",
-      path: { cwd: "/", root: "/" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      {
-        id: `${id}-text`,
-        sessionID: "spec-session",
-        messageID: id,
-        type: "text",
-        text: `${text} ${"filler ".repeat(40)}`,
-      },
-    ],
-  };
+  return textMessage(
+    role,
+    role === "user" ? text : `${text} ${"filler ".repeat(40)}`,
+    "spec-session",
+    id,
+  );
 }
 function history(): Message.WithParts[] {
   return [

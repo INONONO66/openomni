@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
-import { bounded, requestLedger } from "../../helpers/request-ledger";
+import { requestLedger } from "../../helpers/request-ledger";
+import { bounded } from "../../helpers/bounded";
 import { Run } from "@openomni/llm";
 import { createExecutor, type ExecutorOptions } from "../../../src/executor";
 import { runChatAttempts } from "../../helpers/chat-attempts";

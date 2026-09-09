@@ -3,6 +3,8 @@ import type { Message } from "@openomni/protocol";
 import { collector } from "../../src/index";
 import { Compaction } from "../../src/compaction/compact";
 import { elideToolOutputs } from "../../src/compaction/reduce";
+import { textMessage, completedToolPart } from "../helpers/messages";
+import { RunEvents } from "../../src/core/execution/events";
 
 const sessionID = "reduce-session";
 let idCounter = 0;
@@ -10,55 +12,14 @@ let idCounter = 0;
 function userMessage(text: string): Message.WithParts {
   idCounter += 1;
   const id = `reduce-user-${idCounter}`;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "user",
-      time: { created: 1 },
-      agent: "test",
-      model: { providerID: "", modelID: "" },
-    },
-    parts: [{ id: `${id}-text`, sessionID, messageID: id, type: "text", text }],
-  };
+  return textMessage("user", text, sessionID, id);
 }
 
 function toolMessage(output: string): Message.WithParts {
   idCounter += 1;
   const id = `reduce-tool-${idCounter}`;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: 1 },
-      parentID: "",
-      modelID: "m",
-      providerID: "p",
-      agent: "test",
-      path: { cwd: "/", root: "/" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      {
-        id: `${id}-tool`,
-        sessionID,
-        messageID: id,
-        type: "tool",
-        callID: `${id}-call`,
-        tool: "read_file",
-        state: {
-          status: "completed",
-          input: {},
-          output,
-          title: "read_file",
-          metadata: {},
-          time: { start: 1, end: 2 },
-        },
-      },
-    ],
-  };
+  const message = textMessage("assistant", "", sessionID, id);
+  return { info: message.info, parts: [completedToolPart(message, output)] };
 }
 
 const options = { minOutputChars: 100, keepHeadChars: 20 };
@@ -135,7 +96,12 @@ describe("Compaction.compact with elision configured", () => {
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBe(0);
     expect(result.messages).toHaveLength(4);
-    expect(sink.events.length).toBeGreaterThan(0);
+    expect(sink.events.map((event) => event.name)).toEqual([
+      RunEvents.CompactionStarted.name, RunEvents.CompactionCompleted.name,
+    ]);
+    expect(RunEvents.CompactionCompleted.schema.parse(sink.events[1]?.data)).toMatchObject({
+      ...trace, outcome: "reduced", messagesBefore: 4, messagesAfter: 4, removedCount: 0,
+    });
   });
 
   it("falls back to the cut once elision has nothing left", async () => {

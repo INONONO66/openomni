@@ -1,20 +1,16 @@
-import { Run, type Sink } from "@openomni/llm";
+import { Run, type RunInput, type Sink } from "@openomni/llm";
 import type { ChatAgentConfig } from "../../src/core/types";
-import { modelFixture } from "./model-fixture";
+import { createAssistantMessage } from "../../src/core/message-factory";
 
-type MockLlmInput = {
-  readonly messages?: readonly unknown[];
-  readonly maxSteps?: number;
-  readonly signal?: ChatAgentConfig["signal"];
-  /** The steering stop condition the loop passes when config.steeringPending is set (#751). */
-  readonly shouldYield?: () => boolean;
-  /** The window-yield arm point — undefined when the yield is disarmed or the window unknown. */
-  readonly yieldAtInputTokens?: number;
-  /** The resolved model this call runs — reflects a model.override (#753) when one fired. */
-  readonly model?: { readonly id: string; readonly providerID: string };
+export type MockLlmFn = (input: RunInput, sink: Sink) => Promise<Run.Outcome>;
+
+// Explicit terminal provider behavior, never injected into another mock's output.
+export const completeModel: MockLlmFn = async (input, sink) => {
+  sink.onMessage(
+    createAssistantMessage("done", input.messages.at(-1)?.info.id ?? "", input.trace.sessionId),
+  );
+  return { type: "stop" };
 };
-
-export type MockLlmFn = (input: MockLlmInput, sink: Sink) => Promise<Run.Outcome>;
 
 export function createStopOutcome(): Run.Outcome {
   return { type: "stop" };
@@ -96,7 +92,7 @@ export function createMockLlmConfig(options: {
   readonly run: MockLlmFn;
 }): NonNullable<ChatAgentConfig["llm"]> {
   return {
-    run: modelFixture(options.run),
+    run: options.run,
     resolveModel: async () => {
       await options.getModels();
       return options.fromModelsDevModel();

@@ -1,4 +1,4 @@
-import { providerFailure } from "../../helpers/mock-llm";
+import { completeModel, providerFailure } from "../../helpers/mock-llm";
 import { expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/test-agent";
@@ -169,7 +169,7 @@ it("commits a reversible compaction result before completion observations and th
           providerID: "provider",
           limit: { context: 1000, output: 100 },
         }),
-        run: async () => {
+        run: async (input, sink) => {
           calls += 1;
           if (calls === 1)
             return {
@@ -180,7 +180,7 @@ it("commits a reversible compaction result before completion observations and th
               }),
             };
           durableAtNextCall = committedRecord();
-          return { type: "stop" };
+          return completeModel(input, sink);
         },
       },
     },

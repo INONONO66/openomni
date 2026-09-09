@@ -6,7 +6,7 @@ import { session, closeSessions, type SessionRuntime } from "../src/session-hand
 import { createTurnDispatcher, defineTool, eraseTool, sessionTool } from "../src/tool-dispatcher";
 import { createSessionRequests } from "../src/session-requests";
 import { SEEDED_POLICY_ROWS } from "../src/index";
-import { bounded } from "./helpers/request-ledger";
+import { bounded } from "./helpers/bounded";
 
 let runtime: SessionRuntime;
 beforeEach(() => {

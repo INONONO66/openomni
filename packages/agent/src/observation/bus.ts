@@ -57,7 +57,10 @@ export namespace ObservationBus {
   }
 }
 
-export function createObservationBus(): ObservationBus {
+export function createObservationBus(
+  onError: (error: Error, eventName: string) => void = (error, event) =>
+    console.warn("ObservationBus handler error", { event, error }),
+): ObservationBus {
   const rootState = createState();
   const local = new AsyncLocalStorage<BusState>();
   const current = () => local.getStore() ?? rootState;
@@ -79,10 +82,12 @@ export function createObservationBus(): ObservationBus {
       };
       const publishedData = toBusData(data);
       for (const observer of [...state.observers]) {
-        queueMicrotask(() => deliver(() => observer(published, publishedData), event.name));
+        queueMicrotask(() =>
+          deliver(() => observer(published, publishedData), event.name, onError),
+        );
       }
       for (const subscription of [...(state.subscribers.get(event.name) ?? [])]) {
-        queueMicrotask(() => deliver(() => subscription.handler(event, data), event.name));
+        queueMicrotask(() => deliver(() => subscription.handler(event, data), event.name, onError));
       }
     },
     scope(identity) {
@@ -128,11 +133,37 @@ export function createObservationBus(): ObservationBus {
   return bus;
 }
 
-function deliver(operation: () => void, eventName: string): void {
+function deliver(
+  operation: () => void,
+  eventName: string,
+  onError: (error: Error, eventName: string) => void,
+): void {
   try {
     operation();
   } catch (error) {
-    console.warn("ObservationBus handler error", { event: eventName, error: String(error) });
+    reportObservationFailure(
+      error instanceof Error ? error : new Error(String(error)),
+      eventName,
+      onError,
+    );
+  }
+}
+
+function reportObservationFailure(
+  error: Error,
+  eventName: string,
+  report: (error: Error, eventName: string) => void,
+): void {
+  try {
+    report(error, eventName);
+  } catch (reporterError) {
+    console.error("observation error reporter failed", {
+      eventName,
+      error: new AggregateError(
+        [error, reporterError],
+        "observation delivery and reporting failed",
+      ),
+    });
   }
 }
 
@@ -170,14 +201,15 @@ export function scopeObservation(
         if (data === null || typeof data !== "object" || Array.isArray(data)) {
           throw new TypeError("scoped observation payload must be an object");
         }
-        const payload = { ...data, eventId: entropy(), time: clock(), ...identity };
-        sink.publish(event, payload as T);
+        const stamp = { eventId: entropy(), time: clock(), ...identity };
+        const payload = event.schema.parse({ ...data, ...stamp });
+        sink.publish(event, { ...payload, ...stamp });
       } catch (error) {
-        try {
-          report(error instanceof Error ? error : new Error(String(error)), event.name);
-        } catch {
-          // Observation failures never alter the observed operation.
-        }
+        reportObservationFailure(
+          error instanceof Error ? error : new Error(String(error)),
+          event.name,
+          report,
+        );
       }
     },
     scope(childIdentity) {

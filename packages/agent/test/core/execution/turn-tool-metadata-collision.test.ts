@@ -4,7 +4,7 @@ import { runTestAgent } from "../../helpers/test-agent";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import {
   createMockLlmConfig,
-  createStopOutcome,
+  completeModel,
   mockProviderData,
   mockProviderModel,
 } from "../../helpers/mock-llm";
@@ -31,7 +31,7 @@ function config(tools: NonNullable<ChatAgentConfig["tools"]>): ChatAgentConfig {
     llm: createMockLlmConfig({
       getModels: async () => mockProviderData,
       fromModelsDevModel: () => mockProviderModel,
-      run: async () => createStopOutcome(),
+      run: completeModel,
     }),
   };
 }

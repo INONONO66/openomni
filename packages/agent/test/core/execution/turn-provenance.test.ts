@@ -4,7 +4,7 @@ import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
 import {
   createMockLlmConfig,
-  createStopOutcome,
+  completeModel,
   mockProviderData,
   mockProviderModel,
 } from "../../helpers/mock-llm";
@@ -24,9 +24,9 @@ describe("turn provenance", () => {
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
-          run: async (input) => {
-            messages = [...(input.messages as readonly Message.WithParts[])];
-            return createStopOutcome();
+          run: async (input, sink) => {
+            messages = [...input.messages];
+            return completeModel(input, sink);
           },
         }),
       },

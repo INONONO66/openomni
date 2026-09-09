@@ -3,11 +3,7 @@ import { createObservationBus } from "../../src/index";
 import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
 
-function bounded<T>(promise: Promise<T>): Promise<T> {
-  const guard = Promise.withResolvers<T>();
-  const timer = setTimeout(() => guard.reject(new Error("observation was not delivered")), 1_000);
-  return Promise.race([promise, guard.promise]).finally(() => clearTimeout(timer));
-}
+import { bounded } from "../helpers/bounded";
 
 const buses: ReturnType<typeof createObservationBus>[] = [];
 function bus() {
@@ -65,6 +61,18 @@ describe("observation bus delivery", () => {
     } finally {
       console.warn = originalWarn;
     }
+  });
+
+  it("delivers the original handler failure to the injected error sink", async () => {
+    const failure = new Error("subscriber failure");
+    const reported = Promise.withResolvers<{ error: Error; event: string }>();
+    const observations = createObservationBus((error, event) => reported.resolve({ error, event }));
+    const event = BusEvent.define("test.bus.error-sink", z.string());
+    observations.subscribe(event, () => {
+      throw failure;
+    });
+    observations.publish(event, "payload");
+    expect(await bounded(reported.promise)).toEqual({ error: failure, event: event.name });
   });
 
   it("filters subscriptions by all requested payload fields", async () => {

@@ -19,6 +19,7 @@ import {
 } from "../src/index";
 import { recordingLedger } from "./helpers/compiled-policy";
 import {
+  completeModel,
   createMockLlmConfig,
   createStopOutcome,
   type MockLlmFn,
@@ -187,9 +188,9 @@ describe("session chat runner", () => {
     const boundaries: string[] = [];
     const runner = createSessionChatRunner({
       prepare: () => ({
-        config: config(async ({ messages }) => {
-          modelInputs.push(JSON.stringify(messages ?? []));
-          return createStopOutcome();
+        config: config(async (input, sink) => {
+          modelInputs.push(JSON.stringify(input.messages));
+          return completeModel(input, sink);
         }),
         traceContext,
       }),
@@ -219,9 +220,9 @@ describe("session chat runner", () => {
     let afterLlm = 0;
     const runner = createSessionChatRunner({
       prepare: () => ({
-        config: config(async ({ messages }) => {
-          modelInputs.push(JSON.stringify(messages ?? []));
-          return createStopOutcome();
+        config: config(async (input, sink) => {
+          modelInputs.push(JSON.stringify(input.messages));
+          return completeModel(input, sink);
         }),
         traceContext,
       }),
@@ -248,7 +249,7 @@ describe("session chat runner", () => {
   it("returns interrupted at either post-model boundary", async () => {
     for (const interruptedAt of ["after_llm", "after_tools"] as const) {
       const runner = createSessionChatRunner({
-        prepare: () => ({ config: config(async () => createStopOutcome()), traceContext }),
+        prepare: () => ({ config: config(completeModel), traceContext }),
       });
       const result = await runner(
         input(async (boundary) => ({
@@ -263,9 +264,9 @@ describe("session chat runner", () => {
   it("records real prompt and turn ownership with sibling llm pairs for normal calls", async () => {
     let calls = 0;
 
-    const { actions, inboxIds } = await runDurably(async () => {
+    const { actions, inboxIds } = await runDurably(async (input, sink) => {
       calls += 1;
-      return calls === 1 ? { type: "continue" } : createStopOutcome();
+      return calls === 1 ? { type: "continue" } : completeModel(input, sink);
     });
 
     const llmIntents = actions.filter(
@@ -303,11 +304,11 @@ describe("session chat runner", () => {
     let calls = 0;
 
     try {
-      const { actions } = await runDurably(async () => {
+      const { actions } = await runDurably(async (input, sink) => {
         calls += 1;
         return calls === 1
           ? { type: "error", error: providerFailure("transient provider outage") }
-          : createStopOutcome();
+          : completeModel(input, sink);
       });
 
       const llmIntents = actions.filter(
@@ -340,11 +341,11 @@ describe("session chat runner", () => {
 
     try {
       const { actions } = await runDurably(
-        async (input) => {
-          answered.push(input.model?.id ?? "unresolved");
+        async (input, sink) => {
+          answered.push(input.model.id);
           return answered.length === 1
             ? { type: "error", error: providerFailure("transient provider outage") }
-            : createStopOutcome();
+            : completeModel(input, sink);
         },
         { prompts: 2, fallbacks: [fallback] },
       );

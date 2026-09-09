@@ -1,4 +1,4 @@
-import { providerFailure } from "../../helpers/mock-llm";
+import { completeModel, providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it } from "bun:test";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Retry } from "@openomni/llm";
@@ -77,7 +77,7 @@ describe("context overflow recovery", () => {
       },
       llm: {
         resolveModel: async () => model,
-        run: async (input) => {
+        run: async (input, sink) => {
           calls += 1;
           seen.push(input.messages.length);
           sawAnchor =
@@ -95,7 +95,7 @@ describe("context overflow recovery", () => {
                   retryable: false,
                 }),
               }
-            : { type: "stop" };
+            : completeModel(input, sink);
         },
       },
     });

@@ -6,6 +6,7 @@ import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
 import {
+  completeModel,
   createMockLlmConfig,
   createStopOutcome,
   mockProviderData,
@@ -64,9 +65,9 @@ describe("ChatAgent public run contract", () => {
       llm: createMockLlmConfig({
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => {
+        run: async (input, sink) => {
           observed = input;
-          return createStopOutcome();
+          return completeModel(input, sink);
         },
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
@@ -195,6 +196,11 @@ describe("ChatAgent public run contract", () => {
 });
 
 describe("ChatAgent provider boundary failures", () => {
+  it("rejects a provider stop without a terminal snapshot instead of forging history", async () => {
+    await expect(
+      agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }])),
+    ).rejects.toThrow("llm completed without an assistant snapshot");
+  });
   it.each([
     {
       name: "a structured error without a message",
@@ -274,7 +280,7 @@ describe("ChatAgent provider boundary failures", () => {
     const result = await createTestAgent({
       events: Bus,
       model: { provider: "anthropic", id: "claude-opus-4-5" },
-      llm: { run: async () => createStopOutcome() },
+      llm: { run: completeModel },
     }).run(runInput([{ role: "user", content: "hello" }]));
 
     expect(result.finishReason).toBe("stop");
@@ -295,9 +301,9 @@ describe("ChatAgent loop controls", () => {
       llm: createMockLlmConfig({
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => {
+        run: async (input, sink) => {
           maxSteps = input.maxSteps;
-          return createStopOutcome();
+          return completeModel(input, sink);
         },
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));

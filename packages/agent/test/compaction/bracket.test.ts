@@ -5,14 +5,9 @@ import { Bus, collector } from "../../src/index";
 import { Compaction } from "../../src/compaction/compact";
 import { captureBusEvents } from "../helpers/bus-event";
 
-/**
- * The lock bracket: every compact() call publishes exactly one
- * `agent.compaction.started` before any work and exactly one
- * `agent.compaction.completed` as its last record — on every exit path,
- * including a summarizer throw. A started without a completed therefore
- * means the run died inside compaction, which is precisely the diagnosis
- * that was impossible while the only records were success-path ephemerals.
- */
+import { textMessage } from "../helpers/messages";
+
+// Every compaction has one start and one terminal event, including failures.
 
 const IDENTITY = {
   traceId: "trace-bracket-test",
@@ -28,50 +23,11 @@ function nextId(prefix: string): string {
 }
 
 function makeUserMessage(text: string): Message.WithParts {
-  const id = nextId("user-message");
-  const sessionID = IDENTITY.sessionId;
-  const info: Message.UserMessage = {
-    id,
-    sessionID,
-    role: "user",
-    time: { created: Date.now() },
-    agent: "test",
-    model: { providerID: "", modelID: "" },
-  };
-  const part: Message.TextPart = {
-    id: nextId("user-part"),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text,
-  };
-  return { info, parts: [part] };
+  return textMessage("user", text, IDENTITY.sessionId, nextId("user-message"));
 }
 
 function makeAssistantMessage(text: string): Message.WithParts {
-  const id = nextId("assistant-message");
-  const sessionID = IDENTITY.sessionId;
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: Date.now() },
-    parentID: "",
-    modelID: "",
-    providerID: "",
-    agent: "test",
-    path: { cwd: "/", root: "/" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  };
-  const part: Message.TextPart = {
-    id: nextId("assistant-part"),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text,
-  };
-  return { info, parts: [part] };
+  return textMessage("assistant", text, IDENTITY.sessionId, nextId("assistant-message"));
 }
 
 interface StartedEvent {

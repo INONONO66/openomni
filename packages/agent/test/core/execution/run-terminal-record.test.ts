@@ -5,6 +5,7 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
 import {
+  completeModel,
   createMockLlmConfig,
   createStopOutcome,
   mockProviderData,
@@ -45,7 +46,7 @@ describe("one terminal record per started run", () => {
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
-          run: async () => createStopOutcome(),
+          run: completeModel,
         }),
       });
       expect(result.finishReason).toBe("stop");
