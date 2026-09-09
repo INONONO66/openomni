@@ -50,26 +50,34 @@ function describe(state: Machine.CellState): string {
   return state.reason;
 }
 
-async function executeOperation(
+function executeOperation(
   cell: Cell,
   operation: Operation,
   sessionId: string,
   signal: AbortSignal | undefined,
 ): Promise<Machine.CellState> {
-  try {
-    if (operation.op === "run")
-      return await cell.run(operation.code, sessionId, {
-        timeoutMs: CELL_CEILING_MS,
-        waitMs: operation.timeout * 1000,
-        signal,
-      });
-    if (operation.op === "peek") return await cell.peek(operation.cell_id, sessionId);
-    return await cell.stop(operation.cell_id, sessionId);
-  } catch (error) {
+  return cellOperation(cell, operation, sessionId, signal).catch((error: Error) => {
     if (error instanceof CodemodeError && error.data.reason === "unknown_cell_id")
       throw new ToolRefused("eval", "no such cell_id in this session");
     throw error;
-  }
+  });
+}
+
+/** Sync throws from the cell surface become rejections here, so one catch above sees every failure. */
+async function cellOperation(
+  cell: Cell,
+  operation: Operation,
+  sessionId: string,
+  signal: AbortSignal | undefined,
+): Promise<Machine.CellState> {
+  if (operation.op === "run")
+    return await cell.run(operation.code, sessionId, {
+      timeoutMs: CELL_CEILING_MS,
+      waitMs: operation.timeout * 1000,
+      signal,
+    });
+  if (operation.op === "peek") return await cell.peek(operation.cell_id, sessionId);
+  return await cell.stop(operation.cell_id, sessionId);
 }
 
 /** The catalog is static: without a composed codemode the tool exists and refuses. */

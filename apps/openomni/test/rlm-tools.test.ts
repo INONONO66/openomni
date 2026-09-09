@@ -95,11 +95,9 @@ describe("the completion tool", () => {
     expect(seen[0]?.system?.startsWith("terse\n\n")).toBe(true);
     expect(seen[0]?.system).toContain(JSON.stringify(schema));
     for (const message of ["does not satisfy the schema", "is not JSON"]) {
-      expect(await run({ prompt: "count", schema })).toMatchObject({
-        isError: true,
-        errorKind: "precondition_failed",
-        output: expect.stringContaining(message),
-      });
+      const result = await run({ prompt: "count", schema });
+      expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+      expect(result.output).toContain(message);
     }
     expect(seen).toHaveLength(3);
     // Without a schema nothing is added to the system text and nothing is parsed.

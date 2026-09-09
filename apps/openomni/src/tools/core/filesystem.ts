@@ -1,3 +1,4 @@
+import type { Dirent } from "node:fs";
 import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { ToolRefused } from "@openomni/agent";
@@ -9,74 +10,80 @@ export interface FilePorts {
 }
 
 /** Translate endpoint failures once; authority remains at tool.pre and the daemon. */
-export async function fileOperation<T>(name: string, operation: () => Promise<T>): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (error instanceof ToolRefused) throw error;
-    if (error instanceof Error && "code" in error)
-      throw new ToolRefused(name, `${String(error.code)}: ${error.message}`);
-    if (MachineRefusalError.isInstance(error)) throw new ToolRefused(name, error.data.message);
-    throw error;
-  }
+export function fileOperation<T>(name: string, operation: () => Promise<T>): Promise<T> {
+  return operation().catch((error: Error) => {
+    throw fileRefusal(name, error);
+  });
+}
+
+/** Refusals pass through; coded I/O errors and daemon refusals become this tool's refusal. */
+function fileRefusal(name: string, error: Error): Error {
+  if (error instanceof ToolRefused) return error;
+  const { code } = error as NodeJS.ErrnoException;
+  if (code !== undefined) return new ToolRefused(name, `${code}: ${error.message}`);
+  if (error instanceof MachineRefusalError) return new ToolRefused(name, error.data.message);
+  return error;
 }
 
 export function filesystem(path: string, ports: FilePorts) {
   const locus = parseLocus(path);
-  const remote = locus.kind === "machine" ? ports.machines?.get(locus.machine) : undefined;
-  if (locus.kind === "machine" && remote === undefined)
-    throw new ToolRefused("locus", "machine host is not configured");
+  const remote = remoteHost(locus, ports);
   return {
     locus,
-    async read() {
-      if (remote === undefined) return readFile(locus.path);
-      const chunks: Uint8Array[] = [];
-      let offset = 0;
-      for (;;) {
-        const value = await remote.fs.read(locus.path, { offset });
-        chunks.push(value.data);
-        offset += value.bytesRead;
-        if (!value.truncated) return Buffer.concat(chunks);
-        if (value.bytesRead === 0) throw new ToolRefused("read", "remote read made no progress");
-      }
-    },
+    read: () => (remote === undefined ? readFile(locus.path) : remoteRead(remote, locus.path)),
     async write(data: Uint8Array) {
       if (remote !== undefined) return (await remote.fs.write(locus.path, data)).bytesWritten;
       await writeFile(locus.path, data);
       return data.byteLength;
     },
     async list() {
-      if (remote !== undefined) {
-        const value = await remote.fs.list(locus.path);
-        if (value.truncated) throw new ToolRefused("ls", "directory exceeds daemon entry limit");
-        return value.entries.map(({ name, kind }) => ({ name, kind }));
-      }
+      if (remote !== undefined) return remoteList(remote, locus.path);
       const entries = await readdir(locus.path, { withFileTypes: true });
       return entries
-        .map((entry) => ({
-          name: entry.name,
-          kind: entry.isFile()
-            ? ("file" as const)
-            : entry.isDirectory()
-              ? ("dir" as const)
-              : entry.isSymbolicLink()
-                ? ("symlink" as const)
-                : ("other" as const),
-        }))
+        .map((entry) => ({ name: entry.name, kind: nodeKind(entry) }))
         .sort((a, b) => a.name.localeCompare(b.name));
     },
     async kind() {
       if (remote !== undefined) return (await remote.fs.stat(locus.path)).kind;
-      const value = await lstat(locus.path);
-      return value.isFile()
-        ? "file"
-        : value.isDirectory()
-          ? "dir"
-          : value.isSymbolicLink()
-            ? "symlink"
-            : "other";
+      return nodeKind(await lstat(locus.path));
     },
   };
+}
+
+type Remote = NonNullable<ReturnType<NonNullable<FilePorts["machines"]>["get"]>>;
+
+/** The attached machine a machine locus names; a local locus has none. */
+function remoteHost(locus: Locus, ports: FilePorts): Remote | undefined {
+  if (locus.kind !== "machine") return undefined;
+  const remote = ports.machines?.get(locus.machine);
+  if (remote === undefined) throw new ToolRefused("locus", "machine host is not configured");
+  return remote;
+}
+
+/** The whole file, assembled from the daemon's bounded reads. */
+async function remoteRead(remote: Remote, path: string): Promise<Buffer> {
+  const chunks: Uint8Array[] = [];
+  let offset = 0;
+  for (;;) {
+    const value = await remote.fs.read(path, { offset });
+    chunks.push(value.data);
+    offset += value.bytesRead;
+    if (!value.truncated) return Buffer.concat(chunks);
+    if (value.bytesRead === 0) throw new ToolRefused("read", "remote read made no progress");
+  }
+}
+
+async function remoteList(remote: Remote, path: string) {
+  const value = await remote.fs.list(path);
+  if (value.truncated) throw new ToolRefused("ls", "directory exceeds daemon entry limit");
+  return value.entries.map(({ name, kind }) => ({ name, kind }));
+}
+
+/** One classification for directory entries and lstat results. */
+function nodeKind(entry: Pick<Dirent, "isFile" | "isDirectory" | "isSymbolicLink">) {
+  if (entry.isFile()) return "file" as const;
+  if (entry.isDirectory()) return "dir" as const;
+  return entry.isSymbolicLink() ? ("symlink" as const) : ("other" as const);
 }
 
 type Endpoint = ReturnType<typeof filesystem>;

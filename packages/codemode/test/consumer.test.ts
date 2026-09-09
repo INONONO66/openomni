@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
-import { createCodemode } from "../src/index";
+import { CodemodeError, createCodemode } from "../src/index";
 
 const silent = {
   publish() {
@@ -77,15 +77,25 @@ async function pair(
   }
 }
 
+/** The CodemodeError an action throws or rejects with; any other outcome fails the test. */
+async function codemodeFailure(action: () => void): Promise<InstanceType<typeof CodemodeError>> {
+  const failure = await Promise.resolve()
+    .then(action)
+    .then(
+      () => undefined,
+      (error: Error) => error,
+    );
+  if (!(failure instanceof CodemodeError))
+    throw new Error(`expected a CodemodeError, got ${String(failure)}`);
+  return failure;
+}
+
 test("SDK handles and Python globals share raw endpoints across two machines", async () => {
   await pair(async ({ mode, a, b }) => {
     expect(mode.listMachines().map((entry) => entry.machineId)).toEqual(["A", "B"]);
     expect(mode.findMachine({ tag: "A" })).toBe(mode.getMachine("A"));
-    expect(() => mode.findMachine({ tag: "missing" })).toThrow(
-      expect.objectContaining({
-        name: "CodemodeError",
-        data: { reason: "machine_not_found", message: expect.any(String) },
-      }),
+    expect((await codemodeFailure(() => mode.findMachine({ tag: "missing" }))).data.reason).toBe(
+      "machine_not_found",
     );
     const bytes = Buffer.from([0, 255, 128, 65]);
     expect(await mode.getMachine("A").write(join(a, "source"), bytes)).toEqual({
@@ -152,7 +162,7 @@ test("cancellation crosses the real host/daemon boundary and the next cell recov
         value: "42",
       });
       await mode.close();
-      expect(() => mode.listMachines()).toThrow(expect.objectContaining({ name: "CodemodeError" }));
+      expect(() => mode.listMachines()).toThrow(CodemodeError);
     },
     {
       tools: () => async () => {
@@ -236,19 +246,13 @@ test("tag ambiguity and an unbound machine port are typed, never arbitrary selec
       },
     },
   });
-  expect(() => mode.findMachine({ tag: "same" })).toThrow(
-    expect.objectContaining({
-      name: "CodemodeError",
-      data: { reason: "ambiguous_machine", message: expect.any(String) },
-    }),
+  expect((await codemodeFailure(() => mode.findMachine({ tag: "same" }))).data.reason).toBe(
+    "ambiguous_machine",
   );
   await mode.close();
   const runner = createCodemode();
-  expect(() => runner.listMachines()).toThrow(
-    expect.objectContaining({
-      name: "CodemodeError",
-      data: { reason: "machines_not_bound", message: expect.any(String) },
-    }),
+  expect((await codemodeFailure(() => runner.listMachines())).data.reason).toBe(
+    "machines_not_bound",
   );
   await expect(
     runner.callTool({ cellId: "ghost", name: "x", arguments: {} }),
@@ -318,10 +322,8 @@ test("run leaves a held cell in the background: peek shows its output so far, st
       });
       // Another tenant cannot see, let alone stop, this cell.
       for (const op of [mode.cell.peek, mode.cell.stop]) {
-        await expect(op(started.cellId, "intruder")).rejects.toMatchObject({
-          name: "CodemodeError",
-          data: { reason: "unknown_cell_id", message: expect.any(String) },
-        });
+        const refusal = await codemodeFailure(() => op(started.cellId, "intruder"));
+        expect(refusal.data.reason).toBe("unknown_cell_id");
       }
       expect(await mode.cell.stop(started.cellId, "background")).toEqual({
         status: "cancelled",
