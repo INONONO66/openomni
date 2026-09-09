@@ -8,7 +8,7 @@ LLM provider abstraction. Handles auth (API key + proxy), provider SDK wiring, s
 
 ```
 src/
-├── index.ts          # Public API: Auth, Provider, Retry, run/Run, accounting, selection, and Sink
+├── index.ts          # Public API: Auth, Provider, ModelsDev, Retry, run/Run, accounting, selection, and Sink
 ├── run.ts            # run() + package-owned Run.Outcome; model/trace/events required
 ├── sink.ts           # Streaming callback contract: message snapshots and paired tool projections
 ├── error.ts          # Internal API/provider errors + coerceApiError (AI SDK error → typed APIError)
@@ -23,7 +23,7 @@ src/
 │   ├── index.ts      # Auth barrel
 │   └── storage.ts    # Auth get/set/all; atomic mode-0600 credential writes
 ├── provider/
-│   ├── index.ts      # Provider identity/resolution; catalog loader stays internal
+│   ├── index.ts      # Provider identity/resolution and ModelsDev namespace
 │   ├── identity.ts   # clientIdentity() — the single owner of the `pi/<version> (<platform> <kernelRelease>; <arch>)` user-agent
 │   ├── sdk.ts        # getSDK() + getLanguage() — maps Provider.Model to @ai-sdk/* instance
 │   ├── transform.ts  # ProviderTransform — message normalization, caching, per-provider variants
@@ -43,7 +43,7 @@ This section supersedes older retry/SDK-tool descriptions below. `run()` and Pro
 
 ## KEY PATTERNS
 
-- **Narrow root public API**: `src/index.ts` exports `Auth`, `Provider`, `Retry`, `selectModel`, `accumulateUsage`, `observeRetry`, `run`, package-owned `Run`, `RunInput`, and `Sink`. Catalog loading, errors and provider helpers remain internal. Do not add `ModelsDev`, `ProviderTransform`, proxy-model helpers, `Processor`, message conversion, or `TokenTracker` to the root barrel.
+- **Narrow root public API**: `src/index.ts` exports `Auth`, `Provider`, `ModelsDev`, `Retry`, `selectModel`, `accumulateUsage`, `observeRetry`, `run`, package-owned `Run`, `RunInput`, and `Sink`. `ModelsDev` exposes only `get`; the reset seam does not ship. Errors and provider helpers remain internal. Do not add `ProviderTransform`, proxy-model helpers, `Processor`, message conversion, or `TokenTracker` to the root barrel.
 - **`run()` entry point**: Takes `RunInput` (messages, schema-only tools, required model, non-empty required `trace`, required `events`, optional auth, transport, system, toolChoice, step/window/steering yield controls, providerOptions) plus a `Sink`. It performs one Processor attempt with AI SDK retries disabled (`maxRetries: 0`) and returns `Run.Outcome`. The receiving executor owns scheduling and backoff. `RunInput.model` is required; do not reintroduce model-less/noop fallback behavior.
 - **Provider.Model**: Zod schema carrying only consumed catalog metadata — identity (`id`/`providerID`/`name`/`family`), SDK routing (`api.npm`/`api.url`/`api.id`), and `limit.context`. `status`/`release_date` were stored by `fromModelsDevModel()` and read by nothing; both are gone from the schema, the mapping, the proxy stub, and the `ModelsDev.Model` input shape (a re-add without a reader fails `test/provider/integration.test.ts`). Built from `models.dev` data via `Provider.fromModelsDevModel()`; `Provider.listModels()` is the catalog lookup. Fields models.dev publishes but nothing here reads (capabilities, cost, options, headers, modalities) are deliberately absent — re-add one only together with its reader.
 - **Auth.Info** (discriminated union): `{ type: "api", key }` | `{ type: "proxy", baseURL, apiKey? }`. `Auth.set()` writes the credential file atomically with mode `0600`; malformed JSON fails loudly so a later write cannot erase credentials. `run()` uses explicit auth first and otherwise reads `Auth.get()` unless `allowAuthFallback` is false.

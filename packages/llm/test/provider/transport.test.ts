@@ -26,9 +26,13 @@ interface CapturedRequest {
  */
 async function capturedRequest(auth: Auth.Info, transport?: Transport): Promise<CapturedRequest> {
   const sdk = getSDK(anthropicModel(), auth, transport);
-  return captureRequest(() => sdk.languageModel("claude-3-haiku").doGenerate({
-    prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-  }), anthropicResponse);
+  return captureRequest(
+    () =>
+      sdk.languageModel("claude-3-haiku").doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      }),
+    anthropicResponse,
+  );
 }
 
 describe("operator transport config", () => {

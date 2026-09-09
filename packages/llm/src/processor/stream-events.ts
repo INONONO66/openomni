@@ -178,7 +178,11 @@ function applyStreamEvent(
   }
 }
 
-function startText(event: ProviderEvent, state: StreamEventState, context: StreamEventContext): void {
+function startText(
+  event: ProviderEvent,
+  state: StreamEventState,
+  context: StreamEventContext,
+): void {
   const part: Message.TextPart = {
     id: crypto.randomUUID(),
     sessionID: context.sessionID,

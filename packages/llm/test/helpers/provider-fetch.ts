@@ -2,13 +2,18 @@ import type { z } from "zod";
 
 type FetchArgs = Parameters<typeof fetch>;
 
-export function mockFetch(handler: (...args: FetchArgs) => Response | Promise<Response>): typeof fetch {
+export function mockFetch(
+  handler: (...args: FetchArgs) => Response | Promise<Response>,
+): typeof fetch {
   return Object.assign(async (...args: FetchArgs) => handler(...args), {
     preconnect: globalThis.fetch.preconnect,
   });
 }
 
-export async function captureRequest(action: () => PromiseLike<object>, response: Parameters<typeof jsonResponse>[0]) {
+export async function captureRequest(
+  action: () => PromiseLike<object>,
+  response: Parameters<typeof jsonResponse>[0],
+) {
   const original = globalThis.fetch;
   let captured: { url: string; headers: Headers } | undefined;
   globalThis.fetch = mockFetch((input, init) => {
@@ -26,8 +31,16 @@ export async function captureRequest(action: () => PromiseLike<object>, response
 
 export function openAIResponse(model: string) {
   return {
-    id: "resp-1", model,
-    output: [{ type: "message", role: "assistant", id: "msg-1", content: [{ type: "output_text", text: "ok", annotations: [] }] }],
+    id: "resp-1",
+    model,
+    output: [
+      {
+        type: "message",
+        role: "assistant",
+        id: "msg-1",
+        content: [{ type: "output_text", text: "ok", annotations: [] }],
+      },
+    ],
     usage: { input_tokens: 1, output_tokens: 1 },
   };
 }

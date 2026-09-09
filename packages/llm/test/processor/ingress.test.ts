@@ -32,29 +32,38 @@ describe("processor ingress", () => {
     });
     await processor.process({ system: "", promptText: "" });
     expect(processor.message.finish).toBe("stop");
-    expect(processorInfo(events).filter((event) => event.msg === "stream.close.failed"))
-      .toMatchObject([{ context: { error: "Error: close fixture" } }]);
+    expect(
+      processorInfo(events).filter((event) => event.msg === "stream.close.failed"),
+    ).toMatchObject([{ context: { error: "Error: close fixture" } }]);
   });
 
   test("aborts a text-only stream without waiting for tool settlement", async () => {
     const abort = new AbortController();
     const capture = capturingSink();
     const processor = createProcessor({
-      sink: capture.sink, abort: abort.signal,
-      createStream: async () => ({ fullStream: (async function* () {
-        yield { type: "text-delta", text: "partial" };
-        abort.abort();
-        yield { type: "text-end" };
-      })() }),
+      sink: capture.sink,
+      abort: abort.signal,
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield { type: "text-delta", text: "partial" };
+          abort.abort();
+          yield { type: "text-end" };
+        })(),
+      }),
     });
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ name: "AbortError" });
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
+      name: "AbortError",
+    });
     expect(capture.finalParts()).toMatchObject([{ type: "text", text: "partial" }]);
     expect(processor.message.finish).toBe("aborted");
   });
 
   test("ignores unconsumed text and reasoning wire events", async () => {
     const capture = capturingSink();
-    const processor = createProcessor({ sink: capture.sink, createStream: streamOf([{ type: "text-other" }, { type: "reasoning-other" }]) });
+    const processor = createProcessor({
+      sink: capture.sink,
+      createStream: streamOf([{ type: "text-other" }, { type: "reasoning-other" }]),
+    });
     await processor.process({ system: "", promptText: "" });
     expect(capture.finalParts()).toEqual([]);
   });

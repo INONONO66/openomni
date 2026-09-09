@@ -13,11 +13,20 @@ const RemoteModel = CatalogModel.omit({ provider: true }).optional().catch(undef
 const RemoteProvider = z.object({
   id: z.string().optional(),
   name: z.string(),
-  env: z.array(z.string().optional().catch(undefined)).transform((entries) => entries.filter((entry) => entry !== undefined)),
+  env: z
+    .array(z.string().optional().catch(undefined))
+    .transform((entries) => entries.filter((entry) => entry !== undefined)),
   npm: z.enum(["@ai-sdk/anthropic", "@ai-sdk/openai"]),
-  models: z.record(z.string(), RemoteModel).catch({}).transform((models) =>
-    Object.fromEntries(Object.entries(models).filter(([id, model]) => !PrototypeKey.has(id) && model !== undefined)),
-  ),
+  models: z
+    .record(z.string(), RemoteModel)
+    .catch({})
+    .transform((models) =>
+      Object.fromEntries(
+        Object.entries(models).filter(
+          ([id, model]) => !PrototypeKey.has(id) && model !== undefined,
+        ),
+      ),
+    ),
 });
 
 export const CatalogProvider = z.object({
@@ -31,11 +40,14 @@ export const CatalogProvider = z.object({
 export const Catalog = z.record(z.string(), CatalogProvider);
 export type Catalog = z.infer<typeof Catalog>;
 
-export const RemoteCatalog = z.record(z.string(), RemoteProvider.optional().catch(undefined)).catch({}).transform((providers): Catalog => {
-  const result: Catalog = {};
-  for (const [id, provider] of Object.entries(providers)) {
-    if (PrototypeKey.has(id) || provider === undefined) continue;
-    result[id] = CatalogProvider.parse({ ...provider, id: provider.id ?? id });
-  }
-  return result;
-});
+export const RemoteCatalog = z
+  .record(z.string(), RemoteProvider.optional().catch(undefined))
+  .catch({})
+  .transform((providers): Catalog => {
+    const result: Catalog = {};
+    for (const [id, provider] of Object.entries(providers)) {
+      if (PrototypeKey.has(id) || provider === undefined) continue;
+      result[id] = CatalogProvider.parse({ ...provider, id: provider.id ?? id });
+    }
+    return result;
+  });

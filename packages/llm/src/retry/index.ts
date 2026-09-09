@@ -5,11 +5,13 @@ import { headerDelay } from "./delay";
 const Payload = z.object({
   type: z.string().catch(""),
   code: z.string().catch(""),
-  error: z.object({
-    type: z.string().catch(""),
-    code: z.string().catch(""),
-    message: z.string().catch(""),
-  }).catch({ type: "", code: "", message: "" }),
+  error: z
+    .object({
+      type: z.string().catch(""),
+      code: z.string().catch(""),
+      message: z.string().catch(""),
+    })
+    .catch({ type: "", code: "", message: "" }),
 });
 
 export namespace Retry {
@@ -106,12 +108,7 @@ export namespace Retry {
     );
   }
 
-  /**
-   * The retry vocabulary (#532 candidate 3). Every member has a producing
-   * branch in classify() and a consuming case in the processor's typed
-   * switch — reasons are branched on as literals, never as prose. Human
-   * prose lives only in Decision.detail.
-   */
+  /** Consumers branch on this closed vocabulary, never on detail prose. */
   export type Reason =
     | "rate_limit"
     | "overloaded"
@@ -132,10 +129,7 @@ export namespace Retry {
       }
     | { readonly retry: false; readonly reason: Reason; readonly detail?: string };
 
-  /**
-   * Typed retry decision (#532 candidate 3): classification + delay in one
-   * call, failing fast when the server asks for a wait above the cap.
-   */
+  /** Terminal classification precedes probes, headers and backoff. */
   export function decide(
     attempt: number,
     error: unknown,
@@ -149,8 +143,6 @@ export namespace Retry {
         return { retry: true, reason: "validation_error", delayMs: 0 };
       return { retry: false, reason };
     }
-    // Terminal before any delay is considered: a spent balance is not a wait,
-    // so neither a retry-after header nor the transport-streak probe applies.
     if (reason === "billing") {
       return {
         retry: false,
@@ -159,9 +151,6 @@ export namespace Retry {
           "the account's quota or billing balance is exhausted — retrying cannot restore it; top up or raise the limit",
       };
     }
-    // A moderation verdict is a judgment about THIS request, not a capacity
-    // condition: the identical prompt earns the identical refusal, so it is
-    // terminal before any delay too.
     if (reason === "content_policy") {
       return {
         retry: false,
@@ -183,12 +172,14 @@ export namespace Retry {
     return selectDelay(attempt, reason, headerDelay(providerError));
   }
 
-  function selectDelay(attempt: number, reason: RetryableReason, header: ReturnType<typeof headerDelay>): Decision {
+  function selectDelay(
+    attempt: number,
+    reason: RetryableReason,
+    header: ReturnType<typeof headerDelay>,
+  ): Decision {
     if (header !== undefined) {
       if (header.ms > RETRY_HEADER_DELAY_CAP) {
-        // Only an explicit retry-after directive fails fast; an out-of-range
-        // ratelimit reset is an inference we made, so it demotes to backoff
-        // rather than killing the run.
+        // Explicit directives fail fast; inferred resets demote to backoff.
         if (header.directive) {
           return {
             retry: false,
@@ -203,12 +194,7 @@ export namespace Retry {
     return { retry: true, reason, delayMs: backoffDelayMs(attempt) };
   }
 
-  /**
-   * How much of a ladder delay jitter may subtract. Full jitter (down to 0)
-   * would let a retry land on the same tick as the failure it is backing off
-   * from; a quarter is enough to break the fleet-wide stampede that identical
-   * exponential delays produce, while keeping the backoff's shape.
-   */
+  /** Jitter subtracts at most one quarter of the ladder delay. */
   export const RETRY_JITTER_RATIO = 0.25;
 
   /**
@@ -220,8 +206,6 @@ export namespace Retry {
       RETRY_INITIAL_DELAY * RETRY_BACKOFF_FACTOR ** (attempt - 1),
       RETRY_MAX_DELAY_NO_HEADERS,
     );
-    // Rounded: the delay is a millisecond wait and a published `backoffMs`,
-    // and a fractional tail is noise in both.
     return Math.round(ladder * (1 - Math.random() * RETRY_JITTER_RATIO));
   }
 
@@ -231,22 +215,10 @@ export namespace Retry {
     return headerDelay(apiError)?.ms;
   }
 
-  /**
-   * How deep a cause chain is walked before giving up. A wrapper layer per
-   * package is the realistic shape (`llm` failure inside an app-level error);
-   * the bound also makes a self-referential `cause` terminate.
-   */
+  /** Bound traversal even for cyclic cause chains. */
   const MAX_CAUSE_DEPTH = 8;
 
-  /**
-   * The classification entry point for callers OUTSIDE the retry loop: hosts
-   * deciding what to tell a user when a run died. Unlike {@link decide} it
-   * takes any thrown value — the typed APIError, a raw AI SDK provider error
-   * (coerced), or either of those wrapped as the `cause` of a higher layer's
-   * failure — and answers with the same closed vocabulary the retry loop
-   * branches on. Hosts get the class here instead of re-matching provider
-   * prose, which is exactly the drift this vocabulary exists to prevent.
-   */
+  /** Host-facing classification shares the retry decision's provider decoder. */
   export function classifyFailure(error: unknown): Reason {
     return classify(apiCause(error));
   }
@@ -269,15 +241,11 @@ export namespace Retry {
       return "non_retryable";
     }
 
-    // Balance exhaustion outranks the provider's retryable flag: a 429 whose
-    // body says the quota is spent is not a wait, and burning the ladder on it
-    // only delays the operator's one real remedy.
+    // Billing and moderation outrank the provider's retryable flag.
     if (isBillingExhaustion(error.data.message) || isBillingExhaustion(error.data.responseBody)) {
       return "billing";
     }
 
-    // Moderation outranks the retryable flag for the same reason billing
-    // does: the verdict is about the request, and no wait changes it.
     if (
       isContentPolicyRefusal(error.data.statusCode, error.data.message) ||
       isContentPolicyRefusal(error.data.statusCode, error.data.responseBody)
@@ -295,9 +263,7 @@ export namespace Retry {
       return sniffed;
     }
 
-    // Status outranks a payload the sniffer found no specific signal in: an
-    // Anthropic 429 body ({error:{type:"rate_limit_error"}}) must classify as
-    // a rate limit, not fall into the generic server-error bucket.
+    // Status is the fallback when the payload has no recognized signal.
     const status = error.data.statusCode;
     if (status === 429) {
       return "rate_limit";
@@ -366,7 +332,10 @@ export namespace Retry {
     } catch {
       return undefined;
     }
-    const { code, error: { type: errorType, code: errorCode, message: errorMessage } } = body;
+    const {
+      code,
+      error: { type: errorType, code: errorCode, message: errorMessage },
+    } = body;
 
     if (
       body.type === "error" &&

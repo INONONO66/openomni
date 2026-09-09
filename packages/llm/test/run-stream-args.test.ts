@@ -4,9 +4,12 @@ import { useStreamCapture } from "./helpers/stream-capture";
 describe("run stream stop conditions", () => {
   const capture = useStreamCapture();
 
-  test("forwards tool choice and stops after one step with SDK retries disabled", async () => {
-    await capture.run({ toolChoice: "required", maxSteps: 7 });
-    expect(capture.args.toolChoice).toBe("required");
+  test.each([
+    { toolChoice: "required" as const, maxSteps: 7 },
+    { toolChoice: undefined, maxSteps: undefined },
+  ])("forwards choice and caps every attempt at one step: %s", async (input) => {
+    await capture.run(input);
+    expect(capture.args.toolChoice).toBe(input.toolChoice);
     expect(capture.args.maxRetries).toBe(0);
     expect(capture.stepCount).toBe(1);
     expect(capture.args.stopWhen).toHaveLength(1);
@@ -14,15 +17,6 @@ describe("run stream stop conditions", () => {
     expect(cap({ steps: [] })).toBe(false);
     expect(cap({ steps: [{}] })).toBe(true);
     expect(cap({ steps: [{}, {}] })).toBe(false);
-  });
-
-  test("defaults to the same single-step cap", async () => {
-    await capture.run();
-    expect(capture.stepCount).toBe(1);
-    expect(capture.args.stopWhen).toHaveLength(1);
-    const cap = capture.condition(0);
-    expect(cap({ steps: [] })).toBe(false);
-    expect(cap({ steps: [{}] })).toBe(true);
     expect(cap({ steps: Array.from({ length: 23 }, () => ({})) })).toBe(false);
   });
 
@@ -30,10 +24,16 @@ describe("run stream stop conditions", () => {
     await capture.run({ yieldAtInputTokens: 800 });
     expect(capture.args.stopWhen).toHaveLength(2);
     const window = capture.condition(1);
-    for (const [inputTokens, expected] of [[799, false], [800, true], [900, true]] as const) {
+    for (const [inputTokens, expected] of [
+      [799, false],
+      [800, true],
+      [900, true],
+    ] as const) {
       expect(window({ steps: [{ usage: { inputTokens } }] })).toBe(expected);
     }
-    expect(window({ steps: [{ usage: { inputTokens: 900 } }, { usage: { inputTokens: 700 } }] })).toBe(false);
+    expect(
+      window({ steps: [{ usage: { inputTokens: 900 } }, { usage: { inputTokens: 700 } }] }),
+    ).toBe(false);
     expect(window({ steps: [{}] })).toBe(false);
     expect(window({ steps: [] })).toBe(false);
   });

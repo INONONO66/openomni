@@ -42,7 +42,8 @@ export function errorFacts(error: unknown): z.infer<typeof ErrorFacts> {
   return wrapped.success ? wrapped.data.data : ErrorFacts.catch({}).parse(error);
 }
 
-const ResponseHeaders = z.record(z.string(), z.string().optional().catch(undefined))
+const ResponseHeaders = z
+  .record(z.string(), z.string().optional().catch(undefined))
   .catch({})
   .transform((headers) => {
     const result: Record<string, string> = {};

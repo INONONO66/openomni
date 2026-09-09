@@ -1,124 +1,65 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import {
-  anthropicModel as model,
-  assistantMessage as buildAssistantMessage,
-} from "../helpers/fixtures";
-import type { Message, Tool } from "@openomni/protocol";
-import type { Sink } from "../../src/sink";
-import { Bus } from "../helpers/observation";
+import { describe, expect, test } from "bun:test";
+import type { Message } from "@openomni/protocol";
 import { APIError } from "../../src/error";
-import { Processor } from "../../src/processor";
+import {
+  useProcessor,
+  capturingSink,
+  failingStream,
+  streamOf,
+  textEvents,
+} from "../helpers/processor";
+import type { StreamEvent } from "../../src/processor/stream-events";
 
-type Capture = {
-  sink: Sink;
-  messages: Message.WithParts[];
-  toolCalls: Tool.Call[];
-  toolResults: Tool.Result[];
-};
+describe("Processor fold emission", () => {
+  const { createProcessor } = useProcessor();
+  const failure = () => new APIError({ message: "failure fixture", isRetryable: true });
 
-function capture(): Capture {
-  const messages: Message.WithParts[] = [];
-  const toolCalls: Tool.Call[] = [];
-  const toolResults: Tool.Result[] = [];
-  return {
-    sink: {
-      onMessage: (message) => messages.push(message),
-      onToolCall: (call) => toolCalls.push(call),
-      onToolResult: (result) => toolResults.push(result),
-    },
-    messages,
-    toolCalls,
-    toolResults,
-  };
-}
-
-function streamOf(chunks: Array<Record<string, unknown>>) {
-  return async () => ({
-    fullStream: (async function* () {
-      yield* chunks as Array<{ type: string }>;
-    })(),
-  });
-}
-
-function createProcessor(cap: Capture, overrides: Partial<Processor.ProcessorOptions> = {}) {
-  return Processor.create({
-    assistantMessage: buildAssistantMessage("msg-fold", "session-fold", "parent-fold"),
-    sessionID: "session-fold",
-    model,
-    abort: new AbortController().signal,
-    sink: cap.sink,
-    events: Bus,
-    trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
-    createStream: streamOf([{ type: "finish" }]),
-    ...overrides,
-  });
-}
-
-function retryableError() {
-  return new APIError({
-    message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
-    isRetryable: true,
-    responseHeaders: { "retry-after-ms": "1" },
-  });
-}
-
-describe("Processor fold-based emission (#545 T2)", () => {
-  afterEach(() => {
-    Bus.reset();
-  });
-
-  test("967 provider assembly without public fact tap", async () => {
-    // Given: a billed failed attempt, then a text/tool response.
-    const cap = capture();
-    let attempts = 0;
-    const options: Partial<Processor.ProcessorOptions> = {
-      createStream: async () => ({
-        fullStream: (async function* () {
-          attempts += 1;
-          if (attempts === 1) {
-            yield {
-              type: "step-finish",
-              finishReason: "stop",
-              usage: { inputTokens: 5, outputTokens: 7 },
-            };
-            throw retryableError();
-          }
-          yield { type: "text-start" };
-          yield { type: "text-delta", text: "retained" };
-          yield { type: "text-end" };
-          yield { type: "tool-call", toolCallId: "paired", toolName: "lookup", input: {} };
-          yield { type: "tool-result", toolCallId: "paired", toolName: "lookup", output: "42" };
-          yield {
-            type: "step-finish",
-            finishReason: "stop",
-            usage: { inputTokens: 11, outputTokens: 13 },
-          };
-          yield { type: "finish" };
-        })(),
-      }),
-    };
-    const failed = createProcessor(cap, options);
-    await expect(failed.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
-    const processor = createProcessor(cap, options);
+  async function project(chunks: StreamEvent[]) {
+    const capture = capturingSink();
+    const processor = createProcessor({ sink: capture.sink, createStream: streamOf(chunks) });
     await processor.process({ system: "", promptText: "" });
+    return { capture, processor };
+  }
 
-    // Then: immutable snapshots, paired callbacks and all billed usage survive.
-    expect(attempts).toBe(2);
-    expect(cap.messages[0]?.info).toMatchObject({ tokens: { input: 0, output: 0 } });
-    const terminals = cap.messages.filter(
+  async function twoAttempts(stream: ReturnType<typeof failingStream>) {
+    const capture = capturingSink();
+    const options = { sink: capture.sink, createStream: stream };
+    const failed = createProcessor(options);
+    await expect(failed.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
+    expect(capture.messages.at(-1)?.info).toMatchObject({ finish: "error" });
+    const processor = createProcessor(options);
+    await processor.process({ system: "", promptText: "" });
+    expect(stream).toHaveBeenCalledTimes(2);
+    return { capture, failed, processor };
+  }
+
+  test("preserves separate attempt accounting and paired tool callbacks", async () => {
+    const stream = failingStream(
+      failure(),
+      [{ type: "step-finish", finishReason: "stop", usage: { inputTokens: 5, outputTokens: 7 } }],
+      [
+        ...textEvents("retained"),
+        { type: "tool-call", toolCallId: "paired", toolName: "lookup", input: {} },
+        { type: "tool-result", toolCallId: "paired", toolName: "lookup", output: "42" },
+        { type: "step-finish", finishReason: "stop", usage: { inputTokens: 11, outputTokens: 13 } },
+      ],
+    );
+    const { capture, failed, processor } = await twoAttempts(stream);
+    expect(capture.messages[0]?.info).toMatchObject({ tokens: { input: 0, output: 0 } });
+    const terminals = capture.messages.filter(
       (message) => message.info.role === "assistant" && message.info.finish !== undefined,
     );
     expect(terminals.map((message) => message.info)).toMatchObject([
       { finish: "error", tokens: { input: 5, output: 7 } },
       { finish: "stop", tokens: { input: 11, output: 13 } },
     ]);
-    expect(cap.messages.at(-1)?.parts).toMatchObject([
+    expect(capture.finalParts()).toMatchObject([
       { type: "text", text: "retained" },
       { type: "tool", callID: "paired", state: { status: "completed", output: "42" } },
       { type: "step-finish", tokens: { input: 11, output: 13 } },
     ]);
-    expect(cap.toolCalls).toEqual([{ id: "paired", tool: "lookup", input: {} }]);
-    expect(cap.toolResults).toMatchObject([{ toolCallId: "paired", output: "42" }]);
+    expect(capture.toolCalls).toEqual([{ id: "paired", tool: "lookup", input: {} }]);
+    expect(capture.toolResults).toMatchObject([{ toolCallId: "paired", output: "42" }]);
     expect(failed.usageTotals).toMatchObject({ input: 5, output: 7 });
     expect(processor.usageTotals).toEqual({
       input: 11,
@@ -128,271 +69,133 @@ describe("Processor fold-based emission (#545 T2)", () => {
     });
   });
 
-  test("emits onMessage only at part boundaries, never per token", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "text-start", providerMetadata: {} },
-        { type: "text-delta", text: "Hello" },
-        { type: "text-delta", text: " " },
-        { type: "text-delta", text: "World" },
-        { type: "text-end", providerMetadata: {} },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    // Boundaries only: part.appended (open, empty), part.advanced (completed
-    // with the full text), message.finished. Deltas emit nothing.
-    const timeline = cap.messages.map(
-      (message) =>
-        message.parts.find((part): part is Message.TextPart => part.type === "text")?.text,
-    );
-    expect(timeline).toEqual(["", "Hello World", "Hello World"]);
-    expect(cap.messages).toHaveLength(3);
+  test("emits only at part boundaries, never per token", async () => {
+    const { capture } = await project(textEvents("Hello", " ", "World"));
+    expect(capture.textTimeline).toEqual(["", "Hello World", "Hello World"]);
+    expect(capture.messages).toHaveLength(3);
   });
 
-  test("already-emitted snapshots are immune to later stream progress", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "text-start", providerMetadata: {} },
-        { type: "text-delta", text: "Hello" },
-        { type: "text-end", providerMetadata: {} },
-        {
-          type: "step-finish",
-          finishReason: "end_turn",
-          usage: { inputTokens: 10, outputTokens: 20 },
-          providerMetadata: {},
-        },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    // The snapshot captured when the text part completed must still describe
-    // that instant: no finish reason, no token totals stamped afterwards.
-    const atTextCompleted = cap.messages[1];
-    expect(atTextCompleted?.info.role).toBe("assistant");
-    if (atTextCompleted?.info.role !== "assistant") throw new Error("expected assistant info");
-    expect(atTextCompleted.info.finish).toBeUndefined();
-    expect(atTextCompleted.info.tokens.input).toBe(0);
-    expect(atTextCompleted.info.time.completed).toBeUndefined();
-
-    // While the final view carries the folded finish and usage.
+  test("later accounting cannot mutate a completed text snapshot", async () => {
+    const { capture, processor } = await project([
+      ...textEvents("Hello"),
+      {
+        type: "step-finish",
+        finishReason: "end_turn",
+        usage: { inputTokens: 10, outputTokens: 20 },
+      },
+    ]);
+    const info = capture.messages[1]?.info;
+    if (info?.role !== "assistant") throw new Error("expected assistant info");
+    expect(info.finish).toBeUndefined();
+    expect(info.tokens.input).toBe(0);
+    expect(info.time.completed).toBeUndefined();
     expect(processor.message.finish).toBe("stop");
     expect(processor.message.tokens.input).toBe(10);
   });
 
-  test("failed-attempt parts do not re-emit into the retry attempt", async () => {
-    let attemptCount = 0;
-    const cap = capture();
-    const options: Partial<Processor.ProcessorOptions> = {
-      createStream: async () => ({
-        fullStream: (async function* () {
-          attemptCount++;
-          if (attemptCount === 1) {
-            yield { type: "text-start", providerMetadata: {} };
-            yield { type: "text-delta", text: "draft that must not leak" };
-            throw retryableError();
-          }
-          yield { type: "text-start", providerMetadata: {} };
-          yield { type: "text-delta", text: "ok" };
-          yield { type: "text-end", providerMetadata: {} };
-          yield { type: "finish" };
-        })(),
-      }),
-    };
-    const failed = createProcessor(cap, options);
-    await expect(failed.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
-    const processor = createProcessor(cap, options);
-    await processor.process({ system: "", promptText: "" });
-
-    expect(attemptCount).toBe(2);
-    const finalParts = cap.messages.at(-1)?.parts ?? [];
-    const finalTexts = finalParts
-      .filter((part): part is Message.TextPart => part.type === "text")
-      .map((part) => part.text);
-    expect(finalTexts).toEqual(["ok"]);
+  test("failed-attempt parts do not leak into the next attempt", async () => {
+    const { capture } = await twoAttempts(
+      failingStream(
+        failure(),
+        [{ type: "text-start" }, { type: "text-delta", text: "draft that must not leak" }],
+        textEvents("ok"),
+      ),
+    );
+    expect(
+      capture
+        .finalParts()
+        .filter((part) => part.type === "text")
+        .map((part) => part.text),
+    ).toEqual(["ok"]);
   });
 
-  test("retry closes the failed attempt with finish error before the next attempt starts", async () => {
-    let attemptCount = 0;
-    const cap = capture();
-    const options: Partial<Processor.ProcessorOptions> = {
-      createStream: async () => ({
-        fullStream: (async function* () {
-          attemptCount++;
-          if (attemptCount === 1) {
-            yield { type: "text-start", providerMetadata: {} };
-            throw retryableError();
-          }
-          expect(cap.messages.at(-1)?.info).toMatchObject({ finish: "error" });
-          yield { type: "finish" };
-        })(),
-      }),
-    };
-    const failed = createProcessor(cap, options);
-    await expect(failed.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
-    const processor = createProcessor(cap, options);
-    await processor.process({ system: "", promptText: "" });
-
-    expect(attemptCount).toBe(2);
-    expect(cap.messages.at(-1)?.info).toMatchObject({ finish: "stop" });
+  test("closes the failed attempt before the next stream starts", async () => {
+    const { capture } = await twoAttempts(failingStream(failure(), [{ type: "text-start" }]));
+    expect(capture.messages.at(-1)?.info).toMatchObject({ finish: "stop" });
   });
 
-  test("length finish fails incomplete tool calls with no salvage", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "tool-call", toolCallId: "call-cut", toolName: "lookup", input: { q: "x" } },
-        {
-          type: "step-finish",
-          finishReason: "length",
-          usage: { inputTokens: 5, outputTokens: 9 },
-          providerMetadata: {},
-        },
-        { type: "finish" },
-      ]),
+  test("length finish fails incomplete tool calls without salvage", async () => {
+    const { capture, processor } = await project([
+      { type: "tool-call", toolCallId: "call-cut", toolName: "lookup", input: { q: "x" } },
+      { type: "step-finish", finishReason: "length", usage: { inputTokens: 5, outputTokens: 9 } },
+    ]);
+    expect(capture.finalParts()[0]).toMatchObject({
+      type: "tool",
+      state: { status: "error", error: "truncated output: tool call incomplete" },
     });
-
-    await processor.process({ system: "", promptText: "" });
-
-    const toolPart = cap.messages
-      .at(-1)
-      ?.parts.find((part): part is Message.ToolPart => part.type === "tool");
-    expect(toolPart?.state.status).toBe("error");
-    if (toolPart?.state.status !== "error") throw new Error("expected error tool state");
-    expect(toolPart.state.error).toBe("truncated output: tool call incomplete");
-    // finish=length is never rewritten.
     expect(processor.message.finish).toBe("length");
-    expect(cap.toolResults).toHaveLength(1);
-    expect(cap.toolResults[0]).toMatchObject({ toolCallId: "call-cut", isError: true });
+    expect(capture.toolResults).toMatchObject([{ toolCallId: "call-cut", isError: true }]);
   });
 
-  test("opens a text block for an orphan text-delta (malformed sequence normalization)", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "text-delta", text: "orphan" },
-        { type: "text-end", providerMetadata: {} },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    const texts = (cap.messages.at(-1)?.parts ?? [])
-      .filter((part): part is Message.TextPart => part.type === "text")
-      .map((part) => part.text);
-    expect(texts).toEqual(["orphan"]);
-  });
-
-  test("ignores a duplicate block end", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "text-start", providerMetadata: {} },
-        { type: "text-delta", text: "once" },
-        { type: "text-end", providerMetadata: {} },
-        { type: "text-end", providerMetadata: {} },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    const texts = (cap.messages.at(-1)?.parts ?? [])
-      .filter((part): part is Message.TextPart => part.type === "text")
-      .map((part) => part.text);
-    expect(texts).toEqual(["once"]);
-  });
-
-  test("closes an open text block before a second start", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "text-start", providerMetadata: {} },
+  test.each<{ name: string; chunks: StreamEvent[]; expected: string[] }>([
+    {
+      name: "orphan delta",
+      chunks: [{ type: "text-delta", text: "orphan" }, { type: "text-end" }],
+      expected: ["orphan"],
+    },
+    {
+      name: "duplicate end",
+      chunks: [...textEvents("once"), { type: "text-end" }],
+      expected: ["once"],
+    },
+    {
+      name: "repeated start",
+      chunks: [
+        { type: "text-start" },
         { type: "text-delta", text: "first" },
-        { type: "text-start", providerMetadata: {} },
-        { type: "text-delta", text: "second" },
-        { type: "text-end", providerMetadata: {} },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    const texts = (cap.messages.at(-1)?.parts ?? [])
-      .filter((part): part is Message.TextPart => part.type === "text")
-      .map((part) => part.text);
-    expect(texts).toEqual(["first", "second"]);
+        ...textEvents("second"),
+      ],
+      expected: ["first", "second"],
+    },
+  ])("normalizes text $name", async ({ chunks, expected }) => {
+    const { capture } = await project(chunks);
+    expect(
+      capture
+        .finalParts()
+        .filter((part) => part.type === "text")
+        .map((part) => part.text),
+    ).toEqual(expected);
   });
 
   test("opens and settles reasoning for an orphan delta", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "reasoning-delta", id: "orphan", text: "inferred start" },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    const reasoning = cap.messages
-      .at(-1)
-      ?.parts.find((part): part is Message.ReasoningPart => part.type === "reasoning");
-    expect(reasoning?.text).toBe("inferred start");
-    expect(reasoning?.time.end).toBeNumber();
+    const { capture } = await project([
+      { type: "reasoning-delta", id: "orphan", text: "inferred start" },
+    ]);
+    const part = capture
+      .finalParts()
+      .find((part): part is Message.ReasoningPart => part.type === "reasoning");
+    expect(part?.text).toBe("inferred start");
+    expect(part?.time.end).toBeNumber();
   });
 
   test("ignores a duplicate reasoning end", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "reasoning-start", id: "r1" },
-        { type: "reasoning-delta", id: "r1", text: "once" },
-        { type: "reasoning-end", id: "r1" },
-        { type: "reasoning-end", id: "r1" },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    const reasoning = (cap.messages.at(-1)?.parts ?? []).filter(
-      (part): part is Message.ReasoningPart => part.type === "reasoning",
-    );
-    expect(reasoning).toHaveLength(1);
-    expect(reasoning[0]?.text).toBe("once");
+    const { capture } = await project([
+      { type: "reasoning-start", id: "r1" },
+      { type: "reasoning-delta", id: "r1", text: "once" },
+      { type: "reasoning-end", id: "r1" },
+      { type: "reasoning-end", id: "r1" },
+    ]);
+    expect(capture.finalParts().filter((part) => part.type === "reasoning")).toMatchObject([
+      { text: "once" },
+    ]);
   });
 
-  test("captures the provider reasoning signature on the completed part", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "reasoning-start", id: "r1", providerMetadata: {} },
-        { type: "reasoning-delta", id: "r1", text: "thinking" },
-        {
-          type: "reasoning-delta",
-          id: "r1",
-          text: "",
-          providerMetadata: { anthropic: { signature: "sig-abc" } },
-        },
-        { type: "reasoning-end", id: "r1" },
-        { type: "finish" },
-      ]),
+  test("retains the provider reasoning signature on the completed part", async () => {
+    const { capture } = await project([
+      { type: "reasoning-start", id: "r1" },
+      { type: "reasoning-delta", id: "r1", text: "thinking" },
+      {
+        type: "reasoning-delta",
+        id: "r1",
+        text: "",
+        providerMetadata: { anthropic: { signature: "sig-abc" } },
+      },
+      { type: "reasoning-end", id: "r1" },
+    ]);
+    expect(capture.finalParts()[0]).toMatchObject({
+      type: "reasoning",
+      text: "thinking",
+      signature: "sig-abc",
     });
-
-    await processor.process({ system: "", promptText: "" });
-
-    const reasoning = cap.messages
-      .at(-1)
-      ?.parts.find((part): part is Message.ReasoningPart => part.type === "reasoning");
-    expect(reasoning?.text).toBe("thinking");
-    expect(reasoning?.signature).toBe("sig-abc");
   });
 });

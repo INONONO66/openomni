@@ -83,7 +83,9 @@ describe("ModelsDev", () => {
 
   it("uses OPENOMNI_MODELS_PATH for cache location", async () => {
     process.env.OPENOMNI_MODELS_PATH = join(directory, "custom.json");
-    const cached = { custom: { id: "custom", name: "Custom", env: [], npm: "@ai-sdk/openai", models: {} } };
+    const cached = {
+      custom: { id: "custom", name: "Custom", env: [], npm: "@ai-sdk/openai", models: {} },
+    };
     await Bun.write(process.env.OPENOMNI_MODELS_PATH, JSON.stringify(cached));
     expect(await ModelsDev.get()).toEqual(cached);
     expect(network).not.toHaveBeenCalled();
@@ -103,7 +105,9 @@ describe("ModelsDev", () => {
   it("keeps a fetched catalog usable when its cache cannot be written", async () => {
     delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
     process.env.OPENOMNI_MODELS_PATH = directory;
-    const remote = { openai: { id: "openai", name: "OpenAI", env: [], npm: "@ai-sdk/openai", models: {} } };
+    const remote = {
+      openai: { id: "openai", name: "OpenAI", env: [], npm: "@ai-sdk/openai", models: {} },
+    };
     globalThis.fetch = mockFetch(() => jsonResponse(remote));
     expect(await ModelsDev.get()).toEqual(remote);
   });

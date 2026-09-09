@@ -147,9 +147,13 @@ describe("Provider Integration", () => {
       api: { npm: "@ai-sdk/openai", url: "http://localhost:9317/v1" },
     };
     const lm = getLanguage(model, auth);
-    const { url } = await captureRequest(() => lm.doGenerate({
-      prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-    }), openAIResponse(model.id));
+    const { url } = await captureRequest(
+      () =>
+        lm.doGenerate({
+          prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        }),
+      openAIResponse(model.id),
+    );
     expect(lm.provider).toBe("openai.responses");
     expect(url).toBe("http://localhost:9317/v1/responses");
   });

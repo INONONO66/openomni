@@ -40,6 +40,7 @@ describe("@openomni/llm root public surface", () => {
     // #500 C1: `Run` (Outcome vocabulary) moved here from protocol; `Sink` is type-only.
     expect(publicKeys).toEqual([
       "Auth",
+      "ModelsDev",
       "Provider",
       "Retry",
       "Run",
@@ -56,7 +57,6 @@ describe("@openomni/llm root public surface", () => {
 
     // When: implementation helpers are checked on the root object.
     const removedExports = [
-      "ModelsDev",
       "ProviderTransform",
       "fetchProxyModels",
       "enrichWithCatalog",

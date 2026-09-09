@@ -22,7 +22,11 @@ export function useStreamCapture() {
   let args: Arguments | undefined;
   let stepCount: number | undefined;
   let chunks: StreamEvent[];
-  const sink: Sink = { onMessage: () => undefined, onToolCall: () => undefined, onToolResult: () => undefined };
+  const sink: Sink = {
+    onMessage: () => undefined,
+    onToolCall: () => undefined,
+    onToolResult: () => undefined,
+  };
   const events = collector();
   beforeEach(() => {
     args = undefined;
@@ -32,7 +36,11 @@ export function useStreamCapture() {
     mock.module("ai", () => ({
       streamText: (input: Arguments) => {
         args = input;
-        return { fullStream: (async function* () { yield* chunks; })() };
+        return {
+          fullStream: (async function* () {
+            yield* chunks;
+          })(),
+        };
       },
       jsonSchema: (schema: PlainObject) => ({ jsonSchema: schema }),
       stepCountIs: (count: number): Condition => {
@@ -52,17 +60,34 @@ export function useStreamCapture() {
       if (condition === undefined) throw new Error(`Missing stop condition ${index}`);
       return condition;
     },
-    get stepCount() { return stepCount; },
-    stream(events: StreamEvent[]) { chunks = events; },
+    get stepCount() {
+      return stepCount;
+    },
+    stream(events: StreamEvent[]) {
+      chunks = events;
+    },
     run(overrides: Partial<RunInput> = {}, output: Sink = sink) {
-      return run({
-        trace: { traceId: "trace-stream-capture", sessionId: "session-stream-capture", runId: "run-stream-capture" },
-        events,
-        messages: [], tools: [],
-        auth: { type: "api", key: "test-key-stream-capture" },
-        model: { id: "claude-3-haiku", providerID: "__test_stream_capture__", name: "test", api: { npm: "@ai-sdk/anthropic" } },
-        ...overrides,
-      }, output);
+      return run(
+        {
+          trace: {
+            traceId: "trace-stream-capture",
+            sessionId: "session-stream-capture",
+            runId: "run-stream-capture",
+          },
+          events,
+          messages: [],
+          tools: [],
+          auth: { type: "api", key: "test-key-stream-capture" },
+          model: {
+            id: "claude-3-haiku",
+            providerID: "__test_stream_capture__",
+            name: "test",
+            api: { npm: "@ai-sdk/anthropic" },
+          },
+          ...overrides,
+        },
+        output,
+      );
     },
   };
 }

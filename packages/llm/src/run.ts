@@ -1,8 +1,7 @@
 import type { BusEvent, Message, PlainObject, Tool } from "@openomni/protocol";
-import { LlmCall, Operational, PlainObjectSchema, type Transcript } from "@openomni/protocol";
+import { LlmCall, type Transcript } from "@openomni/protocol";
 import { z } from "zod";
 import type { Sink } from "./sink";
-import type { SDKMessage } from "./message";
 import { Processor } from "./processor";
 import { toModelMessages } from "./message";
 import type { Provider } from "./provider";
@@ -10,10 +9,8 @@ import { ProviderTransform } from "./provider/transform";
 import { getLanguage, type Transport } from "./provider/sdk";
 import { Auth } from "./auth/storage";
 import { coerceApiError, errorFacts, NamedError } from "./error";
-import { adaptStream, streamTools } from "./provider/stream";
+import { adaptStream, streamArguments } from "./provider/stream";
 import { Retry } from "./retry";
-
-const ProviderOptions = z.record(z.string(), PlainObjectSchema);
 
 /**
  * Input for the run() function.
@@ -245,58 +242,9 @@ export async function run(
 
     const languageModel = getLanguage(model, auth, input.transport);
 
-    const normalizedMessages = toModelMessages(messages, model);
-
-    // #532 cache policy: breakpoints on the last tool definition and the
-    // system message (the latest-user breakpoint is placed inside
-    // toModelMessages). Namespaced under `anthropic`, absent for other providers.
-    const cacheOptions = ProviderTransform.anthropicCacheOptions(model);
-    const systemMessages: SDKMessage[] = streamInput.system
-      ? [
-          {
-            role: "system" as const,
-            content: streamInput.system,
-            ...(cacheOptions && { providerOptions: cacheOptions }),
-          },
-        ]
-      : [];
-
-    const sdkTools = streamTools(input.tools, wireNames, model);
-
-    const shouldYield = input.shouldYield;
-    const streamArgs = {
-      model: languageModel,
-      messages: [...systemMessages, ...normalizedMessages],
-      tools: sdkTools,
-      toolChoice: input.toolChoice,
-      ...(input.maxTokens === undefined ? {} : { maxOutputTokens: input.maxTokens }),
-      maxRetries: 0,
-      stopWhen: [
-        ai.stepCountIs(1),
-        ...(input.yieldAtInputTokens === undefined
-          ? []
-          : [
-              ({ steps }: { steps: ReadonlyArray<{ usage?: { inputTokens?: number } }> }) =>
-                (steps[steps.length - 1]?.usage?.inputTokens ?? 0) >=
-                (input.yieldAtInputTokens as number),
-            ]),
-        ...(shouldYield === undefined ? [] : [() => shouldYield()]),
-      ],
-      onError: ({ error }: { error: unknown }) => {
-        input.events.publish(Operational.Events.Error, {
-          traceId,
-          time: Date.now(),
-          sessionId: sessionID,
-          component: "llm.stream",
-          msg: "streamText error",
-          error: String(error),
-        });
-      },
-      abortSignal: abortSignal,
-      // Provider namespaces cannot overwrite call-owned arguments.
-      ...(input.providerOptions !== undefined && { providerOptions: ProviderOptions.parse(input.providerOptions) }),
-    };
-    const streamResult = ai.streamText(streamArgs);
+    const streamResult = ai.streamText(
+      streamArguments(input, streamInput.system, abortSignal, wireNames, languageModel),
+    );
     return { fullStream: adaptStream(streamResult.fullStream) };
   };
   const provider = model.providerID;
@@ -408,4 +356,3 @@ export async function run(
     return { type: "error", error: failure };
   }
 }
-

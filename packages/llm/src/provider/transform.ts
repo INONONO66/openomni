@@ -11,10 +11,7 @@ export namespace ProviderTransform {
   type ToolContentPart = Extract<SDKMessage, { role: "tool" }>["content"][number];
   type NormalizableContentPart = Exclude<SDKMessage["content"], string>[number];
 
-  export function normalizeMessages(
-    msgs: SDKMessage[],
-    model: Provider.Model,
-  ): SDKMessage[] {
+  export function normalizeMessages(msgs: SDKMessage[], model: Provider.Model): SDKMessage[] {
     if (isAnthropicPackage(model.api?.npm)) {
       return normalizeAnthropic(msgs, model.id);
     }

@@ -152,20 +152,10 @@ describe("run", () => {
       responseHeaders: { "retry-after-ms": "1234" },
       contextOverflow: true,
     });
-    mock.module("ai", () => ({
-      streamText: () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "finish-step",
-            finishReason: "error",
-            usage: { inputTokens: 17, outputTokens: 5 },
-          };
-          yield { type: "error", error: source };
-        })(),
-      }),
-      jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
-      stepCountIs: () => () => false,
-    }));
+    mockStreamChunks = [
+      { type: "finish-step", finishReason: "error", usage: { inputTokens: 17, outputTokens: 5 } },
+      { type: "error", error: source },
+    ];
 
     const outcome = await run(
       { trace: TEST_TRACE, events: Bus, messages: [], tools: [], model: testModel, auth: testAuth },
@@ -176,14 +166,14 @@ describe("run", () => {
     if (outcome.type !== "error" || !(outcome.error instanceof Error)) {
       throw new Error("expected a typed failure");
     }
-    const failure = outcome.error as InstanceType<typeof import("../src/run").Run.FailureError>;
+    const failure = outcome.error;
     expect(failure.data).toMatchObject({
       retryAfterMs: 1_234,
       usage: { inputTokens: 17, outputTokens: 5 },
       aborted: false,
       contextOverflow: true,
     });
-    expect((failure.cause as Error).cause).toBe(source);
+    expect(failure.cause).toMatchObject({ cause: source });
   });
 
   test("preserves a provider abort fact in the aborted outcome", async () => {
@@ -191,15 +181,7 @@ describe("run", () => {
       isRetryable: false,
       aborted: true,
     });
-    mock.module("ai", () => ({
-      streamText: () => ({
-        fullStream: (async function* () {
-          yield { type: "error", error: source };
-        })(),
-      }),
-      jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
-      stepCountIs: () => () => false,
-    }));
+    mockStreamChunks = [{ type: "error", error: source }];
 
     const outcome = await run(
       { trace: TEST_TRACE, events: Bus, messages: [], tools: [], model: testModel, auth: testAuth },
@@ -209,7 +191,7 @@ describe("run", () => {
     expect(outcome.type).toBe("aborted");
     if (outcome.type !== "aborted") throw new Error("expected an aborted outcome");
     expect(outcome.error?.data.aborted).toBe(true);
-    expect((outcome.error?.cause as Error).cause).toBe(source);
+    expect(outcome.error?.cause).toMatchObject({ cause: source });
   });
 
   test("publishes LlmCall.Events.Failed on error so every Started call terminates", async () => {

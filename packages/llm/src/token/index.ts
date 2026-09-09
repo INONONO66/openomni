@@ -38,8 +38,18 @@ export namespace TokenTracker {
     const { usage, providerMetadata: metadata } = UsageResponse.parse(response);
     const { inputTokenDetails: input, outputTokenDetails: output } = usage;
     return {
-      inputTokens: requiredCount(usage, ["inputTokens", "input_tokens", "promptTokens", "prompt_tokens"]),
-      outputTokens: requiredCount(usage, ["outputTokens", "output_tokens", "completionTokens", "completion_tokens"]),
+      inputTokens: requiredCount(usage, [
+        "inputTokens",
+        "input_tokens",
+        "promptTokens",
+        "prompt_tokens",
+      ]),
+      outputTokens: requiredCount(usage, [
+        "outputTokens",
+        "output_tokens",
+        "completionTokens",
+        "completion_tokens",
+      ]),
       reasoningTokens: firstCount(
         output.reasoningTokens,
         usage.reasoningTokens,
@@ -71,7 +81,10 @@ function firstCount(...values: Array<number | undefined>): number {
 }
 
 /** Presence, not validity, decides which required alias owns the count. */
-function requiredCount<Key extends string>(usage: Partial<Record<Key, number | undefined>>, keys: readonly Key[]): number | undefined {
+function requiredCount<Key extends string>(
+  usage: Partial<Record<Key, number | undefined>>,
+  keys: readonly Key[],
+): number | undefined {
   for (const key of keys) {
     if (key in usage) return usage[key];
   }

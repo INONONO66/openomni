@@ -6,11 +6,37 @@ import { APIError } from "../src/error";
 describe("public accounting and attempt classification", () => {
   test("accumulates billed counts without billing auxiliary counters twice", () => {
     const total: Token.AgentUsage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
-    accumulateUsage(total, { inputTokens: 4, outputTokens: 5, reasoningTokens: 6, cacheReadTokens: 7, cacheWriteTokens: 8 });
-    expect(total).toEqual({ inputTokens: 5, outputTokens: 7, totalTokens: 12, reasoningTokens: 6, cacheReadTokens: 7, cacheWriteTokens: 8 });
+    accumulateUsage(total, {
+      inputTokens: 4,
+      outputTokens: 5,
+      reasoningTokens: 6,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 8,
+    });
+    expect(total).toEqual({
+      inputTokens: 5,
+      outputTokens: 7,
+      totalTokens: 12,
+      reasoningTokens: 6,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 8,
+    });
     accumulateUsage(total, { inputTokens: 0, outputTokens: 0 });
-    accumulateUsage(total, { inputTokens: 2, outputTokens: 3, reasoningTokens: 1, cacheReadTokens: 2, cacheWriteTokens: 3 });
-    expect(total).toEqual({ inputTokens: 7, outputTokens: 10, totalTokens: 17, reasoningTokens: 7, cacheReadTokens: 9, cacheWriteTokens: 11 });
+    accumulateUsage(total, {
+      inputTokens: 2,
+      outputTokens: 3,
+      reasoningTokens: 1,
+      cacheReadTokens: 2,
+      cacheWriteTokens: 3,
+    });
+    expect(total).toEqual({
+      inputTokens: 7,
+      outputTokens: 10,
+      totalTokens: 17,
+      reasoningTokens: 7,
+      cacheReadTokens: 9,
+      cacheWriteTokens: 11,
+    });
   });
 
   test.each([

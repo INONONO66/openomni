@@ -191,7 +191,10 @@ describe("ModelsDev catalog loading", () => {
 
     it("should not let prototype keys mutate sanitized catalog objects", async () => {
       const provider = {
-        id: "safe", name: "Safe", env: [], npm: "@ai-sdk/openai",
+        id: "safe",
+        name: "Safe",
+        env: [],
+        npm: "@ai-sdk/openai",
         models: { ["__proto__"]: { id: "bad", name: "Bad" }, safe: { id: "safe", name: "Safe" } },
       };
       await writeCacheCatalog(JSON.stringify({ ["__proto__"]: provider, safe: provider }));

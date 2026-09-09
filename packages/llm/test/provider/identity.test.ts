@@ -44,18 +44,26 @@ function openAICompatibleModel(): Provider.Model {
  */
 async function capturedRequestHeaders(auth: Auth.Info): Promise<Headers> {
   const sdk = getSDK(anthropicModel(), auth);
-  const { headers } = await captureRequest(() => sdk.languageModel("claude-3-haiku").doGenerate({
-    prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-  }), anthropicResponse);
+  const { headers } = await captureRequest(
+    () =>
+      sdk.languageModel("claude-3-haiku").doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      }),
+    anthropicResponse,
+  );
   return headers;
 }
 
 async function capturedOpenAIRequest(
   model: Provider.Model,
 ): Promise<{ readonly url: string; readonly headers: Headers }> {
-  return captureRequest(() => getLanguage(model, { type: "api", key: `sk-identity-${model.providerID}` }).doGenerate({
-    prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-  }), openAIResponse(model.id));
+  return captureRequest(
+    () =>
+      getLanguage(model, { type: "api", key: `sk-identity-${model.providerID}` }).doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      }),
+    openAIResponse(model.id),
+  );
 }
 
 describe("clientIdentity", () => {
@@ -71,9 +79,9 @@ describe("clientIdentity", () => {
   });
 
   test("reports the package manifest's version", async () => {
-    const manifest = z.object({ version: z.string() }).parse(
-      await Bun.file(new URL("../../package.json", import.meta.url)).json(),
-    );
+    const manifest = z
+      .object({ version: z.string() })
+      .parse(await Bun.file(new URL("../../package.json", import.meta.url)).json());
 
     expect(clientIdentity.version).toBe(manifest.version);
   });

@@ -9,7 +9,9 @@ describe("run provider options", () => {
   test("keeps provider namespaces nested without overwriting call-owned arguments", async () => {
     const options = {
       anthropic: { thinking: { type: "enabled", budgetTokens: 1024 } },
-      abortSignal: { clobbered: true }, maxRetries: { clobbered: true }, tools: { clobbered: true },
+      abortSignal: { clobbered: true },
+      maxRetries: { clobbered: true },
+      tools: { clobbered: true },
     };
     await capture.run({
       tools: [{ name: "lookup", description: "look", inputSchema: { type: "object" } }],
@@ -37,9 +39,12 @@ describe("run provider options", () => {
     try {
       await capture.run();
       capture.args.onError({ error: new Error("upstream exploded") });
-      const errors = capture.events.named(Operational.Events.Error.name)
+      const errors = capture.events
+        .named(Operational.Events.Error.name)
         .map((event) => Operational.Events.Error.schema.parse(event));
-      expect(errors).toMatchObject([{ component: "llm.stream", error: "Error: upstream exploded" }]);
+      expect(errors).toMatchObject([
+        { component: "llm.stream", error: "Error: upstream exploded" },
+      ]);
       expect(globalPublish).not.toHaveBeenCalled();
     } finally {
       globalPublish.mockRestore();

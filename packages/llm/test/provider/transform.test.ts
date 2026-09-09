@@ -7,6 +7,21 @@ function makeModel(providerID: string, id: string): Provider.Model {
   return { id, name: id, providerID, api: { npm: `@ai-sdk/${providerID}` } };
 }
 
+function toolCallPart(toolCallId: string) {
+  return { type: "tool-call" as const, toolCallId, toolName: "test", input: {} };
+}
+
+function assistantParts(
+  model: Provider.Model,
+  content: Exclude<Extract<ModelMessage, { role: "assistant" }>["content"], string>,
+) {
+  const result = ProviderTransform.normalizeMessages([{ role: "assistant", content }], model);
+  expect(result).toHaveLength(1);
+  const parts = result[0]?.content;
+  if (!Array.isArray(parts)) throw new TypeError("expected array content");
+  return parts;
+}
+
 describe("ProviderTransform.normalizeMessages", () => {
   const anthropicModel = makeModel("anthropic", "claude-sonnet-4-20250514");
   const openaiModel = makeModel("openai", "gpt-4o");
@@ -67,24 +82,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic sanitizes toolCallId for claude models", () => {
-    const msgs: ModelMessage[] = [
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "call.with.dots/and/slashes",
-            toolName: "test",
-            input: {},
-          },
-        ],
-      },
-    ];
-    const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect(result).toHaveLength(1);
-    const content = result[0]?.content;
-    if (!Array.isArray(content)) throw new TypeError("expected array content");
-    const part = content[0];
+    const part = assistantParts(anthropicModel, [toolCallPart("call.with.dots/and/slashes")])[0];
     if (part?.type !== "tool-call") throw new TypeError("expected a tool-call part");
     expect(part.toolCallId).toBe("call_with_dots_and_slashes");
   });
@@ -116,14 +114,7 @@ describe("ProviderTransform.normalizeMessages", () => {
     const msgs: ModelMessage[] = [
       {
         role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "call.with.dots",
-            toolName: "test",
-            input: {},
-          },
-        ],
+        content: [toolCallPart("call.with.dots")],
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, nonClaudeAnthropicModel);
@@ -132,24 +123,10 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("preserves non-text parts like tool-call in anthropic filtering", () => {
-    const msgs: ModelMessage[] = [
-      {
-        role: "assistant",
-        content: [
-          { type: "text", text: "" },
-          {
-            type: "tool-call",
-            toolCallId: "abc123",
-            toolName: "test",
-            input: {},
-          },
-        ],
-      },
-    ];
-    const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect(result).toHaveLength(1);
-    const content = result[0]?.content;
-    if (!Array.isArray(content)) throw new TypeError("expected array content");
+    const content = assistantParts(anthropicModel, [
+      { type: "text", text: "" },
+      toolCallPart("abc123"),
+    ]);
     expect(content.length).toBe(1);
     expect(content[0]?.type).toBe("tool-call");
   });

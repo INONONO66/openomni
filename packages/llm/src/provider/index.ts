@@ -144,3 +144,4 @@ export namespace Provider {
   }
 }
 
+export { ModelsDev } from "../model";

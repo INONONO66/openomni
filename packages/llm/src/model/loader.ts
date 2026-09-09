@@ -11,14 +11,21 @@ async function snapshot(): Promise<Catalog> {
 
 async function loadCatalog(loadSnapshot: () => Promise<Catalog>): Promise<Catalog> {
   const path = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
-  const cached = RemoteCatalog.parse(await Bun.file(path).json().catch(() => undefined));
+  const cached = RemoteCatalog.parse(
+    await Bun.file(path)
+      .json()
+      .catch(() => undefined),
+  );
   if (Object.keys(cached).length > 0) return cached;
 
   if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
     try {
-      const response = await fetch(`${process.env.OPENOMNI_MODELS_URL || "https://models.dev"}/api.json`, {
-        signal: AbortSignal.timeout(10_000),
-      });
+      const response = await fetch(
+        `${process.env.OPENOMNI_MODELS_URL || "https://models.dev"}/api.json`,
+        {
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
       if (response.ok) {
         const data = RemoteCatalog.parse(await response.json());
         // Cache persistence is optional; a successful response remains usable.
@@ -38,7 +45,9 @@ async function loadCatalog(loadSnapshot: () => Promise<Catalog>): Promise<Catalo
 }
 
 /** Each owner gets one lazy catalog; tests replace the owner rather than shipping a reset API. */
-export function createCatalogLoader(loadSnapshot: () => Promise<Catalog> = snapshot): () => Promise<Catalog> {
+export function createCatalogLoader(
+  loadSnapshot: () => Promise<Catalog> = snapshot,
+): () => Promise<Catalog> {
   let loaded: Promise<Catalog> | undefined;
   return () => {
     loaded ??= loadCatalog(loadSnapshot);
