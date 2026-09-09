@@ -2,16 +2,10 @@ import { expect, test } from "bun:test";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
 import { SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { z } from "zod";
-import type { Message, PolicyRow } from "@openomni/protocol";
+import type { PolicyRow } from "@openomni/protocol";
 import { session, closeSessions, type SessionRuntime } from "../../../src/session-handle";
-import { createSessionChatRunner } from "../../../src/session-chat-runner";
-import {
-  createTurnDispatcher,
-  defineTool,
-  eraseTool,
-  sessionTool,
-} from "../../../src/tool-dispatcher";
-import { createAssistantMessage } from "../../../src/core/message-factory";
+import { defineTool, eraseTool, sessionTool } from "../../../src/tool-dispatcher";
+import { assistantStep, dispatchingRunner } from "../../helpers/dispatching-runner";
 
 async function scenario(
   mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "prior-alarm",
@@ -72,55 +66,30 @@ async function scenario(
         }),
       ),
     ];
-    const runner = createSessionChatRunner({
-      prepare(input) {
-        const dispatcher = createTurnDispatcher(definitions, input, runtime);
-        return {
-          traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
-          config: {
-            events: { publish: () => undefined },
-            executor: dispatcher.executor,
-            model: { provider: "test", id: "test" },
-            tools: [...dispatcher.specs],
-            toolWave: (calls, signal) =>
-              dispatcher.executeWave(calls, {
-                sessionId: input.sessionId,
-                turnId: input.turnId,
-                signal,
-              }),
-            toolExecutor: (call) =>
-              dispatcher.execute(call, { sessionId: input.sessionId, turnId: input.turnId }),
-            llm: {
-              resolveModel: async () => ({ providerID: "test", id: "test", name: "test" }),
-              run: async (_request, sink) => {
-                calls += 1;
-                const message: Message.WithParts = createAssistantMessage(
-                  mode === "stall" || mode === "blocked"
-                    ? `attempt ${calls}`
-                    : mode === "prior-alarm"
-                      ? ""
-                      : "same",
-                  "",
-                  input.sessionId,
-                );
-                if (mode !== "stall" && mode !== "prior-alarm")
-                  message.parts.push({
-                    id: `tool-${calls}`,
-                    messageID: message.info.id,
-                    sessionID: input.sessionId,
-                    type: "tool",
-                    callID: `call-${calls}`,
-                    tool: "loop",
-                    state: { status: "pending", input: {} },
-                  });
-                sink.onMessage(message);
-                return { type: "stop" };
-              },
-            },
-          },
-        };
+    const runner = dispatchingRunner(
+      definitions,
+      () => runtime,
+      async (_request, sink, input) => {
+        calls += 1;
+        const text =
+          mode === "stall" || mode === "blocked"
+            ? `attempt ${calls}`
+            : mode === "prior-alarm"
+              ? ""
+              : "same";
+        sink.onMessage(
+          assistantStep(
+            text,
+            input.sessionId,
+            "",
+            mode === "stall" || mode === "prior-alarm"
+              ? undefined
+              : { id: `tool-${calls}`, callID: `call-${calls}`, tool: "loop" },
+          ),
+        );
+        return { type: "stop" };
       },
-    });
+    );
     const handle = session(
       { id: "stop", role: "resident", runner, tools: definitions.map(sessionTool) },
       runtime,

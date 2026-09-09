@@ -26,6 +26,24 @@ function observeRunTerminals() {
   };
 }
 
+/** Resolves with the `agent.run.failed` operational record; call `unsubscribe` in `finally`. */
+function awaitRunFailed() {
+  const failed = Promise.withResolvers<{
+    error?: string;
+    context?: { reason?: string; attempt?: number; maxAttempts?: number };
+  }>();
+  const unsubscribe = Bus.subscribe(Operational.Events.Error, (event) => {
+    if (event.msg === "agent.run.failed") failed.resolve(event);
+  });
+  return { promise: failed.promise, unsubscribe };
+}
+
+/** A timed-out provider whose every attempt fails with a retryable 408. */
+const timingOutLlm = mockLlm(async () => ({
+  type: "error",
+  error: providerFailure("connection timeout", { statusCode: 408 }),
+}));
+
 describe("one terminal record per started run", () => {
   it("records ordinary completion with charged turns", async () => {
     const records = observeRunTerminals();
@@ -76,26 +94,18 @@ describe("one terminal record per started run", () => {
     jest.useFakeTimers();
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    const failed = Promise.withResolvers<{
-      context?: { reason?: string; attempt?: number; maxAttempts?: number };
-    }>();
     let retries = 0;
     const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, () => {
       retries += 1;
       if (retries === 1) first.resolve();
       else second.resolve();
     });
-    const unsubscribeFailed = Bus.subscribe(Operational.Events.Error, (event) => {
-      if (event.msg === "agent.run.failed") failed.resolve(event);
-    });
+    const failed = awaitRunFailed();
     try {
       const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
-        llm: mockLlm(async () => ({
-          type: "error",
-          error: providerFailure("connection timeout", { statusCode: 408 }),
-        })),
+        llm: timingOutLlm,
       });
       await first.promise;
       jest.advanceTimersByTime(1_000);
@@ -108,7 +118,7 @@ describe("one terminal record per started run", () => {
         maxAttempts: 3,
       });
     } finally {
-      unsubscribeFailed();
+      failed.unsubscribe();
       unsubscribeRetry();
       jest.useRealTimers();
     }
@@ -118,22 +128,14 @@ describe("one terminal record per started run", () => {
     const records = observeRunTerminals();
     const controller = new AbortController();
     const retry = Promise.withResolvers<void>();
-    const failed = Promise.withResolvers<{
-      context?: { reason?: string; attempt?: number; maxAttempts?: number };
-    }>();
     const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
-    const unsubscribeFailed = Bus.subscribe(Operational.Events.Error, (event) => {
-      if (event.msg === "agent.run.failed") failed.resolve(event);
-    });
+    const failed = awaitRunFailed();
     try {
       const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
         signal: controller.signal,
-        llm: mockLlm(async () => ({
-          type: "error",
-          error: providerFailure("connection timeout", { statusCode: 408 }),
-        })),
+        llm: timingOutLlm,
       });
       await retry.promise;
       controller.abort();
@@ -145,7 +147,7 @@ describe("one terminal record per started run", () => {
       });
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
-      unsubscribeFailed();
+      failed.unsubscribe();
       unsubscribeRetry();
       records.unsubscribe();
     }
@@ -176,10 +178,7 @@ describe("one terminal record per started run", () => {
 
   it("preserves a pre-provider non-Error terminal value", async () => {
     const records = observeRunTerminals();
-    const failed = Promise.withResolvers<{ error?: string }>();
-    const unsubscribe = Bus.subscribe(Operational.Events.Error, (event) => {
-      if (event.msg === "agent.run.failed") failed.resolve(event);
-    });
+    const failed = awaitRunFailed();
     try {
       const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
@@ -194,7 +193,7 @@ describe("one terminal record per started run", () => {
       expect((await failed.promise).error).toBe("Symbol(terminal)");
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
-      unsubscribe();
+      failed.unsubscribe();
       records.unsubscribe();
     }
   });

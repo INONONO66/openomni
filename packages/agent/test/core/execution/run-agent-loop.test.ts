@@ -17,6 +17,7 @@ import {
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { restoreCompactionProjection } from "../../../src/compaction/durable";
 import { bounded } from "../../helpers/bounded";
+import { assistantStep, dispatchingRunner } from "../../helpers/dispatching-runner";
 
 const object = (value: PlainValue) =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
@@ -42,52 +43,23 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
     let calls = 0;
     const inputs: Message.WithParts[][] = [];
     let runtime: SessionRuntime = { observations: { publish: () => undefined } };
-    const runner = createSessionChatRunner({
-      prepare(input) {
-        const dispatcher = createTurnDispatcher(definitions, input, runtime);
-        return {
-          traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
-          config: {
-            events: { publish: () => undefined },
-            executor: dispatcher.executor,
-            model: { provider: "test", id: "test" },
-            tools: [...dispatcher.specs],
-            toolWave: (calls, signal) =>
-              dispatcher.executeWave(calls, {
-                sessionId: input.sessionId,
-                turnId: input.turnId,
-                signal,
-              }),
-            toolExecutor: (call) =>
-              dispatcher.execute(call, { sessionId: input.sessionId, turnId: input.turnId }),
-            llm: {
-              resolveModel: async () => ({ providerID: "test", id: "test", name: "test" }),
-              run: async (request, sink) => {
-                inputs.push(structuredClone(request.messages));
-                calls += 1;
-                const message = createAssistantMessage(
-                  calls === 1 ? "working" : "finished",
-                  request.messages.at(-1)?.info.id ?? "",
-                  input.sessionId,
-                );
-                if (calls === 1)
-                  message.parts.push({
-                    id: "tool-part",
-                    messageID: message.info.id,
-                    sessionID: input.sessionId,
-                    type: "tool",
-                    callID: "read-call",
-                    tool: "read",
-                    state: { status: "pending", input: {} },
-                  });
-                sink.onMessage(message);
-                return { type: "stop" };
-              },
-            },
-          },
-        };
+    const runner = dispatchingRunner(
+      definitions,
+      () => runtime,
+      async (request, sink, input) => {
+        inputs.push(structuredClone(request.messages));
+        calls += 1;
+        sink.onMessage(
+          assistantStep(
+            calls === 1 ? "working" : "finished",
+            input.sessionId,
+            request.messages.at(-1)?.info.id ?? "",
+            calls === 1 ? { id: "tool-part", callID: "read-call", tool: "read" } : undefined,
+          ),
+        );
+        return { type: "stop" };
       },
-    });
+    );
     try {
       Storage.initialize({ dbPath });
       seedPolicy();

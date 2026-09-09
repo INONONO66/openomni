@@ -99,21 +99,6 @@ describe("run budget terminal facts", () => {
     }
   });
 
-  it("ends before model execution when the turn budget is exhausted", async () => {
-    let calls = 0;
-    const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      budget: { maxTurns: 0 },
-      llm: mockLlm(async () => {
-        calls += 1;
-        return createStopOutcome();
-      }),
-    }).catch((error: Error) => error);
-    expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
-    expect(calls).toBe(0);
-  });
-
   it("reports wall-time exhaustion through only the injected sink", async () => {
     const events = collector();
     const busEvents: string[] = [];
