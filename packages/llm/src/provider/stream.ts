@@ -9,6 +9,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { toModelMessages, type SDKMessage } from "../message";
+import { ProviderEvent, type StreamEvent } from "../processor/event-schema";
 import type { RunInput } from "../run";
 import type { getLanguage } from "./sdk";
 import { ProviderTransform } from "./transform";
@@ -61,14 +62,14 @@ export function streamArguments(
     ...(input.maxTokens === undefined ? {} : { maxOutputTokens: input.maxTokens }),
     maxRetries: 0,
     stopWhen: stopConditions(input),
-    onError: ({ error }) => {
+    onError: (failure) => {
       input.events.publish(Operational.Events.Error, {
         traceId: input.trace.traceId,
         time: Date.now(),
         sessionId: input.trace.sessionId,
         component: "llm.stream",
         msg: "streamText error",
-        error: String(error),
+        error: String(failure.error),
       });
     },
     abortSignal,
@@ -79,17 +80,18 @@ export function streamArguments(
   };
 }
 
-/** v6 block boundaries pass through unchanged; only step marker names differ. */
-export async function* adaptStream(stream: AsyncIterable<TextStreamPart<ToolSet>>): AsyncGenerator<
-  | TextStreamPart<ToolSet>
-  | (Omit<Extract<TextStreamPart<ToolSet>, { type: "finish-step" }>, "type"> & {
-      type: "step-finish";
-    })
-  | { type: "step-start" }
-> {
+/**
+ * The SDK-to-wire boundary: v6 block boundaries pass through unchanged, only
+ * step marker names differ, and every event is decoded into the consumed wire
+ * shape here because this is where SDK values become processor input.
+ */
+export async function* adaptStream(
+  stream: AsyncIterable<TextStreamPart<ToolSet>>,
+): AsyncGenerator<StreamEvent, void, undefined> {
   for await (const event of stream) {
-    if (event.type === "finish-step") yield { ...event, type: "step-finish" };
-    else if (event.type === "start-step") yield { ...event, type: "step-start" };
-    else yield event;
+    if (event.type === "finish-step") yield ProviderEvent.parse({ ...event, type: "step-finish" });
+    else if (event.type === "start-step")
+      yield ProviderEvent.parse({ ...event, type: "step-start" });
+    else yield ProviderEvent.parse(event);
   }
 }

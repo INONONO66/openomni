@@ -1,5 +1,5 @@
-import type { Token } from "@openomni/protocol";
-import { UsageResponse } from "./schema";
+import type { PlainValue, Token } from "@openomni/protocol";
+import { UsageResponse, type Reported } from "./schema";
 
 /** A step's locally estimated counts, in the same units as provider accounting. */
 type UsageEstimate = {
@@ -29,14 +29,17 @@ export function accumulateUsage(total: Token.AgentUsage, usage: Token.ProviderUs
 export namespace TokenTracker {
   /** Required unusable counts remain undefined so the fold estimates them, never silently zeroes them. */
   export function extractUsage(response: {
-    readonly usage?: unknown;
-    readonly providerMetadata?: unknown;
+    readonly usage?: Reported;
+    readonly providerMetadata?: PlainValue;
   }): Omit<Token.ProviderUsage, "inputTokens" | "outputTokens"> & {
     readonly inputTokens: number | undefined;
     readonly outputTokens: number | undefined;
   } {
-    const { usage, providerMetadata: metadata } = UsageResponse.parse(response);
-    const { inputTokenDetails: input, outputTokenDetails: output } = usage;
+    const parsed = UsageResponse.parse(response);
+    const { usage } = parsed;
+    const metadata = parsed.providerMetadata;
+    const input = usage.inputTokenDetails;
+    const output = usage.outputTokenDetails;
     return {
       inputTokens: requiredCount(usage, [
         "inputTokens",

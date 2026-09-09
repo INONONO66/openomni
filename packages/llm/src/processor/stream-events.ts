@@ -1,14 +1,11 @@
-import type { Message, Transcript } from "@openomni/protocol";
+import type { Message, PlainObject, Transcript } from "@openomni/protocol";
 import type { Sink } from "../sink";
 import { appendPart, advancePart, handleToolCall, handleToolResult } from "./tool-events";
 import { TokenTracker, type EstimateUsage } from "../token";
-import { ProviderEvent, Signature } from "./event-schema";
+import { ProviderEvent, Signature, type StreamEvent } from "./event-schema";
 import { normalizeEvent } from "./normalize";
 
-export interface StreamEvent {
-  type: string;
-  [key: string]: unknown;
-}
+export type { StreamEvent } from "./event-schema";
 
 export type StreamEventContext = {
   readonly sessionID: string;
@@ -22,7 +19,7 @@ export type StreamEventContext = {
    */
   readonly record: (fact: Transcript.Fact) => void;
   /** Debug note for normalized-away provider anomalies (#532-6). */
-  readonly note: (msg: string, data?: Record<string, unknown>) => void;
+  readonly note: (msg: string, data?: PlainObject) => void;
   /**
    * Wire tool name → internal dotted name. The provider echoes the sanitized
    * wire name on stream events; this restores the dotted internal name on the

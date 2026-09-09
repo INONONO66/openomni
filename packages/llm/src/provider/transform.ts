@@ -2,10 +2,6 @@ import type { SDKMessage } from "../message";
 import type { Provider } from "./index";
 
 export namespace ProviderTransform {
-  type SDKMessageWithProviderOptions = SDKMessage & {
-    readonly providerOptions?: Record<string, unknown>;
-  };
-
   type AssistantMessageContent = Extract<SDKMessage, { role: "assistant" }>["content"];
   type AssistantContentPart = Exclude<AssistantMessageContent, string>[number];
   type ToolContentPart = Extract<SDKMessage, { role: "tool" }>["content"][number];
@@ -81,13 +77,12 @@ export namespace ProviderTransform {
       if (msgs[i]?.role !== "user") continue;
       return msgs.map((msg, index) => {
         if (index !== i) return msg;
-        const existing = (msg as SDKMessageWithProviderOptions).providerOptions;
-        const existingAnthropic = (existing?.anthropic ?? {}) as Record<string, unknown>;
+        const existing = msg.providerOptions;
         return {
           ...msg,
           providerOptions: {
             ...existing,
-            anthropic: { ...existingAnthropic, cacheControl: CACHE_CONTROL },
+            anthropic: { ...existing?.anthropic, cacheControl: CACHE_CONTROL },
           },
         };
       });

@@ -1,4 +1,4 @@
-import type { Message } from "@openomni/protocol";
+import type { Message, PlainObject, PlainValue } from "@openomni/protocol";
 import type { ModelMessage } from "ai";
 import type { Provider } from "../provider";
 import { ProviderTransform } from "../provider/transform";
@@ -38,7 +38,7 @@ function buildAssistantReasoningBlock(
 function buildToolCallBlock(call: {
   id: string;
   tool: string;
-  input: Record<string, unknown>;
+  input: PlainObject;
 }): AssistantToolCallBlock {
   return {
     type: "tool-call",
@@ -66,7 +66,7 @@ function buildToolResultBlock(result: {
   };
 }
 
-export function stringifyToolOutput(output: unknown): string {
+export function stringifyToolOutput(output: PlainValue | Error | undefined): string {
   if (typeof output === "string") return output;
   if (output == null) return "";
   if (output instanceof Error) return output.message || String(output);

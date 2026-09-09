@@ -51,7 +51,8 @@ function assistantMessage(
 
 describe("stringifyToolOutput", () => {
   test("falls back to String for circular values", () => {
-    const circular: { self?: unknown } = {};
+    type Loop = { [key: string]: Loop };
+    const circular: Loop = {};
     circular.self = circular;
 
     expect(stringifyToolOutput(circular)).toBe("[object Object]");

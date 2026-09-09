@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+/**
+ * What a provider can put in an accounting slot before sanitizing: a JSON-shaped
+ * tree whose numbers may be non-finite. `Count` decides what is usable.
+ */
+export type Reported = null | boolean | number | string | Reported[] | { [key: string]: Reported };
+const ReportedNumber = z.custom<number>((value) => typeof value === "number");
+export const Reported: z.ZodType<Reported> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.boolean(),
+    ReportedNumber,
+    z.string(),
+    z.array(Reported),
+    z.record(z.string(), Reported),
+  ]),
+);
+
 // Invalid-but-present counters remain present as undefined: aliases cannot repair contradictions.
 const Count = z.number().int().nonnegative().safe().optional().catch(undefined);
 const InputDetails = z.object({ cacheReadTokens: Count, cacheWriteTokens: Count }).catch({});
