@@ -1,9 +1,12 @@
 import { z } from "zod";
-import type { DesktopApi } from "../../preload/api";
+import { gatewayEndpointSchema, shellCommandSchema } from "../../preload/validation";
 
 const bridgeSchema = z.object({
-  gateway: z.custom<DesktopApi["gateway"]>((value) => typeof value === "function"),
-  onShellCommand: z.custom<DesktopApi["onShellCommand"]>((value) => typeof value === "function"),
+  gateway: z.function({ input: [], output: z.promise(gatewayEndpointSchema) }),
+  onShellCommand: z.function({
+    input: [z.function({ input: [shellCommandSchema], output: z.void().catch(undefined) })],
+    output: z.function({ input: [], output: z.void().catch(undefined) }),
+  }),
 });
 
 /** Browser previews have no bridge; malformed bridges are configuration errors. */

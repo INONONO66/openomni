@@ -1,14 +1,16 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { ReactNode } from "react";
 import { SHELL, STRIP } from "./fixture";
 
 GlobalRegistrator.register();
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const { act, useState } = await import("react");
+const { act } = await import("react");
+const { InteractiveTabs } = await import("./interactive-tabs");
 const { createRoot } = await import("react-dom/client");
 const { Console, ConsoleContent } = await import("../src/console");
 const { HistoryMenu } = await import("../src/history-menu");
+const { Composer } = await import("../src/composer");
 
 const cleanups: (() => void)[] = [];
 afterEach(async () => {
@@ -61,6 +63,58 @@ function frame(active: string, onClose = (_id: string) => undefined) {
     />
   );
 }
+
+test("composer measures mount/input height and dispatches focused keyboard decisions", async () => {
+  let height = 400;
+  const computed = document.createElement("div").style;
+  computed.lineHeight = "20px";
+  const style = spyOn(globalThis, "getComputedStyle").mockReturnValue(computed);
+  const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => height });
+  const submitted: string[] = [];
+  const decisions: string[] = [];
+  let draft = "initial";
+  const props = {
+    onValueChange: (value: string) => { draft = value; },
+    onSubmit: () => submitted.push(draft),
+    onApprove: (id: string) => decisions.push(`approve:${id}`),
+    onDeny: (id: string) => decisions.push(`deny:${id}`),
+  };
+  try {
+    const mounted = await mount(<Composer {...props} value={draft} />);
+    const field = node(mounted.host, "textarea");
+    expect(field.style.height).toBe("160px");
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (!setter) throw new Error("Missing native textarea value setter");
+    height = 21;
+    computed.lineHeight = "normal";
+    await act(() => {
+      setter.call(field, "edited");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(draft).toBe("edited");
+    expect(field.style.height).toBe("21px");
+    const key = async (key: string, extra: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...extra });
+      await act(() => field.dispatchEvent(event));
+      return event.defaultPrevented;
+    };
+    expect(await key("Enter", { shiftKey: true })).toBe(false);
+    expect(await key("Enter")).toBe(true);
+    expect(submitted).toEqual(["edited"]);
+    await mounted.render(<Composer {...props} value="" />);
+    expect(await key("Enter")).toBe(true);
+    expect(submitted).toEqual(["edited"]);
+    await mounted.render(<Composer {...props} value="" pending={[{ toolId: "approval-1", summary: "fixture", reason: "fixture" }]} />);
+    await key("Enter", { ctrlKey: true });
+    await key("Backspace", { metaKey: true });
+    expect(decisions).toEqual(["approve:approval-1", "deny:approval-1"]);
+  } finally {
+    style.mockRestore();
+    if (scrollHeight) Object.defineProperty(HTMLElement.prototype, "scrollHeight", scrollHeight);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+  }
+});
 
 describe("real tabs", () => {
   test("mounted anatomy, generic icons, active panel links, reserved close geometry and overflow", async () => {
@@ -144,21 +198,7 @@ describe("real tabs", () => {
   });
 
   test("Arrow keys wrap and Home/End activate and focus only from activation controls", async () => {
-    function Interactive() {
-      const [active, setActive] = useState("a");
-      return (
-        <Console
-          shell={SHELL}
-          sidebar={null}
-          strip={{
-            ...STRIP,
-            tabs: records.map((tab) => ({ ...tab, active: tab.id === active })),
-            onActivate: setActive,
-          }}
-        />
-      );
-    }
-    const { host } = await mount(<Interactive />);
+    const { host } = await mount(<InteractiveTabs records={records} />);
     for (const [from, key, to] of [
       ["a", "ArrowLeft", "c"],
       ["c", "ArrowRight", "a"],
@@ -202,7 +242,7 @@ describe("real tabs", () => {
 });
 
 describe("history menu", () => {
-  const entries = Array.from({ length: 20 }, (_, index) => ({
+  const entries = Array.from({ length: 20 }, (_: undefined, index: number) => ({
     id: String(24 - index),
     title: `Entry ${24 - index}`,
   }));

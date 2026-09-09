@@ -3,6 +3,8 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient } from "@tanstack/react-query";
 import type { ServerWebSocket } from "bun";
 import type { ShellCommand } from "../src/preload/api";
+import { serveChat } from "./helpers/chat-server";
+import { commandBridge } from "./helpers/bridge";
 
 const native = {
   WebSocket: globalThis.WebSocket,
@@ -55,15 +57,7 @@ beforeEach(() => {
   subscriptions = 0;
   Object.defineProperty(window, "desktop", {
     configurable: true,
-    value: {
-      versions: { electron: "test", chrome: "test", node: "test" },
-      gateway: () => Promise.resolve(undefined),
-      onShellCommand: (listener: (command: ShellCommand) => void) => {
-        subscriptions += 1;
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    },
+    value: commandBridge(listeners, () => { subscriptions += 1; }),
   });
 });
 afterEach(async () => {
@@ -313,14 +307,19 @@ for (const empty of [false, true]) {
   });
 }
 
-test("real close commands recover composer/panel/tab focus, inactive closure preserves editor", async () => {
-  const { aTab, bTab } = seed();
+async function inactiveTabControls(id: string) {
   const { host } = await mount();
   const editor = node(host, "textarea");
   editor.focus();
-  const inactive = node(host, `#tab-${bTab}`).parentElement;
+  const inactive = node(host, `#tab-${id}`).parentElement;
   if (inactive === null) throw new Error("Missing tab wrapper");
-  await click(node(inactive, '[data-ui="Tab.Close"]'));
+  return { host, editor, close: node(inactive, '[data-ui="Tab.Close"]') };
+}
+
+test("real close commands recover composer/panel/tab focus, inactive closure preserves editor", async () => {
+  const { aTab, bTab } = seed();
+  const { host, editor, close } = await inactiveTabControls(bTab);
+  await click(close);
   expect(document.activeElement).toBe(editor);
   await command("reopen-tab");
   node(host, "textarea").focus();
@@ -376,12 +375,7 @@ test.each([
 
 test("pointer-pressing an inactive tab's close control leaves the editor focused", async () => {
   const { bTab } = seed();
-  const { host } = await mount();
-  const editor = node(host, "textarea");
-  editor.focus();
-  const inactive = node(host, `#tab-${bTab}`).parentElement;
-  if (inactive === null) throw new Error("Missing tab wrapper");
-  const close = node(inactive, '[data-ui="Tab.Close"]');
+  const { editor, close } = await inactiveTabControls(bTab);
   const press = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 });
   await act(async () => close.dispatchEvent(press));
   if (!press.defaultPrevented) close.focus();
@@ -423,18 +417,7 @@ function deferred<T>() {
 
 test("real Chat and gateway keep in-flight messages across switch, close and reopen; title earned at send", async () => {
   const received = deferred<ServerWebSocket<undefined>>();
-  const server = Bun.serve<undefined>({
-    port: 0,
-    fetch(request, instance) {
-      if (instance.upgrade(request)) return;
-      return new Response(null, { status: 400 });
-    },
-    websocket: {
-      message(socket) {
-        received.resolve(socket);
-      },
-    },
-  });
+  const server = serveChat((socket) => received.resolve(socket));
   cleanups.push(() => server.stop(true));
   const id = newSessionTab();
   const tab = consoleStore.state.activeTabId;

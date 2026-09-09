@@ -86,7 +86,7 @@ export function ConsoleContent({
       >
         {transcript === undefined ? (
           (children ?? (
-            <Voice className="text-fg/40" voice="meta">
+            <Voice className="text-voice-ambient" voice="meta">
               {emptyLabel}
             </Voice>
           ))
@@ -136,7 +136,7 @@ export interface ConsoleShell {
 
 export type ConsoleStrip = ComponentProps<typeof TabStrip>;
 
-export interface ConsoleTranscript {
+interface ConsoleTranscript {
   /** The key transcript expansion state is remembered under. */
   readonly id: string;
   readonly nodes: readonly TranscriptNode[];

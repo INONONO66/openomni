@@ -4,15 +4,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { MenuItemConstructorOptions } from "electron";
-import { BOUNDS_WRITE_DELAY_MS } from "../src/main/window-bounds";
+import { BOUNDS_WRITE_DELAY_MS, parseWindowBounds } from "../src/main/window-bounds";
+import type { GatewayEndpoint } from "../src/preload/api";
 import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type ShellCommand } from "../src/preload/api";
 
-function flatten(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
-  return items.flatMap((item) => [
-    item,
-    ...(Array.isArray(item.submenu) ? flatten(item.submenu) : []),
-  ]);
-}
+import { flatten } from "./helpers/menu";
 
 test.each([
   false,
@@ -22,7 +18,7 @@ test.each([
   const file = join(directory, "window-bounds.json");
   const ready = Promise.withResolvers<void>();
   const events = new EventEmitter();
-  const handlers = new Map<string, () => unknown>();
+  const handlers = new Map<string, () => GatewayEndpoint>();
   const windows: WindowDouble[] = [];
   const switches: string[][] = [];
   const loaded: string[] = [];
@@ -103,7 +99,7 @@ test.each([
       commandLine: { appendSwitch: (...args: string[]) => switches.push(args) },
     },
     ipcMain: {
-      handle: (channel: string, handler: () => unknown) => handlers.set(channel, handler),
+      handle: (channel: string, handler: () => GatewayEndpoint) => handlers.set(channel, handler),
     },
     nativeTheme: { shouldUseDarkColors: !development },
     Menu: {
@@ -146,7 +142,7 @@ test.each([
     const close = flatten(menu).find((item) => item.id === "close-tab");
     if (!close?.click) throw new Error("Missing close-tab command");
     const closeClick = close.click;
-    const dispatch = () => Reflect.apply(closeClick, undefined, []);
+    const dispatch = (): void => { Reflect.apply(closeClick, undefined, []); };
     dispatch();
     expect(sent).toEqual([]);
     first.emit("focus");
@@ -175,7 +171,7 @@ test.each([
     jest.advanceTimersByTime(BOUNDS_WRITE_DELAY_MS - 1);
     expect(existsSync(file)).toBe(false);
     jest.advanceTimersByTime(1);
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(first.bounds);
+    expect(parseWindowBounds(readFileSync(file, "utf8"))).toEqual(first.bounds);
     const saved = readFileSync(file, "utf8");
     first.bounds = { ...first.bounds, width: 1200 };
     for (const state of ["minimized", "maximized", "destroyed"] as const) {
@@ -186,7 +182,7 @@ test.each([
     }
     first.emit("move");
     first.emit("close");
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(first.bounds);
+    expect(parseWindowBounds(readFileSync(file, "utf8"))).toEqual(first.bounds);
     expect(jest.getTimerCount()).toBe(0);
     jest.useRealTimers();
     if (development) {

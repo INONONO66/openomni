@@ -11,15 +11,6 @@ import {
   type SearchState,
 } from "../search";
 
-/**
- * The search field's React binding: it holds the reducer's state, registers the
- * global accelerator, and executes the effects the reducer returns.
- *
- * Every decision about what a key MEANS lives in `renderer/search/keyboard.ts`.
- * This hook only translates events into intents and effects into DOM calls, so
- * the behavior stays testable without a DOM and this file stays free of
- * branching that a test cannot reach.
- */
 export interface Search {
   readonly state: SearchState;
   /** Whether the section header is showing the field instead of its label. */
@@ -58,12 +49,6 @@ export function useSearch({
   const stateRef = useRef(state);
   const searchingRef = useRef(searching);
 
-  /**
-   * A row's searchable text: its own title, then its project's. Both are things
-   * the operator can see on screen, which is the test for whether a field
-   * belongs here — searching text the surface never shows produces matches that
-   * look like bugs.
-   */
   const fieldsFor = useCallback(
     (id: SessionId): SearchFields => {
       const session = sessions.find((candidate) => candidate.id === id);
@@ -115,11 +100,6 @@ export function useSearch({
     [onSelect, focusSelectedRow, onSearchingChange],
   );
 
-  /**
-   * ⌘K from anywhere in the window. Registered ONCE on the document, because
-   * the accelerator's whole point is that it works when the field does not have
-   * focus — a handler on the field could never fire.
-   */
   useEffect(() => {
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
@@ -160,12 +140,6 @@ export function useSearch({
   };
 }
 
-/**
- * The count line. Absent at rest, a plural-correct count while filtering, and
- * one sentence when nothing matches — the zero case is the only one that needs
- * words, because a bare `0 results` reads like a broken query rather than an
- * answer.
- */
 function labelFor(filtered: Filtered): string | undefined {
   if (filtered.unfiltered) return undefined;
   if (filtered.total === 0) return "no sessions match";

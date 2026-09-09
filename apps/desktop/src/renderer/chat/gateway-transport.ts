@@ -1,33 +1,6 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { z } from "zod";
 
-/**
- * The openomni gateway, spoken as an AI SDK `ChatTransport`.
- *
- * The SDK's default transport is HTTP-shaped: one request, one SSE body, one
- * connection per turn. The gateway is neither — it is a single long-lived socket
- * carrying frames in both directions, and a turn is a `message` frame that
- * arrives on a connection opened long before the turn existed. So the adapter
- * lives here rather than in a `fetch` shim: what has to be translated is the
- * SHAPE of the conversation, not its transport headers.
- *
- * ## What this file owns, and what it must not
- *
- * It owns the wire — the three server frames, the reply correlation, and the
- * socket's lifecycle. It owns NO presentation: it emits chunks and the SDK
- * reduces them into messages. `@openomni/ui` never learns that any of this
- * exists, which is the same boundary the rest of the renderer keeps.
- *
- * ## Why one socket, opened late
- *
- * The gateway may demand a token through the WebSocket subprotocol, and the
- * surface that holds tokens is the app, not this module. Opening lazily means a
- * transport can be constructed before a token is known and still connect with
- * one; keeping ONE socket per transport means a Wait pushed as a `message`
- * frame and the reply that settles it travel the same connection, which is what
- * makes `replyToId` correlation meaningful at all.
- */
-
 /** The subset of `WebSocket` this transport uses, so a test can serve its own. */
 interface SocketLike {
   readonly readyState: number;
@@ -48,13 +21,7 @@ type SocketConstructor = new (url: string, protocols?: string | string[]) => Soc
 interface GatewayChatTransportOptions {
   /** `ws://host:port` — the gateway's WebSocket endpoint. */
   readonly url: string;
-  /**
-   * Sec-WebSocket-Protocol offers, passed through untouched.
-   *
-   * The gateway carries its bearer token here. This module deliberately does no
-   * auth of its own: it neither reads the token nor decides when one is needed,
-   * because both answers belong to whoever configured the endpoint.
-   */
+  
   readonly protocols?: string | readonly string[];
   /** Injected in tests. Defaults to the platform `WebSocket`. */
   readonly WebSocketImpl?: SocketConstructor;
@@ -69,14 +36,6 @@ const serverFrameSchema = z.discriminatedUnion("type", [
 
 type ServerFrame = z.infer<typeof serverFrameSchema>;
 
-/**
- * Parse a raw frame into one of the three known shapes.
- *
- * Anything else — an unrecognized `type`, a `message` with no text, a non-object —
- * is `undefined` and simply ignored. A gateway that grows a fourth frame must
- * not break a client that has not learned it yet, and the SDK has no chunk that
- * means "something arrived and I could not read it".
- */
 function parseFrame(raw: string | ArrayBuffer | Blob): ServerFrame | undefined {
   if (typeof raw !== "string") return undefined;
   try {
@@ -87,13 +46,6 @@ function parseFrame(raw: string | ArrayBuffer | Blob): ServerFrame | undefined {
   }
 }
 
-/**
- * The prompt as the gateway wants it: the last user turn's text, flattened.
- *
- * Only the LAST user message is sent because the gateway keeps the ledger. The
- * SDK hands over the whole history on every turn; replaying it would append the
- * conversation to itself on the server side.
- */
 function lastUserText(messages: readonly UIMessage[]): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -132,20 +84,9 @@ function emptyStream(): ReadableStream<UIMessageChunk> {
 export function createGatewayChatTransport(
   options: GatewayChatTransportOptions,
 ): ChatTransport<UIMessage> {
-  const Socket: SocketConstructor = options.WebSocketImpl ?? globalThis.WebSocket;
-
-  let socket: SocketLike | undefined;
-  let opening: { readonly socket: SocketLike; readonly promise: Promise<SocketLike> } | undefined;
-  /**
-   * Turns in flight, oldest first. The gateway answers in order on one socket,
-   * so the next terminal frame belongs to the head of this queue — which also
-   * means a turn is never resolved by another turn's frame.
-   */
+  
   const pending: Turn[] = [];
-  /**
-   * The unanswered Wait, per chat. A `message` frame is the gateway asking, and
-   * the answer is only an answer if it names the question.
-   */
+  
   const outstanding = new Map<string, OutstandingMessage>();
   const lastChatId = new WeakMap<SocketLike, string>();
 
@@ -190,6 +131,98 @@ export function createGatewayChatTransport(
     }
   }
 
+  const { closeSocket, connectUntilAborted } = createConnection(options, settle, drain);
+
+  return {
+    async sendMessages({ trigger, chatId, messages, abortSignal }) {
+      if (trigger === "regenerate-message") {
+        throw new Error("gateway transport does not support regeneration");
+      }
+      if (abortSignal?.aborted) return emptyStream();
+
+      const text = lastUserText(messages);
+      const live = await connectUntilAborted(abortSignal);
+      if (live === undefined) return emptyStream();
+
+      const outstandingMessage = outstanding.get(chatId);
+      const replyToId = outstandingMessage?.socket === live ? outstandingMessage.id : undefined;
+      if (outstandingMessage !== undefined && outstandingMessage.socket !== live) {
+        outstanding.delete(chatId);
+      }
+
+      let controller: ReadableStreamDefaultController<UIMessageChunk> | undefined;
+      let closed = false;
+      let removeAbortListener: (() => void) | undefined;
+      const turn: Turn = {
+        chatId,
+        socket: live,
+        emit: (chunk) => controller?.enqueue(chunk),
+        close: () => {
+          if (closed) return;
+          closed = true;
+          removeAbortListener?.();
+          controller?.close();
+        },
+      };
+
+      const stopTurn = () => {
+        const index = pending.indexOf(turn);
+        if (index >= 0) pending.splice(index, 1);
+        turn.close();
+        closeSocket(live, "gateway socket closed by another turn");
+      };
+
+      const stream = new ReadableStream<UIMessageChunk>({
+        start(streamController) {
+          controller = streamController;
+        },
+        cancel() {
+          if (closed) return;
+          closed = true;
+          removeAbortListener?.();
+          const index = pending.indexOf(turn);
+          if (index >= 0) pending.splice(index, 1);
+          closeSocket(live, "gateway socket closed by another turn");
+        },
+      });
+
+      const abort = () => stopTurn();
+      removeAbortListener = () => abortSignal?.removeEventListener("abort", abort);
+      abortSignal?.addEventListener("abort", abort, { once: true });
+      if (abortSignal?.aborted) {
+        abort();
+        return stream;
+      }
+
+      pending.push(turn);
+      let sent = false;
+      try {
+        live.send(JSON.stringify(replyToId === undefined ? { text } : { text, replyToId }));
+        sent = true;
+      } finally {
+        if (!sent) closeSocket(live);
+      }
+      lastChatId.set(live, chatId);
+      if (replyToId !== undefined) outstanding.delete(chatId);
+
+      return stream;
+    },
+
+    reconnectToStream() {
+      return Promise.resolve(null);
+    },
+  };
+}
+
+function createConnection(
+  options: GatewayChatTransportOptions,
+  settle: (source: SocketLike, frame: ServerFrame) => void,
+  drain: (source: SocketLike, errorText?: string) => void,
+) {
+  const Socket: SocketConstructor = options.WebSocketImpl ?? globalThis.WebSocket;
+
+  let socket: SocketLike | undefined;
+  let opening: { readonly socket: SocketLike; readonly promise: Promise<SocketLike> } | undefined;
   function closeSocket(source: SocketLike, errorText?: string): void {
     if (socket === source) socket = undefined;
     drain(source, errorText);
@@ -272,85 +305,5 @@ export function createGatewayChatTransport(
     }
   }
 
-  return {
-    async sendMessages({ trigger, chatId, messages, abortSignal }) {
-      if (trigger === "regenerate-message") {
-        throw new Error("gateway transport does not support regeneration");
-      }
-      if (abortSignal?.aborted) return emptyStream();
-
-      const text = lastUserText(messages);
-      const live = await connectUntilAborted(abortSignal);
-      if (live === undefined) return emptyStream();
-
-      const outstandingMessage = outstanding.get(chatId);
-      const replyToId = outstandingMessage?.socket === live ? outstandingMessage.id : undefined;
-      if (outstandingMessage !== undefined && outstandingMessage.socket !== live) {
-        outstanding.delete(chatId);
-      }
-
-      let controller: ReadableStreamDefaultController<UIMessageChunk> | undefined;
-      let closed = false;
-      let removeAbortListener: (() => void) | undefined;
-      const turn: Turn = {
-        chatId,
-        socket: live,
-        emit: (chunk) => controller?.enqueue(chunk),
-        close: () => {
-          if (closed) return;
-          closed = true;
-          removeAbortListener?.();
-          controller?.close();
-        },
-      };
-
-      const stopTurn = () => {
-        const index = pending.indexOf(turn);
-        if (index >= 0) pending.splice(index, 1);
-        turn.close();
-        closeSocket(live, "gateway socket closed by another turn");
-      };
-
-      const stream = new ReadableStream<UIMessageChunk>({
-        start(streamController) {
-          controller = streamController;
-        },
-        cancel() {
-          if (closed) return;
-          closed = true;
-          removeAbortListener?.();
-          const index = pending.indexOf(turn);
-          if (index >= 0) pending.splice(index, 1);
-          closeSocket(live, "gateway socket closed by another turn");
-        },
-      });
-
-      const abort = () => stopTurn();
-      removeAbortListener = () => abortSignal?.removeEventListener("abort", abort);
-      abortSignal?.addEventListener("abort", abort, { once: true });
-      if (abortSignal?.aborted) {
-        abort();
-        return stream;
-      }
-
-      pending.push(turn);
-      try {
-        live.send(JSON.stringify(replyToId === undefined ? { text } : { text, replyToId }));
-      } catch (error) {
-        closeSocket(live);
-        throw error;
-      }
-      lastChatId.set(live, chatId);
-      if (replyToId !== undefined) outstanding.delete(chatId);
-
-      return stream;
-    },
-
-    // The gateway has no resumable stream: a turn's `message` is one frame on a
-    // socket, so there is nothing to reconnect TO. Answering `null` is the SDK's
-    // contract for "no active stream", not a stub.
-    reconnectToStream() {
-      return Promise.resolve(null);
-    },
-  };
+  return { closeSocket, connectUntilAborted };
 }

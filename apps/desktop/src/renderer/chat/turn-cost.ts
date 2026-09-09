@@ -1,13 +1,6 @@
 import { segmentTurns, type TranscriptNode, type TurnCost } from "@openomni/ui";
 import type { TurnMetadata } from "./message";
 
-/**
- * Raw instants become the two already-formatted strings the transcript prints.
- *
- * The formatting happens HERE because `TurnCost` is documented as read-ready
- * text: the moment the design system parses a timestamp it owns a locale, and
- * the reader's clock is the app's fact, not the layout's.
- */
 export function costOf(metadata: TurnMetadata | undefined): TurnCost | undefined {
   if (metadata?.startedAt === undefined || metadata.elapsedMs === undefined) return;
   return { at: clock(metadata.startedAt), elapsed: elapsed(metadata.elapsedMs) };
@@ -31,15 +24,6 @@ function elapsed(ms: number): string {
   return `${Math.floor(ms / MINUTE)}m ${Math.round((ms % MINUTE) / SECOND)}s`;
 }
 
-/**
- * Costs, re-keyed onto the turn numbers `Timeline` will look them up by.
- *
- * `segmentTurns` is the design system's own segmentation, so calling it here
- * rather than counting prompts is what guarantees the two agree. Counting user
- * messages would drift the moment an epoch opens a turn of its own — which it
- * does — and the cost would then be attached to the turn below the one that
- * paid it.
- */
 export function costsByTurn(
   nodes: readonly TranscriptNode[],
   anchors: readonly { readonly nodeId: string; readonly cost: TurnCost }[],

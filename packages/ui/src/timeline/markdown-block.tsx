@@ -83,7 +83,7 @@ export function MarkdownBlockView({
       <ul className="flex flex-col gap-1" data-ui={UI_NAMES.MarkdownBlock}>
         {(block.items ?? []).map((item) => (
           <Voice as="li" className="flex gap-2" key={item} voice="prose">
-            <span aria-hidden className="text-fg/40">
+            <span aria-hidden className="text-voice-ambient">
               ·
             </span>
             <span>{item}</span>

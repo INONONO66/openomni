@@ -59,7 +59,6 @@ export function App({ platform, storage }: AppEnvironment) {
   const { sessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
   const tab = activeTab(state);
   const place = activePlace(state);
-  const history = tab?.history;
   const { transport, notice } = useChatEndpoint();
   const search = useRef({ searching: false, invokingTabId: state.activeTabId });
   const focusRecovery = useRef<"panel" | "tab" | null>(null);
@@ -201,16 +200,7 @@ export function App({ platform, storage }: AppEnvironment) {
     createLabel: "New session",
     onCreate: () => travel(newSessionTab),
     platform,
-    history: {
-      entries: historyMenuEntries(state),
-      currentId: history === undefined ? null : String(history.cursor),
-      now,
-      canBack: history !== undefined && canGoBack(history),
-      canForward: history !== undefined && canGoForward(history),
-      onBack: () => travel(back),
-      onForward: () => travel(forward),
-      onJump: (cursor) => travel(() => jumpFrom(tab, cursor)),
-    },
+    history: historyControls(state, now, travel),
   };
   const sidebar = (
     <SessionTree
@@ -260,6 +250,25 @@ export function App({ platform, storage }: AppEnvironment) {
       />
     );
   return <Console content={content} shell={shell} sidebar={sidebar} strip={strip} />;
+}
+
+function historyControls(
+  state: typeof consoleStore.state,
+  now: number,
+  travel: (action: () => void) => void,
+): ConsoleStrip["history"] {
+  const tab = activeTab(state);
+  const history = tab?.history;
+  return {
+    entries: historyMenuEntries(state),
+    currentId: history === undefined ? null : String(history.cursor),
+    now,
+    canBack: history !== undefined && canGoBack(history),
+    canForward: history !== undefined && canGoForward(history),
+    onBack: () => travel(back),
+    onForward: () => travel(forward),
+    onJump: (cursor) => travel(() => jumpFrom(tab, cursor)),
+  };
 }
 
 function useChatEndpoint() {

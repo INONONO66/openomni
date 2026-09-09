@@ -3,7 +3,8 @@ import * as ui from "@openomni/ui";
 import { QueryClient } from "@tanstack/react-query";
 import type { ServerWebSocket } from "bun";
 import { Window } from "happy-dom";
-import { z } from "zod";
+import { serveChat, type ClientFrame } from "./helpers/chat-server";
+import { commandBridge } from "./helpers/bridge";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { GatewayEndpoint, ShellCommand } from "../src/preload/api";
@@ -60,14 +61,7 @@ beforeEach(() => {
   }
   subscriptions = 0;
   Object.defineProperty(browser, "desktop", {
-    value: {
-      gateway: () => Promise.resolve(undefined),
-      onShellCommand: (listener: (command: ShellCommand) => void) => {
-        subscriptions += 1;
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    },
+    value: commandBridge(listeners, () => { subscriptions += 1; }),
   });
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
   client = new QueryClient({ defaultOptions: { queries: { gcTime: Number.POSITIVE_INFINITY } } });
@@ -299,8 +293,6 @@ test("SessionList preserves attention order, dates and callback ids and has no c
   expect(selected).toEqual(["two", "one"]);
 });
 
-const clientFrameSchema = z.object({ text: z.string(), replyToId: z.string().optional() });
-
 function signal<T>() {
   const result = Promise.withResolvers<T>();
   const timeout = setTimeout(
@@ -318,19 +310,8 @@ function signal<T>() {
 }
 
 test("real Chat sends once, retains in-flight work across tab closure and stops through the composer", async () => {
-  const received = signal<{ socket: ServerWebSocket<undefined>; payload: z.infer<typeof clientFrameSchema> }>();
-  const server = Bun.serve<undefined>({
-    port: 0,
-    fetch(request, instance) {
-      if (instance.upgrade(request)) return;
-      return new Response(null, { status: 400 });
-    },
-    websocket: {
-      message(socket, data) {
-        received.resolve({ socket, payload: clientFrameSchema.parse(JSON.parse(String(data))) });
-      },
-    },
-  });
+  const received = signal<{ socket: ServerWebSocket<undefined>; payload: ClientFrame }>();
+  const server = serveChat((socket, payload) => received.resolve({ socket, payload }));
   cleanups.push(() => server.stop(true));
   const id = newSessionTab();
   const tab = consoleStore.state.activeTabId;

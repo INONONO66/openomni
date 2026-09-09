@@ -1,4 +1,7 @@
-/** Contract exposed to the renderer via contextBridge. Leaf file: zero imports. */
+import type { z } from "zod";
+import type { shellCommandSchema } from "./validation";
+
+/** IPC contract; imports are type-only so both processes share the channel literals. */
 
 /**
  * The gateway endpoint as the renderer receives it.
@@ -24,15 +27,7 @@ export interface GatewayEndpoint {
 export const GATEWAY_CHANNEL = "openomni:gateway";
 export const SHELL_COMMAND_CHANNEL = "shell:command";
 
-export type ShellCommand =
-  | "new-tab"
-  | "close-tab"
-  | "reopen-tab"
-  | "next-tab"
-  | "previous-tab"
-  | "back"
-  | "forward"
-  | `select-tab-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
+export type ShellCommand = z.infer<typeof shellCommandSchema>;
 
 export interface DesktopApi {
   readonly onShellCommand: (listener: (command: ShellCommand) => void) => () => void;

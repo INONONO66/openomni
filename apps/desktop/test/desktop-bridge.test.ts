@@ -24,7 +24,7 @@ test("malformed bridge methods fail at lookup", () => {
   expect(desktopBridge).toThrow();
 });
 
-test("bridge preserves gateway and command subscription identity", async () => {
+test("bridge validates gateway and preserves command delivery and disposal", async () => {
   let delivered = "";
   const gateway = () => Promise.resolve({ url: "ws://localhost" });
   const onShellCommand = (listener: (command: "new-tab") => void) => {
@@ -34,7 +34,6 @@ test("bridge preserves gateway and command subscription identity", async () => {
   expose({ gateway, onShellCommand });
   const bridge = desktopBridge();
   if (!bridge) throw new Error("Missing bridge");
-  expect(bridge.gateway).toBe(gateway);
   expect(await bridge.gateway()).toEqual({ url: "ws://localhost" });
   const dispose = bridge.onShellCommand((command) => { delivered = command; });
   expect(delivered).toBe("new-tab");

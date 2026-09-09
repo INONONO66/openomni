@@ -87,10 +87,11 @@ test("mounted hover reveals, cancels across hot zones and dismisses on Escape, p
     const schedule = spyOn(globalThis, "setTimeout");
     try {
       await pointer(element(host, '[data-ui="Sidebar.Edge"]'), "pointerover");
-      const pending = schedule.mock.results.at(-1)?.value;
-      expect(pending).toBeDefined();
+      expect(schedule).toHaveBeenCalledTimes(1);
+      expect(jest.getTimerCount()).toBe(1);
       await act(() => root.unmount());
-      expect(clear).toHaveBeenCalledWith(pending);
+      expect(clear).toHaveBeenCalledTimes(1);
+      expect(jest.getTimerCount()).toBe(0);
     } finally {
       clear.mockRestore();
       schedule.mockRestore();

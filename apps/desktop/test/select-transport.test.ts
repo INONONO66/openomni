@@ -117,48 +117,29 @@ const PROMPT: readonly UIMessage[] = [
   { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
 ];
 
+async function offeredProtocols(token?: string) {
+  const wire = serveUpgrade();
+  const selected = selectChatTransport({
+    url: `ws://127.0.0.1:${wire.port}/ws`,
+    ...(token === undefined ? {} : { token }),
+  });
+  if (selected.kind !== "gateway") throw new Error("Expected a configured gateway");
+  const sent = selected.transport.sendMessages({
+    trigger: "submit-message", chatId: "chat-1", messageId: undefined,
+    messages: [...PROMPT], abortSignal: undefined,
+  });
+  await wire.seen;
+  await sent;
+  return wire.header();
+}
+
 describe("the token reaches the wire", () => {
   test("Given a token, When the transport connects, Then the upgrade carries auth then the token", async () => {
-    const wire = serveUpgrade();
-    const { transport } = selectChatTransport({
-      url: `ws://127.0.0.1:${wire.port}/ws`,
-      token: "s3cret",
-    });
-
-    // Awaited on the upgrade itself rather than on a delay: the request is the
-    // event this asserts about.
-    const sent = transport?.sendMessages({
-      trigger: "submit-message",
-      chatId: "chat-1",
-      messageId: undefined,
-      messages: [...PROMPT],
-      abortSignal: undefined,
-    });
-    await wire.seen;
-
-    expect(
-      wire
-        .header()
-        ?.split(",")
-        .map((part) => part.trim()),
-    ).toEqual(["auth", "s3cret"]);
-    await sent;
+    const header = await offeredProtocols("s3cret");
+    expect(header?.split(",").map((part) => part.trim())).toEqual(["auth", "s3cret"]);
   });
 
   test("Given no token, When the transport connects, Then the upgrade offers no protocol", async () => {
-    const wire = serveUpgrade();
-    const { transport } = selectChatTransport({ url: `ws://127.0.0.1:${wire.port}/ws` });
-
-    const sent = transport?.sendMessages({
-      trigger: "submit-message",
-      chatId: "chat-1",
-      messageId: undefined,
-      messages: [...PROMPT],
-      abortSignal: undefined,
-    });
-    await wire.seen;
-
-    expect(wire.header()).toBeNull();
-    await sent;
+    expect(await offeredProtocols()).toBeNull();
   });
 });

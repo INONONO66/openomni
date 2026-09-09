@@ -1,18 +1,5 @@
 import type { SessionId } from "../state/store";
 
-/**
- * The search field's keyboard contract, as a pure function.
- *
- * There is no DOM in this test runner, so the keyboard flow is expressed as a
- * reducer over explicit state and verified directly. That is not a workaround:
- * a keyboard contract written as a pile of handlers is a contract nobody can
- * read, and the interesting decisions here — that Esc always leaves, where
- * focus lands after Enter — are decisions about state, not about events.
- *
- * The view's job is reduced to translating a real key event into one `Intent`
- * and executing the returned `Effect`s.
- */
-
 export type Intent =
   /** The global ⌘K / Ctrl+K accelerator. */
   | { readonly kind: "shortcut" }
@@ -27,12 +14,6 @@ export interface SearchState {
   readonly activeId: SessionId | null;
 }
 
-/**
- * What the view must do that state cannot express. Focus is an imperative fact
- * about the document, so it is returned rather than stored: storing "should be
- * focused" and reconciling it in an effect is how a field ends up fighting the
- * operator for the caret.
- */
 export type Effect =
   /** Open the field (it lives in the section header only while searching) and put the caret in it. */
   | { readonly kind: "focusField" }
@@ -47,12 +28,6 @@ export interface Transition {
 
 export const INITIAL: SearchState = { query: "", activeId: null };
 
-/**
- * `sequence` is the visible result order — the attention engine's sequence
- * after filtering. It is a parameter rather than state because it is derived:
- * two sources of truth for "what is on screen" is how an active row ends up
- * pointing at a row that is no longer painted.
- */
 export function reduce(
   state: SearchState,
   intent: Intent,
@@ -65,15 +40,9 @@ export function reduce(
       return { state, effects: [{ kind: "focusField" }] };
 
     case "type":
-      // A new query invalidates the active row rather than clamping it. The
-      // operator is still describing what they want; pre-selecting a row from a
-      // half-typed query is the view deciding on their behalf.
       return { state: { query: intent.query, activeId: null }, effects: [] };
 
     case "escape":
-      // One meaning: leave. The query clears, the field closes, and focus
-      // returns to the row the operator is actually working in — not to
-      // nowhere. (reference section-header search; docs/desktop-shell.md.)
       return { state: INITIAL, effects: [{ kind: "close" }] };
 
     case "move": {
@@ -83,10 +52,6 @@ export function reduce(
     }
 
     case "commit": {
-      // Enter without an arrow-key active row commits the first result: the
-      // operator typed a query and pressed Enter, and the first row is what the
-      // query said. Focus returns to the field so the next keystroke keeps
-      // narrowing instead of landing on a row.
       const target = state.activeId ?? sequence[0];
       if (target === undefined) return { state, effects: [] };
       return {
@@ -100,12 +65,6 @@ export function reduce(
   }
 }
 
-/**
- * Walk the visible sequence. Entering from the field lands on the first row
- * going down and the last going up; the ends CLAMP rather than wrap, because a
- * list that loops silently makes "am I at the bottom" unanswerable without
- * counting.
- */
 function step(
   activeId: SessionId | null,
   delta: 1 | -1,
@@ -124,13 +83,6 @@ function step(
   return sequence[target] ?? activeId;
 }
 
-/**
- * Translate a key event into an intent, or `null` when the key is not ours.
- *
- * Returning `null` is what keeps the field from swallowing keys it has no
- * behavior for: a control that calls `preventDefault` on everything breaks text
- * selection, the caret, and every OS shortcut that passes through it.
- */
 export function intentFor(key: string, modifier: boolean): Intent | null {
   if (modifier && key.toLowerCase() === "k") return { kind: "shortcut" };
   switch (key) {

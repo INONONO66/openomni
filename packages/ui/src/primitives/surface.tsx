@@ -1,15 +1,9 @@
 import type { ReactNode } from "react";
 import { UI_NAMES } from "../names";
 
-export type PanelTone = "bg" | "sunken" | "raised";
-/**
- * A hairline is allowed on a COLUMN SPLIT — the places where the layout
- * genuinely divides into independently scrolling regions — and on the ONE
- * frame edge: `box` is the main column's own panel, a 12px-cornered hairline
- * card sitting on the chrome (the reference's `--radius-panel`). Inside a column,
- * structure is whitespace and type weight, never a drawn box.
- */
-export type PanelEdge = "none" | "right" | "left" | "box";
+type PanelTone = "bg" | "sunken" | "raised";
+
+type PanelEdge = "none" | "right" | "left" | "box";
 
 const TONE: Record<PanelTone, string> = {
   bg: "bg-bg",
@@ -24,11 +18,6 @@ const EDGE: Record<PanelEdge, string> = {
   box: "overflow-hidden rounded-panel border-[0.5px] border-line",
 };
 
-/**
- * Panel. The structural surface primitive: one of three quiet
- * tones plus an optional column-split hairline. It exists so app layout code
- * can compose columns without naming a color.
- */
 export function Panel({
   tone = "bg",
   edge = "none",
@@ -44,10 +33,6 @@ export function Panel({
   readonly children?: ReactNode;
 } & Omit<React.ComponentPropsWithoutRef<"div">, "className" | "children">) {
   return (
-    // `data-ui` is spread-FIRST, so a caller composing a more specific surface
-    // out of Panel can name it — a Panel that IS the console's sidebar should
-    // answer to the sidebar's name, not to the primitive's. Every other
-    // primitive does the same for the same reason.
     <Tag className={`${TONE[tone]} ${EDGE[edge]} ${className}`} data-ui={UI_NAMES.Panel} {...rest}>
       {children}
     </Tag>
@@ -55,7 +40,7 @@ export function Panel({
 }
 
 export type TextTone = "fg" | "muted" | "subtle" | "faint" | "accent";
-export type TextLevel =
+type TextLevel =
   | "display"
   | "title"
   | "heading"
@@ -73,12 +58,6 @@ const TEXT_TONE: Record<TextTone, string> = {
   accent: "text-accent",
 };
 
-/**
- * Weight discipline: 400 to read, 500 to interact, 590 to announce. There is no
- * 700 anywhere in the system — past 590 Pretendard stops adding hierarchy and
- * starts adding noise, and the hierarchy this surface needs is already carried
- * by size and spacing.
- */
 const TEXT_LEVEL: Record<TextLevel, string> = {
   display: "text-display font-[590]",
   title: "text-title font-[590]",
@@ -90,26 +69,6 @@ const TEXT_LEVEL: Record<TextLevel, string> = {
   overline: "text-overline font-semibold uppercase",
 };
 
-/**
- * Text. Binds a type-scale level to a foreground tone so app code
- * never writes a color or a size class.
- *
- * The face is a claim about WHAT THE TEXT IS, and the system now makes both
- * claims explicitly:
- *
- *   - `mono` means "machine truth": ids, counts, durations, paths, code, tool
- *     names, timestamps. Anything whose exact characters matter, or that sits
- *     in a column where alignment carries meaning.
- *   - `sans` means PROSE: a human sentence, written or generated. It reads
- *     faster, sets tighter, and does not pretend a paragraph is tabular data.
- *
- * Both exist because the shell density block sets the mono face on the whole
- * container — that is the correct default for a ledger, and it makes `mono` a
- * no-op in most places, but it also means prose INHERITS a coding face unless
- * something says otherwise. `sans` is that something. Neither is the implicit
- * default: a surface states which kind of text it is showing, and the one it
- * does not state is the one it inherits from its column.
- */
 export function Text({
   level = "body",
   tone = "fg",
@@ -146,25 +105,6 @@ export function Text({
   );
 }
 
-/**
- * Caret. Marks the tail of streaming output: a state indicator,
- * not decoration. Drawn, never a half-block character — that glyph varies by
- * font and copies into the transcript as garbage when a reader selects text.
- *
- * 2px and accent-toned, where it used to be a 7px muted slab. A 7px bar is the
- * width of a CHARACTER, so it read as a rendered token — one more mono cell at
- * the end of the line — and the eye tried to parse it. At 2px it is
- * unmistakably a cursor: an insertion point, not content. The accent is spent
- * here for the same reason the running dot spends it — this is the system's one
- * claim about right now, at the exact pixel where output is arriving.
- *
- * The blink is conditional, and that is the entire design. A caret that always
- * blinks is decoration and trains the reader to ignore it; a caret that blinks
- * ONLY while tokens are streaming is a live readout, and the moment it goes
- * solid the reader knows the model stopped without reading a word. Under
- * `prefers-reduced-motion` it holds solid and visible (see styles.css) — the
- * position is still marked, it has simply stopped moving.
- */
 export function Caret({ streaming = false }: { readonly streaming?: boolean }) {
   return (
     <span

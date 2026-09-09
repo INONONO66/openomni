@@ -295,7 +295,7 @@ describe("ordinal selection and positional cycling", () => {
   });
 
   test("1..8 select ordinals, 9 selects last beyond nine, invalid values are no-ops", () => {
-    const tabs = Array.from({ length: 11 }, (_, index) => openSession(`s${index}`));
+    const tabs = Array.from({ length: 11 }, (_: undefined, index: number) => openSession(`s${index}`));
     for (let ordinal = 1; ordinal <= 8; ordinal += 1) {
       activateTabAt(ordinal);
       expect(tabs[ordinal - 1]).toBe(currentTab());
@@ -343,19 +343,19 @@ describe("history menu selector", () => {
   test("over 20 visits retain original cursor ids and current plus newest 19", () => {
     for (let index = 0; index < 25; index += 1) navigate(sessionPlace(`s${index}`));
     expect(historyMenuEntries().map(({ id }) => id)).toEqual(
-      Array.from({ length: 20 }, (_, index) => String(24 - index)),
+      Array.from({ length: 20 }, (_: undefined, index: number) => String(24 - index)),
     );
     jumpTo(0);
     const entries = historyMenuEntries();
     expect(entries.map(({ id }) => id)).toEqual([
-      ...Array.from({ length: 19 }, (_, index) => String(24 - index)),
+      ...Array.from({ length: 19 }, (_: undefined, index: number) => String(24 - index)),
       "0",
     ]);
     expect(entries).toHaveLength(20);
     expect(entries.every((entry) => Object.keys(entry).sort().join(",") === "id,title")).toBe(true);
     jumpTo(5);
     expect(historyMenuEntries().map(({ id }) => id)).toEqual(
-      Array.from({ length: 20 }, (_, index) => String(24 - index)),
+      Array.from({ length: 20 }, (_: undefined, index: number) => String(24 - index)),
     );
   });
 
