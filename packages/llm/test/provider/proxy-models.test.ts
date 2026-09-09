@@ -57,6 +57,30 @@ describe("proxy-models", () => {
       expect(capturedHeaders?.get("Authorization")).toBe(expected);
     });
 
+    it("keeps exactly the valid IDs when objects and non-object entries are mixed", async () => {
+      stubFetch(() =>
+        Response.json({
+          data: [
+            { id: "first" },
+            { id: 42 },
+            { other: "ignored" },
+            { id: "" },
+            null,
+            "ignored",
+            42,
+            false,
+            [],
+            { id: "second", extra: "allowed" },
+          ],
+        }),
+      );
+
+      expect(await fetchProxyModels("https://mixed-entries-proxy.example/v1")).toEqual([
+        "first",
+        "second",
+      ]);
+    });
+
     it("does not share cached model lists between credentials at the same URL", async () => {
       const authorizationHeaders: Array<string | null> = [];
       stubFetch((_input, init) => {

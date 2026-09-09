@@ -37,7 +37,7 @@ function credentialFingerprint(apiKey: string | undefined): string {
 }
 
 const ModelEntry = z.object({ id: z.string().min(1) }).passthrough();
-const ModelListing = z.object({ data: z.array(z.record(z.string(), z.json())) });
+const ModelListing = z.object({ data: z.array(z.json()) });
 
 export async function fetchProxyModels(baseURL: string, apiKey?: string): Promise<string[]> {
   const url = normalizeModelsURL(baseURL);
