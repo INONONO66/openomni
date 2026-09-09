@@ -9,7 +9,6 @@ interface ChannelAuthnDecision {
   readonly verdict: Policy.PolicyDecision["verdict"];
   readonly reason: string;
   readonly durationMs: number;
-  readonly metadata?: Record<string, unknown>;
 }
 
 export type ChannelAuthnDecisionObserver = (decision: ChannelAuthnDecision) => void | Promise<void>;

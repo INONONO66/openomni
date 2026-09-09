@@ -9,14 +9,12 @@ export function evaluateChannelPermission(input: {
   readonly allowed: boolean;
   readonly allowReason: string;
   readonly denyReason: string;
-  readonly metadata?: Record<string, unknown>;
 }): Policy.PolicyDecision {
-  const request: Policy.EvaluationRequest = {
+  const request = {
     action: input.action,
     resource: input.resource,
     input: { [input.field]: String(input.allowed) },
-    ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-  };
+  } satisfies Policy.EvaluationRequest;
 
   return decisionFromEvaluation(
     evaluatePermission(
@@ -52,7 +50,6 @@ export function recordDecision(
   verdict: Policy.PolicyDecision,
   durationMs: number,
   onDecision: ChannelAuthnDecisionObserver | undefined,
-  metadata?: Record<string, unknown>,
 ): void | Promise<void> {
   return onDecision?.({
     timing: "run.start",
@@ -61,6 +58,5 @@ export function recordDecision(
     verdict: verdict.verdict,
     reason: PolicyDecision.reason(verdict, "unspecified"),
     durationMs,
-    ...(metadata !== undefined ? { metadata } : {}),
   });
 }

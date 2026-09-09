@@ -125,10 +125,7 @@ export class TelegramClient implements ChannelClient {
       {
         traceId,
         publish: this.publish,
-        parseRetryAfter: (body) => {
-          const hint = RetryAfterSchema.safeParse(body);
-          return (hint.success ? hint.data.parameters?.retry_after : undefined) ?? 5;
-        },
+        retryAfterSchema: RetryAfterSchema.transform((hint) => hint.parameters?.retry_after ?? 5),
         label: `telegram/${method}`,
       },
     );

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
+import { Operational } from "@openomni/protocol";
+import { z } from "zod";
 import { SlackSocket } from "../src/provider/slack/socket";
 import type { SocketEnvelope } from "../src/provider/slack/types";
 import type { PublishPort } from "../src/types";
@@ -40,19 +42,21 @@ class Signal<Value> {
   }
 }
 
+const AckSchema = z.object({ envelope_id: z.string() });
+
 interface FakeSlack {
   readonly url: string;
-  readonly opens: Signal<ServerWebSocket<unknown>>;
-  readonly acks: Signal<Record<string, unknown>>;
+  readonly opens: Signal<ServerWebSocket<undefined>>;
+  readonly acks: Signal<z.infer<typeof AckSchema>>;
   readonly closes: Signal<number>;
-  stop(): void;
+  stop(): Promise<void>;
 }
 
 function startFakeSlack(): FakeSlack {
-  const opens = new Signal<ServerWebSocket<unknown>>();
-  const acks = new Signal<Record<string, unknown>>();
+  const opens = new Signal<ServerWebSocket<undefined>>();
+  const acks = new Signal<z.infer<typeof AckSchema>>();
   const closes = new Signal<number>();
-  const server = Bun.serve({
+  const server = Bun.serve<undefined>({
     port: 0,
     fetch(request, srv) {
       if (srv.upgrade(request)) return;
@@ -63,7 +67,7 @@ function startFakeSlack(): FakeSlack {
         opens.emit(ws);
       },
       message(_ws, message) {
-        acks.emit(JSON.parse(String(message)) as Record<string, unknown>);
+        acks.emit(AckSchema.parse(JSON.parse(String(message))));
       },
       close(_ws, code) {
         closes.emit(code);
@@ -79,20 +83,22 @@ function startFakeSlack(): FakeSlack {
   };
 }
 
-function collectPublishes(): { messages: string[]; publish: PublishPort } {
-  const messages: string[] = [];
-  const publish: PublishPort = (_descriptor, payload) => {
-    messages.push((payload as { msg: string }).msg);
+function collectPublishes() {
+  const logs: { event: string; error: string | undefined }[] = [];
+  const schema = z.object({ context: z.object({ err: z.string().optional() }).optional() });
+  const publish: PublishPort = (descriptor, payload) => {
+    const log = schema.parse(payload);
+    logs.push({ event: descriptor.name, error: log.context?.err });
   };
-  return { messages, publish };
+  return { logs, publish };
 }
 
 const immediateDelay = () => Promise.resolve();
 
 describe("SlackSocket", () => {
-  const cleanups: Array<() => void> = [];
-  afterEach(() => {
-    for (const cleanup of cleanups.splice(0)) cleanup();
+  const cleanups: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const cleanup of cleanups.splice(0)) await cleanup();
   });
 
   function harness(options?: {
@@ -113,7 +119,7 @@ describe("SlackSocket", () => {
     );
     cleanups.push(() => {
       socket.stop();
-      fake.stop();
+      return fake.stop();
     });
     return { fake, events, socket, fetchCount: () => fetches };
   }
@@ -161,7 +167,7 @@ describe("SlackSocket", () => {
   });
 
   it("retries the socket-url fetch during reconnect until it succeeds", async () => {
-    const { messages, publish } = collectPublishes();
+    const { logs, publish } = collectPublishes();
     const { fake, events, socket } = harness({
       publish,
       fetchUrl: (fakeSlack, attempt) =>
@@ -185,11 +191,13 @@ describe("SlackSocket", () => {
       }),
     );
     expect((await events.next()).envelope_id).toBe("env-3");
-    expect(messages).toContain("slack socket url fetch failed, retrying");
+    expect(logs.filter((log) => log.event === Operational.Events.Error.name)).toEqual([
+      { event: Operational.Events.Error.name, error: String(new Error("slack api down")) },
+    ]);
   });
 
   it("drops a malformed frame with a warning and keeps the connection serving", async () => {
-    const { messages, publish } = collectPublishes();
+    const { logs, publish } = collectPublishes();
     const { fake, events, socket } = harness({ publish });
     const started = socket.start();
     const ws = await fake.opens.next();
@@ -205,11 +213,11 @@ describe("SlackSocket", () => {
       }),
     );
     expect((await events.next()).envelope_id).toBe("env-4");
-    expect(messages).toContain("slack socket frame was not valid JSON; dropped");
+    expect(logs.filter((log) => log.event === Operational.Events.Warn.name)).toHaveLength(1);
   });
 
   it("publishes a dispatch error when the event callback throws", async () => {
-    const { messages, publish } = collectPublishes();
+    const { logs, publish } = collectPublishes();
     const fake = startFakeSlack();
     const socket = new SlackSocket(
       () => Promise.resolve(fake.url),
@@ -223,7 +231,7 @@ describe("SlackSocket", () => {
     );
     cleanups.push(() => {
       socket.stop();
-      fake.stop();
+      return fake.stop();
     });
 
     const started = socket.start();
@@ -240,7 +248,10 @@ describe("SlackSocket", () => {
     );
     expect(await fake.acks.next()).toEqual({ envelope_id: "env-5" });
     // The ack arrived over the wire AFTER dispatch ran locally, so the error is recorded by now.
-    expect(messages).toContain("slack event dispatch error");
+    expect(logs).toContainEqual({
+      event: Operational.Events.Error.name,
+      error: "handler exploded",
+    });
   });
 
   it("stop() closes cleanly and never reconnects", async () => {
@@ -302,7 +313,7 @@ describe("SlackSocket", () => {
     );
     cleanups.push(() => {
       socket.stop();
-      server.stop(true);
+      return server.stop(true);
     });
 
     await expect(socket.start()).rejects.toThrow("slack socket closed before hello");

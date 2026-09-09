@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
+import { z } from "zod";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
 import type { PublishPort } from "../src/types";
 import { WebSocketHandler } from "../src/websocket";
@@ -21,13 +22,11 @@ function createHandler(
 }
 
 function createUpgradeServer() {
-  let options: { data?: unknown; headers?: Record<string, string> } | undefined;
+  type Options = Parameters<Parameters<WebSocketHandler["handleUpgrade"]>[1]["upgrade"]>[1];
+  let options: Options | undefined;
   return {
     server: {
-      upgrade(
-        _req: Request,
-        nextOptions?: { data?: unknown; headers?: Record<string, string> },
-      ): boolean {
+      upgrade(_req: Request, nextOptions: Options): boolean {
         options = nextOptions;
         return true;
       },
@@ -49,7 +48,7 @@ describe("WebSocketHandler authentication", () => {
 
     expect(handler.handleUpgrade(req, upgrade.server)).toBeUndefined();
     expect(req.headers.get("sec-websocket-protocol")).toBe("auth");
-    expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
+    expect(upgrade.options?.data.authenticated).toBe(true);
     expect(decisions.map((decision) => decision.verdict)).toEqual(["allow"]);
   });
 
@@ -138,7 +137,11 @@ describe("WebSocketHandler ingress and receipts", () => {
 
     const receipt = handler.push("alice", "review", "message-1");
     expect(receipt).toEqual({ value: "accepted", externalMessageId: "message-1" });
-    expect(JSON.parse(sent[0] ?? "{}")).toMatchObject({
+    expect(
+      z
+        .object({ type: z.string(), messageId: z.string(), text: z.string() })
+        .parse(JSON.parse(sent[0] ?? "{}")),
+    ).toMatchObject({
       type: "message",
       messageId: "message-1",
       text: "review",

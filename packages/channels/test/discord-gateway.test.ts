@@ -11,13 +11,16 @@ const noopPublish: PublishPort = () => undefined;
 type Payload = z.infer<typeof GatewayFrameSchema>;
 
 type NativeClose = { code: number; reason: string; wasClean: boolean; phase: string };
-const serverTraces = new WeakMap<ServerWebSocket<unknown>, (event: string, data: object) => void>();
+const serverTraces = new WeakMap<
+  ServerWebSocket<undefined>,
+  (event: string, data: object) => void
+>();
 
 type FakeGateway = {
   url: string;
   received: Payload[];
   closes: number[];
-  clients: Set<ServerWebSocket<unknown>>;
+  clients: Set<ServerWebSocket<undefined>>;
   nativeCloses: NativeClose[];
   record(event: string, data: object): void;
   waitFor(predicate: (payload: Payload) => boolean, count?: number): Promise<Payload>;
@@ -73,12 +76,12 @@ function createFakeGateway(options: {
   heartbeatIntervalMs: number;
   ackHeartbeats: boolean;
   rejectUpgrade?: boolean;
-  onIdentify?: (ws: ServerWebSocket<unknown>) => void;
-  onResume?: (ws: ServerWebSocket<unknown>, payload: Payload) => void;
+  onIdentify?: (ws: ServerWebSocket<undefined>) => void;
+  onResume?: (ws: ServerWebSocket<undefined>, payload: Payload) => void;
 }): FakeGateway {
   const received: Payload[] = [];
   const closes: number[] = [];
-  const clients = new Set<ServerWebSocket<unknown>>();
+  const clients = new Set<ServerWebSocket<undefined>>();
   const nativeCloses: NativeClose[] = [];
   const events: object[] = [];
   const record = (event: string, data: object) => {
@@ -86,12 +89,12 @@ function createFakeGateway(options: {
   };
   const payloadEvents = new EventStream<Payload>();
   const closeEvents = new EventStream<number>();
-  const send = (ws: ServerWebSocket<unknown>, payload: Payload) => {
+  const send = (ws: ServerWebSocket<undefined>, payload: Payload) => {
     record("server.send", payload);
     return ws.send(JSON.stringify(payload));
   };
 
-  const server = Bun.serve({
+  const server = Bun.serve<undefined>({
     hostname: "127.0.0.1",
     port: 0,
     fetch(req, srv) {
@@ -236,7 +239,7 @@ function createMissedAckHarness(local: FakeGateway) {
   };
 }
 
-function sendReady(ws: ServerWebSocket<unknown>, url: string, sessionId: string): void {
+function sendReady(ws: ServerWebSocket<undefined>, url: string, sessionId: string): void {
   serverTraces.get(ws)?.("server.ready", { url, sessionId });
   ws.send(
     JSON.stringify({

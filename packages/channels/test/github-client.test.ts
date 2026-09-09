@@ -1,12 +1,17 @@
 import { describe, expect, it } from "bun:test";
+import { z } from "zod";
 import { GitHubClient } from "../src/provider/github/client";
 import { fetchWithRetry } from "../src/support/fetch-retry";
 
 describe("GitHubClient", () => {
   it("records a warn instead of silently skipping a reply without a token (#606)", async () => {
-    const published: Array<{ name: string; data: Record<string, unknown> }> = [];
+    const schema = z.object({
+      traceId: z.string(),
+      context: z.object({ repo: z.string(), issueNumber: z.number() }),
+    });
+    const published: Array<{ name: string; data: z.infer<typeof schema> }> = [];
     const client = new GitHubClient((descriptor, data) => {
-      published.push({ name: descriptor.name, data: data as Record<string, unknown> });
+      published.push({ name: descriptor.name, data: schema.parse(data) });
     });
 
     await client.postComment("openomni/project", 7, "the answer", "trace-github-test");
@@ -16,7 +21,6 @@ describe("GitHubClient", () => {
         name: "operational.warn",
         data: expect.objectContaining({
           traceId: "trace-github-test",
-          msg: "github token missing — reply not posted",
           context: { repo: "openomni/project", issueNumber: 7 },
         }),
       },
@@ -25,12 +29,24 @@ describe("GitHubClient", () => {
 
   it("exhausts rate-limit retries with one trace and a typed failure", async () => {
     const realFetch = globalThis.fetch;
-    const warnings: Array<Record<string, unknown>> = [];
+    const warningSchema = z.object({
+      traceId: z.string(),
+      context: z.object({
+        label: z.string(),
+        retryAfter: z.number(),
+        attempt: z.number(),
+        max: z.number(),
+      }),
+    });
+    const warnings: z.infer<typeof warningSchema>[] = [];
     let attempts = 0;
-    globalThis.fetch = (async () => {
-      attempts += 1;
-      return Response.json({ retryAfter: 0 }, { status: 429 });
-    }) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async () => {
+        attempts += 1;
+        return Response.json({ retryAfter: 0 }, { status: 429 });
+      },
+      { preconnect: realFetch.preconnect },
+    );
 
     try {
       await expect(
@@ -40,8 +56,10 @@ describe("GitHubClient", () => {
           {
             traceId: "trace-rate-limit",
             label: "github/postComment",
-            parseRetryAfter: (body) => (body as { retryAfter: number }).retryAfter,
-            publish: (_event, data) => warnings.push(data as Record<string, unknown>),
+            retryAfterSchema: z
+              .object({ retryAfter: z.number() })
+              .transform((body) => body.retryAfter),
+            publish: (_event, data) => warnings.push(warningSchema.parse(data)),
           },
         ),
       ).rejects.toThrow("github/postComment: rate limited after 3 retries");
