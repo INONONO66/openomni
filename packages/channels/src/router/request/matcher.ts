@@ -4,7 +4,7 @@ type Correlation = SessionTransition.Correlation;
 
 /** Physical responder evidence only; kernel request transitions own admission and persistence. */
 
-export type ResponderTarget = Readonly<{
+type ResponderTarget = Readonly<{
   /** Responder id credited to the fold when this target matches. */
   responderId: string;
   /** Pinned actor identity; when present the sender must resolve to it. */
@@ -15,7 +15,7 @@ export type ResponderTarget = Readonly<{
   tokenHash?: string;
 }>;
 
-export type SenderEvidence = Readonly<{
+type SenderEvidence = Readonly<{
   /** Bearer credential presented via correlation. */
   tokenHash?: string;
   /** Endpoint the sender claims via correlation (consistency-checked, not proof). */

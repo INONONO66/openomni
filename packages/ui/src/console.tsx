@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Composer } from "./composer";
 import { UI_NAMES } from "./names";
 import { ScrollArea } from "./primitives/scroll-area";
 import { Panel } from "./primitives/surface";
 import { Sidebar } from "./sidebar";
-import { type HistoryControls, type TabRecord, TabStrip, type WindowPlatform } from "./tab-strip";
+import { TabStrip } from "./tab-strip";
 import type { PendingApproval, TranscriptNode, TurnCost } from "./timeline/model";
 import { Timeline } from "./timeline/timeline";
 import { Voice } from "./timeline/voice";
@@ -86,7 +86,7 @@ export function ConsoleContent({
       >
         {transcript === undefined ? (
           (children ?? (
-            <Voice className="text-fg/40" voice="meta">
+            <Voice className="text-voice-ambient" voice="meta">
               {emptyLabel}
             </Voice>
           ))
@@ -134,17 +134,9 @@ export interface ConsoleShell {
   readonly onSidebarWidthCommit: (width: number) => void;
 }
 
-export interface ConsoleStrip {
-  readonly tabs: readonly TabRecord[];
-  readonly onActivate: (id: string) => void;
-  readonly onClose: (id: string) => void;
-  readonly createLabel: string;
-  readonly onCreate: () => void;
-  readonly platform: WindowPlatform;
-  readonly history: HistoryControls;
-}
+export type ConsoleStrip = ComponentProps<typeof TabStrip>;
 
-export interface ConsoleTranscript {
+interface ConsoleTranscript {
   /** The key transcript expansion state is remembered under. */
   readonly id: string;
   readonly nodes: readonly TranscriptNode[];

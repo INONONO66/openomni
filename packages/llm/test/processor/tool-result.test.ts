@@ -1,12 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import {
-  anthropicModel as model,
-  assistantMessage as buildAssistantMessage,
-} from "../helpers/fixtures";
 import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "../helpers/observation";
-import { Processor } from "../../src/processor";
+import { useProcessor, capturingSink } from "../helpers/processor";
+const { createProcessor } = useProcessor();
 import type { StreamEvent } from "../../src/processor/stream-events";
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -27,7 +24,7 @@ type ToolProjectionCase = {
   readonly expectedPart: {
     readonly callID: string;
     readonly tool?: string;
-    readonly state: Record<string, unknown>;
+    readonly state: Partial<Tool.State>;
   };
 };
 
@@ -112,6 +109,38 @@ const toolProjectionCases: ToolProjectionCase[] = [
       state: { status: "completed", input: { city: "Seoul" }, output: "sunny" },
     },
   },
+
+  {
+    name: "serializes structured output as JSON",
+    chunks: [
+      { type: "tool-call", toolCallId: "structured", toolName: "search", input: {} },
+      {
+        type: "tool-result",
+        toolCallId: "structured",
+        toolName: "search",
+        output: { content: [{ type: "text", text: "hit" }] },
+      },
+    ],
+    expectedResults: 1,
+    expectedResult: {
+      toolCallId: "structured",
+      output: '{"content":[{"type":"text","text":"hit"}]}',
+    },
+    expectedPart: {
+      callID: "structured",
+      state: { status: "completed", output: '{"content":[{"type":"text","text":"hit"}]}' },
+    },
+  },
+  {
+    name: "preserves Error messages rather than serializing them to an empty object",
+    chunks: [
+      { type: "tool-call", toolCallId: "error-object", toolName: "search", input: {} },
+      { type: "tool-error", toolCallId: "error-object", error: new Error("error fixture") },
+    ],
+    expectedResults: 1,
+    expectedResult: { toolCallId: "error-object", output: "error fixture", isError: true },
+    expectedPart: { callID: "error-object", state: { status: "error", error: "error fixture" } },
+  },
 ];
 
 describe("Processor tool result projection", () => {
@@ -134,20 +163,10 @@ describe("Processor tool result projection", () => {
       onToolResult: (result) => toolResults.push(result),
     };
 
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage(
-        "msg-tool-result",
-        "session-tool-result",
-        "parent-tool-result",
-      ),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
+    const processor = createProcessor({
       sink,
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield {
             type: "tool-call",
             toolCallId: "call-weather",
@@ -204,30 +223,13 @@ describe("Processor tool result projection", () => {
     expectedResult,
     expectedPart,
   }) => {
-    const toolCalls: Tool.Call[] = [];
-    const toolResults: Tool.Result[] = [];
-    const messages: Message.WithParts[] = [];
-    const sink: Sink = {
-      onMessage: (message) => messages.push(message),
-      onToolCall: (call) => toolCalls.push(call),
-      onToolResult: (result) => toolResults.push(result),
-    };
+    const { toolCalls, toolResults, messages, sink } = capturingSink();
 
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage(
-        "msg-tool-result",
-        "session-tool-result",
-        "parent-tool-result",
-      ),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
+    const processor = createProcessor({
       sink,
-      events: Bus,
       toolNames,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield* chunks;
         })(),
       }),
@@ -240,109 +242,6 @@ describe("Processor tool result projection", () => {
     if (expectedResult !== undefined) expect(toolResults[0]).toMatchObject(expectedResult);
     const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
     expect(toolPart).toMatchObject(expectedPart);
-  });
-});
-
-describe("Processor tool output normalization", () => {
-  test("serializes structured tool-result output instead of String coercion", async () => {
-    const toolResults: Tool.Result[] = [];
-    const messages: Message.WithParts[] = [];
-    const sink: Sink = {
-      onMessage: (message) => messages.push(message),
-      onToolCall: () => undefined,
-      onToolResult: (result) => toolResults.push(result),
-    };
-
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage(
-        "msg-tool-result",
-        "session-tool-result",
-        "parent-tool-result",
-      ),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
-      sink,
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-      createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-structured",
-            toolName: "search",
-            input: {},
-          };
-          yield {
-            type: "tool-result",
-            toolCallId: "call-structured",
-            toolName: "search",
-            output: { content: [{ type: "text", text: "hit" }] },
-          };
-          yield { type: "finish" };
-        })(),
-      }),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    expect(toolResults).toHaveLength(1);
-    expect(toolResults[0]?.output).toBe('{"content":[{"type":"text","text":"hit"}]}');
-    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
-    expect(toolPart).toMatchObject({
-      state: { status: "completed", output: '{"content":[{"type":"text","text":"hit"}]}' },
-    });
-  });
-});
-
-describe("Processor tool error normalization", () => {
-  test("preserves Error messages in tool-error stream parts", async () => {
-    const toolResults: Tool.Result[] = [];
-    const sink: Sink = {
-      onMessage: () => undefined,
-      onToolCall: () => undefined,
-      onToolResult: (result) => toolResults.push(result),
-    };
-
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage(
-        "msg-tool-result",
-        "session-tool-result",
-        "parent-tool-result",
-      ),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
-      sink,
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-      createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-error-object",
-            toolName: "search",
-            input: {},
-          };
-          yield {
-            type: "tool-error",
-            toolCallId: "call-error-object",
-            error: new Error("network down"),
-          };
-          yield { type: "finish" };
-        })(),
-      }),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    expect(toolResults).toHaveLength(1);
-    // Error objects must not JSON-serialize to "{}".
-    expect(toolResults[0]).toMatchObject({
-      toolCallId: "call-error-object",
-      output: "network down",
-      isError: true,
-    });
   });
 });
 
@@ -362,51 +261,46 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
 
   function lastToolState(messages: Message.WithParts[]): Message.ToolPart["state"] | undefined {
     const parts = messages[messages.length - 1]?.parts ?? [];
-    const tool = parts.find((part): part is Message.ToolPart => part.type === "tool");
-    return tool?.state;
+    return parts.flatMap((part) => (part.type === "tool" ? [part.state] : []))[0];
   }
 
-  test("tool result already in the stream at abort settles as completed", async () => {
+  const PENDING_CALL = { toolCallId: "call-grace", toolName: "write_file" } as const;
+
+  /**
+   * Streams one tool call, aborts, buffers an unrelated event, then streams
+   * whatever `tail` produces — what the provider does while the grace drain
+   * is pulling. Resolves with the final snapshots once the attempt has
+   * rejected with the abort.
+   */
+  async function abortWithPendingTool(
+    tail: () => Promise<StreamEvent[]>,
+  ): Promise<Message.WithParts[]> {
     const messages: Message.WithParts[] = [];
     const abortController = new AbortController();
-
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage(
-        "msg-tool-result",
-        "session-tool-result",
-        "parent-tool-result",
-      ),
-      sessionID: "session-tool-result",
-      model,
+    const processor = createProcessor({
       abort: abortController.signal,
       sink: captureSink(messages),
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
       createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-grace",
-            toolName: "write_file",
-            input: { path: "/tmp/x" },
-          };
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
+          yield { type: "tool-call", ...PENDING_CALL, input: { path: "/tmp/x" } };
           abortController.abort();
           // The grace drain must skip unrelated buffered events and keep
           // pulling until the exact pending tool settles.
           yield { type: "text-delta", id: "buffered-text", text: "ignored during abort" };
-          yield {
-            type: "tool-result",
-            toolCallId: "call-grace",
-            toolName: "write_file",
-            output: { output: "written", isError: false },
-          };
+          yield* await tail();
         })(),
       }),
     });
-
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
       name: "AbortError",
     });
+    return messages;
+  }
+
+  test("tool result already in the stream at abort settles as completed", async () => {
+    const messages = await abortWithPendingTool(async () => [
+      { type: "tool-result", ...PENDING_CALL, output: { output: "written", isError: false } },
+    ]);
 
     // The tool DID run (the SDK executes between tool-call and tool-result);
     // recording it as interrupted would misreport a real side effect.
@@ -419,8 +313,6 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
   });
 
   test("tool result that never arrives settles as interrupted when the grace timer fires", async () => {
-    const messages: Message.WithParts[] = [];
-    const abortController = new AbortController();
     const scheduledDelays: number[] = [];
     const timerHandle = setTimeout(() => undefined, 0);
     clearTimeout(timerHandle);
@@ -435,37 +327,8 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       ),
     );
 
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage(
-        "msg-tool-result",
-        "session-tool-result",
-        "parent-tool-result",
-      ),
-      sessionID: "session-tool-result",
-      model,
-      abort: abortController.signal,
-      sink: captureSink(messages),
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-      createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-hang",
-            toolName: "slow_tool",
-            input: {},
-          };
-          abortController.abort();
-          yield { type: "text-delta", id: "t1", text: "..." };
-          // Result never arrives: block until the consumer stops pulling.
-          await new Promise(() => undefined);
-        })(),
-      }),
-    });
-
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      name: "AbortError",
-    });
+    // Result never arrives: block until the consumer stops pulling.
+    const messages = await abortWithPendingTool(() => new Promise(() => undefined));
     expect(scheduledDelays).toContain(250);
 
     const state = lastToolState(messages);
@@ -475,5 +338,16 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       // "interrupted" transition, which the fold projects as this error.
       expect(state.error).toBe("interrupted");
     }
+  });
+
+  test("a stream that fails inside the grace window settles the pending tool as interrupted", async () => {
+    // The transport dies while the consumer is still draining for the result.
+    const messages = await abortWithPendingTool(() =>
+      Promise.reject(new Error("connection reset during drain")),
+    );
+
+    const state = lastToolState(messages);
+    expect(state?.status).toBe("error");
+    if (state?.status === "error") expect(state.error).toBe("interrupted");
   });
 });

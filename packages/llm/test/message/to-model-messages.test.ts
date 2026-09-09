@@ -51,7 +51,8 @@ function assistantMessage(
 
 describe("stringifyToolOutput", () => {
   test("falls back to String for circular values", () => {
-    const circular: { self?: unknown } = {};
+    type Loop = { [key: string]: Loop };
+    const circular: Loop = {};
     circular.self = circular;
 
     expect(stringifyToolOutput(circular)).toBe("[object Object]");
@@ -120,44 +121,40 @@ describe("toModelMessages", () => {
     expect(result[1]?.content).toBe("Response");
   });
 
-  test("calls ProviderTransform.normalizeMessages", () => {
-    const result = toModelMessages([userMessage()], anthropicModel);
-    expect(result).toHaveLength(1);
-    expect(result[0]?.role).toBe("user");
-    expect(result[0]?.content).toBe("Hello");
+  test("normalizes empty content at the provider boundary", () => {
+    const empty = assistantMessage([textPart("msg-2", "")]);
+    expect(toModelMessages([empty], anthropicModel)).toEqual([]);
+    const openai = {
+      ...anthropicModel,
+      id: "gpt-4o",
+      providerID: "openai",
+      api: { npm: "@ai-sdk/openai" },
+    };
+    expect(toModelMessages([empty], openai)).toMatchObject([{ role: "assistant", content: "" }]);
   });
 });
 
-describe("toModelMessages error-turn exclusion (#545 T2)", () => {
-  const model: Provider.Model = {
-    id: "claude-3-5-sonnet",
+function assistantInfo(
+  overrides: Partial<Message.AssistantMessage> = {},
+): Message.AssistantMessage {
+  return {
+    id: "msg-a",
+    sessionID: "session-1",
+    role: "assistant",
+    time: { created: 1100, completed: 1200 },
+    parentID: "msg-u",
+    modelID: "claude-3-5-sonnet",
     providerID: "anthropic",
-    name: "Claude 3.5 Sonnet",
-    api: { npm: "@ai-sdk/anthropic" },
+    agent: "default",
+    path: { cwd: "/", root: "/" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    ...overrides,
   };
+}
 
-  function assistantInfo(
-    overrides: Partial<Message.AssistantMessage> = {},
-  ): Message.AssistantMessage {
-    return {
-      id: "msg-a",
-      sessionID: "session-1",
-      role: "assistant",
-      time: { created: 1100, completed: 1200 },
-      parentID: "msg-u",
-      modelID: "claude-3-5-sonnet",
-      providerID: "anthropic",
-      agent: "default",
-      path: { cwd: "/", root: "/" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      ...overrides,
-    };
-  }
-
-  function textPart(messageID: string, text: string): Message.TextPart {
-    return { id: `part-${messageID}`, sessionID: "session-1", messageID, type: "text", text };
-  }
+describe("toModelMessages error-turn exclusion", () => {
+  const model = anthropicModel;
 
   test("excludes error-finished assistant turns from replay", () => {
     const userMsg: Message.WithParts = {
@@ -262,8 +259,8 @@ describe("toModelMessages tool-name wire sanitization (all providers)", () => {
 
   test("serializes failed tool history as an error result", () => {
     const message = assistantWithDottedToolCall();
-    const tool = message.parts.find((part): part is Message.ToolPart => part.type === "tool");
-    if (tool === undefined) throw new Error("expected tool part");
+    const tool = message.parts.find((part) => part.type === "tool");
+    if (tool?.type !== "tool") throw new Error("expected tool part");
     tool.state = {
       status: "error",
       input: tool.state.input,
@@ -292,20 +289,11 @@ describe("toModelMessages reasoning signature resend gate (#532 candidate 10)", 
 
   function reasoningMessage(overrides: Partial<Message.AssistantMessage> = {}): Message.WithParts {
     return {
-      info: {
+      info: assistantInfo({
         id: "msg-r",
-        sessionID: "session-1",
-        role: "assistant",
-        time: { created: 1100, completed: 1200 },
-        parentID: "msg-u",
-        modelID: "claude-3-5-sonnet",
-        providerID: "anthropic",
-        agent: "default",
-        path: { cwd: "/", root: "/" },
-        cost: 0,
         tokens: { input: 0, output: 0, reasoning: 4, cache: { read: 0, write: 0 } },
         ...overrides,
-      },
+      }),
       parts: [
         {
           id: "part-r",
@@ -349,7 +337,7 @@ describe("toModelMessages reasoning signature resend gate (#532 candidate 10)", 
 
     const block = reasoningBlockOf(result);
     expect(block).toMatchObject({ type: "reasoning", text: "step by step" });
-    expect((block as { providerOptions?: unknown }).providerOptions).toBeUndefined();
+    expect(block?.providerOptions).toBeUndefined();
   });
 
   test("withholds the signature when the outgoing provider differs", () => {
@@ -363,6 +351,6 @@ describe("toModelMessages reasoning signature resend gate (#532 candidate 10)", 
     const result = toModelMessages([reasoningMessage()], openaiModel);
 
     const block = reasoningBlockOf(result);
-    expect((block as { providerOptions?: unknown }).providerOptions).toBeUndefined();
+    expect(block?.providerOptions).toBeUndefined();
   });
 });

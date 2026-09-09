@@ -3,7 +3,7 @@ import type { ChannelProvider } from "../contract.js";
 import { TELEGRAM_RENDER } from "./format.js";
 import { TelegramAdapter } from "./surface.js";
 
-export interface TelegramCredentials {
+interface TelegramCredentials {
   /** BotFather bot token. */
   readonly token: string;
 }

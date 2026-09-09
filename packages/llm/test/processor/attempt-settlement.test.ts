@@ -1,88 +1,38 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import {
-  anthropicModel as model,
-  assistantMessage as buildAssistantMessage,
-} from "../helpers/fixtures";
-import { Operational, type Message } from "@openomni/protocol";
-import { Bus } from "../helpers/observation";
-import { Processor } from "../../src/processor";
+import { describe, expect, test } from "bun:test";
+import { useProcessor, capturingSink, statusStates } from "../helpers/processor";
+
 describe("Processor attempt settlement", () => {
-  afterEach(() => {
-    Bus.reset();
-  });
+  const { createProcessor, events } = useProcessor();
 
-  test("records synchronous stream failure before process promise settlement", async () => {
-    const failure = new Error("synchronous stream failure");
-    const messages: Message.WithParts[] = [];
-    const publish = spyOn(Bus, "publish");
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-sync", "session-sync", "parent-sync"),
-      sessionID: "session-sync",
-      model,
-      abort: new AbortController().signal,
-      events: Bus,
-      sink: {
-        onMessage: (message) => messages.push(message),
-        onToolCall: () => undefined,
-        onToolResult: () => undefined,
-      },
+  test.each([
+    true,
+    false,
+  ])("records failure before promise settlement (synchronous=%s)", async (synchronous) => {
+    const failure = new Error("stream failure fixture");
+    const capture = capturingSink();
+    const processor = createProcessor({
+      sink: capture.sink,
       createStream: () => {
-        throw failure;
+        if (synchronous) throw failure;
+        return Promise.reject(failure);
       },
-      trace: { traceId: "trace-sync", sessionId: "session-sync" },
     });
-
-    try {
-      const processing = processor.process({ system: "", promptText: "" });
-      const rejection = processing.catch((error) => error);
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.info).toMatchObject({ finish: "error" });
-      expect(
-        publish.mock.calls
-          .filter((call) => call[0] === Operational.Events.Info)
-          .map((call) => (call[1] as { context?: { stateType?: string } }).context?.stateType)
-          .filter((state): state is string => state !== undefined),
-      ).toEqual(["busy", "idle"]);
-      expect(await rejection).toBe(failure);
-    } finally {
-      publish.mockRestore();
+    function assertSettled() {
+      expect(capture.messages).toHaveLength(1);
+      expect(capture.messages[0]?.info).toMatchObject({ finish: "error" });
+      expect(statusStates(events)).toEqual(["busy", "idle"]);
     }
-  });
-
-  test("records rejected createStream promises in the first rejection continuation", async () => {
-    const failure = new Error("rejected createStream promise");
-    const messages: Message.WithParts[] = [];
-    const publish = spyOn(Bus, "publish");
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-rejected", "session-rejected", "parent"),
-      sessionID: "session-rejected",
-      model,
-      abort: new AbortController().signal,
-      events: Bus,
-      sink: {
-        onMessage: (message) => messages.push(message),
-        onToolCall: () => undefined,
-        onToolResult: () => undefined,
+    const processing = processor.process({ system: "", promptText: "" });
+    // Registered before any await: this handler observes the state at the moment of rejection.
+    const settledAtRejection = processing.then(
+      () => false,
+      () => {
+        assertSettled();
+        return true;
       },
-      createStream: () => Promise.reject(failure),
-      trace: { traceId: "trace-rejected", sessionId: "session-rejected" },
-    });
-
-    try {
-      const processing = processor.process({ system: "", promptText: "" });
-      const rejection = processing.catch((error) => error);
-      await Promise.resolve();
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.info).toMatchObject({ finish: "error" });
-      expect(
-        publish.mock.calls
-          .filter((call) => call[0] === Operational.Events.Info)
-          .map((call) => (call[1] as { context?: { stateType?: string } }).context?.stateType)
-          .filter((state): state is string => state !== undefined),
-      ).toEqual(["busy", "idle"]);
-      expect(await rejection).toBe(failure);
-    } finally {
-      publish.mockRestore();
-    }
+    );
+    if (synchronous) assertSettled();
+    await expect(processing).rejects.toBe(failure);
+    expect(await settledAtRejection).toBe(true);
   });
 });

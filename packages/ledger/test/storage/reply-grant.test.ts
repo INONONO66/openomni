@@ -8,6 +8,12 @@ import { join } from "node:path";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { createSqliteReplyGrantAdapter } from "../../src/storage/sqlite-reply-grant-adapter";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
+import { z } from "zod";
+
+const ClosedMessage = z.tuple([
+  z.object({ type: z.literal("closed"), result: z.enum(["claimed", "existing", "capacity"]) }),
+  z.undefined().optional(),
+]);
 
 const grant = {
   id: "grant-1",
@@ -37,11 +43,19 @@ describe("durable reply-grant current projection", () => {
           { execPath: process.execPath, stdio: ["ignore", "inherit", "inherit", "ipc"] },
         );
         contenders.push(contender);
-        exits.push(once(contender, "exit", { signal }).then(([code, reason]) => [code, reason]));
+        exits.push(
+          once(contender, "exit", { signal }).then((value) =>
+            z.tuple([z.literal(0), z.null()]).parse(value),
+          ),
+        );
         const ready = once(contender, "message", { signal });
-        expect((await ready)[0]).toBe("ready");
+        expect(z.tuple([z.literal("ready"), z.undefined().optional()]).parse(await ready)[0]).toBe(
+          "ready",
+        );
       }
-      const results = contenders.map((contender) => once(contender, "message", { signal }));
+      const results = contenders.map((contender) =>
+        once(contender, "message", { signal }).then((value) => ClosedMessage.parse(value)),
+      );
       for (const contender of contenders) contender.send("claim");
 
       expect((await Promise.all(results)).map(([message]) => message)).toEqual(

@@ -139,7 +139,7 @@ function compactness(spans: MatchSpan): number {
  * and ties are broken toward the earlier field, so `kernel` typed at a session
  * named `kernel` does not rank behind one merely belonging to that project.
  */
-export interface FieldMatch {
+interface FieldMatch {
   readonly field: number;
   readonly match: Match;
 }

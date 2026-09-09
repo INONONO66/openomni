@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { GatewayEndpoint } from "../../preload/api";
+import { gatewayEndpointSchema } from "../../preload/validation";
+import { desktopBridge } from "./desktop-bridge";
 
 /**
  * The renderer's SERVER state: everything a process outside this window
@@ -40,7 +42,7 @@ export function useGatewayEndpoint() {
 }
 
 async function fetchGatewayEndpoint(): Promise<GatewayEndpoint | null> {
-  const bridge = (globalThis as { readonly desktop?: Window["desktop"] }).desktop;
+  const bridge = desktopBridge();
   if (bridge === undefined) return null;
-  return (await bridge.gateway()) ?? null;
+  return gatewayEndpointSchema.parse(await bridge.gateway()) ?? null;
 }

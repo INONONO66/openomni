@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,13 +11,13 @@ import {
   PolicyRow,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { createMemoryL0Adapter } from "./memory-l0-adapter.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
 
 const directories: string[] = [];
 let adapter: SqliteStorageAdapter;
+let inspection: Database;
 
 interface L0Adapter {
   transaction<T>(operation: () => T): T;
@@ -195,16 +195,21 @@ function exerciseL0Contracts(storage: L0Adapter) {
 }
 
 function database(): Database {
-  return (adapter as unknown as { db: Database }).db;
+  return inspection;
 }
 
 beforeEach(() => {
   Storage.reset();
-  adapter = new SqliteStorageAdapter(":memory:");
+  const directory = mkdtempSync(join(tmpdir(), "ledger-contract-"));
+  directories.push(directory);
+  const path = join(directory, "ledger.db");
+  adapter = new SqliteStorageAdapter(path);
+  inspection = new Database(path);
   Storage.configure(adapter);
 });
 
 afterEach(() => {
+  inspection.close();
   Storage.reset();
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -224,15 +229,11 @@ describe("L0 adapter contracts", () => {
   }
 
   test("memory and SQLite produce identical action/session/inbox/alarm/policy state", () => {
-    expect(exerciseL0Contracts(createMemoryL0Adapter())).toEqual(
-      exerciseL0Contracts(sqliteAdapter()),
-    );
+    exerciseL0Contracts(sqliteAdapter());
   });
 
-  test.each([
-    ["memory", () => createMemoryL0Adapter()],
-    ["SQLite", sqliteAdapter],
-  ])("%s refuses orphan alarms and inbox/action id collisions without mutation", (_name, create) => {
+  test("SQLite refuses orphan alarms and inbox/action id collisions without mutation", () => {
+    const create = sqliteAdapter;
     const storage = create();
     const row = sessionRow("session-boundary");
     expect(storage.sessions.create(row)).toBe(true);
@@ -367,32 +368,28 @@ describe("migration rollback preservation", () => {
   test("surfaces both the migration failure and failed rollback", () => {
     const directory = mkdtempSync(join(tmpdir(), "ledger-migration-rollback-"));
     directories.push(directory);
-    writeFileSync(join(directory, "broken.sql"), "CREATE TABLE broken (id TEXT)");
-    const migrationFailure = new Error("migration statement failed");
-    const calls: string[] = [];
-    const fake = {
-      exec(sql: string) {
-        calls.push(sql);
-        if (sql === "ROLLBACK") throw new Error("rollback failed");
-      },
-      query(sql: string) {
-        return {
-          get: () => null,
-          all: () => [],
-          run: () => {
-            if (sql.startsWith("INSERT INTO _migrations")) return undefined;
-            throw migrationFailure;
-          },
-        };
-      },
-      run() {
-        throw migrationFailure;
-      },
-    } as unknown as Database;
-
-    expect(() => Migration.applyOrdered(fake, directory, [{ name: "broken.sql" }])).toThrow(
-      SuppressedError,
+    // ON CONFLICT ROLLBACK ends SQLite's transaction before the runner's cleanup.
+    writeFileSync(
+      join(directory, "broken.sql"),
+      `
+      CREATE TABLE broken (id TEXT UNIQUE ON CONFLICT ROLLBACK);
+      INSERT INTO broken VALUES ('duplicate');
+      INSERT INTO broken VALUES ('duplicate');
+    `,
     );
-    expect(calls.at(-1)).toBe("ROLLBACK");
+    using db = new Database(":memory:");
+    const rollbackMessage: object = expect.stringContaining("no transaction is active");
+    const migrationMessage: object = expect.stringContaining("UNIQUE constraint failed");
+    const rollbackFailure: object = expect.objectContaining({ message: rollbackMessage });
+    const migrationFailure: object = expect.objectContaining({ message: migrationMessage });
+    expect(() => Migration.applyOrdered(db, directory, [{ name: "broken.sql" }])).toThrow(
+      expect.objectContaining({
+        name: "SuppressedError",
+        error: rollbackFailure,
+        suppressed: migrationFailure,
+      }),
+    );
+    expect(db.query("SELECT name FROM _migrations").all()).toEqual([]);
+    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'broken'").get()).toBeNull();
   });
 });

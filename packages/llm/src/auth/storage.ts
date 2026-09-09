@@ -1,6 +1,6 @@
 import z from "zod";
 import { join, dirname, resolve } from "node:path";
-import { mkdirSync, existsSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { mkdirSync, existsSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { NamedError } from "../error";
 
@@ -41,16 +41,13 @@ const ensureAuthDir = (filepath: string) => {
 const writeAuthFile = (filepath: string, contents: string): void => {
   const tmpPath = `${filepath}.${crypto.randomUUID()}.tmp`;
   writeFileSync(tmpPath, contents, { mode: 0o600 });
+  let swapped = false;
   try {
     renameSync(tmpPath, filepath);
-  } catch (error) {
+    swapped = true;
+  } finally {
     // Never leave a plaintext-credential temp file behind on a failed swap.
-    try {
-      unlinkSync(tmpPath);
-    } catch {
-      /* already gone */
-    }
-    throw error;
+    if (!swapped) rmSync(tmpPath, { force: true });
   }
 };
 
@@ -102,32 +99,39 @@ export namespace Auth {
     boundProvider = provider,
     allowFallback = true,
   ): Promise<Info> {
-    const auth =
-      boundProvider === provider && explicit !== undefined
-        ? explicit
-        : allowFallback
-          ? await Auth.get(provider)
-          : undefined;
+    const auth = await candidate(provider, explicit, boundProvider, allowFallback);
     if (auth === undefined)
       throw new ResolutionError({
         message: `No authentication found for provider: ${provider}`,
         provider,
         reason: "missing_auth",
       });
+    return validated(provider, auth);
+  }
+
+  async function candidate(
+    provider: string,
+    explicit: Info | undefined,
+    boundProvider: string,
+    allowFallback: boolean,
+  ): Promise<Info | undefined> {
+    if (boundProvider === provider && explicit !== undefined) return explicit;
+    return allowFallback ? Auth.get(provider) : undefined;
+  }
+
+  /** Explicit credentials arrive from callers, so their shape is re-checked, not trusted. */
+  function validated(provider: string, auth: Info): Info {
     const parsed = Info.safeParse(auth);
-    if (
-      !parsed.success ||
-      (parsed.data.type === "api"
-        ? parsed.data.key.length === 0
-        : !URL.canParse(parsed.data.baseURL))
-    ) {
-      throw new ResolutionError({
-        message: `Invalid authentication for provider: ${provider}`,
-        provider,
-        reason: "invalid_auth",
-      });
-    }
-    return parsed.data;
+    if (parsed.success && isUsable(parsed.data)) return parsed.data;
+    throw new ResolutionError({
+      message: `Invalid authentication for provider: ${provider}`,
+      provider,
+      reason: "invalid_auth",
+    });
+  }
+
+  function isUsable(info: Info): boolean {
+    return info.type === "api" ? info.key.length > 0 : URL.canParse(info.baseURL);
   }
 
   /** A durable, non-secret handle on the credential an attempt used: kind plus a truncated digest. */
@@ -148,34 +152,37 @@ export namespace Auth {
     return readAuthFile(getAuthFilePath());
   }
 
+  const AuthFile = z.record(z.string(), z.json());
+
   async function readAuthFile(filepath: string): Promise<Record<string, Info>> {
     const file = Bun.file(filepath);
     if (!(await file.exists())) return {};
-
-    let data: unknown;
-    try {
-      data = await file.json();
-    } catch (cause) {
-      throw new InvalidFileError(
-        { message: `auth file is not valid JSON: ${filepath}`, path: filepath },
-        { cause },
-      );
-    }
-    if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    const document = AuthFile.safeParse(await file.json().catch(invalidJson(filepath)));
+    if (!document.success) {
       throw new InvalidFileError({
         message: `auth file is not a JSON object: ${filepath}`,
         path: filepath,
       });
     }
+    return credentials(document.data);
+  }
 
-    return Object.entries(data).reduce(
-      (acc, [key, value]) => {
+  function invalidJson(filepath: string) {
+    return <C>(cause: C): never => {
+      throw new InvalidFileError(
+        { message: `auth file is not valid JSON: ${filepath}`, path: filepath },
+        { cause },
+      );
+    };
+  }
+
+  /** Entries that are not credentials are skipped, never rewritten. */
+  function credentials(document: z.infer<typeof AuthFile>): Record<string, Info> {
+    return Object.fromEntries(
+      Object.entries(document).flatMap(([key, value]) => {
         const parsed = Info.safeParse(value);
-        if (!parsed.success) return acc;
-        acc[key] = parsed.data;
-        return acc;
-      },
-      {} as Record<string, Info>,
+        return parsed.success ? [[key, parsed.data] as const] : [];
+      }),
     );
   }
 

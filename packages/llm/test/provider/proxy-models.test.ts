@@ -4,12 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Auth } from "../../src/auth";
 import { ModelsDev } from "../../src/model";
+import { resetCatalog } from "../helpers/model-loader";
 import { Provider } from "../../src/provider/index";
-import {
-  enrichWithCatalog,
-  fetchProxyModels,
-  ProxyModelsError,
-} from "../../src/provider/proxy-models";
+import { enrichWithCatalog, fetchProxyModels } from "../../src/provider/proxy-models";
 
 type FetchArgs = Parameters<typeof fetch>;
 const originalFetch = globalThis.fetch;
@@ -17,17 +14,19 @@ const originalFetch = globalThis.fetch;
 function stubFetch(
   handler: (input: FetchArgs[0], init?: FetchArgs[1]) => Response | Promise<Response>,
 ): void {
-  globalThis.fetch = handler as typeof fetch;
+  globalThis.fetch = Object.assign(async (...args: FetchArgs) => handler(...args), {
+    preconnect: originalFetch.preconnect,
+  });
 }
 
 describe("proxy-models", () => {
   beforeEach(() => {
     globalThis.fetch = originalFetch;
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    ModelsDev.Data.reset();
+    resetCatalog();
   });
 
   describe("fetchProxyModels", () => {
@@ -58,6 +57,30 @@ describe("proxy-models", () => {
       expect(capturedHeaders?.get("Authorization")).toBe(expected);
     });
 
+    it("keeps exactly the valid IDs when objects and non-object entries are mixed", async () => {
+      stubFetch(() =>
+        Response.json({
+          data: [
+            { id: "first" },
+            { id: 42 },
+            { other: "ignored" },
+            { id: "" },
+            null,
+            "ignored",
+            42,
+            false,
+            [],
+            { id: "second", extra: "allowed" },
+          ],
+        }),
+      );
+
+      expect(await fetchProxyModels("https://mixed-entries-proxy.example/v1")).toEqual([
+        "first",
+        "second",
+      ]);
+    });
+
     it("does not share cached model lists between credentials at the same URL", async () => {
       const authorizationHeaders: Array<string | null> = [];
       stubFetch((_input, init) => {
@@ -81,17 +104,10 @@ describe("proxy-models", () => {
 
     it("throws a typed error on auth failure (401) instead of returning []", async () => {
       stubFetch(() => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }));
-      const error = await fetchProxyModels("http://localhost:3102/v1").then(
-        () => {
-          throw new Error("expected fetchProxyModels to reject");
-        },
-        (cause: unknown) => cause,
-      );
-      expect(ProxyModelsError.isInstance(error)).toBe(true);
-      if (ProxyModelsError.isInstance(error)) {
-        expect(error.data.status).toBe(401);
-        expect(error.data.url).toBe("http://localhost:3102/v1/models");
-      }
+      await expect(fetchProxyModels("http://localhost:3102/v1")).rejects.toMatchObject({
+        name: "ProxyModelsError",
+        data: { status: 401, url: "http://localhost:3102/v1/models" },
+      });
     });
 
     it.each([
@@ -115,8 +131,8 @@ describe("proxy-models", () => {
     });
   });
 
-  describe("Provider.listModels proxy discovery", () => {
-    it("returns only models advertised by the configured proxy", async () => {
+  describe("Provider.resolveModel proxy discovery", () => {
+    it("resolves a model advertised only by the configured proxy", async () => {
       const directory = mkdtempSync(join(tmpdir(), "openomni-proxy-registry-"));
       const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
       const previousModelsPath = process.env.OPENOMNI_MODELS_PATH;
@@ -152,16 +168,16 @@ describe("proxy-models", () => {
       });
 
       try {
-        ModelsDev.Data.reset();
-        await ModelsDev.Data();
+        resetCatalog();
+        await ModelsDev.get();
         await Auth.set("openai", {
           type: "proxy",
           baseURL: "http://localhost:3199/v1",
           apiKey: "proxy-key",
         });
-        const models = await Provider.listModels("openai", "proxy");
+        const model = await Provider.resolveModel({ provider: "openai", id: "proxy-only-model" });
 
-        expect(models.map((model) => model.id)).toEqual(["proxy-only-model"]);
+        expect(model).toMatchObject({ id: "proxy-only-model", providerID: "openai" });
       } finally {
         if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
         else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;

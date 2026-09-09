@@ -43,6 +43,15 @@ describe("tablesToBullets", () => {
     expect(tablesToBullets(text)).toBe(text);
   });
 
+  it.each([1, 2, 8])("preserves a terminal %s-column header without a separator", (width) => {
+    const columns = Array.from<undefined, string>(
+      { length: width },
+      (_, index) => `column-${index}`,
+    );
+    const text = `before\n| ${columns.join(" | ")} |`;
+    expect(tablesToBullets(text)).toBe(text);
+  });
+
   it("keeps surrounding prose and converts only the table lines", () => {
     const text = "before\n| H |\n| - |\n| v |\nafter";
     expect(tablesToBullets(text)).toBe("before\n**v**\nafter");
@@ -59,24 +68,32 @@ describe("chunkMarkdown", () => {
   });
 
   it("splits at line boundaries and keeps every chunk within budget", () => {
-    const text = Array.from({ length: 30 }, (_, i) => `line number ${i}`).join("\n");
+    const text = Array.from<undefined, string>({ length: 30 }, (_, i) => `line number ${i}`).join(
+      "\n",
+    );
     const chunks = chunkMarkdown(text, 64);
     expect(chunks.length).toBeGreaterThan(1);
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(64);
     expect(chunks.join("\n")).toBe(text);
   });
 
-  it("closes an interrupted code fence and reopens it with its info string", () => {
-    const code = Array.from({ length: 20 }, (_, i) => `const x${i} = ${i};`).join("\n");
+  it.each([
+    64, 65, 100, 200,
+  ])("preserves fenced code across a %s-character chunk boundary", (limit) => {
+    const code = Array.from<undefined, string>(
+      { length: 20 },
+      (_, i) => `const x${i} = ${i};`,
+    ).join("\n");
     const text = `\`\`\`ts\n${code}\n\`\`\``;
-    const chunks = chunkMarkdown(text, 100);
+    const chunks = chunkMarkdown(text, limit);
     expect(chunks.length).toBeGreaterThan(1);
     for (const chunk of chunks) {
-      expect(chunk.length).toBeLessThanOrEqual(100);
+      expect(chunk.length).toBeLessThanOrEqual(limit);
       expect(chunk.startsWith("```")).toBe(true);
       expect(chunk.endsWith("```")).toBe(true);
     }
     expect(chunks[1]?.startsWith("```ts\n")).toBe(true);
+    expect(chunks.flatMap((chunk) => chunk.split("\n").slice(1, -1)).join("\n")).toBe(code);
   });
 
   it("does not close a fence on a tilde line inside a backtick fence", () => {

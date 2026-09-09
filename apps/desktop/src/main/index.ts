@@ -29,7 +29,6 @@ let lastFocusedWindowId: number | null = null;
 
 if (development) app.commandLine.appendSwitch("remote-debugging-port", "9333");
 
-/** Same values as `--color-sunken` in @openomni/ui's two themes: no flash of the wrong shade before first paint. */
 const BACKGROUND = { dark: "#0A0A0C", light: "#EFEFF0" } as const;
 
 const boundsFile = () => join(app.getPath("userData"), "window-bounds.json");

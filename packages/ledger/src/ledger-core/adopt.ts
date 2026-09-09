@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
-import { Ledger as LedgerTypes } from "@openomni/protocol";
+import { Ledger as LedgerTypes, PlainValueSchema } from "@openomni/protocol";
 import { GENESIS_SEED } from "./hash";
 import { computeLedgerEventHash } from "./hash";
 
@@ -28,17 +28,25 @@ export function adoptStream(
   genesis: LedgerTypes.AdoptGenesis,
 ): void {
   // Service-entry enforcement layer (the one owner of input validity).
-  const parsed = LedgerTypes.AdoptGenesis.parse(genesis);
+  const parsed = LedgerTypes.AdoptGenesis.extend({
+    data: z.record(z.string(), PlainValueSchema),
+  }).parse(genesis);
   const seq = HeadRevision.parse(headRevision);
   const stream = z.string().min(1).parse(streamId);
 
   db.transaction(() => {
-    const head = db.query("SELECT head FROM ledger_head WHERE stream_id = ?").get(stream) as {
-      head: number;
-    } | null;
-    const tip = db
-      .query("SELECT seq FROM ledger_event WHERE stream_id = ? ORDER BY seq DESC LIMIT 1")
-      .get(stream) as { seq: number } | null;
+    const head = z
+      .object({ head: z.number().int().nonnegative() })
+      .nullable()
+      .parse(db.query("SELECT head FROM ledger_head WHERE stream_id = ?").get(stream));
+    const tip = z
+      .object({ seq: z.number().int().nonnegative() })
+      .nullable()
+      .parse(
+        db
+          .query("SELECT seq FROM ledger_event WHERE stream_id = ? ORDER BY seq DESC LIMIT 1")
+          .get(stream),
+      );
     if ((head !== null && head.head !== 0) || tip !== null) {
       throw new LedgerTypes.AdoptError({
         message: `stream ${stream} is not empty — adoption would fabricate a second genesis`,

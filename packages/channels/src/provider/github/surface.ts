@@ -1,22 +1,22 @@
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
 import { z } from "zod";
-import { Dedupe, type DedupeToken } from "../../support/dedupe";
+import { Dedupe } from "../../support/dedupe";
 import { requireHandler } from "../../support/handler-frame";
 import { GitHubClient } from "./client";
-import {
-  type GitHubEventContent,
-  type GitHubIssuePayload,
-  type GitHubUser,
-  GitHubWebhookPayloadSchemas,
-} from "./types";
+import { GitHubWebhookPayloadSchemas } from "./types";
 import type { PublishPort } from "../../types";
 import type { DeliveryReceipt } from "../../support/deliver";
-import {
-  ChannelAuthnMiddleware,
-  type ChannelAuthnDecisionObserver,
-  decisionOption,
-} from "../../channel-authn";
+import { authenticateGitHubWebhook } from "../../authn/github";
+import type { ChannelAuthnDecisionObserver } from "../../authn/types";
+
+interface GitHubEventContent {
+  text: string;
+  sender: string;
+  repo: string;
+  issueNumber: number;
+  issueKind: "issue" | "pr";
+}
 
 interface GitHubAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
@@ -24,6 +24,7 @@ interface GitHubAuthOptions {
 
 /** Every webhook payload carries `action`; unsupported events may not — optional keeps the event-key log honest. */
 const EventActionSchema = z.object({ action: z.string().optional() });
+const WebhookBodySchema = z.record(z.string(), z.json());
 
 function actionOf(raw: object): string | undefined {
   const parsed = EventActionSchema.safeParse(raw);
@@ -33,17 +34,15 @@ function actionOf(raw: object): string | undefined {
 /** Shared shape of both supported payloads — one construction site, not two cloned literals. */
 function issueContent(
   text: string,
-  user: GitHubUser,
-  payload: GitHubIssuePayload,
+  user: { login: string },
+  payload: z.infer<typeof GitHubWebhookPayloadSchemas.issues>,
 ): GitHubEventContent | null {
   return {
     text,
     sender: user.login,
-    senderType: user.type,
     repo: payload.repository.full_name,
     issueNumber: payload.issue.number,
     issueKind: payload.issue.pull_request ? "pr" : "issue",
-    labels: (payload.issue.labels ?? []).map((label) => label.name),
   };
 }
 
@@ -71,7 +70,7 @@ function extractContent(event: string, raw: object): GitHubEventContent | null {
 type PreparedWebhook = Readonly<{
   traceId: string;
   deliveryId: string | null;
-  dedupeToken: DedupeToken | undefined;
+  dedupeToken: symbol | undefined;
   content: GitHubEventContent;
   inbound: Channel.InboundMessage;
 }>;
@@ -90,7 +89,6 @@ export class GitHubAdapter implements Channel.Surface {
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
     githubToken?: string,
-    _botUsername?: string,
     private readonly authOptions: GitHubAuthOptions = {},
   ) {
     this.client = new GitHubClient(publish, githubToken);
@@ -143,20 +141,32 @@ export class GitHubAdapter implements Channel.Surface {
     // Origin: the first frame of an inbound webhook delivery — this ONE mint
     // is the message's trace, carried to the run (D11).
     const traceId = newTraceId();
-    const auth = await ChannelAuthnMiddleware.authenticateGitHubWebhook({
+    const auth = await authenticateGitHubWebhook({
       request,
       secret: this.secret,
-      ...decisionOption(this.authOptions.onDecision),
+      ...(this.authOptions.onDecision === undefined
+        ? {}
+        : { onDecision: this.authOptions.onDecision }),
     });
     if (auth.response) return auth.response;
 
-    const preparation = this.prepareWebhook(request, auth.body ?? "", traceId);
+    let body: ReturnType<typeof WebhookBodySchema.safeParse>;
+    try {
+      body = WebhookBodySchema.safeParse(JSON.parse(auth.body ?? ""));
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+    const preparation = this.prepareWebhook(request, body, traceId);
     if ("response" in preparation) return preparation.response;
 
     return this.dispatchWebhook(preparation);
   }
 
-  private prepareWebhook(request: Request, body: string, traceId: string): WebhookPreparation {
+  private prepareWebhook(
+    request: Request,
+    body: ReturnType<typeof WebhookBodySchema.safeParse>,
+    traceId: string,
+  ): WebhookPreparation {
     const deliveryId = request.headers.get("x-github-delivery");
     const dedupeAcquisition = deliveryId === null ? undefined : this.dedupe.acquire(deliveryId);
     if (dedupeAcquisition?.duplicate) {
@@ -167,7 +177,8 @@ export class GitHubAdapter implements Channel.Surface {
     const event = request.headers.get("x-github-event");
     if (!event) return { response: new Response("Missing event", { status: 400 }) };
 
-    const raw = z.record(z.string(), z.json()).parse(JSON.parse(body));
+    if (!body.success) return { response: new Response("Unsupported event", { status: 200 }) };
+    const raw = body.data;
     const eventKey = `${event}.${actionOf(raw)}`;
     this.publish(Operational.Events.Info, {
       traceId,
@@ -188,9 +199,10 @@ export class GitHubAdapter implements Channel.Surface {
       return { response: new Response("Missing delivery id", { status: 400 }) };
     const addressees = [
       ...new Set(
-        [...content.text.matchAll(/@([a-zA-Z0-9][a-zA-Z0-9-]*)/g)]
-          .map((match) => match[1])
-          .filter((id): id is string => id !== undefined),
+        [...content.text.matchAll(/@([a-zA-Z0-9][a-zA-Z0-9-]*)/g)].flatMap((match) => {
+          const id = match[1];
+          return id === undefined ? [] : [id];
+        }),
       ),
     ];
     const inbound: Channel.InboundMessage = {

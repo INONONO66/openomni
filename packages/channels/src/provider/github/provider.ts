@@ -2,12 +2,12 @@ import { z } from "zod";
 import type { ChannelProvider } from "../contract.js";
 import { GitHubAdapter } from "./surface.js";
 
-export interface GitHubCredentials {
+interface GitHubCredentials {
   /** HMAC secret verifying webhook deliveries — the one required field. */
   readonly secret: string;
   /** API token for posting reply comments; absent leaves the channel ingress-only. */
   readonly token?: string;
-  /** The bot's own login, filtered from mention triggers and self-echoes. */
+  /** Application credential hint; webhook normalization does not filter bot senders. */
   readonly botUsername?: string;
 }
 
@@ -33,13 +33,7 @@ export const GitHubProvider: ChannelProvider<GitHubCredentials, "github"> = {
     "repository webhook posts issues/issue_comment events to the public endpoint with the shared secret",
   ],
   create(credentials, config, publish) {
-    const surface = new GitHubAdapter(
-      credentials.secret,
-      config,
-      publish,
-      credentials.token,
-      credentials.botUsername,
-    );
+    const surface = new GitHubAdapter(credentials.secret, config, publish, credentials.token);
     return {
       surface,
       deliveryRoute: (externalId, body, key) => surface.deliver(externalId, body, key),

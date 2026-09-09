@@ -4,10 +4,10 @@ import type { Provider } from "./index";
 
 /**
  * A proxy that cannot list its models must fail loudly: swallowing the
- * failure into an empty list made listModels() fall through to the full
- * models.dev catalog, presenting every model as "available on this proxy".
+ * failure into an empty list made proxy model resolution fall through to the
+ * full models.dev catalog, presenting every model as "available on this proxy".
  */
-export const ProxyModelsError = NamedError.create(
+const ProxyModelsError = NamedError.create(
   "ProxyModelsError",
   z.object({
     message: z.string(),
@@ -36,17 +36,8 @@ function credentialFingerprint(apiKey: string | undefined): string {
     .digest("hex");
 }
 
-function readModelIds(value: unknown): string[] {
-  if (typeof value !== "object" || value === null || !("data" in value)) return [];
-  const data = value.data;
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((item) => {
-      if (typeof item !== "object" || item === null || !("id" in item)) return undefined;
-      return typeof item.id === "string" ? item.id : undefined;
-    })
-    .filter((id): id is string => Boolean(id));
-}
+const ModelEntry = z.object({ id: z.string().min(1) }).passthrough();
+const ModelListing = z.object({ data: z.array(z.json()) });
 
 export async function fetchProxyModels(baseURL: string, apiKey?: string): Promise<string[]> {
   const url = normalizeModelsURL(baseURL);
@@ -76,9 +67,9 @@ export async function fetchProxyModels(baseURL: string, apiKey?: string): Promis
     });
   }
 
-  let body: unknown;
+  let body: z.infer<typeof ModelListing>;
   try {
-    body = await response.json();
+    body = ModelListing.parse(await response.json());
   } catch (cause) {
     throw new ProxyModelsError(
       { message: "proxy model listing returned invalid JSON", url },
@@ -86,7 +77,10 @@ export async function fetchProxyModels(baseURL: string, apiKey?: string): Promis
     );
   }
 
-  const ids = readModelIds(body);
+  const ids = body.data.flatMap((entry) => {
+    const parsed = ModelEntry.safeParse(entry);
+    return parsed.success ? [parsed.data.id] : [];
+  });
   modelCache.set(cacheKey, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
   return ids;
 }

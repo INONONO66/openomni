@@ -13,7 +13,7 @@ for (const text of ["ambient event", "@owner review @bot", "@bot"]) {
     };
     const body = JSON.stringify(payload);
     const received: Channel.InboundMessage[] = [];
-    const adapter = new GitHubAdapter("secret", {}, () => undefined, undefined, "bot");
+    const adapter = new GitHubAdapter("secret", {}, () => undefined);
     adapter.onMessage(async (message) => {
       received.push(message);
     });

@@ -3,22 +3,9 @@ import { APIError } from "../../src/error";
 import { Run } from "../../src/run";
 import { Retry } from "../../src/retry";
 
-/** An AI SDK provider error as the SDK raises it: facts on the object itself. */
-function sdkError(fields: {
-  readonly message: string;
-  readonly isRetryable: boolean;
-  readonly statusCode?: number;
-  readonly responseBody?: string;
-}): Error {
-  return Object.assign(new Error(fields.message), {
-    name: "AI_APICallError",
-    isRetryable: fields.isRetryable,
-    ...(fields.statusCode === undefined ? {} : { statusCode: fields.statusCode }),
-    ...(fields.responseBody === undefined ? {} : { responseBody: fields.responseBody }),
-  });
-}
+import { sdkError } from "../helpers/retry";
 
-function runFailure(cause: unknown): Run.Failure {
+function runFailure(cause: Error): Run.Failure {
   return new Run.FailureError(
     {
       message: "the model call failed",
@@ -89,7 +76,7 @@ describe("Retry.classifyFailure", () => {
 
   test("terminates on a self-referential cause chain", () => {
     const looping = new Error("loop");
-    (looping as { cause?: unknown }).cause = looping;
+    looping.cause = looping;
 
     expect(Retry.classifyFailure(looping)).toBe("non_retryable");
   });

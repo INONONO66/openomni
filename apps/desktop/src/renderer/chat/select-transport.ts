@@ -10,7 +10,7 @@ import { createGatewayChatTransport } from "./gateway-transport";
  * alternative is a shell that looks connected and answers nothing, which is a
  * harder failure to read than one sentence naming the variable to fix.
  */
-export type SelectedTransport =
+type SelectedTransport =
   | {
       readonly kind: "gateway";
       readonly transport: ChatTransport<UIMessage>;

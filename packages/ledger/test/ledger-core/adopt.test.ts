@@ -4,6 +4,7 @@ import { Ledger as LedgerTypes } from "@openomni/protocol";
 import { GENESIS_SEED } from "../../src/ledger-core/hash";
 import { Ledger } from "../../src/ledger-core/index";
 import { appendChain, openLedgerDatabase } from "../helpers/ledger";
+import { expectNamedFailure } from "../helpers/errors";
 
 let db: Database;
 
@@ -54,21 +55,15 @@ describe("Ledger.adoptStream", () => {
   test("a non-empty stream throws the typed AdoptError and writes nothing", () => {
     appendChain(db, 2, "work:occupied");
 
-    let thrown: unknown;
-    try {
-      Ledger.adoptStream(db, "work:occupied", 5, {
-        type: "work_item.adopted",
-        data: { revision: 5 },
-      });
-    } catch (error) {
-      thrown = error;
-    }
-
-    if (!LedgerTypes.AdoptError.isInstance(thrown)) {
-      throw new Error("expected the typed LedgerAdoptError");
-    }
-    expect(thrown.data.streamId).toBe("work:occupied");
-    expect(thrown.data.currentHead).toBe(2);
+    expectNamedFailure(
+      () =>
+        Ledger.adoptStream(db, "work:occupied", 5, {
+          type: "work_item.adopted",
+          data: { revision: 5 },
+        }),
+      LedgerTypes.AdoptError.name,
+      { streamId: "work:occupied", currentHead: 2 },
+    );
     expect(readHead("work:occupied")).toBe(2);
     expect(readEvents("work:occupied")).toHaveLength(2);
   });
@@ -76,16 +71,15 @@ describe("Ledger.adoptStream", () => {
   test("a second adoption of the same stream throws the typed AdoptError", () => {
     Ledger.adoptStream(db, "wait:once", 1, { type: "wait.adopted", data: { revision: 1 } });
 
-    let thrown: unknown;
-    try {
-      Ledger.adoptStream(db, "wait:once", 1, { type: "wait.adopted", data: { revision: 1 } });
-    } catch (error) {
-      thrown = error;
-    }
-
-    if (!LedgerTypes.AdoptError.isInstance(thrown)) {
-      throw new Error("expected the typed LedgerAdoptError");
-    }
+    expectNamedFailure(
+      () =>
+        Ledger.adoptStream(db, "wait:once", 1, {
+          type: "wait.adopted",
+          data: { revision: 1 },
+        }),
+      LedgerTypes.AdoptError.name,
+      { streamId: "wait:once", currentHead: 1 },
+    );
     expect(readEvents("wait:once")).toHaveLength(1);
   });
 

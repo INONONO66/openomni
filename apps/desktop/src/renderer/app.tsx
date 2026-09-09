@@ -23,6 +23,7 @@ import { SessionList } from "./shell/session-list";
 import { sessionGlyphProps } from "./shell/session-glyph";
 import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
+import { desktopBridge } from "./state/desktop-bridge";
 import { useGatewayEndpoint } from "./state/queries";
 import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
@@ -44,8 +45,6 @@ import {
   type SessionId,
   setDraft,
   setSessionTitleIfPlaceholder,
-  setSessionPhase,
-  setSessionAttention,
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
@@ -54,20 +53,13 @@ import {
   toggleSidebar,
 } from "./state/store";
 
-if (import.meta.env?.DEV) {
-  Object.assign(window, {
-    __openomniDev: { store: consoleStore, setSessionPhase, setSessionAttention },
-  });
-}
-
 export function App({ platform, storage }: AppEnvironment) {
   const state = useStore(consoleStore);
   const now = Date.now();
   const { sessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
   const tab = activeTab(state);
   const place = activePlace(state);
-  const history = tab?.history;
-  const endpoint = useGatewayEndpoint();
+  const { transport, notice } = useChatEndpoint();
   const search = useRef({ searching: false, invokingTabId: state.activeTabId });
   const focusRecovery = useRef<"panel" | "tab" | null>(null);
   const [held, setHeld] = useState<Held>(() => ({
@@ -75,43 +67,7 @@ export function App({ platform, storage }: AppEnvironment) {
     pendingChanges: 0,
   }));
 
-  useLayoutEffect(() => {
-    if (storage === null) return;
-    const remembered = readShellPreferences(storage);
-    setSidebarOpen(remembered.open);
-    setSidebarWidth(remembered.width);
-    const subscription = consoleStore.subscribe(() => {
-      writeShellPreferences(storage, {
-        open: consoleStore.state.sidebarOpen,
-        width: consoleStore.state.sidebarWidth,
-      });
-    });
-    return subscription.unsubscribe;
-  }, [storage]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (shellShortcut(event, isEditing(event.target)) === null) return;
-      toggleSidebar();
-      event.preventDefault();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  const selected = useMemo(
-    () => (endpoint.data ? selectChatTransport(endpoint.data) : null),
-    [endpoint.data],
-  );
-  const transport = selected?.transport ?? null;
-  const notice = endpoint.isPending
-    ? undefined
-    : (endpoint.error?.message ??
-      (selected === null
-        ? "gateway not configured"
-        : selected.kind === "misconfigured"
-          ? selected.problem
-          : undefined));
+  useShellLifecycle(storage);
   const transportRef = useRef(transport);
   useLayoutEffect(() => {
     transportRef.current = transport;
@@ -173,16 +129,20 @@ export function App({ platform, storage }: AppEnvironment) {
     )?.focus();
   }, [state.activeTabId, tabs]);
 
-  useEffect(() => {
-    const bridge = (window as { readonly desktop?: Window["desktop"] }).desktop;
-    return bridge?.onShellCommand((command: ShellCommand) => {
+  const onShellCommand = useCallback(
+    (command: ShellCommand) => {
       const before = consoleStore.state;
       if (command === "close-tab" && before.activeTabId !== null)
         captureCloseFocus(before.activeTabId);
       dispatchShellCommand(command);
       if (consoleStore.state !== before) arrive();
-    });
-  }, [arrive, captureCloseFocus]);
+    },
+    [arrive, captureCloseFocus],
+  );
+
+  useEffect(() => {
+    return desktopBridge()?.onShellCommand(onShellCommand);
+  }, [onShellCommand]);
 
   const onSearchingChange = useCallback((searching: boolean) => {
     if (searching && !search.current.searching) {
@@ -244,16 +204,7 @@ export function App({ platform, storage }: AppEnvironment) {
     createLabel: "New session",
     onCreate: () => travel(newSessionTab),
     platform,
-    history: {
-      entries: historyMenuEntries(state),
-      currentId: history === undefined ? null : String(history.cursor),
-      now,
-      canBack: history !== undefined && canGoBack(history),
-      canForward: history !== undefined && canGoForward(history),
-      onBack: () => travel(back),
-      onForward: () => travel(forward),
-      onJump: (cursor) => travel(() => jumpFrom(tab, cursor)),
-    },
+    history: historyControls(state, now, travel),
   };
   const sidebar = (
     <SessionTree
@@ -303,6 +254,68 @@ export function App({ platform, storage }: AppEnvironment) {
       />
     );
   return <Console content={content} shell={shell} sidebar={sidebar} strip={strip} />;
+}
+
+function historyControls(
+  state: typeof consoleStore.state,
+  now: number,
+  travel: (action: () => void) => void,
+): ConsoleStrip["history"] {
+  const tab = activeTab(state);
+  const history = tab?.history;
+  return {
+    entries: historyMenuEntries(state),
+    currentId: history === undefined ? null : String(history.cursor),
+    now,
+    canBack: history !== undefined && canGoBack(history),
+    canForward: history !== undefined && canGoForward(history),
+    onBack: () => travel(back),
+    onForward: () => travel(forward),
+    onJump: (cursor) => travel(() => jumpFrom(tab, cursor)),
+  };
+}
+
+function useChatEndpoint() {
+  const endpoint = useGatewayEndpoint();
+  const selected = useMemo(
+    () => (endpoint.data ? selectChatTransport(endpoint.data) : null),
+    [endpoint.data],
+  );
+  const notice = endpoint.isPending
+    ? undefined
+    : (endpoint.error?.message ??
+      (selected === null
+        ? "gateway not configured"
+        : selected.kind === "misconfigured"
+          ? selected.problem
+          : undefined));
+  return { transport: selected?.transport ?? null, notice };
+}
+
+function useShellLifecycle(storage: Storage | null): void {
+  useLayoutEffect(() => {
+    if (storage === null) return;
+    const remembered = readShellPreferences(storage);
+    setSidebarOpen(remembered.open);
+    setSidebarWidth(remembered.width);
+    const subscription = consoleStore.subscribe(() => {
+      writeShellPreferences(storage, {
+        open: consoleStore.state.sidebarOpen,
+        width: consoleStore.state.sidebarWidth,
+      });
+    });
+    return subscription.unsubscribe;
+  }, [storage]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (shellShortcut(event, isEditing(event.target)) === null) return;
+      toggleSidebar();
+      event.preventDefault();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 }
 
 export interface AppEnvironment {

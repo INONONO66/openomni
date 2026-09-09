@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { z } from "zod";
 import { Migration } from "../../src/storage/migration-runner";
 import { RETIRED_TABLE_MIGRATION } from "../../src/storage/u967-preflight";
 import { createDispositionFixture, snapshotDatabase } from "../helpers/disposition-967";
@@ -10,8 +11,8 @@ const directory = resolve(import.meta.dir, "../../migration");
 const sql = readFileSync(resolve(directory, RETIRED_TABLE_MIGRATION), "utf8");
 const created = new Set([...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map((match) => match[1]));
 const retired = [...sql.matchAll(/DROP TABLE ([a-z_]+)/g)]
-  .map((match) => match[1])
-  .filter((name): name is string => name !== undefined && !created.has(name));
+  .map((match) => z.string().parse(match[1]))
+  .filter((name) => !created.has(name));
 
 for (const table of retired) {
   test(`message migration refuses a retained ${table} row atomically`, () => {

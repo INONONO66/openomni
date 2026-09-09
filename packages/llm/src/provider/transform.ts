@@ -2,37 +2,14 @@ import type { SDKMessage } from "../message";
 import type { Provider } from "./index";
 
 export namespace ProviderTransform {
-  interface NormalizeOptions {
-    npm: string;
-    modelId: string;
-  }
-
-  type SDKMessageWithProviderOptions = SDKMessage & {
-    readonly providerOptions?: Record<string, unknown>;
-  };
-
   type AssistantMessageContent = Extract<SDKMessage, { role: "assistant" }>["content"];
   type AssistantContentPart = Exclude<AssistantMessageContent, string>[number];
   type ToolContentPart = Extract<SDKMessage, { role: "tool" }>["content"][number];
   type NormalizableContentPart = Exclude<SDKMessage["content"], string>[number];
 
-  export function normalizeMessages(
-    msgs: SDKMessage[],
-    model: Provider.Model | NormalizeOptions,
-  ): SDKMessage[] {
-    let npm: string | undefined;
-    let modelId: string;
-
-    if ("api" in model && model.api) {
-      npm = model.api.npm;
-      modelId = model.id;
-    } else {
-      npm = (model as NormalizeOptions).npm;
-      modelId = (model as NormalizeOptions).modelId;
-    }
-
-    if (isAnthropicPackage(npm)) {
-      return normalizeAnthropic(msgs, { npm: npm || "", modelId });
+  export function normalizeMessages(msgs: SDKMessage[], model: Provider.Model): SDKMessage[] {
+    if (isAnthropicPackage(model.api?.npm)) {
+      return normalizeAnthropic(msgs, model.id);
     }
 
     return msgs;
@@ -42,7 +19,7 @@ export namespace ProviderTransform {
     return npm === "@ai-sdk/anthropic";
   }
 
-  function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {
+  function normalizeAnthropic(msgs: SDKMessage[], modelId: string): SDKMessage[] {
     let result = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -65,9 +42,9 @@ export namespace ProviderTransform {
         if (filtered.length === 0) return undefined;
         return buildMessageWithContent(msg, filtered);
       })
-      .filter((msg): msg is SDKMessage => msg !== undefined && msg.content !== "");
+      .flatMap((msg) => (msg === undefined || msg.content === "" ? [] : [msg]));
 
-    if (model.modelId.includes("claude")) {
+    if (modelId.includes("claude")) {
       result = result.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           return { ...msg, content: msg.content.map(sanitizeAssistantContentPart) };
@@ -100,13 +77,12 @@ export namespace ProviderTransform {
       if (msgs[i]?.role !== "user") continue;
       return msgs.map((msg, index) => {
         if (index !== i) return msg;
-        const existing = (msg as SDKMessageWithProviderOptions).providerOptions;
-        const existingAnthropic = (existing?.anthropic ?? {}) as Record<string, unknown>;
+        const existing = msg.providerOptions;
         return {
           ...msg,
           providerOptions: {
             ...existing,
-            anthropic: { ...existingAnthropic, cacheControl: CACHE_CONTROL },
+            anthropic: { ...existing?.anthropic, cacheControl: CACHE_CONTROL },
           },
         };
       });
@@ -168,27 +144,42 @@ export namespace ProviderTransform {
     if (msg.role === "assistant") {
       return {
         ...msg,
-        content: content.filter(isAssistantContentPart),
+        content: content.flatMap((part) => {
+          const assistantPart = assistantContentPart(part);
+          return assistantPart === undefined ? [] : [assistantPart];
+        }),
       };
     }
     return {
       ...msg,
-      content: content.filter(isToolContentPart),
+      content: content.flatMap((part) => {
+        const toolPart = toolContentPart(part);
+        return toolPart === undefined ? [] : [toolPart];
+      }),
     };
   }
 
-  function isAssistantContentPart(part: NormalizableContentPart): part is AssistantContentPart {
-    return (
-      part.type === "text" ||
-      part.type === "file" ||
-      part.type === "reasoning" ||
-      part.type === "tool-call" ||
-      part.type === "tool-result" ||
-      part.type === "tool-approval-request"
-    );
+  function assistantContentPart(part: NormalizableContentPart): AssistantContentPart | undefined {
+    switch (part.type) {
+      case "text":
+      case "file":
+      case "reasoning":
+      case "tool-call":
+      case "tool-result":
+      case "tool-approval-request":
+        return part;
+      default:
+        return undefined;
+    }
   }
 
-  function isToolContentPart(part: NormalizableContentPart): part is ToolContentPart {
-    return part.type === "tool-result" || part.type === "tool-approval-response";
+  function toolContentPart(part: NormalizableContentPart): ToolContentPart | undefined {
+    switch (part.type) {
+      case "tool-result":
+      case "tool-approval-response":
+        return part;
+      default:
+        return undefined;
+    }
   }
 }

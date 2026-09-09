@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { act, useState } from "react";
+import { act } from "react";
+import { InteractiveTabs } from "./interactive-tabs";
 import { createRoot, type Root } from "react-dom/client";
 import { Console, ConsoleContent } from "../src/console";
 import { SHELL, STRIP } from "./fixture";
@@ -30,22 +31,8 @@ const records = ["a", "b", "c"].map((id) => ({ id, title: id, icon: null, active
 
 test("tab keyboard navigation wraps, updates panel ownership and scrolls selection into view", async () => {
   const scroll = spyOn(browser.HTMLElement.prototype, "scrollIntoView");
-  function Frame() {
-    const [active, setActive] = useState("a");
-    return (
-      <Console
-        shell={SHELL}
-        sidebar={null}
-        strip={{
-          ...STRIP,
-          tabs: records.map((tab) => ({ ...tab, active: tab.id === active })),
-          onActivate: setActive,
-        }}
-      />
-    );
-  }
   try {
-    await act(() => root.render(<Frame />));
+    await act(() => root.render(<InteractiveTabs records={records} />));
     expect(scroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
     for (const [from, key, to] of [
       ["a", "ArrowLeft", "c"],

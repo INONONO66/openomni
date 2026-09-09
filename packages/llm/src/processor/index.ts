@@ -4,6 +4,7 @@ import {
   Transcript,
   type BusEvent,
   type Message,
+  type PlainObject,
   type Tool,
 } from "@openomni/protocol";
 import type { Sink } from "../sink";
@@ -62,9 +63,13 @@ export namespace Processor {
       toolNames,
       estimateUsage = defaultEstimateUsage,
       trace,
-      sink: configuredSink = createNoopSink(),
     } = options;
-    const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);
+    const sink = createProjectedSink(
+      events,
+      options.sink ?? createNoopSink(),
+      sessionID,
+      trace.traceId,
+    );
     let folded: Message.WithParts | undefined;
     const eventState = createStreamEventState();
     const attemptId = `${assistantMessage.id}#1`;
@@ -124,7 +129,7 @@ export namespace Processor {
               await Promise.race([
                 Promise.resolve(closing).then(
                   () => undefined,
-                  (error) => {
+                  (error: Error) => {
                     publishInfo(events, sessionID, trace.traceId, "stream.close.failed", {
                       error: String(error),
                     });
@@ -172,7 +177,7 @@ export namespace Processor {
     sessionID: string,
     traceId: string,
     message: string,
-    data?: Record<string, unknown>,
+    data?: PlainObject,
   ): void {
     events.publish(Operational.Events.Info, {
       traceId,
@@ -212,7 +217,7 @@ export namespace Processor {
         publishInfo(events, sessionID, traceId, "sink.tool.completed", {
           toolCallId: result.toolCallId,
           outputLength: result.output.length,
-          isError: result.isError,
+          isError: result.isError === true,
         });
       },
     };
@@ -232,7 +237,7 @@ export namespace Processor {
   ): void {
     publishInfo(events, sessionID, traceId, "sink.snapshot", { stateType });
   }
-  function summarizeRecord(input: Record<string, unknown>): string {
+  function summarizeRecord(input: PlainObject): string {
     const keys = Object.keys(input).sort();
     return keys.length === 0 ? "empty" : keys.join(",");
   }

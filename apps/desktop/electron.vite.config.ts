@@ -8,7 +8,8 @@ export default defineConfig({
     build: { lib: { entry: "src/main/index.ts" }, outDir: "dist/main" },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    // Sandboxed preloads cannot require npm dependencies at runtime.
+    plugins: [externalizeDepsPlugin({ exclude: ["zod"] })],
     // Sandboxed preloads must be CommonJS: Electron only loads ESM preloads with sandbox:false.
     build: {
       lib: { entry: "src/preload/index.ts", formats: ["cjs"] },

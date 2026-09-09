@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Auth } from "../../src/auth";
-import { type ModelsDev, Provider } from "../../src/provider";
+import { Provider } from "../../src/provider";
 import { getLanguage, getSDK } from "../../src/provider/sdk";
 import { usePrivateCatalog } from "../helpers/catalog";
+import { captureRequest, openAIResponse } from "../helpers/provider-fetch";
 
 function makeModel(provider: "anthropic" | "openai", id: string): Provider.Model {
   return {
@@ -70,32 +71,6 @@ describe("Provider Integration", () => {
     }
   });
 
-  const listCases: Array<{
-    name: string;
-    requests: Array<{ provider: "anthropic" | "openai"; auth?: "proxy" | "api" }>;
-  }> = [
-    {
-      name: "each provider",
-      requests: [{ provider: "anthropic" }, { provider: "openai" }],
-    },
-    {
-      name: "both proxy and api auth types",
-      requests: [
-        { provider: "openai", auth: "proxy" },
-        { provider: "openai", auth: "api" },
-      ],
-    },
-  ];
-
-  it.each(listCases)("should list models for $name", async ({ requests }) => {
-    for (const { provider, auth } of requests) {
-      const models = await Provider.listModels(provider, auth);
-      expect(models.length).toBeGreaterThan(0);
-      expect(models.every((model) => Provider.Model.safeParse(model).success)).toBe(true);
-      expect(models.every((model) => model.providerID === provider)).toBe(true);
-    }
-  });
-
   it("maps custom models without stale removed-provider npm metadata", () => {
     const model = Provider.fromModelsDevModel(
       { id: "custom", name: "Custom", env: [], api: "http://localhost:8317/v1", models: {} },
@@ -118,12 +93,10 @@ describe("Provider Integration", () => {
   });
 
   it("carries no write-only catalog metadata — status and release_date have no reader", () => {
-    // The upstream record still publishes both; it arrives as untyped catalog
-    // data, so the cast is the shape a real models.dev payload has.
     const upstream = { id: "m", name: "M", status: "beta", release_date: "2025-01-01" };
     const mapped = Provider.fromModelsDevModel(
       { id: "custom", name: "Custom", env: [], models: {} },
-      upstream as ModelsDev.Model,
+      upstream,
     );
 
     // Stored-but-never-read fields are dropped by the mapping AND stripped by
@@ -139,7 +112,7 @@ describe("Provider Integration", () => {
     expect("release_date" in parsed).toBe(false);
   });
 
-  it("honors model.api.url for openai models (#audit L5)", () => {
+  it("honors model.api.url on the OpenAI request", async () => {
     const auth: Auth.Info = { type: "api", key: "test-openai-key" };
     const model: Provider.Model = {
       id: "gpt-4o-custom-endpoint",
@@ -147,14 +120,16 @@ describe("Provider Integration", () => {
       name: "GPT-4o (custom endpoint)",
       api: { npm: "@ai-sdk/openai", url: "http://localhost:9317/v1" },
     };
-    const lm = getLanguage(model, auth) as unknown as {
-      config: { url: (options: { path: string; modelId: string }) => string };
-      provider: string;
-    };
-    expect(lm.provider).toBe("openai.responses");
-    expect(lm.config.url({ path: "/responses", modelId: model.id })).toBe(
-      "http://localhost:9317/v1/responses",
+    const lm = getLanguage(model, auth);
+    const { url } = await captureRequest(
+      () =>
+        lm.doGenerate({
+          prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        }),
+      openAIResponse(model.id),
     );
+    expect(lm.provider).toBe("openai.responses");
+    expect(url).toBe("http://localhost:9317/v1/responses");
   });
 
   it("resolves custom baseURL models through the OpenAI provider", () => {

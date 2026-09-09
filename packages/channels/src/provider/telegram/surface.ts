@@ -1,6 +1,7 @@
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { requireHandler } from "../../support/handler-frame";
 import { sendText } from "../../support/send-text";
@@ -56,30 +57,17 @@ export class TelegramAdapter implements Channel.Surface {
     this.poller = new TelegramPoller(
       this.client,
       {
-        onMessage: async (message) => {
-          // D1: message_id is a PER-CHAT counter, so two different chats can
-          // share one id within the dedupe window — key by chat to avoid
-          // silently dropping the second chat's message.
-          const dedupeKey = `${message.chat.id}:${message.message_id}`;
-          const acquisition = this.dedupe.acquire(dedupeKey);
-          if (acquisition.duplicate) return;
-          const dedupeToken = acquisition.token;
-          // Origin: the first frame of an inbound telegram message — this ONE
-          // mint is the message's trace, carried to the run (D11).
+        onMessage: (message) => {
           const messageTraceId = newTraceId();
-          try {
-            await this.handleMessage(message, messageTraceId);
-          } catch (err) {
-            this.dedupe.forget(dedupeKey, dedupeToken);
-            this.publish(Operational.Events.Error, {
-              traceId: messageTraceId,
-              time: Date.now(),
-              component: "server",
-              msg: "telegram message handling failed",
-              context: { err: String(err) },
-            });
-            throw err;
-          }
+          return handoffInbound({
+            dedupe: this.dedupe,
+            key: `${message.chat.id}:${message.message_id}`,
+            traceId: messageTraceId,
+            publish: this.publish,
+            errorMessage: "telegram message handling failed",
+            rethrowFailure: true,
+            handle: () => this.handleMessage(message, messageTraceId),
+          });
         },
       },
       this.publish,

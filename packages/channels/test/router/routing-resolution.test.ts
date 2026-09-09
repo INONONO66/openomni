@@ -1,5 +1,10 @@
 import { beforeEach, expect, test } from "bun:test";
-import { Channel, Ingress, type Ledger } from "@openomni/protocol";
+import { z } from "zod";
+import { rejected } from "../helpers/rejection";
+import { replaceLedger } from "../helpers/ledger";
+import { replyGrantEndpointFacts } from "../../src/router/messaging/reply-grant";
+import { Channel, Ingress, type Gateway, type Inbox, type Ledger } from "@openomni/protocol";
+import { messageExecutionReceipt } from "../helpers/message-execution";
 import {
   ActorRegistry,
   ChannelGrantStore,
@@ -143,18 +148,77 @@ test.each([
       createdBy: "owner",
     });
   }
-  let caught: Error | undefined;
-  try {
-    await router.ingest(ownerSender, ownerFacts);
-  } catch (error) {
-    if (!(error instanceof Error)) throw error;
-    caught = error;
-  }
+  const caught = await rejected(router.ingest(ownerSender, ownerFacts), z.instanceof(Error));
   expect(caught).toMatchObject({ code: "route_replay_divergent" });
   for (const value of ["actor-owner", "replacement", "manager", "evidence_only"])
-    expect(caught?.message).not.toContain(value);
+    expect(caught.message).not.toContain(value);
   expect(commits).toHaveLength(1);
   expect(routingDecisions()).toHaveLength(count);
+});
+
+test("a post-commit reply-grant failure retains commit progress for the executor receipt", async () => {
+  registerOwnerDm();
+  createMappedOwnerSession();
+  const failure = new Error("reply grant projection failed");
+  const observed: Gateway.MessageObservation[] = [];
+  const notified: Inbox.Row[] = [];
+  const router = makeRouter({
+    observe: (_sender, observation) => observed.push(observation),
+    committed: (row) => notified.push(row),
+    messaging: {
+      grants: () => [],
+      deliveryRoutes: new Map(),
+      replyGrantRules: () => {
+        throw failure;
+      },
+    },
+    run: async (_sender, request, body) => {
+      await expect(body(messageExecutionReceipt("source", "ingress", request.intent))).rejects.toBe(
+        failure,
+      );
+      return { terminal: "blocked_post", reason: "grant_projection_failed", matchedRuleIds: [] };
+    },
+  });
+  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({
+    status: "blocked_post",
+    reasonCode: "grant_projection_failed",
+  });
+  expect(commits).toHaveLength(1);
+  expect(notified).toHaveLength(1);
+  expect(observed.filter((observation) => observation.kind === "message.committed")).toHaveLength(
+    1,
+  );
+});
+
+test("reply endpoint changes reject an otherwise equivalent route replay", async () => {
+  registerOwnerDm();
+  createMappedOwnerSession();
+  const router = makeRouter();
+  await router.ingest(ownerSender, ownerFacts);
+  const fact = Storage.get().ledger?.headFact(streamId());
+  if (fact === undefined) throw new Error("route fact missing");
+  const original = Ingress.Events.RoutingDecision.schema.parse(fact.data);
+  const priorEndpoint: readonly string[] = replyGrantEndpointFacts({
+    channel: ownerSender.surface,
+    externalId: ownerSender.externalId,
+  });
+  const changed = {
+    ...original,
+    factsUsed: [
+      ...original.factsUsed.filter((value) => !priorEndpoint.includes(value)),
+      ...replyGrantEndpointFacts({ channel: ownerSender.surface, externalId: "another-endpoint" }),
+    ],
+  };
+  expect(Ingress.routeDecisionsEquivalent(original, changed)).toBe(true);
+  replaceLedger((ledger) => ({
+    ...ledger,
+    headFact: (id) => (id === streamId() ? { ...fact, data: changed } : ledger.headFact(id)),
+  }));
+  await expect(router.ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
+    code: "route_replay_divergent",
+  });
+  expect(commits).toHaveLength(1);
+  expect(routingDecisions()).toHaveLength(1);
 });
 
 test("equivalent blocked redelivery returns a refusal without another route fact", async () => {
@@ -172,33 +236,27 @@ test.each([
 ] as const)("ledger %s refuses before inbox commit or projection", async (fault) => {
   registerOwnerDm();
   createMappedOwnerSession();
-  const adapter = Storage.get();
-  const ledger = adapter.ledger;
-  if (ledger === undefined) throw new Error("missing ledger");
-  Storage.configure({
-    ...adapter,
-    transaction: adapter.transaction.bind(adapter),
-    ledger:
-      fault === "absent"
-        ? undefined
-        : {
-            ...ledger,
-            append: () => {
-              if (fault === "append_failure") throw new Error("ledger unavailable");
-              return { kind: "cas_conflict", currentHead: 1 };
-            },
-            headFact: () =>
-              fault === "corrupt_conflict"
-                ? {
-                    streamId: streamId(),
-                    seq: 1,
-                    type: "route.decided",
-                    data: { invalid: true },
-                    timeCreated: 1,
-                  }
-                : undefined,
+  replaceLedger((ledger) =>
+    fault === "absent"
+      ? undefined
+      : {
+          ...ledger,
+          append: () => {
+            if (fault === "append_failure") throw new Error("ledger unavailable");
+            return { kind: "cas_conflict", currentHead: 1 };
           },
-  });
+          headFact: () =>
+            fault === "corrupt_conflict"
+              ? {
+                  streamId: streamId(),
+                  seq: 1,
+                  type: "route.decided",
+                  data: { invalid: true },
+                  timeCreated: 1,
+                }
+              : undefined,
+        },
+  );
   await expect(makeRouter().ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
     code: "route_record_failed",
   });

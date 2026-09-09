@@ -1,23 +1,12 @@
 import { describe, expect, test, vi } from "bun:test";
-import { APIError } from "../../src/error";
 import { Retry } from "../../src/retry";
 
-type APIErrorInput = ConstructorParameters<typeof APIError>[0];
-const apiError = (input: APIErrorInput) => new APIError(input);
+import { apiError, rateLimitError, withRandom, type APIErrorInput } from "../helpers/retry";
 
 function retryableError(headers?: Record<string, string>) {
   return apiError({
     message: "Rate limited",
     isRetryable: true,
-    ...(headers && { responseHeaders: headers }),
-  });
-}
-
-function rateLimitError(headers?: Record<string, string>) {
-  return apiError({
-    message: "rate limited",
-    isRetryable: true,
-    statusCode: 429,
     ...(headers && { responseHeaders: headers }),
   });
 }
@@ -29,15 +18,10 @@ function rateLimitError(headers?: Record<string, string>) {
  * about. Header-directed delays are never jittered and need no pin.
  */
 function withoutJitter<T>(fn: () => T): T {
-  const random = vi.spyOn(Math, "random").mockReturnValue(0);
-  try {
-    return fn();
-  } finally {
-    random.mockRestore();
-  }
+  return withRandom(0, fn);
 }
 
-function decideWithoutJitter(attempt: number, error: unknown): Retry.Decision {
+function decideWithoutJitter<E>(attempt: number, error: E): Retry.Decision {
   return withoutJitter(() => Retry.decide(attempt, error));
 }
 
@@ -50,7 +34,7 @@ function withNow<T>(now: number, fn: () => T): T {
   }
 }
 
-function delayOf(attempt: number, error: unknown): number {
+function delayOf<E>(attempt: number, error: E): number {
   const decision = decideWithoutJitter(attempt, error);
   if (!decision.retry) throw new Error(`expected a retry decision, got ${decision.reason}`);
   return decision.delayMs;
@@ -117,25 +101,20 @@ describe("Retry", () => {
       // src/retry/index.ts:19-26), so the abort races nothing.
       await Promise.resolve();
       controller.abort();
-      try {
-        await promise;
-        expect.unreachable("Should have thrown AbortError");
-      } catch (error) {
-        expect(error).toBeInstanceOf(DOMException);
-        expect((error as DOMException).name).toBe("AbortError");
-      }
+      await expect(promise).rejects.toMatchObject({
+        constructor: DOMException,
+        name: "AbortError",
+      });
     });
 
     test("clears timeout when aborted", async () => {
       const controller = new AbortController();
       const promise = Retry.sleep(5000, controller.signal);
       controller.abort();
-      try {
-        await promise;
-        expect.unreachable("Should have thrown AbortError");
-      } catch (error) {
-        expect((error as DOMException).name).toBe("AbortError");
-      }
+      await expect(promise).rejects.toMatchObject({
+        constructor: DOMException,
+        name: "AbortError",
+      });
     });
 
     test("rejects immediately when signal is already aborted", async () => {

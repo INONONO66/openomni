@@ -2,7 +2,7 @@ import { type Channel, Gateway } from "@openomni/protocol";
 import type { InboundNormalizer } from "../../types";
 import type { TelegramMessage } from "./types";
 
-export interface TelegramNormalizerContext {
+interface TelegramNormalizerContext {
   botId: string;
   botUsername: string;
 }

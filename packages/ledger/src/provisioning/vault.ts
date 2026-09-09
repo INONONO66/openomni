@@ -1,10 +1,18 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, type DecipherGCM } from "node:crypto";
 import { inspect } from "node:util";
 import { Provisioning } from "@openomni/protocol";
 
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 const KEY_LENGTH = 32;
+
+type DecipherFactory = (
+  algorithm: "aes-256-gcm",
+  key: Uint8Array,
+  iv: Uint8Array,
+) => DecipherGCM;
+
+const defaultDecipherFactory: DecipherFactory = (algorithm, key, iv) => createDecipheriv(algorithm, key, iv);
 
 function pack(iv: Uint8Array, tag: Uint8Array, data: Uint8Array): Uint8Array<ArrayBuffer> {
   const packed = new Uint8Array(iv.length + tag.length + data.length);
@@ -21,7 +29,12 @@ function encryptWith(key: Uint8Array, plaintext: Uint8Array): Uint8Array<ArrayBu
   return pack(iv, new Uint8Array(cipher.getAuthTag()), data);
 }
 
-function decryptWith(key: Uint8Array, packed: Uint8Array, secretId?: string): Uint8Array {
+function decryptWith(
+  key: Uint8Array,
+  packed: Uint8Array,
+  secretId?: string,
+  decipherFactory: DecipherFactory = defaultDecipherFactory,
+): Uint8Array {
   if (packed.length < IV_LENGTH + TAG_LENGTH) {
     throw new Provisioning.VaultError({
       message: "Packed ciphertext is shorter than IV + auth tag",
@@ -32,7 +45,7 @@ function decryptWith(key: Uint8Array, packed: Uint8Array, secretId?: string): Ui
   const iv = packed.subarray(0, IV_LENGTH);
   const tag = packed.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
   const data = packed.subarray(IV_LENGTH + TAG_LENGTH);
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  const decipher = decipherFactory("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   try {
     return new Uint8Array(Buffer.concat([decipher.update(data), decipher.final()]));
@@ -43,7 +56,7 @@ function decryptWith(key: Uint8Array, packed: Uint8Array, secretId?: string): Ui
         code: "unopenable",
         ...(secretId === undefined ? {} : { secretId }),
       },
-      { cause },
+      { cause: cause instanceof Error ? cause : new Error(String(cause)) },
     );
   }
 }
@@ -75,7 +88,7 @@ export namespace Vault {
    * deliberate exit; string coercion, JSON serialization, and util.inspect
    * (console.log / telemetry dumps) all print `[redacted]`.
    */
-  export class Revealed {
+  class Revealed {
     readonly #value: Uint8Array;
 
     constructor(value: Uint8Array) {
@@ -124,7 +137,11 @@ export namespace Vault {
     };
   }
 
-  export function open(envelope: Envelope & { readonly id?: string }, kek: Kek): Revealed {
+  export function open(
+    envelope: Envelope & { readonly id?: string },
+    kek: Kek,
+    decipherFactory: DecipherFactory = defaultDecipherFactory,
+  ): Revealed {
     if (envelope.kekId !== kek.id) {
       throw new Provisioning.VaultError({
         message: `Row sealed under ${envelope.kekId}; presented KEK is ${kek.id}`,
@@ -132,7 +149,7 @@ export namespace Vault {
         ...(envelope.id === undefined ? {} : { secretId: envelope.id }),
       });
     }
-    const dek = decryptWith(kek.key, envelope.wrappedDek, envelope.id);
-    return new Revealed(decryptWith(dek, envelope.ciphertext, envelope.id));
+    const dek = decryptWith(kek.key, envelope.wrappedDek, envelope.id, decipherFactory);
+    return new Revealed(decryptWith(dek, envelope.ciphertext, envelope.id, decipherFactory));
   }
 }

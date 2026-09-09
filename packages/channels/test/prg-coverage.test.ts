@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { DiscordClient } from "../src/provider/discord/client";
 import { DiscordAdapter } from "../src/provider/discord/surface";
-import type { GatewayCallbacks } from "../src/provider/discord/gateway";
+import type { DiscordGateway } from "../src/provider/discord/gateway";
+
+type GatewayCallbacks = ConstructorParameters<typeof DiscordGateway>[2];
 import { DiscordProvider } from "../src/provider/discord/provider";
 import { SlackProvider } from "../src/provider/slack/provider";
 import { TelegramClient } from "../src/provider/telegram/client";
 import { TelegramProvider } from "../src/provider/telegram/provider";
 import type { PublishPort } from "../src/types";
+import { controlledTimeouts } from "./helpers/timeouts";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -29,40 +32,48 @@ function jsonResponse(body: object): Response {
 }
 
 describe("provider retry and receipt paths", () => {
-  it("retries Discord rate limits and returns the platform id", async () => {
+  it.each([
+    {
+      name: "Discord",
+      limited: { retry_after: 0 },
+      success: { id: "m1" },
+      address: "channel-1",
+      id: "m1",
+      client: (publish: PublishPort) => new DiscordClient("token", publish),
+    },
+    {
+      name: "Telegram",
+      limited: { parameters: { retry_after: 0 } },
+      success: { ok: true, result: { message_id: 7 } },
+      address: "chat-1",
+      id: "7",
+      client: (publish: PublishPort) => new TelegramClient("token", publish),
+    },
+  ])("retries $name rate limits and returns the platform id", async (scenario) => {
     const { published, publish } = collector();
+    const timer = controlledTimeouts();
     let calls = 0;
     globalThis.fetch = Object.assign(
       async () => {
         calls += 1;
         return calls === 1
-          ? new Response(JSON.stringify({ retry_after: 0 }), { status: 429 })
-          : new Response(JSON.stringify({ id: "m1" }), { status: 200 });
+          ? Response.json(scenario.limited, { status: 429 })
+          : Response.json(scenario.success);
       },
-      { preconnect: () => undefined },
+      { preconnect: realFetch.preconnect },
     );
-    const id = await new DiscordClient("token", publish).send("channel-1", "hello", "trace-1");
-    expect(id).toBe("m1");
-    expect(calls).toBe(2);
-    expect(published).toContain(Operational.Events.Warn.name);
-  });
-
-  it("retries Telegram rate limits and returns the platform id", async () => {
-    const { published, publish } = collector();
-    let calls = 0;
-    globalThis.fetch = Object.assign(
-      async () => {
-        calls += 1;
-        return calls === 1
-          ? new Response(JSON.stringify({ parameters: { retry_after: 0 } }), { status: 429 })
-          : new Response(JSON.stringify({ ok: true, result: { message_id: 7 } }), { status: 200 });
-      },
-      { preconnect: () => undefined },
-    );
-    const id = await new TelegramClient("token", publish).send("chat-1", "hello", "trace-1");
-    expect(id).toBe("7");
-    expect(calls).toBe(2);
-    expect(published).toContain(Operational.Events.Warn.name);
+    try {
+      const [id] = await Promise.all([
+        scenario.client(publish).send(scenario.address, "hello", "trace-1"),
+        timer.fireNext(),
+      ]);
+      expect(id).toBe(scenario.id);
+      expect(calls).toBe(2);
+      expect(timer.delays).toEqual([0]);
+      expect(published).toContain(Operational.Events.Warn.name);
+    } finally {
+      timer.restore();
+    }
   });
 
   it("provider delivery routes return accepted receipts", async () => {

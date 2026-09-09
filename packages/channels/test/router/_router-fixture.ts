@@ -1,4 +1,5 @@
 import { originalAction, requestPort } from "../helpers/requests";
+import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
 import { compilePolicySnapshot } from "@openomni/policy";
 import {
@@ -70,6 +71,16 @@ export function resetRouterState(): void {
 export function kernelRouter(): GatewayRouter {
   if (!router) throw new Error("resetRouterState() must run before kernelRouter()");
   return router;
+}
+
+export async function ownerMessageTargets(
+  secondFacts: Gateway.IngressFacts = { ...ownerFacts, eventId: "second" },
+) {
+  const first = await kernelRouter().ingest(ownerSender, ownerFacts);
+  const second = await kernelRouter().ingest(ownerSender, secondFacts);
+  if (first.status !== "executed" || second.status !== "executed")
+    throw new Error("owner fixture was not admitted");
+  return [first.handle.target, second.handle.target] as const;
 }
 
 // L1/executor recording ports. Routing, identity, Request, grants and delivery remain real.
@@ -216,20 +227,13 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
       return {
         terminal: "executed",
         matchedRuleIds: decision.matchedRuleIds,
-        value: await body({
-          action: {
-            id: actionId,
-            sessionId: sender.kind === "session" ? sender.id : "ingress",
-            parentId: null,
-            kind: "message",
-            intent: { encodingVersion: 1, value: { value: request.intent } },
-            effect: { encodingVersion: 1, value: {} },
-            irreversible: true,
-            ordinal: 1,
-            ts: 1,
-          },
-          revision: 1,
-        }),
+        value: await body(
+          messageExecutionReceipt(
+            actionId,
+            sender.kind === "session" ? sender.id : "ingress",
+            request.intent,
+          ),
+        ),
       };
     },
     ...overrides,

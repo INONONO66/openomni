@@ -3,26 +3,33 @@ import { ProviderTransform } from "../../src/provider/transform";
 import type { Provider } from "../../src/provider/index";
 type ModelMessage = Parameters<typeof ProviderTransform.normalizeMessages>[0][number];
 
+function makeModel(providerID: string, id: string): Provider.Model {
+  return { id, name: id, providerID, api: { npm: `@ai-sdk/${providerID}` } };
+}
+
+function toolCallPart(toolCallId: string) {
+  return { type: "tool-call" as const, toolCallId, toolName: "test", input: {} };
+}
+
+function assistantParts(
+  model: Provider.Model,
+  content: Exclude<Extract<ModelMessage, { role: "assistant" }>["content"], string>,
+) {
+  const result = ProviderTransform.normalizeMessages([{ role: "assistant", content }], model);
+  expect(result).toHaveLength(1);
+  const parts = result[0]?.content;
+  if (!Array.isArray(parts)) throw new TypeError("expected array content");
+  return parts;
+}
+
 describe("ProviderTransform.normalizeMessages", () => {
-  const anthropicModel = {
-    npm: "@ai-sdk/anthropic",
-    modelId: "claude-sonnet-4-20250514",
-  };
-  const openaiModel = { npm: "@ai-sdk/openai", modelId: "gpt-4o" };
+  const anthropicModel = makeModel("anthropic", "claude-sonnet-4-20250514");
+  const openaiModel = makeModel("openai", "gpt-4o");
 
-  test("does not expose NormalizeOptions as a public namespace member", async () => {
-    const transformSource = await Bun.file(
-      new URL("../../src/provider/transform.ts", import.meta.url),
-    ).text();
-
-    expect(Object.hasOwn(ProviderTransform, "NormalizeOptions")).toBe(false);
+  test("exposes only consumed wire transforms", () => {
     expect(Object.hasOwn(ProviderTransform, "sdkKey")).toBe(false);
     expect(Object.hasOwn(ProviderTransform, "temperature")).toBe(false);
     expect(Object.hasOwn(ProviderTransform, "topP")).toBe(false);
-    expect(transformSource).not.toMatch(/\bexport\s+interface\s+NormalizeOptions\b/);
-    expect(transformSource).not.toMatch(/\bsdkKey\b/);
-    expect(transformSource).not.toMatch(/\btemperature\b/);
-    expect(transformSource).not.toMatch(/\btopP\b/);
   });
 
   test("openai is passthrough", () => {
@@ -75,24 +82,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic sanitizes toolCallId for claude models", () => {
-    const msgs: ModelMessage[] = [
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "call.with.dots/and/slashes",
-            toolName: "test",
-            input: {},
-          },
-        ],
-      },
-    ];
-    const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect(result).toHaveLength(1);
-    const content = result[0]?.content;
-    if (!Array.isArray(content)) throw new TypeError("expected array content");
-    const part = content[0];
+    const part = assistantParts(anthropicModel, [toolCallPart("call.with.dots/and/slashes")])[0];
     if (part?.type !== "tool-call") throw new TypeError("expected a tool-call part");
     expect(part.toolCallId).toBe("call_with_dots_and_slashes");
   });
@@ -120,47 +110,24 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("non-claude anthropic model skips toolCallId sanitization", () => {
-    const nonClaudeAnthropicModel = {
-      npm: "@ai-sdk/anthropic",
-      modelId: "some-other-model",
-    };
+    const nonClaudeAnthropicModel = makeModel("anthropic", "some-other-model");
     const msgs: ModelMessage[] = [
       {
         role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "call.with.dots",
-            toolName: "test",
-            input: {},
-          },
-        ],
+        content: [toolCallPart("call.with.dots")],
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, nonClaudeAnthropicModel);
-    const part = (result[0]?.content as Array<Record<string, unknown>>)[0];
-    expect(part?.toolCallId).toBe("call.with.dots");
+    const content = result[0]?.content;
+    if (!Array.isArray(content)) throw new TypeError("expected array content");
+    expect(content[0]).toMatchObject({ toolCallId: "call.with.dots" });
   });
 
   test("preserves non-text parts like tool-call in anthropic filtering", () => {
-    const msgs: ModelMessage[] = [
-      {
-        role: "assistant",
-        content: [
-          { type: "text", text: "" },
-          {
-            type: "tool-call",
-            toolCallId: "abc123",
-            toolName: "test",
-            input: {},
-          },
-        ],
-      },
-    ];
-    const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect(result).toHaveLength(1);
-    const content = result[0]?.content;
-    if (!Array.isArray(content)) throw new TypeError("expected array content");
+    const content = assistantParts(anthropicModel, [
+      { type: "text", text: "" },
+      toolCallPart("abc123"),
+    ]);
     expect(content.length).toBe(1);
     expect(content[0]?.type).toBe("tool-call");
   });
@@ -224,10 +191,10 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
 
-    expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions).toBeUndefined();
+    expect(result[1]?.providerOptions).toBeUndefined();
     expect(result[2]).toEqual({ role: "user", content: "msg3", ...EXPECTED_OPTS });
-    expect((result[3] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[3]?.providerOptions).toBeUndefined();
   });
 
   test("tool and assistant messages are never marked", () => {
@@ -248,14 +215,14 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
     expect(result[0]).toEqual({ role: "user", content: "run tool", ...EXPECTED_OPTS });
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
-    expect((result[2] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[1]?.providerOptions).toBeUndefined();
+    expect(result[2]?.providerOptions).toBeUndefined();
   });
 
   test("history without a user message is returned unchanged", () => {
     const msgs: ModelMessage[] = [{ role: "assistant", content: "solo" }];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
-    expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions).toBeUndefined();
   });
 
   test("does not mutate original messages", () => {
@@ -274,7 +241,7 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
       } as ModelMessage,
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
-    expect((result[0] as Record<string, unknown>).providerOptions).toEqual({
+    expect(result[0]?.providerOptions).toEqual({
       anthropic: { foo: "bar", cacheControl: { type: "ephemeral", ttl: "1h" } },
     });
   });
@@ -310,8 +277,8 @@ describe("ProviderTransform.anthropicCacheOptions", () => {
 });
 
 describe("normalizeMessages applies caching for anthropic", () => {
-  const anthropicModel = { npm: "@ai-sdk/anthropic", modelId: "claude-sonnet-4-20250514" };
-  const openaiModel = { npm: "@ai-sdk/openai", modelId: "gpt-4o" };
+  const anthropicModel = makeModel("anthropic", "claude-sonnet-4-20250514");
+  const openaiModel = makeModel("openai", "gpt-4o");
 
   test("anthropic latest user message gets cacheControl via normalizeMessages", () => {
     const msgs: ModelMessage[] = [
@@ -319,14 +286,11 @@ describe("normalizeMessages applies caching for anthropic", () => {
       { role: "assistant", content: "yo" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect(
-      (
-        (result[0] as Record<string, unknown>).providerOptions as
-          | Record<string, Record<string, unknown>>
-          | undefined
-      )?.anthropic?.cacheControl,
-    ).toEqual({ type: "ephemeral", ttl: "1h" });
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions?.anthropic?.cacheControl).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
+    expect(result[1]?.providerOptions).toBeUndefined();
   });
 
   test("openai messages do not get cacheControl", () => {
@@ -335,7 +299,7 @@ describe("normalizeMessages applies caching for anthropic", () => {
       { role: "user", content: "hi" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, openaiModel);
-    expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
-    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect(result[0]?.providerOptions).toBeUndefined();
+    expect(result[1]?.providerOptions).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import type { Message } from "@openomni/protocol";
+import type { Message, PlainObject } from "@openomni/protocol";
 import type { ModelMessage } from "ai";
 import type { Provider } from "../provider";
 import { ProviderTransform } from "../provider/transform";
@@ -38,7 +38,7 @@ function buildAssistantReasoningBlock(
 function buildToolCallBlock(call: {
   id: string;
   tool: string;
-  input: Record<string, unknown>;
+  input: PlainObject;
 }): AssistantToolCallBlock {
   return {
     type: "tool-call",
@@ -66,7 +66,18 @@ function buildToolResultBlock(result: {
   };
 }
 
-export function stringifyToolOutput(output: unknown): string {
+export type SDKToolValue =
+  | string
+  | number
+  | bigint
+  | boolean
+  | symbol
+  | null
+  | Date
+  | object
+  | (() => void);
+
+export function stringifyToolOutput(output: SDKToolValue | Error | undefined): string {
   if (typeof output === "string") return output;
   if (output == null) return "";
   if (output instanceof Error) return output.message || String(output);
@@ -91,10 +102,6 @@ function buildToolResult(result: Message.ToolPart): ToolMessage {
 }
 
 type AssistantWithParts = { info: Message.AssistantMessage; parts: Message.Part[] };
-
-function isAssistantMessage(msg: Message.WithParts): msg is AssistantWithParts {
-  return msg.info.role === "assistant";
-}
 
 function buildAssistantMessage(msg: AssistantWithParts, model: Provider.Model): SDKMessage[] {
   if (msg.info.finish === "error") return [];
@@ -141,15 +148,11 @@ function assembleAssistantMessages(
 
 function messageToSDK(msg: Message.WithParts, model: Provider.Model): SDKMessage[] {
   if (msg.parts.length === 0) return [];
-  if (msg.info.role === "user") {
-    const content = msg.parts
-      .filter((p): p is Message.TextPart => p.type === "text")
-      .map((p) => p.text)
-      .join("\n");
-    return content.length > 0 ? [{ role: "user", content }] : [];
+  if (msg.info.role === "assistant") {
+    return buildAssistantMessage({ info: msg.info, parts: msg.parts }, model);
   }
-  if (isAssistantMessage(msg)) return buildAssistantMessage(msg, model);
-  return [];
+  const content = msg.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
+  return content.length > 0 ? [{ role: "user", content }] : [];
 }
 
 export function toModelMessages(

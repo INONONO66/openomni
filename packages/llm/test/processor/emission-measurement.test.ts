@@ -7,23 +7,16 @@ import type { Message } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Processor } from "../../src/processor";
 import { Bus } from "../helpers/observation";
+import type { StreamEvent } from "../../src/processor/stream-events";
 
-/**
- * #545 T2 measurement harness: streams a fixed synthetic 2000-delta/3-part
- * scenario and reports how much the sink actually receives. Run the same
- * harness on a scratch checkout of main (without the boundary-count
- * assertion) to get the before numbers for the PR body.
- *
- * Emission volume = onMessage call count and total serialized bytes
- * (sum of JSON.stringify(message).length per call) as the allocation proxy.
- */
+// Emission count depends on part boundaries, not token volume.
 
 const DELTA = "tok ";
 const REASONING_DELTAS = 400;
 const TEXT_DELTAS_PER_BLOCK = 800;
 
-function scenario(): Array<Record<string, unknown>> {
-  const chunks: Array<Record<string, unknown>> = [{ type: "step-start" }];
+function scenario(): StreamEvent[] {
+  const chunks: StreamEvent[] = [{ type: "step-start" }];
   chunks.push({ type: "reasoning-start", id: "r1", providerMetadata: {} });
   for (let i = 0; i < REASONING_DELTAS; i++) {
     chunks.push({ type: "reasoning-delta", id: "r1", text: DELTA });
@@ -49,12 +42,10 @@ function scenario(): Array<Record<string, unknown>> {
 describe("Processor emission measurement (#545 T2)", () => {
   test("2000-delta/3-part scenario: onMessage volume", async () => {
     let onMessageCalls = 0;
-    let serializedBytes = 0;
     let lastMessage: Message.WithParts | undefined;
     const sink: Sink = {
       onMessage: (message) => {
         onMessageCalls += 1;
-        serializedBytes += JSON.stringify(message).length;
         lastMessage = message;
       },
       onToolCall: () => undefined,
@@ -70,7 +61,7 @@ describe("Processor emission measurement (#545 T2)", () => {
       events: { publish: Bus.publish },
       trace: { traceId: "trace-processor-test", sessionId: "session-measure" },
       createStream: async () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
           yield* scenario() as Array<{ type: string }>;
         })(),
       }),
@@ -78,22 +69,18 @@ describe("Processor emission measurement (#545 T2)", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    console.log(
-      `[measurement] onMessage calls: ${onMessageCalls}, serialized bytes: ${serializedBytes}`,
-    );
-
     // Content sanity: the boundary snapshots still deliver the full text.
-    const texts = (lastMessage?.parts ?? [])
-      .filter((part): part is Message.TextPart => part.type === "text")
-      .map((part) => part.text);
+    const texts = (lastMessage?.parts ?? []).flatMap((part) =>
+      part.type === "text" ? [part.text] : [],
+    );
     expect(texts).toEqual([
       DELTA.repeat(TEXT_DELTAS_PER_BLOCK).trimEnd(),
       DELTA.repeat(TEXT_DELTAS_PER_BLOCK).trimEnd(),
     ]);
-    const reasoning = (lastMessage?.parts ?? []).find(
-      (part): part is Message.ReasoningPart => part.type === "reasoning",
+    const reasoning = (lastMessage?.parts ?? []).flatMap((part) =>
+      part.type === "reasoning" ? [part.text] : [],
     );
-    expect(reasoning?.text).toBe(DELTA.repeat(REASONING_DELTAS).trimEnd());
+    expect(reasoning).toEqual([DELTA.repeat(REASONING_DELTAS).trimEnd()]);
 
     // Boundary-only emission: 2000 deltas may not inflate the call count.
     // step-start(1) + reasoning open/close(2) + two text blocks(4) +

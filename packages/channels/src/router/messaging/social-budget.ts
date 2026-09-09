@@ -18,7 +18,7 @@ import type { Gateway } from "@openomni/protocol";
  */
 
 type Suppression = Readonly<{ suppress: Gateway.MessageDenialCode }>;
-export type SocialBudgetVerdict = "allow" | Suppression;
+type SocialBudgetVerdict = "allow" | Suppression;
 
 const MINUTES_PER_DAY = 24 * 60;
 

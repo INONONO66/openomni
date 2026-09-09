@@ -9,8 +9,7 @@ let result: "claimed" | "existing" | "capacity";
 try {
   const start = once(process, "message", { signal: AbortSignal.timeout(10_000) });
   process.send("ready");
-  const [command] = await start;
-  if (command !== "claim") throw new Error("unexpected reply-grant race command");
+  z.tuple([z.literal("claim"), z.undefined().optional()]).parse(await start);
   result = adapter.replyGrant.claim(
     {
       id,

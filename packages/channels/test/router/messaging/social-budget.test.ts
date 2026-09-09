@@ -6,6 +6,7 @@ import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { evaluateSocialBudget } from "../../../src/router/messaging/social-budget.js";
 import {
+  expectDenied,
   buildGrant,
   buildSendInput,
   messagingNow,
@@ -169,6 +170,12 @@ describe("send kernel active-egress gate (#219 seam)", () => {
   let grants: Gateway.SenderTargetGrant[];
   let budgets: Gateway.SocialBudget[];
 
+  function expectWithoutDebit(receipt: Gateway.SendReceipt) {
+    expect(receipt.kind).toBe("sent");
+    expect(deliveries).toEqual(["message:test"]);
+    expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
+  }
+
   function messaging(withGate = true) {
     return createExistingAgentMessaging({
       requests: seededRequests(),
@@ -192,18 +199,12 @@ describe("send kernel active-egress gate (#219 seam)", () => {
   });
 
   test("backward-compat: with NO budget source injected, a cold proactive send is unaffected", async () => {
-    const receipt = await messaging(false).send(buildSendInput());
-    expect(receipt.kind).toBe("sent");
-    expect(deliveries).toEqual(["message:test"]);
-    // The gate never touched the debit ledger.
-    expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
+    expectWithoutDebit(await messaging(false).send(buildSendInput()));
   });
 
   test("fail-safe default: gate wired but no budget entry → cold proactive denied budget_exhausted", async () => {
     const receipt = await messaging().send(buildSendInput());
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("budget_exhausted");
+    expectDenied(receipt, "budget_exhausted");
     expect(deliveries).toHaveLength(0);
     expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
   });
@@ -224,9 +225,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
     const first = await messaging().send(buildSendInput({ messageId: "message:1" }));
     const second = await messaging().send(buildSendInput({ messageId: "message:2" }));
     expect(first.kind).toBe("sent");
-    expect(second.kind).toBe("denied");
-    if (second.kind !== "denied") throw new Error("expected denial");
-    expect(second.code).toBe("budget_exhausted");
+    expectDenied(second, "budget_exhausted");
     expect(deliveries).toEqual(["message:1"]);
   });
 
@@ -239,9 +238,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
       buildSendInput({ messageId: "message:2", at: messagingNow + 5_000 }),
     );
     expect(first.kind).toBe("sent");
-    expect(second.kind).toBe("denied");
-    if (second.kind !== "denied") throw new Error("expected denial");
-    expect(second.code).toBe("cooldown_suppressed");
+    expectDenied(second, "cooldown_suppressed");
     // A send past the cooldown is admitted again.
     const third = await messaging().send(
       buildSendInput({ messageId: "message:3", at: messagingNow + 40_000 }),
@@ -253,9 +250,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
   test("DNC-deny: a do-not-contact target is denied dnc_denied with nothing delivered", async () => {
     budgets = [budget({ doNotContact: true })];
     const receipt = await messaging().send(buildSendInput());
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("dnc_denied");
+    expectDenied(receipt, "dnc_denied");
     expect(deliveries).toHaveLength(0);
   });
 
@@ -275,9 +270,6 @@ describe("send kernel active-egress gate (#219 seam)", () => {
       },
     ];
     budgets = [budget({ doNotContact: true })];
-    const receipt = await messaging().send(buildSendInput());
-    expect(receipt.kind).toBe("sent");
-    expect(deliveries).toEqual(["message:test"]);
-    expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
+    expectWithoutDebit(await messaging().send(buildSendInput()));
   });
 });

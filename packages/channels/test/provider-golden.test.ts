@@ -2,26 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { DiscordNormalizer } from "../src/provider/discord/normalizer";
 import { SlackNormalizer } from "../src/provider/slack/normalizer";
 import { TelegramNormalizer } from "../src/provider/telegram/normalizer";
+import { telegramReply } from "./helpers/telegram";
 
 describe("provider ingress facts", () => {
   test("telegram preserves event identity, sender, reply chain, and render text", () => {
     const result = new TelegramNormalizer({
       botId: "bot-1",
       botUsername: "openomni_bot",
-    }).normalize({
-      message_id: 12,
-      chat: { id: 34, type: "group" },
-      date: 1,
-      from: { id: 56, is_bot: false, first_name: "Seller", username: "seller_acct" },
-      text: "tracking number",
-      reply_to_message: {
-        message_id: 11,
-        chat: { id: 34, type: "group" },
-        date: 1,
-        from: { id: 78, is_bot: true, first_name: "OpenOmni" },
-        text: "please report",
-      },
-    });
+    }).normalize(telegramReply("seller_acct"));
 
     expect(result?.facts).toMatchObject({
       eventId: "12",
@@ -30,6 +18,7 @@ describe("provider ingress facts", () => {
       render: "tracking number",
     });
     expect(result?.sender.externalId).toBe("56");
+    expect(result?.facts.payload).toMatchObject({ from: { username: "seller_acct" } });
   });
 
   test("discord preserves DM identity and content", () => {

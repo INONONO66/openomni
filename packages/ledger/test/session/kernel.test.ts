@@ -605,7 +605,10 @@ describe("session kernel folds", () => {
     let page = SessionHandleStore.historyPage("resync", { afterRevision: observed.from, limit: 2 });
     expect(page).toMatchObject({ afterRevision: 2, headRevision: 5, nextRevision: 4 });
     seen.push(...page.actions);
-    page = SessionHandleStore.historyPage("resync", { afterRevision: page.nextRevision ?? 0, limit: 2 });
+    page = SessionHandleStore.historyPage("resync", {
+      afterRevision: page.nextRevision ?? 0,
+      limit: 2,
+    });
     expect(page.nextRevision).toBeNull();
     seen.push(...page.actions);
     expect(seen.map((action) => [action.id, action.ordinal])).toEqual([

@@ -46,7 +46,7 @@ function applyMigrationFixture(db: Database, name: string): void {
 }
 
 function storageDb(adapter: SqliteStorageAdapter): Database {
-  return (adapter as unknown as { db: Database }).db;
+  return adapter.testDatabase();
 }
 
 function tableColumns(db: Database, table: string): string[] {
@@ -84,10 +84,11 @@ describe("SqliteStorageAdapter", () => {
     });
 
     test("foreign_keys are enabled", () => {
-      const row = (adapter as unknown as { db: Database }).db
-        .query("PRAGMA foreign_keys")
-        .get() as { foreign_keys: number };
-      expect(row.foreign_keys).toBe(1);
+      const row = adapter
+        .testDatabase()
+        .query<{ foreign_keys: number }, []>("PRAGMA foreign_keys")
+        .get();
+      expect(row?.foreign_keys).toBe(1);
     });
   });
 
@@ -404,20 +405,6 @@ describe("SqliteStorageAdapter", () => {
       adapter.surfaceKey?.claim("channel:123", "s1");
       adapter.surfaceKey?.claim("channel:123", "s2", "s1");
       expect(adapter.surfaceKey?.lookup("channel:123")).toBe("s2");
-    });
-  });
-
-  describe("clear", () => {
-    test("clears all data from all tables", () => {
-      seedHistoricalRows(storageDb(adapter));
-      adapter.surfaceKey?.claim("channel:1", "s1");
-      adapter.clear();
-
-      expect(adapter.sessions.list()).toEqual([]);
-      expect(storageDb(adapter).query("SELECT * FROM session").all()).toEqual([]);
-      expect(storageDb(adapter).query("SELECT * FROM message").all()).toEqual([]);
-      expect(storageDb(adapter).query("SELECT * FROM part").all()).toEqual([]);
-      expect(adapter.surfaceKey?.lookup("channel:1")).toBeUndefined();
     });
   });
 

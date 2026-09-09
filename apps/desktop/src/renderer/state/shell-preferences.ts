@@ -11,7 +11,7 @@ import { clampSidebarWidth, SIDEBAR_WIDTH } from "@openomni/ui";
 export const SIDEBAR_WIDTH_KEY = "openomni:sidebar-width";
 export const SIDEBAR_OPEN_KEY = "openomni:sidebar-open";
 
-export interface ShellPreferences {
+interface ShellPreferences {
   readonly open: boolean;
   readonly width: number;
 }

@@ -1,15 +1,15 @@
 import type { BusEvent, Message, PlainObject, Tool } from "@openomni/protocol";
-import { LlmCall, Operational, type Transcript } from "@openomni/protocol";
+import { LlmCall, type Transcript } from "@openomni/protocol";
 import { z } from "zod";
 import type { Sink } from "./sink";
-import type { SDKMessage } from "./message";
 import { Processor } from "./processor";
 import { toModelMessages } from "./message";
 import type { Provider } from "./provider";
 import { ProviderTransform } from "./provider/transform";
 import { getLanguage, type Transport } from "./provider/sdk";
 import { Auth } from "./auth/storage";
-import { coerceApiError, NamedError } from "./error";
+import { coerceApiError, errorFacts, NamedError } from "./error";
+import { adaptStream, streamArguments } from "./provider/stream";
 import { Retry } from "./retry";
 
 /**
@@ -200,17 +200,15 @@ export async function run(
     return { type: "aborted" };
   }
 
-  const { traceId, sessionId: sessionID, runId } = input.trace;
+  const { traceId, runId } = input.trace;
+  const sessionID = input.trace.sessionId;
   if (traceId.length === 0 || sessionID.length === 0 || runId.length === 0) {
     throw new Error("llm run requires a non-empty traceId, sessionId, and runId");
   }
   const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
 
-  // The tool set is fixed across retries, so the wire-name assignment (and its
-  // reverse map for transcript fidelity) is computed once here and captured by
-  // createStream. The reverse map keeps the recorded ToolPart.tool dotted even
-  // though the stream reports the wire name the provider echoed back.
+  // Wire names and history share the sanitizer; invocation identity stays dotted.
   const { wireNames, originalByWire } = assignWireToolNames(input.tools);
 
   const assistantMessage: Message.AssistantMessage = {
@@ -245,99 +243,10 @@ export async function run(
 
     const languageModel = getLanguage(model, auth, input.transport);
 
-    const normalizedMessages = toModelMessages(messages, model);
-
-    // #532 cache policy: breakpoints on the last tool definition and the
-    // system message (the latest-user breakpoint is placed inside
-    // toModelMessages). Namespaced under `anthropic`, absent for other providers.
-    const cacheOptions = ProviderTransform.anthropicCacheOptions(model);
-    const systemMessages: SDKMessage[] = streamInput.system
-      ? [
-          {
-            role: "system" as const,
-            content: streamInput.system,
-            ...(cacheOptions && { providerOptions: cacheOptions }),
-          },
-        ]
-      : [];
-
-    // Schemas only. The receiving session executor, never the provider SDK,
-    // owns tool execution after the model-return inbox drain.
-    const sdkTools: Record<string, unknown> = {};
-    input.tools.forEach((spec, index) => {
-      const wireName = wireNames[index] as string;
-      sdkTools[wireName] = {
-        type: "function" as const,
-        description: spec.description,
-        inputSchema: ai.jsonSchema(spec.inputSchema),
-      };
-    });
-    const lastToolName = wireNames[wireNames.length - 1];
-    if (cacheOptions && lastToolName !== undefined) {
-      (sdkTools[lastToolName] as Record<string, unknown>).providerOptions = cacheOptions;
-    }
-
-    const shouldYield = input.shouldYield;
-    const streamArgs = {
-      model: languageModel,
-      messages: [...systemMessages, ...normalizedMessages],
-      tools: sdkTools,
-      toolChoice: input.toolChoice,
-      ...(input.maxTokens === undefined ? {} : { maxOutputTokens: input.maxTokens }),
-      maxRetries: 0,
-      stopWhen: [
-        ai.stepCountIs(1),
-        ...(input.yieldAtInputTokens === undefined
-          ? []
-          : [
-              ({ steps }: { steps: ReadonlyArray<{ usage?: { inputTokens?: number } }> }) =>
-                (steps[steps.length - 1]?.usage?.inputTokens ?? 0) >=
-                (input.yieldAtInputTokens as number),
-            ]),
-        ...(shouldYield === undefined ? [] : [() => shouldYield()]),
-      ],
-      onError: ({ error }: { error: unknown }) => {
-        input.events.publish(Operational.Events.Error, {
-          traceId,
-          time: Date.now(),
-          sessionId: sessionID,
-          component: "llm.stream",
-          msg: "streamText error",
-          error: String(error),
-        });
-      },
-      abortSignal: abortSignal,
-      // A nested streamText key, never a top-level spread: the AI SDK reads
-      // provider namespaces ({anthropic: {thinking: ...}}) from
-      // `providerOptions`, so spreading dropped them silently — and let
-      // config keys clobber wired args (abortSignal, maxRetries, tools).
-      ...(input.providerOptions !== undefined && { providerOptions: input.providerOptions }),
-    };
-    const streamResult = ai.streamText(streamArgs as Parameters<typeof ai.streamText>[0]);
-
-    // The ai-sdk v6 fullStream already emits text-start/text-delta/text-end
-    // and reasoning-start/delta/end; only the step markers use different
-    // names internally. Synthesizing text boundaries here (the old ai-v4
-    // shim) duplicated the real v6 events and left an empty orphan text part
-    // per block.
-    async function* adaptStream(): AsyncGenerator<{
-      type: string;
-      [key: string]: unknown;
-    }> {
-      for await (const chunk of streamResult.fullStream) {
-        const event = chunk as { type: string; [key: string]: unknown };
-
-        if (event.type === "finish-step") {
-          yield { ...event, type: "step-finish" };
-        } else if (event.type === "start-step") {
-          yield { ...event, type: "step-start" };
-        } else {
-          yield event;
-        }
-      }
-    }
-
-    return { fullStream: adaptStream() };
+    const streamResult = ai.streamText(
+      streamArguments(input, streamInput.system, abortSignal, wireNames, languageModel),
+    );
+    return { fullStream: adaptStream(streamResult.fullStream) };
   };
   const provider = model.providerID;
   const modelId = model.id;
@@ -379,8 +288,7 @@ export async function run(
     await processor.process({ system, promptText: serializePrompt(system, input, model) });
 
     const durationMs = Date.now() - startMs;
-    // Billed usage across every attempt: retried attempts' tokens were billed
-    // too; message.tokens holds only the final attempt's fold.
+    // Usage belongs to this single provider attempt.
     const finalTokens = processor.usageTotals;
     const finishReason = processor.message.finish ?? "unknown";
 
@@ -448,24 +356,4 @@ export async function run(
 
     return { type: "error", error: failure };
   }
-}
-
-function errorFacts(error: unknown): { aborted?: boolean; contextOverflow?: boolean } {
-  if (typeof error !== "object" || error === null) return {};
-  if ("data" in error && typeof error.data === "object" && error.data !== null) {
-    const data = error.data as Record<string, unknown>;
-    return {
-      ...(typeof data.aborted === "boolean" ? { aborted: data.aborted } : {}),
-      ...(typeof data.contextOverflow === "boolean"
-        ? { contextOverflow: data.contextOverflow }
-        : {}),
-    };
-  }
-  const record = error as Record<string, unknown>;
-  return {
-    ...(typeof record.aborted === "boolean" ? { aborted: record.aborted } : {}),
-    ...(typeof record.contextOverflow === "boolean"
-      ? { contextOverflow: record.contextOverflow }
-      : {}),
-  };
 }

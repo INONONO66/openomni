@@ -4,12 +4,7 @@ import { GENESIS_SEED } from "../../src/ledger-core/hash";
 import { createLedgerDb } from "./db";
 import { Ledger } from "../../src/ledger-core/index";
 import { ledgerEvent, ledgerHead } from "../../src/ledger-core/schema";
-import {
-  appendChain,
-  buildAppendInput,
-  captureThrown,
-  openLedgerDatabase,
-} from "../helpers/ledger";
+import { appendChain, buildAppendInput, openLedgerDatabase } from "../helpers/ledger";
 
 let db: Database;
 
@@ -97,16 +92,14 @@ describe("Ledger.append", () => {
   test("composite PK explodes on a CAS-bypassing duplicate seq instead of silently succeeding", () => {
     appendChain(db, 1);
 
-    const error = captureThrown(() =>
+    expect(() =>
       db
         .query(
           `INSERT INTO ledger_event (stream_id, seq, type, data, prev_hash, event_hash, time_created)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
         .run("stream-1", 1, "decision.recorded", "{}", "forged", "forged", 1),
-    );
-
-    expect(error.message).toContain("UNIQUE constraint failed: ledger_event.stream_id");
+    ).toThrow("UNIQUE constraint failed: ledger_event.stream_id");
     expect(countEvents("stream-1")).toBe(1);
   });
 });

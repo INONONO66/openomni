@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Ingress } from "@openomni/protocol";
-import { resolveRoute, type RouteInbound, type RouteState } from "../../src/router/index.js";
+import { resolveRoute, type RouteState } from "../../src/router/resolve-route.js";
+
+type RouteInbound = Parameters<typeof resolveRoute>[0];
 
 function parseDecision(inbound: RouteInbound, state: RouteState) {
   const decision = resolveRoute(inbound, state);

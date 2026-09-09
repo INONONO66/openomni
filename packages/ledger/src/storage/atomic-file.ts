@@ -3,7 +3,7 @@ import { closeSync, fsyncSync, openSync, renameSync, rmSync, writeFileSync } fro
 import { basename, dirname, join } from "node:path";
 import type { IdSource } from "@openomni/protocol";
 
-export interface AtomicFileOptions {
+interface AtomicFileOptions {
   readonly mode?: number;
   readonly durable?: boolean;
   readonly temporaryId?: IdSource;

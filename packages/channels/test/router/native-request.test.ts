@@ -3,6 +3,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { answerNativeRequest } from "../../src/router/request/native";
 import { openRequest, requestPort } from "../helpers/requests";
+import { makeRouter } from "./_router-fixture";
 
 beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
 afterEach(() => Storage.reset());
@@ -36,10 +37,39 @@ test("native reply reaches the canonical receiving inbox once and retains its or
     (ids) => received.push(...ids),
   );
   const message = outbound();
-  expect(await answerNativeRequest(port, sender, message, message.content, 2)).toBe(true);
+  const gateway = makeRouter({
+    clock: () => 2,
+    requests: port,
+    prepare: () => ({
+      target: message.destinationSessionId,
+      origin: message,
+      message: {
+        sender: "session",
+        senderRole: "worker",
+        targetKind: "session",
+        type: "message",
+        parentChild: true,
+        fanout: 0,
+        depth: 1,
+        withinParentDeadline: true,
+      },
+    }),
+    inbox: {
+      commit: () => {
+        throw new Error("native answer bypassed request admission");
+      },
+    },
+  });
+  const deliver = () =>
+    gateway.ingest(sender, {
+      to: { kind: "session", id: message.destinationSessionId },
+      type: "message",
+      content: message.content,
+    });
+  expect(await deliver()).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
   const before = SessionHandleStore.tree("request-owner");
-  expect(await answerNativeRequest(port, sender, message, message.content, 3)).toBe(true);
+  expect(await deliver()).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(SessionHandleStore.tree("request-owner")).toEqual(before);
   expect(received).toEqual(["request-owner"]);
   expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
