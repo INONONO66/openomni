@@ -19,7 +19,7 @@ export interface CodeRunner {
   close(): Promise<void>;
 }
 
-export interface MachineDaemonOptions {
+interface MachineDaemonOptions {
   readonly socketPath: string;
   readonly offer: Machine.Offer;
   readonly fsExports?: ReadonlyMap<string, string>;
@@ -34,7 +34,7 @@ type WireResult =
   | Machine.PeekResult
   | Machine.CellResult;
 
-export interface MachineDaemon {
+interface MachineDaemon {
   readonly attachment: Machine.AttachResult;
   readonly closed: Promise<void>;
   close(): Promise<void>;

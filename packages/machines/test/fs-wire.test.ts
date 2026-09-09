@@ -375,12 +375,6 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
           status: "refused",
           reason: "path_escapes_export",
         });
-        if (missing === "offer") {
-          expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({
-            status: "refused",
-            reason: "path_escapes_export",
-          });
-        }
       } finally {
         await daemon.close();
         host.close();

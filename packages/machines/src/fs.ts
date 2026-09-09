@@ -16,7 +16,7 @@ type Refusal = Extract<Machine.FsResult, { status: "refused" }>;
 type OpenedTarget = { readonly fd: number; readonly symlinkStat?: ReturnType<typeof fstatSync> };
 type WalkResult = OpenedTarget | Refusal;
 
-export type FsDriver = ((request: Machine.FsRequest) => Promise<Machine.FsResult>) & {
+type FsDriver = ((request: Machine.FsRequest) => Promise<Machine.FsResult>) & {
   close(): void;
 };
 
