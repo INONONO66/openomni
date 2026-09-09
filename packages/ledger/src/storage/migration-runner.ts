@@ -1,11 +1,13 @@
 import type { Database } from "bun:sqlite";
-import { Alarm, type PlainValue } from "@openomni/protocol";
+import { Alarm } from "@openomni/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { U967Error, U967_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
+import { migrationStatements } from "./migration-statements";
+import { parseStoredJson } from "./sqlite-json-data";
 
 export namespace Migration {
   export const Definition = z.object({
@@ -30,37 +32,6 @@ export namespace Migration {
   }
 }
 
-// Bun's `Database.exec`/`run` swallow a mid-script statement failure and keep
-// executing the remaining statements (verified against bun 1.4.0: a CHECK
-// violation inside a multi-statement script neither throws nor stops the
-// following DROPs). Migrations therefore run one statement at a time so every
-// failure propagates and rolls the wrapping transaction back.
-// The repo-controlled corpus has no semicolons in literals. Trigger bodies
-// end with END; and must reach SQLite as a single statement.
-function migrationStatements(sql: string): string[] {
-  const parts = sql
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("--"))
-    .join("\n")
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0);
-  const statements: string[] = [];
-  let trigger = "";
-  for (const part of parts) {
-    if (trigger || part.startsWith("CREATE TRIGGER")) {
-      trigger += `${part};`;
-      if (!part.endsWith("END")) continue;
-      statements.push(trigger);
-      trigger = "";
-    } else statements.push(part);
-  }
-  if (trigger) throw new Error("unterminated migration trigger");
-  return statements;
-}
-
-const decodeJson: (text: string) => PlainValue = JSON.parse;
-
 function validateWatchAlarms(db: Database): void {
   const rows = db
     .query<{ id: string; spec: string | null }, []>(
@@ -68,7 +39,7 @@ function validateWatchAlarms(db: Database): void {
     )
     .all();
   for (const row of rows) {
-    const parsed = Alarm.WatchSpec.safeParse(row.spec === null ? null : decodeJson(row.spec));
+    const parsed = Alarm.WatchSpec.safeParse(row.spec === null ? null : parseStoredJson(row.spec));
     if (!parsed.success) throw new Error(`alarm migration refused: ${row.id}: invalid watch spec`);
   }
 }

@@ -11,7 +11,7 @@ import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
 export namespace EgressBudgetStore {
-  export type ClaimResult<Refusal> =
+  type ClaimResult<Refusal> =
     | Readonly<{ kind: "claimed" }>
     | Readonly<{ kind: "refused"; reason: Refusal }>;
 

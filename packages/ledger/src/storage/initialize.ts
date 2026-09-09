@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { Storage } from "./storage";
 import { SqliteStorageAdapter } from "./sqlite-storage";
 
-export interface InitializeOptions {
+interface InitializeOptions {
   dbPath?: string;
   observationSink?: ObservationSink;
 }
@@ -36,4 +36,4 @@ declare module "./storage" {
   }
 }
 
-(Storage as Record<string, unknown>).initialize = initialize;
+Storage.initialize = initialize;

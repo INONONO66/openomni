@@ -1,14 +1,16 @@
 import type { Database } from "bun:sqlite";
 import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { SqliteJsonDataRowSchema, SqliteJsonDataRowsSchema } from "./sqlite-json-data";
+import { sqliteJsonData } from "./sqlite-json-data";
+
+const BlacklistRow = sqliteJsonData(Actor.BlacklistEntry);
 
 export function createSqliteBlacklistAdapter(db: Database): ProtocolStorage.BlacklistSubAdapter {
   return {
     get(id) {
-      const row = SqliteJsonDataRowSchema.nullable().parse(
+      const row = BlacklistRow.nullable().parse(
         db.query("SELECT data FROM blacklist WHERE id = ?").get(id),
       );
-      return row ? Actor.BlacklistEntry.parse(JSON.parse(row.data)) : undefined;
+      return row ?? undefined;
     },
     set(entry) {
       const now = Date.now();
@@ -33,10 +35,9 @@ export function createSqliteBlacklistAdapter(db: Database): ProtocolStorage.Blac
       );
     },
     list() {
-      const rows = SqliteJsonDataRowsSchema.parse(
+      return BlacklistRow.array().parse(
         db.query("SELECT data FROM blacklist ORDER BY time_created ASC, id ASC").all(),
       );
-      return rows.map((row) => Actor.BlacklistEntry.parse(JSON.parse(row.data)));
     },
     remove(id) {
       return db.query("DELETE FROM blacklist WHERE id = ?").run(id).changes > 0;

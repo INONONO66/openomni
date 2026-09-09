@@ -45,21 +45,20 @@ afterEach(() => {
 describe("ledger-first observations", () => {
   test("publishes exactly one committed receipt after durable revision advances", () => {
     const observations: L0Observation.ActionCommitted[] = [];
-    let adapter!: SqliteStorageAdapter;
     const sink: ObservationSink = {
       publish(descriptor, data) {
         if (descriptor.name !== L0Observation.ActionCommittedEvent.name) return;
         observations.push(L0Observation.ActionCommitted.parse(data));
-        expect(adapter.sessions.get("session-observed")?.revision).toBe(1);
       },
     };
-    adapter = new SqliteStorageAdapter(":memory:", sink);
+    const adapter = new SqliteStorageAdapter(":memory:", sink);
     adapters.push(adapter);
     adapter.sessions.create(session("session-observed"));
 
     const receipt = adapter.actions.append(action("action-observed", "session-observed"), 0);
 
     expect(receipt?.revision).toBe(1);
+    expect(adapter.sessions.get("session-observed")?.revision).toBe(1);
     expect(observations).toEqual([
       { id: "action-observed", sessionId: "session-observed", revision: 1, kind: "turn" },
     ]);

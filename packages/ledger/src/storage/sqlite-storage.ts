@@ -6,7 +6,7 @@ import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter"
 import { createSqliteReplyGrantAdapter } from "./sqlite-reply-grant-adapter";
 import { createSqliteProvisioningAdapter } from "./sqlite-provisioning-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
-import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
+import { initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
 import { createSqliteL0Adapters } from "./sqlite-l0-adapter";
 import type { ObservationSink } from "@openomni/protocol";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
@@ -35,11 +35,12 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   constructor(dbPath: string, observationSink: ObservationSink = { publish: () => undefined }) {
     this.observationSink = observationSink;
     this.db = new Database(dbPath);
+    let initialized = false;
     try {
       initializeSqliteDatabase(this.db);
-    } catch (err) {
-      this.db.close();
-      throw err;
+      initialized = true;
+    } finally {
+      if (!initialized) this.db.close();
     }
 
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
@@ -75,8 +76,9 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     Object.defineProperty(this, productionStorageAdapterBrand, { value: true });
   }
 
-  clear(): void {
-    clearSqliteStorage(this.db);
+  /** Test-only seam for schema/retention characterization; never used by product stores. */
+  testDatabase(): Database {
+    return this.db;
   }
 
   transaction<T>(fn: () => T): T {

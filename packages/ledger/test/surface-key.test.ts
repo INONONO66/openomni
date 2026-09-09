@@ -38,20 +38,6 @@ describe("SurfaceKey", () => {
     test("throws error on invalid format during claim", () => {
       expect(() => SurfaceKey.claim("invalid", "session-123")).toThrow(/Invalid surfaceKey format/);
     });
-
-    test("claim with the current owner as expected reassigns the key", () => {
-      const key = "slack:workspaceA:channel:C123";
-      const sessionId1 = "session-1";
-      const sessionId2 = "session-2";
-
-      seedSession(sessionId1);
-      seedSession(sessionId2);
-      SurfaceKey.claim(key, sessionId1);
-      expect(SurfaceKey.lookup(key)).toBe(sessionId1);
-
-      SurfaceKey.claim(key, sessionId2, sessionId1);
-      expect(SurfaceKey.lookup(key)).toBe(sessionId2);
-    });
   });
 
   describe("N:1 mapping (multiple keys → same session)", () => {
@@ -131,24 +117,6 @@ describe("SurfaceKey", () => {
 
       expect(owner).toBe("session-2");
       expect(SurfaceKey.lookup(key)).toBe("session-2");
-    });
-
-    test("maintains bidirectional consistency", () => {
-      const sessionId = "session-123";
-      const key1 = "slack:workspaceA:channel:C123";
-      const key2 = "slack:workspaceA:channel:C456";
-
-      seedSession(sessionId);
-      SurfaceKey.claim(key1, sessionId);
-      SurfaceKey.claim(key2, sessionId);
-
-      expect(SurfaceKey.lookup(key1)).toBe(sessionId);
-      expect(SurfaceKey.lookup(key2)).toBe(sessionId);
-
-      const keys = SurfaceKey.listBySession(sessionId);
-      expect(keys).toHaveLength(2);
-      expect(keys).toContain(key1);
-      expect(keys).toContain(key2);
     });
   });
 

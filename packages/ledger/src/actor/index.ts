@@ -1,6 +1,7 @@
-import { Actor } from "@openomni/protocol";
+import type { Actor } from "@openomni/protocol";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
+import { StoredIdentity, StoredEndpoint } from "./schema";
 
 function requireAdapter(): NonNullable<Storage.Adapter["actorRegistry"]> {
   return requireSubAdapter(
@@ -10,36 +11,31 @@ function requireAdapter(): NonNullable<Storage.Adapter["actorRegistry"]> {
 }
 
 export namespace ActorRegistry {
-  /**
-   * Presence probe (#707 S8 review fix): the gateway router's actor
-   * resolver keeps its legacy pass-through when no registry sub-adapter is
-   * configured (test fakes) — probed through THIS surface instead of the
-   * master Storage entry, so the router never names Storage at all.
-   */
+  /** Whether the configured storage adapter provides the actor registry. */
   export function isConfigured(): boolean {
     return Storage.get().actorRegistry !== undefined;
   }
 
-  export function registerIdentity(input: Actor.Identity): Actor.Identity {
+  export function registerIdentity(input: Actor.Identity) {
     const adapter = requireAdapter();
-    const identity = Actor.Identity.parse(
+    const identity = StoredIdentity.parse(
       withStoreTimestamps(input, adapter.getIdentity(input.id)),
     );
     adapter.setIdentity(identity);
     return identity;
   }
 
-  export function getIdentity(id: string): Actor.Identity | undefined {
-    return requireAdapter().getIdentity(id);
+  export function getIdentity(id: string) {
+    return StoredIdentity.optional().parse(requireAdapter().getIdentity(id));
   }
 
   export function removeIdentity(id: string): boolean {
     return requireAdapter().removeIdentity(id);
   }
 
-  export function registerEndpoint(input: Actor.Endpoint): Actor.Endpoint {
+  export function registerEndpoint(input: Actor.Endpoint) {
     const adapter = requireAdapter();
-    const endpoint = Actor.Endpoint.parse(
+    const endpoint = StoredEndpoint.parse(
       withStoreTimestamps(input, adapter.getEndpoint(input.id)),
     );
     if (!adapter.getIdentity(endpoint.actorId)) {
@@ -59,12 +55,12 @@ export namespace ActorRegistry {
     return endpoint;
   }
 
-  export function getEndpoint(id: string): Actor.Endpoint | undefined {
-    return requireAdapter().getEndpoint(id);
+  export function getEndpoint(id: string) {
+    return StoredEndpoint.optional().parse(requireAdapter().getEndpoint(id));
   }
 
-  export function listEndpoints(actorId?: string, workspace?: string): Actor.Endpoint[] {
-    return requireAdapter().listEndpoints(actorId, workspace);
+  export function listEndpoints(actorId?: string, workspace?: string) {
+    return StoredEndpoint.array().parse(requireAdapter().listEndpoints(actorId, workspace));
   }
 
   /**
@@ -76,7 +72,7 @@ export namespace ActorRegistry {
   export function mintProvisional(
     identity: Actor.Identity,
     endpoint: Omit<Actor.Endpoint, "actorId">,
-  ): Actor.ResolvedEndpoint {
+  ) {
     if (identity.standing !== "provisional") {
       throw new Error(`Provisional mint requires standing "provisional": ${identity.id}`);
     }
@@ -100,7 +96,7 @@ export namespace ActorRegistry {
    * promoting a registered contact returns it unchanged. The Owner-approval
    * gate lives with the tool that calls this (product authority), not here.
    */
-  export function promote(actorId: string): Actor.Identity {
+  export function promote(actorId: string) {
     const identity = getIdentity(actorId);
     if (!identity) {
       throw new Error(`Actor identity not found: ${actorId}`);
@@ -114,7 +110,7 @@ export namespace ActorRegistry {
    * — the ONLY way two channels ever fold into one contact. The
    * Owner-approval gate lives with the tool that calls this.
    */
-  export function mergeEndpoint(endpointId: string, toActorId: string): Actor.Endpoint {
+  export function mergeEndpoint(endpointId: string, toActorId: string) {
     const adapter = requireAdapter();
     const endpoint = adapter.getEndpoint(endpointId);
     if (!endpoint) {
@@ -126,16 +122,12 @@ export namespace ActorRegistry {
     return registerEndpoint({ ...endpoint, actorId: toActorId });
   }
 
-  export function resolveEndpoint(
-    channel: string,
-    externalId: string,
-    workspace?: string,
-  ): Actor.ResolvedEndpoint | undefined {
+  export function resolveEndpoint(channel: string, externalId: string, workspace?: string) {
     const adapter = requireAdapter();
     const endpoint = adapter.findEndpoint(channel, externalId, workspace);
     if (!endpoint) return undefined;
     const identity = adapter.getIdentity(endpoint.actorId);
     if (!identity) return undefined;
-    return { identity, endpoint };
+    return { identity: StoredIdentity.parse(identity), endpoint: StoredEndpoint.parse(endpoint) };
   }
 }

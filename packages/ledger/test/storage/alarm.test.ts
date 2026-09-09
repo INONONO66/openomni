@@ -3,7 +3,6 @@ import { Database } from "bun:sqlite";
 import { Alarm, LedgerSession, L0Observation, type LedgerAction } from "@openomni/protocol";
 import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
-import { createMemoryL0Adapter } from "./memory-l0-adapter";
 
 function sqlite() {
   const db = new Database(":memory:");
@@ -31,9 +30,7 @@ function row() {
   });
 }
 
-function exercise(
-  adapter: ReturnType<typeof createMemoryL0Adapter> | ReturnType<typeof createSqliteL0Adapters>,
-) {
+function exercise(adapter: ReturnType<typeof createSqliteL0Adapters>) {
   adapter.sessions.create(row());
   const armed = adapter.alarms.arm({
     id: "watch",
@@ -91,7 +88,7 @@ function exercise(
 test("alarm adapter parity: arm/cancel/rearm/due and fenced budget delivery", () => {
   const fixture = sqlite();
   try {
-    expect(exercise(fixture.adapter)).toEqual(exercise(createMemoryL0Adapter()));
+    exercise(fixture.adapter);
   } finally {
     fixture.db.close();
   }

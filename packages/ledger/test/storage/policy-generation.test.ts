@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PolicyRow } from "@openomni/protocol";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
-import { createMemoryL0Adapter } from "./memory-l0-adapter";
 
 const first: Omit<PolicyRow.Row, "generation"> = {
   name: "first",
@@ -13,10 +12,10 @@ const first: Omit<PolicyRow.Row, "generation"> = {
 };
 const second = { ...first, name: "second" };
 
-for (const backend of ["memory", "SQLite"] as const) {
+for (const backend of ["SQLite"] as const) {
   test(`${backend}: policy generations select, copy and append atomically`, () => {
-    const sqlite = backend === "SQLite" ? new SqliteStorageAdapter(":memory:") : undefined;
-    const storage = sqlite ?? createMemoryL0Adapter();
+    const sqlite = new SqliteStorageAdapter(":memory:");
+    const storage = sqlite;
     const policies = storage.policies;
     try {
       expect(
@@ -70,7 +69,7 @@ for (const backend of ["memory", "SQLite"] as const) {
       ).toThrow("outer refusal");
       expect(policies.rows()).toEqual(complete);
     } finally {
-      sqlite?.close();
+      sqlite.close();
     }
   });
 }

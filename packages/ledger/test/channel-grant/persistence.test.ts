@@ -1,27 +1,14 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { ChannelGrantStore, SqliteStorageAdapter, Storage } from "../../src/index.js";
+import { ChannelGrantStore, Storage } from "../../src/index.js";
+import { useSqliteStorage } from "../helpers/storage";
+import { Actor } from "@openomni/protocol";
 
 describe("ChannelGrantStore SQLite persistence", () => {
-  let tmpDir: string;
-  let dbPath: string;
+  const fixture = useSqliteStorage("channel-grant");
 
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "channel-grant-test-"));
-    dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath });
-  });
-
-  afterEach(async () => {
-    Storage.reset();
-    await rm(tmpDir, { recursive: true });
-  });
-
-  test("persists grant JSON bytes without resolution-derived normalization", () => {
-    ChannelGrantStore.put({
+  test("persists grant fields without resolution-derived normalization", () => {
+    const stored = ChannelGrantStore.put({
       id: "grant-byte-fixture",
       surface: "discord",
       workspace: "guild",
@@ -34,15 +21,15 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    const reader = new Database(dbPath, { readonly: true });
+    using reader = new Database(fixture.path, { readonly: true });
     const row = reader
-      .query("SELECT data FROM channel_grant WHERE id = ?")
-      .get("grant-byte-fixture") as { data: string };
-    reader.close();
-
+      .query<{ data: string }, [string]>("SELECT data FROM channel_grant WHERE id = ?")
+      .get("grant-byte-fixture");
+    if (row === null) throw new Error("missing persisted grant");
     expect(row.data).toBe(
       '{"id":"grant-byte-fixture","surface":"discord","workspace":"guild","channel":"design","kind":"broadcast_channel","defaultTier":"observer","inboundTreatment":"full_access","createdBy":"act_owner","createdAt":100,"updatedAt":200}',
     );
+    expect(Actor.ChannelGrant.parse(JSON.parse(row.data))).toEqual(stored);
   });
 
   test("round-trips raw grant facts across adapter reconfiguration", () => {
@@ -58,8 +45,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    Storage.reset();
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    fixture.reopen();
 
     expect(ChannelGrantStore.get(stored.id)).toEqual(stored);
     expect(ChannelGrantStore.list()).toEqual([stored]);

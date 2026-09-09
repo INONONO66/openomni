@@ -1,7 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { Provisioning, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
-import { SqliteJsonDataRowSchema, SqliteJsonDataRowsSchema } from "./sqlite-json-data";
+import { sqliteJsonData } from "./sqlite-json-data";
+
+const PersonRow = sqliteJsonData(Provisioning.Person);
+const ChannelInstanceRow = sqliteJsonData(Provisioning.ChannelInstance);
 
 /**
  * Provisioning rows (migration 0029). Person and ChannelInstance persist as
@@ -37,10 +40,10 @@ export function createSqliteProvisioningAdapter(
 ): ProtocolStorage.ProvisioningSubAdapter {
   return {
     getPerson(id) {
-      const row = SqliteJsonDataRowSchema.nullable().parse(
-        db.query("SELECT data FROM person WHERE id = ?").get(id),
+      return (
+        PersonRow.nullable().parse(db.query("SELECT data FROM person WHERE id = ?").get(id)) ??
+        undefined
       );
-      return row ? Provisioning.Person.parse(JSON.parse(row.data)) : undefined;
     },
     setPerson(person) {
       const now = Date.now();
@@ -55,19 +58,19 @@ export function createSqliteProvisioningAdapter(
       ).run(person.id, person.trustTier, JSON.stringify(person), person.revision, now, now);
     },
     listPersons() {
-      const rows = SqliteJsonDataRowsSchema.parse(
+      return PersonRow.array().parse(
         db.query("SELECT data FROM person ORDER BY time_created ASC, id ASC").all(),
       );
-      return rows.map((row) => Provisioning.Person.parse(JSON.parse(row.data)));
     },
     removePerson(id) {
       return db.query("DELETE FROM person WHERE id = ?").run(id).changes > 0;
     },
     getChannelInstance(id) {
-      const row = SqliteJsonDataRowSchema.nullable().parse(
-        db.query("SELECT data FROM channel_instance WHERE id = ?").get(id),
+      return (
+        ChannelInstanceRow.nullable().parse(
+          db.query("SELECT data FROM channel_instance WHERE id = ?").get(id),
+        ) ?? undefined
       );
-      return row ? Provisioning.ChannelInstance.parse(JSON.parse(row.data)) : undefined;
     },
     setChannelInstance(instance) {
       const now = Date.now();
@@ -91,10 +94,9 @@ export function createSqliteProvisioningAdapter(
       );
     },
     listChannelInstances() {
-      const rows = SqliteJsonDataRowsSchema.parse(
+      return ChannelInstanceRow.array().parse(
         db.query("SELECT data FROM channel_instance ORDER BY time_created ASC, id ASC").all(),
       );
-      return rows.map((row) => Provisioning.ChannelInstance.parse(JSON.parse(row.data)));
     },
     removeChannelInstance(id) {
       return db.query("DELETE FROM channel_instance WHERE id = ?").run(id).changes > 0;

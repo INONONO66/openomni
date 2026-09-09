@@ -6,7 +6,6 @@ import { Bus } from "../helpers/observation";
 import { expectCommitted, requestFixture, requestStateAction } from "../helpers/request";
 import { materializeSession } from "../helpers/session";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
-import { createMemoryL0Adapter } from "../storage/memory-l0-adapter";
 
 function reply(): Inbox.Commit {
   return {
@@ -52,10 +51,9 @@ function openRequest() {
   return { ...fixture, transition };
 }
 
-describe.each(["memory", "sqlite"] as const)("%s canonical request deadline", (backend) => {
+describe("SQLite canonical request deadline", () => {
   beforeEach(() => {
-    if (backend === "memory") Storage.configure(createMemoryL0Adapter());
-    else Storage.initialize({ dbPath: ":memory:" });
+    Storage.initialize({ dbPath: ":memory:" });
   });
   afterEach(() => Storage.reset());
 
@@ -192,23 +190,19 @@ describe("durable request projection", () => {
     const timeout = setTimeout(() => observed.reject(new Error("missing request signal")), 10_000);
     const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.id !== "original:resolution") return;
-      try {
-        using independent = new Database(dbPath, { readonly: true });
-        expect(independent.query("SELECT id FROM inbox WHERE id='reply'").get()).toEqual({
-          id: "reply",
-        });
-        expect(
-          independent.query("SELECT status FROM alarm WHERE id='original:deadline'").get(),
-        ).toEqual({ status: "cancelled" });
-        expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
-        observed.resolve();
-      } catch (error) {
-        observed.reject(error);
-      }
+      observed.resolve();
     });
     try {
       expectCommitted(transition("resolved", { receive: reply() }));
       await observed.promise;
+      using independent = new Database(dbPath, { readonly: true });
+      expect(independent.query("SELECT id FROM inbox WHERE id='reply'").get()).toEqual({
+        id: "reply",
+      });
+      expect(
+        independent.query("SELECT status FROM alarm WHERE id='original:deadline'").get(),
+      ).toEqual({ status: "cancelled" });
+      expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
     } finally {
       clearTimeout(timeout);
       unsubscribe();

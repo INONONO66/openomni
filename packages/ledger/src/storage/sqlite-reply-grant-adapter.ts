@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { Gateway, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { z } from "zod";
 
 class ReplyGrantProjectionError extends Error {
   readonly code = "incoherent_reply_grant";
@@ -16,11 +17,16 @@ export function createSqliteReplyGrantAdapter(db: Database): ProtocolStorage.Rep
       return db
         .transaction(() => {
           db.query("DELETE FROM reply_grant WHERE expires_at < ?").run(bound.at);
-          const existing = db
-            .query(
-              "SELECT 1 FROM reply_grant WHERE rule_id = ? AND target_actor_id = ? AND surface_key = ?",
-            )
-            .get(grant.ruleId, grant.targetActorId, grant.replyScope.surfaceKey);
+          const existing = z
+            .object({ present: z.number() })
+            .nullable()
+            .parse(
+              db
+                .query(
+                  "SELECT 1 AS present FROM reply_grant WHERE rule_id = ? AND target_actor_id = ? AND surface_key = ?",
+                )
+                .get(grant.ruleId, grant.targetActorId, grant.replyScope.surfaceKey),
+            );
           if (existing !== null) return "existing" as const;
           const capacity = db
             .query<{ count: number }, [string, number]>(

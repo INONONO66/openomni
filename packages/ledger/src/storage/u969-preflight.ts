@@ -1,6 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { HistoricalApproval, HistoricalWait } from "./historical-request-format";
 import { terminalComplete } from "./u967-projection";
+import {
+  historicalWaitFields,
+  historicalMismatch,
+  historicalDuplicateRows,
+} from "./historical-projections";
 
 export const REQUEST_MIGRATION = "0038_session_requests/migration.sql";
 
@@ -52,46 +57,21 @@ function historicalRequestBlockers(db: Database, table: "wait" | "approval", at:
   }
   const fields =
     table === "wait"
-      ? [
-          ["revision", "revision"],
-          ["owner_kind", "ownerRef.kind"],
-          ["owner_id", "ownerRef.id"],
-          ["origin_message_id", "originMessageId"],
-          ["partial", "partial"],
-          ["endpoint_id", "correlation.endpointId"],
-          ["channel_id", "correlation.channelId"],
-          ["reply_to_message_id", "correlation.replyToMessageId"],
-          ["thread_id", "correlation.threadId"],
-          ["token_hash", "correlation.tokenHash"],
-          ["external_conversation_id", "correlation.externalConversationId"],
-          ["expires_at", "expiresAt"],
-          ["time_created", "createdAt"],
-          ["time_updated", "updatedAt"],
-        ]
-      : [
+      ? historicalWaitFields
+      : ([
           ["revision", "revision"],
           ["deadline", "deadline"],
           ["time_created", "createdAt"],
           ["time_updated", "updatedAt"],
-        ];
-  const mismatch = fields.map(
-    ([column, field]) => `${column} IS NOT json_extract(data, '$.${field}')`,
-  );
-  if (table === "wait")
-    mismatch.push(
-      "follow_up_until IS NOT (json_extract(data, '$.resolvedAt') + json_extract(data, '$.followUpWindow'))",
-    );
+        ] as const);
+  const mismatch = historicalMismatch(fields, table === "wait");
   for (const row of db
     .query<{ id: string }, []>(`SELECT id FROM ${table}
       WHERE CASE WHEN json_valid(data) THEN (${mismatch.join(" OR ")}) ELSE 1 END`)
     .all()) {
     blocked.push(`${table}:${row.id}`);
   }
-  for (const row of db
-    .query<{ id: string }, []>(`SELECT ${table}.id FROM ${table},
-      json_tree(CASE WHEN json_valid(data) THEN data ELSE '{}' END) AS tree
-      WHERE tree.key IS NOT NULL GROUP BY ${table}.rowid, tree.parent, tree.key HAVING count(*) > 1`)
-    .all()) {
+  for (const row of db.query<{ id: string }, []>(historicalDuplicateRows(table)).all()) {
     blocked.push(`${table}:${row.id}`);
   }
   return blocked;

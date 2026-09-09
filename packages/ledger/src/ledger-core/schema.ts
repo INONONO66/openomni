@@ -1,16 +1,8 @@
 import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
- * DDL source of truth for the #510 clean-ledger baseline. Drizzle is used
- * here for definition (and drizzle-kit generation) ONLY — every runtime
- * statement in append.ts / chain.ts stays a raw prepared statement
- * (decision-class rule, the archived clean-room blueprint's "Storage
- * decisions" section — git history, docs/clean-room-blueprint.md).
- *
- * Column names derive from the property names via the `snake_case` casing
- * pinned in drizzle.config.ts and db.ts. The applied DDL is the hand-written
- * migration/0013_ledger/migration.sql run by the existing BEGIN IMMEDIATE
- * runner; if drizzle-kit output ever differs, the hand SQL wins.
+ * Drizzle's generation/test view of the ledger tables, using snake_case columns.
+ * Runtime queries use prepared SQL; the immutable ordered migrations own applied DDL.
  */
 
 /** One hash-chained decision-class fact per (stream_id, seq). */
