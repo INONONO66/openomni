@@ -34,21 +34,18 @@ describe("Storage.initialize", () => {
     const adapter = new SqliteStorageAdapter(":memory:");
     Object.defineProperty(adapter, "actions", { configurable: true, value: undefined });
 
-    let refusal: unknown;
     try {
-      Storage.configure(adapter);
-    } catch (error) {
-      refusal = error;
+      expect(() => Storage.configure(adapter)).toThrow(
+        expect.objectContaining({
+          name: "IncompleteAdapterError",
+          code: "incomplete_adapter",
+          capability: "actions",
+          message: "Production storage adapter is missing required capability: actions",
+        }),
+      );
     } finally {
       adapter.close();
     }
-
-    if (!(refusal instanceof Error)) throw new Error("expected incomplete adapter refusal");
-    expect(refusal.name).toBe("IncompleteAdapterError");
-    expect(refusal).toMatchObject({ code: "incomplete_adapter", capability: "actions" });
-    expect(refusal.message).toBe(
-      "Production storage adapter is missing required capability: actions",
-    );
     expect(() => Storage.get()).toThrow("Storage.get() called before initialize()");
   });
 

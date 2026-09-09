@@ -1,5 +1,12 @@
 import { Database } from "bun:sqlite";
-import type { Ledger as LedgerTypes } from "@openomni/protocol";
+import type { Ledger as LedgerTypes, PlainValue } from "@openomni/protocol";
+
+interface FixtureInput {
+  streamId: string;
+  type: string;
+  data: Record<string, PlainValue>;
+  timeCreated?: number;
+}
 import { Ledger } from "../../src/ledger-core/index";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
 
@@ -14,7 +21,7 @@ export function openLedgerDatabase(): Database {
   return db;
 }
 
-export function buildAppendInput(overrides: Partial<LedgerTypes.Input> = {}): LedgerTypes.Input {
+export function buildAppendInput(overrides: Partial<FixtureInput> = {}): FixtureInput {
   return {
     streamId: "stream-1",
     type: "decision.recorded",
@@ -47,15 +54,4 @@ export function appendChain(
     outcomes.push(outcome);
   }
   return outcomes;
-}
-
-/** Runs fn and returns the Error it throws; fails when none is thrown. */
-export function captureThrown(fn: () => unknown): Error {
-  try {
-    fn();
-  } catch (error) {
-    if (error instanceof Error) return error;
-    throw new Error(`expected an Error, got ${typeof error}`);
-  }
-  throw new Error("expected an Error, but nothing was thrown");
 }

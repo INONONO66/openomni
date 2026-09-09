@@ -199,7 +199,7 @@ test.each([
 test.each([
   "UPDATE wait SET data = '{'",
   "UPDATE wait SET data = json_set(data, '$.id', 'mismatch')",
-  "UPDATE wait SET data = substr(data, 1, length(data) - 1) || ',\"id\":\"preserved\"}'",
+  'UPDATE wait SET data = substr(data, 1, length(data) - 1) || \',"id":"preserved"}\'',
 ])("archive inspection rejects corrupt JSON or scalar projections: %s", (sql) => {
   using fixture = createDispositionFixture(false);
   fixture.db.run(sql);

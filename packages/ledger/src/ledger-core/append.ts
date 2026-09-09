@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
-import { Ledger as LedgerTypes } from "@openomni/protocol";
+import { Ledger as LedgerTypes, PlainValueSchema } from "@openomni/protocol";
+import { z } from "zod";
 import { GENESIS_SEED } from "./hash";
 import { computeLedgerEventHash } from "./hash";
 
@@ -25,7 +26,9 @@ export function append(
   expectedHead: LedgerTypes.ExpectedHead,
 ): LedgerTypes.Outcome {
   // Service-entry enforcement layer (the one owner of input validity).
-  const parsed = LedgerTypes.Input.parse(event);
+  const parsed = LedgerTypes.Input.extend({ data: z.record(z.string(), PlainValueSchema) }).parse(
+    event,
+  );
   const head = LedgerTypes.ExpectedHead.parse(expectedHead);
 
   const run = db.transaction((): LedgerTypes.Outcome => {
@@ -42,16 +45,24 @@ export function append(
       .query("UPDATE ledger_head SET head = head + 1 WHERE stream_id = ? AND head = ?")
       .run(parsed.streamId, head);
     if (cas.changes !== 1) {
-      const row = db
-        .query("SELECT head FROM ledger_head WHERE stream_id = ?")
-        .get(parsed.streamId) as { head: number } | null;
+      const row = z
+        .object({ head: z.number().int().nonnegative() })
+        .nullable()
+        .parse(db.query("SELECT head FROM ledger_head WHERE stream_id = ?").get(parsed.streamId));
       return { kind: "cas_conflict", currentHead: row?.head ?? 0 };
     }
 
     const seq = head + 1;
-    const tip = db
-      .query("SELECT event_hash FROM ledger_event WHERE stream_id = ? ORDER BY seq DESC LIMIT 1")
-      .get(parsed.streamId) as { event_hash: string } | null;
+    const tip = z
+      .object({ event_hash: z.string() })
+      .nullable()
+      .parse(
+        db
+          .query(
+            "SELECT event_hash FROM ledger_event WHERE stream_id = ? ORDER BY seq DESC LIMIT 1",
+          )
+          .get(parsed.streamId),
+      );
     const prevHash = tip?.event_hash ?? GENESIS_SEED;
 
     const data = JSON.stringify(parsed.data);

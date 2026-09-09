@@ -1,17 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { expectNamedFailure } from "../helpers/errors";
+import { useSqliteStorage } from "../helpers/storage";
 import { inspect } from "node:util";
 import { Provisioning } from "@openomni/protocol";
-import {
-  ChannelInstanceStore,
-  PersonStore,
-  SecretStore,
-  SqliteStorageAdapter,
-  Storage,
-  Vault,
-} from "../../src/index.js";
+import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "../../src/index.js";
 
 const NOW = 1_756_000_000_000;
 
@@ -44,20 +37,7 @@ function secretRow(id: string, envelope: Vault.Envelope): Provisioning.Secret {
 }
 
 describe("provisioning stores", () => {
-  let tmpDir: string;
-  let dbPath: string;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "provisioning-test-"));
-    dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(new SqliteStorageAdapter(dbPath));
-  });
-
-  afterEach(async () => {
-    Storage.reset();
-    await rm(tmpDir, { recursive: true });
-  });
+  const fixture = useSqliteStorage("provisioning");
 
   test("Person roundtrips, lists, and removes", () => {
     const declared = PersonStore.put(person("person:alice", "collaborator"));
@@ -70,15 +50,11 @@ describe("provisioning stores", () => {
 
   test("sole-owner invariant: a second owner Person is a typed owner_exists refusal", () => {
     PersonStore.put(person("person:ino", "owner"));
-    let caught: Provisioning.StoreError | undefined;
-    try {
-      PersonStore.put(person("person:mallory", "owner"));
-    } catch (error) {
-      if (Provisioning.StoreError.isInstance(error)) caught = error;
-    }
-    if (caught === undefined) throw new Error("expected a typed StoreError");
-    expect(caught.data.code).toBe("owner_exists");
-    expect(caught.data.id).toBe("person:ino");
+    expectNamedFailure(
+      () => PersonStore.put(person("person:mallory", "owner")),
+      Provisioning.StoreError.name,
+      { code: "owner_exists", id: "person:ino" },
+    );
     expect(PersonStore.get("person:mallory")).toBeUndefined();
   });
 
@@ -129,7 +105,7 @@ describe("provisioning stores", () => {
     SecretStore.put(
       secretRow("secret:leak-probe", Vault.seal(new TextEncoder().encode(plaintext), kek)),
     );
-    const fileBytes = await readFile(dbPath);
+    const fileBytes = await readFile(fixture.path);
     expect(fileBytes.includes(plaintext)).toBe(false);
   });
 
@@ -141,26 +117,16 @@ describe("provisioning stores", () => {
       () => ChannelInstanceStore.list(),
       () => SecretStore.list(),
     ]) {
-      let caught: Provisioning.StoreError | undefined;
-      try {
-        attempt();
-      } catch (error) {
-        if (Provisioning.StoreError.isInstance(error)) caught = error;
-      }
-      expect(caught?.data.code).toBe("adapter_absent");
+      expectNamedFailure(attempt, Provisioning.StoreError.name, { code: "adapter_absent" });
     }
   });
 });
 
 describe("Vault envelope crypto", () => {
   test("kekOf refuses non-32-byte keys with a typed vault_locked error", () => {
-    let caught: Provisioning.VaultError | undefined;
-    try {
-      Vault.kekOf(new Uint8Array(16));
-    } catch (error) {
-      if (Provisioning.VaultError.isInstance(error)) caught = error;
-    }
-    expect(caught?.data.code).toBe("vault_locked");
+    expectNamedFailure(() => Vault.kekOf(new Uint8Array(16)), Provisioning.VaultError.name, {
+      code: "vault_locked",
+    });
   });
 
   test("kek ids are stable fingerprints of the key bytes", () => {
@@ -177,14 +143,11 @@ describe("Vault envelope crypto", () => {
 
   test("open under the wrong KEK id is a typed kek_mismatch", () => {
     const envelope = Vault.seal(new TextEncoder().encode("value"), kekFixture(1));
-    let caught: Provisioning.VaultError | undefined;
-    try {
-      Vault.open({ ...envelope, id: "secret:mismatch" }, kekFixture(2));
-    } catch (error) {
-      if (Provisioning.VaultError.isInstance(error)) caught = error;
-    }
-    expect(caught?.data.code).toBe("kek_mismatch");
-    expect(caught?.data.secretId).toBe("secret:mismatch");
+    expectNamedFailure(
+      () => Vault.open({ ...envelope, id: "secret:mismatch" }, kekFixture(2)),
+      Provisioning.VaultError.name,
+      { code: "kek_mismatch", secretId: "secret:mismatch" },
+    );
   });
 
   test("a tampered ciphertext fails authentication as a typed unopenable", () => {
@@ -193,25 +156,21 @@ describe("Vault envelope crypto", () => {
     const tampered = new Uint8Array(envelope.ciphertext);
     const lastIndex = tampered.length - 1;
     tampered[lastIndex] = (tampered[lastIndex] ?? 0) ^ 0xff;
-    let caught: Provisioning.VaultError | undefined;
-    try {
-      Vault.open({ ...envelope, ciphertext: tampered }, kek);
-    } catch (error) {
-      if (Provisioning.VaultError.isInstance(error)) caught = error;
-    }
-    expect(caught?.data.code).toBe("unopenable");
+    expectNamedFailure(
+      () => Vault.open({ ...envelope, ciphertext: tampered }, kek),
+      Provisioning.VaultError.name,
+      { code: "unopenable" },
+    );
   });
 
   test("a truncated packed blob is a typed unopenable, not a crash", () => {
     const kek = kekFixture(1);
     const envelope = Vault.seal(new TextEncoder().encode("value"), kek);
-    let caught: Provisioning.VaultError | undefined;
-    try {
-      Vault.open({ ...envelope, wrappedDek: envelope.wrappedDek.slice(0, 8) }, kek);
-    } catch (error) {
-      if (Provisioning.VaultError.isInstance(error)) caught = error;
-    }
-    expect(caught?.data.code).toBe("unopenable");
+    expectNamedFailure(
+      () => Vault.open({ ...envelope, wrappedDek: envelope.wrappedDek.slice(0, 8) }, kek),
+      Provisioning.VaultError.name,
+      { code: "unopenable" },
+    );
   });
 
   test("§8.3: every accidental serialization of a revealed secret prints [redacted]", () => {

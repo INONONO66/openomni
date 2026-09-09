@@ -46,7 +46,7 @@ function applyMigrationFixture(db: Database, name: string): void {
 }
 
 function storageDb(adapter: SqliteStorageAdapter): Database {
-  return (adapter as unknown as { db: Database }).db;
+  return adapter.testDatabase();
 }
 
 function tableColumns(db: Database, table: string): string[] {
@@ -84,10 +84,11 @@ describe("SqliteStorageAdapter", () => {
     });
 
     test("foreign_keys are enabled", () => {
-      const row = (adapter as unknown as { db: Database }).db
-        .query("PRAGMA foreign_keys")
-        .get() as { foreign_keys: number };
-      expect(row.foreign_keys).toBe(1);
+      const row = adapter
+        .testDatabase()
+        .query<{ foreign_keys: number }, []>("PRAGMA foreign_keys")
+        .get();
+      expect(row?.foreign_keys).toBe(1);
     });
   });
 

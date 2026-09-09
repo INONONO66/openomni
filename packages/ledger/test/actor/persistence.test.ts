@@ -1,25 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { ActorRegistry, SqliteStorageAdapter, Storage } from "../../src/index.js";
+import { ActorRegistry } from "../../src/index.js";
+import { useSqliteStorage } from "../helpers/storage";
 
 describe("ActorRegistry SQLite persistence", () => {
-  let tmpDir: string;
-  let dbPath: string;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "actor-registry-test-"));
-    dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(new SqliteStorageAdapter(dbPath));
-  });
-
-  afterEach(async () => {
-    Storage.reset();
-    await rm(tmpDir, { recursive: true });
-  });
+  const fixture = useSqliteStorage("actor-registry");
 
   test("resolves registered endpoints across storage re-init", () => {
     // Given
@@ -36,8 +21,7 @@ describe("ActorRegistry SQLite persistence", () => {
       workspace: "guild",
     });
 
-    // When
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    fixture.reopen();
     const resolved = ActorRegistry.resolveEndpoint("discord", "user-1", "guild");
 
     // Then
@@ -168,7 +152,7 @@ describe("ActorRegistry SQLite persistence", () => {
   test("an old-format row whose data blob carries relationship parses and round-trips (#498 A1)", () => {
     // Given — a row persisted BEFORE the relationship removal: migration 0018
     // dropped the column, but the JSON blob keeps the retired key forever.
-    const db = new Database(dbPath);
+    const db = new Database(fixture.path);
     db.query(
       `INSERT INTO actor_identity (id, data, kind, trust_tier, time_created, time_updated)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -188,7 +172,7 @@ describe("ActorRegistry SQLite persistence", () => {
       100,
     );
     db.close();
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    fixture.reopen();
 
     // When — read the legacy blob, then write it back through the registry.
     const identity = ActorRegistry.getIdentity("act_legacy");

@@ -42,15 +42,19 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
       alarms: new Map(alarmRows),
       policies: new Map(policyRows),
     };
+    let committed = false;
     try {
-      return operation();
-    } catch (error) {
-      restore(sessionRows, before.sessions);
-      restore(actionRows, before.actions);
-      restore(inboxRows, before.inbox);
-      restore(alarmRows, before.alarms);
-      restore(policyRows, before.policies);
-      throw error;
+      const result = operation();
+      committed = true;
+      return result;
+    } finally {
+      if (!committed) {
+        restore(sessionRows, before.sessions);
+        restore(actionRows, before.actions);
+        restore(inboxRows, before.inbox);
+        restore(alarmRows, before.alarms);
+        restore(policyRows, before.policies);
+      }
     }
   };
 

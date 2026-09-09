@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { Actor } from "@openomni/protocol";
 import { ActorRegistry, Storage } from "../../src/index";
 
 beforeEach(() => {
@@ -13,7 +12,7 @@ afterEach(() => {
 
 const T0 = 1_000;
 
-function mintOne(n: number, channel = "whatsapp", at = T0): Actor.ResolvedEndpoint {
+function mintOne(n: number, channel = "whatsapp", at = T0) {
   return ActorRegistry.mintProvisional(
     {
       id: `contact:${channel}:ext-${n}`,

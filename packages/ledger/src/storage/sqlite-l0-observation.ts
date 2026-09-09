@@ -24,11 +24,8 @@ export function publishCommitted(
       kind: receipt.action.kind,
     });
     publishMessageTerminal(db, sink, receipt.action);
-  } catch (error) {
-    console.warn("post-commit observation failed", {
-      actionId: receipt.action.id,
-      error: String(error),
-    });
+  } catch {
+    console.warn(`post-commit observation failed: ${receipt.action.id}`);
   }
 }
 

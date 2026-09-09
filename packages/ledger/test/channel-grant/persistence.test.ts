@@ -1,25 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { ChannelGrantStore, SqliteStorageAdapter, Storage } from "../../src/index.js";
+import { ChannelGrantStore, Storage } from "../../src/index.js";
+import { useSqliteStorage } from "../helpers/storage";
 import { Actor } from "@openomni/protocol";
 
 describe("ChannelGrantStore SQLite persistence", () => {
-  let tmpDir: string;
-  let dbPath: string;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "channel-grant-test-"));
-    dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath });
-  });
-
-  afterEach(async () => {
-    Storage.reset();
-    await rm(tmpDir, { recursive: true });
-  });
+  const fixture = useSqliteStorage("channel-grant");
 
   test("persists grant fields without resolution-derived normalization", () => {
     const stored = ChannelGrantStore.put({
@@ -35,8 +21,9 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    using reader = new Database(dbPath, { readonly: true });
-    const row = reader.query<{ data: string }, [string]>("SELECT data FROM channel_grant WHERE id = ?")
+    using reader = new Database(fixture.path, { readonly: true });
+    const row = reader
+      .query<{ data: string }, [string]>("SELECT data FROM channel_grant WHERE id = ?")
       .get("grant-byte-fixture");
     if (row === null) throw new Error("missing persisted grant");
     expect(Actor.ChannelGrant.parse(JSON.parse(row.data))).toEqual(stored);
@@ -55,8 +42,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    Storage.reset();
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    fixture.reopen();
 
     expect(ChannelGrantStore.get(stored.id)).toEqual(stored);
     expect(ChannelGrantStore.list()).toEqual([stored]);

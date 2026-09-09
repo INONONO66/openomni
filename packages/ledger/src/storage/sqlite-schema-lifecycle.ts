@@ -85,7 +85,7 @@ export function initializeSqliteDatabase(
     if (
       projection.blocked.length > 0 ||
       projection.candidates.length > 0 ||
-      db.query("SELECT 1 FROM bus_event LIMIT 1").get()
+      db.query<{ present: number }, []>("SELECT 1 AS present FROM bus_event LIMIT 1").get() !== null
     )
       throw new U967Error("approval_required");
   }

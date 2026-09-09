@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EgressBudgetStore, Storage } from "../../src/index";
+import type { Gateway } from "@openomni/protocol";
 
 /** #219 active-egress debit ledger: atomic, idempotent counted-window claims. */
 describe("EgressBudgetStore", () => {
@@ -12,8 +13,8 @@ describe("EgressBudgetStore", () => {
 
   const row = (
     id: string,
-    overrides: Partial<Parameters<typeof EgressBudgetStore.claim>[0]> = {},
-  ) => ({
+    overrides: Partial<Gateway.EgressDebitRow> = {},
+  ): Gateway.EgressDebitRow => ({
     id,
     senderId: "s",
     targetActorId: "t",

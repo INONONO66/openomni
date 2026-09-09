@@ -1,7 +1,11 @@
 import type { Database } from "bun:sqlite";
-import { Ledger as LedgerTypes } from "@openomni/protocol";
+import { Ledger as LedgerTypes, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 import { parseStoredJson } from "../storage/sqlite-json-data";
+
+const StoredFact = LedgerTypes.RecordedFact.extend({
+  data: z.record(z.string(), PlainValueSchema),
+});
 
 const FactRow = z
   .object({
@@ -12,7 +16,7 @@ const FactRow = z
     time_created: z.number(),
   })
   .transform((row) =>
-    LedgerTypes.RecordedFact.parse({
+    StoredFact.parse({
       streamId: row.stream_id,
       seq: row.seq,
       type: row.type,
@@ -22,7 +26,7 @@ const FactRow = z
   );
 
 /** Newest fact of one stream; persisted data is validated JSON, not a domain verdict. */
-export function headFact(db: Database, streamId: string): LedgerTypes.RecordedFact | undefined {
+export function headFact(db: Database, streamId: string) {
   const fact = FactRow.nullable().parse(
     db
       .query(
@@ -34,7 +38,7 @@ export function headFact(db: Database, streamId: string): LedgerTypes.RecordedFa
 }
 
 /** Facts of one type across streams, ordered by stream identity and sequence. */
-export function factsByType(db: Database, type: string): LedgerTypes.RecordedFact[] {
+export function factsByType(db: Database, type: string) {
   return FactRow.array().parse(
     db
       .query(

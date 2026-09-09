@@ -1,17 +1,16 @@
 import type { Database } from "bun:sqlite";
-import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
+import type { Storage as ProtocolStorage } from "@openomni/protocol";
+import { StoredIdentity, StoredEndpoint } from "../actor/schema";
 import { sqliteJsonData, SqliteCountRow } from "./sqlite-json-data";
 
-const IdentityRow = sqliteJsonData(Actor.Identity);
-const EndpointRow = sqliteJsonData(Actor.Endpoint);
+const IdentityRow = sqliteJsonData(StoredIdentity);
+const EndpointRow = sqliteJsonData(StoredEndpoint);
 
 function workspaceKey(workspace: string | undefined): string {
   return workspace ?? "";
 }
 
-export function createSqliteActorRegistryAdapter(
-  db: Database,
-): ProtocolStorage.ActorRegistrySubAdapter {
+export function createSqliteActorRegistryAdapter(db: Database) {
   return {
     getIdentity(id) {
       return (
@@ -85,7 +84,7 @@ export function createSqliteActorRegistryAdapter(
       );
       return row ?? undefined;
     },
-    listEndpoints(actorId, workspace) {
+    listEndpoints(actorId?: string, workspace?: string) {
       return EndpointRow.array().parse(
         db
           .query(
@@ -114,5 +113,5 @@ export function createSqliteActorRegistryAdapter(
       );
       return row.count;
     },
-  };
+  } satisfies ProtocolStorage.ActorRegistrySubAdapter;
 }

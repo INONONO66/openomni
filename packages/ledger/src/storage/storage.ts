@@ -1,5 +1,6 @@
 import type { BusEvent, Storage as ProtocolStorage } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { headFact, factsByType } from "../ledger-core/read";
 
 export const productionStorageAdapterBrand: unique symbol = Symbol("productionStorageAdapter");
 
@@ -26,7 +27,10 @@ export namespace Storage {
     // the projection sub-adapters, so a decision-class store can commit
     // append + projection inside one `transaction()` call. Optional for test
     // fakes only — decision-class writers fail closed without it.
-    ledger?: ProtocolStorage.LedgerSubAdapter;
+    ledger?: Omit<ProtocolStorage.LedgerSubAdapter, "headFact" | "factsByType"> & {
+      headFact(streamId: string): ReturnType<typeof headFact>;
+      factsByType(type: string): ReturnType<typeof factsByType>;
+    };
     // Active-egress debit ledger (#219, perimeter domain). Optional for test
     // fakes only — EgressBudgetStore fails closed when it is missing;
     // production adapters wire it as required (SqliteStorageAdapter). Sole

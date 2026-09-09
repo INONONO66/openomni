@@ -35,11 +35,12 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   constructor(dbPath: string, observationSink: ObservationSink = { publish: () => undefined }) {
     this.observationSink = observationSink;
     this.db = new Database(dbPath);
+    let initialized = false;
     try {
       initializeSqliteDatabase(this.db);
-    } catch (err) {
-      this.db.close();
-      throw err;
+      initialized = true;
+    } finally {
+      if (!initialized) this.db.close();
     }
 
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
@@ -73,6 +74,11 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     // Non-enumerable so object-spread test fakes stay narrow and are not
     // mistaken for the concrete production adapter during Storage.configure.
     Object.defineProperty(this, productionStorageAdapterBrand, { value: true });
+  }
+
+  /** Test-only seam for schema/retention characterization; never used by product stores. */
+  testDatabase(): Database {
+    return this.db;
   }
 
   clear(): void {

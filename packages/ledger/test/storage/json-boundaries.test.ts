@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Actor, LedgerSession } from "@openomni/protocol";
+import { LedgerSession } from "@openomni/protocol";
 import { createSqliteActorRegistryAdapter } from "../../src/storage/sqlite-actor-registry-adapter";
 import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { Ledger } from "../../src/ledger-core";
@@ -23,24 +23,21 @@ test("raw recorded facts reject malformed JSON and non-finite JSON numbers", () 
 test("actor endpoint filters distinguish no filter from the empty workspace", () => {
   using db = openLedgerDatabase();
   const store = createSqliteActorRegistryAdapter(db);
-  for (const id of ["a", "b"])
-    store.setIdentity(Actor.Identity.parse({ id, kind: "human", trustTier: "observer" }));
+  for (const id of ["a", "b"]) store.setIdentity({ id, kind: "human", trustTier: "observer" });
   for (const [id, actorId, workspace] of [
     ["1", "a", ""],
     ["2", "a", "guild"],
     ["3", "b", "guild"],
   ] as const) {
-    store.setEndpoint(
-      Actor.Endpoint.parse({
-        id,
-        actorId,
-        workspace: workspace || undefined,
-        channel: "discord",
-        externalId: id,
-        createdAt: 1,
-        updatedAt: 1,
-      }),
-    );
+    store.setEndpoint({
+      id,
+      actorId,
+      workspace: workspace || undefined,
+      channel: "discord",
+      externalId: id,
+      createdAt: 1,
+      updatedAt: 1,
+    });
   }
   expect(store.listEndpoints().map((row) => row.id)).toEqual(["1", "2", "3"]);
   expect(store.listEndpoints("a").map((row) => row.id)).toEqual(["1", "2"]);

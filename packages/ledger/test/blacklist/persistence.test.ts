@@ -1,23 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { BlacklistStore, SqliteStorageAdapter, Storage } from "../../src/index.js";
+import { describe, expect, test } from "bun:test";
+import { BlacklistStore, Storage } from "../../src/index.js";
+import { useSqliteStorage } from "../helpers/storage";
 
 describe("BlacklistStore SQLite persistence", () => {
-  let tmpDir: string;
-  let dbPath: string;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "blacklist-test-"));
-    dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath });
-  });
-
-  afterEach(async () => {
-    Storage.reset();
-    await rm(tmpDir, { recursive: true });
-  });
+  const fixture = useSqliteStorage("blacklist");
 
   test("round-trips raw blacklist facts across storage reconfiguration", () => {
     const stored = BlacklistStore.put({
@@ -30,8 +16,7 @@ describe("BlacklistStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    Storage.reset();
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    fixture.reopen();
 
     expect(BlacklistStore.get(stored.id)).toEqual(stored);
     expect(BlacklistStore.list()).toEqual([stored]);

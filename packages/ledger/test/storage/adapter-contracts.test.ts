@@ -383,14 +383,17 @@ describe("migration rollback preservation", () => {
     `,
     );
     using db = new Database(":memory:");
-    try {
-      Migration.applyOrdered(db, directory, [{ name: "broken.sql" }]);
-      throw new Error("migration unexpectedly succeeded");
-    } catch (error) {
-      if (!(error instanceof SuppressedError)) throw error;
-      expect(String(error.error)).toContain("no transaction is active");
-      expect(String(error.suppressed)).toContain("UNIQUE constraint failed");
-    }
+    const rollbackMessage: object = expect.stringContaining("no transaction is active");
+    const migrationMessage: object = expect.stringContaining("UNIQUE constraint failed");
+    const rollbackFailure: object = expect.objectContaining({ message: rollbackMessage });
+    const migrationFailure: object = expect.objectContaining({ message: migrationMessage });
+    expect(() => Migration.applyOrdered(db, directory, [{ name: "broken.sql" }])).toThrow(
+      expect.objectContaining({
+        name: "SuppressedError",
+        error: rollbackFailure,
+        suppressed: migrationFailure,
+      }),
+    );
     expect(db.query("SELECT name FROM _migrations").all()).toEqual([]);
     expect(db.query("SELECT name FROM sqlite_master WHERE name = 'broken'").get()).toBeNull();
   });

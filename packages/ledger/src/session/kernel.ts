@@ -440,12 +440,11 @@ export function watchSnapshot(
       },
       { match: { sessionId } },
     );
-    let snapshot: SessionTurn.Snapshot;
+    let snapshot: SessionTurn.Snapshot | undefined;
     try {
       snapshot = getSnapshot(sessionId, turns);
-    } catch (error) {
-      stop();
-      throw error;
+    } finally {
+      if (snapshot === undefined) stop();
     }
     revision = snapshot.revision;
     return {
