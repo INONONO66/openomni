@@ -243,7 +243,7 @@ test("v2 workflow carries scope as an artifact and always runs repository contra
   expect(jobs["scripts-contracts"]?.needs).toEqual(["plan", "prepare"]);
   expect(jobs["scripts-contracts"]?.if).toBeUndefined();
   expect(jobs["scripts-coverage"]?.needs).toContain("tests");
-  expect(jobs["quality-static"]?.["timeout-minutes"]).toBe(20);
+  expect(jobs["quality-static"]?.["timeout-minutes"]).toBe(`\${{ matrix.leg == 'publisher' && 30 || 20 }}`);
   expect(jobs.tests?.["timeout-minutes"]).toBe(`\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}`);
   expect(jobs["quality-static"]?.steps.some((step) => step.run?.includes('--plan ci-plan.json'))).toBe(true);
 });
@@ -284,8 +284,8 @@ test("quality matrix has exactly five bounded legs and no job exceeds sixty minu
       expect(timeout).toBeGreaterThan(0);
       expect(timeout).toBeLessThanOrEqual(60);
     } else {
-      expect(name).toBe("tests");
-      expect(timeout).toBe(`\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}`);
+      expect(["tests", "quality-static"]).toContain(name);
+      expect(timeout).toBe(name === "tests" ? `\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}` : `\${{ matrix.leg == 'publisher' && 30 || 20 }}`);
     }
   }
   expect(jobs["quality-static"]?.strategy).toEqual({

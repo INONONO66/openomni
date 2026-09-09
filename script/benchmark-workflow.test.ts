@@ -9,6 +9,11 @@ const Step = z.object({
   with: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional(),
 });
 const Workflow = z.object({
+  on: z.object({
+    push: z.object({ branches: z.array(z.string()), paths: z.array(z.string()).optional() }),
+    pull_request: z.object({ paths: z.array(z.string()) }),
+    schedule: z.array(z.object({ cron: z.string() })),
+  }),
   jobs: z.record(
     z.string(),
     z.object({
@@ -20,6 +25,16 @@ const Workflow = z.object({
 const workflow = Workflow.parse(
   YAML.parse(await Bun.file(new URL("../.github/workflows/benchmark.yml", import.meta.url)).text()),
 );
+
+test("benchmark PRs select benchmark inputs while main and schedules stay full", () => {
+  expect(workflow.on.push).toEqual({ branches: ["main"] });
+  expect(workflow.on.schedule.length).toBeGreaterThan(0);
+  expect(workflow.on.pull_request.paths).toEqual([
+    "packages/ledger/**", "packages/agent/**", "packages/protocol/**", "script/**",
+    "package.json", "bun.lock", "bunfig.toml", "turbo.json", "tsconfig.base.json",
+    ".github/workflows/benchmark.yml", ".github/actions/**",
+  ]);
+});
 
 test("benchmark input is validated before collection starts", () => {
   const steps = workflow.jobs.benchmark?.steps ?? [];
