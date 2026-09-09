@@ -3,9 +3,9 @@ import { Storage } from "@openomni/ledger";
 import { requestLedger } from "../../helpers/request-ledger";
 import { bounded } from "../../helpers/bounded";
 import { Run } from "@openomni/llm";
-import { createExecutor, type ExecutorOptions } from "../../../src/executor";
+import type { ExecutorOptions } from "../../../src/executor";
 import { runChatAttempts } from "../../helpers/chat-attempts";
-import { compiledPolicy, recordingLedger } from "../../helpers/compiled-policy";
+import { compiledPolicy, turnExecutor } from "../../helpers/compiled-policy";
 import type { LedgerAction, PlainObject } from "@openomni/protocol";
 afterEach(() => Storage.reset());
 
@@ -36,21 +36,16 @@ function providerFailure(visibleOutput = false) {
 }
 
 function harness(overrides: Partial<ExecutorOptions> = {}) {
-  const record = recordingLedger();
   const waits: number[] = [];
-  const executor = createExecutor({
-    ledger: record.ledger,
-    policy: compiledPolicy(),
-    clock: () => 1,
-    entropy: record.entropy,
-    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-    observations: { publish: () => undefined },
-    waitRetry: async (delay) => {
-      waits.push(delay);
-    },
-    ...overrides,
-  });
-  return { ...record, executor, waits };
+  return {
+    ...turnExecutor(compiledPolicy(), undefined, {
+      waitRetry: async (delay) => {
+        waits.push(delay);
+      },
+      ...overrides,
+    }),
+    waits,
+  };
 }
 function effectRecord(action: LedgerAction.Append): PlainObject {
   const value = action.effect.value;

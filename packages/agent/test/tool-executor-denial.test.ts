@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
-import { createDispatcher, createExecutor, defineTool } from "../src/index";
-import { allowAllPolicy as allowAll, opPhaseOf, recordingLedger } from "./helpers/compiled-policy";
+import { createDispatcher, defineTool } from "../src/index";
+import { allowAllPolicy as allowAll, opPhaseOf, turnExecutor } from "./helpers/compiled-policy";
 import { z } from "zod";
 
 const denyPre = compilePolicySnapshot({
@@ -39,15 +39,7 @@ function echoTool(onRun: () => void) {
 }
 
 function durableExecutor(policy: CompiledPolicySnapshot, committed?: LedgerAction.Append[]) {
-  const recording = recordingLedger(committed);
-  return createExecutor({
-    policy,
-    ledger: recording.ledger,
-    observations: { publish: () => undefined },
-    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-    clock: () => 1,
-    entropy: recording.entropy,
-  });
+  return turnExecutor(policy, committed).executor;
 }
 
 function deniedDispatcher(executions: { count: number }) {

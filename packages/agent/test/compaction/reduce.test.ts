@@ -102,7 +102,7 @@ describe("Compaction.compact with elision configured", () => {
   });
 
   it("falls back to the cut once elision has nothing left", async () => {
-    const { sink, result } = await compactElided("small");
+    const { result } = await compactElided("small");
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBeGreaterThan(0);
@@ -142,7 +142,7 @@ describe("Compaction.compact with elision configured", () => {
     // falls short of the measured overage, the cut runs on the already-elided
     // history in the same round.
     // measured: overage ~9920 tokens; elision nets 439 chars ≈ 110 tokens
-    const { sink, result } = await compactElided("x".repeat(500), 10_000);
+    const { messages, result } = await compactElided("x".repeat(500), 10_000);
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBeGreaterThan(0);

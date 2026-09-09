@@ -8,14 +8,13 @@ import type { LedgerAction, Model } from "@openomni/protocol";
 import {
   Bus,
   closeSessions,
-  createExecutor,
   createSessionChatRunner,
   createTurnDispatcher,
   type Executor,
   type SessionRuntime,
 } from "../src/index";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
-import { recordingLedger } from "./helpers/compiled-policy";
+import { turnExecutor } from "./helpers/compiled-policy";
 import {
   completeModel,
   createMockLlmConfig,
@@ -62,15 +61,7 @@ function input(
 }
 
 function testExecutor(): Executor {
-  const recording = recordingLedger();
-  return createExecutor({
-    policy,
-    ledger: recording.ledger,
-    observations: { publish: () => undefined },
-    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-    clock: () => 1,
-    entropy: recording.entropy,
-  });
+  return turnExecutor(policy).executor;
 }
 
 function config(run: MockLlmFn, executor: Executor = testExecutor(), fallbacks?: Model.Ref[]) {
