@@ -13,7 +13,7 @@ interface SessionChatRun {
   readonly around?: (operation: () => Promise<AgentResult>) => Promise<AgentResult>;
 }
 
-export interface SessionChatRunnerOptions {
+interface SessionChatRunnerOptions {
   readonly prepare: (input: SessionRunnerInput) => SessionChatRun;
   readonly reportError?: (error: Error, input: SessionRunnerInput) => string | undefined;
 }
@@ -41,7 +41,9 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
             {
               messages,
               history:
-                actions === undefined ? input.history : foldSessionHistory(input.sessionId, actions),
+                actions === undefined
+                  ? input.history
+                  : foldSessionHistory(input.sessionId, actions),
               traceContext: prepared.traceContext,
             },
             {

@@ -1,4 +1,5 @@
 import { Run } from "@openomni/llm";
+import { z } from "zod";
 
 export type RetryReason =
   | "timeout"
@@ -39,8 +40,9 @@ export function isAbort(error: Error, signal?: AbortSignal): boolean {
   );
 }
 
-function asLlmFailure(error: Error): Run.Failure | undefined {
-  return Run.FailureError.isInstance(error as unknown) ? (error as Run.Failure) : undefined;
+function asLlmFailure(error: Error): Pick<Run.Failure, "data"> | undefined {
+  if (!Run.FailureError.isInstance(error)) return undefined;
+  return Run.FailureError.Schema.parse(error);
 }
 
 /**
@@ -51,13 +53,20 @@ function asLlmFailure(error: Error): Run.Failure | undefined {
  * and re-deriving them from the error message is exactly the string matching
  * the closed vocabulary exists to avoid.
  */
-export interface AgentFailureFacts {
-  readonly reason: TerminalReason;
-  readonly attempt: number;
-  readonly maxAttempts: number;
-  /** True only when the terminal error came from an llm.run outcome. */
-  readonly llm: true;
-}
+const AgentFailureFacts = z.object({
+  reason: z.enum([
+    "timeout",
+    "tool_error",
+    "transient_error",
+    "validation_error",
+    "context_overflow",
+    "aborted",
+  ]),
+  attempt: z.number(),
+  maxAttempts: z.number(),
+  llm: z.literal(true),
+});
+type AgentFailureFacts = z.infer<typeof AgentFailureFacts>;
 
 /**
  * Carried on the error object itself rather than by wrapping it: wrapping
@@ -84,6 +93,6 @@ export function attachFailureFacts(error: Error, facts: AgentFailureFacts): void
  */
 export function failureFacts(error: unknown): AgentFailureFacts | undefined {
   if (typeof error !== "object" || error === null) return undefined;
-  const carried = (error as Record<symbol, unknown>)[FAILURE_FACTS];
-  return carried === undefined ? undefined : (carried as AgentFailureFacts);
+  const parsed = AgentFailureFacts.safeParse(Reflect.get(error, FAILURE_FACTS));
+  return parsed.success ? parsed.data : undefined;
 }

@@ -33,7 +33,7 @@ export function effectiveBudgetThresholds(budget?: Actor.Profile.BudgetThreshold
   };
 }
 
-export type BudgetStatus = "ok" | "reassurance" | "warning" | "exceeded";
+type BudgetStatus = "ok" | "reassurance" | "warning" | "exceeded";
 
 // Enforcement and narration share the same ceilings.
 const BUDGET_DEFAULTS = {

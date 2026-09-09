@@ -1,5 +1,6 @@
 import type { LedgerAction, PlainObject, PlainValue } from "@openomni/protocol";
-import { canonicalDigest, SessionTransition } from "@openomni/protocol";
+import { canonicalDigest, PlainValueSchema, type SessionTransition } from "@openomni/protocol";
+import { findSessionRequest } from "./session-request";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 
 import { runWaveBodies, waveBodyScope, type WaveControl } from "./core/execution/tool-wave";
@@ -437,14 +438,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
 
   function originalRequest(id: string | undefined): SessionTransition.Request | undefined {
     if (id === undefined) return undefined;
-    let result: SessionTransition.Request | undefined;
-    for (const action of options.ledger.actions?.() ?? []) {
-      const effect = action.effect.value;
-      if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
-      const parsed = SessionTransition.Request.safeParse(effect.request);
-      if (parsed.success && parsed.data.requestId === id) result = parsed.data;
-    }
-    return result;
+    return findSessionRequest(options.ledger.actions?.() ?? [], id);
   }
 
   function registeredKind(request: ExecutionRequest): LedgerAction.Kind {
@@ -557,7 +551,7 @@ function preRefusal(
 }
 
 function clonePlainValue(value: PlainValue): PlainValue {
-  return JSON.parse(JSON.stringify(value)) as PlainValue;
+  return PlainValueSchema.parse(structuredClone(value));
 }
 
 function resultFromEvaluation(

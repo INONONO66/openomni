@@ -26,6 +26,65 @@ interface RequestSnapshot {
 
 const rejected: RequestDecision = { resolution: "rejected", actions: [] };
 
+export function findSessionRequest(
+  actions: readonly LedgerAction.Node[],
+  requestId: string,
+): SessionTransition.Request | undefined {
+  for (let index = actions.length - 1; index >= 0; index -= 1) {
+    const effect = actions[index]?.effect.value;
+    if (
+      effect === undefined ||
+      effect === null ||
+      typeof effect !== "object" ||
+      Array.isArray(effect)
+    )
+      continue;
+    const parsed = SessionTransition.Request.safeParse(effect.request);
+    if (parsed.success && parsed.data.requestId === requestId) return parsed.data;
+  }
+  return undefined;
+}
+
+export function createApprovalRequest(
+  captured: Omit<import("./executor-contract").ExecutionApprovalRequest, "durable">,
+  binding: {
+    readonly effect: PlainValue;
+    readonly domainRevisions?: Readonly<Record<string, number>>;
+  },
+  systemHash: string | undefined,
+  createdAt: number,
+  timeout: number,
+): SessionTransition.Request {
+  const request = SessionTransition.Request.parse({
+    requestId: captured.id,
+    sessionId: captured.sessionId,
+    turnId: captured.turnId,
+    callId: captured.callId,
+    mode: "approval",
+    parsedInput: captured.intent,
+    inputHash: captured.inputHash,
+    effectHash: canonicalDigest(binding.effect),
+    generation: captured.generation,
+    toolsGeneration: captured.toolsGeneration ?? 0,
+    toolsHash: captured.toolsHash ?? canonicalDigest([]),
+    systemHash: systemHash ?? canonicalDigest([]),
+    domainRevisions: binding.domainRevisions ?? {},
+    deadline: createdAt + timeout,
+    expectedResponders: ["owner"],
+    correlation: {},
+    allowedActions: ["report_result"],
+    bindingDigest: "pending",
+    resolution: "first",
+    threshold: 1,
+    seenReplyIds: [],
+    replies: [],
+    state: "open",
+    outcome: null,
+    createdAt,
+  });
+  return { ...request, bindingDigest: requestBindingDigest(request) };
+}
+
 export function requestBindingDigest(request: SessionTransition.Request): string {
   return canonicalDigest({
     requestId: request.requestId,

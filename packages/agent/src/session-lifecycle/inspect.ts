@@ -275,6 +275,21 @@ function compactionsOf(
   turnOf: (action: LedgerAction.Node | undefined) => string | null,
 ): SessionHistory.Compaction[] {
   const compactions: SessionHistory.Compaction[] = [];
+  const restorations = new Map<string, string[]>();
+  for (const action of actions) {
+    const intent = object(action.intent.value);
+    const compactionId = object(intent.value).compactionId;
+    if (
+      action.kind !== "compaction" ||
+      intent.op !== "restore_context_projection" ||
+      intent.phase !== "intent" ||
+      typeof compactionId !== "string"
+    )
+      continue;
+    const ids = restorations.get(compactionId) ?? [];
+    ids.push(action.id);
+    restorations.set(compactionId, ids);
+  }
   for (const action of actions) {
     if (action.kind !== "compaction" || action.parentId === null) continue;
     const effect = object(action.effect.value);
@@ -294,22 +309,10 @@ function compactionsOf(
         count: Number(discarded.count),
         sha256: String(discarded.sha256),
       },
-      restoredBy: actions
-        .filter((candidate) => restores(candidate, action.parentId))
-        .map((candidate) => candidate.id),
+      restoredBy: restorations.get(action.parentId) ?? [],
     });
   }
   return compactions;
-}
-
-function restores(action: LedgerAction.Node, compactionId: string | null): boolean {
-  const intent = object(action.intent.value);
-  return (
-    action.kind === "compaction" &&
-    intent.op === "restore_context_projection" &&
-    intent.phase === "intent" &&
-    object(intent.value).compactionId === compactionId
-  );
 }
 
 function object(value: PlainValue | undefined): PlainObject {

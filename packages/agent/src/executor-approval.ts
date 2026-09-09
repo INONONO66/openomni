@@ -1,7 +1,7 @@
 import {
   canonicalDigest,
   PlainValueSchema,
-  SessionTransition,
+  type SessionTransition,
   type PlainValue,
 } from "@openomni/protocol";
 import {
@@ -10,7 +10,7 @@ import {
   type ExecutionApprovalRequest,
   type ExecutorOptions,
 } from "./executor-contract";
-import { requestBindingDigest } from "./session-request";
+import { createApprovalRequest, findSessionRequest } from "./session-request";
 
 type ApprovalDecision = "approve" | "refuse" | "timeout";
 
@@ -36,13 +36,7 @@ export function createExecutionApprovals(options: ExecutorOptions) {
     return options.ledger.transition(payload, inputId, options.clock());
   };
   const notify = (request: SessionTransition.Request) => {
-    let persisted: SessionTransition.Request | undefined;
-    for (const action of options.ledger.actions?.() ?? []) {
-      const effect = action.effect.value;
-      if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
-      const parsed = SessionTransition.Request.safeParse(effect.request);
-      if (parsed.success && parsed.data.requestId === request.requestId) persisted = parsed.data;
-    }
+    const persisted = findSessionRequest(options.ledger.actions?.() ?? [], request.requestId);
     const suspended = pending.get(request.requestId);
     if (suspended === undefined || persisted === undefined || persisted.state === "open") return;
     pending.delete(request.requestId);
@@ -111,34 +105,7 @@ export function createExecutionApprovals(options: ExecutorOptions) {
     const createdAt = options.clock();
     const durable =
       binding.original ??
-      SessionTransition.Request.parse({
-        requestId: captured.id,
-        sessionId: captured.sessionId,
-        turnId: captured.turnId,
-        callId: captured.callId,
-        mode: "approval",
-        parsedInput: captured.intent,
-        inputHash: captured.inputHash,
-        effectHash: canonicalDigest(binding.effect),
-        generation: captured.generation,
-        toolsGeneration: captured.toolsGeneration ?? 0,
-        toolsHash: captured.toolsHash ?? canonicalDigest([]),
-        systemHash: options.identity.systemHash ?? canonicalDigest([]),
-        domainRevisions: binding.domainRevisions ?? {},
-        deadline: createdAt + timeout,
-        expectedResponders: ["owner"],
-        correlation: {},
-        allowedActions: ["report_result"],
-        bindingDigest: "pending",
-        resolution: "first",
-        threshold: 1,
-        seenReplyIds: [],
-        replies: [],
-        state: "open",
-        outcome: null,
-        createdAt,
-      });
-    if (binding.original === undefined) durable.bindingDigest = requestBindingDigest(durable);
+      createApprovalRequest(captured, binding, options.identity.systemHash, createdAt, timeout);
     const request: ExecutionApprovalRequest = { ...captured, expiresAt: durable.deadline, durable };
     const decision = Promise.withResolvers<ApprovalDecision>();
     pending.set(request.id, {

@@ -177,7 +177,7 @@ function matches<T>(data: T, match: Partial<T>): boolean {
 
 export const Bus = createObservationBus();
 
-export interface ScopeObservationOptions {
+interface ScopeObservationOptions {
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly onError?: (error: Error, eventName: string) => void;

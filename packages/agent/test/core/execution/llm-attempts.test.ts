@@ -264,7 +264,10 @@ test("interrupt cancels an exactly registered backoff without another provider a
   expect(intents(committed, "attempt")).toHaveLength(1);
 });
 
-test("retry approval suspends the captured child without reconstructing the provider call", async () => {
+test.each([
+  "approve",
+  "refuse",
+] as const)("retry approval %s settles the captured child without reconstructing the provider call", async (decision) => {
   const waiting = Promise.withResolvers<void>();
   Storage.initialize({ dbPath: ":memory:" });
   const recording = requestLedger({
@@ -309,6 +312,7 @@ test("retry approval suspends the captured child without reconstructing the prov
       },
     }),
   );
+  const terminal = running.catch((error: Error) => error);
   await bounded(waiting.promise);
   expect(calls).toBe(1);
   const request = executor.approvals?.pending()[0];
@@ -316,9 +320,23 @@ test("retry approval suspends the captured child without reconstructing the prov
   expect(
     intents(recording.ledger.actions?.() ?? [], "attempt").map((action) => action.id),
   ).toContain(request.id);
-  await executor.approvals?.answer({ request, credential: "proof", decision: "approve" });
-  expect(await bounded(running)).toMatchObject({ terminal: "executed" });
-  expect(calls).toBe(2);
+  await executor.approvals?.answer({ request, credential: "proof", decision });
+  const result = await bounded(terminal);
+  if (decision === "approve") expect(result).toMatchObject({ terminal: "executed" });
+  else {
+    expect(result).toBeInstanceOf(Error);
+    expect(
+      (recording.ledger.actions?.() ?? [])
+        .filter((action) => action.kind === "attempt")
+        .map((action) => action.effect.value),
+    ).toContainEqual(
+      expect.objectContaining({
+        terminal: "blocked_pre",
+        reason: "approval_refused",
+      }),
+    );
+  }
+  expect(calls).toBe(decision === "approve" ? 2 : 1);
   expect(prepared).toBe(2);
   expect(intents(recording.ledger.actions?.() ?? [], "llm")).toHaveLength(1);
 });
