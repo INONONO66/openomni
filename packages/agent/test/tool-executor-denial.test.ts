@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { stringQueryTool } from "./helpers/query-tool";
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import { createDispatcher, createExecutor, defineTool } from "../src/index";
@@ -98,21 +99,12 @@ describe("cell-door executor propagation", () => {
     const inner = createDispatcher([echoTool(() => undefined)]);
     const outer = createDispatcher(
       [
-        defineTool({
-          name: "outer",
-          description: "Runs a nested cell tool",
-          category: "query",
-          input: z.object({}).strict(),
-          output: z.string(),
-          visibility: { model: ["resident"], cell: ["resident"] },
-          execute: async () => {
-            const nested = await inner.executeCell(
-              { id: "call-inner", tool: "echo", input: { value: "nested" } },
-              context,
-            );
-            return String(nested.output);
-          },
-          render: (_input, value) => value,
+        stringQueryTool("outer", "Runs a nested cell tool", async () => {
+          const nested = await inner.executeCell(
+            { id: "call-inner", tool: "echo", input: { value: "nested" } },
+            context,
+          );
+          return String(nested.output);
         }),
       ],
       { executor },

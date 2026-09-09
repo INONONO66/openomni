@@ -3,6 +3,7 @@ import { Storage } from "@openomni/ledger";
 import { bounded, requestLedger } from "../../helpers/request-ledger";
 import { Run } from "@openomni/llm";
 import { createExecutor, type ExecutorOptions } from "../../../src/executor";
+import { runChatAttempts } from "../../helpers/chat-attempts";
 import { compiledPolicy, recordingLedger } from "../../helpers/compiled-policy";
 import type { LedgerAction, PlainObject } from "@openomni/protocol";
 afterEach(() => Storage.reset());
@@ -116,22 +117,17 @@ test("every attempt pins its ordinal, cap and retry reason; the settled one pins
   const { executor, committed } = harness();
   let calls = 0;
   const evidence = { usage, visibleOutput: true, credential: { type: "api", fingerprint: "ab12" } };
-  await executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-    executor.runAttempts(parent, {
-      prepare: async (attempt) => ({
-        request: { op: "chat", intent: { attempt }, effect: {} },
-        admit: async () => undefined,
-        body: async () => {
-          calls += 1;
-          if (calls < 2) throw providerFailure();
-          return { type: "stop", evidence };
-        },
-      }),
-      evidence: (value) =>
-        typeof value === "object" && value !== null && !Array.isArray(value)
-          ? (value.evidence ?? null)
-          : null,
-    }),
+  await runChatAttempts(
+    executor,
+    async () => {
+      calls += 1;
+      if (calls < 2) throw providerFailure();
+      return { type: "stop", evidence };
+    },
+    (value) =>
+      typeof value === "object" && value !== null && !Array.isArray(value)
+        ? (value.evidence ?? null)
+        : null,
   );
   expect(intents(committed, "attempt").map((a) => a.intent.value)).toMatchObject([
     { attempt: 1, maxAttempts: 3, retryReason: null },

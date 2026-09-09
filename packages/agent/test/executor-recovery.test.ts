@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
 import { LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
-import { z } from "zod";
-import { createTurnDispatcher, defineTool } from "../src/index";
+import { createTurnDispatcher } from "../src/index";
 import { createExecutor, type ExecutorOptions } from "../src/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";
 
@@ -545,18 +545,9 @@ describe("turn dispatcher recovery", () => {
     let executions = 0;
     const dispatcher = createTurnDispatcher(
       [
-        defineTool({
-          name: "echo",
-          description: "echo",
-          category: "query",
-          input: z.object({}).strict(),
-          output: z.string(),
-          visibility: { model: ["resident"], cell: ["resident"] },
-          execute: async () => {
-            executions += 1;
-            return "ok";
-          },
-          render: (_input, value: PlainValue) => String(value),
+        stringQueryTool("echo", "echo", async () => {
+          executions += 1;
+          return "ok";
         }),
       ],
       {

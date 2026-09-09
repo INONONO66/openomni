@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { runChatAttempts } from "./helpers/chat-attempts";
 import { seedPolicy } from "./helpers/seed-policy";
 import { answerThenCompact } from "./helpers/answer-then-compact";
 import { approveWriteRow } from "./helpers/compiled-policy";
@@ -100,20 +101,12 @@ const parentRunner: SessionRunner = async (input) => {
   if (input.messages.at(-1)?.text !== "hello") return { kind: "result", text: "noted" };
   const { executor } = createTurnDispatcher([], input, runtime);
   let calls = 0;
-  await executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-    executor.runAttempts(parent, {
-      prepare: async (attempt) => ({
-        request: { op: "chat", intent: { attempt }, effect: {} },
-        admit: async () => undefined,
-        body: async () => {
-          calls += 1;
-          bodies += 1;
-          if (calls === 1) throw providerFailure();
-          return { type: "stop" };
-        },
-      }),
-    }),
-  );
+  await runChatAttempts(executor, async () => {
+    calls += 1;
+    bodies += 1;
+    if (calls === 1) throw providerFailure();
+    return { type: "stop" };
+  });
   const opened = committed(input.sessionId, "request");
   const wave = executor.runBatch(
     [
