@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { seedPolicy } from "./helpers/seed-policy";
 import { answerThenCompact } from "./helpers/answer-then-compact";
 import { approveWriteRow } from "./helpers/compiled-policy";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -11,7 +12,6 @@ import {
   foldSessionHistory,
   inspectActions,
   inspectPolicy,
-  SEEDED_POLICY_ROWS,
   session,
   wakeSession,
   type SessionHandle,
@@ -180,9 +180,7 @@ beforeEach(() => {
   nextId = 0;
   bodies = 0;
   Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
+  seedPolicy(rows);
 });
 
 afterEach(async () => {

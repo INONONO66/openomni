@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/receive-outbound";
-import { bounded } from "./helpers/bounded";
+import { bounded as boundedWithin } from "./helpers/bounded";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +20,7 @@ import {
   type SessionTransition,
   type SessionTurn,
 } from "@openomni/protocol";
-import { createExecutor, SEEDED_POLICY_ROWS } from "../src/index";
+import { createExecutor } from "../src/index";
 import type {
   ExecutionApprovalRequest,
   ExecutionApprovals,
@@ -48,6 +49,9 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 
 const SIGNAL_TIMEOUT_MS = 2_000;
+/** This suite's deadline for every awaited signal. */
+const bounded = <T>(signal: Promise<T>, label: string): Promise<T> =>
+  boundedWithin(signal, label, SIGNAL_TIMEOUT_MS);
 
 interface Signal<T> {
   readonly promise: Promise<T>;
@@ -229,12 +233,6 @@ let directory: string;
 let now = 1_000;
 let nextId = 0;
 const runtimes: SessionRuntime[] = [];
-
-function seedPolicy(rows: readonly Omit<PolicyRow.Row, "generation">[] = []): void {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
-}
 
 beforeEach(() => {
   now = 1_000;
@@ -468,8 +466,8 @@ async function openWaveAtApproval(fixture: WaveFixture, text: string) {
     (committed) => committed.sessionId === fixture.handle.id && committed.kind === "request",
   );
   const running = fixture.handle.prompt(text);
-  await bounded(requested, "approval request commit", SIGNAL_TIMEOUT_MS);
-  const approvals = await bounded(fixture.approvals.promise, "bound approvals", SIGNAL_TIMEOUT_MS);
+  await bounded(requested, "approval request commit");
+  const approvals = await bounded(fixture.approvals.promise, "bound approvals");
   const pending = approvals.pending()[0];
   if (pending === undefined) throw new Error("missing pending approval");
   expect(fixture.tape).toEqual([]);
@@ -482,16 +480,11 @@ async function releaseBodies(fixture: WaveFixture, order: readonly WaveCall[]): 
   await bounded(
     Promise.all(parallel.map((call) => fixture.entered[call].promise)),
     "parallel body entry",
-    SIGNAL_TIMEOUT_MS,
   );
   expect(sink.started).toEqual([...parallel].sort());
   expect(sink.completed).toEqual([]);
   for (const call of parallel) fixture.gates[call].resolve();
-  await bounded(
-    fixture.entered.D.promise,
-    "sequential body entry after the parallel barrier",
-    SIGNAL_TIMEOUT_MS,
-  );
+  await bounded(fixture.entered.D.promise, "sequential body entry after the parallel barrier");
   expect(fixture.tape).toEqual([...parallel]);
   expect(
     SessionHandleStore.tree(fixture.handle.id).some(
@@ -559,7 +552,7 @@ describe("session lifecycle conformance", () => {
                 committed.sessionId === "S" && hookOf("S", committed.id) === "turn.pre",
             );
             plainRunning = plain.prompt("hello");
-            await bounded(entered, "turn pre decision", SIGNAL_TIMEOUT_MS);
+            await bounded(entered, "turn pre decision");
           },
         },
         {
@@ -573,13 +566,9 @@ describe("session lifecycle conformance", () => {
                 ) !== undefined,
             );
             gate.resolve();
-            await bounded(sealed, "terminal result", SIGNAL_TIMEOUT_MS);
+            await bounded(sealed, "terminal result");
             expect(
-              await bounded(
-                plainRunning ?? Promise.reject(new Error("no run")),
-                "result",
-                SIGNAL_TIMEOUT_MS,
-              ),
+              await bounded(plainRunning ?? Promise.reject(new Error("no run")), "result"),
             ).toEqual({
               kind: "result",
               text: "done",
@@ -612,11 +601,7 @@ describe("session lifecycle conformance", () => {
           run: async () => {
             await releaseBodies(wave, ["C", "A", "B", "D"]);
             expect(
-              await bounded(
-                waveRunning ?? Promise.reject(new Error("no run")),
-                "wave",
-                SIGNAL_TIMEOUT_MS,
-              ),
+              await bounded(waveRunning ?? Promise.reject(new Error("no run")), "wave"),
             ).toEqual({
               kind: "result",
               text: "executed,executed,executed,executed",
@@ -673,7 +658,7 @@ describe("session lifecycle conformance", () => {
     expect(approved?.requests.map((request) => [request.state, request.outcome])).toEqual([
       ["resolved", "answered"],
     ]);
-    const results = await bounded(wave.results.promise, "wave results", SIGNAL_TIMEOUT_MS);
+    const results = await bounded(wave.results.promise, "wave results");
     expect(results).toEqual(
       WAVE.map((call) => ({ terminal: "executed", value: { status: "success", output: call } })),
     );
@@ -719,11 +704,7 @@ describe("session lifecycle conformance", () => {
           name: "WAVE_REFUSED",
           run: async () => {
             await releaseBodies(refused, ["C", "A", "D"]);
-            await bounded(
-              runs.get("REFUSED") ?? Promise.reject(new Error("no run")),
-              "refused",
-              SIGNAL_TIMEOUT_MS,
-            );
+            await bounded(runs.get("REFUSED") ?? Promise.reject(new Error("no run")), "refused");
           },
         },
         {
@@ -749,11 +730,7 @@ describe("session lifecycle conformance", () => {
           name: "WAVE_TIMEOUT",
           run: async () => {
             await releaseBodies(timed, ["C", "A", "D"]);
-            await bounded(
-              runs.get("TIMED") ?? Promise.reject(new Error("no run")),
-              "timed",
-              SIGNAL_TIMEOUT_MS,
-            );
+            await bounded(runs.get("TIMED") ?? Promise.reject(new Error("no run")), "timed");
           },
         },
         {
@@ -763,10 +740,10 @@ describe("session lifecycle conformance", () => {
             const opened = await openWaveAtApproval(interrupted, "interrupt");
             const aborted = interrupted.results.promise;
             await interrupted.handle.interrupt();
-            expect(await bounded(aborted, "cancelled wave", SIGNAL_TIMEOUT_MS)).toEqual(
+            expect(await bounded(aborted, "cancelled wave")).toEqual(
               WAVE.map(() => ({ terminal: "cancelled" })),
             );
-            await bounded(opened.running, "interrupted turn", SIGNAL_TIMEOUT_MS);
+            await bounded(opened.running, "interrupted turn");
           },
         },
       ],
@@ -815,9 +792,7 @@ describe("session lifecycle conformance", () => {
         [state, id === "REFUSED" ? "denied" : "outcome_unknown"],
       ]);
     }
-    expect(
-      await bounded(refused.results.promise, "refused results", SIGNAL_TIMEOUT_MS),
-    ).toMatchObject([
+    expect(await bounded(refused.results.promise, "refused results")).toMatchObject([
       { terminal: "executed" },
       { terminal: "blocked_pre", reason: "approval_refused" },
       { terminal: "executed" },
@@ -890,9 +865,9 @@ describe("session lifecycle conformance", () => {
           name: "INTERRUPTED",
           run: async () => {
             const running = handle.prompt("hello");
-            firstInput = await bounded(entered.promise, "runner entry", SIGNAL_TIMEOUT_MS);
+            firstInput = await bounded(entered.promise, "runner entry");
             await handle.interrupt();
-            await bounded(running, "interrupted seal", SIGNAL_TIMEOUT_MS);
+            await bounded(running, "interrupted seal");
             expect(handle.get().state).toBe("interrupted");
           },
         },
@@ -902,7 +877,7 @@ describe("session lifecycle conformance", () => {
             now = 1_050;
             await handle.system.blocks.set([{ id: "b", source: "fixture", content: "v2" }]);
             await handle.resume();
-            recovered = await bounded(resumedEntry.promise, "resumed entry", SIGNAL_TIMEOUT_MS);
+            recovered = await bounded(resumedEntry.promise, "resumed entry");
           },
         },
         {
@@ -925,9 +900,8 @@ describe("session lifecycle conformance", () => {
                 runtime,
               ),
               "boot sweep",
-              SIGNAL_TIMEOUT_MS,
             );
-            const input = await bounded(swept.promise, "sweep entry", SIGNAL_TIMEOUT_MS);
+            const input = await bounded(swept.promise, "sweep entry");
             expect(input).toMatchObject({ resultId: "R", resumeCount: 1, toolsGeneration: 1 });
             expect(SessionHandleStore.row("C").toolsGeneration).toBe(2);
             const stale = SessionHandleStore.commit({

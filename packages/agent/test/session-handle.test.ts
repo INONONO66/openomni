@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { bounded } from "./helpers/bounded";
+import { seedPolicy } from "./helpers/seed-policy";
+import { bounded as boundedWithin } from "./helpers/bounded";
 import {
   closeSessions,
   session,
@@ -17,13 +18,15 @@ import {
   L0Observation,
   PlainValueSchema,
   type ObservationSink,
-  type PolicyRow,
   type SessionGeneration,
   type SessionTurn,
 } from "@openomni/protocol";
 import { Bus, SEEDED_POLICY_ROWS } from "../src/index";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
+/** This suite's deadline for every awaited signal. */
+const bounded = <T>(signal: Promise<T>, label: string): Promise<T> =>
+  boundedWithin(signal, label, SIGNAL_TIMEOUT_MS);
 
 interface Signal<T> {
   readonly promise: Promise<T>;
@@ -119,12 +122,6 @@ function policyGeneration(action: LedgerAction.Node): number | undefined {
   const value = action.intent.value;
   if (value === null || Array.isArray(value) || typeof value !== "object") return undefined;
   return typeof value.generation === "number" ? value.generation : undefined;
-}
-
-function seedPolicy(rows: readonly Omit<PolicyRow.Row, "generation">[]): void {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
 }
 
 function commitOpenTurn(input: {
@@ -495,11 +492,7 @@ describe("durable session handle", () => {
             })),
             isolatedRuntime,
           );
-          const result = await bounded(
-            handle.prompt("measure"),
-            "transformed usage terminal",
-            SIGNAL_TIMEOUT_MS,
-          );
+          const result = await bounded(handle.prompt("measure"), "transformed usage terminal");
           if (sample.valid) {
             expect(result).toEqual({
               kind: "result",
@@ -625,15 +618,11 @@ describe("durable session handle", () => {
     const handle = session(residentOptions("single-flight", runner), runtime);
 
     const first = handle.prompt("first prompt");
-    const firstInput = await bounded(entered.promise, "runner entry", SIGNAL_TIMEOUT_MS);
+    const firstInput = await bounded(entered.promise, "runner entry");
     const second = handle.prompt("second prompt");
     const third = handle.prompt("third prompt");
     releaseBoundary.resolve();
-    await bounded(
-      Promise.all([first, second, third]),
-      "serialized prompt completion",
-      SIGNAL_TIMEOUT_MS,
-    );
+    await bounded(Promise.all([first, second, third]), "serialized prompt completion");
 
     expect(runs).toBe(1);
     expect(maximumActive).toBe(1);
@@ -786,14 +775,10 @@ describe("durable session handle", () => {
     const handle = session(residentOptions("interrupt", runner), runtime);
 
     const running = handle.prompt("start");
-    const runnerSignal = await bounded(
-      ready.promise,
-      "interrupt listener installation",
-      SIGNAL_TIMEOUT_MS,
-    );
+    const runnerSignal = await bounded(ready.promise, "interrupt listener installation");
     const interrupted = handle.interrupt();
-    await bounded(aborted.promise, "runner abort", SIGNAL_TIMEOUT_MS);
-    await bounded(Promise.all([running, interrupted]), "interrupted terminal", SIGNAL_TIMEOUT_MS);
+    await bounded(aborted.promise, "runner abort");
+    await bounded(Promise.all([running, interrupted]), "interrupted terminal");
 
     expect(runnerSignal.aborted).toBe(true);
     expect(SessionHandleStore.inboxRows(handle.id).map((row) => row.status)).toEqual([
@@ -830,18 +815,14 @@ describe("durable session handle", () => {
     const handle = session(residentOptions("non-cooperative-interrupt", runner), runtime);
 
     const first = handle.prompt("start");
-    await bounded(firstEntered.promise, "first runner entry", SIGNAL_TIMEOUT_MS);
+    await bounded(firstEntered.promise, "first runner entry");
     const interrupted = handle.interrupt();
-    await bounded(firstAborted.promise, "first runner abort signal", SIGNAL_TIMEOUT_MS);
+    await bounded(firstAborted.promise, "first runner abort signal");
     const resumed = handle.resume();
     expect(entries).toBe(1);
     expect(maximumActive).toBe(1);
     releaseFirst.resolve();
-    await bounded(
-      Promise.all([first, interrupted, resumed]),
-      "serialized resume completion",
-      SIGNAL_TIMEOUT_MS,
-    );
+    await bounded(Promise.all([first, interrupted, resumed]), "serialized resume completion");
 
     expect(entries).toBe(2);
     expect(maximumActive).toBe(1);
@@ -869,9 +850,9 @@ describe("durable session handle", () => {
     });
 
     const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry", SIGNAL_TIMEOUT_MS);
+    await bounded(entered.promise, "runner entry");
     const interrupted = handle.interrupt();
-    await bounded(abortSeen.promise, "runner abort signal", SIGNAL_TIMEOUT_MS);
+    await bounded(abortSeen.promise, "runner abort signal");
 
     // The interrupted terminal is sealed promptly, but the runner ignored the
     // abort and is still alive, so the durable lease MUST stay held by this
@@ -893,14 +874,10 @@ describe("durable session handle", () => {
     // acquirable again.
     // The caller-facing interrupt completes at the sealed terminal, not when
     // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement", SIGNAL_TIMEOUT_MS);
+    await bounded(interrupted, "interrupt receipt before runner settlement");
     expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
     releaseRunner.resolve();
-    await bounded(
-      Promise.all([running, hibernated.promise]),
-      "runner settlement + lease release",
-      SIGNAL_TIMEOUT_MS,
-    );
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     const afterSettle = SessionHandleStore.acquireLease({
       sessionId: handle.id,
       owner: "second-runtime",
@@ -932,10 +909,10 @@ describe("durable session handle", () => {
     });
 
     const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry", SIGNAL_TIMEOUT_MS);
+    await bounded(entered.promise, "runner entry");
     const interrupted = handle.interrupt();
-    await bounded(abortSeen.promise, "runner abort signal", SIGNAL_TIMEOUT_MS);
-    await bounded(interrupted, "interrupt receipt", SIGNAL_TIMEOUT_MS);
+    await bounded(abortSeen.promise, "runner abort signal");
+    await bounded(interrupted, "interrupt receipt");
 
     // The runner outlives its TTL (contract violation) and the lease lapses
     // before it settles. The retained release must treat the lapsed lease as
@@ -943,14 +920,10 @@ describe("durable session handle", () => {
     // later turn start behind the detached settlement.
     now += SessionHandleStore.LEASE_TTL_MS;
     releaseRunner.resolve();
-    await bounded(
-      Promise.all([running, hibernated.promise]),
-      "retained settlement",
-      SIGNAL_TIMEOUT_MS,
-    );
+    await bounded(Promise.all([running, hibernated.promise]), "retained settlement");
 
     const leaseBefore = SessionHandleStore.row(handle.id).leaseFence;
-    await bounded(handle.resume(), "resume after retained settlement", SIGNAL_TIMEOUT_MS);
+    await bounded(handle.resume(), "resume after retained settlement");
     expect(calls).toBe(2);
     expect(handle.get().state).toBe("idle");
     expect(SessionHandleStore.row(handle.id).leaseFence).toBe(leaseBefore + 1);
@@ -978,19 +951,15 @@ describe("durable session handle", () => {
     });
 
     const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry", SIGNAL_TIMEOUT_MS);
+    await bounded(entered.promise, "runner entry");
     const interrupted = handle.interrupt();
-    await bounded(abortSeen.promise, "runner abort signal", SIGNAL_TIMEOUT_MS);
+    await bounded(abortSeen.promise, "runner abort signal");
     expect(handle.get().state).toBe("interrupted");
     const fenceBefore = handle.get().lease.fence;
 
     // A configure while the abort-ignoring runner is still alive must neither
     // rotate the fence nor release the lease: the live executor still owns it.
-    const receipt = await bounded(
-      handle.tools.add([tool("search")]),
-      "configure receipt",
-      SIGNAL_TIMEOUT_MS,
-    );
+    const receipt = await bounded(handle.tools.add([tool("search")]), "configure receipt");
     expect(receipt.generation).toBeGreaterThan(0);
     const afterConfigure = handle.get();
     expect(afterConfigure.lease.fence).toBe(fenceBefore);
@@ -1007,14 +976,10 @@ describe("durable session handle", () => {
 
     // The caller-facing interrupt completes at the sealed terminal, not when
     // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement", SIGNAL_TIMEOUT_MS);
+    await bounded(interrupted, "interrupt receipt before runner settlement");
     expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
     releaseRunner.resolve();
-    await bounded(
-      Promise.all([running, hibernated.promise]),
-      "runner settlement + lease release",
-      SIGNAL_TIMEOUT_MS,
-    );
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     const afterSettle = SessionHandleStore.acquireLease({
       sessionId: handle.id,
       owner: "second-runtime",
@@ -1058,10 +1023,10 @@ describe("durable session handle", () => {
     };
 
     const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry", SIGNAL_TIMEOUT_MS);
+    await bounded(entered.promise, "runner entry");
     const interrupted = handle.interrupt();
-    const reentrant = await bounded(reentered.promise, "seal observation", SIGNAL_TIMEOUT_MS);
-    await bounded(reentrant(), "re-entrant configure", SIGNAL_TIMEOUT_MS);
+    const reentrant = await bounded(reentered.promise, "seal observation");
+    await bounded(reentrant(), "re-entrant configure");
 
     const row = SessionHandleStore.row(handle.id);
     expect(row.leaseFence).toBe(fenceAtSeal);
@@ -1077,14 +1042,10 @@ describe("durable session handle", () => {
 
     // The caller-facing interrupt completes at the sealed terminal, not when
     // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement", SIGNAL_TIMEOUT_MS);
+    await bounded(interrupted, "interrupt receipt before runner settlement");
     expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
     releaseRunner.resolve();
-    await bounded(
-      Promise.all([running, hibernated.promise]),
-      "runner settlement + lease release",
-      SIGNAL_TIMEOUT_MS,
-    );
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
     expect(maximumActive).toBe(1);
   });
@@ -1110,8 +1071,8 @@ describe("durable session handle", () => {
     });
 
     const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry", SIGNAL_TIMEOUT_MS);
-    await bounded(handle.close(), "close with zero grace", SIGNAL_TIMEOUT_MS);
+    await bounded(entered.promise, "runner entry");
+    await bounded(handle.close(), "close with zero grace");
 
     // Detached from the caller only: the lease is still held by this executor
     // and its heartbeat keeps renewing, so no second executor can start.
@@ -1128,11 +1089,7 @@ describe("durable session handle", () => {
 
     // Once the runner settles the turn continuation releases the lease itself.
     releaseRunner.resolve();
-    await bounded(
-      Promise.all([running, hibernated.promise]),
-      "runner settlement + lease release",
-      SIGNAL_TIMEOUT_MS,
-    );
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
     const afterSettle = SessionHandleStore.acquireLease({
       sessionId: handle.id,
@@ -1165,7 +1122,7 @@ describe("durable session handle", () => {
     const handle = session(residentOptions("heartbeat-loss", runner), runtime);
 
     const running = handle.prompt("start");
-    await bounded(entered.promise, "heartbeat runner entry", SIGNAL_TIMEOUT_MS);
+    await bounded(entered.promise, "heartbeat runner entry");
     now += SessionHandleStore.LEASE_TTL_MS;
     const stolen = SessionHandleStore.acquireLease({
       sessionId: handle.id,
@@ -1178,7 +1135,7 @@ describe("durable session handle", () => {
     if (heartbeat === undefined) throw new Error("heartbeat was not scheduled");
     heartbeat();
 
-    await bounded(aborted.promise, "heartbeat abort", SIGNAL_TIMEOUT_MS);
+    await bounded(aborted.promise, "heartbeat abort");
     await expect(running).rejects.toBeInstanceOf(SessionCommitError);
     expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toHaveLength(1);
     expect(
@@ -1204,13 +1161,13 @@ describe("durable session handle", () => {
     const handle = session(residentOptions("configure-pinning", runner), runtime);
 
     const firstTurn = handle.prompt("turn one");
-    const pinned = await bounded(firstEntered.promise, "generation N runner", SIGNAL_TIMEOUT_MS);
+    const pinned = await bounded(firstEntered.promise, "generation N runner");
     const receipt = await handle.tools.add([tool("search")]);
     releaseFirst.resolve();
-    await bounded(firstTurn, "generation N terminal", SIGNAL_TIMEOUT_MS);
+    await bounded(firstTurn, "generation N terminal");
     const secondTurn = handle.prompt("turn two");
-    const next = await bounded(secondEntered.promise, "generation N+1 runner", SIGNAL_TIMEOUT_MS);
-    await bounded(secondTurn, "generation N+1 terminal", SIGNAL_TIMEOUT_MS);
+    const next = await bounded(secondEntered.promise, "generation N+1 runner");
+    await bounded(secondTurn, "generation N+1 terminal");
 
     expect(receipt).toEqual({ generation: 2, revertTo: 1 });
     expect(pinned.toolsGeneration).toBe(1);
@@ -1323,7 +1280,7 @@ describe("durable session handle", () => {
 
     const running = handle.prompt("start");
     try {
-      await bounded(entered.promise, "default-heartbeat runner entry", SIGNAL_TIMEOUT_MS);
+      await bounded(entered.promise, "default-heartbeat runner entry");
       expect(setIntervalSpy).toHaveBeenCalledTimes(1);
       const timer = setIntervalSpy.mock.results[0]?.value;
       if (
@@ -1336,11 +1293,11 @@ describe("durable session handle", () => {
       }
       expect(timer.hasRef()).toBe(false);
       release.resolve();
-      await bounded(running, "default-heartbeat runner completion", SIGNAL_TIMEOUT_MS);
+      await bounded(running, "default-heartbeat runner completion");
       expect(clearIntervalSpy).toHaveBeenCalledWith(timer);
     } finally {
       release.resolve();
-      await bounded(running, "default-heartbeat cleanup", SIGNAL_TIMEOUT_MS);
+      await bounded(running, "default-heartbeat cleanup");
       setIntervalSpy.mockRestore();
       clearIntervalSpy.mockRestore();
     }
@@ -1361,7 +1318,7 @@ describe("durable session handle", () => {
     const first = session(options, runtime);
 
     await first.prompt("sleep after this");
-    await bounded(hibernated.promise, "runtime hibernation", SIGNAL_TIMEOUT_MS);
+    await bounded(hibernated.promise, "runtime hibernation");
     const snapshot = first.get();
     const fenceBeforeGet = snapshot.lease.fence;
     const reopened = session(options, runtime);
@@ -1398,16 +1355,12 @@ describe("durable session handle", () => {
     const handle = session(residentOptions("content-free-resume", runner), runtime);
 
     const first = handle.prompt("original prompt");
-    const firstInput = await bounded(
-      firstEntered.promise,
-      "initial runner entry",
-      SIGNAL_TIMEOUT_MS,
-    );
+    const firstInput = await bounded(firstEntered.promise, "initial runner entry");
     await handle.interrupt();
-    await bounded(first, "interrupted turn", SIGNAL_TIMEOUT_MS);
+    await bounded(first, "interrupted turn");
     const resume = handle.resume();
-    const resumedInput = await bounded(resumed.promise, "resumed runner entry", SIGNAL_TIMEOUT_MS);
-    await bounded(resume, "resumed turn", SIGNAL_TIMEOUT_MS);
+    const resumedInput = await bounded(resumed.promise, "resumed runner entry");
+    await bounded(resume, "resumed turn");
 
     expect(resumedInput.messages).toEqual(firstInput.messages);
     expect(resumedInput.resumeCount).toBe(1);
@@ -1541,8 +1494,8 @@ describe("session crash recovery and observation", () => {
     };
 
     const sweeping = sweepSessions(() => runner, runtime);
-    const input = await bounded(entered.promise, "recovered runner entry", SIGNAL_TIMEOUT_MS);
-    await bounded(sweeping, "boot sweep terminal", SIGNAL_TIMEOUT_MS);
+    const input = await bounded(entered.promise, "recovered runner entry");
+    await bounded(sweeping, "boot sweep terminal");
 
     expect(input.resultId).toBe("preminted-result");
     expect(input.resumeCount).toBe(1);
@@ -1575,7 +1528,6 @@ describe("session crash recovery and observation", () => {
         runtime,
       ),
       "cancelled open turn seal",
-      SIGNAL_TIMEOUT_MS,
     );
     expect(runnerEntries).toBe(0);
     const actions = SessionHandleStore.tree("cancelled-turn");
@@ -1598,7 +1550,6 @@ describe("session crash recovery and observation", () => {
     await bounded(
       sweepSessions(() => runner, runtime),
       "resume budget terminal",
-      SIGNAL_TIMEOUT_MS,
     );
 
     expect(runnerEntries).toBe(0);
@@ -1684,7 +1635,7 @@ describe("session crash recovery and observation", () => {
       parentActionId: "watched-session:prompt-1",
     });
 
-    expect(await bounded(observed.promise, "revision gap", SIGNAL_TIMEOUT_MS)).toEqual({
+    expect(await bounded(observed.promise, "revision gap")).toEqual({
       kind: "gap",
       sessionId: "watched-session",
       from: watch.snapshot.revision,

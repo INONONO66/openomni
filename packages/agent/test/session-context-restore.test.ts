@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { seedPolicy as seed } from "./helpers/seed-policy";
 import { nth } from "./helpers/nth";
 import { answerThenCompact } from "./helpers/answer-then-compact";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import type { LedgerAction, PlainObject, PolicyRow } from "@openomni/protocol";
+import type { LedgerAction, PlainObject } from "@openomni/protocol";
 import { ContextRestoreError } from "../src/compaction/restore";
 import {
   Bus,
   closeSessions,
   createTurnDispatcher,
-  SEEDED_POLICY_ROWS,
   session,
   type SessionRunner,
   type SessionRuntime,
@@ -23,12 +23,6 @@ const runtime: SessionRuntime = {
   processId: "restore-test",
   scheduleHeartbeat: () => () => undefined,
 };
-
-function seed(rows: readonly Omit<PolicyRow.Row, "generation">[] = []): void {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
-}
 
 beforeEach(() => {
   Bus.reset();
