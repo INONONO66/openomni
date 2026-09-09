@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmdirSync, statSync } from "node:fs";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
+import { z } from "zod";
 import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcTimeoutError } from "../src/errors";
 import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
-import { deferred, within } from "./helpers/signal";
+import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 import { connectRaw, transportFixture } from "./helpers/transport";
 
@@ -46,9 +47,8 @@ describe("server edge branches", () => {
     const path = socketPathForTest("directory");
     mkdirSync(path);
     try {
-      await expect(createIpcServer(path, () => undefined)).rejects.toMatchObject({
-        code: expect.stringMatching(/^(EPERM|EISDIR)$/),
-      });
+      const error = await captureError(createIpcServer(path, () => undefined));
+      expect(z.object({ code: z.string() }).parse(error).code).toMatch(/^(EPERM|EISDIR)$/);
       expect(statSync(path).isDirectory()).toBe(true);
     } finally {
       rmdirSync(path);

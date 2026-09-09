@@ -19,7 +19,10 @@ export function transportFixture() {
 export async function connectRaw(path: string): Promise<net.Socket> {
   const socket = new net.Socket();
   const connected = new Promise<net.Socket>((resolve, reject) => {
-    socket.once("connect", () => resolve(socket));
+    socket.once("connect", () => {
+      socket.off("error", reject);
+      resolve(socket);
+    });
     socket.once("error", reject);
   });
   socket.connect(path);
