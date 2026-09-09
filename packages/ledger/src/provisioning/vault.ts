@@ -36,12 +36,15 @@ function decryptWith(key: Uint8Array, packed: Uint8Array, secretId?: string): Ui
   decipher.setAuthTag(tag);
   try {
     return new Uint8Array(Buffer.concat([decipher.update(data), decipher.final()]));
-  } catch {
-    throw new Provisioning.VaultError({
-      message: "Ciphertext failed authentication under the presented KEK",
-      code: "unopenable",
-      ...(secretId === undefined ? {} : { secretId }),
-    });
+  } catch (cause) {
+    throw new Provisioning.VaultError(
+      {
+        message: "Ciphertext failed authentication under the presented KEK",
+        code: "unopenable",
+        ...(secretId === undefined ? {} : { secretId }),
+      },
+      { cause: cause instanceof Error ? cause : new Error(String(cause)) },
+    );
   }
 }
 

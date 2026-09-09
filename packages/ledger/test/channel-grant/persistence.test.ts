@@ -26,6 +26,9 @@ describe("ChannelGrantStore SQLite persistence", () => {
       .query<{ data: string }, [string]>("SELECT data FROM channel_grant WHERE id = ?")
       .get("grant-byte-fixture");
     if (row === null) throw new Error("missing persisted grant");
+    expect(row.data).toBe(
+      '{"id":"grant-byte-fixture","surface":"discord","workspace":"guild","channel":"design","kind":"broadcast_channel","defaultTier":"observer","inboundTreatment":"full_access","createdBy":"act_owner","createdAt":100,"updatedAt":200}',
+    );
     expect(Actor.ChannelGrant.parse(JSON.parse(row.data))).toEqual(stored);
   });
 

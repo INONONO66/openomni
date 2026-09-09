@@ -163,6 +163,24 @@ describe("Vault envelope crypto", () => {
     );
   });
 
+  test("authentication failures preserve their native error as cause", () => {
+    const kek = kekFixture(1);
+    const envelope = Vault.seal(new TextEncoder().encode("value"), kek);
+    const tampered = new Uint8Array(envelope.ciphertext);
+    tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
+    let failure: Provisioning.VaultError | undefined;
+    try {
+      Vault.open({ ...envelope, ciphertext: tampered }, kek);
+    } catch (error) {
+      if (!Provisioning.VaultError.isInstance(error)) throw error;
+      failure = error;
+    }
+    expect(failure).toBeDefined();
+    const cause = failure?.cause;
+    expect(cause).toBeInstanceOf(Error);
+    expect(failure?.cause).toBe(cause);
+  });
+
   test("a truncated packed blob is a typed unopenable, not a crash", () => {
     const kek = kekFixture(1);
     const envelope = Vault.seal(new TextEncoder().encode("value"), kek);
