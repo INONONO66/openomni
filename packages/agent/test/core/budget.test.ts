@@ -256,6 +256,12 @@ describe("default budget ceilings", () => {
     );
   });
 
+  it("the default wall-time ceilings narrate from the same constants", () => {
+    const desc = describeBudgetRemaining(createBudgetState());
+    expect(desc).toContain("300s wall time");
+    expect(desc).toContain("120s tool wall time");
+  });
+
   it("selects the first exceeded ceiling before computing ratios", () => {
     const state = { ...createBudgetState(), turns: 24, toolCalls: 40, toolRuntimeMs: 120_000 };
     expect(evaluateBudget(state, { maxWallTimeMs: 0 }).exceededLimit).toBe("wall time");

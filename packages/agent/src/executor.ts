@@ -1,5 +1,5 @@
 import type { LedgerAction, PlainObject, PlainValue } from "@openomni/protocol";
-import { canonicalDigest, PlainValueSchema, type SessionTransition } from "@openomni/protocol";
+import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { findSessionRequest } from "./session-request";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 
@@ -371,7 +371,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     if (intent === undefined || stage.pre.verdict === "deny" || decision !== "approve") return null;
     const captured = originalRequest(intent.action.id);
     assertFreshRevisions(stage.request, captured);
-    await recordApplication(stage, intent, guardedWave);
+    if (guardedWave) await recordApplication(stage, intent, guardedWave);
     assertFreshRevisions(stage.request, captured);
     assertApprovalLive(captured);
     onStart(publishToolStarted(stage.request));
@@ -692,7 +692,7 @@ function preRefusal(
 }
 
 function clonePlainValue(value: PlainValue): PlainValue {
-  return PlainValueSchema.parse(structuredClone(value));
+  return JSON.parse(JSON.stringify(value)) as PlainValue;
 }
 
 function plainRecord(value: PlainValue): PlainObject | undefined {

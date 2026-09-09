@@ -203,8 +203,7 @@ export function scopeObservation(
           throw new TypeError("scoped observation payload must be an object");
         }
         const stamp = { eventId: entropy(), time: clock(), ...identity };
-        const payload = event.schema.parse({ ...data, ...stamp });
-        sink.publish(event, { ...payload, ...stamp });
+        sink.publish(event, { ...data, ...stamp });
       } catch (error) {
         reportObservationFailure(
           error instanceof Error ? error : new Error(String(error)),

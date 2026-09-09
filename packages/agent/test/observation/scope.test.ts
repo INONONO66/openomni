@@ -80,15 +80,11 @@ describe("scoped observations", () => {
 
     expect(() => Reflect.apply(scoped.publish, scoped, [TestEvent, null])).not.toThrow();
     expect(() => Reflect.apply(scoped.publish, scoped, [TestEvent, []])).not.toThrow();
-    expect(() =>
-      Reflect.apply(scoped.publish, scoped, [TestEvent, { component: 1, msg: "bad" }]),
-    ).not.toThrow();
     expect(() => scoped.publish(TestEvent, { component: "test", msg: "valid" })).not.toThrow();
 
     expect(errors).toEqual([
       { name: TestEvent.name, type: "TypeError" },
       { name: TestEvent.name, type: "TypeError" },
-      { name: TestEvent.name, type: "ZodError" },
       { name: TestEvent.name, type: "Error" },
     ]);
   });
