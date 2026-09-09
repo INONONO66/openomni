@@ -16,10 +16,10 @@ const BoundsSchema = z.object({
   height: z.number().int().min(WINDOW_MIN.height),
 });
 
-export type WindowBounds = z.infer<typeof BoundsSchema>;
+type WindowBounds = z.infer<typeof BoundsSchema>;
 
 /** Position is optional: with none stored, the OS places the window. */
-export type WindowPlacement = Partial<Pick<WindowBounds, "x" | "y">> &
+type WindowPlacement = Partial<Pick<WindowBounds, "x" | "y">> &
   Pick<WindowBounds, "width" | "height">;
 
 export function parseWindowBounds(text: string | null): WindowPlacement {

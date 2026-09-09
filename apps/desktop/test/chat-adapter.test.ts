@@ -22,6 +22,33 @@ const user = (id: string, text: string): OpenOmniUIMessage => ({
 });
 
 describe("uiMessagesToTranscript", () => {
+  test.each([
+    { input: "raw command", target: "raw command" },
+    { input: { command: 9, path: "fallback.ts" }, target: "fallback.ts" },
+    { input: { command: "first", path: "second" }, target: "first" },
+    { input: { target: "last" }, target: "last" },
+    { input: { unrelated: true }, target: "" },
+    { input: null, target: "" },
+    { input: ["not a target"], target: "" },
+  ])("dynamic input is parsed before target projection: $target", ({ input, target }) => {
+    const result = uiMessagesToTranscript([{
+      id: "dynamic", role: "assistant", parts: [{
+        type: "dynamic-tool", toolName: "inspect", toolCallId: "call",
+        state: "input-available", input,
+      }],
+    }]);
+    expect(result.nodes).toEqual([{ kind: "tool", id: "call", tool: "inspect", target, status: "running" }]);
+  });
+
+  test.each([[999, "999ms"], [1000, "1.0s"], [61_200, "1m 1s"]] as const)(
+    "cost duration %i preserves unit boundaries", (elapsedMs, elapsed) => {
+      const result = uiMessagesToTranscript([user("prompt", "question"), {
+        id: "answer", role: "assistant", metadata: { startedAt: 0, elapsedMs },
+        parts: [{ type: "text", text: "answer" }],
+      }]);
+      expect(result.costs[1]?.elapsed).toBe(elapsed);
+    },
+  );
   test("an empty ledger is empty, not a shape with holes in it", () => {
     expect(uiMessagesToTranscript([])).toEqual({ nodes: [], costs: {}, pending: [] });
   });

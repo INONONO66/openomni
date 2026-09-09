@@ -3,6 +3,8 @@ import * as ui from "@openomni/ui";
 import { QueryClient } from "@tanstack/react-query";
 import type { ServerWebSocket } from "bun";
 import { Window } from "happy-dom";
+import { serveChat, type ClientFrame } from "./helpers/chat-server";
+import { commandBridge } from "./helpers/bridge";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { GatewayEndpoint, ShellCommand } from "../src/preload/api";
@@ -59,13 +61,9 @@ beforeEach(() => {
   }
   subscriptions = 0;
   Object.defineProperty(browser, "desktop", {
-    value: {
-      onShellCommand: (listener: (command: ShellCommand) => void) => {
-        subscriptions += 1;
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    },
+    value: commandBridge(listeners, () => {
+      subscriptions += 1;
+    }),
   });
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
   client = new QueryClient({ defaultOptions: { queries: { gcTime: Number.POSITIVE_INFINITY } } });
@@ -314,19 +312,8 @@ function signal<T>() {
 }
 
 test("real Chat sends once, retains in-flight work across tab closure and stops through the composer", async () => {
-  const received = signal<{ socket: ServerWebSocket<undefined>; payload: unknown }>();
-  const server = Bun.serve<undefined>({
-    port: 0,
-    fetch(request, instance) {
-      if (instance.upgrade(request)) return;
-      return new Response(null, { status: 400 });
-    },
-    websocket: {
-      message(socket, data) {
-        received.resolve({ socket, payload: JSON.parse(String(data)) });
-      },
-    },
-  });
+  const received = signal<{ socket: ServerWebSocket<undefined>; payload: ClientFrame }>();
+  const server = serveChat((socket, payload) => received.resolve({ socket, payload }));
   cleanups.push(() => server.stop(true));
   const id = newSessionTab();
   const tab = consoleStore.state.activeTabId;
@@ -353,7 +340,8 @@ test("real Chat sends once, retains in-flight work across tab closure and stops 
   await command("close-tab");
   await command("reopen-tab");
   expect(consoleStore.state.activeTabId).toBe(tab);
-  expect(node('[data-ui="Composer.Stop"]')).toBeDefined();
+  expect(node('[data-ui="Composer.Stop"]').getAttribute("aria-label")).toBe("Stop response");
+  expect(node('[data-ui="Composer.Stop"]').hasAttribute("disabled")).toBe(false);
   expect(node('[role="tabpanel"]').textContent).toContain("lifecycle-sentinel");
   await click('[data-ui="Composer.Stop"]');
   expect(host.querySelector('[data-ui="Composer.Stop"]')).toBeNull();

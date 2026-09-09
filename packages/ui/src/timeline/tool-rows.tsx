@@ -158,7 +158,7 @@ export function ToolRow({
             <button
               aria-expanded={expanded}
               aria-label={`${expanded ? "hide" : "show"} ${call.tool} output`}
-              className="focus-ring -m-1 rounded-sm p-1 text-fg/40 transition-quiet hover:text-fg/70"
+              className="focus-ring -m-1 rounded-sm p-1 text-voice-ambient transition-quiet hover:text-voice-meta"
               onClick={() => onToggle(call.id)}
               type="button"
             >
@@ -169,8 +169,8 @@ export function ToolRow({
         <Voice className="min-w-0 flex-1 truncate" voice="meta">
           {call.tool}
           {"  "}
-          <span className="text-fg/55">{call.target}</span>
-          {call.duration !== undefined && <span className="text-fg/40"> · {call.duration}</span>}
+          <span className="text-voice-secondary">{call.target}</span>
+          {call.duration !== undefined && <span className="text-voice-ambient"> · {call.duration}</span>}
           {status !== undefined && (
             <>
               {" · "}
@@ -179,7 +179,7 @@ export function ToolRow({
                   is a second axis to scan; a dot beside the word it qualifies
                   is read in the same fixation as the word. */}
               <span
-                className={LIVE.has(status) ? "text-accent" : "text-fg/70"}
+                className={LIVE.has(status) ? "text-accent" : "text-voice-meta"}
                 // The mark and the word are ONE address. They are one signal
                 // shown twice and they must never be tuned apart — an Owner
                 // note about the status of a row has to land on both.
@@ -200,7 +200,7 @@ export function ToolRow({
         // The payload is CODE, one voice down from prose, indented past the
         // chevron so it hangs under the row's text rather than under its
         // control.
-        <pre className="ms-[calc(var(--spacing-cell)+12px)] mt-1 overflow-x-auto whitespace-pre font-mono text-[13px]/[20px] text-fg/70">
+        <pre className="ms-[calc(var(--spacing-cell)+12px)] mt-1 overflow-x-auto whitespace-pre font-mono text-[13px]/[20px] text-voice-meta">
           {payload.join("\n")}
         </pre>
       )}
@@ -271,11 +271,11 @@ export function ToolGroup({
           type="button"
         >
           <span className={SLOT} data-tool-slot>
-            <span className="text-fg/40 transition-quiet">
+            <span className="text-voice-ambient transition-quiet">
               <Chevron open={open} />
             </span>
           </span>
-          <Voice className="text-fg/55 hover:text-fg/70" voice="meta">
+          <Voice className="text-voice-secondary hover:text-voice-meta" voice="meta">
             {summaryLabel(summarize(calls), elapsed)}
           </Voice>
         </button>

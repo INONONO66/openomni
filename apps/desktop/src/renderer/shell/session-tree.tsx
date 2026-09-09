@@ -9,14 +9,11 @@ import {
   SidebarSection,
   Text,
   TreeRow,
-  StatusGlyph,
 } from "@openomni/ui";
-import { sessionGlyphProps } from "./session-glyph";
+import { SessionRow } from "./session-row";
 import { Settings } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { ATTENTION_LABEL } from "../attention/order";
-import { rowDensity } from "../attention/reason";
-import { SessionSecondary } from "./session-secondary";
 import type { Boundary, Ordered } from "../attention";
 import { highlightRuns } from "../search";
 import type { FilteredSession } from "../search";
@@ -32,21 +29,6 @@ import { placeIcon } from "./place-icon";
 import { rowId, TREE_ID } from "./row-id";
 import { useSearch } from "./use-search";
 
-/**
- * The sidebar column: header, the four destinations, the session tree under
- * its section header, and the footer.
- *
- * PROJECT → SESSION, and that is the whole depth today. The hierarchy IS the
- * geometry: one indent step per level, each row's text starting at its
- * level's x, so selection reports depth instead of flattening it. There are no
- * connectors and no status marks anywhere in this column (docs/desktop-shell.md,
- * Deferred): a row is one line, the session's title.
- *
- * Filtering preserves that hierarchy rather than flattening to a result list. A
- * matched session keeps its project row as its parent, so a result never
- * appears at an unexplained depth, and a project with nothing matching
- * disappears instead of leaving an empty row behind.
- */
 export function SessionTree({
   ordered,
   pendingChanges,
@@ -70,11 +52,7 @@ export function SessionTree({
   readonly route: Route | null;
   readonly collapsedProjectIds: ReadonlySet<ProjectId | null>;
   readonly onToggleProject: (id: ProjectId | null) => void;
-  /**
-   * `boundary` is how the caller learns whether the order may advance. A row
-   * clicked or arrowed in the tree is a finished decision; one committed from
-   * the search field is not, so that path passes `null` and the order holds.
-   */
+
   readonly onSelect: (id: SessionId, boundary?: Boundary | null, newTab?: boolean) => void;
   /** `newTab` is the ⌘/Ctrl-click intent: open the route in a new tab instead of moving this one. */
   readonly onNavigate: (route: Route, newTab: boolean) => void;
@@ -111,10 +89,6 @@ export function SessionTree({
     [onSelect, search.searching],
   );
 
-  // Arrow keys travel the painted sequence, so they cross group boundaries the
-  // way the eye does: down from a project's last row lands on the next one's
-  // first. While a query is live the sequence is the RESULT order, so the keys
-  // never step onto a row that is not on screen.
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>, id: SessionId) => {
       const delta = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
@@ -166,10 +140,6 @@ export function SessionTree({
         </SectionHeader>
         <SectionList>
           <div aria-label="Sessions" id={TREE_ID} role="tree">
-            {/* One sentence when there is nothing to list, on the row's own
-                text x so it sits where the first row would. It names the way
-                out rather than describing the absence: the `+` it points at is
-                in the tab strip. */}
             {sessions.length === 0 && (
               <Text as="p" className="px-2" level="meta" tone="faint">
                 No sessions yet — press +
@@ -207,7 +177,7 @@ export function SessionTree({
                           const session = sessionById.get(entry.id);
                           if (!session) return null;
                           return (
-                            <SessionRow
+                            <SearchSessionRow
                               active={entry.id === state.activeId}
                               current={entry.id === selectedId}
                               now={now}
@@ -238,14 +208,7 @@ export function SessionTree({
   );
 }
 
-/**
- * A one-line row: the session's title, weighted where the query hit it.
- *
- * `active` is the arrow-key cursor while searching. It reuses the SELECTION
- * fill rather than inventing a second highlight: two different marks for "the
- * one you are on" is one mark too many in a column this quiet.
- */
-function SessionRow({
+function SearchSessionRow({
   session,
   now,
   entry,
@@ -265,41 +228,27 @@ function SessionRow({
   readonly registerRef: (id: SessionId, node: HTMLButtonElement | null) => void;
 }) {
   return (
-    <TreeRow
+    <SessionRow
+      session={session}
+      now={now}
       aria-selected={active}
       current={current || active}
       id={rowId(session.id)}
       level={1}
-      secondary={
-        rowDensity(session) === "double" ? (
-          <SessionSecondary session={session} now={now} />
-        ) : undefined
-      }
-      trailing={<StatusGlyph {...sessionGlyphProps(session.phase)} />}
       onClick={(event) => onSelect(session.id, event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => onKeyDown(event, session.id)}
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}
       role="treeitem"
     >
-      {/* The remainder goes MUTED as soon as there is a match to show, even
-          on the selected row. That row is already primary tone at medium
-          weight — the same treatment matched glyphs get — so keeping it at
-          `fg` would make the highlight invisible on precisely the row the
-          operator is standing on. */}
       <Highlight
         className="block min-w-0 truncate"
         runs={highlightRuns(session.title, entry.spans)}
         tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
       />
-    </TreeRow>
+    </SessionRow>
   );
 }
 
-/**
- * Drift the Owner has not been shown yet. A count, never motion: the order is
- * held while they are working, and this is how the row says so without
- * reflowing anything under the cursor.
- */
 function ChangeHint({ count }: { readonly count: number }) {
   if (count === 0) return null;
   return (

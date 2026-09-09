@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { UI_NAMES } from "./names";
 
-export type TreeLevel = 0 | 1 | 2;
+type TreeLevel = 0 | 1 | 2;
 
 /**
  * Depth is padding, and nothing else: no spine, no elbow, no dot. Three

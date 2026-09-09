@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Glob } from "bun";
-import { renderToStaticMarkup } from "react-dom/server";
+import { attributes, classes } from "./markup";
 import { StatusGlyph } from "../src/status-glyph";
 
 test("glyph tones resolve only to their designated tokens", () => {
@@ -12,11 +12,10 @@ test("glyph tones resolve only to their designated tokens", () => {
     "muted",
     "faint",
   ] as const) {
-    const html = renderToStaticMarkup(<StatusGlyph tone={tone} shape="ring" />);
-    expect(html).toContain(
+    const [glyph] = attributes(<StatusGlyph tone={tone} shape="ring" />, '[data-ui="StatusGlyph"]');
+    expect(glyph?.style).toBe(
       `color:var(--${tone === "muted" || tone === "faint" ? "color-fg" : "status"}-${tone})`,
     );
-    expect(html).toContain('data-ui="StatusGlyph"');
   }
 });
 
@@ -30,10 +29,10 @@ test("every shape is an SVG with a crisp stroke", () => {
     "pause",
     "hollow",
   ] as const) {
-    const html = renderToStaticMarkup(<StatusGlyph tone="muted" shape={shape} />);
-    expect(html).toContain(`data-shape="${shape}"`);
-    expect(html).toContain('stroke-width="1.5"');
-    expect(html).toContain("<svg");
+    const glyphs = attributes(<StatusGlyph tone="muted" shape={shape} />, "svg");
+    expect(glyphs).toHaveLength(1);
+    expect(glyphs[0]?.["data-shape"]).toBe(shape);
+    expect(glyphs[0]?.["stroke-width"]).toBe("1.5");
   }
 });
 
@@ -42,9 +41,9 @@ test("glyph sizes are named and bounded", () => {
     ["regular", "size-4"],
     ["compact", "size-3.5"],
   ] as const) {
-    const html = renderToStaticMarkup(<StatusGlyph shape="hollow" tone="muted" size={size} />);
-    expect(html).toContain(`data-size="${size}"`);
-    expect(html).toContain(box);
+    const glyph = <StatusGlyph shape="hollow" tone="muted" size={size} />;
+    expect(attributes(glyph, "svg")[0]?.["data-size"]).toBe(size);
+    expect(classes(glyph, "svg")).toContain(box);
   }
 });
 
@@ -66,7 +65,7 @@ test("animated shapes have status keyframes and reduced-motion fallbacks", async
     ["check", "status-entrance"],
     ["cross", "status-entrance"],
   ] as const) {
-    expect(renderToStaticMarkup(<StatusGlyph shape={shape} tone="muted" />)).toContain(animation);
+    expect(classes(<StatusGlyph shape={shape} tone="muted" />, "svg")).toContain(animation);
   }
 });
 

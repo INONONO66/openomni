@@ -19,7 +19,7 @@ import { type MatchSpan, scoreFields } from "./score";
  */
 
 /** What a row's searchable text is made of, in recall-likelihood order. */
-export type SearchFields = readonly [session: string, project: string];
+export type SearchFields = readonly [string, string];
 
 export interface FilteredSession {
   readonly id: SessionId;

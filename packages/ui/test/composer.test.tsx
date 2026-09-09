@@ -202,7 +202,7 @@ const tray = (count: number, onNext?: () => void) =>
       onApprove={() => undefined}
       onDeny={() => undefined}
       onNext={onNext}
-      pending={Array.from({ length: count }, (_, i) => ({
+      pending={Array.from({ length: count }, (_: undefined, i: number) => ({
         toolId: `t${i}`,
         summary: `shell rm -rf build-${i}`,
         reason: "writes outside the workspace",

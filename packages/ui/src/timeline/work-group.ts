@@ -37,7 +37,7 @@ export function isLoud(call: TranscriptTool): boolean {
 }
 
 /** What a collapsed group prints instead of its rows. */
-export interface GroupSummary {
+interface GroupSummary {
   /** `6 tools` — the count of every call, including the ones still shown. */
   readonly total: number;
   /** `4 read · 2 edit`, most frequent first, then alphabetical for stability. */

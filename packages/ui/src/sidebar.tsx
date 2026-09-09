@@ -1,3 +1,4 @@
+/** Pinned, hidden and overlay modes share one DOM subtree; hidden content is inert. */
 import {
   createContext,
   type ReactNode,
@@ -8,31 +9,6 @@ import {
 } from "react";
 import { UI_NAMES } from "./names";
 
-/**
- * The sidebar, as Linear builds it: an in-flow GAP that reserves the width, a
- * FIXED container that actually slides, and a CONTENT column inside it that
- * fades a beat after the container moves. Three elements rather than one,
- * because they animate three different things: the gap animates width (so the
- * main column reflows), the container animates `translate` (so the slide is
- * composited), and the content animates `opacity` + a short `translate` on a
- * 40ms delay (so the column reads as arriving after its frame does).
- *
- * The container has three MODES. `pinned`: the sidebar is open and the gap
- * holds its width. `hidden`: collapsed, translated off-screen, its column
- * `inert`. `overlay`: collapsed, but the pointer has rested on the strip's
- * toggle or the window's left edge, so the SAME column floats over the main
- * panel — inset from the strip and the edge, on the panel radius, with the
- * frame's one shadow — until the pointer leaves, Escape, or a navigation.
- * Clicking the toggle while it floats pins it. One column, one component;
- * the mode is a data attribute and a class set, never a second tree.
- *
- * The width is RUNTIME: `--sidebar-width` is written on the root, read by the
- * gap, the container, and the tab strip's controls zone. While the handle is
- * dragging it is written straight to the style attribute under
- * `requestAnimationFrame`, and React hears about the width once, on release.
- * Numbers and delays: docs/desktop-shell.md.
- */
-
 /** The width the handle may drag between, and where a fresh window starts. */
 export const SIDEBAR_WIDTH = { min: 224, max: 330, default: 240 } as const;
 
@@ -40,12 +16,6 @@ export function clampSidebarWidth(width: number): number {
   return Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, Math.round(width)));
 }
 
-/**
- * Hover intent for the collapsed sidebar, in milliseconds. `open` is Linear's
- * measured rest-before-reveal; `close` is the grace that lets the pointer hop
- * from the strip's toggle down across the 8px inset into the floating panel
- * without the panel vanishing under it.
- */
 export const SIDEBAR_REVEAL = { openDelay: 250, closeDelay: 300 } as const;
 
 /** The one motion attribute every frame element reads: reduced motion wins. */
@@ -70,13 +40,6 @@ const WINDOW_TIMERS: RevealTimers<ReturnType<typeof setTimeout>> = {
   clearTimeout: (handle) => clearTimeout(handle),
 };
 
-/**
- * The reveal's timing rules, with no DOM in them so they can be asserted by
- * advancing a clock. `enter` while hidden arms the open and disarms a pending
- * close; `leave` disarms a pending open and, if shown, arms the close. Hopping
- * between two hot zones fires leave-then-enter in one frame, so the close a
- * leave armed is cancelled before it can fire: no counter, no zone identity.
- */
 export function createRevealIntent<H>(
   shown: () => boolean,
   set: (floating: boolean) => void,
@@ -140,12 +103,6 @@ export function useSidebar(): SidebarState {
   return state;
 }
 
-/**
- * The shell root. Everything in the window — strip, sidebar, main — is inside
- * it. Its two frame parts are statics: `Sidebar.Gap` (the in-flow spacer) and
- * `Sidebar.Container` (the fixed box that slides); `Console` composes them, and
- * nothing outside this package needs them by any other name.
- */
 export function Sidebar({
   open,
   floating,
@@ -190,10 +147,6 @@ export function Sidebar({
     leave: () => intent.current?.leave(),
   }).current;
 
-  // A mode change was decided — a pin, a collapse, Escape, a navigation — so
-  // whatever the pointer had armed is void: left alone, an open timer could set
-  // `floating` under a sidebar that was pinned meanwhile. While the column
-  // floats, Escape dismisses it.
   useEffect(() => {
     intent.current?.cancel();
     if (mode !== "overlay") return;
@@ -232,23 +185,6 @@ function SidebarGap() {
   );
 }
 
-/**
- * The container per mode. Pinned and hidden share the frame's geometry and
- * differ only in where the slide rests, at the runtime `--sidebar-width`; the
- * overlay leaves the layout: inset `2` (the same 8px the main panel keeps from
- * the chrome) from the strip and the left edge, on the panel radius, over the
- * drawer layer, at `--spacing-sidebar-overlay` — the SAME token the strip's
- * collapsed zone is sized by, so the zone above is exactly as wide as the panel.
- *
- * The three are ONE fixed box whose mode is a class set, so a mode change is a
- * CSS transition on the same node and never a remount: pinning a floating
- * panel glides its inset 8 -> 0, its radius to 0, and its shadow away, while
- * the gap grows in-flow beside it — the panel MORPHS into the column rather
- * than vanishing while a column grows from the edge. Width rides the same
- * transition: the overlay token equals the pinned default, so at 240 nothing
- * moves; a wider pinned column eases from 240 to its width in step with the
- * strip's zone above. A resize drag zeroes all of it (`data-resizing`).
- */
 const CONTAINER: Record<SidebarMode, string> = {
   pinned: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar) w-(--sidebar-width)",
   hidden: "top-(--shell-top) left-0 bottom-0 z-(--z-sidebar) w-(--sidebar-width) -translate-x-full",
@@ -256,11 +192,6 @@ const CONTAINER: Record<SidebarMode, string> = {
     "top-[calc(var(--shell-top)+--spacing(2))] left-2 bottom-2 z-(--z-drawer) w-sidebar-overlay overflow-hidden rounded-panel border-[0.5px] border-line-surface shadow-panel",
 };
 
-/**
- * The content per mode. Under a tab strip the pinned column starts flush (the
- * strip owns that air); the floating panel is its own surface and keeps the
- * column's top breath. Hidden fades out at once; arriving waits the 40ms beat.
- */
 const CONTENT: Record<SidebarMode, string> = {
   pinned: "delay-[40ms] [[data-tab-strip]_&]:pt-0",
   hidden: "-translate-x-4 opacity-0 delay-0 [[data-tab-strip]_&]:pt-0",
@@ -283,9 +214,6 @@ function SidebarContainer({ children }: { readonly children: ReactNode }) {
         />
       )}
       <div
-        // `bg-sunken` in EVERY mode: the box is opaque, so while it morphs between
-        // the overlay's inset and the pinned column the main panel growing in
-        // beside it never shows through the rows.
         className={`fixed flex bg-sunken transition-[translate,inset,width,border-radius,box-shadow] duration-base ${CONTAINER[mode]} ${FRAME_MOTION}`}
         data-mode={mode}
         data-ui={UI_NAMES.SidebarContainer}
@@ -295,10 +223,6 @@ function SidebarContainer({ children }: { readonly children: ReactNode }) {
           // `pt-2` is the column's own top breath.
           className={`flex h-full min-h-0 min-w-0 flex-1 flex-col pt-2 transition-[opacity,translate] duration-fast ${CONTENT[mode]} ${FRAME_MOTION}`}
           data-ui={UI_NAMES.SidebarContent}
-          // A hidden column is off-screen but still in the tree: `inert` is
-          // what takes its rows out of the tab order and the accessibility tree
-          // at once, so ⇥ from the strip lands in the main column and not on a
-          // row nobody can see.
           inert={mode === "hidden"}
         >
           {children}
@@ -318,14 +242,6 @@ Sidebar.Container = SidebarContainer;
 const KEY_STEP = 8;
 const KEY_STEP_SHIFT = 32;
 
-/**
- * The grab zone: 16px wide, straddling the sidebar's right edge, drawing
- * nothing itself (the cursor is the only feedback). The drag never re-renders React:
- * pointer moves write `--sidebar-width` under rAF and the store hears the final
- * width on release. `data-resizing` on the root is what zeroes the frame's
- * transitions for the duration, so the gap, container, content, and strip zone
- * follow the pointer instead of easing toward it.
- */
 function SidebarResizeHandle() {
   const { width, onWidthCommit, rootRef } = useSidebar();
   const drag = useRef<{ startX: number; startWidth: number; latest: number; frame: number } | null>(

@@ -1,4 +1,4 @@
-export type ShellShortcut = "toggle-sidebar";
+type ShellShortcut = "toggle-sidebar";
 
 /** The facts about a keydown the table reads; a `KeyboardEvent` satisfies it. */
 export interface ShellKey {

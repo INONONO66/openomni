@@ -113,7 +113,7 @@ describe("the transcript ledger", () => {
     // dim is what puts it under the tool rows, which are facts a reader may
     // actually scan.
     expect(tag).toContain('data-voice="meta"');
-    expect(tag).toContain("text-fg/40");
+    expect(tag).toContain("text-voice-ambient");
   });
 
   test("Given the stylesheet, When read, Then no rule hides the time again", () => {

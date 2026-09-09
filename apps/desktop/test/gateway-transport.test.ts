@@ -122,24 +122,18 @@ class ControlledSocket {
     ControlledSocket.instances.push(this);
   }
 
-  addEventListener(type: "open", listener: () => void): void;
-  addEventListener(type: "close", listener: () => void): void;
-  addEventListener(type: "error", listener: () => void): void;
   addEventListener(
-    type: "message",
-    listener: (event: { data: string | ArrayBuffer | Blob }) => void,
-  ): void;
-  addEventListener(
-    ...[type, listener]:
-      | [type: "open" | "close" | "error", listener: () => void]
-      | [type: "message", listener: (event: { data: string | ArrayBuffer | Blob }) => void]
+    ...args:
+      | ["open" | "close" | "error", () => void]
+      | ["message", (event: { data: string | ArrayBuffer | Blob }) => void]
   ): void {
-    if (type === "open") this.openListeners.push(listener);
-    if (type === "close") this.closeListeners.push(listener);
-    if (type === "error") this.errorListeners.push(listener);
-    if (type === "message") {
-      this.messageListeners.push(listener);
+    if (args[0] === "message") {
+      this.messageListeners.push(args[1]);
+      return;
     }
+    if (args[0] === "open") this.openListeners.push(args[1]);
+    if (args[0] === "close") this.closeListeners.push(args[1]);
+    if (args[0] === "error") this.errorListeners.push(args[1]);
   }
 
   open(): void {
@@ -179,7 +173,60 @@ class ControlledSocket {
   }
 }
 
+function controlledTurn(messages = [userMessage("first")]) {
+  ControlledSocket.instances.length = 0;
+  const transport = createGatewayChatTransport({
+    url: "ws://controlled",
+    WebSocketImpl: ControlledSocket,
+  });
+  const sending = send(transport, messages);
+  const controlled = ControlledSocket.instances[0];
+  if (controlled === undefined) throw new Error("socket was not constructed");
+  controlled.open();
+  return { transport, controlled, sending };
+}
+
 describe("createGatewayChatTransport", () => {
+  test("empty history sends an empty prompt and does not offer reconnection", async () => {
+    const { transport, controlled, sending } = controlledTurn([]);
+    const stream = await sending;
+    expect(controlled.sent).toEqual([{ text: "" }]);
+    controlled.respond("empty");
+    expect((await collect(stream)).map((chunk) => chunk.type)).toEqual([
+      "start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
+    ]);
+    expect(await transport.reconnectToStream({ chatId: "chat-1" })).toBeNull();
+  });
+
+  test("close before opening rejects and failed send closes its socket", async () => {
+    ControlledSocket.instances.length = 0;
+    const transport = createGatewayChatTransport({
+      url: "ws://controlled",
+      WebSocketImpl: ControlledSocket,
+    });
+    const opening = send(transport, [userMessage("opening")]);
+    const first = ControlledSocket.instances[0];
+    if (!first) throw new Error("Missing opening socket");
+    const rejected = opening.then(
+      () => {
+        throw new Error("Opening unexpectedly succeeded");
+      },
+      (error: Error) => error,
+    );
+    first.finishClose();
+    expect((await rejected).message).toContain("closed before opening");
+    const sending = send(transport, [userMessage("send failure")]);
+    const replacement = ControlledSocket.instances[1];
+    if (!replacement) throw new Error("Missing replacement socket");
+    replacement.open();
+    replacement.beginClose();
+    await expect(sending).rejects.toThrow("socket is not open");
+    expect(replacement.readyState).toBe(2);
+  });
   test("a server message becomes start / text-start / text-delta / text-end / finish", async () => {
     const { received, url } = serveWire([
       [
@@ -291,15 +338,7 @@ describe("createGatewayChatTransport", () => {
   });
 
   test("ignores malformed frames and retains unsolicited reply correlation", async () => {
-    ControlledSocket.instances.length = 0;
-    const transport = createGatewayChatTransport({
-      url: "ws://controlled",
-      WebSocketImpl: ControlledSocket,
-    });
-    const sending = send(transport, [userMessage("first")]);
-    const controlled = ControlledSocket.instances[0];
-    if (controlled === undefined) throw new Error("socket was not constructed");
-    controlled.open();
+    const { transport, controlled, sending } = controlledTurn();
     const collected = collect(await sending);
     for (const raw of [
       "not-json",
@@ -333,15 +372,7 @@ describe("createGatewayChatTransport", () => {
   });
 
   test("cancelling a stream invalidates its socket and clears reply correlation", async () => {
-    ControlledSocket.instances.length = 0;
-    const transport = createGatewayChatTransport({
-      url: "ws://controlled",
-      WebSocketImpl: ControlledSocket,
-    });
-    const sending = send(transport, [userMessage("first")]);
-    const controlled = ControlledSocket.instances[0];
-    if (controlled === undefined) throw new Error("socket was not constructed");
-    controlled.open();
+    const { transport, controlled, sending } = controlledTurn();
     const first = collect(await sending);
     controlled.respond("first");
     await first;
