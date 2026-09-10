@@ -149,6 +149,21 @@ const db = new Database(":memory:"); db.exec("CREATE TABLE item (id INTEGER PRIM
 export function read() { return db.query("SELECT * FROM item").all(); }
 export function write() { return db.query("INSERT INTO item VALUES (1)").run(); }`;
 
+export function assertStoreWrite(fixture: Fixture): void {
+  const result = fixture.run("store", fixture.schema());
+  expect(result.code).toBe(0);
+  expect(result.output).toContain('"productionWrites":[{');
+}
+
+export function configureElectronFixture(fixture: Fixture, html: string): void {
+  fixture.write("package.json", JSON.stringify({ name: "fixture" }));
+  fixture.write(
+    "src/package.json",
+    JSON.stringify({ name: "application", scripts: { build: "electron-vite build" } }),
+  );
+  fixture.write("src/index.html", html);
+}
+
 export function assertPublication(fixture: Fixture, published: boolean): void {
   const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
     timeout: 5000,

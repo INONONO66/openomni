@@ -2,9 +2,48 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decode, execute, sha256 } from "./run-quality-mutations";
-import { mutationFixture } from "./quality-mutation-fixture";
+import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
+
+test("fixture argument replacement is pure and rejects incomplete pairs", () => {
+  const argv = ["runner", "--root", "before", "--limit", "1"];
+  expect(replaceArguments(argv, ["--root", "after", "--limit", "2"])).toEqual(["runner", "--root", "after", "--limit", "2"]);
+  expect(argv[2]).toBe("before");
+  expect(replaceArguments(argv, [])).toEqual(argv);
+  for (const alter of [["--root"], ["", "value"], ["--root", ""]]) expect(() => replaceArguments(argv, alter)).toThrow();
+});
+
+test("fixture report processing validates candidate counts hashes and reached outcomes in process", () => {
+  const replacement = "false", replacementSha256 = sha256(replacement);
+  const results = ["killed", "survived", "noCoverage", "invalid"].map((outcome, startOffset) => ({
+    path: "src/a.ts", startOffset, endOffset: startOffset + 1, replacement, replacementSha256,
+    id: sha256(`src/a.ts\0${startOffset}\0${startOffset + 1}\0${replacementSha256}`),
+    selected: true, outcome, coverage: { reached: outcome !== "noCoverage" },
+  }));
+  const report = { results, census: [{ path: "src/a.ts", operators: [{ candidates: 4 }] }], counts: { killed: 1, survived: 1, noCoverage: 1, invalid: 1 } };
+  expect(reportResults(report)).toEqual(results);
+  expect(reportResults({})).toEqual([]);
+  expect(reportResults({ ...report, results: results.map((row) => ({ ...row, selected: false })) })).toEqual([]);
+  for (const patch of [
+    { counts: { killed: 2 } }, { census: [{ path: "src/a.ts", operators: [{ candidates: 3 }] }] },
+    { results: results.map((row) => ({ ...row, replacementSha256: "wrong" })) },
+    { results: results.map((row) => ({ ...row, id: "wrong" })) },
+    { results: results.map((row) => ({ ...row, coverage: { reached: false } })) },
+    { results: results.map((row) => ({ ...row, coverage: { reached: true } })) },
+  ]) expect(() => reportResults({ ...report, ...patch })).toThrow();
+});
+
+test("fixture evidence preserves present fields and materializes missing fields as null", () => {
+  const report = { full: false, complete: true, counts: {}, selectedCounts: {}, error: "failure", errors: [], cleanupVerified: true };
+  const selected = { id: "id", operator: "equality", outcome: "killed", reason: "assertion", assertionIdentities: ["test"], restored: false };
+  expect(mutationEvidence(report, [selected])).toEqual({ ...report, report, selected: [selected] });
+  const empty = mutationEvidence({}, [{}]);
+  expect(empty.full).toBeNull();
+  expect(rows(empty.selected).map(record)[0]).toEqual({ id: null, operator: null, outcome: null, reason: null, assertionIdentities: null, restored: null });
+  for (const value of [undefined, null, false, [], "invalid"]) expect(() => record(value)).toThrow();
+  for (const value of [undefined, null, {}, "invalid"]) expect(() => rows(value)).toThrow();
+});
 
 test("execution snapshots retain isolated workspace dependencies and built exports", async () => {
 	const input = await fixture('import { value } from "workspace-dep"; export const run = () => value === 7;', "expect(run()).toBe(true);");

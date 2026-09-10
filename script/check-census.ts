@@ -53,7 +53,7 @@ const NATIVE_EVENT_DOCUMENTATION = {
     "https://www.electronjs.org/docs/latest/api/browser-window#event-ready-to-show;#event-resize;#event-move;#event-close",
 };
 type Locus = { path: string; line: number; symbol: string };
-type Problem = Locus & { code: string; declarationOwner?: string; valueOrigins?: Locus[] };
+export type Problem = Locus & { code: string; declarationOwner?: string; valueOrigins?: Locus[] };
 type Entry = { path: string; sha256: string; bytes: number; category: string; language: string };
 type Edge = {
   originDefinition: Locus;
@@ -1702,36 +1702,7 @@ class Provenance {
       // the spelling of an arbitrary user-defined method.
       const file = this.callbackOwner(node),
         name = memberName(node.expression);
-      const immediate =
-        /typescript\/lib\/lib\..*\.d\.ts$/.test(file) &&
-        [
-          "map",
-          "flatMap",
-          "filter",
-          "forEach",
-          "some",
-          "every",
-          "find",
-          "findIndex",
-          "reduce",
-          "reduceRight",
-          "sort",
-          "from",
-          "then",
-          "catch",
-          "finally",
-          "replace",
-          "replaceAll",
-        ].includes(name);
-      const scheduled =
-        (/(?:(?:bun-types|@types\/node)\/|typescript\/lib\/lib\..*\.d\.ts$)/.test(file) &&
-          ["queueMicrotask", "setTimeout", "setInterval", "setImmediate", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback"].includes(name)) ||
-        // `fs.watch(path, options?, listener)` delivers to its listener from the event loop.
-        (/@types\/node\/fs\.d\.ts$/.test(file) && name === "watch");
-      const eventCallback =
-        /(?:@types\/node\/|electron\/electron\.d\.ts$|typescript\/lib\/lib\.dom\.d\.ts$|bun-types\/)/.test(
-          file,
-        ) && ["on", "once", "addListener", "addEventListener"].includes(name);
+      const { immediate, scheduled, eventCallback } = this.nativeCallbackKinds(file, name);
       this.invokeElectronHandler(name, file, arguments_);
       if (
         /\/node_modules\//.test(file) &&
@@ -1744,11 +1715,7 @@ class Provenance {
         /\/node_modules\/.*\.d\.ts$/.test(file) &&
         (name === "subscribe" || /^on[A-Z]/.test(name));
       const bridgeCallback = /^on[A-Z]/.test(name) && this.desktopBridgeMember(node, name);
-      const receiver =
-        ts.isPropertyAccessExpression(node.expression) ||
-        ts.isElementAccessExpression(node.expression)
-          ? node.expression.expression
-          : undefined;
+      const receiver = this.callReceiver(node);
       this.flowComposedAbort(node, receiver, name, file, arguments_);
       this.activateSpawnedSource(node, file, name, arguments_);
       this.invokeModuleFactory(node, receiver, name, arguments_);
@@ -1780,12 +1747,47 @@ class Provenance {
     };
     this.inScope(node, execute);
     this.watch(node.expression, execute);
-    if (
-      ts.isPropertyAccessExpression(node.expression) ||
-      ts.isElementAccessExpression(node.expression)
-    )
-      this.watch(node.expression.expression, execute);
+    const receiver = this.callReceiver(node);
+    if (receiver) this.watch(receiver, execute);
     for (const argument of arguments_) this.watch(argument, execute);
+  }
+  private callReceiver(node: ts.CallExpression | ts.NewExpression): ts.LeftHandSideExpression | undefined {
+    return ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression)
+      ? node.expression.expression
+      : undefined;
+  }
+  private nativeCallbackKinds(file: string, name: string) {
+      const immediate =
+        /typescript\/lib\/lib\..*\.d\.ts$/.test(file) &&
+        [
+          "map",
+          "flatMap",
+          "filter",
+          "forEach",
+          "some",
+          "every",
+          "find",
+          "findIndex",
+          "reduce",
+          "reduceRight",
+          "sort",
+          "from",
+          "then",
+          "catch",
+          "finally",
+          "replace",
+          "replaceAll",
+        ].includes(name);
+      const scheduled =
+        (/(?:(?:bun-types|@types\/node)\/|typescript\/lib\/lib\..*\.d\.ts$)/.test(file) &&
+          ["queueMicrotask", "setTimeout", "setInterval", "setImmediate", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback"].includes(name)) ||
+        // `fs.watch(path, options?, listener)` delivers to its listener from the event loop.
+        (/@types\/node\/fs\.d\.ts$/.test(file) && name === "watch");
+      const eventCallback =
+        /(?:@types\/node\/|electron\/electron\.d\.ts$|typescript\/lib\/lib\.dom\.d\.ts$|bun-types\/)/.test(
+          file,
+        ) && ["on", "once", "addListener", "addEventListener"].includes(name);
+      return { immediate, scheduled, eventCallback };
   }
   // Rendering `<Component .../>` invokes the component: the element activates its
   // function target and its attributes flow into the props parameter. Attribute
@@ -2236,11 +2238,15 @@ class Provenance {
   }
   // Browser documents, windows and elements receive user input from the host; a
   // renderer root makes that producer real, so listeners on them are dispatched.
-  private domEventTarget(receiver: ts.Node, registrationOnly = false): boolean {
+  private domReceiverSymbol(receiver: ts.Node): ts.Symbol | undefined {
     const symbol = this.checker.getNonNullableType(this.checker.getTypeAtLocation(unwrap(receiver))).getSymbol();
-    if (!symbol?.declarations?.some((node) =>
+    return symbol?.declarations?.some((node) =>
       /typescript\/lib\/lib\.dom\.d\.ts$/.test(node.getSourceFile().fileName),
-    )) return false;
+    ) ? symbol : undefined;
+  }
+  private domEventTarget(receiver: ts.Node, registrationOnly = false): boolean {
+    const symbol = this.domReceiverSymbol(receiver);
+    if (!symbol) return false;
     // A typed signal/target identifies a registration source, not an emission.
     // Optional access retains its nullable receiver type; non-null wrappers use
     // the same declaration owner. Neither grants publication without a trigger.
@@ -4171,6 +4177,18 @@ function censusInput(values: ReturnType<typeof censusOptions>): {
   const input = loadInput(root, values.inventory, values["inventory-sha256"], values.contract);
   return { root, selected, input };
 }
+function censusInvocations(graph: Provenance) {
+  return [...graph.targets]
+    .filter(([call]) => !!graph.path(call))
+    .map(([call, targets]) => ({
+      call: graph.locus(call),
+      implementations: [...targets].map((target) =>
+        graph.locus(target, isFunction(target) ? (target.name?.getText() ?? "<callback>") : target.getText()),
+      ),
+      root: graph.path(call)?.root,
+    }));
+}
+
 export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms()): number {
   const selection = argv.indexOf("--class");
   if (selection >= 0 && argv[selection + 1] === "all") {
@@ -4232,18 +4250,7 @@ export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms
       aliases: graph.aliases,
       assets: graph.assets,
       dependencyContracts: Object.fromEntries(graph.dependencyContracts),
-      invocations: [...graph.targets]
-        .filter(([call]) => !!graph.path(call))
-        .map(([call, targets]) => ({
-          call: graph.locus(call),
-          implementations: [...targets].map((target) =>
-            graph.locus(
-              target,
-              isFunction(target) ? (target.name?.getText() ?? "<callback>") : target.getText(),
-            ),
-          ),
-          root: graph.path(call)?.root,
-        })),
+      invocations: censusInvocations(graph),
       ...map,
       externalEvents: [...graph.externalEvents].map(([registration, trigger]) => ({
         registration: graph.locus(registration),

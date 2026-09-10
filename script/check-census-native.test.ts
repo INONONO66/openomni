@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync, symlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { Fixture, protocol, adapter, assertPublication } from "./census-fixture";
+import { Fixture, protocol, adapter, assertPublication, assertStoreWrite } from "./census-fixture";
 
 test("R3 local events require matching receiver and a subsequent trigger", () => {
   for (const trigger of [
@@ -81,9 +81,7 @@ test("import.meta.main branch evaluated before its file becomes a spawned root s
     "src/main.ts":
       'import {spawnSync} from "node:child_process"; import { ENTRY } from "./entry"; console.log(ENTRY); const child=spawnSync(process.execPath,["src/entry.ts"],{stdio:"inherit"}); if(child.status!==0)throw new Error("child failed");',
   });
-  const result = fixture.run("store", fixture.schema());
-  expect(result.code).toBe(0);
-  expect(result.output).toContain('"productionWrites":[{');
+  assertStoreWrite(fixture);
 }, 180_000);
 
 test("R3 child Python source is rooted in its actual spawn invocation", () => {

@@ -35,8 +35,10 @@ const gates = [
   "coverage",
   "mutation",
 ] as const;
+let lastFailure: InventoryError | undefined;
 function fail(message: string): never {
-  throw new InventoryError("ratchet", "", message);
+  lastFailure = new InventoryError("ratchet", "", message);
+  throw lastFailure;
 }
 function optional<K extends string, T>(
   key: K,
@@ -443,6 +445,7 @@ function nativeEvidence(root: string, current: string, coverage: string | undefi
   return analyzed.includes("coverage") ? readExecuted(evidence) : new Map();
 }
 export function ratchetMain(argv = process.argv.slice(2)): number {
+  lastFailure = undefined;
   try {
     const { values } = parseArgs({
       args: argv,
@@ -493,10 +496,9 @@ export function ratchetMain(argv = process.argv.slice(2)): number {
       JSON.stringify({ complete: true, violations: rows.size, analyzed: current.analyzed }),
     );
     return Number(failures.length > 0);
-  } catch (error) {
-    console.error(
-      error instanceof InventoryError ? `incomplete ratchet: ${error.message}` : "incomplete ratchet: invalid receipt, baseline, source inventory or Git comparison",
-    );
+  } catch {
+    const failure = lastFailure ?? { message: "invalid receipt, baseline, source inventory or Git comparison" };
+    console.error(`incomplete ratchet: ${failure.message}`);
     return 2;
   }
 }

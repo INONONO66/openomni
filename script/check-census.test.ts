@@ -3,7 +3,8 @@ import { Database } from "bun:sqlite";
 import aiPackage from "ai/package.json";
 import { readFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { Fixture, protocol, adapter, assertPublication, hash, cli } from "./census-fixture";
+import { Fixture, protocol, adapter, assertPublication, assertStoreWrite, configureElectronFixture, hash, cli } from "./census-fixture";
+import type { Problem } from "./check-census";
 
 test("scoped census retains resolver inputs but reports only affected sources", () => {
   using fixture = new Fixture({
@@ -193,9 +194,7 @@ test("structural storage dispatch traces configure/get, factories and transactio
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe('{"n":1}');
-  const result = fixture.run("store", fixture.schema());
-  expect(result.code).toBe(0);
-  expect(result.output).toContain('"productionWrites":[{');
+  assertStoreWrite(fixture);
 }, 180_000);
 
 test("durable filesystem discovery and Python operations use real files and rows", () => {
@@ -457,12 +456,7 @@ test("Electron Vite roots include main, preload and HTML module entries", () => 
     "src/preload.ts": 'console.log("preload");',
     "src/renderer.ts": 'console.log("renderer");',
   });
-  fixture.write("package.json", JSON.stringify({ name: "fixture" }));
-  fixture.write(
-    "src/package.json",
-    JSON.stringify({ name: "application", scripts: { build: "electron-vite build" } }),
-  );
-  fixture.write("src/index.html", '<SCRIPT TYPE=module SRC="./renderer.ts"></SCRIPT>');
+  configureElectronFixture(fixture, '<SCRIPT TYPE=module SRC="./renderer.ts"></SCRIPT>');
   const result = fixture.run("publisher");
   expect(result.code).toBe(0);
   for (const entry of ["main", "preload", "renderer"]) {
@@ -507,12 +501,7 @@ test("rendered components, hook callbacks and DOM listeners consume renderer exp
         ? 'import {createRoot} from "react-dom/client";import {App} from "./app";createRoot(document.body).render(<App/>);'
         : 'import {createRoot} from "react-dom/client";import "./app";createRoot(document.body).render(<p>idle</p>);',
     });
-    fixture.write("package.json", JSON.stringify({ name: "fixture" }));
-    fixture.write(
-      "src/package.json",
-      JSON.stringify({ name: "application", scripts: { build: "electron-vite build" } }),
-    );
-    fixture.write("src/index.html", '<script type="module" src="./renderer.tsx"></script>');
+    configureElectronFixture(fixture, '<script type="module" src="./renderer.tsx"></script>');
     fixture.write(
       "tsconfig.json",
       JSON.stringify({
@@ -536,7 +525,7 @@ test("rendered components, hook callbacks and DOM listeners consume renderer exp
     const result = fixture.run("export");
     const report = JSON.parse(result.output) as {
       complete: boolean;
-      errors: unknown[];
+      errors: Problem[];
       findings: { path: string; symbol: string }[];
     };
     expect(report.complete).toBe(true);

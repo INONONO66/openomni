@@ -95,3 +95,50 @@ RED exit 0
 ## Correctness review
 - Replaced initial separate libEventTarget validation escape with existing DOM declaration-owner classifier: unwrap receiver and non-nullable type, identify registration only, retain trigger requirements for dispatch.
 - True RED now reproduces unresolved_event_source on parameter signal?.addEventListener; after fix both full census files pass 68/68. Real CI store collect exits 0 on full repo.
+
+## Final PR checks
+- Bounded check loop completed for head 621adc32; results /tmp/st_01a0897e-final-checks.json.
+
+## Final delivery gate - task 4
+- Final head 621adc32, run 34440340907: all non-Quality/CI checks pass, including export/publisher/store. Quality reports 90 rows, all 90 distinct: coverage 24, CRAP 54, testClones 6, type 3, cyclomatic 2, cognitive 1. Rows saved at /tmp/st_01a0897e-final-rows.txt.
+- Remaining rows include script/check-census.ts complexity, script/check-census.test.ts unknown:errors, script/quality-ratchet.ts unknown:error, and test clone findings; these are NOT exclusively zero-coverage spawned CLI rows. Conditional admin-merge authorization does not apply. PR remains OPEN, auto-merge disabled, no merge SHA.
+- Latest measured tooling wall durations: 245s / 284s / 300s / 352s; original 442s / 402s / 293s. Shard 4 exceeds target.
+- No post-merge mutation dispatch or main CI timings/fan-in count because not merged. Further quality-closure work remains; no baseline relaxation or unsafe override made.
+
+## Quality closure start
+- Read prior report and inspecting the 90-row inventory and affected code.
+
+## Closure diagnosis
+- Confirmed split-suite clone sites, catch-binding unknown findings, and inline callback/main complexity. Mutation fixture report processing and setup are nested under one uncovered factory; extracting directly exercised logic preserves spawned integration assertions.
+
+## Closure implementation
+- Shared census store assertion and parameterized Electron setup; shared coverage lane fixture retains both suites and one setup implementation. Extracted synchronous callback classification, DOM receiver classification, and invocation serialization.
+- Ratchet uses the existing census typed failure-record pattern: a catch binding remains unknown even after instanceof narrowing. Local ratchet errors retain detail; external malformed-input failures retain the generic fail-closed message.
+- Mutation fixture now has pure argument/evidence/report functions with direct branch and rejection tests; setup and report assertions are top-level to avoid whole-factory attribution. Added missing carry-forward default-count, global-gate and deleted-source tests.
+- tsc rerun exit 2.
+- tsc final rerun exit 2.
+- Ultracite initial closure gate exit 0.
+- tsc with the exact census nullish-record pattern exit 0.
+
+## Closure tests
+- Combined touched/related tests exit 1; log /tmp/st_01a08b15-tests.log.
+- tsc likely passed (parallel output empty); ultracite failed one unused import; tests exit 1 with 33 failures, inspect log.
+- tsc final exit 0; Python-fixture failures remain known local failures.
+
+## Environment diagnosis
+- Initial combined suite used globally selected Python 3.13.15, but CI pins 3.12.12. All 33 failures are Python fixtures (7 census plus 26 mutation); preparing the pinned interpreter before the reliable final run.
+
+## Real store leg
+- Exact workflow collection with full plan exit 0; /tmp/st_01a08b15-store.log.
+- Final Ultracite exit 0.
+- Lint exit 0.
+
+## Pinned final test run
+- All touched/related tests with CI Python 3.12.12 exit 0; /tmp/st_01a08b15-tests-pinned.log.
+
+## Build and diagnostics
+- Per-file diagnostics: no errors, two pre-existing db.exec deprecation hints. CI build exit 0.
+- Real metrics collection exit 0; /tmp/st_01a08b15-metrics.
+
+## Ready to rebase
+- All 289 tests passed with pinned Python; mutation fixture 100% local function/line coverage. Real metrics and store collections and CI build passed. Shared coverage setup and Electron config have exactly one implementation (rg).
