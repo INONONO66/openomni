@@ -467,7 +467,15 @@ test("eval run answers running after its wait; peek shows the output so far; sto
     started,
   )?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  await entered.promise;
+  // Bounded wait: LLM must be invoked before cell timeout expires.
+  // Use a 5-second upper bound to tolerate slow test runners; fail fast if LLM doesn't start.
+  const enteredPromise = Promise.race([
+    entered.promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("LLM was not invoked within timeout")), 5000)
+    ),
+  ]);
+  await enteredPromise;
   expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toBe(
     `cell ${cellId} is still running; peek or stop it by cell_id\nstarted\n`,
   );
@@ -496,7 +504,14 @@ test("eval peek and stop racing on one cell: exactly one is answered, the other 
   const started = await run("completion('hold')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  await entered.promise;
+  // Bounded wait: LLM must be invoked before cell timeout expires.
+  const enteredPromise = Promise.race([
+    entered.promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("LLM was not invoked within timeout")), 5000)
+    ),
+  ]);
+  await enteredPromise;
   const [peeked, stopped] = await Promise.all([
     execute({ operation: { op: "peek", cell_id: cellId } }),
     execute({ operation: { op: "stop", cell_id: cellId } }),
