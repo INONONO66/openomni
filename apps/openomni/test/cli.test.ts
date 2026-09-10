@@ -35,7 +35,7 @@ import { processEntryPath } from "../src/process-entry-path";
 import type { DoctorPorts } from "../src/cli/doctor";
 import { main } from "../src/cli/main";
 import { gatherOnboarding } from "../src/cli/onboard";
-import { doctorStatuses } from "./helpers/cli-fixtures";
+import { doctorStatuses, failedSystemdStop } from "./helpers/cli-fixtures";
 
 const directories: string[] = [];
 afterEach(() => {
@@ -273,12 +273,10 @@ describe("daemon units", () => {
   });
 
   test("uninstall after a failed stop proceeds only when inactive AND disabled are proven", () => {
-    const io = fakeIo((argv) => {
-      if (argv[2] === "disable") return { code: 1, stdout: "", stderr: "boom" };
-      if (argv[2] === "is-active") return { code: 3, stdout: "inactive\n", stderr: "" };
-      if (argv[2] === "is-enabled") return { code: 1, stdout: "disabled\n", stderr: "" };
-      return ok;
-    });
+    const io = fakeIo(failedSystemdStop(
+      { code: 3, stdout: "inactive\n", stderr: "" },
+      { code: 1, stdout: "disabled\n", stderr: "" },
+    ));
     io.files.set(unitPath(linuxTarget), "unit");
     expect(daemonUninstall(linuxTarget, io)).toContain("uninstalled");
   });
@@ -286,13 +284,11 @@ describe("daemon units", () => {
   test("uninstall keeps the unit when the process stopped but the enable symlink survived", () => {
     // A dangling enable symlink resurrects the service on reinstall; a
     // failed disable is not success just because the process is inactive.
-    const io = fakeIo((argv) => {
-      if (argv[2] === "disable")
-        return { code: 1, stdout: "", stderr: "could not remove default.target.wants" };
-      if (argv[2] === "is-active") return { code: 3, stdout: "inactive\n", stderr: "" };
-      if (argv[2] === "is-enabled") return { code: 0, stdout: "enabled\n", stderr: "" };
-      return ok;
-    });
+    const io = fakeIo(failedSystemdStop(
+      { code: 3, stdout: "inactive\n", stderr: "" },
+      { code: 0, stdout: "enabled\n", stderr: "" },
+      "could not remove default.target.wants",
+    ));
     io.files.set(unitPath(linuxTarget), "unit");
     expect(() => daemonUninstall(linuxTarget, io)).toThrow("still enabled");
     expect(io.files.has(unitPath(linuxTarget))).toBe(true);
@@ -301,11 +297,7 @@ describe("daemon units", () => {
   test("uninstall keeps the unit when the stop fails and the state is transitional", () => {
     // `activating` is not `inactive`: deleting the unit here orphans a
     // daemon that is actively coming up.
-    const io = fakeIo((argv) => {
-      if (argv[2] === "disable") return { code: 1, stdout: "", stderr: "boom" };
-      if (argv[2] === "is-active") return { code: 0, stdout: "activating\n", stderr: "" };
-      return ok;
-    });
+    const io = fakeIo(failedSystemdStop({ code: 0, stdout: "activating\n", stderr: "" }));
     io.files.set(unitPath(linuxTarget), "unit");
     expect(() => daemonUninstall(linuxTarget, io)).toThrow("could not be stopped");
     expect(io.files.has(unitPath(linuxTarget))).toBe(true);

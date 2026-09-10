@@ -25,6 +25,17 @@ export function messageEnd(stopReason: string, outputTokens: number) {
   ];
 }
 
+export function contentBlocks(blocks: readonly {
+  readonly start: object;
+  readonly delta: object;
+}[]) {
+  return blocks.flatMap((block, index) => [
+    { type: "content_block_start", index, content_block: block.start },
+    { type: "content_block_delta", index, delta: block.delta },
+    { type: "content_block_stop", index },
+  ]);
+}
+
 export function sseResponse(frames: readonly { readonly type: string }[]): Response {
   return new Response(
     frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""),
