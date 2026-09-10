@@ -1,373 +1,67 @@
-import { afterAll, afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { decode, execute, sha256 } from "./run-quality-mutations";
+import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
+const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError } = mutationFixture("campaign");
+type RecordValue = ReturnType<typeof record>;
 
-type Json = ReturnType<typeof decode>;
-type RecordValue = { [key: string]: Json };
-const roots: string[] = [];
-const evidence: RecordValue[] = [];
-class FixtureError {
-	constructor(readonly message: string) { }
-}
-function record(value: Json | undefined): RecordValue {
-	if (!value || typeof value !== "object" || Array.isArray(value))
-		throw new FixtureError("Expected report object");
-	return value;
-}
-function rows(value: Json | undefined): Json[] {
-	if (!Array.isArray(value)) throw new FixtureError("Expected report array");
-	return value;
-}
-const tool = process.env.QUALITY_INVENTORY_TOOL ?? join(import.meta.dir, "quality-inventory.ts");
-const decision = process.env.QUALITY_MUTATION_DECISION ?? join(import.meta.dir, "conformance/quality-mutation-contract.json");
-// Fixtures compile and execute real Bun tests. They need the pinned compiler and
-// its declarations, not Electron or every product dependency copied per mutant.
-const dependencyRoot = mkdtempSync(join(tmpdir(), "omo-mutation-dependencies-"));
-const locations = new Map<string, string>();
-for (const [name, parent] of [["typescript", ""], ["@types/bun", ""], ["bun-types", "@types/bun"], ["@types/node", "bun-types"], ["undici-types", "@types/node"], ["zod", ""]]) {
-	if (!name) throw new FixtureError("Missing dependency name");
-	const location = dirname(Bun.resolveSync(`${name}/package.json`, locations.get(parent ?? "") ?? import.meta.dir));
-	locations.set(name, location);
-	const path = join(dependencyRoot, name);
-	mkdirSync(dirname(path), { recursive: true });
-	symlinkSync(location, path);
-}
-const dependencies = process.env.QUALITY_MUTATION_DEPENDENCIES ?? dependencyRoot;
-const runner = join(import.meta.dir, "run-quality-mutations.ts");
-const pins = { tool: sha256(readFileSync(tool)), decision: sha256(readFileSync(decision)) };
-
-afterEach(() => {
-	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
-afterAll(() => {
-	rmSync(dependencyRoot, { recursive: true, force: true });
-	expect(sha256(readFileSync(tool))).toBe(pins.tool);
-	expect(sha256(readFileSync(decision))).toBe(pins.decision);
-	const path = process.env.QUALITY_MUTATION_EVIDENCE;
-	if (path)
-		writeFileSync(
-			path,
-			JSON.stringify(
-				{
-					runtime: Bun.version,
-					toolSha256: pins.tool,
-					decisionSha256: pins.decision,
-					cases: evidence,
-				},
-				null,
-				2,
-			),
-		);
+test("fixture argument replacement is pure and rejects incomplete pairs", () => {
+  const argv = ["runner", "--root", "before", "--limit", "1"];
+  expect(replaceArguments(argv, ["--root", "after", "--limit", "2"])).toEqual(["runner", "--root", "after", "--limit", "2"]);
+  expect(argv[2]).toBe("before");
+  expect(replaceArguments(argv, [])).toEqual(argv);
+  for (const alter of [["--root"], ["", "value"], ["--root", ""]]) expect(() => replaceArguments(argv, alter)).toThrow();
 });
 
-async function fixture(source: string, assertion: string, additions: Record<string, string> = {}) {
-	const root = mkdtempSync(join(tmpdir(), "omo-mutation-test-"));
-	roots.push(root);
-	const files = {
-		"src/a.ts": source,
-		"src/a.test.ts": `import {test,expect} from "bun:test"; import {run} from "./a"; test("behavior", async()=>{${assertion}});`,
-		...additions,
-	};
-	for (const [path, contents] of Object.entries(files)) {
-		mkdirSync(dirname(join(root, path)), { recursive: true });
-		writeFileSync(join(root, path), contents);
-	}
-	writeFileSync(
-		join(root, "src/tsconfig.json"),
-		JSON.stringify({
-			compilerOptions: {
-				strict: true,
-				noEmit: true,
-				target: "ES2022",
-				module: "ESNext",
-				moduleResolution: "Bundler",
-				types: ["bun"],
-				skipLibCheck: true,
-			},
-			include: ["."],
-		}),
-	);
-	writeFileSync(
-		join(root, "contract.json"),
-		JSON.stringify({
-			version: 1,
-			typescript: "5.9.2",
-			roots: ["src"],
-			projects: ["src/tsconfig.json"],
-			topology: false,
-		}),
-	);
-	const generated = await execute(
-		[process.execPath, tool, "--root", root, "--contract", join(root, "contract.json")],
-		root,
-		15000,
-	);
-	expect(generated.exitCode).toBe(0);
-	const inventory = join(root, "inventory.json");
-	writeFileSync(inventory, generated.stdout);
-	return { root, inventory, files };
-}
-type Fixture = Awaited<ReturnType<typeof fixture>>;
-function assertReportResults(report: RecordValue, selected: RecordValue[]): void {
-	const results = rows(report.results).map(record);
-	const census = rows(report.census).map(record);
-	for (const row of census) {
-		const candidates = results.filter((result) => result.path === row.path);
-		const total = rows(row.operators)
-			.map(record)
-			.reduce((sum, op) => sum + Number(op.candidates), 0);
-		expect(candidates).toHaveLength(total);
-	}
-	for (const [outcome, count] of Object.entries(record(report.counts)))
-		expect(results.filter((result) => result.outcome === outcome)).toHaveLength(Number(count));
-	for (const result of selected) {
-		expect(result.replacementSha256).toBe(sha256(String(result.replacement)));
-		expect(result.id).toBe(
-			sha256(
-				`${result.path}\0${result.startOffset}\0${result.endOffset}\0${result.replacementSha256}`,
-			),
-		);
-		if (["killed", "survived"].includes(String(result.outcome)))
-			expect(record(result.coverage).reached).toBe(true);
-		if (result.outcome === "noCoverage") expect(record(result.coverage).reached).toBe(false);
-	}
-}
-async function invoke(input: Fixture, name: string, args: string[] = [], alter: string[] = []) {
-	const paths = {
-		contract: join(input.root, "contract.json"),
-		inventory: input.inventory,
-		decision,
-		"inventory-tool": tool,
-	};
-	const argv = [process.execPath, runner, "--root", input.root, "--dependencies", dependencies];
-	for (const [key, path] of Object.entries(paths))
-		argv.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
-	const python = process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3";
-	argv.push("--python", python);
-	for (let index = 0; index < alter.length; index += 2) {
-		const key = alter[index];
-		const value = alter[index + 1];
-		if (!key || !value) throw new FixtureError("Expected argument replacement pair");
-		argv[argv.indexOf(key) + 1] = value;
-	}
-	const receipt = await execute([...argv, ...args], input.root, 90000);
-	expect(receipt.timedOut).toBe(false);
-	expect(receipt.overflow).toBe(false);
-	expect(receipt.signal).toBeNull();
-	const report = record(decode(receipt.stdout));
-	expect(report.exitCode).toBe(receipt.exitCode);
-	expect(report.globalZero).toBe(false);
-	const selected = report.results
-		? rows(report.results)
-			.map(record)
-			.filter((row) => row.selected === true)
-		: [];
-	if (report.results) assertReportResults(report, selected);
-	evidence.push({
-		name,
-		exitCode: receipt.exitCode,
-		full: report.full ?? null,
-		complete: report.complete ?? null,
-		counts: report.counts ?? null,
-		selectedCounts: report.selectedCounts ?? null,
-		error: report.error ?? null,
-		errors: report.errors ?? null,
-		runtime: Bun.version,
-		stdoutSha256: receipt.stdoutSha256,
-		stderrSha256: receipt.stderrSha256,
-		selected: selected.map((row) => ({
-			id: row.id ?? null,
-			operator: row.operator ?? null,
-			outcome: row.outcome ?? null,
-			reason: row.reason ?? null,
-			assertionIdentities: row.assertionIdentities ?? null,
-			restored: row.restored ?? null,
-		})),
-		cleanupVerified: report.cleanupVerified ?? null,
-		argv: [...argv, ...args],
-		fixture: input.files,
-		report,
-		runnerSha256: sha256(readFileSync(runner)),
-	});
-	return { report, selected, code: receipt.exitCode };
-}
-function assertBehavioralKill(result: Awaited<ReturnType<typeof invoke>>): void {
-	expect(result.code).toBe(0);
-	expect(result.selected[0]?.outcome).toBe("killed");
-	expect(rows(result.selected[0]?.assertionIdentities)).toHaveLength(1);
-}
-const select = (family: string) => ["--target", "src/a.ts", "--operator", family, "--limit", "1"];
+test("fixture report processing validates candidate counts hashes and reached outcomes in process", () => {
+  const replacement = "false", replacementSha256 = sha256(replacement);
+  const results = ["killed", "survived", "noCoverage", "invalid"].map((outcome, startOffset) => ({
+    path: "src/a.ts", startOffset, endOffset: startOffset + 1, replacement, replacementSha256,
+    id: sha256(`src/a.ts\0${startOffset}\0${startOffset + 1}\0${replacementSha256}`),
+    selected: true, outcome, coverage: { reached: outcome !== "noCoverage" },
+  }));
+  const report = { results, census: [{ path: "src/a.ts", operators: [{ candidates: 4 }] }], counts: { killed: 1, survived: 1, noCoverage: 1, invalid: 1 } };
+  expect(reportResults(report)).toEqual(results);
+  expect(reportResults({})).toEqual([]);
+  expect(reportResults({ ...report, results: results.map((row) => ({ ...row, selected: false })) })).toEqual([]);
+  for (const patch of [
+    { counts: { killed: 2 } }, { census: [{ path: "src/a.ts", operators: [{ candidates: 3 }] }] },
+    { results: results.map((row) => ({ ...row, replacementSha256: "wrong" })) },
+    { results: results.map((row) => ({ ...row, id: "wrong" })) },
+    { results: results.map((row) => ({ ...row, coverage: { reached: false } })) },
+    { results: results.map((row) => ({ ...row, coverage: { reached: true } })) },
+  ]) expect(() => reportResults({ ...report, ...patch })).toThrow();
+});
 
-const families = [
-	{
-		id: "boolean-literal",
-		source: "export const run = () => true;",
-		assert: "expect(run()).toBe(true);",
-		outcome: "killed",
-	},
-	{
-		id: "equality",
-		source: "export const run = (a:number,b:number) => a === b;",
-		assert: "expect(run(1,1)).toBe(true);",
-		outcome: "killed",
-	},
-	{
-		id: "relational",
-		source: "export const run = (a:number,b:number) => a > b;",
-		assert: "expect(run(2,1)).toBe(true);expect(run(1,1)).toBe(false);",
-		outcome: "killed",
-	},
-	{
-		id: "arithmetic",
-		source: "export const run = (a:number,b:number) => a + b;",
-		assert: "expect(run(2,1)).toBe(3);",
-		outcome: "killed",
-	},
-	{
-		id: "logical",
-		source: "export const run = (a:boolean,b:boolean) => a && b;",
-		assert: "expect(run(true,false)).toBe(false);",
-		outcome: "killed",
-	},
-	{
-		id: "bitwise",
-		source: "export const run = (a:number,b:number) => a & b;",
-		assert: "expect(run(2,1)).toBe(0);",
-		outcome: "killed",
-	},
-	{
-		id: "unary",
-		source: "export const run = (a:boolean) => !a;",
-		assert: "expect(run(true)).toBe(false);",
-		outcome: "killed",
-	},
-	{
-		id: "update",
-		source: "export function run(n:number) {let x=n;return ++x;}",
-		assert: "expect(run(2)).toBe(3);",
-		outcome: "killed",
-	},
-	{
-		id: "assignment",
-		source: "export function run(x:number,n:number) {x+=n;return x;}",
-		assert: "expect(run(3,2)).toBe(5);",
-		outcome: "killed",
-	},
-	{
-		id: "numeric-literal",
-		source: "export const run = () => 42;",
-		assert: "expect(run()).toBe(42);",
-		outcome: "killed",
-	},
-	{
-		id: "bigint-literal",
-		source: "export const run = () => 42n;",
-		assert: "expect(run()).toBe(42n);",
-		outcome: "killed",
-	},
-	{
-		id: "string-literal",
-		source: 'export const run = () => "hello";',
-		assert: 'expect(run()).toBe("hello");',
-		outcome: "killed",
-	},
-	{
-		id: "condition",
-		source: "export function run(n:number){if(n)return 1;return 2;}",
-		assert: "expect(run(1)).toBe(1);",
-		outcome: "killed",
-	},
-	{
-		id: "conditional-arm",
-		source: "export const run = (n:number) => n ? 1 : 2;",
-		assert: "expect(run(1)).toBe(1);",
-		outcome: "killed",
-	},
-	{
-		id: "statement-delete",
-		source: "export function run(n:number){let x=0;x+=n;return x;}",
-		assert: "expect(run(3)).toBe(3);",
-		outcome: "killed",
-	},
-	{
-		id: "return-value",
-		source: "export function run():number|undefined{return 42;}",
-		assert: "expect(run()).toBe(42);",
-		outcome: "killed",
-	},
-	{
-		id: "throw-delete",
-		source: 'export function run(){throw new Error("boom");}',
-		assert: "expect(run).toThrow();",
-		outcome: "killed",
-	},
-	{
-		id: "array-literal",
-		source: "export const run = ():number[] => [1,2];",
-		assert: "expect(run()).toEqual([1,2]);",
-		outcome: "killed",
-	},
-	{
-		id: "object-literal",
-		source: "export const run = () => ({value:1});",
-		assert: "expect(run()).toEqual({value:1});",
-		outcome: "killed",
-	},
-	{
-		id: "optional-chain",
-		source: "export const run = (n:{value:number}) => n?.value;",
-		assert: "expect(run({value:3})).toBe(3);",
-		outcome: "survived",
-	},
-	{
-		id: "await-delete",
-		source:
-			"export async function run(){const result=await Promise.resolve(3);return typeof result;}",
-		assert: 'expect(await run()).toBe("number");',
-		outcome: "killed",
-	},
-	{
-		id: "switch-case",
-		source:
-			'export function run(n:number){switch(n){case 0:return "zero";default:return "other";}}',
-		assert: 'expect(run(0)).toBe("zero");',
-		outcome: "killed",
-	},
-	{
-		id: "regex",
-		source: "export const run = (s:string) => /^foo+$/.test(s);",
-		assert:
-			'expect(run("foo")).toBe(true);expect(run("fo")).toBe(false);expect(run("zfoo")).toBe(false);expect(run("fooz")).toBe(false);expect(run("FOO")).toBe(false);',
-		outcome: "killed",
-	},
-	{
-		id: "method",
-		source: "export const run = (n:number[]) => n.filter(x=>x>0);",
-		assert: "expect(run([-1,1])).toEqual([1]);",
-		outcome: "killed",
-	},
-];
-for (const family of families)
-	test(`real operator seam: ${family.id}`, async () => {
-		const input = await fixture(family.source, family.assert);
-		const before = sha256(readFileSync(join(input.root, "src/a.ts")));
-		const { report, selected, code } = await invoke(input, family.id, select(family.id));
-		expect(code).toBe(family.outcome === "killed" ? 0 : 1);
-		expect(report.full).toBe(false);
-		expect(report.mutationZero).toBe(false);
-		expect(report.complete).toBe(true);
-		expect(report.cleanupVerified).toBe(true);
-		expect(report.originalHashesVerified).toBe(true);
-		expect(selected).toHaveLength(1);
-		expect(selected[0]?.outcome).toBe(family.outcome);
-		expect(selected[0]?.restored).toBe(true);
-		if (family.outcome === "killed")
-			expect(rows(selected[0]?.assertionIdentities).length).toBeGreaterThan(0);
-		expect(sha256(readFileSync(join(input.root, "src/a.ts")))).toBe(before);
-		for (const row of rows(report.census).map(record)) expect(rows(row.operators)).toHaveLength(24);
-	}, 90000);
+test("fixture evidence preserves present fields and materializes missing fields as null", () => {
+  const report = { full: false, complete: true, counts: {}, selectedCounts: {}, error: "failure", errors: [], cleanupVerified: true };
+  const selected = { id: "id", operator: "equality", outcome: "killed", reason: "assertion", assertionIdentities: ["test"], restored: false };
+  expect(mutationEvidence(report, [selected])).toEqual({ ...report, report, selected: [selected] });
+  const empty = mutationEvidence({}, [{}]);
+  expect(empty.full).toBeNull();
+  expect(rows(empty.selected).map(record)[0]).toEqual({ id: null, operator: null, outcome: null, reason: null, assertionIdentities: null, restored: null });
+  for (const value of [undefined, null, false, [], "invalid"]) expect(() => record(value)).toThrow();
+  for (const value of [undefined, null, {}, "invalid"]) expect(() => rows(value)).toThrow();
+});
+
+test("execution snapshots retain isolated workspace dependencies and built exports", async () => {
+	const input = await fixture('import { value } from "workspace-dep"; export const run = () => value === 7;', "expect(run()).toBe(true);");
+	mkdirSync(join(input.root, "vendor/dep/dist"), { recursive: true });
+	mkdirSync(join(input.root, "src/node_modules"), { recursive: true });
+	writeFileSync(join(input.root, "vendor/dep/package.json"), JSON.stringify({ name: "workspace-dep", type: "module", exports: "./dist/index.js" }));
+	writeFileSync(join(input.root, "vendor/dep/dist/index.js"), "export const value = 7;");
+	writeFileSync(join(input.root, "vendor/dep/dist/index.d.ts"), "export declare const value: number;");
+	symlinkSync("../../vendor/dep", join(input.root, "src/node_modules/workspace-dep"));
+	// A real workspace back-edge must remain internal, without recursive copying.
+	mkdirSync(join(input.root, "vendor/dep/node_modules"));
+	symlinkSync("../../../src", join(input.root, "vendor/dep/node_modules/app"));
+	const result = await invoke(input, "workspace-layout", select("equality"));
+	assertBehavioralKill(result);
+	expect(result.report.sourceDiagnostics).toEqual([]);
+	expect(result.report.cleanupVerified).toBe(true);
+	expect(readFileSync(join(input.root, "vendor/dep/dist/index.js"), "utf8")).toBe("export const value = 7;");
+}, 90000);
 
 test("review R2: negated assertion is a behavioral kill", async () => {
 	const input = await fixture("export const run = () => true;", "expect(run()).not.toBe(false);");
@@ -635,6 +329,56 @@ test("passing self-closing JUnit cases cannot steal a grouped failure identity",
 	expect(record(decode(String(identities[0]))).name).toBe("behavior");
 }, 90000);
 
+test("canonical TS and JS outside native includes get inventory fallback ownership", async () => {
+	const input = await fixture("export const run=()=>true;", "expect(run()).toBe(true);", {
+		"src/excluded/loose.ts": "export const loose=()=>true;",
+		"src/excluded/loose.js": "export const loose=()=>true;",
+	});
+	const config = join(input.root, "src/tsconfig.json");
+	writeFileSync(
+		config,
+		JSON.stringify({ ...record(decode(readFileSync(config, "utf8"))), exclude: ["excluded"] }),
+	);
+	const generated = await execute(
+		[process.execPath, tool, "--root", input.root, "--contract", join(input.root, "contract.json")],
+		input.root,
+		15000,
+	);
+	expect(generated.exitCode).toBe(0);
+	writeFileSync(input.inventory, generated.stdout);
+	const result = await invoke(input, "inventory-fallback", select("boolean-literal"));
+	expect(result.code).toBe(0);
+	for (const path of ["src/excluded/loose.ts", "src/excluded/loose.js"]) {
+		const row = rows(result.report.census)
+			.map(record)
+			.find((item) => item.path === path);
+		expect(row?.syntax).toBe("parsed");
+		expect(
+			rows(row?.operators)
+				.map(record)
+				.find((op) => op.operator === "boolean-literal")?.candidates,
+		).toBe(1);
+	}
+}, 90000);
+
+test("assertion identity cannot credit another testcase's crash", async () => {
+	const input = await fixture("export const run=()=>true;", "expect(run()).not.toBe(false);", {
+		"src/crash.test.ts":
+			'import {test,expect} from "bun:test";import {run} from "./a";test("separate crash",()=>{expect(1).toBe(1);if(!run())throw new Error("crash");});',
+	});
+	const result = await invoke(input, "mixed-assertion-crash", select("boolean-literal"));
+	expect(result.code).toBe(2);
+	expect(result.selected[0]?.outcome).toBe("infrastructure");
+}, 90000);
+
+test("missing executable reports infrastructure without leaking resources", async () => {
+	const result = await execute(["/not/a/real/executable"], import.meta.dir, 1000);
+	expect(result.spawnError).toBe(true);
+	expect(result.exitCode).not.toBe(0);
+	expect(result.timedOut).toBe(false);
+	expect(existsSync("/not/a/real/executable")).toBe(false);
+});
+
 const pythonEntry =
 	'export async function run(){const child=Bun.spawn(["python3","src/driver.py"],{stdout:"pipe",stderr:"pipe"}); const output=await new Response(child.stdout).text(); const error=await new Response(child.stderr).text(); const exit=await child.exited; if(exit!==0)throw new Error(error); return output.trim();}';
 const pythonFamilies = [
@@ -866,100 +610,3 @@ for (const example of [
 		expect(result.report.originalHashesVerified).toBe(true);
 		expect(result.report.cleanupVerified).toBe(true);
 	}, 90000);
-
-for (const source of [
-	"let reads=0; const value={n:3,get method(){reads++;return function(this:{n:number}){return this.n;}}}; export const run=()=>[value?.method(),reads];",
-	"let calls=0; const value={n:3,method(x:number){return this.n+x;}}; export const run=()=>[value?.method?.(++calls),calls];",
-	"let keys=0; const value={n:3,method(){return this.n;}}; export const run=()=>[value?.[(++keys,'method')](),keys];",
-])
-	test("optional reference probe preserves single evaluation", async () => {
-		const expected = source.includes("++calls") ? "[4,1]" : "[3,1]";
-		const input = await fixture(source, `expect(run()).toEqual(${expected});`);
-		const result = await invoke(input, "reference-effects", select("optional-chain"));
-		expect(result.code).toBe(1);
-		expect(result.selected[0]?.outcome).toBe("survived");
-	}, 90000);
-
-test("optional chain probe keeps skipped key and argument effects lazy", async () => {
-	const input = await fixture(
-		"let effects=0; const values:{method(x:number):number}[]=[]; const get=()=>values[0]!; export const run=():(number|undefined)[]=>[get()?.[(++effects,'method')](++effects),effects];",
-		"expect(run()).toEqual([undefined,0]);",
-	);
-	const result = await invoke(input, "optional-lazy-effects", select("optional-chain"));
-	// Removing ?. is itself a runtime error, but the ORIGINAL probe must be green.
-	expect(result.code).toBe(2);
-	expect(result.selected[0]?.reason).toBe("failure-without-complete-behavioral-assertions");
-	const receipts = rows(result.selected[0]?.receipts).map(record);
-	expect(receipts[1]?.exitCode).toBe(0);
-}, 90000);
-
-test("ordinary interpolated template has a runtime string mutant", async () => {
-	const input = await fixture(
-		`export const run=(s:string)=>\`hello \${s}\`;`,
-		'expect(run("world")).toBe("hello world");',
-	);
-	const result = await invoke(input, "interpolated-string", select("string-literal"));
-	expect(result.code).toBe(0);
-	expect(result.selected[0]?.replacement).toBe('""');
-}, 90000);
-
-test("tagged template probe preserves tag receiver, raw data and substitutions", async () => {
-	const input = await fixture(
-		`let effects=0; const owner={n:3,tag(parts:TemplateStringsArray,x:number){return [this.n,parts.raw[0],x,effects];}}; export const run=()=>owner.tag\`hello\\n\${++effects}tail\`;`,
-		'expect(run()).toEqual([3,"hello\\\\n",1,1]);',
-	);
-	const result = await invoke(input, "tagged-template", select("string-literal"));
-	expect(result.code).toBe(0);
-	expect(result.selected[0]?.outcome).toBe("killed");
-	expect(rows(result.selected[0]?.receipts).map(record)[1]?.exitCode).toBe(0);
-}, 90000);
-
-test("canonical TS and JS outside native includes get inventory fallback ownership", async () => {
-	const input = await fixture("export const run=()=>true;", "expect(run()).toBe(true);", {
-		"src/excluded/loose.ts": "export const loose=()=>true;",
-		"src/excluded/loose.js": "export const loose=()=>true;",
-	});
-	const config = join(input.root, "src/tsconfig.json");
-	writeFileSync(
-		config,
-		JSON.stringify({ ...record(decode(readFileSync(config, "utf8"))), exclude: ["excluded"] }),
-	);
-	const generated = await execute(
-		[process.execPath, tool, "--root", input.root, "--contract", join(input.root, "contract.json")],
-		input.root,
-		15000,
-	);
-	expect(generated.exitCode).toBe(0);
-	writeFileSync(input.inventory, generated.stdout);
-	const result = await invoke(input, "inventory-fallback", select("boolean-literal"));
-	expect(result.code).toBe(0);
-	for (const path of ["src/excluded/loose.ts", "src/excluded/loose.js"]) {
-		const row = rows(result.report.census)
-			.map(record)
-			.find((item) => item.path === path);
-		expect(row?.syntax).toBe("parsed");
-		expect(
-			rows(row?.operators)
-				.map(record)
-				.find((op) => op.operator === "boolean-literal")?.candidates,
-		).toBe(1);
-	}
-}, 90000);
-
-test("assertion identity cannot credit another testcase's crash", async () => {
-	const input = await fixture("export const run=()=>true;", "expect(run()).not.toBe(false);", {
-		"src/crash.test.ts":
-			'import {test,expect} from "bun:test";import {run} from "./a";test("separate crash",()=>{expect(1).toBe(1);if(!run())throw new Error("crash");});',
-	});
-	const result = await invoke(input, "mixed-assertion-crash", select("boolean-literal"));
-	expect(result.code).toBe(2);
-	expect(result.selected[0]?.outcome).toBe("infrastructure");
-}, 90000);
-
-test("missing executable reports infrastructure without leaking resources", async () => {
-	const result = await execute(["/not/a/real/executable"], import.meta.dir, 1000);
-	expect(result.spawnError).toBe(true);
-	expect(result.exitCode).not.toBe(0);
-	expect(result.timedOut).toBe(false);
-	expect(existsSync("/not/a/real/executable")).toBe(false);
-});

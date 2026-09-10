@@ -40,6 +40,11 @@ test("carry-forward requires a baseline content proof for every unmeasured path,
   expect(carried.findings.every((row) => row.path === "script/b.ts")).toBe(true);
   expect(() => carryUnmeasured(repo.root, { ...baseline, sha256: {} }, current, ["script/a.ts"])).toThrow("script/b.ts");
   expect(() => carryUnmeasured(repo.root, { ...baseline, sha256: { "script/b.ts": "0".repeat(64) } }, current, ["script/a.ts"])).toThrow("script/b.ts");
+  expect(carryUnmeasured(repo.root, baseline, current, ["script/a.ts"], ["publisher"]).findings).toEqual([]);
+  const single = { ...finding, count: undefined };
+  expect(carryUnmeasured(repo.root, { ...baseline, findings: [single] }, current, ["script/a.ts"]).findings).toHaveLength(1);
+  rmSync(join(repo.root, "script/b.ts"));
+  expect(() => carryUnmeasured(repo.root, baseline, current, ["script/a.ts"])).toThrow("missing unchanged source");
   writeFileSync(join(repo.root, "script/b.ts"), "export const b = 3;\n");
   expect(() => carryUnmeasured(repo.root, { ...baseline, findings: [] }, current, ["script/a.ts"])).toThrow("script/b.ts");
 });

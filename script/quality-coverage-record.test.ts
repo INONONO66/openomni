@@ -18,7 +18,7 @@ test("LCOV preserves native line counts without inventing statement hits", () =>
 	]) expect(() => parseNativeLcov(malformed, "packages/example")).toThrow();
 });
 
-test("script shards merge native counters only after all four fresh partitions arrive", () => {
+test("script shards merge native counters only after all five fresh partitions arrive", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-shards-"));
   const options = { root, lane: "script", contract: "contract.json", run: "run-1", output: "merged.json", directory: "partitions" };
   try {
@@ -27,7 +27,7 @@ test("script shards merge native counters only after all four fresh partitions a
     writeFileSync(join(root, "script/a.ts"), "export const a = 1;\n");
     writeFileSync(join(root, "script/tsconfig.json"), '{"include":["*.ts"]}');
     writeFileSync(join(root, "contract.json"), JSON.stringify({ version: 1, typescript: "5.9.2", roots: ["script"], projects: ["script/tsconfig.json"], topology: false }));
-    for (const partition of ["scripts-contracts", "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3"]) {
+    for (const partition of ["scripts-contracts", "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3", "scripts-tooling-4"]) {
       expect(() => coverageRecord("merge", options)).toThrow();
       const part = { ...options, partition, output: `partitions/${partition}.json` };
       coverageRecord("begin", part);

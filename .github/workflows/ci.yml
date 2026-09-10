@@ -186,6 +186,7 @@ jobs:
     timeout-minutes: ${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}
     strategy:
       fail-fast: false
+      # ci-plan derives scripts-tooling-1 through scripts-tooling-4 from scriptPartitions.
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
