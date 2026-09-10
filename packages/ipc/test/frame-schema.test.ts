@@ -34,7 +34,7 @@ test("wire schema refuses values that JSON.parse cannot produce without reading 
 test("schema failure marks only its own line malformed", () => {
   // A temporary non-JSON parser value exercises the schema rejection at the actual framing boundary.
   const parse = JSON.parse;
-  JSON.parse = (text, reviver) => text === '"invalid-schema"' ? undefined : parse(text, reviver);
+  JSON.parse = (text, reviver) => text === '"invalid-schema"' ? undefined : FrameSchema.parse(parse(text, reviver));
   try {
     expect(new LineDecoder().push('"before"\n"invalid-schema"\n"after"\n')).toEqual({
       frames: ["before", "after"], malformed: ['"invalid-schema"'],
