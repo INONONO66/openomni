@@ -8,6 +8,22 @@ import { connectRaw, transportFixture } from "./helpers/transport";
 describe("published callback contract", () => {
   const { servers, clients, rawSockets } = transportFixture();
 
+  test("generic callbacks preserve JSON normalization, absent fields and primitive results", async () => {
+    const server = await createIpcServer(socketPath("callback-values"), (_method, params, respond) => {
+      respond(params?.value);
+    });
+    servers.push(server);
+    const client = await connectIpcClient(server.socketPath);
+    clients.push(client);
+    const values = [null, false, "text", 4, [null, "entry", false, { nested: [1, 2] }]];
+    for (const value of values) {
+      expect(await client.call("future.echo", { value })).toEqual(value);
+    }
+    expect(await client.call("future.echo")).toBeUndefined();
+    expect(await client.call("future.echo", { value: undefined })).toBeUndefined();
+    expect(await client.call("future.echo", { value: { omitted: undefined, kept: 1 } })).toEqual({ kept: 1 });
+  });
+
   test("request and notification handlers receive only the original positional arguments", async () => {
     const serverNotification = deferred<number>();
     const clientNotification = deferred<number>();

@@ -1,11 +1,11 @@
-import { Ipc, type IdSource } from "@openomni/protocol";
+import { Ipc, type IdSource, type PlainValue } from "@openomni/protocol";
 
 import { IpcRemoteError, IpcTimeoutError } from "./errors";
 
 type PendingCall<TPeer> = {
   readonly peer: TPeer;
   readonly reject: (error: Error) => void;
-  readonly resolve: (value: unknown) => void;
+  readonly resolve: (value: Ipc.Response["result"]) => void;
   readonly timer: ReturnType<typeof setTimeout>;
 };
 
@@ -14,15 +14,15 @@ type SendFrame<TPeer> = (peer: TPeer, frame: Ipc.Request | Ipc.Response | Ipc.No
 type RequestHandler<TPeer> = (
   peer: TPeer,
   method: string,
-  params: Record<string, unknown> | undefined,
-  respond: (result: unknown) => void,
-  notify: (method: string, params?: Record<string, unknown>) => void,
+  params: Ipc.Request["params"],
+  respond: (result: Ipc.Response["result"]) => void,
+  notify: (method: string, params?: Ipc.Notification["params"]) => void,
 ) => void | Promise<void>;
 
 type NotificationHandler<TPeer> = (
   peer: TPeer,
   method: string,
-  params: Record<string, unknown> | undefined,
+  params: Ipc.Notification["params"],
 ) => void | Promise<void>;
 
 type PeerRequestTableOptions<TPeer> = {
@@ -50,9 +50,9 @@ export class PeerRequestTable<TPeer = undefined> {
   call(
     peer: TPeer,
     method: string,
-    params: Record<string, unknown> | undefined,
+    params: Ipc.Request["params"],
     timeoutMs: number,
-  ): Promise<unknown> {
+  ): Promise<Ipc.Response["result"]> {
     const request = Ipc.createRequest(
       (this.options.idSource ?? (() => crypto.randomUUID()))(),
       method,
@@ -69,7 +69,7 @@ export class PeerRequestTable<TPeer = undefined> {
   }
 
   /** Returns false when `raw` matches no IPC message schema. */
-  dispatch(raw: unknown, peer: TPeer): boolean {
+  dispatch(raw: PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification, peer: TPeer): boolean {
     const response = Ipc.Response.safeParse(raw);
     if (response.success) {
       this.settleResponse(response.data, peer);
@@ -121,10 +121,10 @@ export class PeerRequestTable<TPeer = undefined> {
       return;
     }
 
-    const respond = (result: unknown) => {
+    const respond = (result: Ipc.Response["result"]) => {
       this.options.send(peer, Ipc.createResponse(request.id, result));
     };
-    const notify = (method: string, params?: Record<string, unknown>) => {
+    const notify = (method: string, params?: Ipc.Notification["params"]) => {
       this.options.send(peer, Ipc.createNotification(method, params));
     };
     const failRequest = (error: unknown) => {

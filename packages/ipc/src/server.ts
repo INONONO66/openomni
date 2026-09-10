@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import net from "node:net";
-import { Ipc } from "@openomni/protocol";
+import { Ipc, type PlainValue } from "@openomni/protocol";
 
 import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
@@ -27,17 +27,17 @@ interface IpcServerOptions {
 
 type RequestHandler = (
   method: string,
-  params: Record<string, unknown> | undefined,
-  respond: (result: unknown) => void,
-  notify: (method: string, params?: Record<string, unknown>) => void,
+  params: Ipc.Request["params"],
+  respond: (result: Ipc.Response["result"]) => void,
+  notify: (method: string, params?: Ipc.Notification["params"]) => void,
   connectionId: string,
 ) => void | Promise<void>;
 
 export interface IpcServer {
   readonly socketPath: string;
-  call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  call(method: string, params?: Ipc.Request["params"], timeoutMs?: number): Promise<Ipc.Response["result"]>;
   /** Returns false when the notification was dropped because no client is connected. */
-  notify(method: string, params?: Record<string, unknown>): boolean;
+  notify(method: string, params?: Ipc.Notification["params"]): boolean;
   useConnection(id: string): void;
   close(): void;
 }
@@ -234,7 +234,7 @@ export async function createIpcServer(
         // loop (and the reclaim timer with it) for nothing.
         if (state.endAfterFlush) return;
 
-        let messages: unknown[];
+        let messages: PlainValue[];
         let malformed: string[];
         try {
           ({ frames: messages, malformed } = state.decoder.push(raw));
@@ -332,7 +332,7 @@ type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
 // Cap how much of an unrecognized payload the error message echoes back.
 const MAX_ERROR_PAYLOAD_CHARS = 200;
 
-function decodeMessage(raw: unknown): IpcMessage {
+function decodeMessage(raw: PlainValue): IpcMessage {
   const req = Ipc.Request.safeParse(raw);
   if (req.success) return req.data;
 
@@ -348,7 +348,7 @@ function decodeMessage(raw: unknown): IpcMessage {
 }
 
 /** The offending frame's own id when it carries a string one, else "unknown". */
-function extractFrameId(raw: unknown): string {
+function extractFrameId(raw: PlainValue): string {
   if (raw !== null && typeof raw === "object" && "id" in raw) {
     const id = raw.id;
     if (typeof id === "string" && id.length > 0) return id;

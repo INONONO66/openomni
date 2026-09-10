@@ -1,4 +1,5 @@
-import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
+import type { PlainValue } from "@openomni/protocol";
+import { FrameSchema } from "./frame-schema";
 import { IpcProtocolError } from "./errors";
 
 const encoder = new TextEncoder();
@@ -76,7 +77,7 @@ export class LineDecoder {
         throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
       }
       try {
-        frames.push(PlainValueSchema.parse(JSON.parse(line)));
+        frames.push(FrameSchema.parse(JSON.parse(line)));
       } catch {
         malformed.push(line.slice(0, MALFORMED_REPORT_CHARS));
       }

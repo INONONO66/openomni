@@ -1,10 +1,11 @@
 import net from "node:net";
+import type { Ipc, PlainValue } from "@openomni/protocol";
 import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
 import { PeerRequestTable } from "./peer-request-table";
 
 export interface IpcClient {
-  call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  call(method: string, params?: Ipc.Request["params"], timeoutMs?: number): Promise<Ipc.Response["result"]>;
   close(): void;
   readonly connected: boolean;
 }
@@ -14,12 +15,12 @@ type ConnectIpcClientOptions = {
   onDisconnect?: () => void;
   onRequest?: (
     method: string,
-    params: Record<string, unknown> | undefined,
-    respond: (result: unknown) => void,
+    params: Ipc.Request["params"],
+    respond: (result: Ipc.Response["result"]) => void,
   ) => void | Promise<void>;
   onNotification?: (
     method: string,
-    params: Record<string, unknown> | undefined,
+    params: Ipc.Notification["params"],
   ) => void | Promise<void>;
 };
 
@@ -74,7 +75,7 @@ export function connectIpcClient(
     });
 
     socket.on("data", (chunk) => {
-      let msgs: unknown[];
+      let msgs: PlainValue[];
       let malformed: string[];
       try {
         ({ frames: msgs, malformed } = decoder.push(chunk));
