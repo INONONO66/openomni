@@ -108,26 +108,28 @@ type Finding = ReturnType<typeof finding>;
 
 /** Unmeasured findings are debt, not new observations. Only a matching baseline
  * content hash admits them; missing proof (including deletion) fails closed. */
-export function carryUnmeasured(root: string, baseline: Receipt, current: Receipt, measured: readonly string[], globalGates: readonly Finding["gate"][] = []): Receipt {
-  comparable(baseline, current);
-  const scope = new Set(measured);
-  const unmeasured = [...new Set([...baseline.inventory, ...current.inventory])].filter((path) => !scope.has(path));
+function verifyUnmeasured(root: string, baseline: Receipt, unmeasured: readonly string[]): void {
   for (const path of unmeasured) {
     const proof = baseline.sha256?.[path];
     if (!proof) fail(`missing unchanged proof: ${path}`);
     let hash: string;
-    try {
-      hash = digest(readFileSync(resolve(root, path)));
-    } catch {
-      fail(`missing unchanged source: ${path}`);
-    }
+    try { hash = digest(readFileSync(resolve(root, path))); }
+    catch { fail(`missing unchanged source: ${path}`); }
     if (hash !== proof) fail(`unchanged proof mismatch: ${path}`);
   }
-  const carried = baseline.findings.filter((row) => !scope.has(row.path) && !globalGates.includes(row.gate)).flatMap((row) => {
+}
+function carriedFindings(baseline: Receipt, scope: ReadonlySet<string>, globalGates: readonly Finding["gate"][]): Finding[] {
+  return baseline.findings.filter((row) => !scope.has(row.path) && !globalGates.includes(row.gate)).flatMap((row) => {
     const { count = 1, ...finding } = row;
     return Array.from({ length: count }, () => finding);
   });
-  return { ...current, inventory: [...new Set([...current.inventory, ...unmeasured])].sort(), findings: [...current.findings, ...carried] };
+}
+export function carryUnmeasured(root: string, baseline: Receipt, current: Receipt, measured: readonly string[], globalGates: readonly Finding["gate"][] = []): Receipt {
+  comparable(baseline, current);
+  const scope = new Set(measured);
+  const unmeasured = [...new Set([...baseline.inventory, ...current.inventory])].filter((path) => !scope.has(path));
+  verifyUnmeasured(root, baseline, unmeasured);
+  return { ...current, inventory: [...new Set([...current.inventory, ...unmeasured])].sort(), findings: [...current.findings, ...carriedFindings(baseline, scope, globalGates)] };
 }
 
 function key(row: Finding): string {

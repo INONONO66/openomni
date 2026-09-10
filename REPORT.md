@@ -154,3 +154,9 @@ RED exit 0
 
 ## Final validation
 - Parallel Ultracite saw temporary collector inventory JSON; rerun after collector cleanup: tsc/Ultracite/lint/build exit 0. Census 68/68; real store exit 0. Measured censusMain cyclomatic 20, cognitive 21; callback 16/13.
+
+## Remote closure run
+- Pushed b8bac188 (two incremental commits), rebased against current origin/main. Updated PR body with verification and spawn-only scope.
+
+## Remote checks
+- Poll completed for head b8bac188. All quality legs and Quality Gates passed; Desktop production smoke failed, so merge is blocked per rule. No merge, mutation dispatch, or main post-merge timing was performed.
