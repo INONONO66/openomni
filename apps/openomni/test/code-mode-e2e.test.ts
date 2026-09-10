@@ -452,10 +452,12 @@ test("cells from different sessions never share interpreter state", async () => 
  */
 test("eval run answers running after its wait; peek shows the output so far; stop interrupts once", async () => {
   const entered = Promise.withResolvers<void>();
+  const arm = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let calls = 0;
   const { run, execute } = await startCellHarness({
     llm: async () => {
+      await arm.promise;
       calls += 1;
       entered.resolve();
       await release.promise;
@@ -467,15 +469,11 @@ test("eval run answers running after its wait; peek shows the output so far; sto
     started,
   )?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  // Bounded wait: LLM must be invoked before cell timeout expires.
-  // Use a 5-second upper bound to tolerate slow test runners; fail fast if LLM doesn't start.
-  const enteredPromise = Promise.race([
-    entered.promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("LLM was not invoked within timeout")), 5000)
-    ),
-  ]);
-  await enteredPromise;
+  // Entry is deliberately armed only after run has returned. This makes the
+  // signal await observable: without it, peek races the callback entry.
+  arm.resolve();
+  await entered.promise;
+  expect(calls).toBe(1);
   expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toBe(
     `cell ${cellId} is still running; peek or stop it by cell_id\nstarted\n`,
   );
@@ -493,9 +491,13 @@ test("eval run answers running after its wait; peek shows the output so far; sto
 
 test("eval peek and stop racing on one cell: exactly one is answered, the other finds the id spent", async () => {
   const entered = Promise.withResolvers<void>();
+  const arm = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
+  let calls = 0;
   const { run, execute } = await startCellHarness({
     llm: async () => {
+      await arm.promise;
+      calls += 1;
       entered.resolve();
       await release.promise;
       return "late";
@@ -504,14 +506,11 @@ test("eval peek and stop racing on one cell: exactly one is answered, the other 
   const started = await run("completion('hold')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  // Bounded wait: LLM must be invoked before cell timeout expires.
-  const enteredPromise = Promise.race([
-    entered.promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("LLM was not invoked within timeout")), 5000)
-    ),
-  ]);
-  await enteredPromise;
+  // Entry is deliberately armed only after run has returned. This makes the
+  // signal await observable: without it, peek/stop races callback entry.
+  arm.resolve();
+  await entered.promise;
+  expect(calls).toBe(1);
   const [peeked, stopped] = await Promise.all([
     execute({ operation: { op: "peek", cell_id: cellId } }),
     execute({ operation: { op: "stop", cell_id: cellId } }),
