@@ -16,12 +16,16 @@ type Refusal = Extract<Machine.FsResult, { status: "refused" }>;
 type OpenedTarget = { readonly fd: number; readonly symlinkStat?: ReturnType<typeof fstatSync> };
 type WalkResult = OpenedTarget | Refusal;
 
-export type FsDriver = ((request: Machine.FsRequest) => Promise<Machine.FsResult>) & {
+type FsDriver = ((request: Machine.FsRequest) => Promise<Machine.FsResult>) & {
   close(): void;
 };
 
 type FsDriverTestHooks = {
   readonly afterRootPathResolution?: (canonicalPath: string) => void;
+  /** Schedule a pathname replacement after readlink, before the no-follow open. */
+  readonly afterSymlinkRead?: () => void;
+  /** Substitute only the native stream acquisition; descriptor ownership stays in the driver. */
+  readonly openDirectoryStream?: (fd: number) => Pointer | null;
   /**
    * Seams over the root descriptor lifecycle. A test substitutes the open of
    * the filesystem root to force the restart reopen to fail, and observes
@@ -187,7 +191,8 @@ function walk(
   finalDirectory: boolean,
   preserveFinalSymlink: boolean,
   shown: string,
-  targetFlags = O_TARGET,
+  targetFlags: number,
+  testHooks: FsDriverTestHooks,
 ): WalkResult {
   let pending = [...initialSegments];
   let traversed: string[] = [];
@@ -207,17 +212,7 @@ function walk(
     return result;
   };
 
-  while (true) {
-    if (pending.length === 0) {
-      const opened = openAt(dirfd, ".", O_TARGET | O_CLOEXEC | (finalDirectory ? O_DIRECTORY : 0));
-      if (!("fd" in opened)) return fail(refusalForOpenError(opened.errno, shown));
-      closeOwned();
-      const symlinkStat =
-        preservedSymlinkFd === undefined ? undefined : fstatSync(preservedSymlinkFd);
-      if (preservedSymlinkFd !== undefined) closeSync(preservedSymlinkFd);
-      return { fd: opened.fd, symlinkStat };
-    }
-
+  while (pending.length > 0) {
     const segment = pending[0] as string;
     const isFinal = pending.length === 1;
     const flags =
@@ -249,6 +244,7 @@ function walk(
       return fail(refusalForOpenError(opened.errno, shown));
     }
 
+    testHooks.afterSymlinkRead?.();
     const rewritten = resolveLink(root, traversed, link.target);
     if (rewritten === undefined) {
       return fail(refused("path_escapes_export", `path escapes export: ${shown}`));
@@ -269,6 +265,13 @@ function walk(
     traversed = [];
     closeOwned();
   }
+
+  const opened = openAt(dirfd, ".", O_TARGET | O_CLOEXEC | (finalDirectory ? O_DIRECTORY : 0));
+  if (!("fd" in opened)) return fail(refusalForOpenError(opened.errno, shown));
+  closeOwned();
+  const symlinkStat = preservedSymlinkFd === undefined ? undefined : fstatSync(preservedSymlinkFd);
+  if (preservedSymlinkFd !== undefined) closeSync(preservedSymlinkFd);
+  return { fd: opened.fd, symlinkStat };
 }
 
 function closeRootDescriptor(testHooks: FsDriverTestHooks, fd: number): void {
@@ -371,10 +374,10 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
   return { canonicalPath, fd: dirfd };
 }
 
-function directoryNames(fd: number): string[] {
+function directoryNames(fd: number, testHooks: FsDriverTestHooks): string[] {
   const duplicate = openAt(fd, ".", constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
   if (!("fd" in duplicate)) throw new Error("directory duplication failed");
-  const directory = libc.symbols.fdopendir(duplicate.fd);
+  const directory = (testHooks.openDirectoryStream ?? libc.symbols.fdopendir)(duplicate.fd);
   if (directory === null) {
     closeSync(duplicate.fd);
     throw new Error("fdopendir failed");
@@ -466,6 +469,7 @@ export function createFsDriver(
       request.op === "write"
         ? constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK
         : O_TARGET,
+      testHooks,
     );
 
     if (isRefusal(target)) return target;
@@ -511,7 +515,7 @@ export function createFsDriver(
       }
 
       if (request.op === "list") {
-        const directoryEntries = directoryNames(target.fd);
+        const directoryEntries = directoryNames(target.fd, testHooks);
         const selected = directoryEntries.slice(0, Machine.FS_LIST_MAX_ENTRIES);
         return {
           status: "completed",

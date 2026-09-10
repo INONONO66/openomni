@@ -19,7 +19,7 @@ export interface CodeRunner {
   close(): Promise<void>;
 }
 
-export interface MachineDaemonOptions {
+interface MachineDaemonOptions {
   readonly socketPath: string;
   readonly offer: Machine.Offer;
   readonly fsExports?: ReadonlyMap<string, string>;
