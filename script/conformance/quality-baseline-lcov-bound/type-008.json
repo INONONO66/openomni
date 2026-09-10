@@ -1409,14 +1409,6 @@
   },
   {
     "path": "packages/policy/src/row-compiler.ts",
-    "line": 35,
-    "symbol": "implicitAny:PolicyCompileErrorCode",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
     "line": 155,
     "symbol": "implicitAny:RowVerdict",
     "gate": "type",
@@ -1686,14 +1678,6 @@
     "gate": "type",
     "value": 1,
     "count": 3
-  },
-  {
-    "path": "packages/policy/src/row-compiler.ts",
-    "line": 35,
-    "symbol": "unknown:PolicyCompileErrorCode",
-    "gate": "type",
-    "value": 1,
-    "count": 1
   },
   {
     "path": "packages/policy/src/row-compiler.ts",
