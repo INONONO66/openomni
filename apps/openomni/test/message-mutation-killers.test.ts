@@ -1,18 +1,13 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { rmSync } from "node:fs";
 import { Bus } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 
-const directories: string[] = [];
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
+import { storageDirectories } from "./helpers/storage-directories";
+
+const directories = storageDirectories(true);
 
 test("worker actor send is blocked by a compiled B row before transport", async () => {
   let calls = 0;

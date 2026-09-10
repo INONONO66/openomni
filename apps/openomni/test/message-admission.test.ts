@@ -1,17 +1,11 @@
-import { afterEach, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
-import { Bus } from "@openomni/agent";
-import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
+import { expect, test } from "bun:test";
+import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 
-const directories: string[] = [];
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
+import { storageDirectories } from "./helpers/storage-directories";
+
+const directories = storageDirectories(true);
 
 function registerTarget() {
   ActorRegistry.registerIdentity({ id: "target", kind: "human", trustTier: "owner" });

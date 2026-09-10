@@ -1,20 +1,15 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { describe, expect, it } from "bun:test";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Sink } from "@openomni/llm";
-import { initialize, Storage } from "@openomni/ledger";
+import { initialize } from "@openomni/ledger";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { assistantMessage } from "./helpers/assistant-message";
 
-const directories: string[] = [];
+import { storageDirectories } from "./helpers/storage-directories";
 
-afterEach(() => {
-  Storage.reset();
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+const directories = storageDirectories();
 
 describe("Resident compaction", () => {
   it("replaces oversized hydrated history before continuing the Resident run", async () => {

@@ -11,22 +11,12 @@ import { z } from "zod";
 import { startOpenOmni } from "../../src/index";
 import { closeSocket, nextMessage, openSocket } from "./ws";
 
+import { messageStart, messageEnd } from "./anthropic-sse";
+
 // A local provider speaks real Anthropic SSE to the installed SDK, not a run/SDK mock.
 function response(tool: boolean): Response {
   const frames = [
-    {
-      type: "message_start",
-      message: {
-        id: "provider-message",
-        type: "message",
-        role: "assistant",
-        model: "fixture",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: tool ? 5 : 11, output_tokens: 0 },
-      },
-    },
+    messageStart("provider-message", "fixture", tool ? 5 : 11),
     {
       type: "content_block_start",
       index: 0,
@@ -42,12 +32,7 @@ function response(tool: boolean): Response {
         : { type: "text_delta", text: "retained reply" },
     },
     { type: "content_block_stop", index: 0 },
-    {
-      type: "message_delta",
-      delta: { stop_reason: tool ? "tool_use" : "end_turn", stop_sequence: null },
-      usage: { output_tokens: tool ? 7 : 13 },
-    },
-    { type: "message_stop" },
+    ...messageEnd(tool ? "tool_use" : "end_turn", tool ? 7 : 13),
   ];
   return new Response(
     new ReadableStream<Uint8Array>({

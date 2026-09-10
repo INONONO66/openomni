@@ -8,37 +8,19 @@ import { z } from "zod";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextMessage } from "./helpers/ws";
 
+import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
+
 const suite = residentSuite();
 
 function textResponse(text: string): Response {
   const frames = [
-    {
-      type: "message_start",
-      message: {
-        id: "provider-message",
-        type: "message",
-        role: "assistant",
-        model: "fixture",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 12000, output_tokens: 0 },
-      },
-    },
+    messageStart("provider-message", "fixture", 12000),
     { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
     { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
     { type: "content_block_stop", index: 0 },
-    {
-      type: "message_delta",
-      delta: { stop_reason: "end_turn", stop_sequence: null },
-      usage: { output_tokens: 10 },
-    },
-    { type: "message_stop" },
+    ...messageEnd("end_turn", 10),
   ];
-  return new Response(
-    frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""),
-    { headers: { "content-type": "text/event-stream" } },
-  );
+  return sseResponse(frames);
 }
 
 test("real app SSE compaction commits reversible evidence through the session executor", async () => {

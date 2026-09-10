@@ -1,19 +1,14 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { rmSync } from "node:fs";
 import { Bus } from "@openomni/agent";
 import { ActorRegistry, EgressBudgetStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway, L0Observation } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 import { z } from "zod";
 
-const directories: string[] = [];
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
+import { storageDirectories } from "./helpers/storage-directories";
+
+const directories = storageDirectories(true);
 
 function registerPeer() {
   ActorRegistry.registerIdentity({ id: "peer", kind: "human", trustTier: "owner" });

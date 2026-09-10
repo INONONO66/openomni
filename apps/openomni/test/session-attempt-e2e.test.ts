@@ -6,22 +6,12 @@ import { join } from "node:path";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextMessage } from "./helpers/ws";
 
+import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
+
 const suite = residentSuite();
 function stream(text: string, fail: boolean, tool: boolean): Response {
   const frames = [
-    {
-      type: "message_start",
-      message: {
-        id: "attempt",
-        type: "message",
-        role: "assistant",
-        model: "claude-opus-4-5",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 8, output_tokens: 0 },
-      },
-    },
+    messageStart("attempt", "claude-opus-4-5", 8),
     {
       type: "content_block_start",
       index: 0,
@@ -42,19 +32,9 @@ function stream(text: string, fail: boolean, tool: boolean): Response {
     { type: "content_block_stop", index: 0 },
     ...(fail
       ? [{ type: "error", error: { type: "overloaded_error", message: "overloaded" } }]
-      : [
-          {
-            type: "message_delta",
-            delta: { stop_reason: "end_turn", stop_sequence: null },
-            usage: { output_tokens: 3 },
-          },
-          { type: "message_stop" },
-        ]),
+      : messageEnd("end_turn", 3)),
   ];
-  return new Response(
-    frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""),
-    { headers: { "content-type": "text/event-stream" } },
-  );
+  return sseResponse(frames);
 }
 
 for (const visible of ["none", "text", "tool"] as const) {
