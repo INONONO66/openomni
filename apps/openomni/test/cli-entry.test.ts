@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCliDeps } from "../src/cli/main";
+import { createCliDeps, main } from "../src/cli/main";
 
 const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
 const directories: string[] = [];
@@ -288,9 +288,60 @@ describe("real CLI entry", () => {
     expect(canceled).toBe(true);
   });
 
-  test("executes the import.meta.main exit path", async () => {
-    const child = await runCli(["not-a-command"], appEnv(tempHome()));
+  test.each([[], ["help"], ["--help"], ["-h"]])("help dispatch %j", async (...args) => {
+    const child = await runCli(args, appEnv(tempHome()));
+    expect(child.exitCode).toBe(0);
+    expect(child.stderr).toBe("");
+    const commands = child.stdout.split("\n").flatMap((line) => {
+      const command = /^\s+openomni (\w+)/.exec(line)?.[1];
+      return command === undefined ? [] : [command];
+    });
+    expect(commands).toEqual(["start", "onboard", "daemon", "machine", "doctor", "logs", "help"]);
+  });
+
+  test.each([
+    ["not-a-command"],
+    ["daemon"],
+    ["daemon", "missing"],
+    ["machine"],
+    ["machine", "attach"],
+    ["machine", "attach", "config.json", "extra"],
+  ])("rejects invalid dispatch %j", async (...args) => {
+    const child = await runCli(args, appEnv(tempHome()));
     expect(child.exitCode).toBe(1);
+    expect(child.stdout).toBe("");
+    expect(child.stderr).toContain("openomni");
+  });
+
+  test("exported main uses the same process adapters", async () => {
+    const output = spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(await main(["--help"])).toBe(0);
+      expect(output).toHaveBeenCalledTimes(1);
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  test.each(["status", "start", "stop", "restart"])("daemon %s reaches service IO", async (verb) => {
+    const home = tempHome();
+    const env = appEnv(home);
+    expect((await runCli(["daemon", "install"], env)).exitCode).toBe(0);
+    writeFileSync(join(home, "commands.log"), "");
+    const child = await runCli(["daemon", verb], env);
+    expect(child.exitCode).toBe(0);
+    expect(child.stderr).toBe("");
+    expect(readFileSync(join(home, "commands.log"), "utf8")).toMatch(/launchctl|systemctl/);
+  });
+
+  test("logs forwards the follow process output and exit status", async () => {
+    const home = tempHome();
+    const env = appEnv(home);
+    const command = join(home, "bin", process.platform === "darwin" ? "tail" : "journalctl");
+    writeFileSync(command, "#!/bin/sh\nprintf 'LOG_SENTINEL\\n'\nexit 7\n");
+    chmodSync(command, 0o755);
+    const child = await runCli(["logs"], env);
+    expect(child).toEqual({ exitCode: 7, stdout: "LOG_SENTINEL\n", stderr: "" });
   });
 
   test("boots the Resident and shuts it down through its installed signal handler", async () => {
