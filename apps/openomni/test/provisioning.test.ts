@@ -223,7 +223,12 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   // #931: the ChannelInstance grant block is the Owner's tier decision; a
   // declaration without one mounts at the mount tier, never owner.
   test("a declared row carries its grant tier, and an undeclared grant mounts at the mount tier", () => {
-    putChannelCredential("secret:channel-telegram-main", '{"token":"tg"}', new Uint8Array(32).fill(7), NOW);
+    putChannelCredential(
+      "secret:channel-telegram-main",
+      '{"token":"tg"}',
+      new Uint8Array(32).fill(7),
+      NOW,
+    );
 
     // Every declared tier threads through exactly: a remap of any single tier
     // (e.g. observer -> owner) fails here rather than surviving on one literal.
@@ -258,7 +263,12 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   });
 
   test("§8.7 the declared bounce key folds revision with the secret's rotation epoch", () => {
-    const envelope = putChannelCredential("secret:channel-telegram-main", '{"token":"tg"}', new Uint8Array(32).fill(7), NOW);
+    const envelope = putChannelCredential(
+      "secret:channel-telegram-main",
+      '{"token":"tg"}',
+      new Uint8Array(32).fill(7),
+      NOW,
+    );
     ChannelInstanceStore.put(instance({ revision: 4 }));
     const get = spyOn(SecretStore, "get");
     let before: ReturnType<typeof desiredChannels>;

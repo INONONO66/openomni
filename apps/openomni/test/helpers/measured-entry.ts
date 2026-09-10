@@ -8,16 +8,23 @@ export async function measuredEntry(entry: URL, env: Record<string, string>, inp
   const parent = process.env.OPENOMNI_CHILD_COVERAGE_DIR ?? tmpdir();
   mkdirSync(parent, { recursive: true });
   const coverage = mkdtempSync(join(parent, "openomni-entry-coverage-"));
-  const child = Bun.spawn([
-    process.execPath, "test", entry.pathname,
-    "--coverage", "--coverage-reporter=lcov", `--coverage-dir=${coverage}`,
-  ], {
-    cwd: new URL("../../", import.meta.url).pathname,
-    env,
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "test",
+      entry.pathname,
+      "--coverage",
+      "--coverage-reporter=lcov",
+      `--coverage-dir=${coverage}`,
+    ],
+    {
+      cwd: new URL("../../", import.meta.url).pathname,
+      env,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const stdout = new Response(child.stdout).text();
   const stderr = new Response(child.stderr).text();
   try {

@@ -23,8 +23,15 @@ import { residentSuite } from "./helpers/resident-suite";
 import { nextMessage } from "./helpers/ws";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import {
-  acquireContender, bounded, commitInterrupt, interruptDeliveries,
-  interruptSecondModel, ProviderRequest, releaseContender, trackedWaveTools, waveTool,
+  acquireContender,
+  bounded,
+  commitInterrupt,
+  interruptDeliveries,
+  interruptSecondModel,
+  ProviderRequest,
+  releaseContender,
+  trackedWaveTools,
+  waveTool,
 } from "./helpers/session-wave";
 
 const suite = residentSuite();
@@ -588,7 +595,11 @@ for (const door of [
       if (isCurrent) await bounded(handle.interrupt());
       else {
         // Finish the top-level body first, so it cannot mask missing captured retention.
-        const interrupted = interruptSecondModel(suite, () => received.length, () => handle);
+        const interrupted = interruptSecondModel(
+          suite,
+          () => received.length,
+          () => handle,
+        );
         outerDone.resolve();
         await bounded(interrupted);
       }
@@ -706,7 +717,11 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         sessionId = row.id;
         handle = app.sessions.get(sessionId);
         if (handle === undefined) throw new Error("missing SDK handle");
-        const interrupted = interruptSecondModel(suite, () => received.length, () => handle);
+        const interrupted = interruptSecondModel(
+          suite,
+          () => received.length,
+          () => handle,
+        );
         if (current) outerGate.resolve();
         else {
           expect(() => currentExecutor()).toThrow("executor context is required");
@@ -825,14 +840,10 @@ test("approval-time prompts retain durable identities and enter the next model s
 test("an exact approval deadline refuses only B and cannot grant late authority", async () => {
   let now = 100;
   const started: string[] = [];
-  const { app, socket } = await waveApp(
-    trackedWaveTools(started),
-    ["A", "B", "C"],
-    {
-      clock: () => now,
-      approvalTimeoutMs: 1,
-    },
-  );
+  const { app, socket } = await waveApp(trackedWaveTools(started), ["A", "B", "C"], {
+    clock: () => now,
+    approvalTimeoutMs: 1,
+  });
   requireBApproval();
   const waiting = nextApproval(app);
   const response = nextMessage(socket, 5000);

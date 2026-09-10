@@ -132,7 +132,10 @@ test.each([
     stdout: "pipe",
     stderr: "pipe",
   });
-  const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  const output = Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
   try {
     child.stdin.write(input);
     child.stdin.end();

@@ -8,7 +8,10 @@ import { type AnyToolDefinition, Machine } from "@openomni/protocol";
 export function composeCodemode(machines: MachineHost) {
   const empty = createDispatcher([]);
   const catalogs = new Map<string, ReturnType<typeof createDispatcher>>();
-  const dispatchers = new WeakMap<readonly AnyToolDefinition[], ReturnType<typeof createDispatcher>>();
+  const dispatchers = new WeakMap<
+    readonly AnyToolDefinition[],
+    ReturnType<typeof createDispatcher>
+  >();
   const mode = createCodemode({
     machines,
     boundary() {
@@ -43,14 +46,16 @@ export function composeCodemode(machines: MachineHost) {
       // authority, not the executor that happened to build the catalog.
       const inContext = AsyncLocalStorage.snapshot();
       return async (call) => {
-        const result = await inContext(() => dispatcher.executeCell(
-          {
-            id: `cell:${call.cellId}:${crypto.randomUUID()}`,
-            tool: call.name,
-            input: call.arguments,
-          },
-          { sessionId: tenant, turnId: call.cellId },
-        ));
+        const result = await inContext(() =>
+          dispatcher.executeCell(
+            {
+              id: `cell:${call.cellId}:${crypto.randomUUID()}`,
+              tool: call.name,
+              input: call.arguments,
+            },
+            { sessionId: tenant, turnId: call.cellId },
+          ),
+        );
         return Machine.ToolCallResult.parse(
           result.isError
             ? { status: "failed", error: String(result.output) }
@@ -68,9 +73,9 @@ export function composeCodemode(machines: MachineHost) {
       }
       let dispatcher = dispatchers.get(tools);
       if (dispatcher === undefined) {
-        dispatcher = createDispatcher(tools.filter(
-          (tool) => tool.name !== "eval" && tool.visibility.cell.length > 0,
-        ));
+        dispatcher = createDispatcher(
+          tools.filter((tool) => tool.name !== "eval" && tool.visibility.cell.length > 0),
+        );
         dispatchers.set(tools, dispatcher);
       }
       catalogs.set(tenant, dispatcher);

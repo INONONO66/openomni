@@ -1,6 +1,9 @@
 import type { attachMachineDaemon } from "@openomni/machines";
 
-export function cellDaemonOptions(socketPath: string, machineId: string): Parameters<typeof attachMachineDaemon>[0] {
+export function cellDaemonOptions(
+  socketPath: string,
+  machineId: string,
+): Parameters<typeof attachMachineDaemon>[0] {
   return {
     socketPath,
     offer: {

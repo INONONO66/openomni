@@ -22,8 +22,7 @@ export function dispatchModelTool(
     try {
       const currentDefinitions = definitions ?? createTools(ports, origin);
       if (definitions === undefined) ports.cells?.bindTools(origin.sessionId, currentDefinitions);
-      const dispatcher =
-        persistentDispatcher ?? createDispatcher(currentDefinitions, { executor });
+      const dispatcher = persistentDispatcher ?? createDispatcher(currentDefinitions, { executor });
       return await dispatcher.execute(
         { id: `test-tool-call-${nextCallId++}`, tool: name, input },
         { sessionId: origin.sessionId, turnId: `test-turn-${nextCallId}` },

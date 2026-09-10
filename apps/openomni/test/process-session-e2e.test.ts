@@ -13,14 +13,20 @@ import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 
 const suite = residentSuite();
 function response(target?: string): Response {
-  const block = target === undefined
-    ? { type: "text", text: "" }
-    : { type: "tool_use", id: "process-tool", name: "send_message", input: {} };
-  const delta = target === undefined
-    ? { type: "text_delta", text: "PROCESS_SENTINEL" }
-    : { type: "input_json_delta", partial_json: JSON.stringify({
-        to: { kind: "session", id: target }, message: "PROCESS_TOOL_SENTINEL",
-      }) };
+  const block =
+    target === undefined
+      ? { type: "text", text: "" }
+      : { type: "tool_use", id: "process-tool", name: "send_message", input: {} };
+  const delta =
+    target === undefined
+      ? { type: "text_delta", text: "PROCESS_SENTINEL" }
+      : {
+          type: "input_json_delta",
+          partial_json: JSON.stringify({
+            to: { kind: "session", id: target },
+            message: "PROCESS_TOOL_SENTINEL",
+          }),
+        };
   const frames = [
     messageStart(crypto.randomUUID(), "claude-opus-4-5", 4),
     { type: "content_block_start", index: 0, content_block: block },
@@ -31,8 +37,13 @@ function response(target?: string): Response {
   return sseResponse(frames);
 }
 
-test.each([false, true])("process-session entry preserves deadline and parent with tool send %s", async (toolSend) => {
-  const fixture = messageFixture("resident", undefined,
+test.each([
+  false,
+  true,
+])("process-session entry preserves deadline and parent with tool send %s", async (toolSend) => {
+  const fixture = messageFixture(
+    "resident",
+    undefined,
     toolSend ? createTools({}, { sessionId: "worker", role: "worker" }).map(sessionTool) : [],
   );
   let requests = 0;
@@ -73,7 +84,11 @@ test.each([false, true])("process-session entry preserves deadline and parent wi
     Storage.initialize({ dbPath: fixture.dbPath });
     expect(requests).toBe(toolSend ? 2 : 1);
     expect(notified).toContain("sender");
-    expect(SessionHandleStore.inboxRows("sender").filter((row) => row.content === "PROCESS_TOOL_SENTINEL")).toHaveLength(toolSend ? 1 : 0);
+    expect(
+      SessionHandleStore.inboxRows("sender").filter(
+        (row) => row.content === "PROCESS_TOOL_SENTINEL",
+      ),
+    ).toHaveLength(toolSend ? 1 : 0);
     const received = SessionHandleStore.inboxRows("sender").filter(
       (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
     );
@@ -166,7 +181,11 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     row.id.endsWith(":reply"),
   );
   expect(requests).toBe(2);
-  expect(SessionHandleStore.inboxRows(child.parentId).some((row) => row.content === "PROCESS_TOOL_SENTINEL")).toBe(true);
+  expect(
+    SessionHandleStore.inboxRows(child.parentId).some(
+      (row) => row.content === "PROCESS_TOOL_SENTINEL",
+    ),
+  ).toBe(true);
   expect(replies).toHaveLength(1);
   expect(replies[0]?.content).toBe("PROCESS_SENTINEL");
   expect(replies[0]?.origin.value).toMatchObject({

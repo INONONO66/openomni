@@ -390,7 +390,8 @@ test("a real daemon read assembles successive bounded chunks without dropping th
     const content = `${"a".repeat(Machine.FS_READ_MAX_BYTES)}TAIL_SENTINEL`;
     await writeFile(join(root, "chunked"), content);
     expect((await cell("read", { path: path("chunked") })).output).toEqual({
-      content, bytes: Buffer.byteLength(content),
+      content,
+      bytes: Buffer.byteLength(content),
     });
   });
 });
@@ -398,7 +399,11 @@ test("a real daemon read assembles successive bounded chunks without dropping th
 test("a truncated remote read without progress is refused instead of looping", async () => {
   await fixture(true, async ({ machine, path, model }) => {
     const read = spyOn(machine.fs, "read").mockResolvedValue({
-      op: "read", data: new Uint8Array(), bytesRead: 0, size: 1, truncated: true,
+      op: "read",
+      data: new Uint8Array(),
+      bytesRead: 0,
+      size: 1,
+      truncated: true,
     });
     try {
       const result = await model("read", { path: path("stalled") });

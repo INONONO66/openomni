@@ -118,13 +118,18 @@ test("conversation correlation cannot select the physical default session", asyn
 });
 
 test.each([
-  { mutation: "json_set(intent, '$.matchedRuleIds', json_array(42))", error: "invalid message decision rule identity" },
+  {
+    mutation: "json_set(intent, '$.matchedRuleIds', json_array(42))",
+    error: "invalid message decision rule identity",
+  },
   { mutation: "json_remove(intent, '$.inputHash')", error: "message pre decision is missing" },
 ])("corrupted persisted policy evidence is refused: %j", async ({ mutation, error }) => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
   using db = new Database(fixture.dbPath);
-  db.exec(`CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`);
+  db.exec(
+    `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`,
+  );
   const result = await fixture.send({
     to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
     type: "message",
