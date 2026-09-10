@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Machine } from "../../src/machine/index.js";
+import { expectIssue } from "../helpers/schema.js";
 
 const enrollment = {
   machineId: "mac-0",
@@ -32,13 +33,10 @@ describe("Machine.CapabilityId grammar", () => {
   test("rejects single-segment, uppercase, and empty ids with the grammar message", () => {
     for (const id of ["fs", "Fs.read", "fs.", ".read", "", "fs..read", "fs.Read"]) {
       const result = Machine.CapabilityId.safeParse(id);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0]?.message).toBe(
-          "capability id must be dot-namespaced lowercase (e.g. fs.read)",
-        );
-        expect(result.error.issues[0]?.path).toEqual([]);
-      }
+      expectIssue(result, {
+        message: "capability id must be dot-namespaced lowercase (e.g. fs.read)",
+        path: [],
+      });
     }
   });
 
@@ -58,11 +56,7 @@ describe("Machine.Enrollment", () => {
       ...enrollment,
       allowedCapabilities: ["fs.read", "fs.read"],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
-      expect(result.error.issues[0]?.path.join(".")).toBe("allowedCapabilities");
-    }
+    expectIssue(result, { message: "capabilities must be unique", path: "allowedCapabilities" });
   });
 
   test("rejects an empty allowlist — an enrolled machine with no capability is a contradiction", () => {
@@ -95,11 +89,7 @@ describe("Machine.Offer", () => {
       ...offer,
       offeredCapabilities: ["fs.read", "fs.read"],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
-      expect(result.error.issues[0]?.path.join(".")).toBe("offeredCapabilities");
-    }
+    expectIssue(result, { message: "capabilities must be unique", path: "offeredCapabilities" });
   });
 });
 
@@ -145,11 +135,7 @@ describe("machine.attached event payload", () => {
       time: 1,
       effectiveCapabilities: ["fs.read", "fs.read"],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
-      expect(result.error.issues[0]?.path.join(".")).toBe("effectiveCapabilities");
-    }
+    expectIssue(result, { message: "capabilities must be unique", path: "effectiveCapabilities" });
   });
 });
 
@@ -159,11 +145,7 @@ describe("Machine.AttachResult", () => {
       status: "attached",
       effectiveCapabilities: ["fs.read", "fs.read"],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
-      expect(result.error.issues[0]?.path.join(".")).toBe("effectiveCapabilities");
-    }
+    expectIssue(result, { message: "capabilities must be unique", path: "effectiveCapabilities" });
   });
 
   test("refused accepts only the enrollment refusal vocabulary", () => {

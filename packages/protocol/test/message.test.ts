@@ -32,6 +32,16 @@ describe("Message.TextPart", () => {
     expect(part.metadata).toEqual({ source: "user" });
   });
 
+  test("parses the full persisted metadata value grammar with a typed result", () => {
+    const part = Message.TextPart.parse({
+      ...base,
+      type: "text",
+      text: "hello",
+      metadata: { nullable: null, nested: [[], {}] },
+    });
+    expect(part.metadata).toEqual({ nullable: null, nested: [[], {}] });
+  });
+
   test("rejects missing text", () => {
     expect(() => Message.TextPart.parse({ ...base, type: "text" })).toThrow(ZodError);
   });

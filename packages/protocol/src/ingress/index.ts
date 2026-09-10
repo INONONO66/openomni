@@ -188,7 +188,7 @@ export namespace Ingress {
     channel: z.string().optional(),
     workspace: z.string().optional(),
     userId: z.string().optional(),
-    /** Zod 4 requires bare `unknown` keys to be present; `.optional()` preserves the v3 absent-key tolerance this surface always had. */
+    /** Payload is optional because ingress accepts envelopes without platform data. */
     payload: z.unknown().optional(),
     target: TargetSchemaImpl.optional(),
     meta: MetaSchemaImpl.optional(),

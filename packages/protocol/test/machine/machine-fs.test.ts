@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Machine } from "../../src/machine/index.js";
+import { expectIssue } from "../helpers/schema.js";
 
 const enrollment = {
   machineId: "mac-0",
@@ -77,11 +78,7 @@ describe("Machine.Enrollment.allowedExports", () => {
       ...enrollment,
       allowedExports: ["notes", "notes"],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("export names must be unique");
-      expect(result.error.issues[0]?.path.join(".")).toBe("allowedExports");
-    }
+    expectIssue(result, { message: "export names must be unique", path: "allowedExports" });
   });
 });
 
@@ -99,11 +96,7 @@ describe("Machine.Offer.exports", () => {
         { name: "notes", path: "/notes" },
       ],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("export names must be unique");
-      expect(result.error.issues[0]?.path.join(".")).toBe("exports");
-    }
+    expectIssue(result, { message: "export names must be unique", path: "exports" });
   });
 
   test("requires a real absolute export root", () => {
@@ -160,11 +153,7 @@ describe("machine wire compatibility", () => {
       effectiveCapabilities: ["fs.read"],
       effectiveExports: ["notes", "notes"],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("export names must be unique");
-      expect(result.error.issues[0]?.path.join(".")).toBe("effectiveExports");
-    }
+    expectIssue(result, { message: "export names must be unique", path: "effectiveExports" });
   });
 });
 
@@ -279,10 +268,7 @@ describe("Machine.FsRequest", () => {
   test("rejects any .. segment, wherever it sits", () => {
     for (const path of ["..", "../x", "a/../b", "a/..", "a/../../b"]) {
       const result = Machine.FsRequest.safeParse({ op: "list", export: "notes", path });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0]?.path.join(".")).toBe("path");
-      }
+      expectIssue(result, { path: "path" });
     }
   });
 
@@ -298,10 +284,7 @@ describe("Machine.FsRequest", () => {
       export: "notes",
       path: "a\u0000b.txt",
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.path.join(".")).toBe("path");
-    }
+    expectIssue(result, { path: "path" });
   });
 
   test("rejects an unknown op and unknown fields", () => {

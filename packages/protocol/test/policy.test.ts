@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
 import { Policy, PolicyDecision } from "../src/policy/index";
@@ -174,9 +173,8 @@ describe("Policy schemas", () => {
       expect(timingKeys.length).toBe(13);
     });
 
-    it("rejects invalid timing value", () => {
-      const invalidTiming = "invalid_timing" as Policy.Timing;
-      expect(invalidTiming).toBe("invalid_timing");
+    it("does not register invalid timing values", () => {
+      expect(Object.values(Policy.Timing)).not.toContain("invalid_timing");
     });
   });
 
@@ -424,9 +422,11 @@ describe("Policy schemas", () => {
         annotation: "audit note",
         severity: "warning",
       });
-      expect(result.type).toBe("audit.annotate");
-      expect(result.annotation).toBe("audit note");
-      expect(result.severity).toBe("warning");
+      expect(result).toEqual({
+        type: "audit.annotate",
+        annotation: "audit note",
+        severity: "warning",
+      });
     });
   });
 
@@ -474,8 +474,7 @@ describe("Policy schemas", () => {
         labels: ["security", "audit"],
       });
       expect(result.policies.length).toBe(2);
-      expect(result.policies[0].id).toBe("policy-1");
-      expect(result.policies[0].required).toBe(true);
+      expect(result.policies[0]).toEqual({ id: "policy-1", required: true });
       expect(result.labels).toEqual(["security", "audit"]);
     });
 
@@ -488,13 +487,13 @@ describe("Policy schemas", () => {
       expect(result.registryVersion).toBe("1.0.0");
     });
 
-    it("rejects policy plan with empty policies array", () => {
-      expect(() =>
+    it("accepts policy plan with no policies", () => {
+      expect(
         Policy.PolicyPlan.parse({
           policies: [],
           labels: ["test"],
         }),
-      ).not.toThrow();
+      ).toEqual({ policies: [], labels: ["test"] });
     });
 
     it("rejects policy with empty id", () => {

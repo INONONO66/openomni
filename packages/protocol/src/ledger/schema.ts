@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { NamedError } from "../error/index.js";
 import { EpochMs } from "../time.js";
+import { PlainObjectSchema } from "../json.js";
 
 /**
  * Durability class of a ledger write connection (#510). Decision-class
@@ -21,7 +22,7 @@ export const Input = z
   .object({
     streamId: z.string().min(1),
     type: z.string().min(1),
-    data: z.record(z.string(), z.unknown()),
+    data: PlainObjectSchema,
     /** Milliseconds since epoch; the append core defaults it to now. */
     timeCreated: EpochMs.int().nonnegative().optional(),
   })
@@ -92,7 +93,7 @@ export const RecordedFact = z
     streamId: z.string().min(1),
     seq: z.number().int().positive(),
     type: z.string().min(1),
-    data: z.record(z.string(), z.unknown()),
+    data: PlainObjectSchema,
     timeCreated: EpochMs.int().nonnegative(),
   })
   .strict();

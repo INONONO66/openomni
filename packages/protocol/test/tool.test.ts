@@ -1,6 +1,11 @@
 import { describe, test, expect } from "bun:test";
 import { ZodError } from "zod";
 import { Tool } from "../src/tool/index.js";
+import type { PlainValue } from "../src/json.js";
+
+function expectInvalidState(state: unknown): void {
+  expect(() => Tool.State.parse(state)).toThrow(ZodError);
+}
 
 describe("Tool shared contracts", () => {
   test("parses tool config shared by execution and ingress", () => {
@@ -107,14 +112,32 @@ describe("Tool.StateCompleted", () => {
       input: { task: "demo" },
       output: "done",
       title: "Demo Task",
-      metadata: {},
+      metadata: { nullable: null, nested: [[], {}] },
       time: { start: 1, end: 0 },
     });
 
     expect(state.status).toBe("completed");
     if (state.status !== "completed") throw new Error("shape");
     expect(state.time.end).toBe(0);
-    expect(state.metadata).toEqual({});
+    const metadata: Record<string, PlainValue> = state.metadata;
+    expect(metadata).toEqual({ nullable: null, nested: [[], {}] });
+  });
+
+  test("rejects non-plain metadata values", () => {
+    const base = {
+      status: "completed",
+      input: {},
+      output: "done",
+      title: "Demo Task",
+      time: { start: 1, end: 2 },
+    };
+    for (const metadata of [
+      { nested: () => "nope" },
+      { nested: new Date() },
+      { nested: new (class Example {})() },
+    ]) {
+      expect(Tool.State.safeParse({ ...base, metadata }).success).toBe(false);
+    }
   });
 
   test("rejects missing output", () => {
@@ -142,15 +165,13 @@ describe("Tool.StateCompleted", () => {
   });
 
   test("rejects missing time", () => {
-    expect(() =>
-      Tool.State.parse({
-        status: "completed",
-        input: {},
-        output: "done",
-        title: "Demo Task",
-        metadata: {},
-      }),
-    ).toThrow(ZodError);
+    expectInvalidState({
+      status: "completed",
+      input: {},
+      output: "done",
+      title: "Demo Task",
+      metadata: {},
+    });
   });
 });
 
@@ -179,13 +200,7 @@ describe("Tool.StateError", () => {
   });
 
   test("rejects missing time", () => {
-    expect(() =>
-      Tool.State.parse({
-        status: "error",
-        input: {},
-        error: "failed",
-      }),
-    ).toThrow(ZodError);
+    expectInvalidState({ status: "error", input: {}, error: "failed" });
   });
 });
 
