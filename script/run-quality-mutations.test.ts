@@ -1,17 +1,33 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { programs, diagnostics } from "./run-quality-mutations";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 
-test("mutation helpers cover execution tree and virtual source traversal", () => {
-  const root = resolve(import.meta.dir, "..");
-  expect(executionTreeHash(root)).toHaveLength(64);
-  const source = mutationSource(root, "script/run-quality-mutations.ts");
-  expect(source.source).toContain("export async function main");
+test("fallback compiler ignores untyped JavaScript inventory sources", () => {
+  const root = mkdtempSync(join(tmpdir(), "mutation-fallback-"));
+  try {
+    writeFileSync(join(root, "tool.cjs"), "module.exports = missingName;");
+    writeFileSync(join(root, "tool.mjs"), "export const value = missingName;");
+    const contract: { version: 1; typescript: "5.9.2"; roots: string[]; projects: string[]; topology: false } = { version: 1, typescript: "5.9.2", roots: ["."], projects: [], topology: false };
+    const inventory = buildInventory(root, contract);
+    expect(diagnostics(programs(root, contract, inventory))).toEqual([]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("mutation helpers cover execution tree recursion and virtual source traversal", () => {
+  const root = mkdtempSync(join(tmpdir(), "mutation-tree-"));
+  try {
+    mkdirSync(join(root, "nested"));
+    writeFileSync(join(root, "nested", "source.ts"), "export const value = 1;");
+    symlinkSync("nested/source.ts", join(root, "source-link.ts"));
+    expect(executionTreeHash(root)).toHaveLength(64);
+    const source = mutationSource(resolve(import.meta.dir, ".."), "script/run-quality-mutations.ts");
+    expect(source.source).toContain("export async function main");
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("real mutation contract has no baseline compiler diagnostics", () => {
