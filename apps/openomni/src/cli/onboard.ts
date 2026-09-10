@@ -1,4 +1,3 @@
-import { parseWsPort } from "../config";
 import type { EnvEntry } from "./env-file";
 
 /**
@@ -42,7 +41,7 @@ export async function gatherOnboarding(ask: Ask): Promise<readonly EnvEntry[]> {
   const apiKey = await askRequired(ask, "Model API key", { secret: true });
   const port = await askRequired(ask, "WebSocket port", { fallback: "3000" });
   // Port 0 would bind an ephemeral, undiscoverable port under the daemon.
-  if (parseWsPort(port) === 0) {
+  if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65_535) {
     throw new Error("WebSocket port must be an integer from 1 to 65535");
   }
 
