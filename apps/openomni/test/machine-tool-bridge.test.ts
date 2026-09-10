@@ -3,15 +3,11 @@ import { describe, expect, test } from "bun:test";
 import { connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "@openomni/machines";
-import { type MachineHost, createMachineHost } from "@openomni/machines";
+import type { MachineHost } from "@openomni/machines";
 import { MachineCellError } from "@openomni/machines";
 import { socketPath } from "./helpers/socket-path";
 
-const silent = {
-  publish() {
-    return;
-  },
-};
+import { bridgeDaemon, bridgeHost, bridgeOffer, bridgeProbe } from "./helpers/machine-bridge";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -33,16 +29,7 @@ async function withBridge(
 ): Promise<void> {
   const path = socketPath();
   const calls: Machine.ToolCall[] = [];
-  const host = await createMachineHost({
-    socketPath: path,
-    enrollment: () => ({
-      name: "workstation",
-      machineId: "m-1",
-      allowedCapabilities: ["kernel.py"],
-      enrolledAt: 1000,
-    }),
-    events: silent,
-    now: () => 5000,
+  const host = await bridgeHost(path, {
     callTool: async (call) => {
       calls.push(call);
       if (callTool) return callTool(call);
@@ -55,17 +42,7 @@ async function withBridge(
       return { status: "failed", error: `tool is not offerable: ${call.name}` };
     },
   });
-  const daemon = await attachMachineDaemon({
-    runner: createCodemode().runner,
-    socketPath: path,
-    offer: {
-      machineId: "m-1",
-      daemonVersion: "0.1.0",
-      platform: "darwin",
-      offeredCapabilities: ["kernel.py"],
-      offeredAt: 2000,
-    },
-  });
+  const daemon = await bridgeDaemon(path);
   try {
     await run({ host, calls });
   } finally {
@@ -274,17 +251,7 @@ describe("code-mode tool bridge", () => {
 
   test("a duplicate in-flight cellId is refused with a typed error on a live connection", async () => {
     const path = socketPath();
-    const host = await createMachineHost({
-      socketPath: path,
-      enrollment: () => ({
-        name: "workstation",
-        machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
-        enrolledAt: 1000,
-      }),
-      events: silent,
-      now: () => 5000,
-    });
+    const host = await bridgeHost(path);
     let announceFirst!: () => void;
     const firstReceived = new Promise<void>((resolve) => {
       announceFirst = resolve;
@@ -359,22 +326,7 @@ describe("code-mode tool bridge", () => {
 
   test("a connection that never attached cannot reach host tools", async () => {
     const path = socketPath();
-    let reached = false;
-    const host = await createMachineHost({
-      socketPath: path,
-      enrollment: () => ({
-        name: "workstation",
-        machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
-        enrolledAt: 1000,
-      }),
-      events: silent,
-      now: () => 5000,
-      callTool: () => {
-        reached = true;
-        return Promise.resolve({ status: "completed", value: "ran" });
-      },
-    });
+    const { host, reached } = await bridgeProbe(path);
     // A bare connection: no offer, no attach, straight to the tool channel.
     const intruder = await connectIpcClient(path, {});
     try {
@@ -386,7 +338,7 @@ describe("code-mode tool bridge", () => {
           5000,
         ),
       ).rejects.toThrow("no cell in flight: c");
-      expect(reached).toBe(false);
+      expect(reached()).toBe(false);
     } finally {
       intruder.close();
       host.close();
@@ -395,22 +347,7 @@ describe("code-mode tool bridge", () => {
 
   test("an attached daemon cannot invoke tools outside a cell the host dispatched", async () => {
     const path = socketPath();
-    let reached = false;
-    const host = await createMachineHost({
-      socketPath: path,
-      enrollment: () => ({
-        name: "workstation",
-        machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
-        enrolledAt: 1000,
-      }),
-      events: silent,
-      now: () => 5000,
-      callTool: () => {
-        reached = true;
-        return Promise.resolve({ status: "completed", value: "ran" });
-      },
-    });
+    const { host, reached } = await bridgeProbe(path);
     const client = await connectIpcClient(path, {});
     try {
       await typedCall(
@@ -435,7 +372,7 @@ describe("code-mode tool bridge", () => {
           5000,
         ),
       ).rejects.toThrow("no cell in flight: ghost");
-      expect(reached).toBe(false);
+      expect(reached()).toBe(false);
     } finally {
       client.close();
       host.close();
@@ -444,22 +381,7 @@ describe("code-mode tool bridge", () => {
 
   test("a cellId stops working the moment its cell settles", async () => {
     const path = socketPath();
-    let reached = false;
-    const host = await createMachineHost({
-      socketPath: path,
-      enrollment: () => ({
-        name: "workstation",
-        machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
-        enrolledAt: 1000,
-      }),
-      events: silent,
-      now: () => 5000,
-      callTool: () => {
-        reached = true;
-        return Promise.resolve({ status: "completed", value: "ran" });
-      },
-    });
+    const { host, reached } = await bridgeProbe(path);
     // A stand-in daemon: it answers RunCell itself, so the replay below comes
     // from the very connection the cell ran on — the only way to prove the
     // cell is retired rather than merely unknown to some other connection.
@@ -505,7 +427,7 @@ describe("code-mode tool bridge", () => {
           5000,
         ),
       ).rejects.toThrow("no cell in flight: spent");
-      expect(reached).toBe(false);
+      expect(reached()).toBe(false);
     } finally {
       daemon.close();
       host.close();
@@ -527,16 +449,7 @@ describe("code-mode tool bridge", () => {
       announceEntered = resolve;
     });
     let calls = 0;
-    const host = await createMachineHost({
-      socketPath: path,
-      enrollment: () => ({
-        name: "workstation",
-        machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
-        enrolledAt: 1000,
-      }),
-      events: silent,
-      now: () => 5000,
+    const host = await bridgeHost(path, {
       callTool: async () => {
         calls += 1;
         if (calls === 1) {
@@ -546,13 +459,7 @@ describe("code-mode tool bridge", () => {
         return { status: "completed", value: calls };
       },
     });
-    const offer = {
-      machineId: "m-1" as const,
-      daemonVersion: "0.1.0",
-      platform: "darwin",
-      offeredCapabilities: ["kernel.py" as const],
-      offeredAt: 2000,
-    };
+    const offer = bridgeOffer();
     const first = await attachMachineDaemon({
       runner: createCodemode().runner,
       socketPath: path,
@@ -694,28 +601,8 @@ describe("code-mode tool bridge", () => {
 
   test("a host wired without a tool port says so instead of pretending", async () => {
     const path = socketPath();
-    const host = await createMachineHost({
-      socketPath: path,
-      enrollment: () => ({
-        name: "workstation",
-        machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
-        enrolledAt: 1000,
-      }),
-      events: silent,
-      now: () => 5000,
-    });
-    const daemon = await attachMachineDaemon({
-      runner: createCodemode().runner,
-      socketPath: path,
-      offer: {
-        machineId: "m-1",
-        daemonVersion: "0.1.0",
-        platform: "darwin",
-        offeredCapabilities: ["kernel.py"],
-        offeredAt: 2000,
-      },
-    });
+    const host = await bridgeHost(path);
+    const daemon = await bridgeDaemon(path);
     try {
       const result = await host.get("m-1").runCode({
         cellId: "no-tools",
