@@ -1,11 +1,18 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decode, execute, main, sha256 } from "./run-quality-mutations";
+import { decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { programs, diagnostics } from "./run-quality-mutations";
 import { resolve } from "node:path";
+
+test("mutation helpers cover execution tree and virtual source traversal", () => {
+  const root = resolve(import.meta.dir, "..");
+  expect(executionTreeHash(root)).toHaveLength(64);
+  const source = mutationSource(root, "script/run-quality-mutations.ts");
+  expect(source.source).toContain("export async function main");
+});
 
 test("real mutation contract has no baseline compiler diagnostics", () => {
   const root = resolve(import.meta.dir, "..");

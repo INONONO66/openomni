@@ -867,7 +867,7 @@ function verifySources(root: string, inventory: Inventory): void {
 }
 // Execution-copy identity includes configs, assets and dependencies. This is
 // not source discovery: it cannot add, remove or categorize inventory members.
-function executionTreeHash(directory: string): string {
+export function executionTreeHash(directory: string): string {
 	const root = realpathSync(directory);
 	const hasher = new Bun.CryptoHasher("sha256");
 	function visit(directory: string): void {
@@ -1018,7 +1018,7 @@ function defaultResult(candidate: Candidate, tests: string[], selected = true): 
 		restored: true,
 	};
 }
-function mutationSource(
+export function mutationSource(
 	root: string,
 	candidatePath: string,
 ): {
