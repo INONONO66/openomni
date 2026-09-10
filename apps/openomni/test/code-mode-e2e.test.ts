@@ -464,14 +464,14 @@ test("eval run answers running after its wait; peek shows the output so far; sto
       return "late";
     },
   });
+  arm.resolve();
   const started = await run("print('started')\ncompletion('hold')\nprint('never')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
     started,
   )?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  // Entry is deliberately armed only after run has returned. This makes the
-  // signal await observable: without it, peek races the callback entry.
-  arm.resolve();
+  // The callback reaches its release boundary while run still owns the
+  // completion IPC; entered is the exact signal for that boundary.
   await entered.promise;
   expect(calls).toBe(1);
   expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toBe(
@@ -503,12 +503,11 @@ test("eval peek and stop racing on one cell: exactly one is answered, the other 
       return "late";
     },
   });
+  arm.resolve();
   const started = await run("completion('hold')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  // Entry is deliberately armed only after run has returned. This makes the
-  // signal await observable: without it, peek/stop races callback entry.
-  arm.resolve();
+  // entered fires only after the callback reaches its release boundary.
   await entered.promise;
   expect(calls).toBe(1);
   const [peeked, stopped] = await Promise.all([
