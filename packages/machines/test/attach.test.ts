@@ -3,7 +3,7 @@ import { statSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc";
-import type { BusEvent, Machine } from "@openomni/protocol";
+import { type BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon, type CodeRunner } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { socketPath } from "./helpers/socket-path";
@@ -177,11 +177,12 @@ describe("machine attach handshake", () => {
               cancelled.resolve();
               throw new Error("cancel rejected by peer");
             } else {
+              const request = Machine.CellRequest.parse(params);
               started.resolve();
               await cancelled.promise;
               respond({
                 status: "cancelled",
-                cellId: params?.cellId,
+                cellId: request.cellId,
                 output: { stdout: "", stderr: "" },
               });
             }
