@@ -3,6 +3,24 @@ import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
 import type { SessionRuntime } from "../../src/session-contract";
 import type { SessionTransition } from "@openomni/protocol";
+import { collector } from "./observation-collector";
+export { bounded } from "./bounded";
+
+export function crashAfterRequestOpen(initial: ReturnType<typeof requestLedger>, message: string) {
+  const transition = initial.ledger.transition;
+  if (transition === undefined) throw new Error("missing transition port");
+  return {
+    ...initial,
+    ledger: {
+      ...initial.ledger,
+      async transition(...args: Parameters<typeof transition>) {
+        const result = await transition(...args);
+        if (args[0].kind === "request.open") throw new Error(message);
+        return result;
+      },
+    },
+  };
+}
 
 export function requestLedger(
   input: {
@@ -76,7 +94,7 @@ export function requestLedger(
   }
   const runtime: SessionRuntime = {
     clock,
-    observations: { publish: () => undefined },
+    observations: collector(),
     requestDomainRevisions: input.domainRevisions,
   };
   const ledger: ExecutionLedger = {
@@ -126,14 +144,4 @@ export function requestLedger(
     entropy: () => crypto.randomUUID(),
     clock,
   };
-}
-
-export function bounded<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("request event deadline")), 3000);
-    }),
-  ]).finally(() => clearTimeout(timer));
 }

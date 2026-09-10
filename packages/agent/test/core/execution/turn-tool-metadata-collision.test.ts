@@ -2,12 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Bus } from "../../../src/index";
 import { runTestAgent } from "../../helpers/test-agent";
 import type { ChatAgentConfig } from "../../../src/core/types";
-import {
-  createMockLlmConfig,
-  createStopOutcome,
-  mockProviderData,
-  mockProviderModel,
-} from "../../helpers/mock-llm";
+import { mockLlm, completeModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 /**
@@ -28,11 +23,7 @@ function config(tools: NonNullable<ChatAgentConfig["tools"]>): ChatAgentConfig {
       output: "ok",
       isError: false,
     }),
-    llm: createMockLlmConfig({
-      getModels: async () => mockProviderData,
-      fromModelsDevModel: () => mockProviderModel,
-      run: async () => createStopOutcome(),
-    }),
+    llm: mockLlm(completeModel),
   };
 }
 

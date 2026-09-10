@@ -1,27 +1,23 @@
 import { buildSystemPrompt, prepareTurnTools } from "./tools";
-import { accumulateUsage, type RunInput, type Sink } from "@openomni/llm";
-import { Message, type BusEvent, Operational, PlainValueSchema } from "@openomni/protocol";
+import type { RunInput, Sink } from "@openomni/llm";
+import { type Message, Operational, type BusEvent } from "@openomni/protocol";
+import { assistantTextOf, createTrackingSink, recordAssistant } from "./turn-assistant";
 import { effectiveMaxToolCalls, publishBudgetTelemetry } from "../budget";
-import { Compaction, type CompactionSession } from "../../compaction";
-import { executeCompaction } from "../../compaction/execute-cut";
+import type { CompactionSession } from "../../compaction";
+import { applyCompaction, prepareCompactionAfterContinue } from "./turn-compaction";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
-import { measuredContextTokens } from "../../compaction/measure";
 import { createAssistantMessage, createUserMessage, withMessageId } from "../message-factory";
 import { settleModelTools } from "./tool-wave";
-import { AgentStopError } from "./stop-chain";
+import { AgentStopError, type StopVerdict } from "./stop-chain";
 import * as Retry from "../retry";
 import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
 import { emitTurnComplete, runResult } from "./run-events";
 import {
   advanceRunTurn,
-  applyCompactionMessages,
   disarmWindowYield,
   appendRunMessages,
   appendRunStep,
-  recordAssistantTokenDelta,
-  recordCallContext,
   recordRunTurn,
-  setLastAssistantText,
   type AgentRunBase,
   type BuildTurnResult,
   type RunState,
@@ -125,83 +121,7 @@ export async function buildTurn(
   };
 }
 
-function createTrackingSink(
-  state: RunState,
-  sink: Sink | undefined,
-  turnUsage: TokenUsage,
-  turnAssistant: TurnArtifacts["turnAssistant"],
-): Sink {
-  let prevInputTokens = 0;
-  let prevOutputTokens = 0;
-  let previousAux = { reasoning: 0, read: 0, write: 0 };
-
-  return {
-    onMessage: (message: Message.WithParts) => {
-      if (message.info.role === "assistant") {
-        // Boundary snapshots are immutable fold states (#557); the latest one
-        // IS the turn's assistant message — full parts, tool use included.
-        // Holding it (instead of re-extracting text) keeps one source of
-        // truth for what enters history at turn end (#546).
-        turnAssistant.message = message;
-        // Tokens arrive once, stamped by message.finished; intermediate
-        // boundary snapshots carry zeros, so this delta fires once per attempt.
-        const tokens = message.info.tokens;
-        const deltaInput = tokens.input - prevInputTokens;
-        const deltaOutput = tokens.output - prevOutputTokens;
-        prevInputTokens = tokens.input;
-        prevOutputTokens = tokens.output;
-        const delta = {
-          inputTokens: deltaInput,
-          outputTokens: deltaOutput,
-          reasoningTokens: tokens.reasoning - previousAux.reasoning,
-          cacheReadTokens: tokens.cache.read - previousAux.read,
-          cacheWriteTokens: tokens.cache.write - previousAux.write,
-        };
-        previousAux = {
-          reasoning: tokens.reasoning,
-          read: tokens.cache.read,
-          write: tokens.cache.write,
-        };
-        if (
-          deltaInput > 0 ||
-          deltaOutput > 0 ||
-          delta.reasoningTokens > 0 ||
-          delta.cacheReadTokens > 0 ||
-          delta.cacheWriteTokens > 0
-        ) {
-          accumulateUsage(turnUsage, delta);
-          recordAssistantTokenDelta(state, delta);
-          const measured = measuredContextTokens(message);
-          if (measured !== undefined) recordCallContext(state, measured);
-        }
-      }
-      const text = message.parts
-        .filter((part): part is Message.TextPart => part.type === "text")
-        .map((part) => part.text)
-        .join("");
-      if (text) setLastAssistantText(state, text);
-      sink?.onMessage(message);
-    },
-    onToolCall: (call) => sink?.onToolCall(call),
-    onToolResult: (result) => sink?.onToolResult(result),
-  };
-}
-
-async function recordAssistant(
-  config: ChatAgentConfig,
-  message: Message.WithParts,
-): Promise<Message.WithParts> {
-  if (config.executor === undefined) throw new Error("missing message authority");
-  const result = await config.executor.run(
-    { kind: "message", op: "assistant", intent: { messageId: message.info.id }, effect: {} },
-    async () => PlainValueSchema.parse(message),
-  );
-  if (result.terminal !== "executed")
-    throw new Error(`assistant persistence refused: ${result.reason}`);
-  return Message.WithParts.parse(result.value);
-}
-
-export type StopOutcome = AgentResult | "continue";
+type StopOutcome = AgentResult | "continue";
 
 /**
  * A turn whose last step still asked for tools did not finish — the llm loop
@@ -238,10 +158,8 @@ export async function handleStop(
   compaction: CompactionSession | undefined,
 ): Promise<StopOutcome> {
   const assistantIndex = state.messages.length;
-  const initialAssistant = await recordAssistant(
-    config,
-    resolveTurnAssistant(config.events, state, turn, agentBase),
-  );
+  const snapshot = resolveTurnAssistant(config.events, state, turn, agentBase);
+  const initialAssistant = await recordAssistant(config, snapshot);
   turn.turnAssistant.message = initialAssistant;
   appendRunMessages(state, [initialAssistant]);
   const afterModelPrompts = await drainStepBoundary(state, config, "after_llm");
@@ -291,32 +209,20 @@ export async function handleStop(
         "exceeded",
   });
   state.stop = judgment.state;
-  if (judgment.verdict.kind === "interrupted") throw Retry.abortError();
-  if (judgment.verdict.kind === "error") throw new AgentStopError(judgment.verdict.reason);
-  if (judgment.verdict.kind === "continue") {
+  return stopResult(state, turnText, judgment.verdict);
+}
+
+function stopResult(state: RunState, text: string, verdict: StopVerdict): StopOutcome {
+  if (verdict.kind === "interrupted") throw Retry.abortError();
+  if (verdict.kind === "error") throw new AgentStopError(verdict.reason);
+  if (verdict.kind === "continue") {
     advanceRunTurn(state);
     return "continue";
   }
-  const result = runResult(state, { text: turnText });
-  return judgment.verdict.kind === "waiting"
-    ? { ...result, waiting: { reason: "live_wait", alarmIds: judgment.verdict.alarmIds } }
+  const result = runResult(state, { text });
+  return verdict.kind === "waiting"
+    ? { ...result, waiting: { reason: "live_wait", alarmIds: verdict.alarmIds } }
     : result;
-}
-
-/**
- * The text a turn actually produced: the text parts of its boundary snapshot,
- * empty when the turn produced none (or, on the TEST-STUB-ONLY missing-
- * snapshot path, when there is no snapshot at all — see
- * {@link resolveTurnAssistant}). Never falls back to `state.lastAssistantText`;
- * that field is the run's last produced text, kept for guard/abort results,
- * and reusing it as a turn's own output forges history (#audit M3).
- */
-function assistantTextOf(message: Message.WithParts | undefined): string {
-  if (message === undefined) return "";
-  return message.parts
-    .filter((part): part is Message.TextPart => part.type === "text")
-    .map((part) => part.text)
-    .join("");
 }
 
 export function handleContinue(
@@ -329,108 +235,6 @@ export function handleContinue(
   advanceRunTurn(state);
 }
 
-type CompactionApplyResult = "compacted" | "deferred" | "none";
-
-function resolvedCompaction(
-  state: RunState,
-  config: ChatAgentConfig,
-): (NonNullable<ChatAgentConfig["compaction"]> & { contextWindowTokens: number }) | undefined {
-  if (config.compaction === undefined) return undefined;
-  const contextWindowTokens = config.compaction.contextWindowTokens ?? state.contextWindowTokens;
-  if (contextWindowTokens === undefined) return undefined;
-  return { ...config.compaction, contextWindowTokens };
-}
-
-export function prepareCompactionAfterContinue(
-  state: RunState,
-  config: ChatAgentConfig,
-  compaction: CompactionSession | undefined,
-): void {
-  const options = resolvedCompaction(state, config);
-  const measuredTokens = state.lastCallContextTokens;
-  if (options === undefined || measuredTokens === undefined || compaction === undefined) return;
-  const geometry = compactionGeometry(state, options);
-  compaction.prepare(
-    state.messages,
-    measuredTokens,
-    geometry.prepareTokens,
-    options.contextWindowTokens,
-  );
-}
-
-function compactionGeometry(
-  state: RunState,
-  options: NonNullable<ReturnType<typeof resolvedCompaction>>,
-) {
-  return resolveCompactionGeometry({
-    contextWindowTokens: options.contextWindowTokens,
-    ...(options.reserveTokens === undefined ? {} : { reserveTokens: options.reserveTokens }),
-    ...(state.lastCompactionYield === undefined
-      ? {}
-      : { previousYield: state.lastCompactionYield }),
-  });
-}
-
-export async function applyCompaction(
-  state: RunState,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  compaction: CompactionSession | undefined,
-  trigger: "threshold" | "yield",
-): Promise<CompactionApplyResult> {
-  const options = resolvedCompaction(state, config);
-  if (options === undefined) return "none";
-  const measuredTokens = state.lastCallContextTokens;
-  const geometry = compactionGeometry(state, options);
-  if (
-    trigger === "threshold" &&
-    (measuredTokens === undefined ||
-      !Compaction.shouldCompact(measuredTokens, options, state.lastCompactionYield))
-  ) {
-    return "none";
-  }
-  if (
-    measuredTokens !== undefined &&
-    compaction?.inFlight() === true &&
-    measuredTokens < geometry.graceTokens
-  ) {
-    state.lastCompactionDeferred = true;
-    return "deferred";
-  }
-
-  state.lastCompactionDeferred = undefined;
-  const candidate = compaction?.candidate();
-  const result = await executeCompaction({
-    history: state.messages,
-    options,
-    identity: agentBase,
-    events: config.events,
-    executor: config.executor,
-    signal: config.signal,
-    dispatch: {
-      trigger,
-      ...(measuredTokens === undefined ? {} : { measuredTokens }),
-      ...(candidate === undefined ? {} : { candidate }),
-    },
-  });
-  if (candidate !== undefined) compaction?.consume();
-  state.lastCompactionIneffective = result.ineffective;
-  if (result.yield !== undefined) state.lastCompactionYield = result.yield;
-  if (result.summarizerFailed === true) compaction?.disable();
-  if (!result.compacted) return "none";
-  applyCompactionMessages(state, result.messages);
-  return "compacted";
-}
-
-/**
- * The turn's assistant message is the llm fold's boundary snapshot — the one
- * source of truth for what enters history (#546). The empty-text fallback is
- * a TEST-STUB-ONLY path: every production processor exit emits a finished
- * snapshot (#557), so a missing snapshot means the configured llm run never
- * drove the sink. It is loud (Operational.Events.Error) and deliberately does NOT
- * reuse lastAssistantText, which may still hold the PREVIOUS turn's text —
- * resurrecting it would forge history.
- */
 function resolveTurnAssistant(
   events: BusEvent.Sink,
   state: RunState,

@@ -105,6 +105,38 @@ function finishAnchoredCut(
   );
 }
 
+async function chooseAnchoredCut(
+  working: Message.WithParts[],
+  cutoff: number,
+  firstRemoved: Message.WithParts,
+  options: ResolvedCompactionOptions & {
+    onSummarize: NonNullable<ResolvedCompactionOptions["onSummarize"]>;
+  },
+  candidate: CompactionCandidate | undefined,
+) {
+  const preserveBudget = options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS;
+  const attempt = (boundary: number, anchor: string | undefined) =>
+    attemptAnchoredCut(
+      working.slice(0, boundary),
+      working.slice(boundary),
+      anchor,
+      working,
+      firstRemoved,
+      preserveBudget,
+      options.contextWindowTokens,
+      options.onSummarize,
+    );
+  if (candidate !== undefined && isWarmCandidateValid(candidate, working)) {
+    const promoted = await attempt(candidate.prefixIds.length, candidate.anchorBody);
+    if (promoted.cut !== undefined)
+      return { attempt: promoted, candidateOutcome: "promoted" as const };
+  }
+  return {
+    attempt: await attempt(cutoff, undefined),
+    candidateOutcome: candidate === undefined ? undefined : ("discarded" as const),
+  };
+}
+
 export async function compactUnbracketed(
   messages: Message.WithParts[],
   options: ResolvedCompactionOptions,
@@ -126,16 +158,7 @@ export async function compactUnbracketed(
     return finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
   }
 
-  // Reduction before the cut: eliding old tool outputs reclaims window
-  // without dropping a message. But under sustained tool use each turn ages
-  // a fresh output past the protected tail, so "cut when nothing is left to
-  // elide" starves the cut while un-elidable residue accumulates
-  // (adversarial review, #645). The round therefore keeps its elision only
-  // when the estimated net reclaim plausibly covers the measured overage;
-  // otherwise the cut below ALSO runs, on the already-elided history. The
-  // estimate (chars/4) only decides the cut's eagerness — the next call
-  // measures ground truth, and a wrong estimate costs one earlier or one
-  // extra round, never convergence.
+  // Elision postpones a cut only when its estimated reclaim covers the measured overage.
   const reduction = reduceHistoryBeforeCut(
     messages,
     options,
@@ -146,24 +169,7 @@ export async function compactUnbracketed(
   if (reduction.completed !== undefined) return reduction.completed;
   const { working, elidedChars } = reduction;
 
-  // Commit boundary invariant (#531, representable since #557/#560).
-  //
-  // Tool-pair splits are unrepresentable at this seam by construction: a
-  // tool result is not a standalone message — it lives in `ToolPart.state`
-  // on the same assistant `Message.WithParts` that carries the call
-  // (protocol `Message.ToolPart` + `Tool.State`), and `Message.Info` has
-  // only user/assistant roles. Slicing at WithParts granularity therefore
-  // cannot separate a call from its result, so no pair guard exists here.
-  // Kept non-terminal (pending/running) tool parts are replay-safe too:
-  // `toModelMessages` (packages/llm/src/message/index.ts) expands every
-  // ToolPart into an atomic tool-call + tool-result block pair,
-  // synthesizing "[Tool execution was interrupted]" for pending/running
-  // states — that safety net makes a terminality guard here redundant.
-  //
-  // The one real hazard is the window START: without a summary user message
-  // anchoring the kept window, a window beginning with an assistant message
-  // violates provider first-message rules. Snap the cutoff back to the
-  // nearest user boundary; refuse loudly when none exists.
+  // Without a summary anchor, the kept window must start at a user boundary.
   const naturalCutoff = working.length - protectRecent;
   const cutoff =
     options.onSummarize === undefined ? snapToUserBoundary(working, naturalCutoff) : naturalCutoff;
@@ -173,49 +179,15 @@ export async function compactUnbracketed(
   const toRemove = working.slice(0, cutoff);
   const toKeep = working.slice(cutoff);
 
-  // Anchored cut (compaction-design L2). Three invariants the mechanism
-  // owns, whatever the summarizer does:
-  //   1. user messages never enter the summarizer — they are preserved
-  //      verbatim (newest-first within budget) or dropped from the window,
-  //      never paraphrased;
-  //   2. a prior anchor render never re-enters the summarizer as content —
-  //      its BODY threads through as `previousAnchor`, so summaries merge
-  //      instead of recursively re-summarizing (the drift OpenAI measured);
-  //   3. an empty merge input costs no model call — the previous anchor
-  //      carries forward unchanged.
   const firstRemoved = toRemove[0];
   if (options.onSummarize !== undefined && firstRemoved !== undefined) {
-    const preserveBudget = options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS;
-    let candidateOutcome: "promoted" | "discarded" | undefined;
-    let attempt: AnchoredCutAttempt = {};
-
-    if (candidate !== undefined) {
-      if (isWarmCandidateValid(candidate, working)) {
-        attempt = await attemptAnchoredCut(
-          working.slice(0, candidate.prefixIds.length),
-          working.slice(candidate.prefixIds.length),
-          candidate.anchorBody,
-          working,
-          firstRemoved,
-          preserveBudget,
-          options.contextWindowTokens,
-          options.onSummarize,
-        );
-      }
-      candidateOutcome = attempt.cut === undefined ? "discarded" : "promoted";
-    }
-    if (attempt.cut === undefined) {
-      attempt = await attemptAnchoredCut(
-        toRemove,
-        toKeep,
-        undefined,
-        working,
-        firstRemoved,
-        preserveBudget,
-        options.contextWindowTokens,
-        options.onSummarize,
-      );
-    }
+    const { attempt, candidateOutcome } = await chooseAnchoredCut(
+      working,
+      toRemove.length,
+      firstRemoved,
+      { ...options, onSummarize: options.onSummarize },
+      candidate,
+    );
     if (attempt.summarizerError !== undefined) {
       const fallbackCutoff = snapToUserBoundary(working, naturalCutoff);
       if (fallbackCutoff !== undefined && fallbackCutoff > 0) {

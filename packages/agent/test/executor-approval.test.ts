@@ -3,7 +3,8 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { createExecutor, type ExecutorOptions } from "../src/executor";
 import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
-import { bounded, requestLedger } from "./helpers/request-ledger";
+import { requestLedger } from "./helpers/request-ledger";
+import { bounded } from "./helpers/bounded";
 
 const policy = compiledPolicy([approveWriteRow]);
 const evidence = { kind: "owner", principalId: "owner", evidenceId: "auth-1" } as const;

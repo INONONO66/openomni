@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
-import { createDispatcher, createExecutor, defineTool } from "../src/index";
-import { allowAllPolicy as allowAll, opPhaseOf, recordingLedger } from "./helpers/compiled-policy";
-import { z } from "zod";
+import { createDispatcher } from "../src/index";
+import { valueTool } from "./helpers/query-tool";
+import { allowAllPolicy as allowAll, opPhaseOf, turnExecutor } from "./helpers/compiled-policy";
 
 const denyPre = compilePolicySnapshot({
   generation: 1,
@@ -23,31 +23,18 @@ const denyPre = compilePolicySnapshot({
 });
 
 function echoTool(onRun: () => void) {
-  return defineTool({
+  return valueTool({
     name: "echo",
     description: "Echo input",
-    category: "query",
-    input: z.object({ value: z.string() }).strict(),
-    output: z.string(),
-    visibility: { model: ["resident"], cell: ["resident"] },
-    execute: async ({ value }) => {
+    execute: async (value) => {
       onRun();
       return value;
     },
-    render: (_input, value) => value,
   });
 }
 
 function durableExecutor(policy: CompiledPolicySnapshot, committed?: LedgerAction.Append[]) {
-  const recording = recordingLedger(committed);
-  return createExecutor({
-    policy,
-    ledger: recording.ledger,
-    observations: { publish: () => undefined },
-    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-    clock: () => 1,
-    entropy: recording.entropy,
-  });
+  return turnExecutor(policy, committed).executor;
 }
 
 function deniedDispatcher(executions: { count: number }) {
@@ -65,6 +52,14 @@ const call = { id: "call-1", tool: "echo", input: { value: "secret" } };
 const context = { sessionId: "session-1", turnId: "turn-1" };
 
 describe("compiled tool.pre denial", () => {
+  it("normalizes noncanonical numeric tool results without rejecting", async () => {
+    const executor = durableExecutor(allowAll);
+    const result = await executor.run(
+      { kind: "tool", op: "number", intent: {}, effect: {} },
+      async () => Number.POSITIVE_INFINITY,
+    );
+    expect(result).toMatchObject({ terminal: "executed", value: null });
+  });
   it("returns an error result through the model door without running the body", async () => {
     const executions = { count: 0 };
 

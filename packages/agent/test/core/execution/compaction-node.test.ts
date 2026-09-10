@@ -1,4 +1,4 @@
-import { providerFailure } from "../../helpers/mock-llm";
+import { completeModel, providerFailure, windowedLlm } from "../../helpers/mock-llm";
 import { expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/test-agent";
@@ -162,27 +162,19 @@ it("commits a reversible compaction result before completion observations and th
         speculate: false,
         onSummarize: async () => "checkpoint",
       },
-      llm: {
-        resolveModel: async () => ({
-          id: "model",
-          name: "model",
-          providerID: "provider",
-          limit: { context: 1000, output: 100 },
-        }),
-        run: async () => {
-          calls += 1;
-          if (calls === 1)
-            return {
-              type: "error",
-              error: providerFailure("prompt is too long", {
-                contextOverflow: true,
-                retryable: false,
-              }),
-            };
-          durableAtNextCall = committedRecord();
-          return { type: "stop" };
-        },
-      },
+      llm: windowedLlm(async (input, sink) => {
+        calls += 1;
+        if (calls === 1)
+          return {
+            type: "error",
+            error: providerFailure("prompt is too long", {
+              contextOverflow: true,
+              retryable: false,
+            }),
+          };
+        durableAtNextCall = committedRecord();
+        return completeModel(input, sink);
+      }),
     },
   );
   // Then: the durable reversible action precedes both consumers.

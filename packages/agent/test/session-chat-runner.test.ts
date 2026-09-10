@@ -1,4 +1,5 @@
 import { providerFailure } from "./helpers/mock-llm";
+import { seedPolicy } from "./helpers/seed-policy";
 import { describe, expect, it, spyOn } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Retry as LlmRetry } from "@openomni/llm";
@@ -7,18 +8,16 @@ import type { LedgerAction, Model } from "@openomni/protocol";
 import {
   Bus,
   closeSessions,
-  createExecutor,
   createSessionChatRunner,
   createTurnDispatcher,
-  noopSink,
-  session,
   type Executor,
-  type SessionHandle,
-  type SessionRunnerInput,
   type SessionRuntime,
 } from "../src/index";
-import { recordingLedger } from "./helpers/compiled-policy";
+import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
+import { turnExecutor } from "./helpers/compiled-policy";
+import { recordingChatRunner } from "./helpers/session-chat";
 import {
+  completeModel,
   createMockLlmConfig,
   createStopOutcome,
   type MockLlmFn,
@@ -63,20 +62,12 @@ function input(
 }
 
 function testExecutor(): Executor {
-  const recording = recordingLedger();
-  return createExecutor({
-    policy,
-    ledger: recording.ledger,
-    observations: noopSink(),
-    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-    clock: () => 1,
-    entropy: recording.entropy,
-  });
+  return turnExecutor(policy).executor;
 }
 
 function config(run: MockLlmFn, executor: Executor = testExecutor(), fallbacks?: Model.Ref[]) {
   return {
-    events: noopSink(),
+    events: { publish: () => undefined },
     executor,
     model: { provider: "anthropic", id: mockProviderModel.id },
     ...(fallbacks === undefined ? {} : { modelFallbacks: fallbacks }),
@@ -133,9 +124,7 @@ async function runDurably(
       scheduleHeartbeat: () => () => undefined,
     };
     Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
-    const policies = Storage.get().policies;
-    if (policies === undefined) throw new Error("missing policy adapter");
-    for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
+    seedPolicy();
     const chatRunner = createSessionChatRunner({
       prepare: (input) => {
         return {
@@ -183,17 +172,8 @@ describe("session chat runner", () => {
   });
 
   it("passes boundary messages into the model and returns its terminal result", async () => {
-    const modelInputs: string[] = [];
     const boundaries: string[] = [];
-    const runner = createSessionChatRunner({
-      prepare: () => ({
-        config: config(async ({ messages }) => {
-          modelInputs.push(JSON.stringify(messages ?? []));
-          return createStopOutcome();
-        }),
-        traceContext,
-      }),
-    });
+    const { runner, modelInputs } = recordingChatRunner(config, traceContext);
 
     const result = await runner(
       input(async (boundary) => {
@@ -215,17 +195,8 @@ describe("session chat runner", () => {
   });
 
   it("starts another model turn when a post-model boundary supplies continuation", async () => {
-    const modelInputs: string[] = [];
     let afterLlm = 0;
-    const runner = createSessionChatRunner({
-      prepare: () => ({
-        config: config(async ({ messages }) => {
-          modelInputs.push(JSON.stringify(messages ?? []));
-          return createStopOutcome();
-        }),
-        traceContext,
-      }),
-    });
+    const { runner, modelInputs } = recordingChatRunner(config, traceContext);
 
     const result = await runner(
       input(async (boundary) => {
@@ -248,7 +219,7 @@ describe("session chat runner", () => {
   it("returns interrupted at either post-model boundary", async () => {
     for (const interruptedAt of ["after_llm", "after_tools"] as const) {
       const runner = createSessionChatRunner({
-        prepare: () => ({ config: config(async () => createStopOutcome()), traceContext }),
+        prepare: () => ({ config: config(completeModel), traceContext }),
       });
       const result = await runner(
         input(async (boundary) => ({
@@ -263,9 +234,9 @@ describe("session chat runner", () => {
   it("records real prompt and turn ownership with sibling llm pairs for normal calls", async () => {
     let calls = 0;
 
-    const { actions, inboxIds } = await runDurably(async () => {
+    const { actions, inboxIds } = await runDurably(async (input, sink) => {
       calls += 1;
-      return calls === 1 ? { type: "continue" } : createStopOutcome();
+      return calls === 1 ? { type: "continue" } : completeModel(input, sink);
     });
 
     const llmIntents = actions.filter(
@@ -303,11 +274,11 @@ describe("session chat runner", () => {
     let calls = 0;
 
     try {
-      const { actions } = await runDurably(async () => {
+      const { actions } = await runDurably(async (input, sink) => {
         calls += 1;
         return calls === 1
           ? { type: "error", error: providerFailure("transient provider outage") }
-          : createStopOutcome();
+          : completeModel(input, sink);
       });
 
       const llmIntents = actions.filter(
@@ -340,11 +311,11 @@ describe("session chat runner", () => {
 
     try {
       const { actions } = await runDurably(
-        async (input) => {
-          answered.push(input.model?.id ?? "unresolved");
+        async (input, sink) => {
+          answered.push(input.model.id);
           return answered.length === 1
             ? { type: "error", error: providerFailure("transient provider outage") }
-            : createStopOutcome();
+            : completeModel(input, sink);
         },
         { prompts: 2, fallbacks: [fallback] },
       );

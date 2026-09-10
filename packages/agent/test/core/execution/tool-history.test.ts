@@ -9,6 +9,7 @@ import { createAssistantMessage } from "../../../src/core/message-factory";
 import { Bus } from "../../../src/index";
 import { createStopOutcome, type MockLlmFn } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
+import { stepFinish } from "../../helpers/messages";
 
 const providerModel = {
   id: "claude-3-haiku-20240307",
@@ -46,15 +47,7 @@ function toolSnapshot(id: string, text: string, reason: "tool-calls" | "stop"): 
     parts: [
       tool,
       ...base.parts.map((part) => ({ ...part, messageID: id })),
-      {
-        id: `${id}-step`,
-        sessionID: "session",
-        messageID: id,
-        type: "step-finish",
-        reason,
-        cost: 0,
-        tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
+      stepFinish(id, reason, 100, 50),
     ],
   };
 }

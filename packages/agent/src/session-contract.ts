@@ -226,7 +226,6 @@ export interface SessionController {
   readonly handle: SessionHandle;
   readonly owner: string;
   reconcile(): Promise<SessionRunnerResult | undefined>;
-  isRunning(): boolean;
 }
 
 export interface RegistryEntry {

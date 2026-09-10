@@ -93,7 +93,7 @@ export class CompactionSession {
                 anchorBody: summary,
               };
       })
-      .catch((error) => {
+      .catch(<Failure>(error: Failure) => {
         if (generation !== this.#generation) return;
         this.#candidate = undefined;
         const failure = error instanceof Error ? error : new Error(String(error));

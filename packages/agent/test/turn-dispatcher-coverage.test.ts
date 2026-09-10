@@ -2,11 +2,11 @@ import { describe, expect, it } from "bun:test";
 import {
   createDispatcher,
   createTurnDispatcher,
-  ExecutorContextError,
   currentExecutor,
   defineTool,
   type Executor,
 } from "../src/index";
+import { ExecutorContextError } from "../src/executor-context";
 import { z } from "zod";
 import {
   allowAllPolicy,
@@ -15,7 +15,11 @@ import {
   recordingLedger,
 } from "./helpers/compiled-policy";
 
-function tool(name: string, execute: () => Promise<string>, output = z.string()) {
+function tool(
+  name: string,
+  execute: (input: object, context: { readonly signal: AbortSignal }) => Promise<string>,
+  output = z.string(),
+) {
   return defineTool({
     name,
     description: name,
@@ -59,6 +63,24 @@ describe("createTurnDispatcher", () => {
   });
 });
 
+describe("wave tracking", () => {
+  it("hands every model wave to trackWave as a settlement promise", async () => {
+    const tracked: Promise<void>[] = [];
+    const dispatcher = createDispatcher(
+      [tool("ok", async () => "fine"), tool("boom", async () => Promise.reject(new Error("x")))],
+      { executor: passThrough, trackWave: (wave) => tracked.push(wave) },
+    );
+
+    const results = await dispatcher.executeWave([call("ok"), call("boom")], context);
+    await dispatcher.execute(call("ok"), context);
+    await dispatcher.executeCell(call("ok"), context);
+
+    expect(results.map((result) => result.isError)).toEqual([undefined, true]);
+    expect(tracked).toHaveLength(3);
+    await expect(Promise.all(tracked)).resolves.toEqual([undefined, undefined, undefined]);
+  });
+});
+
 describe("currentExecutor", () => {
   it("throws outside an active execution", () => {
     expect(() => currentExecutor()).toThrow(ExecutorContextError);
@@ -94,6 +116,39 @@ describe("tool body outcomes", () => {
 
     const result = await dispatcher.execute(call("stall"), context);
 
+    expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
+  });
+
+  it("forwards the caller's abort reason into a timed body's signal", async () => {
+    const caller = new AbortController();
+    const bodyEntered = Promise.withResolvers<void>();
+    let seenReason: Error | undefined;
+    const dispatcher = createDispatcher(
+      [
+        tool("abortable", (_input, { signal }) => {
+          bodyEntered.resolve();
+          return new Promise<string>((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                seenReason = signal.reason;
+                reject(signal.reason);
+              },
+              { once: true },
+            );
+          });
+        }),
+      ],
+      { executor: passThrough, timeoutMs: 1000 },
+    );
+
+    const pending = dispatcher.execute(call("abortable"), { ...context, signal: caller.signal });
+    await bodyEntered.promise;
+    const reason = new Error("caller aborted");
+    caller.abort(reason);
+
+    const result = await pending;
+    expect(seenReason).toBe(reason);
     expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
   });
 

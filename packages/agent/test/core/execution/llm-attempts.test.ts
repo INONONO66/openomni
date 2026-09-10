@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
-import { bounded, requestLedger } from "../../helpers/request-ledger";
+import { requestLedger } from "../../helpers/request-ledger";
+import { bounded } from "../../helpers/bounded";
 import { Run } from "@openomni/llm";
-import { createExecutor, type ExecutorOptions } from "../../../src/executor";
+import type { ExecutorOptions } from "../../../src/executor";
 import { runChatAttempts } from "../../helpers/chat-attempts";
-import { compiledPolicy, recordingLedger } from "../../helpers/compiled-policy";
+import { compiledPolicy, turnExecutor } from "../../helpers/compiled-policy";
 import type { LedgerAction, PlainObject } from "@openomni/protocol";
 afterEach(() => Storage.reset());
 
@@ -35,21 +36,16 @@ function providerFailure(visibleOutput = false) {
 }
 
 function harness(overrides: Partial<ExecutorOptions> = {}) {
-  const record = recordingLedger();
   const waits: number[] = [];
-  const executor = createExecutor({
-    ledger: record.ledger,
-    policy: compiledPolicy(),
-    clock: () => 1,
-    entropy: record.entropy,
-    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-    observations: { publish: () => undefined },
-    waitRetry: async (delay) => {
-      waits.push(delay);
-    },
-    ...overrides,
-  });
-  return { ...record, executor, waits };
+  return {
+    ...turnExecutor(compiledPolicy(), undefined, {
+      waitRetry: async (delay) => {
+        waits.push(delay);
+      },
+      ...overrides,
+    }),
+    waits,
+  };
 }
 function effectRecord(action: LedgerAction.Append): PlainObject {
   const value = action.effect.value;
@@ -144,18 +140,10 @@ test("visible output makes a provider failure terminal without a second admissio
   const failure = providerFailure(true);
   let calls = 0;
   await expect(
-    executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-      executor.runAttempts(parent, {
-        prepare: async () => ({
-          request: { op: "chat", intent: {}, effect: {} },
-          admit: async () => undefined,
-          body: async () => {
-            calls += 1;
-            throw failure;
-          },
-        }),
-      }),
-    ),
+    runChatAttempts(executor, async () => {
+      calls += 1;
+      throw failure;
+    }, undefined, {}),
   ).rejects.toBe(failure);
   expect(calls).toBe(1);
   expect(waits).toEqual([]);
@@ -166,18 +154,10 @@ test("retry cap retains three failed children and never invokes a fourth body", 
   const { executor, committed, waits } = harness();
   let calls = 0;
   await expect(
-    executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-      executor.runAttempts(parent, {
-        prepare: async () => ({
-          request: { op: "chat", intent: {}, effect: {} },
-          admit: async () => undefined,
-          body: async () => {
-            calls += 1;
-            throw providerFailure();
-          },
-        }),
-      }),
-    ),
+    runChatAttempts(executor, async () => {
+      calls += 1;
+      throw providerFailure();
+    }, undefined, {}),
   ).rejects.toBeInstanceOf(Run.FailureError);
   expect(calls).toBe(3);
   expect(waits).toEqual([0, 0]);
@@ -244,17 +224,9 @@ test("interrupt cancels an exactly registered backoff without another provider a
         registered.resolve();
       }),
   });
-  const running = executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
-    executor.runAttempts(parent, {
-      prepare: async () => ({
-        request: { op: "chat", intent: {}, effect: {} },
-        admit: async () => undefined,
-        body: async () => {
-          throw providerFailure();
-        },
-      }),
-    }),
-  );
+  const running = runChatAttempts(executor, async () => {
+    throw providerFailure();
+  }, undefined, {});
   const terminal = running.catch((error: Error) => error);
   await registered.promise;
   controller.abort();
@@ -263,7 +235,10 @@ test("interrupt cancels an exactly registered backoff without another provider a
   expect(intents(committed, "attempt")).toHaveLength(1);
 });
 
-test("retry approval suspends the captured child without reconstructing the provider call", async () => {
+test.each([
+  "approve",
+  "refuse",
+] as const)("retry approval %s settles the captured child without reconstructing the provider call", async (decision) => {
   const waiting = Promise.withResolvers<void>();
   Storage.initialize({ dbPath: ":memory:" });
   const recording = requestLedger({
@@ -308,6 +283,7 @@ test("retry approval suspends the captured child without reconstructing the prov
       },
     }),
   );
+  const terminal = running.catch((error: Error) => error);
   await bounded(waiting.promise);
   expect(calls).toBe(1);
   const request = executor.approvals?.pending()[0];
@@ -315,9 +291,23 @@ test("retry approval suspends the captured child without reconstructing the prov
   expect(
     intents(recording.ledger.actions?.() ?? [], "attempt").map((action) => action.id),
   ).toContain(request.id);
-  await executor.approvals?.answer({ request, credential: "proof", decision: "approve" });
-  expect(await bounded(running)).toMatchObject({ terminal: "executed" });
-  expect(calls).toBe(2);
+  await executor.approvals?.answer({ request, credential: "proof", decision });
+  const result = await bounded(terminal);
+  if (decision === "approve") expect(result).toMatchObject({ terminal: "executed" });
+  else {
+    expect(result).toBeInstanceOf(Error);
+    expect(
+      (recording.ledger.actions?.() ?? [])
+        .filter((action) => action.kind === "attempt")
+        .map((action) => action.effect.value),
+    ).toContainEqual(
+      expect.objectContaining({
+        terminal: "blocked_pre",
+        reason: "approval_refused",
+      }),
+    );
+  }
+  expect(calls).toBe(decision === "approve" ? 2 : 1);
   expect(prepared).toBe(2);
   expect(intents(recording.ledger.actions?.() ?? [], "llm")).toHaveLength(1);
 });

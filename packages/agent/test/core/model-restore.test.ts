@@ -6,7 +6,6 @@ import { createAssistantMessage } from "../../src/core/message-factory";
 import { createExecutor } from "../../src/executor";
 import { compiledPolicy, opPhaseOf, recordingLedger } from "../helpers/compiled-policy";
 import { createStopOutcome } from "../helpers/mock-llm";
-import { modelFixture } from "../helpers/model-fixture";
 import { runInput } from "../helpers/run-input";
 
 const primary = { provider: "anthropic", id: "primary-model" };
@@ -59,10 +58,10 @@ async function turn(options: {
     ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
     ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
     llm: {
-      run: modelFixture(async (_input, sink: Sink) => {
+      run: async (_input, sink: Sink) => {
         sink.onMessage(createAssistantMessage("done", "", "session"));
         return createStopOutcome();
-      }),
+      },
       resolveModel: async (model: Model.Ref) => {
         resolved.push(model);
         return { id: model.id, name: model.id, providerID: model.provider };
@@ -88,7 +87,9 @@ describe("restore_model_selection at the turn boundary", () => {
       "chat:intent",
       "chat:result",
     ]);
-    expect(intentOf(llm[0] as LedgerAction.Append)).toMatchObject({
+    const intent = llm[0];
+    if (intent === undefined) throw new Error("missing restoration intent");
+    expect(intentOf(intent)).toMatchObject({
       value: { from: fallback, to: primary },
       effect: { model: primary },
       recovery: "local_transactional",

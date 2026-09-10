@@ -3,10 +3,8 @@ import type { Message } from "@openomni/protocol";
 export function createUserMessage(
   content: string,
   sessionID: string,
-  partMetadata?: Record<string, unknown>,
-  // #737: recorded creation time from the hydration record. Without it a
-  // resumed message wears hydration time, and the next compaction cut would
-  // stamp today's date onto yesterday's words.
+  partMetadata?: Message.TextPart["metadata"],
+  // Hydrated messages retain their recorded creation time.
   timeCreated?: number,
 ): Message.WithParts {
   const id = crypto.randomUUID();
@@ -20,23 +18,14 @@ export function createUserMessage(
     model: { providerID: "", modelID: "" },
   };
 
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text: content,
-    ...(partMetadata === undefined ? {} : { metadata: partMetadata }),
-  };
-
-  return { info, parts: [textPart] };
+  return withTextPart(info, content, partMetadata);
 }
 
 export function createAssistantMessage(
   content: string,
   parentID: string,
   sessionID: string,
-  partMetadata?: Record<string, unknown>,
+  partMetadata?: Message.TextPart["metadata"],
   timeCreated?: number,
 ): Message.WithParts {
   const id = crypto.randomUUID();
@@ -55,16 +44,27 @@ export function createAssistantMessage(
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   };
 
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text: content,
-    ...(partMetadata === undefined ? {} : { metadata: partMetadata }),
-  };
+  return withTextPart(info, content, partMetadata);
+}
 
-  return { info, parts: [textPart] };
+function withTextPart(
+  info: Message.Info,
+  content: string,
+  metadata: Message.TextPart["metadata"],
+): Message.WithParts {
+  return {
+    info,
+    parts: [
+      {
+        id: crypto.randomUUID(),
+        sessionID: info.sessionID,
+        messageID: info.id,
+        type: "text",
+        text: content,
+        ...(metadata === undefined ? {} : { metadata }),
+      },
+    ],
+  };
 }
 
 /** Preserve durable prompt/result identity when hydrating its model projection. */

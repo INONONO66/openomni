@@ -2,18 +2,10 @@ import { expect, it } from "bun:test";
 import { runWaveBodies, waveBodyScope } from "../../../src/core/execution/tool-wave";
 import { allowAllPolicy, recordingExecutor, recordingLedger } from "../../helpers/compiled-policy";
 import { createExecutor } from "../../../src/executor";
-import { createDispatcher, defineTool } from "../../../src/tool-dispatcher";
-import { z } from "zod";
+import { createDispatcher } from "../../../src/tool-dispatcher";
 
-function bounded<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("retention signal deadline")), 5000);
-    }),
-  ]).finally(() => clearTimeout(timer));
-}
+import { bounded } from "../../helpers/bounded";
+import { timedQueryTool } from "../../helpers/query-tool";
 
 for (const door of ["cell", "wave"] as const) {
   for (const reason of ["Error", "plain-value"] as const) {
@@ -53,22 +45,13 @@ for (const door of ["cell", "wave"] as const) {
         });
         const dispatcher = createDispatcher(
           [
-            defineTool({
-              name: "timed",
-              description: "actual timed rejection",
-              category: "query",
-              visibility: { model: ["resident"], cell: ["resident"] },
-              input: z.object({}),
-              output: z.string(),
-              render: (_input, output) => output,
-              async execute(_input, context) {
+            timedQueryTool("actual timed rejection", async (_input, context) => {
                 context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
                 await gate.promise;
                 rawSettled = true;
                 if (reason === "Error") throw new Error("raw definition rejected");
                 // Legal JSON rejection whose String conversion throws.
                 return Promise.reject({ toString: 0 });
-              },
             }),
           ],
           {
@@ -136,18 +119,9 @@ for (const door of ["cell", "wave"] as const) {
       const recording = recordingExecutor();
       const dispatcher = createDispatcher(
         [
-          defineTool({
-            name: "timed",
-            description: "immediate rejection",
-            category: "query",
-            visibility: { model: ["resident"], cell: ["resident"] },
-            input: z.object({}),
-            output: z.string(),
-            render: (_input, output) => output,
-            async execute() {
-              if (reason === "Error") throw new Error("raw definition rejected");
-              return Promise.reject({ toString: 0 });
-            },
+          timedQueryTool("immediate rejection", async () => {
+            if (reason === "Error") throw new Error("raw definition rejected");
+            return Promise.reject({ toString: 0 });
           }),
         ],
         { executor: recording.executor, timeoutMs: 0 },
@@ -184,20 +158,11 @@ for (const door of ["cell", "wave"] as const) {
       const executor = recordingExecutor().executor;
       const dispatcher = createDispatcher(
         [
-          defineTool({
-            name: "timed",
-            description: "timed effect",
-            category: "query",
-            visibility: { model: ["resident"], cell: ["resident"] },
-            input: z.object({}),
-            output: z.string(),
-            render: (_input, output) => output,
-            async execute(_input, context) {
-              context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
-              await gate.promise;
-              if (rejects) throw new Error("raw effect rejected");
-              return "effect";
-            },
+          timedQueryTool("timed effect", async (_input, context) => {
+            context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
+            await gate.promise;
+            if (rejects) throw new Error("raw effect rejected");
+            return "effect";
           }),
         ],
         { executor, timeoutMs: 0 },

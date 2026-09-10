@@ -13,7 +13,7 @@ import {
  * action list: it reads no store, runs no body and appends nothing. Payloads
  * are reduced to identities, hashes, terminals and reasons.
  */
-export function inspectActions(
+function inspectActions(
   sessionId: string,
   parentId: string | null,
   actions: readonly LedgerAction.Node[],
@@ -69,17 +69,17 @@ export function inspectSession(
 }
 
 /** Policy decisions narrowed by generation, matched rule and verdict. */
-export function inspectPolicy(
-  decisions: readonly SessionHistory.PolicyDecision[],
-  filter: SessionHistory.PolicyFilter = {},
-): SessionHistory.PolicyDecision[] {
-  const { generation, ruleId, verdict } = SessionHistory.PolicyFilter.parse(filter);
-  return decisions.filter(
-    (decision) =>
-      (generation === undefined || decision.generation === generation) &&
-      (ruleId === undefined || decision.matchedRuleIds.includes(ruleId)) &&
-      (verdict === undefined || decision.verdict === verdict),
-  );
+function all(...checks: readonly boolean[]): boolean {
+  return checks.every((check) => check);
+}
+
+function firstDefined<T>(...values: readonly (T | undefined)[]): T | undefined {
+  return values.find((value) => value !== undefined);
+}
+
+/** The first non-empty string among candidate payload fields, else null. */
+function firstText(...values: readonly (PlainValue | undefined)[]): string | null {
+  return firstDefined(...values.map(text)) ?? null;
 }
 
 function transitionOf(action: LedgerAction.Node, turnId: string | null): SessionHistory.Transition {
@@ -94,11 +94,11 @@ function transitionOf(action: LedgerAction.Node, turnId: string | null): Session
     sessionId: action.sessionId,
     kind: action.kind,
     phase: phaseOf(action, intent, effect),
-    op: text(intent.op) ?? text(intent.hook) ?? null,
+    op: firstText(intent.op, intent.hook),
     at: action.ts,
     turnId,
-    callId: text(effect.callId) ?? text(intent.callId) ?? request.data?.callId ?? null,
-    requestId: request.data?.requestId ?? outbound.data?.message.requestId ?? null,
+    callId: firstText(effect.callId, intent.callId, request.data?.callId),
+    requestId: firstText(request.data?.requestId, outbound.data?.message.requestId),
     peerSessionId: peerOf(intent, outbound.data),
     cause: causeOf(action, intent, effect),
     outcome: outcomeOf(action, effect, request.data, outbound.data),
@@ -109,9 +109,26 @@ function transitionOf(action: LedgerAction.Node, turnId: string | null): Session
 
 function ownTurnId(action: LedgerAction.Node): string | undefined {
   if (SessionHandleStore.turnIntent(action) !== undefined) return action.id;
-  const effect = object(action.effect.value);
-  const turnId = text(effect.turnId) ?? text(object(action.intent.value).turnId);
-  return action.kind === "turn" || action.kind === "inbox.deliver" ? turnId : undefined;
+  if (action.kind !== "turn" && action.kind !== "inbox.deliver") return undefined;
+  return firstDefined(
+    text(object(action.effect.value).turnId),
+    text(object(action.intent.value).turnId),
+  );
+}
+
+const KIND_PHASES: Partial<Record<LedgerAction.Kind, SessionHistory.Phase>> = {
+  "session.configure": "configure",
+  "inbox.deliver": "delivery",
+  "policy.decision": "decision",
+};
+
+function effectPhase(phase: PlainValue | undefined): SessionHistory.Phase | undefined {
+  return phase === "checkpoint" || phase === "terminal" || phase === "state" ? phase : undefined;
+}
+
+function intentPhase(phase: PlainValue | undefined): SessionHistory.Phase {
+  if (phase === "intent" || phase === "resume") return "intent";
+  return phase === "result" ? "result" : "record";
 }
 
 function phaseOf(
@@ -119,14 +136,33 @@ function phaseOf(
   intent: PlainObject,
   effect: PlainObject,
 ): SessionHistory.Phase {
-  if (action.kind === "session.configure") return "configure";
-  if (action.kind === "inbox.deliver") return "delivery";
-  if (action.kind === "policy.decision") return "decision";
-  if (effect.phase === "checkpoint" || effect.phase === "terminal" || effect.phase === "state")
-    return effect.phase;
-  if (intent.phase === "intent" || intent.phase === "resume") return "intent";
-  if (intent.phase === "result") return "result";
-  return "record";
+  return KIND_PHASES[action.kind] ?? effectPhase(effect.phase) ?? intentPhase(intent.phase);
+}
+
+function alarmCause(
+  action: LedgerAction.Node,
+  intent: PlainObject,
+): SessionHistory.Cause | undefined {
+  const alarmId = text(intent.alarmId);
+  if (alarmId !== undefined && typeof intent.epoch === "number" && action.kind !== "alarm.arm")
+    return { kind: "alarm", alarmId, epoch: intent.epoch };
+  return undefined;
+}
+
+function deliveryCause(
+  action: LedgerAction.Node,
+  effect: PlainObject,
+): SessionHistory.Cause | undefined {
+  const inboxId = text(effect.inboxId);
+  return action.kind === "inbox.deliver" && inboxId !== undefined
+    ? { kind: "inbox", inboxIds: [inboxId] }
+    : undefined;
+}
+
+function lineageCause(action: LedgerAction.Node): SessionHistory.Cause {
+  if (action.parentId !== null) return { kind: "action", actionId: action.parentId };
+  // Turns always descend from `session.configure`, so a root action is never a turn with inbox ids.
+  return action.kind === "prompt" ? { kind: "inbox", inboxIds: [action.id] } : { kind: "root" };
 }
 
 function causeOf(
@@ -134,18 +170,11 @@ function causeOf(
   intent: PlainObject,
   effect: PlainObject,
 ): SessionHistory.Cause {
-  const alarmId = text(intent.alarmId);
-  if (alarmId !== undefined && typeof intent.epoch === "number" && action.kind !== "alarm.arm")
-    return { kind: "alarm", alarmId, epoch: intent.epoch };
-  const inboxId = text(effect.inboxId);
-  if (action.kind === "inbox.deliver" && inboxId !== undefined)
-    return { kind: "inbox", inboxIds: [inboxId] };
-  if (action.kind === "prompt" && action.parentId === null)
-    return { kind: "inbox", inboxIds: [action.id] };
-  const inboxIds = Array.isArray(intent.inboxIds) ? intent.inboxIds.flatMap(texts) : [];
-  if (action.parentId !== null) return { kind: "action", actionId: action.parentId };
-  if (inboxIds.length > 0) return { kind: "inbox", inboxIds };
-  return { kind: "root" };
+  return alarmCause(action, intent) ?? deliveryCause(action, effect) ?? lineageCause(action);
+}
+
+function outboundOutcome(outbound: SessionTransition.Outbound): SessionHistory.Outcome {
+  return outbound.state === "delivered" ? "executed" : "pending";
 }
 
 function outcomeOf(
@@ -155,7 +184,7 @@ function outcomeOf(
   outbound: SessionTransition.Outbound | undefined,
 ): SessionHistory.Outcome | null {
   if (request !== undefined) return requestOutcome(request);
-  if (outbound !== undefined) return outbound.state === "delivered" ? "executed" : "pending";
+  if (outbound !== undefined) return outboundOutcome(outbound);
   // A pre denial commits no intent; its decision is the call's only terminal record.
   if (action.kind === "policy.decision") return preDenial(object(action.intent.value));
   return recordedOutcome(action, effect);
@@ -201,9 +230,8 @@ function reasonOf(intent: PlainObject, effect: PlainObject): string | null {
   const terminal = text(effect.kind);
   if (effect.phase === "terminal" && terminal !== undefined) return terminal;
   const verdict = text(intent.verdict);
-  if (verdict !== undefined) return text(effect.reason) ?? verdict;
-  const error = object(effect.error);
-  return text(error.name) ?? text(effect.reason) ?? text(effect.status) ?? null;
+  if (verdict !== undefined) return firstText(effect.reason, verdict);
+  return firstText(object(effect.error).name, effect.reason, effect.status);
 }
 
 function peerOf(
@@ -211,11 +239,10 @@ function peerOf(
   outbound: SessionTransition.Outbound | undefined,
 ): string | null {
   if (outbound !== undefined) return outbound.message.destinationSessionId;
-  return (
-    text(intent.sourceSessionId) ??
-    text(intent.senderSessionId) ??
-    text(object(intent.message).senderSessionId) ??
-    null
+  return firstText(
+    intent.sourceSessionId,
+    intent.senderSessionId,
+    object(intent.message).senderSessionId,
   );
 }
 
@@ -243,83 +270,132 @@ function policyDecisionOf(
   ];
 }
 
+type TurnOf = (action: LedgerAction.Node | undefined) => string | null;
+
+function requestSummary(
+  request: SessionTransition.Request,
+  action: LedgerAction.Node,
+  turnOf: TurnOf,
+): SessionHistory.Request {
+  return {
+    requestId: request.requestId,
+    revision: action.ordinal,
+    turnId: request.turnId ?? turnOf(action),
+    callId: request.callId,
+    mode: request.mode,
+    inputHash: request.inputHash,
+    state: request.state,
+    outcome: requestOutcome(request),
+    deadline: request.deadline,
+    expectedResponders: request.expectedResponders,
+    replyCount: request.replies.length,
+  };
+}
+
+function requestRecord(
+  action: LedgerAction.Node,
+  turnOf: TurnOf,
+): SessionHistory.Request | undefined {
+  if (action.kind !== "request" && action.kind !== "reply") return undefined;
+  const parsed = SessionTransition.Request.safeParse(object(action.effect.value).request);
+  return parsed.success ? requestSummary(parsed.data, action, turnOf) : undefined;
+}
+
 function requestsOf(
   actions: readonly LedgerAction.Node[],
-  turnOf: (action: LedgerAction.Node | undefined) => string | null,
+  turnOf: TurnOf,
 ): SessionHistory.Request[] {
   const latest = new Map<string, SessionHistory.Request>();
   for (const action of actions) {
-    if (action.kind !== "request" && action.kind !== "reply") continue;
-    const parsed = SessionTransition.Request.safeParse(object(action.effect.value).request);
-    if (!parsed.success) continue;
-    const request = parsed.data;
-    latest.set(request.requestId, {
-      requestId: request.requestId,
-      revision: action.ordinal,
-      turnId: request.turnId ?? turnOf(action),
-      callId: request.callId,
-      mode: request.mode,
-      inputHash: request.inputHash,
-      state: request.state,
-      outcome: requestOutcome(request),
-      deadline: request.deadline,
-      expectedResponders: request.expectedResponders,
-      replyCount: request.replies.length,
-    });
+    const record = requestRecord(action, turnOf);
+    if (record !== undefined) latest.set(record.requestId, record);
   }
   return [...latest.values()];
 }
 
-function compactionsOf(
-  actions: readonly LedgerAction.Node[],
-  turnOf: (action: LedgerAction.Node | undefined) => string | null,
-): SessionHistory.Compaction[] {
-  const compactions: SessionHistory.Compaction[] = [];
-  for (const action of actions) {
-    if (action.kind !== "compaction" || action.parentId === null) continue;
-    const effect = object(action.effect.value);
-    const result = object(effect.result);
-    const discarded = object(result.discarded);
-    if (effect.terminal !== "executed" || typeof result.summary !== "string") continue;
-    compactions.push({
-      compactionId: action.parentId,
-      resultId: action.id,
-      revision: action.ordinal,
-      turnId: turnOf(action),
-      summaryDigest: canonicalDigest(result.summary),
-      firstKeptEntryId: String(result.firstKeptEntryId),
-      discarded: {
-        firstEntryId: String(discarded.firstEntryId),
-        lastEntryId: String(discarded.lastEntryId),
-        count: Number(discarded.count),
-        sha256: String(discarded.sha256),
-      },
-      restoredBy: actions
-        .filter((candidate) => restores(candidate, action.parentId))
-        .map((candidate) => candidate.id),
-    });
-  }
-  return compactions;
-}
-
-function restores(action: LedgerAction.Node, compactionId: string | null): boolean {
-  const intent = object(action.intent.value);
-  return (
-    action.kind === "compaction" &&
-    intent.op === "restore_context_projection" &&
-    intent.phase === "intent" &&
-    object(intent.value).compactionId === compactionId
+function isRestoreIntent(action: LedgerAction.Node, intent: PlainObject): boolean {
+  return all(
+    action.kind === "compaction",
+    intent.op === "restore_context_projection",
+    intent.phase === "intent",
   );
 }
 
-function object(value: PlainValue | undefined): PlainObject {
-  return value !== undefined && value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value
-    : {};
+function restorationTarget(action: LedgerAction.Node): string | undefined {
+  const intent = object(action.intent.value);
+  if (!isRestoreIntent(action, intent)) return undefined;
+  const compactionId = object(intent.value).compactionId;
+  return typeof compactionId === "string" ? compactionId : undefined;
 }
 
-function texts(value: PlainValue): string[] {
-  return typeof value === "string" ? [value] : [];
+function restorationsOf(actions: readonly LedgerAction.Node[]): Map<string, string[]> {
+  const restorations = new Map<string, string[]>();
+  for (const action of actions) {
+    const target = restorationTarget(action);
+    if (target === undefined) continue;
+    const ids = restorations.get(target) ?? [];
+    ids.push(action.id);
+    restorations.set(target, ids);
+  }
+  return restorations;
+}
+
+function compactionResult(
+  action: LedgerAction.Node,
+): { readonly result: PlainObject; readonly summary: string } | undefined {
+  const effect = object(action.effect.value);
+  const result = object(effect.result);
+  const { summary } = result;
+  return effect.terminal === "executed" && typeof summary === "string"
+    ? { result, summary }
+    : undefined;
+}
+
+function discardedOf(discarded: PlainObject): SessionHistory.Compaction["discarded"] {
+  return {
+    firstEntryId: String(discarded.firstEntryId),
+    lastEntryId: String(discarded.lastEntryId),
+    count: Number(discarded.count),
+    sha256: String(discarded.sha256),
+  };
+}
+
+function restoredBy(restorations: ReadonlyMap<string, string[]>, compactionId: string): string[] {
+  return restorations.get(compactionId) ?? [];
+}
+
+function compactionRecord(
+  action: LedgerAction.Node,
+  turnOf: TurnOf,
+  restorations: ReadonlyMap<string, string[]>,
+): SessionHistory.Compaction | undefined {
+  const executed = action.kind === "compaction" ? compactionResult(action) : undefined;
+  if (action.parentId === null || executed === undefined) return undefined;
+  return {
+    compactionId: action.parentId,
+    resultId: action.id,
+    revision: action.ordinal,
+    turnId: turnOf(action),
+    summaryDigest: canonicalDigest(executed.summary),
+    firstKeptEntryId: String(executed.result.firstKeptEntryId),
+    discarded: discardedOf(object(executed.result.discarded)),
+    restoredBy: restoredBy(restorations, action.parentId),
+  };
+}
+
+function compactionsOf(
+  actions: readonly LedgerAction.Node[],
+  turnOf: TurnOf,
+): SessionHistory.Compaction[] {
+  const restorations = restorationsOf(actions);
+  return actions.flatMap((action) => {
+    const record = compactionRecord(action, turnOf, restorations);
+    return record === undefined ? [] : [record];
+  });
+}
+
+function object(value: PlainValue | undefined): PlainObject {
+  return Array.isArray(value) || typeof value !== "object" || value === null ? {} : value;
 }
 
 function text(value: PlainValue | undefined): string | undefined {

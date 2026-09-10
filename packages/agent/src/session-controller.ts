@@ -1,6 +1,8 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { Inbox, LedgerSession } from "@openomni/protocol";
+import { entropyOf } from "./core/entropy";
+import { settled } from "./core/settled";
 import { ExecutionApprovalError } from "./executor";
 import { SessionLeaseError } from "./session-contract";
 import type {
@@ -29,7 +31,7 @@ export function createController(
   pinPolicy: (generation: number) => CompiledPolicySnapshot,
 ): SessionController {
   const clock = runtime.clock ?? Date.now;
-  const entropy = runtime.entropy ?? (() => crypto.randomUUID());
+  const entropy = entropyOf(runtime);
   const owner = `${runtime.processId ?? String(process.pid)}:${entropy()}`;
   const scheduleHeartbeat = runtime.scheduleHeartbeat ?? defaultHeartbeat;
   const state: SessionControllerState = {
@@ -229,11 +231,7 @@ export function createController(
         // the turn continuation keeps the heartbeat alive and releases the
         // lease itself once the abort-ignoring runner finally settles, so the
         // lease is never handed off while that runner may still be alive.
-        const settled = Promise.all([state.active, state.retainedRunner]).then(
-          () => undefined,
-          () => undefined,
-        );
-        await Promise.race([settled, grace]);
+        await Promise.race([settled(Promise.all([state.active, state.retainedRunner])), grace]);
       } finally {
         if (graceTimer !== undefined) clearTimeout(graceTimer);
         // A still-live turn or retained runner owns the lifecycle release: the
@@ -362,7 +360,7 @@ export function createController(
     await runtime.onHibernate?.(sessionId);
   }
 
-  return { handle, owner, reconcile, isRunning: () => state.active !== undefined };
+  return { handle, owner, reconcile };
 }
 
 function defaultHeartbeat(callback: () => void, intervalMs: number): () => void {

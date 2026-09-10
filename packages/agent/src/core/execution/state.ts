@@ -70,13 +70,13 @@ export function requireTrace(
       traceId === undefined ? "traceId" : undefined,
       sessionId === undefined ? "sessionId" : undefined,
       runId === undefined ? "runId" : undefined,
-    ].filter((field): field is string => field !== undefined);
+    ].filter((field: string | undefined): field is string => field !== undefined);
     throw new Error(`${subject} requires a trace context with ${missing.join(", ")}`);
   }
   return { ...traceContext, traceId, sessionId, runId };
 }
 
-export function nonEmptyString(value: unknown): string | undefined {
+export function nonEmptyString<T>(value: T): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
@@ -134,7 +134,6 @@ export interface RunState {
   lastCompactionYield?: CompactionYield;
   /** Results of the most recent apply seam, consumed by the window-yield path. */
   lastCompactionIneffective?: boolean;
-  lastCompactionDeferred?: boolean;
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
@@ -254,7 +253,6 @@ export function resetModelWindowGuards(state: RunState): void {
   state.windowYieldDisarmed = undefined;
   state.lastCompactionYield = undefined;
   state.lastCompactionIneffective = undefined;
-  state.lastCompactionDeferred = undefined;
   state.overflowCompactionAttempted = undefined;
 }
 

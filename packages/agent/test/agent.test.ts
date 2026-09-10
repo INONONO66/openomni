@@ -6,39 +6,28 @@ import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
 import {
-  createMockLlmConfig,
+  completeModel,
+  mockLlm,
   createStopOutcome,
-  mockProviderData,
   mockProviderModel,
   type MockLlmFn,
 } from "./helpers/mock-llm";
 import { runInput } from "./helpers/run-input";
+import { assistantTextSnapshot } from "./helpers/messages";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 function agent(run: MockLlmFn) {
   return createTestAgent({
     events: Bus,
     model,
-    llm: createMockLlmConfig({
-      getModels: async () => mockProviderData,
-      fromModelsDevModel: () => mockProviderModel,
-      run,
-    }),
+    llm: mockLlm(run),
   });
 }
 
 describe("ChatAgent public run contract", () => {
   it("returns terminal text, step, and token usage", async () => {
     const result = await agent(async (_input, sink) => {
-      const message = createAssistantMessage("answer", "", "session");
-      if (message.info.role !== "assistant") throw new Error("expected assistant message");
-      sink.onMessage({
-        ...message,
-        info: {
-          ...message.info,
-          tokens: { input: 8, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-        },
-      });
+      sink.onMessage(assistantTextSnapshot("answer", 8, 5));
       return createStopOutcome();
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(result).toMatchObject({
@@ -61,13 +50,9 @@ describe("ChatAgent public run contract", () => {
       transport,
       providerOptions: { temperature: 0 },
       toolChoice: "none",
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => {
-          observed = input;
-          return createStopOutcome();
-        },
+      llm: mockLlm(async (input, sink) => {
+        observed = input;
+        return completeModel(input, sink);
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(observed).toMatchObject({
@@ -87,13 +72,9 @@ describe("ChatAgent public run contract", () => {
       onStepFinish: (step) => {
         seen.push(step);
       },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (_input, sink) => {
-          sink.onMessage(createAssistantMessage("done", "", "session"));
-          return createStopOutcome();
-        },
+      llm: mockLlm(async (_input, sink) => {
+        sink.onMessage(createAssistantMessage("done", "", "session"));
+        return createStopOutcome();
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(seen).toEqual(result.steps);
@@ -173,13 +154,9 @@ describe("ChatAgent public run contract", () => {
           requires: [],
         },
       ],
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => {
-          calls += 1;
-          return createStopOutcome();
-        },
+      llm: mockLlm(async () => {
+        calls += 1;
+        return createStopOutcome();
       }),
     });
     try {
@@ -195,6 +172,11 @@ describe("ChatAgent public run contract", () => {
 });
 
 describe("ChatAgent provider boundary failures", () => {
+  it("uses the empty assistant fallback for a provider stop without a snapshot", async () => {
+    await expect(
+      agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }])),
+    ).rejects.toThrow("exact_repeat");
+  });
   it.each([
     {
       name: "a structured error without a message",
@@ -214,12 +196,8 @@ describe("ChatAgent provider boundary failures", () => {
       events: Bus,
       model,
       signal: controller.signal,
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => {
-          return outcome as never;
-        },
+      llm: mockLlm(async () => {
+        return outcome as never;
       }),
     });
 
@@ -274,7 +252,7 @@ describe("ChatAgent provider boundary failures", () => {
     const result = await createTestAgent({
       events: Bus,
       model: { provider: "anthropic", id: "claude-opus-4-5" },
-      llm: { run: async () => createStopOutcome() },
+      llm: { run: completeModel },
     }).run(runInput([{ role: "user", content: "hello" }]));
 
     expect(result.finishReason).toBe("stop");
@@ -292,13 +270,9 @@ describe("ChatAgent loop controls", () => {
       events: Bus,
       model,
       budget: { maxToolCalls: 7 },
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => {
-          maxSteps = input.maxSteps;
-          return createStopOutcome();
-        },
+      llm: mockLlm(async (input, sink) => {
+        maxSteps = input.maxSteps;
+        return completeModel(input, sink);
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(maxSteps).toBe(7);
@@ -313,13 +287,9 @@ describe("ChatAgent loop controls", () => {
         events: Bus,
         model,
         signal: controller.signal,
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => {
-            calls += 1;
-            return createStopOutcome();
-          },
+        llm: mockLlm(async () => {
+          calls += 1;
+          return createStopOutcome();
         }),
       }).run(runInput([{ role: "user", content: "hello" }])),
     ).rejects.toThrow("aborted");

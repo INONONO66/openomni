@@ -9,12 +9,11 @@ import {
   toolSpec,
 } from "../src/index";
 import { recordingExecutor } from "./helpers/compiled-policy";
+import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";
 
-const executor = recordingExecutor().executor;
-
 function dispatcher(definitions: Parameters<typeof createDispatcher>[0]) {
-  return createDispatcher(definitions, { executor });
+  return createDispatcher(definitions, { executor: recordingExecutor().executor });
 }
 
 function definition(options: {
@@ -23,15 +22,12 @@ function definition(options: {
   readonly execute?: () => Promise<string>;
   readonly render?: (value: string) => string;
 }) {
-  return defineTool({
+  return valueTool({
     name: options.name ?? "echo",
     description: "Echo a value",
-    category: options.category ?? "query",
-    input: z.object({ value: z.string() }).strict(),
-    output: z.string(),
-    visibility: { model: ["resident"], cell: ["resident"] },
+    ...(options.category === undefined ? {} : { category: options.category }),
     execute: options.execute ?? (async () => "ok"),
-    render: (_input, value) => options.render?.(value) ?? value,
+    ...(options.render === undefined ? {} : { render: options.render }),
   });
 }
 
@@ -39,6 +35,35 @@ const context = { sessionId: "session-1", turnId: "turn-1" };
 const call = { id: "call-1", tool: "echo", input: { value: "input" } };
 
 describe("tool dispatcher public contract", () => {
+  it("records admission synchronously and never acts before the commit resolves", async () => {
+    const reached = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    let bodies = 0;
+    const recording = recordingExecutor({
+      onCommit: async () => {
+        reached.resolve();
+        await released.promise;
+      },
+    });
+    const dispatch = createDispatcher(
+      [
+        definition({
+          execute: async () => {
+            bodies += 1;
+            return "result";
+          },
+        }),
+      ],
+      { executor: recording.executor },
+    );
+    const running = dispatch.execute(call, context);
+    expect(recording.committed[0]?.kind).toBe("policy.decision");
+    await reached.promise;
+    expect(bodies).toBe(0);
+    released.resolve();
+    expect(await running).toMatchObject({ output: "result" });
+    expect(bodies).toBe(1);
+  });
   it("rejects empty metadata and non-object input schemas", () => {
     expect(() => definition({ name: " " })).toThrow();
     expect(() =>

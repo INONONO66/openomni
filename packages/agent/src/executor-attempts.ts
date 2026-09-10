@@ -64,6 +64,35 @@ export function createAttemptRunner(
     attempts.onRetry?.({ ...retry, maxAttempts: Retry.MAX_ATTEMPTS });
     await (options.waitRetry ?? Retry.sleep)(retry.delayMs, options.signal);
   }
+  async function requireApproval(
+    request: AttemptRequest,
+    intent: LedgerAction.Receipt,
+    policy: Admission,
+  ): Promise<void> {
+    const decision = await approve(request, intent, policy);
+    if (decision === "approve") return;
+    await record.appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
+      phase: "result",
+      terminal: "blocked_pre",
+      reason: decision === "timeout" ? "approval_timeout" : "approval_refused",
+    });
+    throw new Error(`llm attempt approval ${decision}`);
+  }
+
+  function requireRetryableFailure(error: Error): void {
+    const failure = error instanceof Run.FailureError ? error : undefined;
+    if (options.signal?.aborted || failure?.data.aborted || failure?.data.visibleOutput)
+      throw error;
+  }
+
+  function retryContinuation(error: Error, decision: Retry.Decision, recover: boolean) {
+    if (!recover && (Retry.isContextOverflow(error) || !decision.retry)) throw error;
+    return {
+      delayMs: recover ? 0 : decision.retry ? decision.delayMs : 0,
+      reason: recover ? "context_overflow" : Retry.attemptReason(error),
+    };
+  }
+
   return async function runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
@@ -81,19 +110,7 @@ export function createAttemptRunner(
       options.signal?.throwIfAborted();
       const intent = await appendAttemptIntent(prepared.request, parent, attempt, failures);
       if (policy?.verdict === "require_approval") {
-        const decision = await approve(prepared.request, intent, policy);
-        if (decision !== "approve") {
-          await record.appendResult(
-            { kind: "attempt", op: prepared.request.op },
-            intent.action.id,
-            {
-              phase: "result",
-              terminal: "blocked_pre",
-              reason: decision === "timeout" ? "approval_timeout" : "approval_refused",
-            },
-          );
-          throw new Error(`llm attempt approval ${decision}`);
-        }
+        await requireApproval(prepared.request, intent, policy);
       }
       const started = options.clock();
       const outcome = await prepared.body().then(
@@ -113,9 +130,7 @@ export function createAttemptRunner(
         prepared.request.effect,
         outcome.error,
       );
-      const failure = outcome.error instanceof Run.FailureError ? outcome.error : undefined;
-      if (options.signal?.aborted || failure?.data.aborted || failure?.data.visibleOutput)
-        throw outcome.error;
+      requireRetryableFailure(outcome.error);
       const overflow = Retry.isContextOverflow(outcome.error);
       instantFailures = Retry.isInstantTransportFailure(outcome.error, options.clock() - started)
         ? instantFailures + 1
@@ -128,9 +143,7 @@ export function createAttemptRunner(
       );
       if (attempt >= Retry.MAX_ATTEMPTS) throw outcome.error;
       const recover = overflow && (await attempts.recoverOverflow?.(outcome.error)) === true;
-      if (!recover && (overflow || !decision.retry)) throw outcome.error;
-      const delayMs = recover ? 0 : decision.retry ? decision.delayMs : 0;
-      const reason = recover ? "context_overflow" : Retry.attemptReason(outcome.error);
+      const { delayMs, reason } = retryContinuation(outcome.error, decision, recover);
       failures.push(reason);
       await waitForRetry(attempts, { attempt, delayMs, decision, error: outcome.error, reason });
     }

@@ -1,6 +1,13 @@
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type PolicyRow } from "@openomni/protocol";
+import type { DurableExecutor } from "../../src/executor-contract";
+
+export function runTestOperation(executor: DurableExecutor, kind: LedgerAction.Kind, body: () => Promise<{ ok: boolean }>) {
+  return executor.run({ kind, op: "test", intent: { requested: true }, effect: { completed: true } }, body);
+}
 import { createExecutor, type Executor } from "../../src/index";
+import type { ExecutorOptions } from "../../src/executor-contract";
+import { collector } from "./observation-collector";
 
 const mandatoryPolicyRow: PolicyRow.Row = {
   name: "compaction",
@@ -32,6 +39,18 @@ export function compiledPolicy(rows: readonly PolicyRow.Row[] = []): CompiledPol
   });
 }
 
+export function accountOutputDeniedPolicy() {
+  return compiledPolicy([{
+    name: "deny-account-output",
+    kind: "tool",
+    phase: "post",
+    match: { encodingVersion: 1, value: { op: "account" } },
+    verdict: { encodingVersion: 1, value: { type: "deny", reason: "output_denied" } },
+    priority: 1,
+    generation: 1,
+  }]);
+}
+
 /** An "allow everything" compiled policy for tests. */
 export const allowAllPolicy = compiledPolicy();
 
@@ -59,6 +78,25 @@ export function recordingLedger(committed: LedgerAction.Append[] = []) {
       },
     },
   };
+}
+
+/** A durable executor bound to turn-1 of session-1 over a recording ledger. */
+export function turnExecutor(
+  policy: CompiledPolicySnapshot,
+  committed?: LedgerAction.Append[],
+  overrides: Partial<ExecutorOptions> = {},
+) {
+  const record = recordingLedger(committed);
+  const executor = createExecutor({
+    policy,
+    ledger: record.ledger,
+    observations: collector(),
+    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
+    clock: () => 1,
+    entropy: record.entropy,
+    ...overrides,
+  });
+  return { ...record, executor };
 }
 
 interface RecordingExecutorOptions {

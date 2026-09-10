@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
+import { seedPolicy } from "./helpers/seed-policy";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
-import { SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { SessionTurn } from "@openomni/protocol";
 import {
   session,
@@ -62,8 +62,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
       });
       try {
         Storage.initialize({ dbPath });
-        for (const row of SEEDED_POLICY_ROWS)
-          Storage.get().policies?.append({ ...row, generation: 1 });
+        seedPolicy();
         let originalTurn = "crashed-turn";
         let originalResult = "crashed-result";
         if (mode === "interrupted") {

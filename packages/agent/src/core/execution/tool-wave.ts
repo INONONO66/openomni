@@ -7,12 +7,12 @@ import type { RunState, TurnArtifacts } from "./state";
 /** Nested calls inherit ownership as well as cancellation after a body detaches. */
 export const waveBodyScope = new AsyncLocalStorage<WaveControl>();
 
-export type WaveBodyOutcome =
+type WaveBodyOutcome =
   | { readonly status: "fulfilled"; readonly value: PlainValue }
   | { readonly status: "rejected"; readonly error: Error }
   | { readonly status: "cancelled" };
 
-export interface WaveBody {
+interface WaveBody {
   readonly sequential?: true;
   run(): Promise<PlainValue>;
 }
@@ -87,7 +87,7 @@ export async function settleModelTools(
   const assistant = turn.turnAssistant.message;
   const pending =
     assistant?.parts.filter(
-      (part): part is Message.ToolPart =>
+      (part: Message.Part): part is Message.ToolPart =>
         part.type === "tool" &&
         (part.state.status === "pending" || part.state.status === "running"),
     ) ?? [];

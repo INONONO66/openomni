@@ -49,7 +49,7 @@ export interface ObservationBus extends ObservationSink {
   withIsolation<T>(operation: () => T): T;
 }
 
-export namespace ObservationBus {
+namespace ObservationBus {
   export interface PublishedDescriptor {
     readonly name: string;
     readonly schema: { readonly safeParse: (value: BusData) => ParseResult<BusData> };
@@ -57,7 +57,10 @@ export namespace ObservationBus {
   }
 }
 
-export function createObservationBus(): ObservationBus {
+export function createObservationBus(
+  onError: (error: Error, eventName: string) => void = (error, event) =>
+    console.warn("ObservationBus handler error", { event, error }),
+): ObservationBus {
   const rootState = createState();
   const local = new AsyncLocalStorage<BusState>();
   const current = () => local.getStore() ?? rootState;
@@ -79,10 +82,12 @@ export function createObservationBus(): ObservationBus {
       };
       const publishedData = toBusData(data);
       for (const observer of [...state.observers]) {
-        queueMicrotask(() => deliver(() => observer(published, publishedData), event.name));
+        queueMicrotask(() =>
+          deliver(() => observer(published, publishedData), event.name, onError),
+        );
       }
       for (const subscription of [...(state.subscribers.get(event.name) ?? [])]) {
-        queueMicrotask(() => deliver(() => subscription.handler(event, data), event.name));
+        queueMicrotask(() => deliver(() => subscription.handler(event, data), event.name, onError));
       }
     },
     scope(identity) {
@@ -128,11 +133,38 @@ export function createObservationBus(): ObservationBus {
   return bus;
 }
 
-function deliver(operation: () => void, eventName: string): void {
+function deliver(
+  operation: () => void,
+  eventName: string,
+  onError: (error: Error, eventName: string) => void,
+): void {
   try {
     operation();
   } catch (error) {
-    console.warn("ObservationBus handler error", { event: eventName, error: String(error) });
+    reportObservationFailure(
+      error instanceof Error ? error : new Error(String(error)),
+      eventName,
+      onError,
+    );
+  }
+}
+
+function reportObservationFailure(
+  error: Error,
+  eventName: string,
+  report: (error: Error, eventName: string) => void,
+): void {
+  try {
+    report(error, eventName);
+  } catch (reporterError) {
+    const reportedFailure = toBusData(reporterError);
+    console.error("observation error reporter failed", {
+      eventName,
+      error: new AggregateError(
+        [error, reportedFailure],
+        "observation delivery and reporting failed",
+      ),
+    });
   }
 }
 
@@ -146,7 +178,7 @@ function matches<T>(data: T, match: Partial<T>): boolean {
 
 export const Bus = createObservationBus();
 
-export interface ScopeObservationOptions {
+interface ScopeObservationOptions {
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly onError?: (error: Error, eventName: string) => void;
@@ -164,75 +196,31 @@ export function scopeObservation(
     ((error, eventName) =>
       console.warn("observation emit failed", { eventName, error: String(error) }));
 
+  const subscribe = sink.subscribe?.bind(sink);
   const scoped: ObservationSink = {
     publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
       try {
         if (data === null || typeof data !== "object" || Array.isArray(data)) {
           throw new TypeError("scoped observation payload must be an object");
         }
-        const payload = { ...data, eventId: entropy(), time: clock(), ...identity };
-        sink.publish(event, payload as T);
+        const stamp = { eventId: entropy(), time: clock(), ...identity };
+        sink.publish(event, { ...data, ...stamp });
       } catch (error) {
-        try {
-          report(error instanceof Error ? error : new Error(String(error)), event.name);
-        } catch {
-          // Observation failures never alter the observed operation.
-        }
+        reportObservationFailure(
+          error instanceof Error ? error : new Error(String(error)),
+          event.name,
+          report,
+        );
       }
     },
     scope(childIdentity) {
       return scopeObservation(sink, { ...identity, ...childIdentity }, options);
     },
-    ...(sink.subscribe === undefined
-      ? {}
-      : {
-          subscribe<T>(
-            event: BusEvent.Descriptor<T>,
-            handler: (data: T) => void,
-            subscriptionOptions?: { match?: Partial<T> },
-          ): () => void {
-            return sink.subscribe?.(event, handler, subscriptionOptions) ?? (() => undefined);
-          },
-        }),
+    ...(subscribe === undefined ? {} : { subscribe }),
   };
   return scoped;
 }
 
-interface CollectingObservationSink extends ObservationSink {
-  readonly events: readonly { readonly name: string; readonly data: BusData }[];
-  named(name: string): readonly BusData[];
-  reset(): void;
-}
-
-function observationCollector(): CollectingObservationSink {
-  const events: Array<{ readonly name: string; readonly data: BusData }> = [];
-  return {
-    publish(event, data) {
-      events.push({ name: event.name, data: toBusData(data) });
-    },
-    scope(identity) {
-      return scopeObservation(this, identity);
-    },
-    events,
-    named: (name) => events.filter((event) => event.name === name).map((event) => event.data),
-    reset: () => {
-      events.length = 0;
-    },
-  };
-}
-
-export const collector = observationCollector;
-
 export function newTraceId(): string {
   return crypto.randomUUID().replaceAll("-", "");
 }
-
-function noopObservationSink(): ObservationSink {
-  const sink: ObservationSink = {
-    publish: () => undefined,
-    scope: () => sink,
-  };
-  return sink;
-}
-
-export const noopSink = noopObservationSink;

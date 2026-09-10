@@ -17,14 +17,8 @@ import { evaluateBudget, publishBudgetTelemetry } from "../budget";
 import { restoreModelSelection } from "../../model-selection";
 import { AgentStopError } from "./stop-chain";
 import { assertToolExecutor, assertUnambiguousToolMetadata } from "./tools";
-import {
-  buildTurn,
-  handleContinue,
-  handleStop,
-  prepareCompactionAfterContinue,
-  drainStepBoundary,
-  applyCompaction,
-} from "./turn";
+import { buildTurn, handleContinue, handleStop, drainStepBoundary } from "./turn";
+import { applyCompaction, prepareCompactionAfterContinue } from "./turn-compaction";
 import {
   emitRunCompleted,
   emitRunFailed,
@@ -90,8 +84,8 @@ export async function runAgent(
       maxAttempts: LlmRetry.MAX_ATTEMPTS,
     };
     emitRunFailed(config.events, base, cause.message, facts);
-    if (Run.FailureError.isInstance(error))
-      Retry.attachFailureFacts(cause, { ...facts, llm: true });
+    const llmFailure: boolean = Run.FailureError.isInstance(error);
+    if (llmFailure) Retry.attachFailureFacts(cause, { ...facts, llm: true });
     throw error;
   } finally {
     compaction?.abort();
@@ -172,7 +166,7 @@ async function runModelStep(
         if (result.type === "aborted") throw result.error ?? Retry.abortError();
         if (result.type === "error") throw result.error;
         return {
-          type: result.type,
+          type: successfulOutcome({ type: result.type }),
           evidence: PlainValueSchema.parse(
             result.type === "stop" ? (result.evidence ?? null) : null,
           ),

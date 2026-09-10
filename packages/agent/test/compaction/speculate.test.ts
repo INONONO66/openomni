@@ -1,49 +1,12 @@
 import { describe, expect, it, jest } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Compaction, CompactionSession } from "../../src/compaction";
-import { collector } from "../../src/observation/bus";
+import { collector } from "../helpers/observation-collector";
+import { messageSequence } from "../helpers/messages";
 
-let sequence = 0;
+const sequence = messageSequence("spec-session", ` ${"filler ".repeat(40)}`);
 function message(role: "user" | "assistant", text: string): Message.WithParts {
-  sequence += 1;
-  const id = `spec-${sequence}`;
-  if (role === "user") {
-    return {
-      info: {
-        id,
-        sessionID: "spec-session",
-        role,
-        time: { created: 1 },
-        agent: "test",
-        model: { providerID: "", modelID: "" },
-      },
-      parts: [{ id: `${id}-text`, sessionID: "spec-session", messageID: id, type: "text", text }],
-    };
-  }
-  return {
-    info: {
-      id,
-      sessionID: "spec-session",
-      role,
-      time: { created: 1 },
-      parentID: "",
-      modelID: "m",
-      providerID: "p",
-      agent: "test",
-      path: { cwd: "/", root: "/" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      {
-        id: `${id}-text`,
-        sessionID: "spec-session",
-        messageID: id,
-        type: "text",
-        text: `${text} ${"filler ".repeat(40)}`,
-      },
-    ],
-  };
+  return sequence[role](text);
 }
 function history(): Message.WithParts[] {
   return [
@@ -56,22 +19,57 @@ function history(): Message.WithParts[] {
 }
 const identity = { traceId: "trace", sessionId: "spec-session", runId: "run" };
 
+interface CallCounter {
+  count: number;
+}
+
+/** A speculation session whose summarizer counts its calls and answers `summary(call)`. */
+function countingSession(summary: (call: number) => string): {
+  session: CompactionSession;
+  calls: CallCounter;
+} {
+  const calls: CallCounter = { count: 0 };
+  const session = new CompactionSession({
+    protectRecentMessages: 2,
+    summarize: async () => {
+      calls.count += 1;
+      return summary(calls.count);
+    },
+  });
+  return { session, calls };
+}
+
+/** Threshold-triggered compaction offered the session's warm candidate; the sync summarizer counts into `calls`. */
+function compactWith(
+  session: CompactionSession,
+  messages: Message.WithParts[],
+  calls?: CallCounter,
+) {
+  return Compaction.compact(
+    messages,
+    {
+      contextWindowTokens: 1000,
+      protectRecentMessages: 2,
+      onSummarize: async () => {
+        if (calls) calls.count += 1;
+        return "sync";
+      },
+    },
+    identity,
+    collector(),
+    { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
+  );
+}
+
 describe("run-scoped compaction speculation", () => {
   it("starts only at the prepare boundary", async () => {
-    let calls = 0;
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "anchor";
-      },
-    });
+    const { session, calls } = countingSession(() => "anchor");
     session.prepare(history(), 59, 60, 1000);
     await session.settled();
-    expect(calls).toBe(0);
+    expect(calls.count).toBe(0);
     session.prepare(history(), 60, 60, 1000);
     await session.settled();
-    expect(calls).toBe(1);
+    expect(calls.count).toBe(1);
   });
 
   it("is single-flight and retains one candidate", async () => {
@@ -98,98 +96,38 @@ describe("run-scoped compaction speculation", () => {
   });
 
   it("promotes a fresh candidate without another summary call", async () => {
-    let calls = 0;
     const messages = history();
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "prepared";
-      },
-    });
+    const { session, calls } = countingSession(() => "prepared");
     session.prepare(messages, 70, 60, 1000);
     await session.settled();
-    const result = await Compaction.compact(
-      messages,
-      {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 2,
-        onSummarize: async () => {
-          calls += 1;
-          return "sync";
-        },
-      },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
+    const result = await compactWith(session, messages, calls);
     expect(result.candidate).toBe("promoted");
-    expect(calls).toBe(1);
+    expect(calls.count).toBe(1);
   });
 
   it("discards a changed prefix and falls back synchronously", async () => {
-    let calls = 0;
     const messages = history();
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "prepared";
-      },
-    });
+    const { session, calls } = countingSession(() => "prepared");
     session.prepare(messages, 70, 60, 1000);
     await session.settled();
     const changed = structuredClone(messages);
     const part = changed[1]?.parts[0];
     if (part?.type !== "text") throw new Error("expected text fixture");
     part.text = "changed";
-    const result = await Compaction.compact(
-      changed,
-      {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 2,
-        onSummarize: async () => {
-          calls += 1;
-          return "sync";
-        },
-      },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
+    const result = await compactWith(session, changed, calls);
     expect(result.candidate).toBe("discarded");
-    expect(calls).toBe(2);
+    expect(calls.count).toBe(2);
   });
 
   it("promotes across appended turns and preserves the appended tail", async () => {
-    let calls = 0;
     const messages = history();
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "prefix-anchor";
-      },
-    });
+    const { session, calls } = countingSession(() => "prefix-anchor");
     session.prepare(messages, 70, 60, 1000);
     await session.settled();
     const grown = [...messages, message("user", "late-q"), message("assistant", "late-a")];
-    const result = await Compaction.compact(
-      grown,
-      {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 2,
-        onSummarize: async () => {
-          calls += 1;
-          return "sync";
-        },
-      },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
+    const result = await compactWith(session, grown, calls);
     expect(result.candidate).toBe("promoted");
-    expect(calls).toBe(1);
+    expect(calls.count).toBe(1);
     expect(
       result.messages
         .flatMap((entry) => entry.parts)
@@ -198,7 +136,6 @@ describe("run-scoped compaction speculation", () => {
   });
 
   it("keeps a candidate valid when only a completed tool output changes", async () => {
-    let calls = 0;
     const messages = history();
     const owner = messages[1];
     if (owner === undefined) throw new Error("expected assistant fixture");
@@ -218,13 +155,7 @@ describe("run-scoped compaction speculation", () => {
         time: { start: 1, end: 2 },
       },
     });
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "tool-anchor";
-      },
-    });
+    const { session, calls } = countingSession(() => "tool-anchor");
     session.prepare(messages, 70, 60, 1000);
     await session.settled();
     const changed = structuredClone(messages);
@@ -233,33 +164,13 @@ describe("run-scoped compaction speculation", () => {
       throw new Error("expected completed tool fixture");
     }
     tool.state.output = "[output elided by compaction]";
-    const result = await Compaction.compact(
-      changed,
-      {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 2,
-        onSummarize: async () => {
-          calls += 1;
-          return "sync";
-        },
-      },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
+    const result = await compactWith(session, changed, calls);
     expect(result.candidate).toBe("promoted");
-    expect(calls).toBe(1);
+    expect(calls.count).toBe(1);
   });
 
   it("invalidates a warm candidate when a different compaction anchor lands", async () => {
-    let calls = 0;
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return `anchor-${calls}`;
-      },
-    });
+    const { session, calls } = countingSession((call) => `anchor-${call}`);
     session.prepare(history(), 70, 60, 1000);
     await session.settled();
     const landed = message("user", "landed-compaction");
@@ -268,31 +179,18 @@ describe("run-scoped compaction speculation", () => {
     landed.parts = [{ ...part, metadata: { compactionAnchor: true, anchorBody: "other" } }];
     session.prepare([landed, ...history()], 70, 60, 1000);
     await session.settled();
-    expect(calls).toBe(2);
+    expect(calls.count).toBe(2);
   });
 
   it("replaces a stale candidate during the next background prepare", async () => {
-    let calls = 0;
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return `anchor-${calls}`;
-      },
-    });
+    const { session, calls } = countingSession((call) => `anchor-${call}`);
     session.prepare(history(), 70, 60, 1000);
     await session.settled();
     const replacement = history();
     session.prepare(replacement, 70, 60, 1000);
     await session.settled();
-    const result = await Compaction.compact(
-      replacement,
-      { contextWindowTokens: 1000, protectRecentMessages: 2, onSummarize: async () => "sync" },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
-    expect(calls).toBe(2);
+    const result = await compactWith(session, replacement);
+    expect(calls.count).toBe(2);
     expect(result.candidate).toBe("promoted");
   });
 
@@ -329,20 +227,13 @@ describe("run-scoped compaction speculation", () => {
   });
 
   it("falls back synchronously when a valid candidate cannot reclaim", async () => {
-    let calls = 0;
     const tiny = [
       message("user", "q"),
       message("assistant", "a"),
       message("user", "t1"),
       message("user", "t2"),
     ];
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "x".repeat(5000);
-      },
-    });
+    const { session, calls } = countingSession(() => "x".repeat(5000));
     session.prepare(tiny, 70, 60, 1000);
     await session.settled();
     const grown = [
@@ -351,53 +242,21 @@ describe("run-scoped compaction speculation", () => {
       message("user", "tail-q"),
       message("assistant", "tail-a"),
     ];
-    const result = await Compaction.compact(
-      grown,
-      {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 2,
-        onSummarize: async () => {
-          calls += 1;
-          return "sync-anchor";
-        },
-      },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
+    const result = await compactWith(session, grown, calls);
     expect(result).toMatchObject({ candidate: "discarded", compacted: true });
-    expect(calls).toBe(2);
+    expect(calls.count).toBe(2);
   });
 
   it("retains an unevaluated candidate after a protected-tail no-op", async () => {
-    let calls = 0;
     const messages = history();
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "kept-candidate";
-      },
-    });
+    const { session, calls } = countingSession(() => "kept-candidate");
     session.prepare(messages, 70, 60, 1000);
     await session.settled();
-    const short = await Compaction.compact(
-      messages.slice(0, 2),
-      { contextWindowTokens: 1000, protectRecentMessages: 2, onSummarize: async () => "sync" },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
+    const short = await compactWith(session, messages.slice(0, 2));
     expect(short.candidate).toBeUndefined();
-    const result = await Compaction.compact(
-      messages,
-      { contextWindowTokens: 1000, protectRecentMessages: 2, onSummarize: async () => "sync" },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 800, candidate: session.candidate() },
-    );
+    const result = await compactWith(session, messages);
     expect(result.candidate).toBe("promoted");
-    expect(calls).toBe(1);
+    expect(calls.count).toBe(1);
   });
 
   it("uses deterministic fallback when the summarizer deadline expires", async () => {
@@ -430,18 +289,11 @@ describe("run-scoped compaction speculation", () => {
   });
 
   it("aborts before the scheduled summary starts", async () => {
-    let calls = 0;
-    const session = new CompactionSession({
-      protectRecentMessages: 2,
-      summarize: async () => {
-        calls += 1;
-        return "late";
-      },
-    });
+    const { session, calls } = countingSession(() => "late");
     session.prepare(history(), 70, 60, 1000);
     session.abort();
     await session.settled();
-    expect(calls).toBe(0);
+    expect(calls.count).toBe(0);
     expect(session.candidate()).toBeUndefined();
   });
 

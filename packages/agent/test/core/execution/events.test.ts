@@ -1,19 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { RunEvents } from "../../../src/core/execution/events";
-
-// #500 C1: moved from packages/protocol/test/agent-execution.test.ts — the
-// descriptors live in this package now (src/core/execution/events.ts); the
-// persisted `agent.*` name strings stay frozen.
+import { Operational, type PlainObject } from "@openomni/protocol";
+import { createBudgetState, publishBudgetTelemetry } from "../../../src/core/budget";
+import { collector } from "../../helpers/observation-collector";
 describe("RunEvents BusEvents", () => {
-  const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
+  const base = { traceId: "test-trace-id", sessionId: "s1", time: 1 };
 
   test("TurnStart parses", () => {
     expect(() => RunEvents.TurnStart.schema.parse({ ...base, turnIndex: 0 })).not.toThrow();
   });
 
-  // The run loop publishes every event with `actorId` in the payload
-  // (run.ts `agentBase`); the persisted schema must keep it, or audit
-  // attribution is stripped on parse.
   test("published run events round-trip actorId through the schema", () => {
     const actorId = "run-actor-1";
     const parsed = RunEvents.TurnStart.schema.parse({ ...base, actorId, turnIndex: 0 });
@@ -56,24 +52,20 @@ describe("RunEvents BusEvents", () => {
     expect("ToolBlocked" in RunEvents).toBe(false);
   });
 
-  test("BudgetWarning parses", () => {
-    expect(() =>
-      RunEvents.BudgetWarning.schema.parse({
-        ...base,
-        remaining: "5 turns remaining",
-        threshold: 0.8,
-      }),
-    ).not.toThrow();
-  });
-
-  test("BudgetReassurance parses", () => {
-    expect(() =>
-      RunEvents.BudgetReassurance.schema.parse({
-        ...base,
-        remaining: "15 turns remaining",
-        threshold: 0.6,
-      }),
-    ).not.toThrow();
+  test.each([
+    { turns: 20, event: Operational.Events.Warn, status: "warning" },
+    { turns: 15, event: Operational.Events.Info, status: "reassurance" },
+  ])("budget $status uses the operational event contract", ({ turns, event, status }) => {
+    const events = collector();
+    publishBudgetTelemetry({ ...createBudgetState(), turns }, base, events);
+    expect(events.events).toHaveLength(1);
+    const parsed = event.schema.parse(events.named(event.name)[0]);
+    expect(parsed).toMatchObject({
+      traceId: base.traceId,
+      sessionId: base.sessionId,
+      component: "agent.budget",
+      context: { type: status },
+    });
   });
 
   test("CompactionStarted parses, with and without measurement", () => {
@@ -140,7 +132,7 @@ describe("RunEvents BusEvents", () => {
 
   /** One field at a time, or relaxing either alone still throws on the other. */
   test.each(["reason", "backoffMs"] as const)("ErrorRetry requires %s", (field) => {
-    const payload: Record<string, unknown> = {
+    const payload: PlainObject = {
       ...base,
       attempt: 2,
       maxAttempts: 3,

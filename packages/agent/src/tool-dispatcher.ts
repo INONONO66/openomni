@@ -1,6 +1,6 @@
 import { executeToolBody, ToolBodyOutcome } from "./tool-body";
 import { activeExecutor, ExecutorContextError } from "./executor-context";
-export { currentExecutor, ExecutorContextError } from "./executor-context";
+export { currentExecutor } from "./executor-context";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   type AnyToolDefinition,
@@ -18,6 +18,8 @@ import {
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
+import { entropyOf } from "./core/entropy";
+import { settled } from "./core/settled";
 import {
   createExecutor,
   type DurableExecutor,
@@ -61,7 +63,7 @@ type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
   readonly output: PlainValue;
 };
 
-export interface DispatcherOptions {
+interface DispatcherOptions {
   readonly executor: Executor;
   readonly timeoutMs?: number;
   readonly retainEffect?: (effect: Promise<void>) => void;
@@ -74,7 +76,7 @@ interface DispatchContext {
   readonly signal?: AbortSignal;
 }
 
-export interface Dispatcher {
+interface Dispatcher {
   readonly executor?: Executor;
   readonly specs: readonly Tool.Spec[];
   execute(call: Tool.Call, context: DispatchContext): Promise<ToolDispatchResult>;
@@ -103,16 +105,15 @@ export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
 export function eraseTool<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
 ): AnyToolDefinition {
-  return definition as AnyToolDefinition;
+  return definition;
 }
 
 type JsonSchemaObject = Record<string, PlainValue>;
 
 export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject {
-  const { $schema: _dialect, ...projected } = z.toJSONSchema(definition.input, {
-    io: "input",
-    target: "draft-7",
-  }) as JsonSchemaObject;
+  const { $schema: _dialect, ...projected } = z
+    .record(z.string(), PlainValueSchema)
+    .parse(z.toJSONSchema(definition.input, { io: "input", target: "draft-7" }));
   if (projected.type !== "object") {
     throw new Error(`${definition.name} input schema root must be an object`);
   }
@@ -316,6 +317,19 @@ export function createDispatcher(
     return prepared.finish(await executor.run(prepared.request, prepared.body));
   }
 
+  function runPreparedBatch(
+    ready: readonly Extract<Prepared, { kind: "ready" }>[],
+    context: DispatchContext,
+    retain?: (effect: Promise<void>) => void,
+  ) {
+    const executor = resolveExecutor();
+    if (executor?.runBatch === undefined) throw new ExecutorContextError();
+    return executor.runBatch(ready, {
+      signal: context.signal ?? new AbortController().signal,
+      ...(retain === undefined ? {} : { retain }),
+    });
+  }
+
   function executeWave(
     calls: readonly Tool.Call[],
     context: DispatchContext,
@@ -323,27 +337,19 @@ export function createDispatcher(
     const execute = async (): Promise<readonly ToolDispatchResult[]> => {
       const prepared = calls.map((call) => prepare(call, context, "model"));
       const ready = prepared.filter(
-        (item): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
+        (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
       );
-      const executor = resolveExecutor();
-      if (executor?.runBatch === undefined) throw new ExecutorContextError();
-      const results = await executor.runBatch(ready, {
-        signal: context.signal ?? new AbortController().signal,
-        retain: options?.retainEffect,
-      });
+      const results = await runPreparedBatch(ready, context, options?.retainEffect);
       let index = 0;
       return prepared.map((item) => {
         if (item.kind === "refused") return item.result;
         const result = results[index++];
         if (result === undefined) throw new Error("wave result missing");
-        const finished = item.finish(result);
-        if (typeof finished.output !== "string")
-          throw new Error("model tool output must be rendered text");
-        return { ...finished, output: finished.output };
+        return renderedResult(item.finish(result));
       });
     };
     const wave = Promise.resolve().then(execute);
-    options?.trackWave?.(wave.then(() => undefined));
+    options?.trackWave?.(settled(wave));
     return wave;
   }
 
@@ -353,44 +359,41 @@ export function createDispatcher(
     executeWave,
     async recover(actions, context) {
       const groups = recoverableWaves(actions, context.turnId);
-      for (const [waveId, group] of groups) {
+      const approvalWaves = new Set<string>();
+      for (const action of actions) {
+        const intent = action.intent.value;
         if (
-          !actions.some((action) => {
-            const intent = action.intent.value;
-            return (
-              intent !== null &&
-              typeof intent === "object" &&
-              !Array.isArray(intent) &&
-              intent.waveId === waveId &&
-              intent.approvalRequired === true
-            );
-          })
-        )
-          continue;
+          intent !== null &&
+          typeof intent === "object" &&
+          !Array.isArray(intent) &&
+          typeof intent.waveId === "string" &&
+          intent.approvalRequired === true
+        ) {
+          approvalWaves.add(intent.waveId);
+        }
+      }
+      for (const [waveId, group] of groups) {
+        if (!approvalWaves.has(waveId)) continue;
         const prepared = group.map(({ action, call }) => prepare(call, context, "model", action));
         if (prepared.some((item) => item.kind === "refused"))
           throw new Error("captured invocation no longer parses");
         const ready = prepared.filter(
-          (item): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
+          (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
         );
-        const executor = resolveExecutor();
-        if (executor?.runBatch === undefined) throw new ExecutorContextError();
-        const results = await executor.runBatch(ready, {
-          signal: context.signal ?? new AbortController().signal,
-        });
+        const results = await runPreparedBatch(ready, context);
         results.forEach((result, index) => {
           ready[index]?.finish(result);
         });
       }
     },
     execute(call, context) {
-      const wave = dispatch(call, context, "model") as Promise<ToolDispatchResult>;
-      options?.trackWave?.(wave.then(() => undefined));
+      const wave = dispatch(call, context, "model").then(renderedResult);
+      options?.trackWave?.(settled(wave));
       return wave;
     },
     executeCell(call, context) {
-      const wave = dispatch(call, context, "cell") as Promise<CellToolDispatchResult>;
-      options?.trackWave?.(wave.then(() => undefined));
+      const wave = dispatch(call, context, "cell");
+      options?.trackWave?.(settled(wave));
       return wave;
     },
   };
@@ -402,7 +405,7 @@ export function createDispatcher(
  * {@link SessionRunnerInput}, so composing the executor+dispatcher has one owner
  * instead of being copied per role.
  */
-export interface TurnDispatchInput {
+interface TurnDispatchInput {
   readonly signal?: AbortSignal;
   readonly sessionId: string;
   readonly role: LedgerSession.Role;
@@ -421,6 +424,20 @@ export interface TurnDispatchInput {
 
 function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string | undefined) {
   const groups = new Map<string, { action: LedgerAction.Node; call: Tool.Call }[]>();
+  const settledIntents = new Set(
+    actions
+      .filter((action) => {
+        const effect = action.effect.value;
+        return (
+          action.kind === "tool" &&
+          effect !== null &&
+          typeof effect === "object" &&
+          !Array.isArray(effect) &&
+          effect.phase === "result"
+        );
+      })
+      .map((action) => action.parentId),
+  );
   for (const action of actions) {
     if (action.kind !== "tool") continue;
     const intent = action.intent.value;
@@ -435,18 +452,7 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
       typeof intent.waveId !== "string"
     )
       continue;
-    if (
-      actions.some(
-        (node) =>
-          node.kind === "tool" &&
-          node.parentId === action.id &&
-          node.effect.value !== null &&
-          typeof node.effect.value === "object" &&
-          !Array.isArray(node.effect.value) &&
-          node.effect.value.phase === "result",
-      )
-    )
-      continue;
+    if (settledIntents.has(action.id)) continue;
     const parsed = PlainValueSchema.parse(intent.value);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
       throw new Error(`invalid durable invocation: ${action.id}`);
@@ -458,7 +464,7 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
 }
 
 /** The runtime clock/entropy/observation sink shared across a session's turns. */
-export interface TurnDispatchRuntime {
+interface TurnDispatchRuntime {
   readonly waitRetry?: ExecutorOptions["waitRetry"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly observations: ObservationSink | BusEvent.Sink;
@@ -505,7 +511,7 @@ export function createTurnDispatcher(
       systemHash: input.systemHash,
     },
     clock: runtime.clock ?? Date.now,
-    entropy: runtime.entropy ?? (() => crypto.randomUUID()),
+    entropy: entropyOf(runtime),
   });
   if (executor.approvals !== undefined) input.bindApprovals?.(executor.approvals);
   const pinnedNames =
@@ -566,6 +572,11 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
     callId: call.id,
     signal: context.signal ?? new AbortController().signal,
   };
+}
+
+function renderedResult(result: ToolDispatchResult | CellToolDispatchResult): ToolDispatchResult {
+  if (typeof result.output !== "string") throw new Error("model tool output must be rendered text");
+  return { ...result, output: result.output };
 }
 
 function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): ToolDispatchResult {

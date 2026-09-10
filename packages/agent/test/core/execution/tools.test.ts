@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
-import { createObservationBus, scopeObservation } from "../../../src/index";
+import { scopeObservation } from "../../../src/index";
+import { createObservationBus } from "../../../src/observation/bus";
 import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
 

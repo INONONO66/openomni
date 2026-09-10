@@ -3,13 +3,13 @@ export interface CompactionYield {
   readonly tokensBefore: number;
 }
 
-export interface CompactionGeometryOptions {
+interface CompactionGeometryOptions {
   readonly contextWindowTokens: number;
   readonly reserveTokens?: number;
   readonly previousYield?: CompactionYield;
 }
 
-export interface CompactionGeometry {
+interface CompactionGeometry {
   readonly thresholdRatio: number;
   readonly thresholdTokens: number;
   readonly reserveTokens: number;

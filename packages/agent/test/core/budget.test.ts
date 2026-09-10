@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus, collector } from "../../src/index";
+import { Bus } from "../../src/index";
+import { collector } from "../helpers/observation-collector";
 import { captureBusEvents } from "../helpers/bus-event";
 import {
-  BUDGET_DEFAULTS,
+  evaluateBudget,
   describeBudgetRemaining,
   createBudgetState,
   effectiveBudgetThresholds,
@@ -26,7 +27,7 @@ function countCollectedOperationalEmits(
 }
 
 async function countGlobalOperationalEmits(run: () => void): Promise<number> {
-  const seen: unknown[] = [];
+  let seen = 0;
   const sentinel = {
     traceId: "trace-budget-test-barrier",
     time: 0,
@@ -39,10 +40,12 @@ async function countGlobalOperationalEmits(run: () => void): Promise<number> {
     resolveBarrier = resolve;
     barrierTimer = setTimeout(() => reject(new Error("timed out waiting for Bus barrier")), 1_000);
   });
-  const unsubWarn = Bus.subscribe(Operational.Events.Warn, (event) => seen.push(event));
+  const unsubWarn = Bus.subscribe(Operational.Events.Warn, () => {
+    seen += 1;
+  });
   const unsubInfo = Bus.subscribe(Operational.Events.Info, (event) => {
     if (event === sentinel) resolveBarrier();
-    else seen.push(event);
+    else seen += 1;
   });
 
   try {
@@ -51,7 +54,7 @@ async function countGlobalOperationalEmits(run: () => void): Promise<number> {
     // proves every operational event published by run() has been delivered.
     Bus.publish(Operational.Events.Info, sentinel);
     await barrier;
-    return seen.length;
+    return seen;
   } finally {
     if (barrierTimer !== undefined) clearTimeout(barrierTimer);
     unsubWarn();
@@ -226,38 +229,45 @@ describe("describeBudgetRemaining", () => {
   });
 });
 
-describe("defaults are written once — narration agrees with enforcement", () => {
-  // The 24/40/5min/2min defaults used to be duplicated between
-  // evaluateBudget and describeBudgetRemaining; a change to one side made
-  // the narration contradict the verdict. Both sites now read
-  // BUDGET_DEFAULTS, and this pin drives each pair from the shared constant:
-  // reintroduce a drifting literal on either side and the pair splits.
-  it("at the default turn ceiling: enforcement says exceeded, narration says 0 remaining", () => {
-    const s = { ...createBudgetState(), turns: BUDGET_DEFAULTS.maxTurns };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector())).toBe("exceeded");
-    expect(describeBudgetRemaining(s)).toContain("0 turns remaining");
-
-    const oneBelow = { ...createBudgetState(), turns: BUDGET_DEFAULTS.maxTurns - 1 };
-    expect(publishBudgetTelemetry(oneBelow, TEST_RUN, collector())).not.toBe("exceeded");
-    expect(describeBudgetRemaining(oneBelow)).toContain("1 turn remaining");
+describe("default budget ceilings", () => {
+  it("enforces the default turn ceiling at 24", () => {
+    expect(evaluateBudget({ ...createBudgetState(), turns: 24 })).toMatchObject({
+      status: "exceeded",
+      exceededLimit: "turns",
+    });
+    expect(evaluateBudget({ ...createBudgetState(), turns: 23 }).status).toBe("warning");
   });
 
-  it("at the default tool-call ceiling: enforcement says exceeded, narration says 0 remaining", () => {
-    const s = { ...createBudgetState(), toolCalls: BUDGET_DEFAULTS.maxToolCalls };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector())).toBe("exceeded");
-    expect(describeBudgetRemaining(s)).toContain("0 tool calls remaining");
+  it("enforces the default tool-call ceiling at 40", () => {
+    expect(evaluateBudget({ ...createBudgetState(), toolCalls: 40 })).toMatchObject({
+      status: "exceeded",
+      exceededLimit: "tool calls",
+    });
+    expect(evaluateBudget({ ...createBudgetState(), toolCalls: 39 }).status).toBe("warning");
+  });
 
-    const oneBelow = { ...createBudgetState(), toolCalls: BUDGET_DEFAULTS.maxToolCalls - 1 };
-    expect(publishBudgetTelemetry(oneBelow, TEST_RUN, collector())).not.toBe("exceeded");
-    expect(describeBudgetRemaining(oneBelow)).toContain("1 tool call remaining");
+  it("enforces the default tool-runtime ceiling at two minutes", () => {
+    expect(evaluateBudget({ ...createBudgetState(), toolRuntimeMs: 120_000 })).toMatchObject({
+      status: "exceeded",
+      exceededLimit: "tool wall time",
+    });
+    expect(evaluateBudget({ ...createBudgetState(), toolRuntimeMs: 119_999 }).status).toBe(
+      "warning",
+    );
   });
 
   it("the default wall-time ceilings narrate from the same constants", () => {
-    const s = createBudgetState();
-    const desc = describeBudgetRemaining(s);
-    expect(desc).toContain(`${Math.round(BUDGET_DEFAULTS.maxWallTimeMs / 1000)}s wall time`);
-    expect(desc).toContain(
-      `${Math.round(BUDGET_DEFAULTS.maxToolRuntimeMs / 1000)}s tool wall time`,
+    const desc = describeBudgetRemaining(createBudgetState());
+    expect(desc).toContain("300s wall time");
+    expect(desc).toContain("120s tool wall time");
+  });
+
+  it("selects the first exceeded ceiling before computing ratios", () => {
+    const state = { ...createBudgetState(), turns: 24, toolCalls: 40, toolRuntimeMs: 120_000 };
+    expect(evaluateBudget(state, { maxWallTimeMs: 0 }).exceededLimit).toBe("wall time");
+    expect(evaluateBudget(state, { maxWallTimeMs: -1 }).exceededLimit).toBe("turns");
+    expect(evaluateBudget(state, { maxWallTimeMs: -1, maxTurns: -1 }).exceededLimit).toBe(
+      "tool calls",
     );
   });
 });

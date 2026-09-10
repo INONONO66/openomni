@@ -5,8 +5,6 @@ export { decideRequestTransition, requestBindingDigest } from "./session-request
 export { failureFacts } from "./core/retry";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
-export { foldSessionHistory } from "./session-lifecycle/history";
-export { inspectActions, inspectPolicy } from "./session-lifecycle/inspect";
 export {
   closeSessions,
   getSessionHandle,
@@ -14,36 +12,21 @@ export {
   sweepSessions,
   wakeSession,
 } from "./session-handle";
-export { createExecutor, ExecutionApprovalError, UnregisteredExecutionKindError } from "./executor";
+export { createExecutor, ExecutionApprovalError } from "./executor";
+export { ExecutorContextError } from "./executor-context";
+export type { ExecutionApprovalRequest } from "./executor";
 export { SEEDED_POLICY_ROWS } from "@openomni/policy";
-export type {
-  ExecutionLedger,
-  Executor,
-  ExecutionApprovalRequest,
-} from "./executor";
+export type { Executor } from "./executor";
 export {
   createDispatcher,
   createTurnDispatcher,
   currentExecutor,
   defineTool,
   eraseTool,
-  ExecutorContextError,
   sessionTool,
   ToolRefused,
   toolInputSchema,
   toolSpec,
 } from "./tool-dispatcher";
-export {
-  Bus,
-  collector,
-  createObservationBus,
-  newTraceId,
-  noopSink,
-  scopeObservation,
-} from "./observation/bus";
-export type {
-  SessionHandle,
-  SessionRunner,
-  SessionRunnerInput,
-  SessionRuntime,
-} from "./session-handle";
+export { Bus, createObservationBus, newTraceId, scopeObservation } from "./observation/bus";
+export type { SessionHandle, SessionRunner, SessionRuntime } from "./session-handle";

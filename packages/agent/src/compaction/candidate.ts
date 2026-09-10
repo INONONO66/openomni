@@ -1,12 +1,7 @@
 import type { Message } from "@openomni/protocol";
 import type { CompactionCandidate } from "./speculate";
 
-/**
- * The anchored-cut plan, shared by the seam and the speculator (L4): which
- * span a cut would summarize right now, by id, with the exclusions the L2
- * contract owns (user messages and prior anchor renders never reach the
- * summarizer). Pure — no elision, no events, no rebuild.
- */
+// User messages and prior anchor renders never enter summarizer content.
 export function planAnchoredCut(
   messages: readonly Message.WithParts[],
   protectRecentMessages: number,
@@ -32,18 +27,16 @@ export function planAnchoredCut(
   };
 }
 
-/**
- * Anchor identity is structural — the metadata flag, never string-matching
- * on the render — so later render decoration (L6: artifact table, goal
- * recitation) cannot break extraction. `anchorBody` in metadata is the raw
- * merge state the next cut threads back into the summarizer; the part text
- * is its model-facing render.
- */
-export function isAnchorMessage(message: Message.WithParts): boolean {
-  return (
-    message.info.role === "user" &&
-    message.parts.some((part) => part.type === "text" && part.metadata?.compactionAnchor === true)
+function anchorPart(message: Message.WithParts): Message.TextPart | undefined {
+  if (message.info.role !== "user") return undefined;
+  return message.parts.find(
+    (part: Message.Part): part is Message.TextPart =>
+      part.type === "text" && part.metadata?.compactionAnchor === true,
   );
+}
+
+export function isAnchorMessage(message: Message.WithParts): boolean {
+  return anchorPart(message) !== undefined;
 }
 
 export function latestCompactionAnchorId(span: readonly Message.WithParts[]): string | undefined {
@@ -68,7 +61,7 @@ export function isWarmCandidateValid(
   );
 }
 
-function canonicalPartContent(part: Message.Part): unknown {
+function canonicalPartContent(part: Message.Part) {
   if (part.type === "text") return { type: part.type, text: part.text, metadata: part.metadata };
   if (part.type === "reasoning") {
     return { type: part.type, text: part.text, signature: part.signature, metadata: part.metadata };
@@ -99,22 +92,12 @@ function canonicalPrefixFingerprint(messages: readonly Message.WithParts[]): str
 
 export function latestAnchorBody(span: readonly Message.WithParts[]): string | undefined {
   for (let index = span.length - 1; index >= 0; index -= 1) {
-    // The parameter is a dense Message.WithParts[] assembled by slice/spread;
-    // an in-bounds element is therefore present.
-    const message = span[index] as Message.WithParts;
-    // One identity, one definition (review #721 M3): only what
-    // isAnchorMessage accepts may thread its body — an assistant-role part
-    // wearing the metadata is content, never state.
-    if (!isAnchorMessage(message)) continue;
-    // isAnchorMessage just proved this element exists; repeat the predicate
-    // only to retrieve it, not as a second impossible fallback branch.
-    const part = message.parts.find(
-      (candidate): candidate is Message.TextPart =>
-        candidate.type === "text" && candidate.metadata?.compactionAnchor === true,
-    ) as Message.TextPart;
+    const message = span[index];
+    if (message === undefined) continue;
+    const part = anchorPart(message);
+    if (part === undefined) continue;
     const body = part.metadata?.anchorBody;
-    // A marked part without a string body is a foreign or corrupt render:
-    // fall back to the visible text rather than dropping the anchor.
+    // Corrupt or foreign renders retain their visible text.
     return typeof body === "string" ? body : part.text;
   }
   return undefined;

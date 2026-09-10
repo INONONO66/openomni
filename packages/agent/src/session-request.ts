@@ -26,6 +26,76 @@ interface RequestSnapshot {
 
 const rejected: RequestDecision = { resolution: "rejected", actions: [] };
 
+function all(...checks: readonly boolean[]): boolean {
+  return checks.every((check) => check);
+}
+
+function requestEffect(
+  action: LedgerAction.Node | undefined,
+): SessionTransition.Request | undefined {
+  const parsed = SessionTransition.Request.safeParse(objectValue(action?.effect.value)?.request);
+  return parsed.success ? parsed.data : undefined;
+}
+
+export function findSessionRequest(
+  actions: readonly LedgerAction.Node[],
+  requestId: string,
+): SessionTransition.Request | undefined {
+  for (let index = actions.length - 1; index >= 0; index -= 1) {
+    const request = requestEffect(actions[index]);
+    if (request?.requestId === requestId) return request;
+  }
+  return undefined;
+}
+
+type CapturedApproval = Omit<import("./executor-contract").ExecutionApprovalRequest, "durable">;
+
+function generationDefaults(captured: CapturedApproval) {
+  return {
+    toolsGeneration: captured.toolsGeneration ?? 0,
+    toolsHash: captured.toolsHash ?? canonicalDigest([]),
+  };
+}
+
+export function createApprovalRequest(
+  captured: CapturedApproval,
+  binding: {
+    readonly effect: PlainValue;
+    readonly domainRevisions?: Readonly<Record<string, number>>;
+  },
+  systemHash: string | undefined,
+  createdAt: number,
+  timeout: number,
+): SessionTransition.Request {
+  const request = SessionTransition.Request.parse({
+    requestId: captured.id,
+    sessionId: captured.sessionId,
+    turnId: captured.turnId,
+    callId: captured.callId,
+    mode: "approval",
+    parsedInput: captured.intent,
+    inputHash: captured.inputHash,
+    effectHash: canonicalDigest(binding.effect),
+    generation: captured.generation,
+    ...generationDefaults(captured),
+    systemHash: systemHash ?? canonicalDigest([]),
+    domainRevisions: binding.domainRevisions ?? {},
+    deadline: createdAt + timeout,
+    expectedResponders: ["owner"],
+    correlation: {},
+    allowedActions: ["report_result"],
+    bindingDigest: "pending",
+    resolution: "first",
+    threshold: 1,
+    seenReplyIds: [],
+    replies: [],
+    state: "open",
+    outcome: null,
+    createdAt,
+  });
+  return { ...request, bindingDigest: requestBindingDigest(request) };
+}
+
 export function requestBindingDigest(request: SessionTransition.Request): string {
   return canonicalDigest({
     requestId: request.requestId,
@@ -53,29 +123,53 @@ export function decideRequestTransition(
   command: SessionTransition.Command,
   snapshot: RequestSnapshot,
 ): RequestDecision {
-  const parsed = SessionTransition.Command.safeParse(command);
-  if (!parsed.success) return rejected;
-  if (!ownsRequestRevision(command, snapshot.row)) return rejected;
+  if (
+    !SessionTransition.Command.safeParse(command).success ||
+    !ownsRequestRevision(command, snapshot.row)
+  )
+    return rejected;
   const inputDigest = requestInputDigest(command.payload);
-  const repeated = repeatedInput(command, snapshot, inputDigest);
-  if (repeated !== undefined) return repeated;
+  return (
+    repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest)
+  );
+}
+
+type ExistingPayload = Exclude<SessionTransition.Payload, { kind: "request.open" }>;
+
+function targetRequestId(payload: ExistingPayload): string {
+  if (payload.kind === "request.answer") return payload.answer.requestId;
+  return payload.kind === "request.delivery" ? payload.receipt.requestId : payload.requestId;
+}
+
+function transition(
+  command: SessionTransition.Command,
+  snapshot: RequestSnapshot,
+  inputDigest: string,
+): RequestDecision {
   const { payload } = command;
   if (payload.kind === "request.open") {
     return openRequest(command, snapshot, payload.request, inputDigest);
   }
-  const requestId =
-    payload.kind === "request.answer"
-      ? payload.answer.requestId
-      : payload.kind === "request.delivery"
-        ? payload.receipt.requestId
-        : payload.requestId;
   const request = snapshot.request;
-  if (
-    request === undefined ||
-    request.requestId !== requestId ||
-    request.sessionId !== snapshot.row.id
-  )
-    return rejected;
+  if (request === undefined || !targets(request, payload, snapshot.row.id)) return rejected;
+  return transitionExisting(command, snapshot, request, payload, inputDigest);
+}
+
+function targets(
+  request: SessionTransition.Request,
+  payload: ExistingPayload,
+  sessionId: string,
+): boolean {
+  return request.requestId === targetRequestId(payload) && request.sessionId === sessionId;
+}
+
+function transitionExisting(
+  command: SessionTransition.Command,
+  snapshot: RequestSnapshot,
+  request: SessionTransition.Request,
+  payload: ExistingPayload,
+  inputDigest: string,
+): RequestDecision {
   if (payload.kind === "request.delivery") {
     return recordDelivery(command, request, payload.receipt, inputDigest);
   }
@@ -86,14 +180,30 @@ export function decideRequestTransition(
 }
 
 function ownsRequestRevision(command: SessionTransition.Command, row: LedgerSession.Row): boolean {
-  return (
-    row.id === command.sessionId &&
-    row.leaseOwner === command.authority.owner &&
-    row.leaseFence === command.authority.fence &&
-    row.leaseExpiresAt !== null &&
-    row.leaseExpiresAt > command.at &&
-    row.revision === command.expectedRevision
+  return all(
+    row.id === command.sessionId,
+    row.leaseOwner === command.authority.owner,
+    row.leaseFence === command.authority.fence,
+    row.leaseExpiresAt !== null && row.leaseExpiresAt > command.at,
+    row.revision === command.expectedRevision,
   );
+}
+
+function recordedResolution(action: LedgerAction.Node): SessionTransition.Resolution | undefined {
+  const resolution = SessionTransition.Resolution.safeParse(
+    objectValue(action.effect.value)?.resolution,
+  );
+  return resolution.success ? resolution.data : undefined;
+}
+
+function replayedInput(
+  action: LedgerAction.Node,
+  request: SessionTransition.Request | undefined,
+  inputDigest: string,
+): RequestDecision {
+  if (objectValue(action.intent.value)?.inputDigest !== inputDigest) return rejected;
+  const resolution = recordedResolution(action);
+  return resolution === undefined ? rejected : { resolution, request, actions: [] };
 }
 
 function repeatedInput(
@@ -101,18 +211,69 @@ function repeatedInput(
   snapshot: RequestSnapshot,
   inputDigest: string,
 ): RequestDecision | undefined {
-  for (const action of snapshot.actions) {
-    const intent = objectValue(action.intent.value);
-    if (intent?.inputId !== command.inputId) continue;
-    if (intent.inputDigest !== inputDigest) return rejected;
-    const resolution = SessionTransition.Resolution.safeParse(
-      objectValue(action.effect.value)?.resolution,
-    );
-    return resolution.success
-      ? { resolution: resolution.data, request: snapshot.request, actions: [] }
-      : rejected;
-  }
-  return undefined;
+  const previous = snapshot.actions.find(
+    (action) => objectValue(action.intent.value)?.inputId === command.inputId,
+  );
+  if (previous === undefined) return undefined;
+  return replayedInput(previous, snapshot.request, inputDigest);
+}
+
+function payloadEvidence(payload: SessionTransition.Payload) {
+  if (payload.kind === "request.answer") return { answer: payload.answer };
+  if (payload.kind === "request.delivery") return { receipt: payload.receipt };
+  return {};
+}
+
+function inputRecord(
+  command: SessionTransition.Command,
+  request: SessionTransition.Request,
+  inputDigest: string,
+  resolution: SessionTransition.Resolution,
+): LedgerAction.Append {
+  const { payload } = command;
+  const parentId = request.requestId;
+  return {
+    id: `${parentId}:input:${command.inputId}`,
+    parentId,
+    sessionId: command.sessionId,
+    kind: payload.kind === "request.answer" ? "reply" : "request",
+    intent: {
+      encodingVersion: 1,
+      value: { inputId: command.inputId, inputDigest, command: payload.kind },
+    },
+    effect: {
+      encodingVersion: 1,
+      value: PlainValueSchema.parse({
+        phase: "state",
+        request,
+        resolution,
+        ...payloadEvidence(payload),
+      }),
+    },
+    ts: command.at,
+    irreversible: true,
+  };
+}
+
+function resolutionRecord(
+  command: SessionTransition.Command,
+  request: SessionTransition.Request,
+  resolution: SessionTransition.Resolution,
+): LedgerAction.Append {
+  const parentId = request.requestId;
+  return {
+    id: `${parentId}:resolution`,
+    parentId,
+    sessionId: command.sessionId,
+    kind: "request",
+    intent: { encodingVersion: 1, value: { phase: "resolution" } },
+    effect: {
+      encodingVersion: 1,
+      value: PlainValueSchema.parse({ phase: "state", request, resolution }),
+    },
+    ts: command.at,
+    irreversible: true,
+  };
 }
 
 function recordRequest(
@@ -122,70 +283,30 @@ function recordRequest(
   resolution: SessionTransition.Resolution,
   terminal = false,
 ): RequestDecision {
-  const { payload } = command;
-  const parentId = request.requestId;
-  const writes: LedgerAction.Append[] = [
-    {
-      id: `${parentId}:input:${command.inputId}`,
-      parentId,
-      sessionId: command.sessionId,
-      kind: payload.kind === "request.answer" ? "reply" : "request",
-      intent: {
-        encodingVersion: 1,
-        value: { inputId: command.inputId, inputDigest, command: payload.kind },
-      },
-      effect: {
-        encodingVersion: 1,
-        value: PlainValueSchema.parse({
-          phase: "state",
-          request,
-          resolution,
-          ...(payload.kind === "request.answer" ? { answer: payload.answer } : {}),
-          ...(payload.kind === "request.delivery" ? { receipt: payload.receipt } : {}),
-        }),
-      },
-      ts: command.at,
-      irreversible: true,
-    },
-  ];
-  if (terminal) {
-    writes.push({
-      id: `${parentId}:resolution`,
-      parentId,
-      sessionId: command.sessionId,
-      kind: "request",
-      intent: { encodingVersion: 1, value: { phase: "resolution" } },
-      effect: {
-        encodingVersion: 1,
-        value: PlainValueSchema.parse({ phase: "state", request, resolution }),
-      },
-      ts: command.at,
-      irreversible: true,
-    });
-  }
+  const writes: LedgerAction.Append[] = [inputRecord(command, request, inputDigest, resolution)];
+  if (terminal) writes.push(resolutionRecord(command, request, resolution));
   const receive = receivingIntake(command, request, resolution);
   return { resolution, request, actions: writes, ...(receive === undefined ? {} : { receive }) };
 }
 
-function receivingIntake(
-  command: SessionTransition.Command,
+function receivesReply(
   request: SessionTransition.Request,
   resolution: SessionTransition.Resolution,
-): Inbox.Commit | undefined {
-  const { payload } = command;
-  if (
-    payload.kind !== "request.answer" ||
-    request.mode !== "reply" ||
-    (resolution !== "attached" && resolution !== "resolved")
-  )
-    return undefined;
-  const { answer } = payload;
+): boolean {
+  return request.mode === "reply" && (resolution === "attached" || resolution === "resolved");
+}
+
+function replyIntake(
+  at: number,
+  request: SessionTransition.Request,
+  answer: SessionTransition.Answer,
+): Inbox.Commit {
   return {
     id: answer.inputId,
     sessionId: request.sessionId,
     kind: "prompt",
     content: answer.content,
-    createdAt: command.at,
+    createdAt: at,
     parentActionId: request.requestId,
     origin: {
       encodingVersion: 1,
@@ -201,67 +322,108 @@ function receivingIntake(
   };
 }
 
+function receivingIntake(
+  command: SessionTransition.Command,
+  request: SessionTransition.Request,
+  resolution: SessionTransition.Resolution,
+): Inbox.Commit | undefined {
+  const { payload } = command;
+  if (payload.kind !== "request.answer" || !receivesReply(request, resolution)) return undefined;
+  return replyIntake(command.at, request, payload.answer);
+}
+
+type ApprovalCount = NonNullable<LedgerSession.Commit["requestCount"]>;
+
+function openApprovalSince(existing: SessionTransition.Request, since: number): boolean {
+  return existing.mode === "approval" && existing.state === "open" && existing.createdAt > since;
+}
+
+function openApprovalCount(
+  snapshot: RequestSnapshot,
+  next: SessionTransition.Request,
+  since: number,
+): ApprovalCount | undefined {
+  if (next.mode !== "approval") return undefined;
+  const open = (snapshot.requests ?? []).filter((existing) => openApprovalSince(existing, since));
+  return { since, count: open.length };
+}
+
+function exceedsApprovalBudget(requestCount: ApprovalCount | undefined): boolean {
+  return requestCount !== undefined && requestCount.count >= 8;
+}
+
+function freshRequestShape(next: SessionTransition.Request): boolean {
+  return all(
+    next.state === "open",
+    next.outcome === null,
+    next.seenReplyIds.length === 0,
+    next.replies.length === 0,
+  );
+}
+
+function admitsOpen(next: SessionTransition.Request, snapshot: RequestSnapshot): boolean {
+  return all(
+    snapshot.request === undefined,
+    originalInvocationMatches(next, snapshot),
+    next.sessionId === snapshot.row.id,
+    freshRequestShape(next),
+    generationMatches(next, snapshot.row),
+    next.bindingDigest === requestBindingDigest(next),
+  );
+}
+
 function openRequest(
   command: SessionTransition.Command,
   snapshot: RequestSnapshot,
   next: SessionTransition.Request,
   inputDigest: string,
 ): RequestDecision {
-  const since = command.at - 3_600_000;
-  const requestCount =
-    next.mode === "approval"
-      ? {
-          since,
-          count: (snapshot.requests ?? []).filter(
-            (existing) =>
-              existing.mode === "approval" &&
-              existing.state === "open" &&
-              existing.createdAt > since,
-          ).length,
-        }
-      : undefined;
-  if (requestCount !== undefined && requestCount.count >= 8) return rejected;
-  if (
-    snapshot.request !== undefined ||
-    !originalInvocationMatches(next, snapshot) ||
-    next.sessionId !== snapshot.row.id ||
-    next.state !== "open" ||
-    next.outcome !== null ||
-    next.seenReplyIds.length > 0 ||
-    next.replies.length > 0 ||
-    !generationMatches(next, snapshot.row) ||
-    next.bindingDigest !== requestBindingDigest(next)
-  )
-    return rejected;
+  const requestCount = openApprovalCount(snapshot, next, command.at - 3_600_000);
+  if (exceedsApprovalBudget(requestCount) || !admitsOpen(next, snapshot)) return rejected;
   return {
     ...recordRequest(command, next, inputDigest, "opened"),
     ...(requestCount === undefined ? {} : { requestCount }),
   };
 }
 
+function intentInvocation(invocation: ReturnType<typeof objectValue>) {
+  return invocation?.phase === "intent" ? invocation : undefined;
+}
+
+function recordedInvocation(original: LedgerAction.Node | undefined, sessionId: string) {
+  if (original?.sessionId !== sessionId) return undefined;
+  return intentInvocation(objectValue(original.intent.value));
+}
+
+function domainRevisionsAgree(
+  recorded: PlainValue | undefined,
+  expected: Readonly<Record<string, number>>,
+): boolean {
+  return recorded === undefined || canonicalDigest(recorded) === canonicalDigest(expected);
+}
+
 function originalInvocationMatches(
   next: SessionTransition.Request,
   snapshot: RequestSnapshot,
 ): boolean {
-  const original = snapshot.actions.find((action) => action.id === next.requestId);
-  const invocation = objectValue(original?.intent.value);
-  return !(
-    original?.sessionId !== snapshot.row.id ||
-    invocation?.phase !== "intent" ||
-    invocation.value === undefined ||
-    canonicalDigest(invocation.value) !== next.inputHash ||
-    canonicalDigest(next.parsedInput) !== next.inputHash ||
-    invocation.effectHash !== next.effectHash ||
-    (invocation.domainRevisions !== undefined &&
-      canonicalDigest(invocation.domainRevisions) !== canonicalDigest(next.domainRevisions))
+  const invocation = recordedInvocation(
+    snapshot.actions.find((action) => action.id === next.requestId),
+    snapshot.row.id,
+  );
+  if (invocation === undefined || invocation.value === undefined) return false;
+  return all(
+    canonicalDigest(invocation.value) === next.inputHash,
+    canonicalDigest(next.parsedInput) === next.inputHash,
+    invocation.effectHash === next.effectHash,
+    domainRevisionsAgree(invocation.domainRevisions, next.domainRevisions),
   );
 }
 
 function generationMatches(request: SessionTransition.Request, row: LedgerSession.Row): boolean {
-  return (
-    request.generation === row.policyGeneration &&
-    request.toolsGeneration === row.toolsGeneration &&
-    request.systemHash === row.systemHash
+  return all(
+    request.generation === row.policyGeneration,
+    request.toolsGeneration === row.toolsGeneration,
+    request.systemHash === row.systemHash,
   );
 }
 
@@ -284,6 +446,75 @@ function recordDelivery(
   return recordRequest(command, request, inputDigest, "delivery_recorded");
 }
 
+function answerAddressed(
+  answer: SessionTransition.Answer,
+  command: SessionTransition.Command,
+): boolean {
+  return answer.sessionId === command.sessionId && answer.inputId === command.inputId;
+}
+
+function lateAnswer(
+  command: SessionTransition.Command,
+  current: SessionTransition.Request,
+  answer: SessionTransition.Answer,
+  inputDigest: string,
+): RequestDecision {
+  const terminal = current.state === "open";
+  const seen = withSeenReply(current, answer.inputId);
+  const request: SessionTransition.Request = terminal
+    ? { ...seen, state: "expired", outcome: "outcome_unknown" }
+    : seen;
+  return recordRequest(command, request, inputDigest, "late_unknown", terminal);
+}
+
+function replyOf(answer: SessionTransition.Answer): SessionTransition.Request["replies"][number] {
+  return {
+    replyId: answer.inputId,
+    responderId: answer.principal.principalId,
+    content: answer.content,
+    receivedAt: answer.receivedAt,
+  };
+}
+
+function settleReply(
+  command: SessionTransition.Command,
+  request: SessionTransition.Request,
+  answer: SessionTransition.Answer,
+  inputDigest: string,
+): RequestDecision {
+  if (answer.decision === "refuse") {
+    const refused: SessionTransition.Request = { ...request, state: "refused", outcome: "denied" };
+    return recordRequest(command, refused, inputDigest, "refused", true);
+  }
+  if (request.replies.length >= request.threshold) {
+    const resolved: SessionTransition.Request = {
+      ...request,
+      state: "resolved",
+      outcome: "answered",
+    };
+    return recordRequest(command, resolved, inputDigest, "resolved", true);
+  }
+  return recordRequest(command, request, inputDigest, "attached");
+}
+
+function attachAnswer(
+  command: SessionTransition.Command,
+  current: SessionTransition.Request,
+  answer: SessionTransition.Answer,
+  inputDigest: string,
+): RequestDecision {
+  const previouslySeen = current.seenReplyIds.includes(answer.inputId);
+  const seen = withSeenReply(current, answer.inputId);
+  if (
+    seen.state !== "open" ||
+    previouslySeen ||
+    seen.replies.some((reply) => reply.responderId === answer.principal.principalId)
+  )
+    return recordRequest(command, seen, inputDigest, "duplicate");
+  const replied = { ...seen, replies: [...seen.replies, replyOf(answer)] };
+  return settleReply(command, replied, answer, inputDigest);
+}
+
 function answerRequest(
   command: SessionTransition.Command,
   snapshot: RequestSnapshot,
@@ -291,45 +522,12 @@ function answerRequest(
   answer: SessionTransition.Answer,
   inputDigest: string,
 ): RequestDecision {
-  let request = current;
-  if (answer.sessionId !== command.sessionId || answer.inputId !== command.inputId) return rejected;
-  if (answer.receivedAt >= request.deadline) {
-    const terminal = request.state === "open";
-    request = withSeenReply(request, answer.inputId);
-    if (terminal) request = { ...request, state: "expired", outcome: "outcome_unknown" };
-    return recordRequest(command, request, inputDigest, "late_unknown", terminal);
-  }
-  if (!answerBindingMatches(answer, request, snapshot))
-    return recordRequest(command, request, inputDigest, "rejected");
-  const previouslySeen = request.seenReplyIds.includes(answer.inputId);
-  request = withSeenReply(request, answer.inputId);
-  if (
-    request.state !== "open" ||
-    previouslySeen ||
-    request.replies.some((reply) => reply.responderId === answer.principal.principalId)
-  )
-    return recordRequest(command, request, inputDigest, "duplicate");
-  request = {
-    ...request,
-    replies: [
-      ...request.replies,
-      {
-        replyId: answer.inputId,
-        responderId: answer.principal.principalId,
-        content: answer.content,
-        receivedAt: answer.receivedAt,
-      },
-    ],
-  };
-  if (answer.decision === "refuse") {
-    request = { ...request, state: "refused", outcome: "denied" };
-    return recordRequest(command, request, inputDigest, "refused", true);
-  }
-  if (request.replies.length >= request.threshold) {
-    request = { ...request, state: "resolved", outcome: "answered" };
-    return recordRequest(command, request, inputDigest, "resolved", true);
-  }
-  return recordRequest(command, request, inputDigest, "attached");
+  if (!answerAddressed(answer, command)) return rejected;
+  if (answer.receivedAt >= current.deadline)
+    return lateAnswer(command, current, answer, inputDigest);
+  if (!answerBindingMatches(answer, current, snapshot))
+    return recordRequest(command, current, inputDigest, "rejected");
+  return attachAnswer(command, current, answer, inputDigest);
 }
 
 function withSeenReply(
@@ -339,27 +537,32 @@ function withSeenReply(
   return { ...request, seenReplyIds: [...new Set([...request.seenReplyIds, inputId])] };
 }
 
+function principalValid(
+  answer: SessionTransition.Answer,
+  request: SessionTransition.Request,
+): boolean {
+  if (request.mode === "approval")
+    return answer.principal.kind === "owner" && answer.decision !== "reply";
+  return answer.decision !== "approve";
+}
+
 function answerBindingMatches(
   answer: SessionTransition.Answer,
   request: SessionTransition.Request,
   snapshot: RequestSnapshot,
 ): boolean {
-  const principalValid =
-    request.mode === "approval"
-      ? answer.principal.kind === "owner" && answer.decision !== "reply"
-      : answer.decision !== "approve";
-  return (
-    principalValid &&
-    request.expectedResponders.includes(answer.principal.principalId) &&
-    answer.bindingDigest === request.bindingDigest &&
-    answer.inputHash === request.inputHash &&
-    answer.effectHash === request.effectHash &&
-    answer.generation === request.generation &&
-    answer.toolsHash === request.toolsHash &&
-    request.allowedActions.includes(answer.allowedAction) &&
-    canonicalDigest(answer.domainRevisions) === canonicalDigest(request.domainRevisions) &&
-    domainRevisionsMatch(request, snapshot.domainRevisions) &&
-    generationMatches(request, snapshot.row)
+  return all(
+    principalValid(answer, request),
+    request.expectedResponders.includes(answer.principal.principalId),
+    answer.bindingDigest === request.bindingDigest,
+    answer.inputHash === request.inputHash,
+    answer.effectHash === request.effectHash,
+    answer.generation === request.generation,
+    answer.toolsHash === request.toolsHash,
+    request.allowedActions.includes(answer.allowedAction),
+    canonicalDigest(answer.domainRevisions) === canonicalDigest(request.domainRevisions),
+    domainRevisionsMatch(request, snapshot.domainRevisions),
+    generationMatches(request, snapshot.row),
   );
 }
 
@@ -371,26 +574,52 @@ function domainRevisionsMatch(
   return canonicalDigest({ ...current }) === canonicalDigest(request.domainRevisions);
 }
 
+function expireRequest(
+  command: SessionTransition.Command,
+  current: SessionTransition.Request,
+  inputDigest: string,
+): RequestDecision {
+  if (command.at < current.deadline) return rejected;
+  const expired: SessionTransition.Request = {
+    ...current,
+    state: "expired",
+    outcome: "outcome_unknown",
+  };
+  return recordRequest(command, expired, inputDigest, "expired", true);
+}
+
+function mayCancel(principal: SessionTransition.Principal, sessionId: string): boolean {
+  return (
+    principal.kind === "owner" ||
+    (principal.kind === "session" && principal.principalId === sessionId)
+  );
+}
+
+function cancelRequest(
+  command: SessionTransition.Command,
+  current: SessionTransition.Request,
+  principal: SessionTransition.Principal,
+  inputDigest: string,
+): RequestDecision {
+  if (!mayCancel(principal, command.sessionId))
+    return recordRequest(command, current, inputDigest, "rejected");
+  const cancelled: SessionTransition.Request = {
+    ...current,
+    state: "cancelled",
+    outcome: "cancelled",
+  };
+  return recordRequest(command, cancelled, inputDigest, "cancelled", true);
+}
+
 function closeRequest(
   command: SessionTransition.Command,
   current: SessionTransition.Request,
   payload: Extract<SessionTransition.Payload, { kind: "request.timeout" | "request.cancel" }>,
   inputDigest: string,
 ): RequestDecision {
-  let request = current;
-  if (request.state !== "open") return recordRequest(command, request, inputDigest, "duplicate");
-  if (payload.kind === "request.timeout") {
-    if (command.at < request.deadline) return rejected;
-    request = { ...request, state: "expired", outcome: "outcome_unknown" };
-    return recordRequest(command, request, inputDigest, "expired", true);
-  }
-  if (
-    payload.principal.kind !== "owner" &&
-    !(payload.principal.kind === "session" && payload.principal.principalId === command.sessionId)
-  )
-    return recordRequest(command, request, inputDigest, "rejected");
-  request = { ...request, state: "cancelled", outcome: "cancelled" };
-  return recordRequest(command, request, inputDigest, "cancelled", true);
+  if (current.state !== "open") return recordRequest(command, current, inputDigest, "duplicate");
+  if (payload.kind === "request.timeout") return expireRequest(command, current, inputDigest);
+  return cancelRequest(command, current, payload.principal, inputDigest);
 }
 
 function requestInputDigest(payload: SessionTransition.Payload): string {

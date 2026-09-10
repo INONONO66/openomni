@@ -14,6 +14,8 @@ Every durable `prompt`, `turn`, `llm`, and `tool` operation runs through the per
 
 Observations are lossy projections after durable commits. Session and turn identity come from the session runtime, never tool payloads.
 
+2026-09-09, #945: `turn-assistant` owns synchronous sink folding and assistant persistence; `turn-compaction` owns preparation and application at the existing turn boundaries. Provider stops require an actual assistant snapshot. Session result decoding uses a strict wire schema. Approval request construction and latest-request lookup live in `session-request`; executor approval owns only live waiting and authenticated answers. Observation delivery reports failures through an explicit error sink and retains both failures if its reporter throws. See `COMPACTION.md` for the provider-boundary invariants.
+
 Updated for #969 request convergence (2026-09-07): `session-request` owns pure request decisions; `session-requests` applies them through the existing fenced session transaction. Approval suspends the original parsed invocation and the whole wave. Product input bindings capture domain preconditions before admission, while authenticated answers and application claims remain executor-owned. `session-chat-runner` recovers original request-bearing waves before model entry; a persisted application claim without a result becomes `outcome_unknown`, never a replay. Both single-call and batch dispatch settle before an interrupted turn seals. There is no separate approval store or model-facing consent decision.
 
 ## Boundaries

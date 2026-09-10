@@ -1,5 +1,6 @@
-import { describe, expect, it, mock } from "bun:test";
-import { collector, newTraceId, noopSink, scopeObservation } from "../../src/index";
+import { describe, expect, it, mock, spyOn } from "bun:test";
+import { newTraceId, scopeObservation } from "../../src/index";
+import { collector } from "../helpers/observation-collector";
 import { BusEvent, type ObservationSink } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -42,6 +43,20 @@ describe("scoped observations", () => {
         msg: "observed",
       },
     ]);
+  });
+
+  it("preserves strict descriptor payload fields while stamping scope identity", () => {
+    const StrictEvent = BusEvent.define(
+      "test.scope.strict",
+      z.object({ component: z.string(), msg: z.string() }).strict(),
+    );
+    const received: unknown[] = [];
+    const scoped = scopeObservation({
+      publish: (_event, data) => received.push(data),
+      scope: () => scoped,
+    }, identity, { clock: () => 42, entropy: () => "event-strict" });
+    scoped.publish(StrictEvent, { component: "test", msg: "strict", extra: "kept" } as never);
+    expect(received[0]).toMatchObject({ component: "test", msg: "strict", extra: "kept" });
   });
 
   it("merges child identity while retaining parent fields", () => {
@@ -88,7 +103,10 @@ describe("scoped observations", () => {
     ]);
   });
 
-  it("contains failures from the default and caller-provided error reporters", () => {
+  it.each([
+    new Error("reporter failed"), Symbol("reporter"), { toString: 0 }, null, undefined,
+    false, 1, 1n, "reporter", () => undefined,
+  ])("contains reporter failure without changing its identity: %p", (reporterFailure) => {
     const warn = mock(() => undefined);
     const originalWarn = console.warn;
     console.warn = warn;
@@ -110,14 +128,26 @@ describe("scoped observations", () => {
       console.warn = originalWarn;
     }
 
+    const errorLog = spyOn(console, "error").mockImplementation(() => undefined);
     const scoped = scopeObservation(hostile, identity, {
       onError() {
-        throw new Error("reporter failed");
+        throw reporterFailure;
       },
     });
-    expect(() =>
-      scoped.publish(TestEvent, { component: "test", msg: "custom reporter" }),
-    ).not.toThrow();
+    try {
+      expect(() =>
+        scoped.publish(TestEvent, { component: "test", msg: "custom reporter" }),
+      ).not.toThrow();
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      expect(errorLog.mock.calls[0]?.[1]).toMatchObject({
+        eventName: TestEvent.name,
+        error: { errors: [expect.objectContaining({ message: "sink failed" }), reporterFailure] },
+      });
+      const logged = z.object({ error: z.instanceof(AggregateError) }).parse(errorLog.mock.calls[0]?.[1]);
+      expect(logged.error.errors[1]).toBe(reporterFailure);
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 
   it("forwards subscriptions when the underlying sink supports them", () => {
@@ -152,14 +182,6 @@ describe("scoped observations", () => {
     expect(sink.named(OtherEvent.name)).toHaveLength(1);
     sink.reset();
     expect(sink.events).toEqual([]);
-  });
-
-  it("noop sink and its scopes discard observations", () => {
-    const sink = noopSink();
-    expect(() => sink.publish(TestEvent, { component: "test", msg: "discard" })).not.toThrow();
-    expect(() =>
-      sink.scope?.(identity).publish(TestEvent, { component: "test", msg: "discard" }),
-    ).not.toThrow();
   });
 
   it("generates compact trace identifiers", () => {

@@ -1,4 +1,5 @@
 import { canonicalDigest, type Message } from "@openomni/protocol";
+import { latestCompactionAnchorId } from "./candidate";
 
 export type CanonicalConversationEntry = Message.WithParts;
 
@@ -18,7 +19,7 @@ export interface CompactionRecord {
   };
 }
 
-export interface CompactionPlan {
+interface CompactionPlan {
   readonly projection: readonly CanonicalConversationEntry[];
   readonly record: CompactionRecord;
 }
@@ -29,7 +30,7 @@ export function createCompactionPlan(
   tokensBefore: number,
 ): CompactionPlan {
   const originals = structuredClone(prior);
-  const shared = sharedSuffixLength(originals, replacement);
+  const { count: shared, first: sharedFirst } = sharedSuffix(originals, replacement);
   const finalOriginal = originals.at(-1);
   if (finalOriginal === undefined) {
     throw new Error("compaction requires original history");
@@ -41,10 +42,7 @@ export function createCompactionPlan(
       ? replacement
       : [...replacement.filter((entry) => entry.info.id !== finalOriginal.info.id), finalOriginal];
   const suffixLength = Math.max(1, shared);
-  const firstKept = originals[originals.length - suffixLength];
-  if (firstKept === undefined) {
-    throw new Error("compaction projection must contain at least one entry");
-  }
+  const firstKept = sharedFirst ?? finalOriginal;
   const removedEntries = originals.slice(0, originals.length - suffixLength);
   const firstRemoved = removedEntries[0];
   const lastRemoved = removedEntries.at(-1);
@@ -66,7 +64,7 @@ export function createCompactionPlan(
       },
       revert: {
         removedEntries,
-        priorAnchorEntryId: latestAnchorId(removedEntries),
+        priorAnchorEntryId: latestCompactionAnchorId(removedEntries) ?? null,
       },
     },
   };
@@ -86,11 +84,12 @@ export function restoreCompactionProjection(
   return [...record.revert.removedEntries, ...projection.slice(firstKeptIndex)];
 }
 
-function sharedSuffixLength(
+function sharedSuffix(
   prior: readonly CanonicalConversationEntry[],
   replacement: readonly CanonicalConversationEntry[],
-): number {
+): { readonly count: number; readonly first: CanonicalConversationEntry | undefined } {
   let count = 0;
+  let first: CanonicalConversationEntry | undefined;
   while (count < prior.length && count < replacement.length) {
     const before = prior[prior.length - count - 1];
     const after = replacement[replacement.length - count - 1];
@@ -101,26 +100,10 @@ function sharedSuffixLength(
     ) {
       break;
     }
+    first = before;
     count += 1;
   }
-  return count;
-}
-
-function isAnchorEntry(entry: CanonicalConversationEntry): boolean {
-  return (
-    entry.info.role === "user" &&
-    entry.parts.some((part) => part.type === "text" && part.metadata?.compactionAnchor === true)
-  );
-}
-
-function latestAnchorId(entries: readonly CanonicalConversationEntry[]): string | null {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
-    if (entry !== undefined && isAnchorEntry(entry)) {
-      return entry.info.id;
-    }
-  }
-  return null;
+  return { count, first };
 }
 
 function compactionSummary(entries: readonly CanonicalConversationEntry[]): string {

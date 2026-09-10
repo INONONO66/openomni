@@ -1,49 +1,21 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Compaction } from "../../src/compaction";
-import { collector } from "../../src/observation/bus";
+import { collector } from "../helpers/observation-collector";
 import { resolveCompactionGeometry } from "../../src/compaction/geometry";
+import { textMessage } from "../helpers/messages";
 
 function user(id: string): Message.WithParts {
-  return {
-    info: {
-      id,
-      sessionID: "policy-session",
-      role: "user",
-      time: { created: 1 },
-      agent: "test",
-      model: { providerID: "", modelID: "" },
-    },
-    parts: [
-      { id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id },
-    ],
-  };
+  return textMessage("user", id, identity.sessionId, id);
 }
 
 function assistant(id: string): Message.WithParts {
-  return {
-    info: {
-      id,
-      sessionID: "policy-session",
-      role: "assistant",
-      time: { created: 1 },
-      parentID: "",
-      modelID: "model",
-      providerID: "provider",
-      agent: "test",
-      path: { cwd: "/", root: "/" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id },
-    ],
-  };
+  return textMessage("assistant", id, identity.sessionId, id);
 }
 
 const identity = { traceId: "trace", sessionId: "policy-session", runId: "run" };
 
-describe("compaction geometry and apply policy", () => {
+describe("compaction geometry and application", () => {
   it("uses adaptive geometry instead of cumulative run spend", () => {
     expect(Compaction.shouldCompact(449, { contextWindowTokens: 1000 })).toBe(false);
     expect(Compaction.shouldCompact(450, { contextWindowTokens: 1000 })).toBe(true);

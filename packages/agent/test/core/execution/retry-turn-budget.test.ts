@@ -5,12 +5,7 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { runTestAgent } from "../../helpers/test-agent";
 import { advanceRunTurn, createRunState, recordRunTurn } from "../../../src/core/execution/state";
 import { Bus } from "../../../src/index";
-import {
-  createMockLlmConfig,
-  createStopOutcome,
-  mockProviderData,
-  mockProviderModel,
-} from "../../helpers/mock-llm";
+import { mockLlm, completeModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 describe("turn budget across retries", () => {
@@ -38,14 +33,10 @@ describe("turn budget across retries", () => {
       const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        llm: createMockLlmConfig({
-          getModels: async () => mockProviderData,
-          fromModelsDevModel: () => mockProviderModel,
-          run: async () => {
-            calls += 1;
-            if (calls === 1) throw providerFailure("transient provider hiccup");
-            return createStopOutcome();
-          },
+        llm: mockLlm(async (input, sink) => {
+          calls += 1;
+          if (calls === 1) throw providerFailure("transient provider hiccup");
+          return completeModel(input, sink);
         }),
       });
       await retry.promise;

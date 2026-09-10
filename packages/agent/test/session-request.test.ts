@@ -1,4 +1,5 @@
 import { expect, it } from "bun:test";
+import { openRequest } from "./helpers/open-request";
 import {
   canonicalDigest,
   type LedgerAction,
@@ -41,35 +42,14 @@ const original: LedgerAction.Node = {
   irreversible: true,
 };
 function request(): SessionTransition.Request {
-  const value: SessionTransition.Request = {
+  return openRequest({
     requestId: "invocation",
     sessionId: "session",
     turnId: null,
     callId: "call",
-    mode: "approval",
     parsedInput: { path: "original" },
-    inputHash: canonicalDigest({ path: "original" }),
-    effectHash: canonicalDigest({ category: "mutation" }),
-    generation: 1,
-    toolsGeneration: 1,
-    toolsHash: "tools",
-    systemHash: "system",
     domainRevisions: { person: 3 },
-    deadline: 100,
-    expectedResponders: ["owner"],
-    correlation: {},
-    allowedActions: ["report_result"],
-    bindingDigest: "",
-    resolution: "first",
-    threshold: 1,
-    seenReplyIds: [],
-    replies: [],
-    state: "open",
-    outcome: null,
-    createdAt: 1,
-  };
-  value.bindingDigest = requestBindingDigest(value);
-  return value;
+  });
 }
 function answer(pending = request()): SessionTransition.Answer {
   return {
@@ -139,6 +119,16 @@ it("records one canonical resolution and deduplicates equivalent input after res
       ...persisted,
     ]).resolution,
   ).toBe("rejected");
+  // A recorded input whose durable resolution no longer decodes is not replayed as a success.
+  const corrupted: LedgerAction.Node[] = persisted.map((action) =>
+    action.id === `invocation:input:${payload.answer.inputId}`
+      ? {
+          ...action,
+          effect: { encodingVersion: 1 as const, value: { phase: "state", resolution: "???" } },
+        }
+      : action,
+  );
+  expect(decide(payload, result.request, [original, ...corrupted]).resolution).toBe("rejected");
 });
 it("expires late answers before binding checks without reopening or inbox effects", () => {
   const pending = request();

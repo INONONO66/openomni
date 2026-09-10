@@ -1,9 +1,10 @@
-import { providerFailure } from "../../helpers/mock-llm";
+import { completeModel, providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it } from "bun:test";
 import { runTestAgent } from "../../helpers/test-agent";
 import { Retry } from "@openomni/llm";
-import { collector } from "../../../src/observation/bus";
+import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
+import { overflowCompactionConfig } from "../../helpers/run-config";
 
 const model = {
   id: "model",
@@ -67,17 +68,10 @@ describe("context overflow recovery", () => {
     let sawAnchor = false;
     let calls = 0;
     const result = await runTestAgent(history, {
-      events: collector(),
-      model: { provider: "provider", id: "model" },
-      compaction: {
-        contextWindowTokens: 10_000,
-        protectRecentMessages: 2,
-        speculate: false,
-        onSummarize: async () => "overflow checkpoint",
-      },
+      ...overflowCompactionConfig(),
       llm: {
         resolveModel: async () => model,
-        run: async (input) => {
+        run: async (input, sink) => {
           calls += 1;
           seen.push(input.messages.length);
           sawAnchor =
@@ -95,7 +89,7 @@ describe("context overflow recovery", () => {
                   retryable: false,
                 }),
               }
-            : { type: "stop" };
+            : completeModel(input, sink);
         },
       },
     });
@@ -118,14 +112,7 @@ describe("context overflow recovery", () => {
     });
     let calls = 0;
     const running = runTestAgent(history, {
-      events: collector(),
-      model: { provider: "provider", id: "model" },
-      compaction: {
-        contextWindowTokens: 10_000,
-        protectRecentMessages: 2,
-        speculate: false,
-        onSummarize: async () => "overflow checkpoint",
-      },
+      ...overflowCompactionConfig(),
       llm: {
         resolveModel: async () => model,
         run: async () => {

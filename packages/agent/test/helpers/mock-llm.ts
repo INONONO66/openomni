@@ -1,23 +1,30 @@
-import { Run, type Sink } from "@openomni/llm";
+import { Run, type RunInput, type Sink } from "@openomni/llm";
 import type { ChatAgentConfig } from "../../src/core/types";
-import { modelFixture } from "./model-fixture";
+import { createAssistantMessage } from "../../src/core/message-factory";
 
-type MockLlmInput = {
-  readonly messages?: readonly unknown[];
-  readonly maxSteps?: number;
-  readonly signal?: ChatAgentConfig["signal"];
-  /** The steering stop condition the loop passes when config.steeringPending is set (#751). */
-  readonly shouldYield?: () => boolean;
-  /** The window-yield arm point — undefined when the yield is disarmed or the window unknown. */
-  readonly yieldAtInputTokens?: number;
-  /** The resolved model this call runs — reflects a model.override (#753) when one fired. */
-  readonly model?: { readonly id: string; readonly providerID: string };
+export type MockLlmFn = (input: RunInput, sink: Sink) => Promise<Run.Outcome>;
+
+// Explicit terminal provider behavior, never injected into another mock's output.
+export const completeModel: MockLlmFn = async (input, sink) => {
+  sink.onMessage(
+    createAssistantMessage("done", input.messages.at(-1)?.info.id ?? "", input.trace.sessionId),
+  );
+  return { type: "stop" };
 };
-
-export type MockLlmFn = (input: MockLlmInput, sink: Sink) => Promise<Run.Outcome>;
 
 export function createStopOutcome(): Run.Outcome {
   return { type: "stop" };
+}
+
+export function countingStopLlm() {
+  let calls = 0;
+  return {
+    get calls() { return calls; },
+    llm: mockLlm(async () => {
+      calls += 1;
+      return createStopOutcome();
+    }),
+  };
 }
 
 export function providerFailure(
@@ -96,10 +103,32 @@ export function createMockLlmConfig(options: {
   readonly run: MockLlmFn;
 }): NonNullable<ChatAgentConfig["llm"]> {
   return {
-    run: modelFixture(options.run),
+    run: options.run,
     resolveModel: async () => {
       await options.getModels();
       return options.fromModelsDevModel();
     },
   };
+}
+
+/** An llm config whose resolved "provider/model" advertises a `context`-token window. */
+export function windowedLlm(run: MockLlmFn, context = 1000): ChatAgentConfig["llm"] {
+  return {
+    resolveModel: async () => ({
+      id: "model",
+      name: "model",
+      providerID: "provider",
+      limit: { context, output: 100 },
+    }),
+    run,
+  };
+}
+
+/** The catalog-resolved anthropic haiku mock with `run` as its provider behavior. */
+export function mockLlm(run: MockLlmFn): NonNullable<ChatAgentConfig["llm"]> {
+  return createMockLlmConfig({
+    getModels: async () => mockProviderData,
+    fromModelsDevModel: () => mockProviderModel,
+    run,
+  });
 }

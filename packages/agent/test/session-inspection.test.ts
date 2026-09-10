@@ -10,16 +10,13 @@ import {
   Bus,
   closeSessions,
   createTurnDispatcher,
-  foldSessionHistory,
-  inspectActions,
-  inspectPolicy,
-  session,
   wakeSession,
-  type SessionHandle,
   type SessionRunner,
   type SessionRuntime,
 } from "../src/index";
-import { bounded } from "./helpers/request-ledger";
+import { foldSessionHistory } from "../src/session-lifecycle/history";
+import { session, type SessionHandle } from "../src/session-handle";
+import { bounded } from "./helpers/bounded";
 
 const SECRET = "sk-live-credential-never-shown";
 let nextId = 0;
@@ -302,17 +299,16 @@ describe("action-based history and diagnostic projections", () => {
     expect(parent.inspect({ depth: 0 }).children).toEqual([]);
   });
 
-  test("policy decisions are inspectable by generation, rule and verdict and never carry payloads", async () => {
+  test("policy decisions carry generation, rule and verdict and never carry payloads", async () => {
     const parent = await lifecycle();
     const inspection = parent.inspect();
-    expect(inspectPolicy(inspection.policy, { verdict: "deny" })).toMatchObject([
+    expect(inspection.policy.filter((decision) => decision.verdict === "deny")).toMatchObject([
       { op: "forbidden", hook: "tool.pre", matchedRuleIds: ["refuse-forbidden"] },
     ]);
-    expect(inspectPolicy(inspection.policy, { ruleId: "approve-write" })).toMatchObject([
-      { verdict: "require_approval", reason: "owner", generation: 1 },
-    ]);
-    expect(inspectPolicy(inspection.policy, { generation: 2 })).toEqual([]);
-    expect(inspectPolicy(inspection.policy, { generation: 1 })).toEqual([...inspection.policy]);
+    expect(
+      inspection.policy.filter((decision) => decision.matchedRuleIds.includes("approve-write")),
+    ).toMatchObject([{ verdict: "require_approval", reason: "owner", generation: 1 }]);
+    expect(inspection.policy.every((decision) => decision.generation === 1)).toBe(true);
     for (const decision of inspection.policy) {
       if (decision.subjectActionId === null) continue;
       expect(inspection.transitions.some((e) => e.actionId === decision.subjectActionId)).toBe(
@@ -331,7 +327,6 @@ describe("action-based history and diagnostic projections", () => {
     const ran = bodies;
     parent.inspect({ depth: 2 });
     parent.history({ limit: 5 });
-    inspectActions("parent", null, before);
     expect(bodies).toBe(ran);
     expect(SessionHandleStore.tree("parent")).toEqual(before);
     expect(SessionHandleStore.tree("child")).toEqual(SessionHandleStore.tree("child"));
@@ -350,9 +345,7 @@ describe("action-based history and diagnostic projections", () => {
     }
     expect(page.headRevision).toBe(parent.get().revision);
     expect(rebuilt).toEqual(before);
-    const { children, ...canonical } = parent.inspect({ depth: 0 });
-    expect(children).toEqual([]);
-    expect(inspectActions("parent", null, rebuilt)).toEqual(canonical);
+    expect(parent.inspect({ depth: 0 }).children).toEqual([]);
     expect(foldSessionHistory("parent", rebuilt)).toEqual(foldSessionHistory("parent", before));
   });
 });

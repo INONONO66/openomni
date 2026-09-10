@@ -6,6 +6,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { waveBodyScope } from "./core/execution/tool-wave";
+import { settled } from "./core/settled";
 
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({ status: z.literal("timed_out") }).strict(),
@@ -60,10 +61,7 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
   readonly error?: Error;
 }> {
   if (timeoutMs === undefined) {
-    return Promise.resolve(definition.execute(input, context)).then(
-      (value) => ({ timedOut: false, value }) as const,
-      (error) => ({ timedOut: false, error: toError(error) }) as const,
-    );
+    return settledExecution(Promise.resolve(definition.execute(input, context)));
   }
 
   const controller = new AbortController();
@@ -71,17 +69,9 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
   context.signal.addEventListener("abort", forwardAbort, { once: true });
   const scopedContext = { ...context, signal: controller.signal };
   const rawExecution = Promise.resolve(definition.execute(input, scopedContext));
-  const execution = rawExecution.then(
-    (value) => ({ timedOut: false, value }) as const,
-    (error) => ({ timedOut: false, error: toError(error) }) as const,
-  );
+  const execution = settledExecution(rawExecution);
   // Ownership follows raw settlement, independent of fallible result conversion.
-  waveBodyScope.getStore()?.retain?.(
-    rawExecution.then(
-      () => undefined,
-      () => undefined,
-    ),
-  );
+  waveBodyScope.getStore()?.retain?.(settled(rawExecution));
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
     controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));
@@ -91,6 +81,13 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
     clearTimeout(timer);
     context.signal.removeEventListener("abort", forwardAbort);
   });
+}
+
+function settledExecution<T>(execution: Promise<T>) {
+  return execution.then(
+    (value) => ({ timedOut: false, value }) as const,
+    (error: CaughtValue) => ({ timedOut: false, error: toError(error) }) as const,
+  );
 }
 
 function isToolRefusal(error: Error): boolean {

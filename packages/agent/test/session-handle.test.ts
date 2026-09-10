@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
+import { openRequest } from "./helpers/open-request";
 import { boundedBy } from "./helpers/bounded";
+import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
 import {
   closeSessions,
   session,
   SessionCommitError,
   type SessionCreateOptions,
+  type SessionHandle,
   type SessionRunner,
   type SessionRunnerInput,
   type SessionRuntime,
@@ -19,9 +22,10 @@ import {
   PlainValueSchema,
   type ObservationSink,
   type SessionGeneration,
+  type SessionTransition,
   type SessionTurn,
 } from "@openomni/protocol";
-import { Bus, SEEDED_POLICY_ROWS } from "../src/index";
+import { Bus } from "../src/index";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
 const bounded = boundedBy(SIGNAL_TIMEOUT_MS);
@@ -37,6 +41,119 @@ function signal<T>(): Signal<T> {
     resolvePromise = resolve;
   });
   return { promise, resolve: resolvePromise };
+}
+
+/** A runner that ignores abort and only settles once released; tracks its concurrency. */
+function stubbornRunner(options: { readonly resumeAfterFirst?: boolean } = {}) {
+  const entered = signal<void>();
+  const abortSeen = signal<void>();
+  const releaseRunner = signal<void>();
+  let active = 0;
+  let maximumActive = 0;
+  let calls = 0;
+  const runner: SessionRunner = async (input) => {
+    calls += 1;
+    if (options.resumeAfterFirst && calls > 1) return { kind: "result", text: "resumed" };
+    active += 1;
+    maximumActive = Math.max(maximumActive, active);
+    input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
+    entered.resolve();
+    await releaseRunner.promise;
+    active -= 1;
+    return { kind: "result", text: "late" };
+  };
+  return {
+    runner,
+    entered,
+    abortSeen,
+    releaseRunner,
+    maximumActive: () => maximumActive,
+    calls: () => calls,
+  };
+}
+
+type StubbornRun = ReturnType<typeof stubbornRunner>;
+
+/** Prompts, waits for the stubborn runner to enter, interrupts, and waits for the abort to reach it. */
+async function interruptStubborn(
+  handle: SessionHandle,
+  run: StubbornRun,
+): Promise<{ running: Promise<unknown>; interrupted: Promise<unknown> }> {
+  const running = handle.prompt("start");
+  await bounded(run.entered.promise, "runner entry");
+  const interrupted = handle.interrupt();
+  await bounded(run.abortSeen.promise, "runner abort signal");
+  return { running, interrupted };
+}
+
+/**
+ * The caller-facing interrupt completes at the sealed terminal, not when the
+ * abort-ignoring runner finally settles; the lease stays held until then.
+ */
+async function settleStubborn(
+  handle: SessionHandle,
+  run: StubbornRun,
+  pending: { running: Promise<unknown>; interrupted: Promise<unknown> },
+  hibernated: Signal<void>,
+): Promise<void> {
+  await bounded(pending.interrupted, "interrupt receipt before runner settlement");
+  expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+  run.releaseRunner.resolve();
+  await bounded(
+    Promise.all([pending.running, hibernated.promise]),
+    "runner settlement + lease release",
+  );
+}
+
+/** A runner that records every input it receives and answers `text`. */
+function recordingRunner(text: string): { runner: SessionRunner; inputs: SessionRunnerInput[] } {
+  const inputs: SessionRunnerInput[] = [];
+  const runner: SessionRunner = async (input) => {
+    inputs.push(input);
+    return { kind: "result", text };
+  };
+  return { runner, inputs };
+}
+
+/** No second runtime may take the lease while the stubborn runner lives; once it settles the lease is free. */
+async function expectLeaseHeldUntilSettled(
+  handle: SessionHandle,
+  run: StubbornRun,
+  pending: { running: Promise<unknown>; interrupted: Promise<unknown> },
+  hibernated: Signal<void>,
+  fence = handle.get().lease.fence,
+): Promise<void> {
+  expect(contendLease(handle, fence).ok).toBe(false);
+  expect(run.maximumActive()).toBe(1);
+  await settleStubborn(handle, run, pending, hibernated);
+  expect(contendLease(handle).ok).toBe(true);
+  expect(run.maximumActive()).toBe(1);
+}
+
+/** Declares `id` with a runtime whose hibernation resolves the returned signal. */
+function hibernatingSession(
+  id: string,
+  runner: SessionRunner,
+  extra: Partial<SessionRuntime> = {},
+): { handle: SessionHandle; hibernated: Signal<void> } {
+  const hibernated = signal<void>();
+  const handle = session(residentOptions(id, runner), {
+    ...runtime,
+    ...extra,
+    onHibernate: () => hibernated.resolve(),
+  });
+  return { handle, hibernated };
+}
+
+/** A second runtime trying to take the lease right now, without waiting for the TTL. */
+function contendLease(handle: SessionHandle, expectedFence = handle.get().lease.fence) {
+  return SessionHandleStore.acquireLease({
+    sessionId: handle.id,
+    owner: "second-runtime",
+    expectedFence,
+    now,
+    expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+  });
 }
 
 class TestObservationSink implements ObservationSink {
@@ -93,9 +210,7 @@ beforeEach(() => {
     scheduleHeartbeat: () => () => undefined,
   };
   Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
-  for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
+  seedPolicy();
 });
 
 afterEach(async () => {
@@ -108,7 +223,7 @@ function residentOptions(id: string, runner: SessionRunner): SessionCreateOption
   return { id, role: "resident", runner, tools: [tool("read")], system };
 }
 
-function policyHook(action: LedgerAction.Node): string | undefined {
+function policyHook(action: Pick<LedgerAction.Append, "kind" | "intent">): string | undefined {
   if (action.kind !== "policy.decision") return undefined;
   const value = action.intent.value;
   if (value === null || Array.isArray(value) || typeof value !== "object") return undefined;
@@ -126,6 +241,7 @@ function commitOpenTurn(input: {
   readonly sessionId: string;
   readonly resultId: string;
   readonly resumeCount: number;
+  readonly toolsHash?: string;
 }): void {
   const created = SessionHandleStore.materialize({
     id: input.sessionId,
@@ -165,7 +281,7 @@ function commitOpenTurn(input: {
             resultId: input.resultId,
             inboxIds: [],
             toolsGeneration: generation.generation,
-            toolsHash: generation.toolsHash,
+            toolsHash: input.toolsHash ?? generation.toolsHash,
             systemHash: generation.systemHash,
             policyGeneration: generation.policyGeneration,
             resumeCount: input.resumeCount,
@@ -183,6 +299,37 @@ function commitOpenTurn(input: {
   });
   if (!committed.ok) throw new Error("crash fixture could not commit its open turn");
   now += SessionHandleStore.LEASE_TTL_MS;
+}
+
+function durableRequest(sessionId: string, turnId: string): SessionTransition.Request {
+  const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
+  return openRequest({
+    requestId: `${sessionId}:request`,
+    sessionId,
+    turnId,
+    callId: `${sessionId}:call`,
+    toolsGeneration: generation.generation,
+    toolsHash: generation.toolsHash,
+    systemHash: generation.systemHash,
+    deadline: now + 1_000,
+    createdAt: now,
+  });
+}
+
+function approvalRequest(sessionId: string, turnId: string): ExecutionApprovalRequest {
+  const durable = durableRequest(sessionId, turnId);
+  return {
+    durable,
+    id: durable.requestId,
+    sessionId,
+    turnId,
+    callId: durable.callId,
+    inputHash: durable.inputHash,
+    generation: 1,
+    revision: 1,
+    policyDecisionId: `${sessionId}:decision`,
+    intent: {},
+  };
 }
 
 describe("durable session handle", () => {
@@ -245,88 +392,54 @@ describe("durable session handle", () => {
     expect(observedBeforeCommit).toEqual([]);
   });
 
-  test("a prompt pre denial consumes the inbox row without constructing or running a turn", async () => {
-    await Storage.withIsolation(async () => {
+  /** Runs one prompt against an isolated store whose only extra policy row denies prompts at `phase`. */
+  async function promptDeniedAt(phase: "pre" | "post", reason: string) {
+    return await Storage.withIsolation(async () => {
       Storage.initialize({ dbPath: ":memory:", observationSink: sink });
       seedPolicy([
         {
-          name: "deny-prompt-pre",
+          name: `deny-prompt-${phase}`,
           kind: "prompt",
-          phase: "pre",
+          phase,
           match: { encodingVersion: 1, value: { op: "inbox" } },
-          verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt refused" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason } },
           priority: 2_000,
         },
       ]);
       const isolatedRuntime = { ...runtime };
       let calls = 0;
       const handle = session(
-        residentOptions("prompt-pre-deny", async () => {
+        residentOptions(`prompt-${phase}-deny`, async () => {
           calls += 1;
           return { kind: "result", text: "must not run" };
         }),
         isolatedRuntime,
       );
-
       const result = await handle.prompt("blocked prompt");
-
       const tree = SessionHandleStore.tree(handle.id);
       expect(result).toMatchObject({
         kind: "error",
-        cause: { name: "SessionPolicyRefusal", reason: "prompt refused" },
+        cause: { name: "SessionPolicyRefusal", reason },
       });
       expect(calls).toBe(0);
       expect(tree.filter((action) => action.kind === "turn")).toEqual([]);
-      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
-        "prompt.pre",
-      ]);
-      expect(SessionHandleStore.inboxRows(handle.id).map((row) => row.status)).toEqual([
-        "consumed",
-      ]);
+      const hooks = tree.filter((action) => action.kind === "policy.decision").map(policyHook);
+      const inbox = SessionHandleStore.inboxRows(handle.id).map((row) => row.status);
       await closeSessions(isolatedRuntime);
       Storage.reset();
+      return { hooks, inbox };
     });
+  }
+
+  test("a prompt pre denial consumes the inbox row without constructing or running a turn", async () => {
+    const { hooks, inbox } = await promptDeniedAt("pre", "prompt refused");
+    expect(hooks).toEqual(["prompt.pre"]);
+    expect(inbox).toEqual(["consumed"]);
   });
 
   test("a prompt post denial records both prompt decisions but never starts a turn", async () => {
-    await Storage.withIsolation(async () => {
-      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-      seedPolicy([
-        {
-          name: "deny-prompt-post",
-          kind: "prompt",
-          phase: "post",
-          match: { encodingVersion: 1, value: { op: "inbox" } },
-          verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt post refused" } },
-          priority: 2_000,
-        },
-      ]);
-      const isolatedRuntime = { ...runtime };
-      let calls = 0;
-      const handle = session(
-        residentOptions("prompt-post-deny", async () => {
-          calls += 1;
-          return { kind: "result", text: "must not run" };
-        }),
-        isolatedRuntime,
-      );
-
-      const result = await handle.prompt("blocked after record");
-
-      const tree = SessionHandleStore.tree(handle.id);
-      expect(result).toMatchObject({
-        kind: "error",
-        cause: { name: "SessionPolicyRefusal", reason: "prompt post refused" },
-      });
-      expect(calls).toBe(0);
-      expect(tree.filter((action) => action.kind === "turn")).toEqual([]);
-      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
-        "prompt.pre",
-        "prompt.post",
-      ]);
-      await closeSessions(isolatedRuntime);
-      Storage.reset();
-    });
+    const { hooks } = await promptDeniedAt("post", "prompt post refused");
+    expect(hooks).toEqual(["prompt.pre", "prompt.post"]);
   });
 
   test("fails closed when prompt post policy transforms its immutable receipt", async () => {
@@ -648,12 +761,78 @@ describe("durable session handle", () => {
     ).toEqual(SessionHandleStore.inboxRows(handle.id).map((row) => row.id));
   });
 
-  test("records an idle interrupt as a no-op without resuming the next prompt", async () => {
-    const inputs: SessionRunnerInput[] = [];
+  test("a turn's ledger refuses a request transition once that turn has sealed", async () => {
+    const entered = signal<SessionRunnerInput>();
     const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "ran once" };
+      entered.resolve(input);
+      return { kind: "result", text: "done" };
     };
+    const handle = session(residentOptions("late-transition", runner), runtime);
+    await bounded(handle.prompt("first prompt"), "prompt completion");
+    const input = await bounded(entered.promise, "runner entry");
+    const request = durableRequest(handle.id, input.turnId);
+    const tree = SessionHandleStore.tree(handle.id);
+    if (input.ledger.transition === undefined) throw new Error("missing transition port");
+    const late = input.ledger.transition({ kind: "request.open", request }, "late:open", now);
+    await expect(late).rejects.toBeInstanceOf(SessionCommitError);
+    await expect(late).rejects.toMatchObject({ result: { ok: false, reason: "stale" } });
+    expect(SessionHandleStore.tree(handle.id)).toEqual(tree);
+    expect(SessionHandleStore.requestRows()).toEqual([]);
+  });
+
+  test("an interrupt landing during turn.pre admission seals interrupted without entering the runner", async () => {
+    let runs = 0;
+    const handle = session(
+      residentOptions("interrupt-before-body", async () => {
+        runs += 1;
+        return { kind: "result", text: "ran" };
+      }),
+      runtime,
+    );
+    let interrupted: Promise<void> | undefined;
+    sink.onCommit = (committed) => {
+      if (committed.sessionId !== handle.id || committed.kind !== "policy.decision") return;
+      const action = SessionHandleStore.tree(handle.id).find((node) => node.id === committed.id);
+      if (action === undefined || policyHook(action) !== "turn.pre" || interrupted !== undefined)
+        return;
+      interrupted = handle.interrupt();
+    };
+    const result = await bounded(handle.prompt("never reaches the runner"), "prompt completion");
+    if (interrupted === undefined) throw new Error("turn.pre decision was never observed");
+    await bounded(interrupted, "interrupt receipt");
+    expect(result).toEqual({ kind: "interrupted", text: "" });
+    expect(runs).toBe(0);
+    expect(handle.get().state).toBe("interrupted");
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+  });
+
+  test("a storage failure during turn admission seals the turn as an error", async () => {
+    let runs = 0;
+    const handle = session(
+      residentOptions("admission-storage-failure", async () => {
+        runs += 1;
+        return { kind: "result", text: "ran" };
+      }),
+      runtime,
+    );
+    const sessions = Storage.get().sessions;
+    if (sessions === undefined) throw new Error("missing session adapter");
+    const commit = sessions.commit;
+    const explode = spyOn(sessions, "commit").mockImplementation((input) => {
+      const decision = input.actions.find((action) => action.kind === "policy.decision");
+      if (decision === undefined || policyHook(decision) !== "turn.pre") return commit(input);
+      explode.mockRestore();
+      throw new Error("storage exploded during admission");
+    });
+    const result = await bounded(handle.prompt("admission fails"), "prompt completion");
+    expect(result).toMatchObject({ kind: "error", text: "storage exploded during admission" });
+    expect(runs).toBe(0);
+    expect(handle.get().state).toBe("idle");
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+  });
+
+  test("records an idle interrupt as a no-op without resuming the next prompt", async () => {
+    const { runner, inputs } = recordingRunner("ran once");
     const handle = session(residentOptions("idle-interrupt", runner), runtime);
     SessionHandleStore.commitInbox({
       id: "idle-interrupt:interrupt",
@@ -716,11 +895,7 @@ describe("durable session handle", () => {
   });
 
   test("a leading idle interrupt is consumed before a later prompt starts", async () => {
-    const inputs: SessionRunnerInput[] = [];
-    const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "ran once" };
-    };
+    const { runner, inputs } = recordingRunner("ran once");
     const handle = session(residentOptions("leading-idle-interrupt", runner), runtime);
     const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
     SessionHandleStore.commitInbox({
@@ -827,30 +1002,9 @@ describe("durable session handle", () => {
   });
 
   test("keeps the durable lease held through an ignored abort so no other runtime can resume", async () => {
-    const entered = signal<void>();
-    const abortSeen = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async (input) => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("lease-held-through-abort", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
-    });
-
-    const running = handle.prompt("start");
-    await bounded(entered.promise, "runner entry");
-    const interrupted = handle.interrupt();
-    await bounded(abortSeen.promise, "runner abort signal");
+    const run = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("lease-held-through-abort", run.runner);
+    const pending = await interruptStubborn(handle, run);
 
     // The interrupted terminal is sealed promptly, but the runner ignored the
     // abort and is still alive, so the durable lease MUST stay held by this
@@ -858,53 +1012,14 @@ describe("durable session handle", () => {
     // (no clock advance) must be refused, or two live executors could exist for
     // one durable session.
     expect(handle.get().state).toBe("interrupted");
-    const contended = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: handle.get().lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(contended.ok).toBe(false);
-    expect(maximumActive).toBe(1);
-
-    // Once the runner settles, this owner releases the lease and it becomes
-    // acquirable again.
-    // The caller-facing interrupt completes at the sealed terminal, not when
-    // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement");
-    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
-    releaseRunner.resolve();
-    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
-    const afterSettle = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: handle.get().lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(afterSettle.ok).toBe(true);
-    expect(maximumActive).toBe(1);
+    await expectLeaseHeldUntilSettled(handle, run, pending, hibernated);
   });
 
   test("a retained runner whose lease lapsed does not wedge the handle: the next prompt still runs", async () => {
-    const entered = signal<void>();
-    const abortSeen = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let calls = 0;
-    const runner: SessionRunner = async (input) => {
-      calls += 1;
-      if (calls > 1) return { kind: "result", text: "resumed" };
-      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
-      entered.resolve();
-      await releaseRunner.promise;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("retained-lease-lapsed", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
+    const { runner, entered, abortSeen, releaseRunner, calls } = stubbornRunner({
+      resumeAfterFirst: true,
     });
+    const { handle, hibernated } = hibernatingSession("retained-lease-lapsed", runner);
 
     const running = handle.prompt("start");
     await bounded(entered.promise, "runner entry");
@@ -922,36 +1037,47 @@ describe("durable session handle", () => {
 
     const leaseBefore = SessionHandleStore.row(handle.id).leaseFence;
     await bounded(handle.resume(), "resume after retained settlement");
-    expect(calls).toBe(2);
+    expect(calls()).toBe(2);
     expect(handle.get().state).toBe("idle");
     expect(SessionHandleStore.row(handle.id).leaseFence).toBe(leaseBefore + 1);
   });
 
-  test("configure during the ignored-abort window keeps the lease held by the live runner", async () => {
-    const entered = signal<void>();
-    const abortSeen = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async (input) => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("configure-in-interrupt-window", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
+  test("a refused retained release surfaces once to the next turn start and then clears", async () => {
+    const { runner, entered, abortSeen, releaseRunner, calls } = stubbornRunner({
+      resumeAfterFirst: true,
     });
-
+    const handle = session(residentOptions("retained-release-refused", runner), runtime);
     const running = handle.prompt("start");
     await bounded(entered.promise, "runner entry");
-    const interrupted = handle.interrupt();
+    await bounded(handle.interrupt(), "interrupt receipt");
     await bounded(abortSeen.promise, "runner abort signal");
+
+    const sessions = Storage.get().sessions;
+    if (sessions === undefined) throw new Error("missing session adapter");
+    const commit = sessions.commit;
+    const releaseRefused = signal<void>();
+    const refuseRelease = spyOn(sessions, "commit").mockImplementation((input) => {
+      if (input.releaseLease && input.actions.length === 0 && input.sessionId === handle.id) {
+        refuseRelease.mockRestore();
+        releaseRefused.resolve();
+        throw new Error("release refused by storage");
+      }
+      return commit(input);
+    });
+    releaseRunner.resolve();
+    await bounded(Promise.all([running, releaseRefused.promise]), "retained settlement");
+
+    await expect(handle.resume()).rejects.toThrow("release refused by storage");
+    await bounded(handle.resume(), "resume after the surfaced failure");
+    expect(calls()).toBe(2);
+    expect(handle.get().state).toBe("idle");
+    expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
+  });
+
+  test("configure during the ignored-abort window keeps the lease held by the live runner", async () => {
+    const run = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("configure-in-interrupt-window", run.runner);
+    const pending = await interruptStubborn(handle, run);
     expect(handle.get().state).toBe("interrupted");
     const fenceBefore = handle.get().lease.fence;
 
@@ -962,51 +1088,16 @@ describe("durable session handle", () => {
     const afterConfigure = handle.get();
     expect(afterConfigure.lease.fence).toBe(fenceBefore);
     expect(afterConfigure.lease.owner).not.toBeNull();
-    const contended = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: afterConfigure.lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(contended.ok).toBe(false);
-    expect(maximumActive).toBe(1);
-
-    // The caller-facing interrupt completes at the sealed terminal, not when
-    // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement");
-    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
-    releaseRunner.resolve();
-    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
-    const afterSettle = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: handle.get().lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(afterSettle.ok).toBe(true);
-    expect(maximumActive).toBe(1);
+    await expectLeaseHeldUntilSettled(handle, run, pending, hibernated, afterConfigure.lease.fence);
   });
 
   test("configure re-entered from the interrupted seal observation still sees the lease as held", async () => {
-    const entered = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async () => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("configure-from-seal-observation", runner), {
-      ...runtime,
-      onHibernate: () => hibernated.resolve(),
-    });
+    const run = stubbornRunner();
+    const { entered } = run;
+    const { handle, hibernated } = hibernatingSession(
+      "configure-from-seal-observation",
+      run.runner,
+    );
     // Re-enter configure synchronously from the observation of the interrupted
     // terminal seal — the earliest point a subscriber can react to it.
     const reentered = signal<() => Promise<SessionGeneration.ConfigureReceipt>>();
@@ -1029,43 +1120,36 @@ describe("durable session handle", () => {
     const row = SessionHandleStore.row(handle.id);
     expect(row.leaseFence).toBe(fenceAtSeal);
     expect(row.leaseOwner).not.toBeNull();
-    const contended = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(contended.ok).toBe(false);
+    expect(contendLease(handle, row.leaseFence).ok).toBe(false);
 
-    // The caller-facing interrupt completes at the sealed terminal, not when
-    // the abort-ignoring runner finally settles.
-    await bounded(interrupted, "interrupt receipt before runner settlement");
+    await settleStubborn(handle, run, { running, interrupted }, hibernated);
+    expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+    expect(run.maximumActive()).toBe(1);
+  });
+
+  test("close() returns once a positive grace window lapses while the runner still ignores abort", async () => {
+    const { runner, entered, releaseRunner } = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("close-after-positive-grace", runner, {
+      closeGraceMs: 1,
+    });
+
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "runner entry");
+    // The interrupt seals the turn while the abort-ignoring runner stays retained,
+    // so close() can only return once the grace timer lapses.
+    await bounded(handle.interrupt(), "interrupt receipt");
+    await bounded(handle.close(), "close after grace lapse");
     expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+
     releaseRunner.resolve();
     await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
-    expect(maximumActive).toBe(1);
   });
 
   test("close() returns after the grace window while the lease stays held until the abort-ignoring runner settles", async () => {
-    const entered = signal<void>();
-    const releaseRunner = signal<void>();
-    const hibernated = signal<void>();
-    let active = 0;
-    let maximumActive = 0;
-    const runner: SessionRunner = async () => {
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      entered.resolve();
-      await releaseRunner.promise;
-      active -= 1;
-      return { kind: "result", text: "late" };
-    };
-    const handle = session(residentOptions("close-detaches-after-grace", runner), {
-      ...runtime,
+    const { runner, entered, releaseRunner, maximumActive } = stubbornRunner();
+    const { handle, hibernated } = hibernatingSession("close-detaches-after-grace", runner, {
       closeGraceMs: 0,
-      onHibernate: () => hibernated.resolve(),
     });
 
     const running = handle.prompt("start");
@@ -1076,28 +1160,14 @@ describe("durable session handle", () => {
     // and its heartbeat keeps renewing, so no second executor can start.
     const row = SessionHandleStore.row(handle.id);
     expect(row.leaseOwner).not.toBeNull();
-    const whileAlive = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(whileAlive.ok).toBe(false);
+    expect(contendLease(handle, row.leaseFence).ok).toBe(false);
 
     // Once the runner settles the turn continuation releases the lease itself.
     releaseRunner.resolve();
     await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
-    const afterSettle = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence: SessionHandleStore.row(handle.id).leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    expect(afterSettle.ok).toBe(true);
-    expect(maximumActive).toBe(1);
+    expect(contendLease(handle, SessionHandleStore.row(handle.id).leaseFence).ok).toBe(true);
+    expect(maximumActive()).toBe(1);
   });
 
   test("heartbeat loss aborts the runner and the stale fence cannot seal its result", async () => {
@@ -1192,11 +1262,7 @@ describe("durable session handle", () => {
   });
 
   test("a reactivated handle removes a tool from the next runner generation", async () => {
-    const inputs: SessionRunnerInput[] = [];
-    const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "complete" };
-    };
+    const { runner, inputs } = recordingRunner("complete");
     const handle = session(
       {
         ...residentOptions("remove-after-reactivation", runner),
@@ -1214,11 +1280,7 @@ describe("durable session handle", () => {
   });
 
   test("a reactivated handle replaces system blocks for the next runner generation", async () => {
-    const inputs: SessionRunnerInput[] = [];
-    const runner: SessionRunner = async (input) => {
-      inputs.push(input);
-      return { kind: "result", text: "complete" };
-    };
+    const { runner, inputs } = recordingRunner("complete");
     const handle = session(residentOptions("blocks-after-reactivation", runner), runtime);
     const nextBlocks = [{ id: "safety", source: "operator", content: "Use the safe path." }];
 
@@ -1332,6 +1394,65 @@ describe("durable session handle", () => {
     await first.prompt("wake again");
     expect(first.get().lease.fence).toBe(fenceBeforeGet + 1);
     expect(hibernations).toBe(2);
+  });
+
+  test("a hibernated handle routes restore and close through its live successor", async () => {
+    const hibernated = signal<void>();
+    runtime = { ...runtime, onHibernate: () => hibernated.resolve() };
+    const runner: SessionRunner = async () => ({ kind: "result", text: "complete" });
+    const options = residentOptions("hibernate-successor", runner);
+    const first = session(options, runtime);
+    await bounded(first.prompt("sleep after this"), "first prompt");
+    await bounded(hibernated.promise, "runtime hibernation");
+    const successor = session(options, runtime);
+    expect(successor).not.toBe(first);
+
+    await expect(first.restoreContext("missing-compaction")).rejects.toMatchObject({
+      name: "ContextRestoreError",
+      code: "context_restore_refused",
+      reason: "unknown_compaction",
+    });
+    await bounded(first.close(), "close through successor");
+    expect(() => successor.prompt("after close")).toThrow("session handle is closed");
+    expect(() => first.prompt("after close")).toThrow("session handle is closed");
+  });
+
+  test("approval answers reach only a turn's live approvals", async () => {
+    const answers: Parameters<ExecutionApprovals["answer"]>[0][] = [];
+    const entered = signal<void>();
+    const release = signal<void>();
+    const livePending: ExecutionApprovalRequest[] = [];
+    const runner: SessionRunner = async (input) => {
+      input.bindApprovals?.({
+        pending: () => livePending,
+        notify: () => undefined,
+        answer: async (answer) => {
+          answers.push(answer);
+        },
+      });
+      entered.resolve();
+      await release.promise;
+      return { kind: "result", text: "done" };
+    };
+    const handle = session(residentOptions("approval-routing", runner), runtime);
+    const request = approvalRequest(handle.id, "turn");
+    livePending.push(request);
+    const answer = {
+      request,
+      credential: "owner-token",
+      decision: "approve",
+    } as const;
+    expect(handle.approvals.pending()).toEqual([]);
+    await expect(handle.approvals.answer(answer)).rejects.toMatchObject({
+      code: "stale_approval",
+    });
+    const prompted = handle.prompt("needs approval");
+    await bounded(entered.promise, "runner entry");
+    expect(handle.approvals.pending()).toBe(livePending);
+    await bounded(handle.approvals.answer(answer), "routed answer");
+    expect(answers).toEqual([answer]);
+    release.resolve();
+    await bounded(prompted, "prompt completion");
   });
 
   test("resume after interruption carries no prompt content into the runner", async () => {
@@ -1504,6 +1625,85 @@ describe("session crash recovery and observation", () => {
     expect(SessionHandleStore.openTurns(SessionHandleStore.tree("crashed-turn"))).toEqual([]);
   });
 
+  test("boot sweep refuses an open turn whose pinned generation no longer matches the ledger", async () => {
+    commitOpenTurn({
+      sessionId: "drifted-turn",
+      resultId: "drifted-result",
+      resumeCount: 0,
+      toolsHash: "not-the-recorded-tools",
+    });
+    let runs = 0;
+    const sweeping = sweepSessions(
+      () => async () => {
+        runs += 1;
+        return { kind: "result", text: "must not run" };
+      },
+      runtime,
+    );
+    await expect(sweeping).rejects.toThrow("pinned session generation unavailable: 1");
+    expect(runs).toBe(0);
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree("drifted-turn"))).toHaveLength(1);
+  });
+
+  test("a prompt denied at a mid-turn boundary is consumed and fails the runner's drain", async () => {
+    await Storage.withIsolation(async () => {
+      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+      seedPolicy([
+        {
+          name: "deny-boundary-prompt",
+          kind: "prompt",
+          phase: "pre",
+          match: { encodingVersion: 1, value: { op: "inbox", sessionId: "boundary-deny" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason: "late prompt refused" } },
+          priority: 2_000,
+        },
+      ]);
+      commitOpenTurn({ sessionId: "boundary-deny", resultId: "boundary-result", resumeCount: 0 });
+      const isolatedRuntime = { ...runtime };
+      const drained = signal<unknown>();
+      const runner: SessionRunner = async (input) => {
+        SessionHandleStore.commitInbox({
+          id: "boundary-deny:late",
+          sessionId: input.sessionId,
+          kind: "prompt",
+          content: "late prompt",
+          origin: { encodingVersion: 1, value: { source: "test" } },
+          createdAt: now,
+          parentActionId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
+        });
+        try {
+          return { kind: "result", text: JSON.stringify(await input.boundary("after_llm")) };
+        } catch (error) {
+          drained.resolve(error);
+          throw error;
+        }
+      };
+      await bounded(
+        sweepSessions(() => runner, isolatedRuntime),
+        "boot sweep terminal",
+      );
+      expect(await bounded(drained.promise, "boundary refusal")).toMatchObject({
+        name: "SessionPolicyRefusal",
+        reason: "late prompt refused",
+      });
+      const tree = SessionHandleStore.tree("boundary-deny");
+      expect(
+        SessionHandleStore.turnTerminal(tree.find((action) => action.id === "boundary-result")),
+      ).toMatchObject({ kind: "error", text: "session policy refused" });
+      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
+        "turn.pre",
+        "prompt.pre",
+        "turn.post",
+      ]);
+      expect(tree.map(SessionHandleStore.delivery).filter((d) => d !== undefined)).toEqual([]);
+      expect(SessionHandleStore.inboxRows("boundary-deny").map((row) => row.status)).toEqual([
+        "consumed",
+      ]);
+      await closeSessions(isolatedRuntime);
+      Storage.reset();
+    });
+  });
+
   test("boot sweep seals a durable interrupt before admitting an open turn", async () => {
     commitOpenTurn({ sessionId: "cancelled-turn", resultId: "cancelled-result", resumeCount: 0 });
     SessionHandleStore.commitInbox({
@@ -1560,6 +1760,49 @@ describe("session crash recovery and observation", () => {
     });
   });
 
+  test("a resume for an interrupted session without any terminal is consumed as a no-op", async () => {
+    const runs: string[] = [];
+    const handle = session(
+      residentOptions("interrupted-without-terminal", async (input) => {
+        runs.push(input.turnId);
+        return { kind: "result", text: "never" };
+      }),
+      runtime,
+    );
+    const row = SessionHandleStore.row(handle.id);
+    const lease = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "earlier-runtime",
+      expectedFence: row.leaseFence,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    if (!lease.ok) throw new Error("test lease refused");
+    const marked = SessionHandleStore.commit({
+      sessionId: handle.id,
+      owner: "earlier-runtime",
+      fence: lease.fence,
+      now,
+      expectedRevision: SessionHandleStore.row(handle.id).revision,
+      actions: [],
+      consumeInboxIds: [],
+      state: "interrupted",
+      releaseLease: true,
+    });
+    if (!marked.ok) throw new Error("test interrupt refused");
+
+    expect(await bounded(handle.resume(), "resume without terminal")).toBeUndefined();
+    expect(runs).toEqual([]);
+    expect(handle.get().state).toBe("interrupted");
+    expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
+    expect(
+      SessionHandleStore.tree(handle.id)
+        .map(SessionHandleStore.delivery)
+        .filter((delivery): delivery is SessionTurn.Delivery => delivery !== undefined)
+        .map((delivery) => delivery.turnId),
+    ).toEqual(["noop"]);
+  });
+
   test("watch installs its subscription before reading the initial snapshot", () => {
     SessionHandleStore.materialize({
       id: "watch-order",
@@ -1599,17 +1842,13 @@ describe("session crash recovery and observation", () => {
   });
 
   test("watch reports a revision gap and get replaces state after a dropped observation", async () => {
-    SessionHandleStore.materialize({
-      id: "watched-session",
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: 0,
-      actionId: "watched-session:configure",
-      at: now,
-    });
-    const watch = SessionHandleStore.watchSnapshot("watched-session", 1, sink);
+    const handle = session(
+      residentOptions("watched-session", async () => ({ kind: "result", text: "unused" })),
+      runtime,
+    );
+    const configureId = SessionHandleStore.tree(handle.id)[0]?.id;
+    if (configureId === undefined) throw new Error("missing configure action");
+    const watch = handle.watch();
     const observed = signal<SessionTurn.Observation>();
     const stop = watch.subscribe(observed.resolve);
     sink.dropNextCommit = true;
@@ -1621,7 +1860,7 @@ describe("session crash recovery and observation", () => {
       content: "first",
       origin: { encodingVersion: 1, value: { source: "test" } },
       createdAt: now + 1,
-      parentActionId: "watched-session:configure",
+      parentActionId: configureId,
     });
     SessionHandleStore.commitInbox({
       id: "watched-session:prompt-2",
@@ -1639,7 +1878,7 @@ describe("session crash recovery and observation", () => {
       from: watch.snapshot.revision,
       to: 3,
     });
-    expect(SessionHandleStore.getSnapshot("watched-session").revision).toBe(3);
+    expect(handle.get().revision).toBe(3);
     stop();
     watch.unsubscribe();
   });

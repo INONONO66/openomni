@@ -3,7 +3,11 @@ import type { ChatAgentConfig, ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "@openomni/llm";
 import { createExecutor } from "../../src/executor";
 import { recordingLedger } from "./compiled-policy";
-import { modelFixture } from "./model-fixture";
+import { runInput } from "./run-input";
+
+export function runUserMessage(config: ChatAgentConfig, content: string) {
+  return createTestAgent(config).run(runInput([{ role: "user", content }]));
+}
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 
 export function runTestAgent(input: ChatAgentInput, config: ChatAgentConfig, sink?: Sink) {
@@ -37,9 +41,6 @@ export function createTestAgent(config: ChatAgentConfig) {
           executor,
           execution: executor,
           ...config,
-          ...(config.llm?.run === undefined
-            ? {}
-            : { llm: { ...config.llm, run: modelFixture(config.llm.run) } }),
         },
         sink,
       );
