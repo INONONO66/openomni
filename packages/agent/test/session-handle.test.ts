@@ -75,10 +75,7 @@ function stubbornRunner(options: { readonly resumeAfterFirst?: boolean } = {}) {
 type StubbornRun = ReturnType<typeof stubbornRunner>;
 
 /** Prompts, waits for the stubborn runner to enter, interrupts, and waits for the abort to reach it. */
-async function interruptStubborn(
-  handle: SessionHandle,
-  run: StubbornRun,
-): Promise<{ running: Promise<unknown>; interrupted: Promise<unknown> }> {
+async function interruptStubborn(handle: SessionHandle, run: StubbornRun) {
   const running = handle.prompt("start");
   await bounded(run.entered.promise, "runner entry");
   const interrupted = handle.interrupt();
@@ -93,7 +90,7 @@ async function interruptStubborn(
 async function settleStubborn(
   handle: SessionHandle,
   run: StubbornRun,
-  pending: { running: Promise<unknown>; interrupted: Promise<unknown> },
+  pending: Awaited<ReturnType<typeof interruptStubborn>>,
   hibernated: Signal<void>,
 ): Promise<void> {
   await bounded(pending.interrupted, "interrupt receipt before runner settlement");
@@ -119,7 +116,7 @@ function recordingRunner(text: string): { runner: SessionRunner; inputs: Session
 async function expectLeaseHeldUntilSettled(
   handle: SessionHandle,
   run: StubbornRun,
-  pending: { running: Promise<unknown>; interrupted: Promise<unknown> },
+  pending: Awaited<ReturnType<typeof interruptStubborn>>,
   hibernated: Signal<void>,
   fence = handle.get().lease.fence,
 ): Promise<void> {

@@ -1,3 +1,5 @@
+import type { PlainValue } from "@openomni/protocol";
+import { FrameSchema } from "./frame-schema";
 import { IpcProtocolError } from "./errors";
 
 const encoder = new TextEncoder();
@@ -14,7 +16,7 @@ export function encode(msg: unknown): Uint8Array {
 
 type DecodedChunk = {
   /** Every parseable frame in the chunk, delivered immediately, in wire order. */
-  frames: unknown[];
+  frames: PlainValue[];
   /** Each non-JSON line, truncated to MALFORMED_REPORT_CHARS for reporting — never re-queued. */
   malformed: string[];
 };
@@ -66,7 +68,7 @@ export class LineDecoder {
       throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
     }
 
-    const frames: unknown[] = [];
+    const frames: PlainValue[] = [];
     const malformed: string[] = [];
     for (const line of lines) {
       if (!line.trim()) continue;
@@ -75,7 +77,7 @@ export class LineDecoder {
         throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
       }
       try {
-        frames.push(JSON.parse(line));
+        frames.push(FrameSchema.parse(JSON.parse(line)));
       } catch {
         malformed.push(line.slice(0, MALFORMED_REPORT_CHARS));
       }
