@@ -20,7 +20,7 @@ export async function measuredEntry(entry: URL, env: Record<string, string>, inp
     {
       cwd: new URL("../../", import.meta.url).pathname,
       env,
-      stdin: "pipe",
+      stdin: input === undefined ? "ignore" : "pipe",
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -28,8 +28,10 @@ export async function measuredEntry(entry: URL, env: Record<string, string>, inp
   const stdout = new Response(child.stdout).text();
   const stderr = new Response(child.stderr).text();
   try {
-    if (input !== undefined) child.stdin.write(input);
-    child.stdin.end();
+    if (input !== undefined && child.stdin !== undefined) {
+      child.stdin.write(input);
+      child.stdin.end();
+    }
     const exitCode = await bounded(child.exited);
     return { exitCode, stdout: await bounded(stdout), stderr: await bounded(stderr) };
   } finally {
