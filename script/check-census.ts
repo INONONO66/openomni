@@ -625,7 +625,7 @@ class Provenance {
         !this.knownExternalEventSource(receiver) &&
         !this.externalEventOrigin(receiver) &&
         !this.externalEvents.has(call) &&
-        !this.domEventTarget(receiver, true)
+        !this.domEventTarget(receiver)
       )
         this.problem(call, "unresolved_event_source", receiver);
       const names = call.arguments[0]
