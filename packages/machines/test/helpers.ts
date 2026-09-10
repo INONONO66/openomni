@@ -60,7 +60,7 @@ export async function expectEscape(fsOp: FsCall) {
   });
 }
 
-export async function expectKernelUnavailable(result: Promise<unknown>) {
+export async function expectKernelUnavailable(result: Promise<Machine.CellResult>) {
   expect(await result).toEqual({ status: "refused", reason: "kernel_not_available" });
 }
 
