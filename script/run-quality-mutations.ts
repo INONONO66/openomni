@@ -863,23 +863,23 @@ function verifySources(root: string, inventory: Inventory): void {
 }
 // Execution-copy identity includes configs, assets and dependencies. This is
 // not source discovery: it cannot add, remove or categorize inventory members.
+function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {
+	for (const name of readdirSync(directory).sort(compare)) {
+		const path = join(directory, name);
+		if (lstatSync(path).isSymbolicLink()) {
+			const link = readlinkSync(path);
+			const destination = relative(root, realpathSync(path));
+			if (isAbsolute(link) || destination === ".." || destination.startsWith(`..${sep}`))
+				fail("isolation", `External symlink in execution copy: ${relative(root, path)}`);
+			hasher.update(`${relative(root, path)}\0link\0${link}\0`);
+		} else if (lstatSync(path).isDirectory()) visitExecutionTree(root, hasher, path);
+		else hasher.update(`${relative(root, path)}\0${sha256(readFileSync(path))}\0`);
+	}
+}
 export function executionTreeHash(directory: string): string {
 	const root = realpathSync(directory);
 	const hasher = new Bun.CryptoHasher("sha256");
-	function visit(directory: string): void {
-		for (const name of readdirSync(directory).sort(compare)) {
-			const path = join(directory, name);
-			if (lstatSync(path).isSymbolicLink()) {
-				const link = readlinkSync(path);
-				const destination = relative(root, realpathSync(path));
-				if (isAbsolute(link) || destination === ".." || destination.startsWith(`..${sep}`))
-					fail("isolation", `External symlink in execution copy: ${relative(root, path)}`);
-				hasher.update(`${relative(root, path)}\0link\0${link}\0`);
-			} else if (lstatSync(path).isDirectory()) visit(path);
-			else hasher.update(`${relative(root, path)}\0${sha256(readFileSync(path))}\0`);
-		}
-	}
-	visit(root);
+	visitExecutionTree(root, hasher, root);
 	return hasher.digest("hex");
 }
 type TestsReceipt = {

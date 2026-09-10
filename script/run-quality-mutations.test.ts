@@ -25,6 +25,8 @@ test("mutation helpers cover execution tree recursion and virtual source travers
     writeFileSync(join(root, "nested", "source.ts"), "export const value = 1;");
     symlinkSync("nested/source.ts", join(root, "source-link.ts"));
     expect(executionTreeHash(root)).toHaveLength(64);
+    symlinkSync("/tmp", join(root, "external-link.ts"));
+    expect(() => executionTreeHash(root)).toThrow();
     const source = mutationSource(resolve(import.meta.dir, ".."), "script/run-quality-mutations.ts");
     expect(source.source).toContain("export async function main");
   } finally { rmSync(root, { recursive: true, force: true }); }
