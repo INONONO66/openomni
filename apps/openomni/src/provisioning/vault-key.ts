@@ -41,4 +41,3 @@ export function resolveKek(env: Record<string, string | undefined>, home: string
   }
   return kekFromBase64(readFileSync(path, "utf-8").trim(), path);
 }
-
