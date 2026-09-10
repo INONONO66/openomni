@@ -617,7 +617,8 @@ class Provenance {
         !native &&
         !this.externalEventOrigin(receiver) &&
         !this.externalEvents.has(call) &&
-        !this.domEventTarget(receiver)
+        !this.domEventTarget(receiver) &&
+        !this.libEventTarget(receiver)
       )
         this.problem(call, "unresolved_event_source", receiver);
       const names = call.arguments[0]
@@ -2236,6 +2237,17 @@ class Provenance {
   }
   // Browser documents, windows and elements receive user input from the host; a
   // renderer root makes that producer real, so listeners on them are dispatched.
+  private libEventTarget(receiver: ts.Node): boolean {
+    const type = this.checker.getNonNullableType(this.checker.getTypeAtLocation(unwrap(receiver)));
+    const symbol = type.getSymbol();
+    return Boolean(
+      symbol &&
+        /^(?:AbortSignal|EventTarget)$/.test(symbol.name) &&
+        symbol.declarations?.some((node) =>
+          /typescript\/lib\/lib\.(?:dom|es\w*)\.d\.ts$/.test(node.getSourceFile().fileName),
+        ),
+    );
+  }
   private domEventTarget(receiver: ts.Node): boolean {
     const rendererRoot = [...this.roots.values()].some(
       (root) => root.symbol === "electron-vite" || root.path.endsWith("electron.vite.config.ts"),

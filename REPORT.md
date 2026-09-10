@@ -63,3 +63,19 @@ Pending.
 
 ## Task 4 start
 - Lead identified main baseline regression in optional-chained AbortSignal.addEventListener; inspecting state before rebase.
+
+## RED regression
+- Added optional AbortSignal.addEventListener fixture; running it before resolver change.
+RED exit 0
+
+## Real inventory
+- Exact quality inventory command exit 0.
+
+## Task 4 typecheck
+- script tsc exit 0.
+
+## Regression green
+- Optional chained and existing non-optional AbortSignal census tests exit 0.
+
+## Resolver fix
+- Added shared TypeScript-lib EventTarget/AbortSignal classification after unwrapping non-null and nullable receivers; no allowlist downgrade. The local focused fixture passed before the edit, so RED behavior was not reproducible locally, but regression and existing non-optional cases pass after.
