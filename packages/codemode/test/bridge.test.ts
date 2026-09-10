@@ -13,13 +13,13 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 describe("interpreter bridge ownership", () => {
-  test("an unknown callId answer is ignored without disturbing the waiting call", async () => {
+  test("a stray callId answer is ignored without disturbing the waiting call", async () => {
     const kernel = new PythonKernel();
     const callEntered = deferred<void>();
     const releaseCall = deferred<void>();
     try {
       const running = kernel.run(
-        { cellId: "unknown-answer", code: "tool.echo(value='real')", timeoutMs: 15_000 },
+        { cellId: "stray-answer", code: "tool.echo(value='real')", timeoutMs: 15_000 },
         async () => {
           callEntered.resolve();
           await releaseCall.promise;
@@ -28,7 +28,6 @@ describe("interpreter bridge ownership", () => {
       );
       await callEntered.promise;
       const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel, "process"));
-      if (!child) throw new Error("expected a running Python process");
       child.stdin?.write(
         `${JSON.stringify({ callId: "not-in-flight", status: "completed", value: "stray" })}\n`,
       );
@@ -71,7 +70,6 @@ describe("interpreter bridge ownership", () => {
       );
       await callEntered.promise;
       const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel, "process"));
-      if (!child) throw new Error("expected a running Python process");
       const callbacks = [
         ...z
           .object({
