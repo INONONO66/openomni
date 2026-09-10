@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDispatcher, ToolRefused } from "@openomni/agent";
 import { attachMachineDaemon, createMachineHost, type MachineHandle } from "@openomni/machines";
-import type { PlainValue } from "@openomni/protocol";
+import { Machine, type PlainValue } from "@openomni/protocol";
 import { createTools } from "../src/tools/core/catalog";
 import { parseLocus } from "../src/tools/locus";
 import { socketPath } from "./helpers/socket-path";
@@ -382,6 +382,16 @@ test("R3 real daemon Unicode read preserves cells and reports exact dropped byte
       `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
     );
     expect(Buffer.from(result.output, "utf8").toString("utf8")).toBe(result.output);
+  });
+});
+
+test("a real daemon read assembles successive bounded chunks without dropping the tail", async () => {
+  await fixture(true, async ({ root, path, cell }) => {
+    const content = `${"a".repeat(Machine.FS_READ_MAX_BYTES)}TAIL_SENTINEL`;
+    await writeFile(join(root, "chunked"), content);
+    expect((await cell("read", { path: path("chunked") })).output).toEqual({
+      content, bytes: Buffer.byteLength(content),
+    });
   });
 });
 
