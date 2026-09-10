@@ -53,7 +53,7 @@ Policy is not a gate-internal or Worker-only feature: it is the system-wide inte
 
 The rulebook:
 
-1. Conflict composition: **deny > pending > allow**; priority orders evaluation, never verdict strength.
+1. Compiled-row evaluation orders rows by descending priority, then rule name; the first matched deny or approval requirement stops evaluation. The unconsumed general effect-composition contract (**deny > pending > allow**, safe-deny effects and conflict merging) is withdrawn in #1030, not replaced by this row evaluator.
 2. Engine failure: side-effect-boundary (pre) points **fail closed** with an incident event; post points fail open. Silent skips are forbidden.
 3. Hot-path discipline: policies are pure and synchronous — **a policy never calls an LLM**. LLM-grade watching is an actor's job: the kernel host invokes the Jester on bounded bus-derived input, and only the host may authorize speech; *policies block, actors assess, the host sends through the gate*.
 4. No recursion: a policy returns a verdict and declares effects; it never invokes verbs. Effects are applied by the host.

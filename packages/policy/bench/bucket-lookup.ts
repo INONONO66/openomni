@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createPolicyCompiler, type PolicyEvaluationInput } from "../src/index";
-import { atGeneration, compaction, draft, MemoryPolicyRows } from "./row-fixtures";
+import { atGeneration, compaction, draft, MemoryPolicyRows, unrelatedRows } from "../test/row-fixtures";
 
 const ROW_COUNT = 220;
 const EVALUATION_COUNT = 100_000;
@@ -17,14 +17,7 @@ const input: PolicyEvaluationInput = {
 };
 
 test("bucket lookup stays below the policy hot-path budget", () => {
-  const unrelated = Array.from({ length: ROW_COUNT - 2 }, (_, index) =>
-    atGeneration(
-      draft(`unrelated-${index}`, index % 2 === 0 ? "llm" : "prompt", "pre", {
-        type: "allow",
-      }),
-      1,
-    ),
-  );
+  const unrelated = unrelatedRows(ROW_COUNT - 2);
   const source = new MemoryPolicyRows([
     atGeneration(compaction, 1),
     atGeneration(

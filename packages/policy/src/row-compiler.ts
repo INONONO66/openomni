@@ -13,7 +13,7 @@ import { z } from "zod";
 import { matchesMessage, type MessagePolicyContext } from "./message-match";
 
 const MANDATORY_RULE_NAMES = ["compaction"] as const;
-export type RuleName = (typeof MANDATORY_RULE_NAMES)[number];
+type RuleName = (typeof MANDATORY_RULE_NAMES)[number];
 
 const TRANSFORMER_NAMES = ["redact"] as const;
 const OBLIGATION_NAMES = ["budget_clamp"] as const;
@@ -32,7 +32,7 @@ const CompileErrorCode = z.enum([
   "snapshot_load_failed",
   "snapshot_append_failed",
 ]);
-export type PolicyCompileErrorCode = z.infer<typeof CompileErrorCode>;
+type PolicyCompileErrorCode = z.infer<typeof CompileErrorCode>;
 
 const CompileErrorData = z
   .object({
@@ -216,7 +216,7 @@ interface BucketSet {
   readonly operations: ReadonlyMap<string, readonly CompiledRow[]>;
 }
 
-export interface CompilePolicySnapshotOptions {
+interface CompilePolicySnapshotOptions {
   readonly generation: number;
   readonly rows: readonly PolicyRow.Row[];
   readonly mandatory?: readonly RuleName[];
@@ -420,12 +420,11 @@ function redact(value: PlainValue, paths: readonly string[], replacement?: Plain
     if (leaf === undefined || leaf.length === 0) continue;
     let parent: PlainValue | undefined = output;
     for (const field of fields) {
-      if (parent === null || Array.isArray(parent) || typeof parent !== "object") {
+      if (parent !== null && typeof parent === "object" && !Array.isArray(parent)) {
+        parent = parent[field];
+      } else {
         parent = undefined;
-        break;
       }
-      parent = parent[field];
-      if (parent === undefined) break;
     }
     if (
       parent === undefined ||
@@ -441,20 +440,24 @@ function redact(value: PlainValue, paths: readonly string[], replacement?: Plain
   return output;
 }
 
-function evaluateSnapshot(
-  generation: number,
-  contentHash: string,
-  buckets: ReadonlyMap<string, BucketSet>,
+interface CandidateEvaluation {
+  readonly matchedRuleIds: string[];
+  readonly effects: Policy.PolicyEffect[];
+  readonly obligations: CompiledObligation[];
+  readonly value: PlainValue;
+  readonly verdict: EffectiveRowVerdict;
+  readonly reason?: string;
+}
+
+function applyCandidates(
+  selected: readonly CompiledRow[],
   input: PolicyEvaluationInput,
-): PolicyEvaluation {
-  const point = buckets.get(pointKey(input.kind, input.phase));
-  const bucket =
-    input.op === undefined ? point?.wildcard : (point?.operations.get(input.op) ?? point?.wildcard);
-  const selected = bucket ?? [];
+  initialValue: PlainValue,
+): CandidateEvaluation {
   const matchedRuleIds: string[] = [];
   const effects: Policy.PolicyEffect[] = [];
   const obligations: CompiledObligation[] = [];
-  let value = clonePlain(input.value);
+  let value = initialValue;
   const missingMessageContext =
     input.kind === "message" && input.op === "send_message" && input.message === undefined;
   let verdict: EffectiveRowVerdict = missingMessageContext ? "deny" : "allow";
@@ -482,29 +485,40 @@ function evaluateSnapshot(
     }
     if (candidate.type === "obligation") {
       if (verdict === "allow") verdict = "obligation";
-      obligations.push({
-        name: candidate.name,
-        metric: candidate.metric,
-        limit: candidate.limit,
-      });
+      obligations.push({ name: candidate.name, metric: candidate.metric, limit: candidate.limit });
       continue;
     }
     effects.push(...(candidate.effects ?? []));
     reason ??= candidate.reason ?? candidate.reasonCodes?.[0];
   }
 
+  return { matchedRuleIds, effects, obligations, value, verdict, reason };
+}
+
+function evaluateSnapshot(
+  generation: number,
+  contentHash: string,
+  buckets: ReadonlyMap<string, BucketSet>,
+  input: PolicyEvaluationInput,
+): PolicyEvaluation {
+  const point = buckets.get(pointKey(input.kind, input.phase));
+  const bucket =
+    input.op === undefined ? point?.wildcard : (point?.operations.get(input.op) ?? point?.wildcard);
+  const selected = bucket ?? [];
+  const evaluation = applyCandidates(selected, input, clonePlain(input.value));
+
   return Object.freeze({
     generation,
     snapshotHash: contentHash,
     inputHash: canonicalDigest(input),
-    matchedRuleIds: Object.freeze(matchedRuleIds),
-    verdict,
-    ...(reason === undefined ? {} : { reason }),
-    value,
-    effects: Object.freeze(effects),
-    obligations: Object.freeze(obligations),
+    matchedRuleIds: Object.freeze(evaluation.matchedRuleIds),
+    verdict: evaluation.verdict,
+    ...(evaluation.reason === undefined ? {} : { reason: evaluation.reason }),
+    value: evaluation.value,
+    effects: Object.freeze(evaluation.effects),
+    obligations: Object.freeze(evaluation.obligations),
     bucket: publicBucket(input.kind, input.phase, input.op),
-    evaluatedRuleCount: matchedRuleIds.length,
+    evaluatedRuleCount: evaluation.matchedRuleIds.length,
   });
 }
 
@@ -557,9 +571,9 @@ function failedSnapshot(error: PolicyCompileError): CompiledPolicySnapshot {
   });
 }
 
-export type PolicyRowDraft = Omit<PolicyRow.Row, "generation">;
+type PolicyRowDraft = Omit<PolicyRow.Row, "generation">;
 
-export interface PolicyCompiler {
+interface PolicyCompiler {
   pin(generation: number): CompiledPolicySnapshot;
   append(rows: readonly PolicyRowDraft[]): Promise<number>;
 }

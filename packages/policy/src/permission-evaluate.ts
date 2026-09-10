@@ -1,13 +1,9 @@
 import { type Policy, PolicyDecision, PolicyPermission } from "@openomni/protocol";
-
-/**
- * The permission evaluation engine, moved from protocol to its owner (#498 W1).
- * Protocol keeps the vocabulary (Permission/EvaluationRequest/EvaluationResult
- * schemas and the ReDoS-safety predicate that `InputRule.pattern` refines on);
- * this module owns the behavior.
- */
+import { z } from "zod";
 
 const POLICY_ID = "guardrail.permission";
+const PolicyInput = z.record(z.string(), z.json());
+type PolicyInput = z.infer<typeof PolicyInput>;
 
 type PermissionDecision = NonNullable<Policy.EvaluationResult["decision"]>;
 
@@ -31,7 +27,7 @@ function findMatchingLabel(
 type InputMatchResult = "match" | "miss" | "unsafe";
 
 function matchesInputField(
-  input: Record<string, unknown> | undefined,
+  input: PolicyInput | undefined,
   field: string,
   pattern: string,
 ): InputMatchResult {
@@ -65,10 +61,15 @@ function evaluateInputRules(
     (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
   );
 
+  const parsedInput = PolicyInput.safeParse(request.input);
+  if (!parsedInput.success && request.input !== undefined) {
+    return verdict("deny", "unsafe_input_rule");
+  }
+
   for (const rule of inputRules) {
     if (!matchesPattern(request.resource, rule.toolPattern)) continue;
 
-    const inputMatch = matchesInputField(request.input, rule.field, rule.pattern);
+    const inputMatch = matchesInputField(parsedInput.success ? parsedInput.data : undefined, rule.field, rule.pattern);
     if (inputMatch === "unsafe") {
       return verdict("deny", "unsafe_input_rule", rule.toolPattern);
     }
