@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { statSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,7 +20,7 @@ import {
   materializePersons,
   vaultCredentialReader,
 } from "../src/provisioning/declared";
-import { ensureVaultKeyFile, resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
+import { resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
 
 import { putChannelCredential } from "./helpers/channel-credential";
 
@@ -79,13 +79,14 @@ describe("vault-key resolution", () => {
     expect(resolved.kind === "locked" && resolved.reason.includes(vaultKeyPath(home))).toBe(true);
   });
 
-  test("ensureVaultKeyFile mints once at 0600 and the minted key resolves", () => {
-    const first = ensureVaultKeyFile(home);
-    expect(first.created).toBe(true);
-    expect(statSync(first.path).mode & 0o777).toBe(0o600);
-    const second = ensureVaultKeyFile(home);
-    expect(second.created).toBe(false);
+  test("an operator key file resolves without changing its bytes or permissions", async () => {
+    expect(resolveKek({}, home).kind).toBe("locked");
+    await mkdir(join(home, ".openomni"));
+    const path = vaultKeyPath(home);
+    await writeFile(path, `${KEY_B64}\n`, { mode: 0o600 });
     expect(resolveKek({}, home).kind).toBe("ok");
+    expect(await readFile(path, "utf8")).toBe(`${KEY_B64}\n`);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });
 
