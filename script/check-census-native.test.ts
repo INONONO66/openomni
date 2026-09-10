@@ -154,12 +154,16 @@ test("R3 real observation bus transfers through its scheduled delivery", () => {
   expect(fixture.run("publisher").code).toBe(0);
 }, 180_000);
 
-test("optional-chained AbortSignal listeners retain the TypeScript lib event source", () => {
-  using fixture = new Fixture({
-    "src/events.ts": protocol,
-    "src/main.ts": 'import {Ready} from "./events";const controller=new AbortController();const signal:AbortSignal|undefined=controller.signal;const sink={publish(event:{name:string},data:object){console.log(event.name)}};signal?.addEventListener("abort",()=>sink.publish(Ready,{}),{once:true});controller.abort();',
-  });
-  expect(fixture.run("publisher").code).toBe(0);
+test("optional-chained AbortSignal parameters resolve without inventing an abort", () => {
+  for (const receiver of ["signal?", "signal!", "signal"]) {
+    using fixture = new Fixture({
+      "src/events.ts": protocol,
+      "src/main.ts": `import {Ready} from "./events";const sink={publish(event:{name:string},data:object){console.log(event.name)}};function attach(signal${receiver === "signal" ? "" : "?"}:AbortSignal){${receiver}.addEventListener("abort",()=>sink.publish(Ready,{}),{once:true})}attach();`,
+    });
+    const result = fixture.run("publisher");
+    expect(result.output).toContain('"complete":true');
+    expect(result.code).toBe(1);
+  }
 }, 180_000);
 
 test("R3 removed listeners and untriggered abort controllers stay dormant", () => {

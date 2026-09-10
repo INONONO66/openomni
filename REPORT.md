@@ -79,3 +79,19 @@ RED exit 0
 
 ## Resolver fix
 - Added shared TypeScript-lib EventTarget/AbortSignal classification after unwrapping non-null and nullable receivers; no allowlist downgrade. The local focused fixture passed before the edit, so RED behavior was not reproducible locally, but regression and existing non-optional cases pass after.
+
+## Corrected RED proof
+- Parameter receiver fixture (optional, non-null, non-optional) run against pre-fix classifier: exit 1, /tmp/st_01a0897e-true-red.log. Local controller fixture had resolved provenance and was insufficient.
+
+## Final census suite
+- Shared DOM declaration owner classification, both census files exit 0.
+
+## Real store collection
+- Exact CI collect command with full plan, exit 0; log /tmp/st_01a0897e-real-store.log.
+
+## Final task 4 gates
+- tsc, Ultracite, lint, CI build chain exit 0.
+
+## Correctness review
+- Replaced initial separate libEventTarget validation escape with existing DOM declaration-owner classifier: unwrap receiver and non-nullable type, identify registration only, retain trigger requirements for dispatch.
+- True RED now reproduces unresolved_event_source on parameter signal?.addEventListener; after fix both full census files pass 68/68. Real CI store collect exits 0 on full repo.
