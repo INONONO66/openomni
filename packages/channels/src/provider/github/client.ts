@@ -18,7 +18,7 @@ export class GitHubClient {
     issueNumber: number,
     body: string,
     traceId: string,
-    deliveryId?: string,
+    deliveryId: string,
   ): Promise<DeliveryReceipt> {
     if (!this.token) {
       // Loud absence (#606 audit): a deployment with a webhook secret but no
@@ -41,10 +41,8 @@ export class GitHubClient {
       "Content-Type": "application/json",
       "User-Agent": "openomni-server",
     };
-    const marker = deliveryId
-      ? `<!-- openomni-delivery:${encodeURIComponent(deliveryId)} -->`
-      : undefined;
-    if (marker && (await this.hasComment(url, headers, marker, traceId))) {
+    const marker = `<!-- openomni-delivery:${encodeURIComponent(deliveryId)} -->`;
+    if (await this.hasComment(url, headers, marker, traceId)) {
       this.publish(Operational.Events.Debug, {
         traceId,
         time: Date.now(),
@@ -60,7 +58,7 @@ export class GitHubClient {
       {
         method: "POST",
         headers,
-        body: JSON.stringify({ body: marker ? `${body}\n\n${marker}` : body }),
+        body: JSON.stringify({ body: `${body}\n\n${marker}` }),
       },
       {
         traceId,

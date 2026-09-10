@@ -3,7 +3,7 @@ import type { ChannelProvider } from "../contract.js";
 import { SLACK_RENDER } from "./format.js";
 import { SlackAdapter } from "./surface.js";
 
-export interface SlackCredentials {
+interface SlackCredentials {
   /** Bot token (`xoxb-`): identity, posting, DMs. */
   readonly botToken: string;
   /** App-level token (`xapp-`) with `connections:write`: opens the Socket Mode URL, nothing else. */

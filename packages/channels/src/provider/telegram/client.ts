@@ -14,7 +14,11 @@ const RetryAfterSchema = z.object({
   parameters: z.object({ retry_after: z.number().optional() }).optional(),
 });
 
-const EnvelopeSchema = z.object({ ok: z.boolean(), description: z.string().optional() });
+const EnvelopeSchema = z.object({
+  ok: z.boolean(),
+  description: z.string().optional(),
+  result: z.json().optional(),
+});
 
 /** `sendMessage` result — Telegram sends a numeric id; absence means no id to report. */
 const SentMessageSchema = z.object({
@@ -121,10 +125,7 @@ export class TelegramClient implements ChannelClient {
       {
         traceId,
         publish: this.publish,
-        parseRetryAfter: (body) => {
-          const hint = RetryAfterSchema.safeParse(body);
-          return (hint.success ? hint.data.parameters?.retry_after : undefined) ?? 5;
-        },
+        retryAfterSchema: RetryAfterSchema.transform((hint) => hint.parameters?.retry_after ?? 5),
         label: `telegram/${method}`,
       },
     );
@@ -137,8 +138,7 @@ export class TelegramClient implements ChannelClient {
       );
     }
 
-    const raw = (await response.json()) as object;
-    const envelope = EnvelopeSchema.safeParse(raw);
+    const envelope = EnvelopeSchema.safeParse(await response.json());
     if (!envelope.success) {
       throw new Error(`Telegram API ${method} returned a malformed envelope`);
     }
@@ -148,7 +148,7 @@ export class TelegramClient implements ChannelClient {
         true,
       );
     }
-    const result = schema.safeParse(Reflect.get(raw, "result"));
+    const result = schema.safeParse(envelope.data.result);
     if (!result.success) {
       throw new Error(`Telegram API ${method} returned a malformed result`);
     }

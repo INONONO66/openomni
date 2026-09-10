@@ -1,5 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { ChannelGrantStore } from "@openomni/ledger";
+import { registerChannelGrant } from "../helpers/channel-grant";
 import {
   commits,
   kernelRouter,
@@ -24,13 +25,11 @@ test("registered Owner still needs a channel grant", async () => {
 });
 
 test("blocked channel overrides registered Owner authority", async () => {
-  ChannelGrantStore.put({
+  registerChannelGrant({
     id: "grant-owner-dm",
-    surface: "discord",
     workspace: "owner-workspace",
     channel: "owner-dm",
     kind: "blocked_channel",
-    createdBy: "owner",
   });
   expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
     status: "blocked_pre",
@@ -40,13 +39,11 @@ test("blocked channel overrides registered Owner authority", async () => {
 });
 
 test("broadcast channel floors the Owner to evidence-only content", async () => {
-  ChannelGrantStore.put({
+  registerChannelGrant({
     id: "grant-owner-dm",
-    surface: "discord",
     workspace: "owner-workspace",
     channel: "owner-dm",
     kind: "broadcast_channel",
-    createdBy: "owner",
   });
   expect((await kernelRouter().ingest(ownerSender, ownerFacts)).status).toBe("executed");
   expect(routingDecisions()[0]).toMatchObject({

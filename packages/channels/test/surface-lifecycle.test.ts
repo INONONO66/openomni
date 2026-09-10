@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { Operational } from "@openomni/protocol";
+import type { z } from "zod";
 import { DiscordAdapter } from "../src/provider/discord/surface";
 import { GitHubAdapter } from "../src/provider/github/surface";
 import { TelegramClient } from "../src/provider/telegram/client";
@@ -19,48 +21,51 @@ describe("GitHubAdapter lifecycle", () => {
   });
 
   it("starts after a handler is registered and publishes readiness", async () => {
-    const events: unknown[] = [];
-    const adapter = new GitHubAdapter("secret", config, (_event, data) => {
-      events.push(data);
+    const events: z.infer<typeof Operational.Events.Info.schema>[] = [];
+    const adapter = new GitHubAdapter("secret", config, (event, data) => {
+      expect(event.name).toBe(Operational.Events.Info.name);
+      events.push(Operational.Events.Info.schema.parse(data));
     });
     adapter.onMessage(async () => undefined);
     await adapter.start("trace-gh-2");
     adapter.stop("trace-gh-2");
-    expect(
-      events.some((entry) => (entry as { msg?: unknown }).msg === "github webhook handler ready"),
-    ).toBe(true);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ traceId: "trace-gh-2", component: "server" });
   });
 });
 
 describe("DiscordAdapter lifecycle", () => {
   it("stop publishes shutdown and is safe before start", () => {
-    const events: unknown[] = [];
-    const adapter = new DiscordAdapter("token", config, (_event, data) => {
-      events.push(data);
+    const events: z.infer<typeof Operational.Events.Info.schema>[] = [];
+    const adapter = new DiscordAdapter("token", config, (event, data) => {
+      expect(event.name).toBe(Operational.Events.Info.name);
+      events.push(Operational.Events.Info.schema.parse(data));
     });
     adapter.stop("trace-dc-1");
-    expect(events.some((entry) => (entry as { msg?: string }).msg === "discord bot stopped")).toBe(
-      true,
-    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ traceId: "trace-dc-1", component: "server" });
   });
 });
 
 describe("TelegramClient send result normalization", () => {
-  const jsonResponse = (result: unknown) =>
+  const jsonResponse = (result: { message_id?: number }) =>
     new Response(JSON.stringify({ ok: true, result }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
 
   it("returns the message id when Telegram provides one", async () => {
-    globalThis.fetch = (() =>
-      Promise.resolve(jsonResponse({ message_id: 42 }))) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(async () => jsonResponse({ message_id: 42 }), {
+      preconnect: realFetch.preconnect,
+    });
     const client = new TelegramClient("token", () => undefined);
     expect(await client.send("chat-1", "hi", "trace-1")).toBe("42");
   });
 
   it("returns undefined when Telegram omits the message id", async () => {
-    globalThis.fetch = (() => Promise.resolve(jsonResponse({}))) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(async () => jsonResponse({}), {
+      preconnect: realFetch.preconnect,
+    });
     const client = new TelegramClient("token", () => undefined);
     expect(await client.send("chat-1", "hi", "trace-1")).toBeUndefined();
   });

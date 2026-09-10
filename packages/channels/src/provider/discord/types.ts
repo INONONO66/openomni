@@ -46,6 +46,7 @@ export type DiscordMessage = z.infer<typeof DiscordMessageSchema>;
 /** Outer gateway frame; `d` stays op-specific and is parsed at each op's arm. */
 export const GatewayFrameSchema = z.object({
   op: z.number(),
+  d: z.json().optional(),
   s: z.number().nullish(),
   t: z.string().nullish(),
 });

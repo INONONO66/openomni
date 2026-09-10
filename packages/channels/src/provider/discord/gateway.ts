@@ -3,6 +3,7 @@ import { Operational } from "@openomni/protocol";
 import { sleep } from "../../support/fetch-retry";
 import { SocketReconnectShell, type SocketSettle } from "../../support/socket-shell";
 import type { PublishPort } from "../../types";
+import { GatewayHeartbeat } from "./heartbeat";
 import {
   type GatewayFrame,
   GatewayFrameSchema,
@@ -19,7 +20,7 @@ const DISCORD_SHELL_MESSAGES = {
   socketError: "discord websocket error",
 } as const;
 
-export interface GatewayCallbacks {
+interface GatewayCallbacks {
   /** `traceId` is minted per dispatch — the first frame of an inbound gateway event (D11 origin). */
   onDispatch: (event: string, data: object, traceId: string) => void;
   onReady: (info: { botId: string; botUsername: string }) => void;
@@ -47,18 +48,9 @@ function validResumeUrl(raw: string, trustedOrigin: string | null): string | nul
   return `${raw}?v=10&encoding=json`;
 }
 
-/**
- * Discord gateway connection state machine. Heartbeat and payload routing
- * live INSIDE this class (#520): the former heartbeat.ts/dispatch-router.ts
- * satellite split severed the two data paths the protocol depends on — no
- * code path delivered HEARTBEAT_ACK to the ack flag (so the missed-ack
- * watchdog force-closed every ~2 intervals), and the router had no token
- * access so RESUME serialized `token: undefined` (dropped by JSON.stringify;
- * Discord answers INVALID_SESSION and every resume degraded to re-identify).
- */
+/** Owns session/resume state and routes protocol frames to the socket and heartbeat owners. */
 export class DiscordGateway {
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private heartbeatAckReceived = true;
+  private readonly heartbeat: GatewayHeartbeat;
   private sequence: number | null = null;
   private sessionId: string | null = null;
   private resumeUrl: string | null = null;
@@ -75,6 +67,10 @@ export class DiscordGateway {
   ) {
     this.shell = new SocketReconnectShell(publish, DISCORD_SHELL_MESSAGES, delay, (url) =>
       this.openSocket(url),
+    );
+    this.heartbeat = new GatewayHeartbeat(
+      () => this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence }),
+      () => this.shell.closeSocket(4000),
     );
   }
 
@@ -95,16 +91,12 @@ export class DiscordGateway {
   }
 
   stop(): void {
-    this.stopHeartbeat();
+    this.heartbeat.stop();
     this.shell.stop();
   }
 
   private reconnect(traceId: string): Promise<void> {
-    // A resumable session reconnects straight to its pinned resume URL. A
-    // cold reconnect needs a fresh gateway URL from Discord's REST API —
-    // fetched under the shell's shared backoff (#540). openSocket stays
-    // OUTSIDE that retry: socket-level failures already re-enter through the
-    // close handler, and retrying them here too would overlap that chain.
+    // Socket failures retry through close handling; only URL fetches use the REST backoff.
     return this.resumeUrl && this.sessionId
       ? this.openSocket(this.resumeUrl)
       : this.shell.reconnectVia(() => this.fetchTrustedGatewayUrl(), traceId);
@@ -116,25 +108,24 @@ export class DiscordGateway {
 
   private wireSocket(ws: WebSocket, settle: SocketSettle): void {
     ws.addEventListener("message", (event) => {
-      let raw: object;
+      let frame: ReturnType<typeof GatewayFrameSchema.safeParse>;
       try {
-        raw = JSON.parse(String(event.data)) as object;
+        frame = GatewayFrameSchema.safeParse(JSON.parse(String(event.data)));
       } catch {
         // One malformed frame must not become an uncaught listener throw;
         // drop it — the gateway's own heartbeat/close handling recovers.
         this.shell.warnDrop("discord gateway frame was not valid JSON; dropped");
         return;
       }
-      const frame = GatewayFrameSchema.safeParse(raw);
       if (!frame.success) {
         this.shell.warnDrop("discord gateway frame had no op envelope; dropped");
         return;
       }
-      if (this.handlePayload(frame.data, raw)) settle.resolveOnce();
+      if (this.handlePayload(frame.data)) settle.resolveOnce();
     });
 
     ws.addEventListener("close", async (event) => {
-      this.stopHeartbeat();
+      this.heartbeat.stop();
       settle.rejectOnce(new Error(`WebSocket closed before ready: ${event.code}`));
       if (FATAL_CLOSE_CODES.has(event.code)) {
         this.shell.end();
@@ -154,23 +145,20 @@ export class DiscordGateway {
   }
 
   /** Routes one gateway payload; returns true when the connection is ready. */
-  private handlePayload(frame: GatewayFrame, raw: object): boolean {
+  private handlePayload(frame: GatewayFrame): boolean {
     // typeof guard, not `!== null`: a MISSING s would otherwise assign
     // undefined, and `seq: undefined` in RESUME gets dropped by
     // JSON.stringify — the same serialization class as the #520 token bug.
     if (typeof frame.s === "number") this.sequence = frame.s;
-    const d = Reflect.get(raw, "d");
+    const d = frame.d;
 
     switch (frame.op) {
       case GatewayOp.HELLO: {
         const hello = HelloDataSchema.safeParse(d);
         // A malformed interval falls to the clamp's floor rather than dropping
         // the frame — HELLO must always answer with IDENTIFY/RESUME.
-        this.startHeartbeat(hello.success ? hello.data.heartbeat_interval : Number.NaN);
+        this.heartbeat.start(hello.success ? hello.data.heartbeat_interval : Number.NaN);
         if (this.sessionId && this.sequence !== null) {
-          // #520 fix 2: the REAL token — `token: undefined` was dropped by
-          // JSON.stringify and Discord answered INVALID_SESSION on every
-          // resume attempt.
           this.sendGateway({
             op: GatewayOp.RESUME,
             d: { token: this.token, session_id: this.sessionId, seq: this.sequence },
@@ -186,10 +174,7 @@ export class DiscordGateway {
         this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence });
         return false;
       case GatewayOp.HEARTBEAT_ACK:
-        // #520 fix 1: the ack has to reach the watchdog flag — before the
-        // re-merge nothing set it, so every connection was force-closed
-        // after ~2 heartbeat intervals.
-        this.heartbeatAckReceived = true;
+        this.heartbeat.acknowledge();
         return false;
       // The op notice and the close→reconnect chain it triggers carry two
       // ids on purpose: threading the notice's id through instance state
@@ -278,42 +263,6 @@ export class DiscordGateway {
       });
     }
     return false;
-  }
-
-  private startHeartbeat(intervalMs: number): void {
-    // The interval arrives from the gateway payload (network input). Clamp it
-    // so a malformed HELLO can neither busy-loop the process (0/negative/NaN)
-    // nor zombify the connection with a never-firing heartbeat (CodeQL
-    // js/resource-exhaustion). Discord's real value is ~41250ms; the 100ms
-    // floor bounds timer pressure while keeping fake-gateway state-machine
-    // tests fast. Explicit comparison guard (not Math.min/max) so the taint
-    // barrier is analyzable.
-    let clampedMs = 100;
-    if (Number.isFinite(intervalMs) && intervalMs >= 100 && intervalMs <= 300_000) {
-      clampedMs = intervalMs;
-    } else if (intervalMs > 300_000) {
-      clampedMs = 300_000;
-    }
-    this.stopHeartbeat();
-    this.heartbeatAckReceived = true;
-    this.heartbeatTimer = setInterval(() => {
-      if (!this.heartbeatAckReceived) {
-        // Missed ack: zombied connection. Close with a non-1000 code so the
-        // session stays resumable (Discord treats 1000/1001 as a clean
-        // goodbye and invalidates the session).
-        this.shell.closeSocket(4000);
-        return;
-      }
-      this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence });
-      this.heartbeatAckReceived = false;
-    }, clampedMs);
-  }
-
-  private stopHeartbeat(): void {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
   }
 
   private identify(): void {

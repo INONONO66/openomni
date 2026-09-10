@@ -1,7 +1,7 @@
 import type { Actor } from "@openomni/protocol";
 import { ChannelGrantStore } from "@openomni/ledger";
 
-export interface ChannelGrantMatchInput {
+interface ChannelGrantMatchInput {
   readonly surface: string;
   readonly workspace?: string;
   readonly channel?: string;
@@ -9,7 +9,7 @@ export interface ChannelGrantMatchInput {
   readonly sender?: string;
 }
 
-export interface ChannelGrantResolution {
+interface ChannelGrantResolution {
   readonly grant: Actor.ChannelGrant;
   readonly inboundTreatment: Actor.InboundTreatment;
 }

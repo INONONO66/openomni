@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
+import { z } from "zod";
 import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouterPorts } from "../../src/router";
 import { commits, makeRouter, resetRouterState } from "./_router-fixture";
@@ -75,11 +76,13 @@ test("session deadline is part of the inbox commit, never a second alarm write",
     { deadline: 100, expectedResponders: ["child"] },
   ]);
   expect(commits).toHaveLength(1);
+  expect(z.object({ sourceActionId: z.string() }).safeParse(commits[0]?.origin.value).success).toBe(
+    true,
+  );
   expect(commits[0]?.origin.value).toMatchObject({
     kind: "message",
     messageId: result.handle.messageId,
     senderSessionId: "sender",
-    sourceActionId: expect.any(String),
     deadline: 100,
     replyTo: "binding",
   });

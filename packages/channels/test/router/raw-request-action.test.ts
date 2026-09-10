@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { ActorRegistry, Storage, SessionHandleStore } from "@openomni/ledger";
 import { type Gateway, type Inbox, Ingress } from "@openomni/protocol";
 import { createGatewayRouter } from "../../src/router";
-import { IngressRoutingError } from "../../src/router/routing-resolution";
+import { IngressRoutingError } from "../../src/router/routing-error";
 
 beforeEach(() => {
   Storage.reset();
@@ -23,10 +23,13 @@ beforeEach(() => {
 afterEach(() => Storage.reset());
 
 test.each([
-  "report_result",
-  "ask_clarification",
-  "invalid",
-] as const)("raw request reply preserves the requested %s action", async (action) => {
+  ["report_result", "report_result"],
+  ["ask_clarification", "ask_clarification"],
+  ["invalid", "invalid"],
+  [null, "invalid"],
+  [0, "invalid"],
+  [{ unexpected: true }, "invalid"],
+] as const)("raw request reply projects %j as %s", async (action, expectedAction) => {
   // Given a durable request accepting only report_result.
   await openRequest("request-raw-action", {
     sessionId: "request-owner",
@@ -91,20 +94,14 @@ test.each([
   };
 
   // When a driver submits raw facts through the current public seam.
-  let outcome: Gateway.IngestResult | IngressRoutingError | undefined;
-  try {
-    outcome = await router.ingest(
-      { kind: "external", surface: "telegram", externalId: "seller" },
-      facts,
-    );
-  } catch (error) {
-    if (!(error instanceof IngressRoutingError)) throw error;
-    outcome = error;
-  }
+  const outcome = router.ingest(
+    { kind: "external", surface: "telegram", externalId: "seller" },
+    facts,
+  );
 
   // Then only the allowed action can resolve the request and commit a prompt.
   if (action === "report_result") {
-    expect(outcome).toMatchObject({
+    expect(await outcome).toMatchObject({
       status: "executed",
       handle: { target: "request-owner" },
     });
@@ -112,18 +109,17 @@ test.each([
     expect(SessionHandleStore.inboxRows("request-owner")).toMatchObject([{ content: "answer" }]);
     expect(SessionHandleStore.requestById("request-raw-action")?.state).toBe("resolved");
   } else {
+    await expect(outcome).rejects.toBeInstanceOf(IngressRoutingError);
+    await expect(outcome).rejects.toMatchObject({ data: { code: "route_blocked" } });
     expect(decisions[0]).toMatchObject({
       stage: "request_correlation",
       outcome: "block",
       factsUsed: [
         "request:request:request-raw-action",
-        `request.action:${action}`,
+        `request.action:${expectedAction}`,
         "request.action:disallowed",
       ],
     });
-    expect(outcome).toBeInstanceOf(IngressRoutingError);
-    if (!(outcome instanceof IngressRoutingError)) throw new Error("expected routing rejection");
-    expect(outcome.code).toBe("route_blocked");
     expect(commits).toHaveLength(0);
     expect(SessionHandleStore.requestById("request-raw-action")).toMatchObject({
       state: "open",

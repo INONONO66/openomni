@@ -1,6 +1,7 @@
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { DiscordClient } from "./client";
 import { DiscordApiError, DiscordHandlerMissingError } from "./error";
@@ -111,28 +112,20 @@ export class DiscordAdapter implements Channel.Surface {
   }
 
   private handleMessageCreate(message: DiscordMessage, traceId: string): void {
-    if (!this.normalizer) return;
-    const acquisition = this.dedupe.acquire(message.id);
-    if (acquisition.duplicate) return;
-    const dedupeToken = acquisition.token;
-    if (message.author.bot) return;
-    if (!message.content) return;
-
-    const botId = this.botId;
-    if (!botId) return;
-
-    const inbound = this.normalizer.normalize(message);
-    if (!inbound) return;
-
-    this.handleIncoming(inbound, message.channel_id, traceId).catch((err) => {
-      this.dedupe.forget(message.id, dedupeToken);
-      this.publish(Operational.Events.Error, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "discord message handling failed",
-        context: { err: String(err) },
-      });
+    const normalizer = this.normalizer;
+    if (!normalizer) return;
+    void handoffInbound({
+      dedupe: this.dedupe,
+      key: message.id,
+      traceId,
+      publish: this.publish,
+      errorMessage: "discord message handling failed",
+      rethrowFailure: false,
+      handle: async () => {
+        if (message.author.bot || !message.content || !this.botId) return;
+        const inbound = normalizer.normalize(message);
+        if (inbound) await this.handleIncoming(inbound, message.channel_id, traceId);
+      },
     });
   }
 

@@ -1,4 +1,5 @@
 import { openRequest, requestPort, seededRequests } from "../helpers/requests";
+import { replaceLedger } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
 import { Channel, Ingress, type Gateway } from "@openomni/protocol";
 import {
@@ -98,6 +99,13 @@ test("first quorum reply commits input but leaves the request open", async () =>
   expect(SessionHandleStore.requestById("quorum")?.replies).toHaveLength(1);
 });
 
+async function expectStableReplyReplay(): Promise<void> {
+  const before = SessionHandleStore.tree("request-owner");
+  await kernelRouter().ingest(sender, facts("reply"));
+  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+}
+
 test("duplicate unresolved reply reuses its receipt without another durable input", async () => {
   await openRequest("duplicate", {
     expectedResponders: ["actor-external-worker", "b"],
@@ -105,10 +113,7 @@ test("duplicate unresolved reply reuses its receipt without another durable inpu
     threshold: 2,
   });
   await kernelRouter().ingest(sender, facts("reply"));
-  const before = SessionHandleStore.tree("request-owner");
-  await kernelRouter().ingest(sender, facts("reply"));
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+  await expectStableReplyReplay();
   expect(SessionHandleStore.requestById("duplicate")?.replies).toHaveLength(1);
   expect(commits).toHaveLength(1);
 });
@@ -158,10 +163,7 @@ test("resolved reply redelivery preserves the original request revision", async 
   await openRequest("redelivery");
   await kernelRouter().ingest(sender, facts("reply"));
   const resolved = SessionHandleStore.requestById("redelivery");
-  const before = SessionHandleStore.tree("request-owner");
-  await kernelRouter().ingest(sender, facts("reply"));
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+  await expectStableReplyReplay();
   expect(SessionHandleStore.requestById("redelivery")).toEqual(resolved);
   // Kernel admission and receiving inbox are one durable transition.
   expect(commits).toHaveLength(1);
@@ -248,23 +250,15 @@ test.each([
   "empty_conflict",
 ] as const)("route correction %s fails closed", async (fault) => {
   await openRequest("correction", { expectedResponders: ["someone-else"] });
-  const adapter = Storage.get();
-  const ledger = adapter.ledger;
-  if (ledger === undefined) throw new Error("missing ledger");
-  Storage.configure({
-    ...adapter,
-    transaction: adapter.transaction.bind(adapter),
-    ledger: {
-      ...ledger,
-      append: (fact, expected) => {
-        if (fact.type !== Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE)
-          return ledger.append(fact, expected);
-        if (fault === "throw") throw new Error("correction unavailable");
-        return { kind: "cas_conflict", currentHead: 0 };
-      },
-      headFact: (id) => (id.startsWith("route_correction:") ? undefined : ledger.headFact(id)),
+  replaceLedger((ledger) => ({
+    ...ledger,
+    append: (fact, expected) => {
+      if (fact.type !== Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return ledger.append(fact, expected);
+      if (fault === "throw") throw new Error("correction unavailable");
+      return { kind: "cas_conflict", currentHead: 0 };
     },
-  });
+    headFact: (id) => (id.startsWith("route_correction:") ? undefined : ledger.headFact(id)),
+  }));
   await expect(kernelRouter().ingest(sender, facts("reply"))).rejects.toMatchObject({
     code: "route_record_failed",
   });

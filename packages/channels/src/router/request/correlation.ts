@@ -1,6 +1,9 @@
 import type { SessionTransition } from "@openomni/protocol";
 
-type Candidate = Readonly<{ key: `request:${string}`; request: SessionTransition.Request }>;
+interface Candidate {
+  readonly key: `request:${string}`;
+  readonly request: SessionTransition.Request;
+}
 export type RequestResolution =
   | Readonly<{ kind: "none" }>
   | Readonly<{ kind: "match"; candidate: Candidate }>

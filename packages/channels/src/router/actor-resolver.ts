@@ -3,9 +3,11 @@ import { ActorRegistry } from "@openomni/ledger";
 import { matchBlacklist } from "./blacklist.js";
 import { resolveChannelGrant } from "./channel-grant.js";
 
-function legacyActorFields(actor: Ingress.Actor | undefined): Ingress.Actor | undefined {
+type LegacyActor = Pick<Ingress.Actor, "id" | "role">;
+
+function legacyActorFields(actor: LegacyActor | undefined): LegacyActor | undefined {
   if (!actor) return undefined;
-  const legacyActor: Ingress.Actor = {};
+  const legacyActor: LegacyActor = {};
   if (actor.id) legacyActor.id = actor.id;
   if (actor.role) legacyActor.role = actor.role;
   return legacyActor;

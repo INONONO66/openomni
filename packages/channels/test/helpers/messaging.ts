@@ -1,8 +1,29 @@
-import type { Gateway } from "@openomni/protocol";
+import { Gateway } from "@openomni/protocol";
+import { expect } from "bun:test";
 import { ActorRegistry } from "@openomni/ledger";
 
 type SendInput = Gateway.SendInput;
 type SenderTargetGrant = Gateway.SenderTargetGrant;
+
+export function expectRequestSpecViolation(input: Gateway.SendInput) {
+  const result = Gateway.SendInput.safeParse(input);
+  if (result.success) throw new Error("invalid request specification was accepted");
+  expect(result.error.issues.map(({ code, path }) => ({ code, path }))).toEqual([
+    { code: "custom", path: ["requestSpec"] },
+  ]);
+}
+
+export function expectDenied(receipt: Gateway.SendReceipt, code: Gateway.MessageDenialCode) {
+  if (receipt.kind !== "denied") throw new Error(`expected denied receipt, got ${receipt.kind}`);
+  expect(receipt.code).toBe(code);
+  return receipt;
+}
+
+export function expectAwaited(receipt: Gateway.SendReceipt) {
+  if (receipt.kind !== "sent" || receipt.operation !== "awaited")
+    throw new Error("expected awaited sent receipt");
+  return receipt;
+}
 
 /** Shared messaging-domain fixture builders for openomni tests (#215). */
 

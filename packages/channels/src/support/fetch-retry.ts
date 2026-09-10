@@ -1,7 +1,7 @@
 import { Operational } from "@openomni/protocol";
+import type { z } from "zod";
 import type { PublishPort } from "../types";
 
-// merged from sleep.ts (fragment sweep); also consumed by channel pollers
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -29,7 +29,7 @@ export async function fetchWithRetry(
     /** The logical request's trace (D11): every retry of one request shares this ONE id — never re-minted per attempt. */
     traceId: string;
     /** retry-after seconds from 429 body; defaults to 5s */
-    parseRetryAfter?: (body: object) => number;
+    retryAfterSchema?: z.ZodType<number>;
     retries?: number;
     label?: string;
     /** band contract: telemetry goes through the injected observation port */
@@ -47,15 +47,9 @@ export async function fetchWithRetry(
     }
 
     let retryAfter = 5;
-    if (options.parseRetryAfter) {
-      const body = (await response.json().catch(() => null)) as object | null;
-      if (body !== null) {
-        try {
-          retryAfter = options.parseRetryAfter(body);
-        } catch {
-          // parser failed — fall back to default delay
-        }
-      }
+    if (options.retryAfterSchema) {
+      const parsed = options.retryAfterSchema.safeParse(await response.json().catch(() => null));
+      if (parsed.success) retryAfter = parsed.data;
     }
 
     options.publish?.(Operational.Events.Warn, {

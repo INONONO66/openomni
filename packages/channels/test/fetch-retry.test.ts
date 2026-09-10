@@ -1,4 +1,5 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
+import { controlledTimeouts } from "./helpers/timeouts";
 import { fetchWithRetry, RetryExhaustedError } from "../src/support/fetch-retry";
 
 for (const finalOutcome of ["refused", "network", "server", "accepted"] as const) {
@@ -13,20 +14,7 @@ for (const finalOutcome of ["refused", "network", "server", "accepted"] as const
     );
     const networkError = new TypeError("rate limited after 3 retries (429)");
     let requests = 0;
-    let scheduled = Promise.withResolvers<() => void>();
-    const timerHandle = setTimeout(() => undefined, 0);
-    clearTimeout(timerHandle);
-    const delays: number[] = [];
-    const timer = spyOn(globalThis, "setTimeout").mockImplementation(
-      Object.assign(
-        (callback: Parameters<typeof setTimeout>[0], delay?: number) => {
-          delays.push(delay ?? 0);
-          scheduled.resolve(() => callback());
-          return timerHandle;
-        },
-        { __promisify__: setTimeout.__promisify__ },
-      ),
-    );
+    const timer = controlledTimeouts();
     globalThis.fetch = Object.assign(
       async () => {
         requests += 1;
@@ -47,14 +35,10 @@ for (const finalOutcome of ["refused", "network", "server", "accepted"] as const
         (value) => value,
         (failure: Error) => failure,
       );
-      for (let retry = 0; retry < 3; retry++) {
-        const fire = await scheduled.promise;
-        scheduled = Promise.withResolvers<() => void>();
-        fire();
-      }
+      for (let retry = 0; retry < 3; retry++) await timer.fireNext();
       const received = await result;
       expect(requests).toBe(4);
-      expect(delays).toEqual([5000, 5000, 5000]);
+      expect(timer.delays).toEqual([5000, 5000, 5000]);
       if (finalOutcome === "refused") {
         expect(received).toBeInstanceOf(RetryExhaustedError);
         if (!(received instanceof RetryExhaustedError))
@@ -68,7 +52,7 @@ for (const finalOutcome of ["refused", "network", "server", "accepted"] as const
         expect(received).toBe(finalOutcome === "network" ? networkError : response);
       }
     } finally {
-      timer.mockRestore();
+      timer.restore();
       globalThis.fetch = originalFetch;
     }
   }, 15000);

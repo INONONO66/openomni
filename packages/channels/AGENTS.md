@@ -10,9 +10,8 @@ Gateway band, stage 2 (`@openomni/channels`; drivers and perimeter judgment were
 
 ```
 src/
-├── index.ts          # Package barrel — adapters, WebSocketHandler, ChannelAuthnMiddleware, router surface
+├── index.ts          # Package barrel — adapters, WebSocketHandler, router surface
 ├── types.ts          # PublishPort (injected observation port), ChannelClient, InboundNormalizer
-├── channel-authn.ts  # ChannelAuthnMiddleware facade over authn/
 ├── websocket.ts      # In-process WebSocket surface (token-gated)
 ├── authn/            # Perimeter judgment: policy-engine decisions, trigger/webhook/upgrade authn
 ├── router/           # Gateway router (#707): createGatewayRouter, resolve-route (external arms),

@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
-import type { Gateway, Inbox } from "@openomni/protocol";
-import { createGatewayRouter } from "../../src/router";
+import { Gateway, type Inbox } from "@openomni/protocol";
+import { z } from "zod";
+import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
 import { resetStores } from "./_router-fixture";
 import { requestPort } from "../helpers/requests";
+import { messageExecutionReceipt } from "../helpers/message-execution";
 
 beforeEach(resetStores);
 afterEach(() => Storage.reset());
 
-test("session ingest commits once through the injected inbox without a channel driver", async () => {
+function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["sender"]) {
   const commits: Inbox.Commit[] = [];
   const router = createGatewayRouter({
     requests: requestPort(),
@@ -21,12 +23,12 @@ test("session ingest commits once through the injected inbox without a channel d
     },
     prepare: () => ({
       target: "child",
-      sender: { sessionId: "parent", owner: "process", fence: 1 },
+      ...(sender === undefined ? {} : { sender }),
       message: {
         sender: "session",
         senderRole: "resident",
         targetKind: "session",
-        targetRole: "worker",
+        ...(sender === undefined ? {} : { targetRole: "worker" as const }),
         type: "message",
         parentChild: true,
         fanout: 0,
@@ -34,29 +36,32 @@ test("session ingest commits once through the injected inbox without a channel d
         withinParentDeadline: true,
       },
     }),
-    run: async (_sender, request, body) => ({
+    run,
+  });
+  return { router, commits };
+}
+
+function sendToChild(router: ReturnType<typeof createGatewayRouter>, content: string) {
+  return router.ingest(
+    { kind: "session", id: "parent" },
+    {
+      to: { kind: "session", id: "child" },
+      type: "message",
+      content,
+    },
+  );
+}
+
+test("session ingest commits once through the injected inbox without a channel driver", async () => {
+  const { router, commits } = recordingRouter(
+    async (_sender, request, body) => ({
       terminal: "executed",
       matchedRuleIds: [],
-      value: await body({
-        action: {
-          id: "source",
-          sessionId: "parent",
-          parentId: null,
-          kind: "message",
-          intent: { encodingVersion: 1, value: { value: request.intent } },
-          effect: { encodingVersion: 1, value: {} },
-          irreversible: true,
-          ordinal: 1,
-          ts: 1,
-        },
-        revision: 1,
-      }),
+      value: await body(messageExecutionReceipt("source", "parent", request.intent)),
     }),
-  });
-  const result: Gateway.IngestResult = await router.ingest(
-    { kind: "session", id: "parent" },
-    { to: { kind: "session", id: "child" }, type: "message", content: "work" },
+    { sessionId: "parent", owner: "process", fence: 1 },
   );
+  const result: Gateway.IngestResult = await sendToChild(router, "work");
   expect(result).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(commits).toHaveLength(1);
   expect(commits[0]).toMatchObject({
@@ -72,71 +77,22 @@ test.each([
   "content",
   "target",
 ] as const)("pre transform of %s is applied or refused before inbox commit", async (field) => {
-  const commits: Inbox.Commit[] = [];
-  const router = createGatewayRouter({
-    requests: requestPort(),
-    sink: () => undefined,
-    inbox: {
-      commit: (row) => {
-        commits.push(row);
-        return { ...row, status: "pending", consumedBy: null, consumedAt: null, ordinal: 1 };
-      },
-    },
-    prepare: () => ({
-      target: "child",
-      message: {
-        sender: "session",
-        senderRole: "resident",
-        targetKind: "session",
-        type: "message",
-        parentChild: true,
-        fanout: 0,
-        depth: 1,
-        withinParentDeadline: true,
-      },
-    }),
-    run: async (_sender, request, body) => {
-      const value = request.intent;
-      if (value === null || typeof value !== "object" || Array.isArray(value))
-        throw new Error("invalid fixture intent");
-      return {
-        terminal: "executed",
-        matchedRuleIds: [],
-        value: await body({
-          action: {
-            id: "source",
-            sessionId: "parent",
-            parentId: null,
-            kind: "message",
-            intent: {
-              encodingVersion: 1,
-              value: {
-                value: {
-                  ...value,
-                  ...(field === "content"
-                    ? { content: "redacted" }
-                    : { to: { kind: "session", id: "other" } }),
-                },
-              },
-            },
-            effect: { encodingVersion: 1, value: {} },
-            irreversible: true,
-            ordinal: 1,
-            ts: 1,
-          },
-          revision: 1,
-        }),
-      };
-    },
+  const { router, commits } = recordingRouter(async (_sender, request, body) => {
+    const value = Gateway.SendMessage.extend({
+      messageId: z.string(),
+      sender: Gateway.IngestSender,
+    }).parse(request.intent);
+    const transformed = {
+      ...value,
+      ...(field === "content" ? { content: "redacted" } : { to: { kind: "session", id: "other" } }),
+    };
+    return {
+      terminal: "executed",
+      matchedRuleIds: [],
+      value: await body(messageExecutionReceipt("source", "parent", transformed)),
+    };
   });
-  const result = router.ingest(
-    { kind: "session", id: "parent" },
-    {
-      to: { kind: "session", id: "child" },
-      type: "message",
-      content: "secret",
-    },
-  );
+  const result = sendToChild(router, "secret");
   if (field === "target") {
     await expect(result).rejects.toThrow("message routing transform requires readmission");
     expect(commits).toHaveLength(0);
@@ -144,4 +100,18 @@ test.each([
     await result;
     expect(commits[0]?.content).toBe("redacted");
   }
+});
+
+test("post-execution denial retains the delivery handle and committed effect", async () => {
+  const { router, commits } = recordingRouter(async (_sender, request, body) => {
+    await body(messageExecutionReceipt("source", "parent", request.intent));
+    return { terminal: "blocked_post", matchedRuleIds: ["post-rule"], reason: "post-denial" };
+  });
+  const result = await sendToChild(router, "work");
+  expect(result).toMatchObject({
+    status: "blocked_post",
+    reasonCode: "post-denial",
+    handle: { target: "child" },
+  });
+  expect(commits).toHaveLength(1);
 });

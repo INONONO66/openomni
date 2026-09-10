@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { z } from "zod";
 import { runExistingAgentMessageDriver } from "../../harness/existing-agent-message-driver.js";
 
 /**
@@ -12,7 +13,24 @@ describe("existing-agent-message-driver", () => {
     const result = await runExistingAgentMessageDriver(["--scenario", "restart-quorum", "--json"]);
 
     expect(result.exitCode).toBe(0);
-    const receipt = JSON.parse(result.stdout);
+    const receipt = z
+      .object({
+        resultCode: z.string(),
+        allocationDelta: z.number(),
+        sessionId: z.string(),
+        requestState: z.string(),
+        resolutionActions: z.array(z.object({ requestId: z.string(), sessionId: z.string() })),
+        fireAndForget: z.object({ outcome: z.string(), requestCountAfterSend: z.number() }),
+        restart: z.object({
+          storageReopened: z.boolean(),
+          stateAtRestart: z.string(),
+          repliesPersistedAcrossRestart: z.number(),
+        }),
+        deliveries: z.array(
+          z.object({ messageId: z.string(), operation: z.string(), endpointId: z.string() }),
+        ),
+      })
+      .parse(JSON.parse(result.stdout));
     expect(receipt.resultCode).toBe("restart_quorum_resolved");
     expect(receipt.allocationDelta).toBe(0);
     expect(receipt.sessionId).toBe("session:qa-owner");
@@ -39,7 +57,23 @@ describe("existing-agent-message-driver", () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    const receipt = JSON.parse(result.stdout);
+    const receipt = z
+      .object({
+        resultCode: z.string(),
+        allocationDelta: z.number(),
+        workerAllocated: z.boolean(),
+        denials: z.array(z.object({ plane: z.string(), code: z.string() })),
+        quorum: z.object({
+          unchanged: z.boolean(),
+          after: z.object({
+            state: z.string(),
+            replies: z.number(),
+            responders: z.number(),
+            threshold: z.number(),
+          }),
+        }),
+      })
+      .parse(JSON.parse(result.stdout));
     expect(receipt.resultCode).toBe("duplicate_and_ambiguous_denied");
     expect(receipt.denials).toEqual([
       { plane: "reply", code: "duplicate" },
@@ -83,27 +117,25 @@ describe("existing-agent-message-driver", () => {
     [new Error("serialization fault"), "Error"],
     ["serialization fault", "NonError"],
   ] as const)("converts an unexpected %s into the driver error receipt", async (fault, errorType) => {
-    const stringify = JSON.stringify;
-    let firstCall = true;
-    JSON.stringify = ((value: unknown) => {
-      if (firstCall) {
-        firstCall = false;
-        throw fault;
-      }
-      return stringify(value);
-    }) as typeof JSON.stringify;
+    const stringify = spyOn(JSON, "stringify").mockImplementationOnce(() => {
+      throw fault;
+    });
 
     try {
       const result = await runExistingAgentMessageDriver(["invalid"]);
 
       expect(result.exitCode).toBe(1);
-      expect(JSON.parse(result.stdout)).toMatchObject({
+      expect(
+        z
+          .object({ mode: z.string(), resultCode: z.string(), errorType: z.string() })
+          .parse(JSON.parse(result.stdout)),
+      ).toMatchObject({
         mode: "driver_error",
         resultCode: "driver_threw",
         errorType,
       });
     } finally {
-      JSON.stringify = stringify;
+      stringify.mockRestore();
     }
   });
 
@@ -111,6 +143,8 @@ describe("existing-agent-message-driver", () => {
     const result = await runExistingAgentMessageDriver(["--scenario", "unknown", "--json"]);
 
     expect(result.exitCode).toBe(1);
-    expect(JSON.parse(result.stdout).resultCode).toBe("invalid_arguments");
+    expect(z.object({ resultCode: z.string() }).parse(JSON.parse(result.stdout)).resultCode).toBe(
+      "invalid_arguments",
+    );
   });
 });

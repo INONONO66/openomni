@@ -7,8 +7,7 @@ import type { PublishPort } from "../types.js";
  * externalId. Structurally identical to the router's `ChannelDeliveryRoute`
  * on purpose: the provider band may not import `src/router/` (S8 banding), so
  * the contract restates the seam and the composition root is where the two
- * meet. The optional `idempotencyKey` mirrors the adapters' deliver seam —
- * the current server composition calls it keyless (at-least-once retained).
+ * meet. Every delivery carries the required gateway idempotency key.
  */
 export type ProviderDeliveryRoute = (
   externalId: string,

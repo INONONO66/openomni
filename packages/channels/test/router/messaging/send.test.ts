@@ -1,14 +1,18 @@
 import { seededRequests } from "../../helpers/requests";
+import { replaceLedger } from "../../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Gateway } from "@openomni/protocol";
+import { z } from "zod";
+import type { Gateway } from "@openomni/protocol";
 import { ActorRegistry, EgressBudgetStore, Storage, SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "../../helpers/observation";
+import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
+import type { DeliveryReceipt } from "../../../src/support/deliver";
+
+type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
 import {
-  createExistingAgentMessaging,
-  type DeliveryReceipt,
-  type OutboundMessage,
-} from "../../../src/router/messaging/send.js";
-import {
+  expectAwaited,
+  expectDenied,
+  expectRequestSpecViolation,
   buildAwaitedSendInput,
   buildGrant,
   buildSendInput,
@@ -17,7 +21,6 @@ import {
 } from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
 
-const SendInput = Gateway.SendInput;
 type SenderTargetGrant = Gateway.SenderTargetGrant;
 
 const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
@@ -65,6 +68,24 @@ beforeEach(() => {
   registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
 });
 
+test("preflight reads authority without debiting, opening requests, or delivering", () => {
+  expect(messaging().preflight(buildAwaitedSendInput())).toBeUndefined();
+  expect(inspectDebitCount()).toBe(0);
+  expect(SessionHandleStore.requestRows()).toHaveLength(0);
+  expect(deliveries).toEqual([]);
+});
+
+test("receipt assertions reject wrong discriminants and denial codes", async () => {
+  grants = [];
+  const denied = await messaging().send(buildSendInput());
+  expect(() => expectDenied(denied, "target_missing")).toThrow();
+  expect(() => expectAwaited(denied)).toThrow();
+  grants = [buildGrant("grant:sender->target")];
+  const sent = await messaging().send(buildSendInput());
+  expect(() => expectDenied(sent, "ungranted")).toThrow();
+  expect(() => expectAwaited(sent)).toThrow();
+});
+
 describe("sender-target grant (policy plane)", () => {
   test("send without any covering grant is denied ungranted and delivers nothing", async () => {
     grants = [];
@@ -77,9 +98,7 @@ describe("sender-target grant (policy plane)", () => {
 
     const receipt = await messaging().send(buildSendInput());
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("ungranted");
+    expectDenied(receipt, "ungranted");
     expect(deliveries).toHaveLength(0);
     expect(SessionHandleStore.requestRows()).toHaveLength(0);
     await flushBus();
@@ -92,30 +111,23 @@ describe("sender-target grant (policy plane)", () => {
 
     const receipt = await messaging().send(buildAwaitedSendInput());
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("ungranted");
+    expectDenied(receipt, "ungranted");
     expect(SessionHandleStore.requestRows()).toHaveLength(0);
   });
 
   test("an expired grant is not active — time is an input, denial is ungranted", async () => {
     grants = [buildGrant("grant:expired", { expiresAt: messagingNow - 1 })];
 
-    const receipt = await messaging().send(buildSendInput());
-
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("ungranted");
+    expectDenied(await messaging().send(buildSendInput()), "ungranted");
   });
 });
 
 describe("explicit target resolution (fail closed)", () => {
   test("grant evaluation precedes target resolution: an ungranted sender learns nothing from the registry", async () => {
-    const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
-
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("ungranted");
+    expectDenied(
+      await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })),
+      "ungranted",
+    );
   });
 
   test("granted but unregistered target actor is denied target_missing", async () => {
@@ -123,9 +135,7 @@ describe("explicit target resolution (fail closed)", () => {
 
     const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("target_missing");
+    expectDenied(receipt, "target_missing");
     expect(deliveries).toHaveLength(0);
   });
 
@@ -137,9 +147,7 @@ describe("explicit target resolution (fail closed)", () => {
       buildSendInput({ target: { actorId: "actor:endpointless" } }),
     );
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("target_stale");
+    expectDenied(receipt, "target_stale");
   });
 
   test("pinned endpoint that no longer exists is denied target_stale", async () => {
@@ -147,9 +155,7 @@ describe("explicit target resolution (fail closed)", () => {
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:gone" } }),
     );
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("target_stale");
+    expectDenied(receipt, "target_stale");
   });
 
   test("pinned endpoint re-bound to another actor is denied target_stale", async () => {
@@ -159,9 +165,7 @@ describe("explicit target resolution (fail closed)", () => {
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:other" } }),
     );
 
-    expect(receipt.kind).toBe("denied");
-    if (receipt.kind !== "denied") throw new Error("expected denial");
-    expect(receipt.code).toBe("target_stale");
+    expectDenied(receipt, "target_stale");
   });
 
   test("multi-endpoint actor without a pin is denied target_ambiguous; a pin resolves it", async () => {
@@ -179,9 +183,7 @@ describe("explicit target resolution (fail closed)", () => {
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:target-b" } }),
     );
 
-    expect(unpinned.kind).toBe("denied");
-    if (unpinned.kind !== "denied") throw new Error("expected denial");
-    expect(unpinned.code).toBe("target_ambiguous");
+    expectDenied(unpinned, "target_ambiguous");
     expect(pinned.kind).toBe("sent");
     if (pinned.kind !== "sent") throw new Error("expected sent");
     expect(pinned.target.endpointId).toBe("endpoint:target-b");
@@ -239,24 +241,13 @@ describe("fire-and-forget delivery", () => {
   });
 
   test("fire_and_forget carrying a requestSpec is a schema violation, not a silent Request", async () => {
-    const result = SendInput.safeParse(buildAwaitedSendInput({ operation: "fire_and_forget" }));
-
-    expect(result.success).toBe(false);
-    if (result.success) throw new Error("expected schema rejection");
-    expect(result.error.issues.map((issue) => issue.message)).toContain(
-      "fire_and_forget never opens a request — requestSpec is not allowed",
-    );
+    expectRequestSpecViolation(buildAwaitedSendInput({ operation: "fire_and_forget" }));
   });
 });
 
 describe("awaited delivery", () => {
   test("appends exactly one owner-correct Request with correlation, responders, policy, and deadline", async () => {
-    const receipt = await messaging().send(buildAwaitedSendInput());
-
-    expect(receipt.kind).toBe("sent");
-    if (receipt.kind !== "sent" || receipt.operation !== "awaited") {
-      throw new Error("expected awaited sent receipt");
-    }
+    const receipt = expectAwaited(await messaging().send(buildAwaitedSendInput()));
     const stored = SessionHandleStore.requestById("request:test-awaited");
     expect(stored).toEqual(receipt.request);
     expect(stored).toMatchObject({
@@ -292,9 +283,7 @@ describe("awaited delivery", () => {
       }),
     );
 
-    expect(duplicate.kind).toBe("denied");
-    if (duplicate.kind !== "denied") throw new Error("expected denial");
-    expect(duplicate.code).toBe("request_duplicate");
+    expectDenied(duplicate, "request_duplicate");
     expect(SessionHandleStore.requestRows()).toHaveLength(1);
     expect(deliveries).toHaveLength(1);
     await flushBus();
@@ -302,13 +291,7 @@ describe("awaited delivery", () => {
   });
 
   test("awaited without a requestSpec is a schema violation owned by the SendInput refinement", async () => {
-    const result = SendInput.safeParse(buildSendInput({ operation: "awaited" }));
-
-    expect(result.success).toBe(false);
-    if (result.success) throw new Error("expected schema rejection");
-    expect(result.error.issues.map((issue) => issue.message)).toContain(
-      "awaited operation requires a requestSpec",
-    );
+    expectRequestSpecViolation(buildSendInput({ operation: "awaited" }));
   });
 });
 
@@ -321,12 +304,7 @@ describe("delivery receipt", () => {
       publish: Bus.publish,
     });
 
-    const receipt = await withReceipt.send(buildAwaitedSendInput());
-
-    expect(receipt.kind).toBe("sent");
-    if (receipt.kind !== "sent" || receipt.operation !== "awaited") {
-      throw new Error("expected awaited sent receipt");
-    }
+    const receipt = expectAwaited(await withReceipt.send(buildAwaitedSendInput()));
     // The send receipt carries the receipt-updated record (revision bumped
     // from 1 at create — head === revision on the owner stream, #510).
     expect(receipt.request.correlation.replyToMessageId).toBe("platform:msg-77");
@@ -351,12 +329,7 @@ describe("delivery receipt", () => {
   });
 
   test("no receipt from the owner leaves the internal-id correlation unchanged", async () => {
-    const receipt = await messaging().send(buildAwaitedSendInput());
-
-    expect(receipt.kind).toBe("sent");
-    if (receipt.kind !== "sent" || receipt.operation !== "awaited") {
-      throw new Error("expected awaited sent receipt");
-    }
+    const receipt = expectAwaited(await messaging().send(buildAwaitedSendInput()));
     expect(receipt.request.correlation.replyToMessageId).toBe("message:test-awaited");
     expect(receipt.request.requestId).toBe("request:test-awaited");
   });
@@ -413,9 +386,9 @@ describe("durable send admission faults", () => {
       },
       grants: () => grants,
       budgets: () => {
-        const { ledger: _ledger, ...withoutLedger } = detached;
         Storage.configure({
-          ...withoutLedger,
+          ...detached,
+          ledger: undefined,
           transaction: detached.transaction.bind(detached),
         });
         return [
@@ -472,42 +445,46 @@ describe("durable send admission faults", () => {
   });
 
   test("fails closed when admission loses an append race without a recorded winner", async () => {
-    const adapter = Storage.get();
-    const ledger = adapter.ledger;
-    if (ledger === undefined) throw new Error("ledger sub-adapter missing");
-    Storage.configure({
-      ...adapter,
-      transaction: adapter.transaction.bind(adapter),
-      ledger: {
-        ...ledger,
-        append: (fact, expectedHead) =>
-          fact.type === "gateway.send.admitted"
-            ? { kind: "cas_conflict", currentHead: 0 }
-            : ledger.append(fact, expectedHead),
-      },
-    });
+    replaceLedger((ledger) => ({
+      ...ledger,
+      append: (fact, expectedHead) =>
+        fact.type === "gateway.send.admitted"
+          ? { kind: "cas_conflict", currentHead: 0 }
+          : ledger.append(fact, expectedHead),
+    }));
 
     await expect(messaging().send(buildSendInput())).rejects.toThrow();
     expect(deliveries).toEqual([]);
   });
 
-  test("uses the matching admission that won a concurrent append race", async () => {
-    const adapter = Storage.get();
-    const ledger = adapter.ledger;
-    if (ledger === undefined) throw new Error("ledger sub-adapter missing");
-    Storage.configure({
-      ...adapter,
-      transaction: adapter.transaction.bind(adapter),
-      ledger: {
-        ...ledger,
-        append: (fact, expectedHead) => {
-          if (fact.type !== "gateway.send.admitted") return ledger.append(fact, expectedHead);
-          const result = ledger.append(fact, expectedHead);
-          expect(result.kind).toBe("appended");
-          return { kind: "cas_conflict", currentHead: 1 };
-        },
+  test("an incompatible concurrent admission still rejects an awaited send", async () => {
+    replaceLedger((ledger) => ({
+      ...ledger,
+      append: (fact, head) => {
+        if (fact.type !== "gateway.send.admitted") return ledger.append(fact, head);
+        const data = z.record(z.string(), z.json()).parse(fact.data);
+        expect(
+          ledger.append({ ...fact, data: { ...data, signature: "conflicting" } }, head).kind,
+        ).toBe("appended");
+        return { kind: "cas_conflict", currentHead: 1 };
       },
-    });
+    }));
+    await expect(messaging().send(buildAwaitedSendInput())).rejects.toThrow(
+      "already admitted with different content",
+    );
+    expect(deliveries).toEqual([]);
+  });
+
+  test("uses the matching admission that won a concurrent append race", async () => {
+    replaceLedger((ledger) => ({
+      ...ledger,
+      append: (fact, expectedHead) => {
+        if (fact.type !== "gateway.send.admitted") return ledger.append(fact, expectedHead);
+        const result = ledger.append(fact, expectedHead);
+        expect(result.kind).toBe("appended");
+        return { kind: "cas_conflict", currentHead: 1 };
+      },
+    }));
 
     const receipt = await messaging().send(buildSendInput());
 
@@ -632,14 +609,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
           })(),
         });
 
-  let injected: unknown;
-  try {
-    await messaging.send(input);
-  } catch (error) {
-    injected = error;
-  }
-  expect(injected).toBeInstanceOf(Error);
-  expect((injected as Error).message).toBe(`fault:${point}`);
+  await expect(messaging.send(input)).rejects.toThrow(`fault:${point}`);
   const resumed = await messaging.send(input);
 
   return {

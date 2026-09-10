@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
+import { replaceLedger } from "../../helpers/ledger";
 import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
 import type { ChannelDeliveryRoute } from "../../../src/router";
@@ -116,19 +117,12 @@ test("a granted endpoint without a channel delivery owner fails closed", async (
 
 test("restart reads the durable live-grant projection, never route history", async () => {
   await makeRouter().ingest(sender, facts);
-  const adapter = Storage.get();
-  const ledger = adapter.ledger;
-  if (ledger === undefined) throw new Error("missing ledger");
-  Storage.configure({
-    ...adapter,
-    transaction: adapter.transaction.bind(adapter),
-    ledger: {
-      ...ledger,
-      factsByType: () => {
-        throw new Error("route history replay is forbidden");
-      },
+  replaceLedger((ledger) => ({
+    ...ledger,
+    factsByType: () => {
+      throw new Error("route history replay is forbidden");
     },
-  });
+  }));
   const restarted = makeRouter();
   expect(await restarted.ingest({ kind: "session", id: "persona-owner" }, reply)).toMatchObject({
     status: "executed",

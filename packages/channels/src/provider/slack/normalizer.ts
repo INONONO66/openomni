@@ -2,7 +2,7 @@ import type { Channel } from "@openomni/protocol";
 import type { InboundNormalizer } from "../../types";
 import type { SlackMessageEvent } from "./types";
 
-export interface SlackNormalizerContext {
+interface SlackNormalizerContext {
   botUserId: string;
   /** Workspace (team) id from `auth.test` — the surface-key namespace AND the sender-id prefix. */
   team: string;

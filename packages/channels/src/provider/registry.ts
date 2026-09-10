@@ -12,7 +12,12 @@ import { TelegramProvider } from "./telegram/provider.js";
  * bootstrap/recovery surface with no credential and a server-owned lifecycle,
  * and must stay mountable when every credentialed channel is down.
  */
-export const ChannelProviders = {
+export const ChannelProviders: Readonly<{
+  telegram: typeof TelegramProvider;
+  discord: typeof DiscordProvider;
+  github: typeof GitHubProvider;
+  slack: typeof SlackProvider;
+}> = {
   telegram: TelegramProvider,
   discord: DiscordProvider,
   github: GitHubProvider,

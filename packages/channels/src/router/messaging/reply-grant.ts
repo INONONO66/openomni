@@ -48,7 +48,7 @@ export function replyGrantEndpointFromFacts(
   }
 }
 
-export type ReplyGrantAdmission = Readonly<{
+type ReplyGrantAdmission = Readonly<{
   /** Resolved registered initiator (perimeter fact — anonymous senders materialize nothing). */
   actorId: string;
   /** The initiator's resolved endpoint — the same facts the send kernel re-derives at evaluation. */
@@ -62,7 +62,7 @@ export type ReplyGrantAdmission = Readonly<{
   sourceId?: string;
 }>;
 
-export type ReplyGrantInstances = Readonly<{
+type ReplyGrantInstances = Readonly<{
   /** Live view for the send kernel's grant source; expiry is re-checked per-send by the evaluator (`at` is the send's clock). */
   list(at?: number): readonly Gateway.SenderTargetGrant[];
   /** Materializes instances for an admitted inbound; capacity/first-contact rules applied per rule. */

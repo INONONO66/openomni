@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { DiscordAdapter } from "../src/provider/discord/surface";
 import { SlackAdapter } from "../src/provider/slack/surface";
-import { TelegramAdapter } from "../src/provider/telegram/surface";
+import { deliveryFixture, installDeliveryFetch } from "./helpers/delivery";
 
 for (const provider of ["discord", "slack", "telegram"] as const) {
   for (const failure of [
@@ -14,44 +13,30 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
     "accepted",
   ] as const) {
     test(`${provider} classifies ${failure} at its real HTTP delivery boundary`, async () => {
-      const originalFetch = globalThis.fetch;
       let sends = 0;
-      globalThis.fetch = Object.assign(
-        async (input: string | URL | Request) => {
-          const url = String(input);
-          if (url.endsWith("/users/@me/channels")) return Response.json({ id: "dm" });
-          if (url.endsWith("/conversations.open"))
-            return Response.json({ ok: true, channel: { id: "dm" } });
-          sends += 1;
-          if (failure === "network") throw new TypeError("connection lost after transmission");
-          if (
-            failure === "forbidden" ||
-            failure === "server" ||
-            (failure === "partial" && sends === 2)
-          )
-            return Response.json(
-              { ok: false, error: "forbidden", description: "forbidden" },
-              { status: failure === "server" ? 503 : 403 },
-            );
-          if (failure === "malformed") return new Response("not-json");
-          if (failure === "missing_id") return Response.json({ ok: true, result: {} });
-          return Response.json({
-            id: "physical-id",
-            ok: true,
-            ts: "physical-id",
-            result: { message_id: "physical-id" },
-          });
-        },
-        { preconnect: originalFetch.preconnect },
-      );
-      const adapter =
-        provider === "discord"
-          ? new DiscordAdapter("token", {}, () => undefined)
-          : provider === "slack"
-            ? new SlackAdapter({ botToken: "token", appToken: "app" }, {}, () => undefined)
-            : new TelegramAdapter("token", {}, () => undefined);
+      const restoreFetch = installDeliveryFetch(() => {
+        sends += 1;
+        if (failure === "network") throw new TypeError("connection lost after transmission");
+        if (
+          failure === "forbidden" ||
+          failure === "server" ||
+          (failure === "partial" && sends === 2)
+        )
+          return Response.json(
+            { ok: false, error: "forbidden", description: "forbidden" },
+            { status: failure === "server" ? 503 : 403 },
+          );
+        if (failure === "malformed") return new Response("not-json");
+        if (failure === "missing_id") return Response.json({ ok: true, result: {} });
+        return Response.json({
+          id: "physical-id",
+          ok: true,
+          ts: "physical-id",
+          result: { message_id: "physical-id" },
+        });
+      });
+      const { adapter, address } = deliveryFixture(provider);
       try {
-        const address = provider === "slack" ? "TEAM:USER" : "123";
         const content = failure === "partial" ? "X".repeat(8000) : "SENTINEL";
         const receipt = await adapter.deliver(address, content, "stable-key");
         expect(sends).toBe(failure === "partial" ? 2 : 1);
@@ -63,7 +48,7 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
         expect(await adapter.deliver(address, content, "stable-key")).toEqual(receipt);
         expect(sends).toBe(failure === "partial" ? 2 : 1);
       } finally {
-        globalThis.fetch = originalFetch;
+        restoreFetch();
       }
     });
   }

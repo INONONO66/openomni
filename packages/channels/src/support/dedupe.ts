@@ -38,7 +38,7 @@ export class DedupeWindow<Value> {
   }
 }
 
-export type DedupeToken = symbol;
+type DedupeToken = symbol;
 
 export class Dedupe {
   private readonly seen = new Map<string, { at: number; token: DedupeToken }>();
