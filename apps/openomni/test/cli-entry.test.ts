@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCliDeps, main } from "../src/cli/main";
+import { replaceEnvironment } from "./helpers/environment";
 
 const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
 const directories: string[] = [];
@@ -76,16 +77,6 @@ esac
     OPENOMNI_MODEL_API_KEY: "test-key",
     OPENOMNI_WS_HOST: "127.0.0.1",
     OPENOMNI_WS_PORT: "0",
-  };
-}
-
-function replaceEnvironment(env: Record<string, string | undefined>): () => void {
-  const saved = { ...process.env };
-  for (const key of Object.keys(process.env)) delete process.env[key];
-  Object.assign(process.env, env);
-  return () => {
-    for (const key of Object.keys(process.env)) delete process.env[key];
-    Object.assign(process.env, saved);
   };
 }
 
@@ -288,7 +279,7 @@ describe("real CLI entry", () => {
     expect(canceled).toBe(true);
   });
 
-  test.each([[], ["help"], ["--help"], ["-h"]])("help dispatch %j", async (...args) => {
+  test.each([[], ["help"], ["--help"], ["-h"]].map((args) => ({ args })))("help dispatch %j", async ({ args }) => {
     const child = await runCli(args, appEnv(tempHome()));
     expect(child.exitCode).toBe(0);
     expect(child.stderr).toBe("");
@@ -306,7 +297,7 @@ describe("real CLI entry", () => {
     ["machine"],
     ["machine", "attach"],
     ["machine", "attach", "config.json", "extra"],
-  ])("rejects invalid dispatch %j", async (...args) => {
+  ].map((args) => ({ args })))("rejects invalid dispatch %j", async ({ args }) => {
     const child = await runCli(args, appEnv(tempHome()));
     expect(child.exitCode).toBe(1);
     expect(child.stdout).toBe("");

@@ -35,6 +35,7 @@ import { processEntryPath } from "../src/process-entry-path";
 import type { DoctorPorts } from "../src/cli/doctor";
 import { main } from "../src/cli/main";
 import { gatherOnboarding } from "../src/cli/onboard";
+import { doctorStatuses } from "./helpers/cli-fixtures";
 
 const directories: string[] = [];
 afterEach(() => {
@@ -310,22 +311,13 @@ describe("daemon units", () => {
     expect(io.files.has(unitPath(linuxTarget))).toBe(true);
   });
 
-  test("darwin uninstall keeps the plist while the job is still loaded", () => {
+  test.each([
+    { code: 0, stdout: "state = waiting", stderr: "" },
+    { code: 1, stdout: "", stderr: "Operation not permitted" },
+  ])("darwin uninstall retains the plist without proof of unload: %j", (query) => {
     const io = fakeIo((argv) => {
       if (argv[1] === "bootout") return { code: 5, stdout: "", stderr: "busy" };
-      if (argv[1] === "print") return { code: 0, stdout: "state = waiting", stderr: "" };
-      return ok;
-    });
-    io.files.set(unitPath(darwinTarget), "plist");
-    expect(() => daemonUninstall(darwinTarget, io)).toThrow("may still be loaded");
-    expect(io.files.has(unitPath(darwinTarget))).toBe(true);
-  });
-
-  test("darwin uninstall treats a failed query as unknown, not as proof of unload", () => {
-    // Permission or IPC failures prove nothing about the job's state.
-    const io = fakeIo((argv) => {
-      if (argv[1] === "bootout") return { code: 5, stdout: "", stderr: "busy" };
-      if (argv[1] === "print") return { code: 1, stdout: "", stderr: "Operation not permitted" };
+      if (argv[1] === "print") return query;
       return ok;
     });
     io.files.set(unitPath(darwinTarget), "plist");
@@ -504,7 +496,7 @@ describe("doctor", () => {
       probeHealth: () => Promise.resolve(false),
     });
     expect(report.ok).toBe(false);
-    const byName = new Map(report.checks.map((check) => [check.name, check.status]));
+    const byName = doctorStatuses(report);
     expect(byName.get("env file")).toBe("warn");
     expect(byName.get("model config")).toBe("fail");
     expect(byName.get("daemon")).toBe("warn");
@@ -536,11 +528,26 @@ describe("doctor", () => {
     expect(byName.get("model config")).toBe("fail");
   });
 
+  test("an installed but inactive daemon fails diagnostics", async () => {
+    const report = await runDoctor({ ...healthyPorts, daemonActive: false });
+    expect(report.ok).toBe(false);
+    expect(report.checks.find((check) => check.name === "daemon")?.status).toBe("fail");
+  });
+
   test("installed daemon without linger warns", async () => {
     const report = await runDoctor({ ...healthyPorts, lingerEnabled: false });
     const byName = new Map(report.checks.map((check) => [check.name, check.status]));
     expect(byName.get("linger")).toBe("warn");
     expect(report.ok).toBe(true);
+  });
+
+  test("unsupported onboarding provider is refused before credentials", async () => {
+    let prompts = 0;
+    await expect(gatherOnboarding(async () => {
+      prompts += 1;
+      return "unsupported";
+    })).rejects.toBeInstanceOf(Error);
+    expect(prompts).toBe(1);
   });
 
   test("active daemon with unreachable health is a failure", async () => {
@@ -550,7 +557,7 @@ describe("doctor", () => {
       probeHealth: () => Promise.resolve(false),
     });
     expect(report.ok).toBe(false);
-    const byName = new Map(report.checks.map((check) => [check.name, check.status]));
+    const byName = doctorStatuses(report);
     expect(byName.get("model config")).toBe("fail");
     expect(byName.get("health")).toBe("fail");
   });
