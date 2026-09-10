@@ -6,6 +6,8 @@ Machine/codemode ownership updated on `kernel/949-tools-catalog` (2026-09-06), b
 
 Desktop/ui ownership updated on `feat/desktop-tabs` (2026-09-07; `docs/desktop-shell.md`, receipts in `.omo/reports/desktop-tabs-20260907/impl-{A,B,C,D}.md`; native QA and full integration gates not claimed complete): one TanStack Store owns tab-local places/history and sessions/drafts; Electron Menu commands cross a value-only preload subscription, installed once per App mount. App owns Sessions list, explicit-open dedupe, search invocation/reveal, prompt-earned titles and window-lifetime Chat cache. Server state remains one TanStack Query gateway endpoint. No mock data or kernel imports. `packages/ui` exposes generic Console/ConsoleContent transcript presentation, exports only real desktop consumers, and stamps every UI address from `src/names.ts`.
 
+Policy ownership updated on `q945/policy` (PR #1030, 2026-09-09): the unconsumed general effect-composition implementation and its 29 tests are removed, not replaced. Compiled-row and permission evaluation remain; `Policy.EffectiveDecision` is retained protocol schema debt, not a live composition capability. See `docs/implementation-status.md`.
+
 ## OVERVIEW
 
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
@@ -19,7 +21,7 @@ openomni/
 │   └── desktop/         # Electron console: shell/build pipeline plus app-owned AI SDK chat state
 ├── packages/
 │   ├── protocol/        # Zod schemas and cross-package contracts
-│   ├── policy/          # pure policy engine and effect composition
+│   ├── policy/          # pure compiled-row and permission policy evaluation
 │   ├── ledger/          # durable stores and journal persistence
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
 │   ├── agent/           # durable sessions, stateless runAgent loop, executor, compaction

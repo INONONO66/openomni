@@ -4,7 +4,7 @@ import { type IpcServer, createIpcServer, typedCall } from "@openomni/ipc";
 import { type BusEvent, Machine } from "@openomni/protocol";
 import { MachineCellError, MachineRefusalError } from "./errors";
 
-export interface MachineHostOptions {
+interface MachineHostOptions {
   readonly socketPath: string;
   readonly enrollment: (id: Machine.MachineId) => Machine.Enrollment | undefined;
   readonly events: BusEvent.Sink;

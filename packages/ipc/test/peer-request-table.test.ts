@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Ipc } from "@openomni/protocol";
+import { z } from "zod";
 
 import { IpcConnectionError, IpcRemoteError, IpcTimeoutError } from "../src/errors";
 import { PeerRequestTable } from "../src/peer-request-table";
+import { captureError } from "./helpers/signal";
 
 type Frame = Ipc.Request | Ipc.Response | Ipc.Notification;
 
@@ -36,7 +38,7 @@ describe("PeerRequestTable", () => {
     const request = requestFrom(sent);
     table.dispatch(Ipc.createErrorResponse(request.id, 1000, "no"), "peer-a");
 
-    const error = await call.catch((caught: unknown) => caught);
+    const error = await captureError(call);
     expect(error).toBeInstanceOf(IpcRemoteError);
     expect(error).toMatchObject({ code: 1000, message: "IPC error 1000: no" });
   });
@@ -63,7 +65,7 @@ describe("PeerRequestTable", () => {
 
     const disconnectError = new IpcConnectionError("peer-a closed");
     table.disconnect("peer-a", disconnectError);
-    expect(await callA.catch((error: unknown) => error)).toBe(disconnectError);
+    await expect(callA).rejects.toBe(disconnectError);
 
     table.dispatch(Ipc.createResponse(requestB.id, "survived"), "peer-b");
     expect(await callB).toBe("survived");
@@ -72,7 +74,7 @@ describe("PeerRequestTable", () => {
   test("call timeout rejects with IpcTimeoutError", async () => {
     const table = new PeerRequestTable({ send: () => undefined });
     const call = table.call(undefined, "slow", undefined, 10);
-    const error = await call.catch((caught: unknown) => caught);
+    const error = await captureError(call);
     expect(error).toBeInstanceOf(IpcTimeoutError);
     expect(error).toMatchObject({ message: "request timeout: slow" });
   });
@@ -84,8 +86,8 @@ describe("PeerRequestTable", () => {
     const error = new IpcConnectionError("endpoint closed");
 
     table.disconnectAll(error);
-    expect(await first.catch((caught: unknown) => caught)).toBe(error);
-    expect(await second.catch((caught: unknown) => caught)).toBe(error);
+    await expect(first).rejects.toBe(error);
+    await expect(second).rejects.toBe(error);
   });
 
   test("dispatch invokes inbound request handlers with response and notification senders", () => {
@@ -107,6 +109,20 @@ describe("PeerRequestTable", () => {
       method: "request.observed",
       params: { method: "echo" },
     });
+  });
+
+  test("request handlers parse params with the supplied Zod schema", () => {
+    const sent: Frame[] = [];
+    const table = new PeerRequestTable<string>({
+      send: (_peer, frame) => sent.push(frame),
+      onRequest: (_peer, _method, rawParams, respond) => {
+        const params = z.object({ value: z.number() }).parse(rawParams);
+        respond({ doubled: params.value * 2 });
+      },
+    });
+
+    table.dispatch(Ipc.createRequest("typed", "double", { value: 21 }), "peer-a");
+    expect(Ipc.Response.parse(sent[0]).result).toEqual({ doubled: 42 });
   });
 
   test("missing and throwing request handlers become code-1000 responses", () => {

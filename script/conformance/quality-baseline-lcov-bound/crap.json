@@ -5707,15 +5707,6 @@
   },
   {
     "gate": "crap",
-    "path": "packages/policy/src/effects/compose.ts",
-    "line": 13,
-    "endLine": 50,
-    "symbol": "FunctionDeclaration:composeEffects",
-    "value": 30,
-    "count": 1
-  },
-  {
-    "gate": "crap",
     "path": "packages/policy/src/effects/conflicts.ts",
     "line": 29,
     "endLine": 60,
@@ -5739,42 +5730,6 @@
     "endLine": 149,
     "symbol": "FunctionDeclaration:singleValueForEffect",
     "value": 145.92307692307696,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/policy/src/effects/merge/accumulators.ts",
-    "line": 42,
-    "endLine": 61,
-    "symbol": "FunctionDeclaration:appendPriorityReason",
-    "value": 56,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/policy/src/effects/merge/accumulators.ts",
-    "line": 19,
-    "endLine": 31,
-    "symbol": "FunctionDeclaration:appendReason",
-    "value": 72,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/policy/src/effects/merge/accumulators.ts",
-    "line": 63,
-    "endLine": 82,
-    "symbol": "FunctionDeclaration:mergeRetry",
-    "value": 90,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/policy/src/effects/merge/output.ts",
-    "line": 28,
-    "endLine": 56,
-    "symbol": "FunctionDeclaration:appendMergedEffects",
-    "value": 43.74516588642377,
     "count": 1
   },
   {
@@ -5829,15 +5784,6 @@
     "endLine": 149,
     "symbol": "FunctionDeclaration:mergeToolEffect",
     "value": 156,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/policy/src/effects/records.ts",
-    "line": 3,
-    "endLine": 19,
-    "symbol": "FunctionDeclaration:flattenRecord",
-    "value": 31.28395061728395,
     "count": 1
   },
   {

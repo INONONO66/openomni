@@ -7,18 +7,20 @@ import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon, type CodeRunner } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { socketPath } from "./helpers/socket-path";
+import { MachineCellError } from "../src/errors";
+import { kernelEnrollment } from "./helpers";
 
-interface RecordedEvent {
+type RecordedEvent<T> = {
   readonly name: string;
-  readonly payload: Record<string, unknown>;
-}
+  readonly payload: T;
+};
 
 function eventCollector() {
-  const events: RecordedEvent[] = [];
-  const waiters: Array<{ name: string; resolve: (event: RecordedEvent) => void }> = [];
+  const events: RecordedEvent<unknown>[] = [];
+  const waiters: Array<{ name: string; resolve: (event: RecordedEvent<unknown>) => void }> = [];
   const sink: BusEvent.Sink = {
     publish(descriptor, payload) {
-      const event = { name: descriptor.name, payload: payload as Record<string, unknown> };
+      const event = { name: descriptor.name, payload };
       events.push(event);
       for (let i = waiters.length - 1; i >= 0; i -= 1) {
         const waiter = waiters[i];
@@ -33,7 +35,7 @@ function eventCollector() {
     sink,
     events,
     /** Resolves on the NEXT event of this name (bounded by bun's test timeout). */
-    next(name: string): Promise<RecordedEvent> {
+    next(name: string): Promise<RecordedEvent<unknown>> {
       return new Promise((resolve) => {
         waiters.push({ name, resolve });
       });
@@ -94,6 +96,120 @@ async function withHost(
 }
 
 describe("machine attach handshake", () => {
+  test("rejects unaffiliated tool calls and unknown methods at the host boundary", async () => {
+    await withHost(
+      () => enrollment,
+      async ({ path }) => {
+        const client = await connectIpcClient(path);
+        try {
+          for (const [method, params] of [
+            ["machine.call_tool", { cellId: "unknown", name: "tool", arguments: {} }],
+            ["machine.unknown", {}],
+          ] as const) {
+            await expect(client.call(method, params)).rejects.toBeInstanceOf(IpcRemoteError);
+          }
+        } finally {
+          client.close();
+        }
+      },
+    );
+  });
+
+  test("returns no-tools failure for a real in-flight cell and refuses duplicate ids", async () => {
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    await withHost(
+      () => kernelEnrollment(enrollment),
+      async ({ host, path }) => {
+        const daemon = await attachKernel(path, {
+          runCode: async (request, call) => {
+            const answer = await call({ cellId: request.cellId, name: "missing", arguments: {} });
+            expect(answer).toMatchObject({ status: "failed" });
+            entered.resolve();
+            await finish.promise;
+            return {
+              status: "cancelled",
+              cellId: request.cellId,
+              output: { stdout: "", stderr: "" },
+            };
+          },
+        });
+        const cell = { cellId: "same", code: "x", timeoutMs: 1000 };
+        try {
+          const handle = host.get("mac-studio");
+          const running = handle.runCode(cell);
+          await entered.promise;
+          const duplicate = await handle.runCode(cell).catch((error: unknown) => error);
+          expect(MachineCellError.isInstance(duplicate)).toBe(true);
+          expect(duplicate).toMatchObject({
+            name: "MachineCellError",
+            data: { code: "duplicate_cell_id", cellId: cell.cellId },
+          });
+          finish.resolve();
+          expect((await running).status).toBe("cancelled");
+          expect(await handle.runCode(cell, AbortSignal.abort())).toEqual({
+            status: "cancelled",
+            cellId: cell.cellId,
+            output: { stdout: "", stderr: "" },
+          });
+        } finally {
+          finish.resolve();
+          await daemon.close();
+        }
+      },
+    );
+  });
+
+  test("rejects mismatched filesystem replies and propagates wire cancellation failures", async () => {
+    const started = Promise.withResolvers<void>();
+    const cancelled = Promise.withResolvers<void>();
+    await withHost(
+      () => ({ ...enrollment, allowedExports: ["docs"] }),
+      async ({ host, path }) => {
+        const client = await connectIpcClient(path, {
+          onRequest: async (method, params, respond) => {
+            if (method === "machine.fs_op") {
+              respond({
+                status: "completed",
+                value: { op: "list", entries: [], truncated: false },
+              });
+            } else if (method === "machine.cancel_code") {
+              cancelled.resolve();
+              throw new Error("cancel rejected by peer");
+            } else {
+              started.resolve();
+              await cancelled.promise;
+              respond({
+                status: "cancelled",
+                cellId: params?.cellId,
+                output: { stdout: "", stderr: "" },
+              });
+            }
+          },
+        });
+        try {
+          await client.call("machine.attach", offer({ exports: [{ name: "docs", path: "/" }] }));
+          const handle = host.get("mac-studio");
+          await expect(handle.fs.stat("/file")).rejects.toMatchObject({
+            name: "MachineRefusalError",
+            data: { reason: "invalid_response" },
+          });
+          const controller = new AbortController();
+          const running = handle.runCode(
+            { cellId: "cancel", code: "x", timeoutMs: 1000 },
+            controller.signal,
+          );
+          const outcome = running.catch((error: unknown) => error);
+          await started.promise;
+          controller.abort();
+          expect(await outcome).toBeInstanceOf(IpcRemoteError);
+        } finally {
+          client.close();
+        }
+      },
+    );
+  });
+
   test("list preserves enrollment fields and stable handles route two attachments without rendering", async () => {
     const root = mkdtempSync(join(tmpdir(), "om-routing-"));
     const data = Buffer.alloc(80_001, 255);
@@ -375,7 +491,7 @@ describe("machine attach handshake", () => {
     const calls: Machine.ToolCall[] = [];
     const relayed = Promise.withResolvers<void>();
     await withHost(
-      () => ({ ...enrollment, allowedCapabilities: ["kernel.py"] }),
+      () => kernelEnrollment(enrollment),
       async ({ host, path }) => {
         const daemon = await attachKernel(path, {
           runCode: async (request, call, signal) => {

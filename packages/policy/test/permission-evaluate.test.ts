@@ -7,11 +7,20 @@ const it = test;
 describe("evaluatePermission", () => {
   const request = (
     resource: string,
-    input?: Record<string, unknown>,
+    input?: Record<string, string | number | boolean | null>,
   ): Policy.EvaluationRequest => ({
     action: "tool.call",
     resource,
     ...(input !== undefined ? { input } : {}),
+  });
+
+  it("fails closed when input contains a non-JSON value", () => {
+    expect(
+      evaluatePermission(
+        { action: "tool.call", inputRules: [{ toolPattern: "*", field: "value", pattern: "x", action: "allow", priority: 1 }] },
+        { ...request("tool"), input: { value: () => "not JSON" } },
+      ),
+    ).toMatchObject({ action: "abort", decision: "deny", reason: "unsafe_input_rule" });
   });
 
   it("denies with the absent permission key in the reason", () => {

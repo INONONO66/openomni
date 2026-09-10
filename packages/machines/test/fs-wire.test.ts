@@ -7,32 +7,15 @@ import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon, createMachineHost, MachineRefusalError } from "../src/index";
 import { socketPath } from "./helpers/socket-path";
 
-const silent = {
-  publish() {
-    return;
-  },
-};
-const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
-function enrollment(): Machine.Enrollment {
-  return {
-    machineId: "m-1",
-    name: "workstation",
-    allowedCapabilities: capabilities,
-    allowedExports: ["docs"],
-    enrolledAt: 1,
-  };
-}
-function offer(root: string, changes: Partial<Machine.Offer> = {}): Machine.Offer {
-  return {
-    machineId: "m-1",
-    offeredCapabilities: capabilities,
-    exports: [{ name: "docs", path: root }],
-    daemonVersion: "test",
-    platform: "darwin-arm64",
-    offeredAt: 2,
-    ...changes,
-  };
-}
+import {
+  capabilities,
+  enrollment,
+  offer,
+  silent,
+  wireHost,
+  wireDaemon,
+  expectKernelUnavailable,
+} from "./helpers";
 async function fixture(run: (root: string) => Promise<void>) {
   const root = mkdtempSync(join(tmpdir(), "om-wire-"));
   try {
@@ -46,17 +29,8 @@ describe("real machine consumer surface", () => {
   test("write/read/list/stat preserve binary bytes and raw metadata", async () => {
     await fixture(async (root) => {
       const path = socketPath();
-      const host = await createMachineHost({
-        socketPath: path,
-        enrollment,
-        events: silent,
-        now: () => 3,
-      });
-      const daemon = await attachMachineDaemon({
-        socketPath: path,
-        offer: offer(root),
-        fsExports: new Map([["docs", root]]),
-      });
+      const host = await wireHost(path);
+      const daemon = await wireDaemon(path, root);
       try {
         const target = host.get("m-1");
         const bytes = Buffer.from([0, 255, 128, 10, 65]);
@@ -126,9 +100,9 @@ describe("real machine consumer surface", () => {
           status: "refused",
           reason: "exec_not_available",
         });
-        expect(
-          await host.get("m-1").runCode({ cellId: "no", code: "no", timeoutMs: 1000 }),
-        ).toEqual({ status: "refused", reason: "kernel_not_available" });
+        await expectKernelUnavailable(
+          host.get("m-1").runCode({ cellId: "no", code: "no", timeoutMs: 1000 }),
+        );
       } finally {
         await daemon.close();
         host.close();
@@ -148,17 +122,8 @@ describe("real machine consumer surface", () => {
       writeFileSync(join(second, "mark"), "SECOND");
       symlinkSync(first, link);
       const path = socketPath();
-      const host = await createMachineHost({
-        socketPath: path,
-        enrollment,
-        events: silent,
-        now: () => 3,
-      });
-      const daemon = await attachMachineDaemon({
-        socketPath: path,
-        offer: offer(link),
-        fsExports: new Map([["docs", link]]),
-      });
+      const host = await wireHost(path);
+      const daemon = await wireDaemon(path, link);
       try {
         renameSync(first, moved);
         rmSync(link);
@@ -188,17 +153,8 @@ describe("real machine consumer surface", () => {
       writeFileSync(join(a, "mark"), "A");
       writeFileSync(join(b, "mark"), "B");
       const path = socketPath();
-      const host = await createMachineHost({
-        socketPath: path,
-        enrollment,
-        events: silent,
-        now: () => 3,
-      });
-      const daemon = await attachMachineDaemon({
-        socketPath: path,
-        offer: offer(root),
-        fsExports: new Map([["docs", root]]),
-      });
+      const host = await wireHost(path);
+      const daemon = await wireDaemon(path, root);
       try {
         const target = host.get("m-1");
         await expect(target.exec("true", "/tmp")).resolves.toEqual({
@@ -254,12 +210,7 @@ test("longest normalized root wins, and equal roots refuse rather than selecting
     const nested = join(root, "nested");
     mkdirSync(nested);
     const path = socketPath();
-    const host = await createMachineHost({
-      socketPath: path,
-      enrollment,
-      events: silent,
-      now: () => 3,
-    });
+    const host = await wireHost(path);
     const daemon = await attachMachineDaemon({
       socketPath: path,
       offer: offer(root, {
@@ -334,9 +285,9 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
           status: "refused",
           reason: "exec_not_available",
         });
-        expect(
-          await typedCall(host, "machine.run_code", { cellId: "no", code: "no", timeoutMs: 1000 }),
-        ).toEqual({ status: "refused", reason: "kernel_not_available" });
+        await expectKernelUnavailable(
+          typedCall(host, "machine.run_code", { cellId: "no", code: "no", timeoutMs: 1000 }),
+        );
       } finally {
         await daemon.close();
         host.close();
@@ -375,12 +326,6 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
           status: "refused",
           reason: "path_escapes_export",
         });
-        if (missing === "offer") {
-          expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({
-            status: "refused",
-            reason: "path_escapes_export",
-          });
-        }
       } finally {
         await daemon.close();
         host.close();

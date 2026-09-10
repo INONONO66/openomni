@@ -31,53 +31,49 @@ export function matchesMessage(
 ): boolean {
   if (context === undefined) return false;
   switch (rule.table) {
-    case "A": {
-      if (context.sender !== "external") return false;
-      if (rule.senderTier !== undefined && rule.senderTier !== context.senderTier) return false;
-      if (rule.addressee !== undefined && rule.addressee !== context.addressee) return false;
-      const checks = {
-        identity: context.identity,
-        grant_tier: context.grantTier,
-        egress_budget: context.egressBudget,
-        event_id_dedupe: context.eventIdUnique,
-        reply_correlation: context.replyCorrelation,
-      };
-      return checks[rule.check] === (rule.effect === "allow");
-    }
-    case "B": {
-      if (context.sender !== "session" || rule.senderRole !== context.senderRole) return false;
-      if (rule.targetKind !== undefined && rule.targetKind !== context.targetKind) return false;
-      if (rule.targetRole !== undefined && rule.targetRole !== context.targetRole) return false;
-      if (rule.type !== undefined && rule.type !== context.type) return false;
-      let valid: boolean;
-      switch (rule.check.kind) {
-        case "parent_child":
-          valid = context.parentChild;
-          break;
-        case "fanout":
-          valid = context.fanout < rule.check.max;
-          break;
-        case "depth":
-          valid = context.depth <= rule.check.max;
-          break;
-        case "deadline":
-          valid = context.withinParentDeadline;
-          break;
-        case "actor_send":
-          valid = context.actorSendAllowed === true;
-          break;
-        case "type":
-          return true;
-        default:
-          return exhaustive(rule.check);
-      }
-      return valid === (rule.effect === "allow");
-    }
-    default:
-      return exhaustive(rule);
+    case "A": return matchesExternal(rule, context);
+    case "B": return matchesSession(rule, context);
   }
 }
 
-function exhaustive(value: never): never {
-  throw new TypeError(`Invalid message policy variant: ${String(value)}`);
+function matchesExternal(
+  rule: Gateway.RuleTableA,
+  context: MessagePolicyContext,
+): boolean {
+  if (context.sender !== "external") return false;
+  if (rule.senderTier !== undefined && rule.senderTier !== context.senderTier) return false;
+  if (rule.addressee !== undefined && rule.addressee !== context.addressee) return false;
+  const checks = {
+    identity: context.identity,
+    grant_tier: context.grantTier,
+    egress_budget: context.egressBudget,
+    event_id_dedupe: context.eventIdUnique,
+    reply_correlation: context.replyCorrelation,
+  };
+  return checks[rule.check] === (rule.effect === "allow");
+}
+
+function matchesSession(
+  rule: Gateway.RuleTableB,
+  context: MessagePolicyContext,
+): boolean {
+  if (context.sender !== "session" || rule.senderRole !== context.senderRole) return false;
+  if (rule.targetKind !== undefined && rule.targetKind !== context.targetKind) return false;
+  if (rule.targetRole !== undefined && rule.targetRole !== context.targetRole) return false;
+  if (rule.type !== undefined && rule.type !== context.type) return false;
+  if (rule.check.kind === "type") return true;
+  return sessionCheck(rule.check, context) === (rule.effect === "allow");
+}
+
+function sessionCheck(
+  check: Exclude<Gateway.RuleTableB["check"], { kind: "type" }>,
+  context: Extract<MessagePolicyContext, { sender: "session" }>,
+): boolean {
+  switch (check.kind) {
+    case "parent_child": return context.parentChild;
+    case "fanout": return context.fanout < check.max;
+    case "depth": return context.depth <= check.max;
+    case "deadline": return context.withinParentDeadline;
+    case "actor_send": return context.actorSendAllowed === true;
+  }
 }

@@ -200,6 +200,8 @@ Who owns the action record differs by kind. `llm` and `tool` operations are exec
 
 Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine or callback registration surface. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
 
+The live policy contract is compiled-row evaluation, not general effect composition. PR #1030 removes the unconsumed `composeEffects` subsystem and its 29 tests without a successor. Its deny/pending/allow composition, safe-effect ceiling on deny, conflict fail-closed merging, effect deduplication and retry-ceiling merging are not active kernel capabilities. Rows retain descending-priority evaluation and stop at the first matched deny or approval requirement; captured budget-obligation limits and channel ceilings are separate, unchanged controls. `Policy.EffectiveDecision` remains a protocol schema pending cross-package cleanup, not an implemented composition surface.
+
 ## 3. Machine and codemode contract
 
 The machine endpoint is a raw WHERE surface: `MachineHost.list()` and stable

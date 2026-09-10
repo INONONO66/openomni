@@ -7,7 +7,8 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "lint": "bunx biome check ./src",
-    "test": "bun test"
+    "test": "bun test",
+    "bench": "bun test bench/bucket-lookup.ts"
   },
   "dependencies": {
     "@openomni/protocol": "workspace:*",
