@@ -267,7 +267,10 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
             },
           );
         };
-        signal?.addEventListener("abort", cancel, { once: true });
+        if (signal) {
+          const abortSignal: AbortSignal = signal;
+          abortSignal.addEventListener("abort", cancel, { once: true });
+        }
         let result: Machine.CellResult;
         try {
           server.useConnection(peer.id);

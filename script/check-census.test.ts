@@ -5,6 +5,14 @@ import { readFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Fixture, protocol, adapter, assertPublication, assertStoreWrite, configureElectronFixture, hash, cli } from "./census-fixture";
 import type { Problem } from "./check-census";
+import {
+  decodeJson,
+  jsonArray,
+  jsonBoolean,
+  jsonNumber,
+  jsonObject,
+  jsonString,
+} from "./quality-inventory";
 
 test("scoped census retains resolver inputs but reports only affected sources", () => {
   using fixture = new Fixture({
@@ -583,4 +591,35 @@ test("Knip use without terminal provenance cannot silently pass registration", (
   const result = fixture.run("export");
   expect(result.code).toBe(1);
   expect(result.output).toContain('"symbol":"read","class":"export"');
+}, 180_000);
+
+test("platform AbortSignals resolve without publisher credit while unknown sources stay unresolved", () => {
+  for (const source of [
+    "AbortSignal.any([])",
+    "AbortSignal.abort()",
+    "new EventTarget()",
+    "new AbortSignal()",
+  ]) {
+    const known = source !== "new AbortSignal()";
+    using fixture = new Fixture({
+      "src/events.ts": protocol,
+      "src/main.ts": `import {Ready} from "./events";${source === "new AbortSignal()" ? "class AbortSignal extends EventTarget {}" : ""}const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};const signal=${source};signal.addEventListener("abort",()=>sink.publish(Ready,{}));console.log(JSON.stringify(received));`,
+    });
+    const native = Bun.spawnSync([process.execPath, "src/main.ts"], {
+      cwd: fixture.root,
+      timeout: 5000,
+    });
+    expect(native.exitCode).toBe(0);
+    expect(native.stdout.toString().trim()).toBe("[]");
+    const result = fixture.run("publisher");
+    const document = jsonObject(decodeJson(result.output));
+    expect(result.code).toBe(known ? 1 : 2);
+    expect(jsonBoolean(document.complete)).toBe(known);
+    expect(jsonArray(document.errors, (error) => jsonString(jsonObject(error).code))).toEqual(
+      known ? [] : ["unresolved_event_source"],
+    );
+    expect(jsonNumber(jsonObject(document.counts).publisher)).toBe(1);
+    expect(document.schemas).toMatchObject([{ name: "ready", productionPublishers: [] }]);
+    expect(document.externalEvents).toEqual([]);
+  }
 }, 180_000);
