@@ -468,7 +468,6 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       { provisioning: port },
       {
         role: "resident",
-        depth: 0,
         sessionId: "s",
       },
     ).map((entry) => entry.name);
@@ -476,7 +475,6 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       { provisioning: port },
       {
         role: "worker",
-        depth: 1,
         sessionId: "s",
       },
     ).map((entry) => entry.name);
