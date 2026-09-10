@@ -8,38 +8,20 @@ import { messageFixture } from "./helpers/message-fixture";
 import { Gateway, SessionTransition } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
+
 const suite = residentSuite();
 function response(): Response {
   const block = { type: "text", text: "" };
   const delta = { type: "text_delta", text: "PROCESS_SENTINEL" };
   const frames = [
-    {
-      type: "message_start",
-      message: {
-        id: crypto.randomUUID(),
-        type: "message",
-        role: "assistant",
-        model: "claude-opus-4-5",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 4, output_tokens: 0 },
-      },
-    },
+    messageStart(crypto.randomUUID(), "claude-opus-4-5", 4),
     { type: "content_block_start", index: 0, content_block: block },
     { type: "content_block_delta", index: 0, delta },
     { type: "content_block_stop", index: 0 },
-    {
-      type: "message_delta",
-      delta: { stop_reason: "end_turn", stop_sequence: null },
-      usage: { output_tokens: 2 },
-    },
-    { type: "message_stop" },
+    ...messageEnd("end_turn", 2),
   ];
-  return new Response(
-    frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""),
-    { headers: { "content-type": "text/event-stream" } },
-  );
+  return sseResponse(frames);
 }
 
 test("process-session entry preserves the commissioned deadline and reports the committed parent", async () => {
