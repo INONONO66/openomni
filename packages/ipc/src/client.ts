@@ -5,7 +5,11 @@ import { LineDecoder, encode } from "./framing";
 import { PeerRequestTable } from "./peer-request-table";
 
 export interface IpcClient {
-  call(method: string, params?: Ipc.Request["params"], timeoutMs?: number): Promise<Ipc.Response["result"]>;
+  call(
+    method: string,
+    params?: Ipc.Request["params"],
+    timeoutMs?: number,
+  ): Promise<Ipc.Response["result"]>;
   close(): void;
   readonly connected: boolean;
 }
@@ -18,10 +22,7 @@ type ConnectIpcClientOptions = {
     params: Ipc.Request["params"],
     respond: (result: Ipc.Response["result"]) => void,
   ) => void | Promise<void>;
-  onNotification?: (
-    method: string,
-    params: Ipc.Notification["params"],
-  ) => void | Promise<void>;
+  onNotification?: (method: string, params: Ipc.Notification["params"]) => void | Promise<void>;
 };
 
 export function connectIpcClient(

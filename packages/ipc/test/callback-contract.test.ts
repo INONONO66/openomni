@@ -9,9 +9,12 @@ describe("published callback contract", () => {
   const { servers, clients, rawSockets } = transportFixture();
 
   test("generic callbacks preserve JSON normalization, absent fields and primitive results", async () => {
-    const server = await createIpcServer(socketPath("callback-values"), (_method, params, respond) => {
-      respond(params?.value);
-    });
+    const server = await createIpcServer(
+      socketPath("callback-values"),
+      (_method, params, respond) => {
+        respond(params?.value);
+      },
+    );
     servers.push(server);
     const client = await connectIpcClient(server.socketPath);
     clients.push(client);
@@ -21,7 +24,9 @@ describe("published callback contract", () => {
     }
     expect(await client.call("future.echo")).toBeUndefined();
     expect(await client.call("future.echo", { value: undefined })).toBeUndefined();
-    expect(await client.call("future.echo", { value: { omitted: undefined, kept: 1 } })).toEqual({ kept: 1 });
+    expect(await client.call("future.echo", { value: { omitted: undefined, kept: 1 } })).toEqual({
+      kept: 1,
+    });
   });
 
   test("request and notification handlers receive only the original positional arguments", async () => {

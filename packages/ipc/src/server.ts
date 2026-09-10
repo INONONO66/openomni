@@ -35,7 +35,11 @@ type RequestHandler = (
 
 export interface IpcServer {
   readonly socketPath: string;
-  call(method: string, params?: Ipc.Request["params"], timeoutMs?: number): Promise<Ipc.Response["result"]>;
+  call(
+    method: string,
+    params?: Ipc.Request["params"],
+    timeoutMs?: number,
+  ): Promise<Ipc.Response["result"]>;
   /** Returns false when the notification was dropped because no client is connected. */
   notify(method: string, params?: Ipc.Notification["params"]): boolean;
   useConnection(id: string): void;

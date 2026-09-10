@@ -49,7 +49,33 @@ function compactThreshold(messages: Message.WithParts[], options: ResolvedCompac
   });
 }
 
+// Shared with rejection tests so the anchor metadata assertion cannot silently weaken.
+function parseKeptWindow(value: unknown) {
+  return z.array(z.object({ time: z.number(), text: z.string() })).parse(value);
+}
+
 describe("Compaction", () => {
+  it("kept-window assertion rejects a missing timestamp", () => {
+    expect(() => parseKeptWindow([{ text: "ok" }])).toThrow(z.ZodError);
+  });
+
+  it.each([
+    NaN,
+    Infinity,
+    -Infinity,
+  ])("kept-window assertion rejects a non-finite timestamp: %s", (time) => {
+    expect(() => parseKeptWindow([{ time, text: "ok" }])).toThrow(z.ZodError);
+  });
+
+  it.each([
+    { value: null },
+    { value: {} },
+    { value: [{ time: 1 }] },
+    { value: [{ time: "1", text: "ok" }] },
+  ])("kept-window assertion rejects malformed metadata: %j", ({ value }) => {
+    expect(() => parseKeptWindow(value)).toThrow(z.ZodError);
+  });
+
   /**
    * Compaction rewrites the run's history; the record of that has to be
    * readable against the run it changed. Re-minting here left the suite green.
@@ -581,7 +607,7 @@ describe("Compaction", () => {
       // And the record never carries a marker: it is derived render.
       const anchor = second.messages[0]?.parts[0];
       if (anchor?.type !== "text") throw new Error("shape");
-      const kept = z.array(z.object({ time: z.number(), text: z.string() })).parse(anchor.metadata?.keptWindow);
+      const kept = parseKeptWindow(anchor.metadata?.keptWindow);
       expect(kept.every((entry) => !entry.text.startsWith("[recorded "))).toBe(true);
     });
 

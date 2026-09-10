@@ -95,7 +95,26 @@ async function withHost(
   }
 }
 
+// Shared with rejection tests so the simulated peer's parse cannot silently weaken.
+function parsePeerCellRequest(params: unknown) {
+  return Machine.CellRequest.parse(params);
+}
+
 describe("machine attach handshake", () => {
+  test.each([
+    { cellId: "x" },
+    { cellId: "x", timeoutMs: 1 },
+    { cellId: "x", code: "ok" },
+  ])("simulated peer rejects missing cell request fields: %j", (params) => {
+    expect(() => parsePeerCellRequest(params)).toThrow();
+  });
+
+  test("simulated peer rejects extra cell request fields", () => {
+    expect(() =>
+      parsePeerCellRequest({ cellId: "x", code: "ok", timeoutMs: 1, constructor: "extra" }),
+    ).toThrow();
+  });
+
   test("rejects unaffiliated tool calls and unknown methods at the host boundary", async () => {
     await withHost(
       () => enrollment,
@@ -177,7 +196,7 @@ describe("machine attach handshake", () => {
               cancelled.resolve();
               throw new Error("cancel rejected by peer");
             } else {
-              const request = Machine.CellRequest.parse(params);
+              const request = parsePeerCellRequest(params);
               started.resolve();
               await cancelled.promise;
               respond({

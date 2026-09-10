@@ -75,10 +75,7 @@ function stubbornRunner(options: { readonly resumeAfterFirst?: boolean } = {}) {
 type StubbornRun = ReturnType<typeof stubbornRunner>;
 
 /** Prompts, waits for the stubborn runner to enter, interrupts, and waits for the abort to reach it. */
-async function interruptStubborn(
-  handle: SessionHandle,
-  run: StubbornRun,
-) {
+async function interruptStubborn(handle: SessionHandle, run: StubbornRun) {
   const running = handle.prompt("start");
   await bounded(run.entered.promise, "runner entry");
   const interrupted = handle.interrupt();
