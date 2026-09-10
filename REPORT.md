@@ -55,3 +55,11 @@ Pending.
 
 ## Pull request
 - Pushed commit and opened PR #1046; auto-squash merge enabled.
+
+## PR gate outcome
+- PR #1046, head 67ee9e98, CI run 34436705854. All four tooling jobs passed: 312s / 244s / 229s / 252s (before: 442s / 402s / 293s). Shard 1 remains 12s above five minutes including setup.
+- Quality Static (export), (publisher), and (store) failed; CI aggregation failed and Quality was skipped. Per explicit gate, disabled auto-merge; PR stays OPEN with no merge sha.
+- PR body corrected to measured before/after timing table. No admin override, issue comment, post-merge mutation dispatch, main timing, or new-main fan-in count: blocked by non-Quality/CI failures.
+
+## Task 4 start
+- Lead identified main baseline regression in optional-chained AbortSignal.addEventListener; inspecting state before rebase.
