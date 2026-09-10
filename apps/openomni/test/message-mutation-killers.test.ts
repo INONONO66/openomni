@@ -117,6 +117,23 @@ test("conversation correlation cannot select the physical default session", asyn
   expect(result.handle.target).not.toBe(fixture.sessionId);
 });
 
+test.each([
+  { mutation: "json_set(intent, '$.matchedRuleIds', json_array(42))", error: "invalid message decision rule identity" },
+  { mutation: "json_remove(intent, '$.inputHash')", error: "message pre decision is missing" },
+])("corrupted persisted policy evidence is refused: %j", async ({ mutation, error }) => {
+  const fixture = messageFixture();
+  directories.push(fixture.directory);
+  using db = new Database(fixture.dbPath);
+  db.exec(`CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`);
+  const result = await fixture.send({
+    to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
+    type: "message",
+    content: "corrupt-evidence",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.output).toContain(error);
+});
+
 test("message observations carry the committed compiled policy rule identity", async () => {
   const fixture = messageFixture("worker");
   directories.push(fixture.directory);

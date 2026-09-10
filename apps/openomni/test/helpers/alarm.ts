@@ -3,7 +3,7 @@ import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/led
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
 import { createAlarmWorker } from "../../src/composition/alarm-worker";
 
-export function alarmFixture(path = ":memory:") {
+export function alarmFixture(path = ":memory:", onFailure?: (error: Error) => void) {
   const events = createObservationBus();
   const storage = new SqliteStorageAdapter(path, events);
   Storage.configure(storage);
@@ -29,7 +29,10 @@ export function alarmFixture(path = ":memory:") {
     clock: () => at,
     schedule: () => () => undefined,
     requestTimeout: createSessionRequests({ observations: events, clock: () => at }).timeout,
-    failure: (error) => errors.push(error),
+    failure: (error) => {
+      errors.push(error);
+      onFailure?.(error);
+    },
     wake: (id) => {
       wakes.push(id);
       return Promise.resolve();
