@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type ChannelProvider, ChannelProviders as RealProviders } from "@openomni/channels";
+import { fakeProviders, type FakeBuild } from "./helpers/channel-providers";
 import type { Channel } from "@openomni/protocol";
 import { type BuiltChannel, channelProfile } from "../src/channels";
-import type { OpenOmniConfig } from "../src/config";
+import { loadConfig, type OpenOmniConfig } from "../src/config";
+import { replaceEnvironment } from "./helpers/environment";
 
 /**
  * The channel profile is the app's declarative composition of external
@@ -23,119 +24,40 @@ function baseConfig(channels?: OpenOmniConfig["channels"]): OpenOmniConfig {
   };
 }
 
-class FakeSurface implements Channel.Surface {
-  handler: Channel.MessageHandler | null = null;
-  started = false;
-  stopped = false;
-
-  constructor(
-    readonly id: string,
-    readonly config: Channel.Config,
-    readonly credentials: unknown,
-  ) {}
-
-  onMessage(handler: Channel.MessageHandler): void {
-    this.handler = handler;
-  }
-
-  start(_traceId: string): Promise<void> {
-    this.started = true;
-    return Promise.resolve();
-  }
-
-  stop(_traceId: string): void {
-    this.stopped = true;
-  }
-}
-
-interface FakeBuild {
-  surfaces: FakeSurface[];
-  providers: typeof RealProviders;
-  delivered: { externalId: string; body: string }[];
-  webhookCalls: Request[];
-}
-
-/**
- * Fake providers that keep the real registry's ids, schemas, and capability
- * declarations but construct recording surfaces instead of live adapters —
- * the profile's own logic (row existence, credential parse, handler binding,
- * seam shaping) runs unmodified.
- */
-function fakeProviders(): FakeBuild {
-  const surfaces: FakeSurface[] = [];
-  const delivered: { externalId: string; body: string }[] = [];
-  const webhookCalls: Request[] = [];
-  const telegram: ChannelProvider<TelegramCredentials, "telegram"> = {
-    ...RealProviders.telegram,
-    create(credentials, config) {
-      const surface = new FakeSurface("telegram", config, credentials);
-      surfaces.push(surface);
-      return {
-        surface,
-        deliveryRoute: (externalId, body) => {
-          delivered.push({ externalId, body });
-          return Promise.resolve({ value: "accepted" as const, externalMessageId: "tg-1" });
-        },
-      };
-    },
-  };
-  const discord: ChannelProvider<DiscordCredentials, "discord"> = {
-    ...RealProviders.discord,
-    create(credentials, config) {
-      const surface = new FakeSurface("discord", config, credentials);
-      surfaces.push(surface);
-      return {
-        surface,
-        deliveryRoute: (externalId, body) => {
-          delivered.push({ externalId, body });
-          return Promise.resolve({ value: "accepted" as const, externalMessageId: "dc-1" });
-        },
-      };
-    },
-  };
-  const github: ChannelProvider<GitHubCredentials, "github"> = {
-    ...RealProviders.github,
-    create(credentials, config) {
-      const surface = new FakeSurface("github", config, credentials);
-      surfaces.push(surface);
-      return {
-        surface,
-        webhookHandler: (request) => {
-          webhookCalls.push(request);
-          return Promise.resolve(new Response("OK", { status: 200 }));
-        },
-      };
-    },
-  };
-  const slack: ChannelProvider<SlackCredentials, "slack"> = {
-    ...RealProviders.slack,
-    create(credentials, config) {
-      const surface = new FakeSurface("slack", config, credentials);
-      surfaces.push(surface);
-      return {
-        surface,
-        deliveryRoute: (externalId, body) => {
-          delivered.push({ externalId, body });
-          return Promise.resolve({ value: "accepted" as const, externalMessageId: "sl-1" });
-        },
-      };
-    },
-  };
-  return { surfaces, providers: { telegram, discord, github, slack }, delivered, webhookCalls };
-}
-
 const handler: Channel.MessageHandler = () => Promise.resolve();
 
 function build(config: OpenOmniConfig, fakes: FakeBuild): BuiltChannel[] {
   return channelProfile(config, fakes.providers).map((row) => row.build(handler));
 }
 
-type TelegramCredentials = Readonly<{ token: string }>;
-type DiscordCredentials = Readonly<{ token: string }>;
-type GitHubCredentials = Readonly<{ secret: string; token?: string; botUsername?: string }>;
-type SlackCredentials = Readonly<{ botToken: string; appToken: string }>;
-
 describe("channelProfile", () => {
+  test.each([false, true])("real environment parity with configured channels: %s", (enabled) => {
+    const restore = replaceEnvironment({
+      OPENOMNI_MODEL_PROVIDER: "anthropic",
+      OPENOMNI_MODEL_ID: "fixture",
+      OPENOMNI_MODEL_API_KEY: "fixture-key",
+      TELEGRAM_BOT_TOKEN: enabled ? " tg-token " : " ",
+      DISCORD_BOT_TOKEN: enabled ? " dc-token " : "",
+      GITHUB_WEBHOOK_SECRET: enabled ? " gh-secret " : undefined,
+      GITHUB_TOKEN: enabled ? " gh-api " : undefined,
+      GITHUB_BOT_USERNAME: enabled ? " omni-bot " : undefined,
+    });
+    try {
+      const fakes = fakeProviders();
+      const config = loadConfig();
+      const rows = channelProfile(config, fakes.providers);
+      expect(rows.map((row) => row.id)).toEqual(enabled ? ["telegram", "github", "discord"] : []);
+      for (const row of rows) row.build(handler);
+      expect(fakes.surfaces.map((surface) => surface.credentials)).toEqual(enabled ? [
+        { token: "tg-token" },
+        { secret: "gh-secret", token: "gh-api", botUsername: "omni-bot" },
+        { token: "dc-token" },
+      ] : []);
+      expect(fakes.surfaces.every((surface) => surface.handler === handler)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
   test("no channel config produces no rows", () => {
     expect(channelProfile(baseConfig(), fakeProviders().providers)).toEqual([]);
   });

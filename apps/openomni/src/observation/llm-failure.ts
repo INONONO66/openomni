@@ -54,13 +54,12 @@ export function classifyTurnFailure(error: unknown): ClassifiedFailure {
         reason,
         text: `I could not answer: the model provider failed server-side${attemptClause(error)}. This is upstream, not your request — retry shortly.`,
       };
+    case "validation_error":
     case "non_retryable":
       return {
         reason,
         text: unclassifiedText(error),
       };
-    default:
-      return { reason, text: unclassifiedText(error) };
   }
 }
 
