@@ -150,7 +150,7 @@ describe("code-mode kernel substrate", () => {
           },
           noTools,
         ),
-      ).rejects.toBeInstanceOf(SyntaxError);
+      ).rejects.toMatchObject({ message: "invalid driver frame" });
       await expect(
         kernel.run(
           { cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 },
@@ -162,14 +162,34 @@ describe("code-mode kernel substrate", () => {
     }
   });
 
+  test("a rejected host tool preserves its message in the cell error", async () => {
+    const kernel = new PythonKernel();
+    try {
+      const result = await kernel.run(
+        { cellId: "tool-error-message", code: "tool.test()", timeoutMs: 1_000 },
+        async () => {
+          throw new Error("disk on fire");
+        },
+      );
+      expect(result).toMatchObject({ status: "raised" });
+      expect(result).toMatchObject({ error: expect.stringContaining("disk on fire") });
+    } finally {
+      await kernel.close();
+    }
+  });
+
   test("an unserializable tool answer rejects the owning cell", async () => {
     const kernel = new PythonKernel();
     try {
       await expect(
         kernel.run({ cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 }, () =>
-          Promise.resolve(Machine.ToolCallResult.parse({ status: "completed", value: 1n })),
+          (() => {
+            const answer = Machine.ToolCallResult.parse({ status: "completed", value: "ok" });
+            Reflect.set(answer, "value", 1n);
+            return Promise.resolve(answer);
+          })(),
         ),
-      ).resolves.toMatchObject({ status: "raised" });
+      ).rejects.toMatchObject({ message: "driver write failed" });
     } finally {
       await kernel.close();
     }
