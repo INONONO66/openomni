@@ -1359,6 +1359,8 @@ class Provenance {
       (node) =>
         (symbol.name === "Process" &&
           /@types\/node\/process\.d\.ts$/.test(node.getSourceFile().fileName)) ||
+        (symbol.name === "AbortSignal" &&
+          /typescript\/lib\/lib\.dom\.d\.ts$/.test(node.getSourceFile().fileName)) ||
         (["App", "BrowserWindow"].includes(symbol.name) &&
           /electron\/electron\.d\.ts$/.test(node.getSourceFile().fileName)),
     );
@@ -1387,9 +1389,11 @@ class Provenance {
         }
       });
     const events =
-      symbol?.name === "Process"
-        ? this.processEvents(source, declared)
-        : symbol?.name === "BrowserWindow"
+      symbol?.name === "AbortSignal"
+        ? new Set(["abort"])
+        : symbol?.name === "Process"
+          ? this.processEvents(source, declared)
+          : symbol?.name === "BrowserWindow"
           ? this.windowEvents(receiver)
           : this.appEvents(registration);
     return {
