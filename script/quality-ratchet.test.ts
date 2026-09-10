@@ -385,6 +385,7 @@ test("synthetic regression fails closed end to end: a measured owned top type in
     expect(failed.lines.length).toBeGreaterThan(0);
     expect(failed.lines.every((line) => line.startsWith("type script/lib.ts:4 unknown:"))).toBe(true);
     expect(failed.lines).toContain("type script/lib.ts:4 unknown:value 1");
+    expect(failed.lines).toEqual([...new Set(failed.lines)]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

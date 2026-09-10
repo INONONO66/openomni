@@ -485,10 +485,12 @@ export function ratchetMain(argv = process.argv.slice(2)): number {
         )
       : regressions(baseline, current, new Set());
     failures.sort((a, b) => key(a).localeCompare(key(b)) || a.line - b.line);
-    for (const row of failures)
-      console.log(`${row.gate} ${row.path}:${row.line} ${row.symbol} ${row.value}`);
+    // Native sites can share a rendered location (for example several AST
+    // offsets on one line). Keep their debt multiset above; report the row set.
+    const rows = new Set(failures.map((row) => `${row.gate} ${row.path}:${row.line} ${row.symbol} ${row.value}`));
+    for (const row of rows) console.log(row);
     console.log(
-      JSON.stringify({ complete: true, violations: failures.length, analyzed: current.analyzed }),
+      JSON.stringify({ complete: true, violations: rows.size, analyzed: current.analyzed }),
     );
     return Number(failures.length > 0);
   } catch (error) {
