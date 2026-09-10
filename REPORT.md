@@ -142,3 +142,15 @@ RED exit 0
 
 ## Ready to rebase
 - All 289 tests passed with pinned Python; mutation fixture 100% local function/line coverage. Real metrics and store collections and CI build passed. Shared coverage setup and Electron config have exactly one implementation (rg).
+
+## Rebase
+- Closure commit 724e2e52; fetch and rebase origin/main exit 0.
+- Post-rebase tsc, Ultracite and lint chain exit 0. Rebase made no source changes; 289/289 test result remains the verified tree.
+- Final tsc/Ultracite/lint gate exit 1.
+
+## Main complexity closure
+- Metrics confirmed callback cyclomatic 16/cognitive 13, but censusMain remained 24/24 (nested arrow extraction does not affect its metric). Extracted scoped-plan parsing and class-all traversal. Census suites exit 0.
+- Final real-repo store collection exit 0.
+
+## Final validation
+- Parallel Ultracite saw temporary collector inventory JSON; rerun after collector cleanup: tsc/Ultracite/lint/build exit 0. Census 68/68; real store exit 0. Measured censusMain cyclomatic 20, cognitive 21; callback 16/13.

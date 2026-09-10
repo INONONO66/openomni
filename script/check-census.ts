@@ -4189,24 +4189,28 @@ function censusInvocations(graph: Provenance) {
     }));
 }
 
+function censusScope(root: string, values: ReturnType<typeof censusOptions>) {
+  return values.plan ? qualityPlan(root, values.contract ?? "", inventorySchema.parse(decodeJson(readFileSync(sourcePath(root, values.inventory ?? ""), "utf8"))), values.plan) : undefined;
+}
+function censusAll(argv: string[], selection: number, shared: CensusPrograms): number {
+  let status = 0;
+  for (const selected of ["publisher", "export", "store"]) {
+    const args = [...argv];
+    args[selection + 1] = selected;
+    status = Math.max(status, censusMain(args, shared));
+  }
+  return status;
+}
 export function censusMain(argv = Bun.argv.slice(2), shared = new CensusPrograms()): number {
   const selection = argv.indexOf("--class");
-  if (selection >= 0 && argv[selection + 1] === "all") {
-    let status = 0;
-    for (const selected of ["publisher", "export", "store"]) {
-      const args = [...argv];
-      args[selection + 1] = selected;
-      status = Math.max(status, censusMain(args, shared));
-    }
-    return status;
-  }
+  if (selection >= 0 && argv[selection + 1] === "all") return censusAll(argv, selection, shared);
   lastFailure = undefined;
   const jsonMode = argv.includes("--json");
   try {
     if (ts.version !== "5.9.2") fail("tool_version", "typescript", "requires 5.9.2");
     const values = censusOptions(argv);
     const { root, selected, input } = censusInput(values);
-    const scope = values.plan ? qualityPlan(root, values.contract ?? "", inventorySchema.parse(decodeJson(readFileSync(sourcePath(root, values.inventory ?? ""), "utf8"))), values.plan) : undefined;
+    const scope = censusScope(root, values);
     const program = makeProgram(root, input.files, input.projects, shared);
     const roots = productionRoots(root, input.files, input.topology);
     const graph = new Provenance(root, program, input.files, roots.entries, input.topology);
