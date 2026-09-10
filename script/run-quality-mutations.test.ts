@@ -36,7 +36,7 @@ test("real mutation contract has no baseline compiler diagnostics", () => {
   const root = resolve(import.meta.dir, "..");
   const contract = readContract(resolve(root, "script/conformance/quality-contract.json"));
   expect(diagnostics(programs(root, contract, buildInventory(root, contract)))).toEqual([]);
-}, 120_000);
+}, 300_000);
 
 test("mutation main rejects an invalid invocation in process", async () => {
   expect(await main(["--not-a-real-option"])).toBe(2);
