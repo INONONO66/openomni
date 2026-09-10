@@ -475,7 +475,7 @@ export class PythonKernel {
     this.pending = undefined;
     pending.inFlight.clear();
     this.discard(process);
-    pending.reject(error instanceof Error ? error : new Error(String(error)));
+    pending.reject(error);
   }
 
   private answerToolCall(

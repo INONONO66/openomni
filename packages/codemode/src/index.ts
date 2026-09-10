@@ -346,9 +346,9 @@ export function createCodemode(options: Options = {}) {
         };
         started.execution.then(markDone, markDone);
         background.set(started.cellId, entry);
-        const settled = await within(started.execution, runOptions.waitMs).catch((error: Error) => {
+        const settled = await within(started.execution, runOptions.waitMs).catch((error: unknown) => {
           background.delete(started.cellId);
-          throw error;
+          throw normalizeError(error);
         });
         // The id has not been answered yet, so no peek or stop can have claimed it: the
         // launcher is the one reader even if the retention bound already evicted the entry.
@@ -365,6 +365,10 @@ export function createCodemode(options: Options = {}) {
 }
 
 /** The promise's value once it settles within `ms`, else undefined; a rejection propagates. */
+function normalizeError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => resolve(undefined), ms);
@@ -373,9 +377,9 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
         clearTimeout(timer);
         resolve(value);
       },
-      (error: Error) => {
+      (error: unknown) => {
         clearTimeout(timer);
-        reject(error);
+        reject(normalizeError(error));
       },
     );
   });
