@@ -9,7 +9,7 @@ export interface IpcClient {
   readonly connected: boolean;
 }
 
-export type ConnectIpcClientOptions = {
+type ConnectIpcClientOptions = {
   connectTimeoutMs?: number;
   onDisconnect?: () => void;
   onRequest?: (
@@ -31,8 +31,8 @@ export function connectIpcClient(
   const connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
 
   return new Promise((resolve, reject) => {
-    // Register listeners before initiating the connection; Bun 1.3.6 may
-    // emit a refused-connect error during the initial connection turn.
+    // Register listeners before initiating the connection so refused-connect
+    // errors cannot be emitted before they are observed.
     const socket = new net.Socket();
     const decoder = new LineDecoder();
     let connected = false;

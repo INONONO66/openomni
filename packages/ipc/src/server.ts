@@ -6,22 +6,18 @@ import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
 import { PeerRequestTable } from "./peer-request-table";
 
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
 /** Remove the socket file, tolerating a concurrent removal (ENOENT). */
 function unlinkIfExists(socketPath: string): void {
   try {
     fs.unlinkSync(socketPath);
   } catch (error) {
-    if (!isMissingFileError(error)) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
       throw error;
     }
   }
 }
 
-export interface IpcServerOptions {
+interface IpcServerOptions {
   /**
    * Fires once per connection after it is torn down (close or error). The
    * connection's in-flight requests have already been failed when this runs.
@@ -60,8 +56,8 @@ function probeSocketLive(socketPath: string): Promise<boolean> {
     const probe = new net.Socket();
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // Install this before the timer/connect listeners: Bun 1.3.6 may emit a
-    // refused-connect error during the initial connection turn.
+    // Install this before the timer/connect listeners so refused-connect
+    // errors cannot be emitted before they are observed.
     probe.once("error", () => settle(false));
     const settle = (live: boolean) => {
       if (settled) return;
@@ -141,7 +137,7 @@ export async function createIpcServer(
     }
   }
 
-  function sendFrame(state: ConnectionState, msg: unknown): void {
+  function sendFrame(state: ConnectionState, msg: IpcMessage): void {
     send(state, encode(msg));
   }
 
@@ -354,7 +350,7 @@ function decodeMessage(raw: unknown): IpcMessage {
 /** The offending frame's own id when it carries a string one, else "unknown". */
 function extractFrameId(raw: unknown): string {
   if (raw !== null && typeof raw === "object" && "id" in raw) {
-    const id = (raw as { id: unknown }).id;
+    const id = raw.id;
     if (typeof id === "string" && id.length > 0) return id;
   }
   return "unknown";

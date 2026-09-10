@@ -1,20 +1,15 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import fs from "node:fs";
 import net from "node:net";
 import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
 import { createIpcServer } from "../src/server";
-import { deferred, within } from "./helpers/signal";
+import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
+import { transportFixture } from "./helpers/transport";
 
 describe("IPC transport resilience (#QB1)", () => {
-  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
-  const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
-
-  afterEach(() => {
-    for (const c of clients.splice(0)) c.close();
-    for (const s of servers.splice(0)) s.close();
-  });
+  const { servers, clients } = transportFixture();
 
   test("throwing onRequest handler → typed error frame, not a process crash", async () => {
     const socketPath = socketPathForTest("throw");
@@ -29,8 +24,6 @@ describe("IPC transport resilience (#QB1)", () => {
     });
     clients.push(client);
 
-    // Pre-fix the throw escaped the socket 'data' listener and crashed the
-    // process; it now comes back as a typed error response.
     await expect(srv.call("boom", { x: 1 })).rejects.toThrow("handler blew up");
 
     // Process + socket survived: a normal request still round-trips.
@@ -66,15 +59,14 @@ describe("IPC transport resilience (#QB1)", () => {
     clients.push(c2);
     await c2.call("register", { name: "c2" });
 
-    // Active connection routes to c1.
+    // The selected active connection routes calls to c1.
     expect(await srv.call("ping")).toEqual({ from: "c1" });
 
     // Drop the active connection.
     c1.close();
     expect(await within(disconnected.promise, "active connection removal")).toBe(c1ConnectionId);
 
-    // activeConnectionId is cleared on close, so the surviving connection
-    // binds (pre-fix it stayed pinned to the dead conn-1 and found no socket).
+    // Clearing the active id lets the surviving connection bind.
     expect(await srv.call("ping")).toEqual({ from: "c2" });
   });
 
@@ -88,11 +80,9 @@ describe("IPC transport resilience (#QB1)", () => {
     const client = await connectIpcClient(socketPath);
     clients.push(client);
 
-    // Pre-fix only sync throws were caught; an async rejection escaped and
-    // the requester burned its timeout with no error response.
-    const error = await client.call("boom", {}, 2_000).catch((e: unknown) => e);
+    const error = await captureError(client.call("boom", {}, 2_000));
     expect(error).toBeInstanceOf(IpcRemoteError);
-    expect((error as Error).message).toContain("async handler blew up");
+    expect(error.message).toContain("async handler blew up");
 
     // Process + socket survived: a normal request still round-trips.
     expect(await client.call("ok", {}, 2_000)).toEqual({ ok: "ok" });
@@ -110,9 +100,9 @@ describe("IPC transport resilience (#QB1)", () => {
     });
     clients.push(client);
 
-    const error = await srv.call("boom", {}, 2_000).catch((e: unknown) => e);
+    const error = await captureError(srv.call("boom", {}, 2_000));
     expect(error).toBeInstanceOf(IpcRemoteError);
-    expect((error as Error).message).toContain("async client handler blew up");
+    expect(error.message).toContain("async client handler blew up");
     expect(await srv.call("ok", {}, 2_000)).toEqual({ ok: "ok" });
   });
 
@@ -127,8 +117,8 @@ describe("IPC transport resilience (#QB1)", () => {
     const warnings: string[] = [];
     const warned = deferred();
     const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(" "));
+    console.warn = (message: string) => {
+      warnings.push(message);
       warned.resolve();
     };
     try {
@@ -151,8 +141,6 @@ describe("IPC transport resilience (#QB1)", () => {
     );
     servers.push(incumbent);
 
-    // Pre-fix the unconditional unlink silently diverted new connections to
-    // the newcomer while the incumbent kept running blind.
     await expect(createIpcServer(socketPath, () => undefined)).rejects.toBeInstanceOf(
       IpcConnectionError,
     );

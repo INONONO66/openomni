@@ -98,8 +98,7 @@ describe("IPC client transport edges", () => {
   });
 
   test("an oversized server frame fails a pending call as a protocol error", async () => {
-    // Three-byte UTF-8 keeps the wire oversized but the character count below the cap.
-    // It also avoids the costly repeated scans of 17 MiB of ASCII in Bun 1.3.6.
+    // Three-byte UTF-8 keeps the wire oversized while the character count stays below the cap.
     const frame = "\u0800".repeat(Math.ceil((17 * 1024 * 1024) / 3));
     const payload = Buffer.from(frame);
     expect(payload.byteLength).toBe(17 * 1024 * 1024 + 1);
