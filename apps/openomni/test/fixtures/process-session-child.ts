@@ -62,9 +62,17 @@ switch (scenario) {
     console.log(JSON.stringify(answer("forged", "someone-else")));
     await next();
     break;
+  case "malformed":
+    console.log("{not-json}");
+    await next();
+    break;
+  case "ack-crash":
+    console.log(JSON.stringify({ sessionIds: [request.sessionId] }));
+    process.exit(2);
   case "crash":
     process.exit(2);
   case "linger":
+    console.log(JSON.stringify({ sessionIds: [request.sessionId] }));
     await next();
     break;
   default:
