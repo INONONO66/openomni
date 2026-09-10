@@ -64,7 +64,6 @@ switch (scenario) {
     break;
   case "crash":
     process.exit(2);
-    break;
   case "linger":
     await next();
     break;
