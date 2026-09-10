@@ -622,10 +622,9 @@ class Provenance {
       if (
         !local &&
         !native &&
-        !this.knownExternalEventSource(receiver) &&
         !this.externalEventOrigin(receiver) &&
         !this.externalEvents.has(call) &&
-        !this.domEventTarget(receiver)
+        !this.domEventTarget(receiver, true)
       )
         this.problem(call, "unresolved_event_source", receiver);
       const names = call.arguments[0]
@@ -1349,17 +1348,6 @@ class Provenance {
       return scope(left) === scope(right) && left.getEnd() < right.getEnd();
     }
     return false;
-  }
-  // A platform-owned source resolves registration, not delivery. AbortSignal
-  // still needs an abort producer; keep controller identity in runtimeValues.
-  private knownExternalEventSource(receiver: ts.Node): boolean {
-    const symbol = this.checker.getTypeAtLocation(receiver).getSymbol();
-    return Boolean(
-      symbol?.name === "AbortSignal" &&
-        symbol.declarations?.some((node) =>
-          /typescript\/lib\/lib\.dom\.d\.ts$/.test(node.getSourceFile().fileName),
-        ),
-    );
   }
   private nativeEventContract(receiver: ts.Node, registration?: ts.CallExpression) {
     const type = this.checker.getTypeAtLocation(receiver),
