@@ -210,7 +210,7 @@ export function createCodemode(options: Options = {}) {
   }
   function tenantCell(cellId: string, tenant: string): BackgroundCell {
     const entry = background.get(cellId);
-    // Another tenant's cell is as unknown as a settled one: ids never leak across sessions.
+    // Another tenant's cell is as inaccessible as a settled one: ids never leak across sessions.
     if (entry === undefined || entry.tenant !== tenant) unknownCell();
     return entry;
   }
@@ -346,9 +346,9 @@ export function createCodemode(options: Options = {}) {
         };
         started.execution.then(markDone, markDone);
         background.set(started.cellId, entry);
-        const settled = await within(started.execution, runOptions.waitMs).catch((error: unknown) => {
+        const settled = await within(started.execution, runOptions.waitMs).catch((error) => {
           background.delete(started.cellId);
-          throw normalizeError(error);
+          throw toCellError(error);
         });
         // The id has not been answered yet, so no peek or stop can have claimed it: the
         // launcher is the one reader even if the retention bound already evicted the entry.
@@ -365,7 +365,7 @@ export function createCodemode(options: Options = {}) {
 }
 
 /** The promise's value once it settles within `ms`, else undefined; a rejection propagates. */
-function normalizeError(error: unknown): Error {
+function toCellError<T>(error: T): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
@@ -377,9 +377,9 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
         clearTimeout(timer);
         resolve(value);
       },
-      (error: unknown) => {
+      (error) => {
         clearTimeout(timer);
-        reject(normalizeError(error));
+        reject(toCellError(error));
       },
     );
   });
