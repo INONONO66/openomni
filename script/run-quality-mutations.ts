@@ -409,11 +409,7 @@ export function programs(root: string, contract: Contract, inventory: Inventory)
 			ts.createProgram(remaining, {
 				strict: true,
 				noEmit: true,
-				allowJs: true,
-				// JavaScript is inventoried for mutation, but its untyped sources are
-				// not a TypeScript compiler contract. Checking them creates false
-				// baseline failures unrelated to the declared workspace projects.
-				checkJs: false,
+				allowJs: true, checkJs: false, // untyped inventory JS is outside compiler contracts
 				rootDir: root,
 				target: ts.ScriptTarget.ES2022,
 				module: ts.ModuleKind.ESNext,
