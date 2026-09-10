@@ -58,6 +58,23 @@ describe("boot tool catalog", () => {
   });
 });
 
+test("stopping the daemon preserves the durable WebSocket bootstrap grant", async () => {
+  const config = suite.config("openomni-bootstrap-lifetime-");
+  const app = await suite.boot({ config, llm: { resolveModel: fakeProviderModel } });
+  const database = new Database(config.dbPath, { readonly: true });
+  try {
+    expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
+    const grants = () => database.query("SELECT * FROM channel_grant WHERE id = ?")
+      .all("openomni-resident-ws");
+    const before = grants();
+    expect(before).toHaveLength(1);
+    await app.stop();
+    expect(grants()).toEqual(before);
+  } finally {
+    database.close();
+  }
+});
+
 test("967 boot preserves promoted expired session", async () => {
   const config = suite.config("openomni-967-history-", { wsToken: "history-token" });
   let calls = 0;
