@@ -1,6 +1,5 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { createCodemode } from "@openomni/codemode";
-import { createDispatcher, currentExecutor } from "@openomni/agent";
+import { createDispatcher, currentExecutor, withExecutor } from "@openomni/agent";
 import type { MachineHost } from "@openomni/machines";
 import { type AnyToolDefinition, Machine } from "@openomni/protocol";
 
@@ -42,11 +41,11 @@ export function composeCodemode(machines: MachineHost) {
     },
     tools(tenant) {
       const dispatcher = catalogs.get(tenant) ?? empty;
-      // RPC responses arrive outside the cell's context; capture this call's
-      // authority, not the executor that happened to build the catalog.
-      const inContext = AsyncLocalStorage.snapshot();
+      // RPC responses arrive outside the cell's context; capture executor
+      // authority only, not the cell's cancellation scope.
+      const executor = currentExecutor();
       return async (call) => {
-        const result = await inContext(() =>
+        const result = await withExecutor(executor, () =>
           dispatcher.executeCell(
             {
               id: `cell:${call.cellId}:${crypto.randomUUID()}`,

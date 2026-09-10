@@ -16,3 +16,8 @@ export function currentExecutor(): Executor {
   if (executor === undefined) throw new ExecutorContextError();
   return executor;
 }
+
+/** Re-enter only executor authority; callers must not carry unrelated ALS scopes across RPC. */
+export function withExecutor<T>(executor: Executor, body: () => T): T {
+  return activeExecutor.run(executor, body);
+}
