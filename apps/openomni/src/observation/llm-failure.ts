@@ -86,8 +86,14 @@ function paymentRequired(error: unknown): boolean {
   for (let depth = 0; depth < 8; depth += 1) {
     if (typeof current !== "object" || current === null) return false;
     if ("statusCode" in current && current.statusCode === 402) return true;
-    if ("data" in current && typeof current.data === "object" && current.data !== null &&
-      "statusCode" in current.data && current.data.statusCode === 402) return true;
+    if (
+      "data" in current &&
+      typeof current.data === "object" &&
+      current.data !== null &&
+      "statusCode" in current.data &&
+      current.data.statusCode === 402
+    )
+      return true;
     const cause = "cause" in current ? current.cause : undefined;
     if (cause === undefined || cause === current) return false;
     current = cause;

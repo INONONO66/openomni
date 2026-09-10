@@ -31,7 +31,12 @@ export function fakeProviders() {
   const surfaces: FakeSurface[] = [];
   const delivered: { externalId: string; body: string }[] = [];
   const webhookCalls: Request[] = [];
-  const delivery = (id: string, credentials: unknown, config: Channel.Config, messageId: string) => {
+  const delivery = (
+    id: string,
+    credentials: unknown,
+    config: Channel.Config,
+    messageId: string,
+  ) => {
     const surface = new FakeSurface(id, config, credentials);
     surfaces.push(surface);
     return {

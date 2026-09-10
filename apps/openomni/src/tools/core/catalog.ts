@@ -31,7 +31,10 @@ export interface CatalogPorts {
   readonly clock?: () => number;
 }
 
-const catalogs = new WeakMap<CatalogPorts, Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>>>();
+const catalogs = new WeakMap<
+  CatalogPorts,
+  Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>>
+>();
 
 /** Immutable ports own one catalog; session composition owns cell binding. */
 export function createTools(
@@ -54,9 +57,10 @@ export function createTools(
     eraseTool(createProvisionTool(ports.provisioning)),
     eraseTool(createCompletionTool(ports.llm)),
   ];
-  const visible = (role: LedgerSession.Role) => tools.filter(
-    (tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role),
-  );
+  const visible = (role: LedgerSession.Role) =>
+    tools.filter(
+      (tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role),
+    );
   const catalog = { resident: visible("resident"), worker: visible("worker") };
   catalogs.set(ports, catalog);
   return catalog[origin.role];

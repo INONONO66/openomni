@@ -28,7 +28,13 @@ import {
   renderSystemdUnit,
   unitPath,
 } from "../src/cli/daemon";
-import { applyEnvFile, mergeEnvFile, parseEnvFile, renderEnvFile, writeEnvFile } from "../src/cli/env-file";
+import {
+  applyEnvFile,
+  mergeEnvFile,
+  parseEnvFile,
+  renderEnvFile,
+  writeEnvFile,
+} from "../src/cli/env-file";
 import { ConfigurationError, parseWsPort } from "../src/config";
 import { runDoctor } from "../src/cli/doctor";
 import { processEntryPath } from "../src/process-entry-path";
@@ -114,8 +120,11 @@ describe("env file", () => {
 
   test("merge preserves explicit empty values and does not mutate process env", () => {
     const env = { OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: undefined };
-    expect(Object.fromEntries(mergeEnvFile("OPENOMNI_MODEL_ID=file\nOPENOMNI_WS_PORT=4000", env))).toEqual({
-      OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: "4000",
+    expect(
+      Object.fromEntries(mergeEnvFile("OPENOMNI_MODEL_ID=file\nOPENOMNI_WS_PORT=4000", env)),
+    ).toEqual({
+      OPENOMNI_MODEL_ID: "",
+      OPENOMNI_WS_PORT: "4000",
     });
     expect(env).toEqual({ OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: undefined });
   });
@@ -273,10 +282,12 @@ describe("daemon units", () => {
   });
 
   test("uninstall after a failed stop proceeds only when inactive AND disabled are proven", () => {
-    const io = fakeIo(failedSystemdStop(
-      { code: 3, stdout: "inactive\n", stderr: "" },
-      { code: 1, stdout: "disabled\n", stderr: "" },
-    ));
+    const io = fakeIo(
+      failedSystemdStop(
+        { code: 3, stdout: "inactive\n", stderr: "" },
+        { code: 1, stdout: "disabled\n", stderr: "" },
+      ),
+    );
     io.files.set(unitPath(linuxTarget), "unit");
     expect(daemonUninstall(linuxTarget, io)).toContain("uninstalled");
   });
@@ -284,11 +295,13 @@ describe("daemon units", () => {
   test("uninstall keeps the unit when the process stopped but the enable symlink survived", () => {
     // A dangling enable symlink resurrects the service on reinstall; a
     // failed disable is not success just because the process is inactive.
-    const io = fakeIo(failedSystemdStop(
-      { code: 3, stdout: "inactive\n", stderr: "" },
-      { code: 0, stdout: "enabled\n", stderr: "" },
-      "could not remove default.target.wants",
-    ));
+    const io = fakeIo(
+      failedSystemdStop(
+        { code: 3, stdout: "inactive\n", stderr: "" },
+        { code: 0, stdout: "enabled\n", stderr: "" },
+        "could not remove default.target.wants",
+      ),
+    );
     io.files.set(unitPath(linuxTarget), "unit");
     expect(() => daemonUninstall(linuxTarget, io)).toThrow("still enabled");
     expect(io.files.has(unitPath(linuxTarget))).toBe(true);
@@ -418,25 +431,38 @@ describe("onboarding", () => {
   });
 
   test.each(["1", "80", "65535"])("onboarding accepts decimal port %s", async (port) => {
-    const entries = await gatherOnboarding(scriptedAsk({
-      "Model id": "m", "Model API key": "k", "WebSocket port": port,
-    }));
+    const entries = await gatherOnboarding(
+      scriptedAsk({
+        "Model id": "m",
+        "Model API key": "k",
+        "WebSocket port": port,
+      }),
+    );
     expect(entries.find((entry) => entry.key === "OPENOMNI_WS_PORT")?.value).toBe(port);
   });
 
-  test.each(["1e2", "0x50", "+80", "80.0", "65536", "invalid", "0"])(
-    "onboarding rejects non-decimal or out-of-range port %s with the original error contract",
-    async (port) => {
-      const result = gatherOnboarding(scriptedAsk({
-        "Model id": "m", "Model API key": "k", "WebSocket port": port,
-      }));
-      await expect(result).rejects.toMatchObject({
-        constructor: Error,
-        name: "Error",
-        message: "WebSocket port must be an integer from 1 to 65535",
-      });
-    },
-  );
+  test.each([
+    "1e2",
+    "0x50",
+    "+80",
+    "80.0",
+    "65536",
+    "invalid",
+    "0",
+  ])("onboarding rejects non-decimal or out-of-range port %s with the original error contract", async (port) => {
+    const result = gatherOnboarding(
+      scriptedAsk({
+        "Model id": "m",
+        "Model API key": "k",
+        "WebSocket port": port,
+      }),
+    );
+    await expect(result).rejects.toMatchObject({
+      constructor: Error,
+      name: "Error",
+      message: "WebSocket port must be an integer from 1 to 65535",
+    });
+  });
 
   test("secret prompts are flagged so the terminal never echoes them", async () => {
     const secretQuestions: string[] = [];
@@ -549,10 +575,12 @@ describe("doctor", () => {
 
   test("unsupported onboarding provider is refused before credentials", async () => {
     let prompts = 0;
-    await expect(gatherOnboarding(async () => {
-      prompts += 1;
-      return "unsupported";
-    })).rejects.toBeInstanceOf(Error);
+    await expect(
+      gatherOnboarding(async () => {
+        prompts += 1;
+        return "unsupported";
+      }),
+    ).rejects.toBeInstanceOf(Error);
     expect(prompts).toBe(1);
   });
 

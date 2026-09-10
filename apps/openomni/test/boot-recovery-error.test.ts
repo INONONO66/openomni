@@ -13,35 +13,68 @@ test("a pending Owner request keeps the server available while failed recovery i
   const directory = mkdtempSync(join(tmpdir(), "recovery-failure-"));
   const dbPath = join(directory, "storage.sqlite");
   const reported = Promise.withResolvers<unknown>();
-  const log = spyOn(console, "error").mockImplementation((_message, error) => reported.resolve(error));
+  const log = spyOn(console, "error").mockImplementation((_message, error) =>
+    reported.resolve(error),
+  );
   let app: Awaited<ReturnType<typeof startOpenOmni>> | undefined;
   try {
     initialize({ dbPath });
     seedKernelPolicyRows();
     SessionHandleStore.materialize({
-      id: "session", parentId: null, role: "resident", tools: [],
+      id: "session",
+      parentId: null,
+      role: "resident",
+      tools: [],
       system: { preset: "", blocks: [] },
-      policyGeneration: SessionHandleStore.currentPolicyGeneration(), actionId: "configure", at: 1,
+      policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+      actionId: "configure",
+      at: 1,
     });
     const actions = Storage.get().actions;
     if (actions === undefined) throw new Error("action storage missing");
-    expect(actions.append({
-      id: "request-state", sessionId: "session", parentId: "configure", kind: "request",
-      intent: { encodingVersion: 1, value: {} },
-      effect: { encodingVersion: 1, value: { phase: "state", request: approvalRequest({}, {}) } },
-      irreversible: true, ts: 2,
-    }, 1)).toBeDefined();
-    expect(actions.append({
-      id: "corrupt-outbound", sessionId: "session", parentId: "request-state", kind: "outbound",
-      intent: { encodingVersion: 1, value: {} },
-      effect: { encodingVersion: 1, value: {} },
-      irreversible: true, ts: 3,
-    }, 2)).toBeDefined();
+    expect(
+      actions.append(
+        {
+          id: "request-state",
+          sessionId: "session",
+          parentId: "configure",
+          kind: "request",
+          intent: { encodingVersion: 1, value: {} },
+          effect: {
+            encodingVersion: 1,
+            value: { phase: "state", request: approvalRequest({}, {}) },
+          },
+          irreversible: true,
+          ts: 2,
+        },
+        1,
+      ),
+    ).toBeDefined();
+    expect(
+      actions.append(
+        {
+          id: "corrupt-outbound",
+          sessionId: "session",
+          parentId: "request-state",
+          kind: "outbound",
+          intent: { encodingVersion: 1, value: {} },
+          effect: { encodingVersion: 1, value: {} },
+          irreversible: true,
+          ts: 3,
+        },
+        2,
+      ),
+    ).toBeDefined();
     Storage.reset();
-    app = await startOpenOmni({ sessionRuntime: { clock: () => 100 }, config: {
-      dbPath, host: "127.0.0.1", wsPort: 0,
-      model: { provider: "fake", id: "fixture", apiKey: "fixture" },
-    } });
+    app = await startOpenOmni({
+      sessionRuntime: { clock: () => 100 },
+      config: {
+        dbPath,
+        host: "127.0.0.1",
+        wsPort: 0,
+        model: { provider: "fake", id: "fixture", apiKey: "fixture" },
+      },
+    });
     const failure = await bounded(reported.promise);
     expect(failure).toBeInstanceOf(Error);
     expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);

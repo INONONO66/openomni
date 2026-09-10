@@ -19,7 +19,10 @@ export function providerError(fields: {
   });
 }
 
-export function transientProvider(resolved: Model.Ref[], auths?: Auth.Info[]): ChatAgentConfig["llm"] {
+export function transientProvider(
+  resolved: Model.Ref[],
+  auths?: Auth.Info[],
+): ChatAgentConfig["llm"] {
   let calls = 0;
   return {
     resolveModel: async (model) => {

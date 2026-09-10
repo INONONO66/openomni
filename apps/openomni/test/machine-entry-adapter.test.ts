@@ -13,12 +13,15 @@ test.each([false, true])("machine entry adapter handles enrollment %s", async (e
   const path = socketPath();
   const host = await createMachineHost({
     socketPath: path,
-    enrollment: () => enrolled ? {
-      machineId: "entry-machine",
-      name: "entry",
-      allowedCapabilities: ["kernel.py"],
-      enrolledAt: 1,
-    } : undefined,
+    enrollment: () =>
+      enrolled
+        ? {
+            machineId: "entry-machine",
+            name: "entry",
+            allowedCapabilities: ["kernel.py"],
+            enrolledAt: 1,
+          }
+        : undefined,
     events: { publish: () => undefined },
     now: () => 2,
   });
@@ -30,22 +33,29 @@ test.each([false, true])("machine entry adapter handles enrollment %s", async (e
   const previous = new Set(signals.flatMap((signal) => process.listeners(signal)));
   try {
     const configPath = join(home, "machine.json");
-    writeFileSync(configPath, JSON.stringify({
-      socketPath: path,
-      offer: {
-        machineId: "entry-machine",
-        offeredCapabilities: ["kernel.py"],
-        exports: [{ name: "root", path: home }],
-        daemonVersion: "fixture",
-        platform: process.platform,
-        offeredAt: 2,
-      },
-    }));
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        socketPath: path,
+        offer: {
+          machineId: "entry-machine",
+          offeredCapabilities: ["kernel.py"],
+          exports: [{ name: "root", path: home }],
+          daemonVersion: "fixture",
+          platform: process.platform,
+          offeredAt: 2,
+        },
+      }),
+    );
     const attached = createCliDeps(home).attachMachine(configPath);
-    const result = await bounded(Promise.race([
-      announced.promise,
-      attached.then(() => { throw new Error("machine exited before attachment"); }),
-    ]));
+    const result = await bounded(
+      Promise.race([
+        announced.promise,
+        attached.then(() => {
+          throw new Error("machine exited before attachment");
+        }),
+      ]),
+    );
     expect(result.status).toBe(enrolled ? "attached" : "refused");
     await host.close();
     expect(await bounded(attached)).toBe(enrolled ? 0 : 1);

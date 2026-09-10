@@ -65,7 +65,10 @@ export function messageMaterialization(input: {
   };
 }
 
-function sessionDepth(parentId: string | null, rows: ReturnType<typeof SessionHandleStore.listRows>) {
+function sessionDepth(
+  parentId: string | null,
+  rows: ReturnType<typeof SessionHandleStore.listRows>,
+) {
   let depth = 1;
   let parent = parentId;
   while (parent !== null) {

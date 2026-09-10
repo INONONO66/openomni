@@ -280,7 +280,9 @@ describe("real CLI entry", () => {
     expect(canceled).toBe(true);
   });
 
-  test.each([[], ["help"], ["--help"], ["-h"]].map((args) => ({ args })))("help dispatch %j", async ({ args }) => {
+  test.each(
+    [[], ["help"], ["--help"], ["-h"]].map((args) => ({ args })),
+  )("help dispatch %j", async ({ args }) => {
     const child = await runCli(args, appEnv(tempHome()));
     expect(child.exitCode).toBe(0);
     expect(child.stderr).toBe("");
@@ -291,14 +293,16 @@ describe("real CLI entry", () => {
     expect(commands).toEqual(["start", "onboard", "daemon", "machine", "doctor", "logs", "help"]);
   });
 
-  test.each([
-    ["not-a-command"],
-    ["daemon"],
-    ["daemon", "missing"],
-    ["machine"],
-    ["machine", "attach"],
-    ["machine", "attach", "config.json", "extra"],
-  ].map((args) => ({ args })))("rejects invalid dispatch %j", async ({ args }) => {
+  test.each(
+    [
+      ["not-a-command"],
+      ["daemon"],
+      ["daemon", "missing"],
+      ["machine"],
+      ["machine", "attach"],
+      ["machine", "attach", "config.json", "extra"],
+    ].map((args) => ({ args })),
+  )("rejects invalid dispatch %j", async ({ args }) => {
     const child = await runCli(args, appEnv(tempHome()));
     expect(child.exitCode).toBe(1);
     expect(child.stdout).toBe("");
@@ -306,7 +310,10 @@ describe("real CLI entry", () => {
   });
 
   test("native entry coverage executes the real main guard", async () => {
-    const child = await measuredEntry(new URL("../src/cli/main.ts", import.meta.url), appEnv(tempHome()));
+    const child = await measuredEntry(
+      new URL("../src/cli/main.ts", import.meta.url),
+      appEnv(tempHome()),
+    );
     expect(child.exitCode).toBe(0);
     expect(child.stdout).toMatch(/openomni start\s/);
   });
@@ -341,7 +348,12 @@ describe("real CLI entry", () => {
     }
   });
 
-  test.each(["status", "start", "stop", "restart"])("daemon %s reaches service IO", async (verb) => {
+  test.each([
+    "status",
+    "start",
+    "stop",
+    "restart",
+  ])("daemon %s reaches service IO", async (verb) => {
     const home = tempHome();
     const env = appEnv(home);
     expect((await runCli(["daemon", "install"], env)).exitCode).toBe(0);

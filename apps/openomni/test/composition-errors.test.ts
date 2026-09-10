@@ -5,12 +5,22 @@ import { observeComponent } from "../src/observation/component";
 import { createResident } from "../src/resident";
 
 test("component failure observation preserves an unprintable rejection", async () => {
-  const failure = { toString() { throw new Error("conversion failed"); } };
+  const failure = {
+    toString() {
+      throw new Error("conversion failed");
+    },
+  };
   const states: string[] = [];
   const unsubscribe = [
-    Bus.subscribe(Component.Events.Active, () => { states.push("active"); }),
-    Bus.subscribe(Component.Events.Failed, () => { states.push("failed"); }),
-    Bus.subscribe(Component.Events.Disposed, () => { states.push("disposed"); }),
+    Bus.subscribe(Component.Events.Active, () => {
+      states.push("active");
+    }),
+    Bus.subscribe(Component.Events.Failed, () => {
+      states.push("failed");
+    }),
+    Bus.subscribe(Component.Events.Disposed, () => {
+      states.push("disposed");
+    }),
   ];
   const component = observeComponent({
     traceId: newTraceId(),
@@ -20,10 +30,12 @@ test("component failure observation preserves an unprintable rejection", async (
     componentGeneration: 1,
   });
   try {
-    const result = await component.run(() => Promise.reject(failure)).then(
-      () => false,
-      (error: unknown) => error === failure,
-    );
+    const result = await component
+      .run(() => Promise.reject(failure))
+      .then(
+        () => false,
+        (error: unknown) => error === failure,
+      );
     expect(result).toBe(true);
     expect(states).toEqual(["active", "failed", "disposed"]);
   } finally {

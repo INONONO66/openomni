@@ -48,11 +48,15 @@ describe("channelProfile", () => {
       const rows = channelProfile(config, fakes.providers);
       expect(rows.map((row) => row.id)).toEqual(enabled ? ["telegram", "github", "discord"] : []);
       for (const row of rows) row.build(handler);
-      expect(fakes.surfaces.map((surface) => surface.credentials)).toEqual(enabled ? [
-        { token: "tg-token" },
-        { secret: "gh-secret", token: "gh-api", botUsername: "omni-bot" },
-        { token: "dc-token" },
-      ] : []);
+      expect(fakes.surfaces.map((surface) => surface.credentials)).toEqual(
+        enabled
+          ? [
+              { token: "tg-token" },
+              { secret: "gh-secret", token: "gh-api", botUsername: "omni-bot" },
+              { token: "dc-token" },
+            ]
+          : [],
+      );
       expect(fakes.surfaces.every((surface) => surface.handler === handler)).toBe(true);
     } finally {
       restore();

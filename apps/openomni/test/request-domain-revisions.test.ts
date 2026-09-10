@@ -31,9 +31,9 @@ test("contact_add reads back the live Person revision, absent as -1", () => {
 });
 
 test("a request without domain preconditions reads back nothing", () => {
-  expect(requestDomainRevisions(approvalRequest({ operation: { op: "status", args: {} } }, {}))).toEqual(
-    {},
-  );
+  expect(
+    requestDomainRevisions(approvalRequest({ operation: { op: "status", args: {} } }, {})),
+  ).toEqual({});
 });
 
 test("domain preconditions on an unrecognized operation fail closed", () => {

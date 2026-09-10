@@ -6,7 +6,11 @@ export function assertNoLegacyRequestStores(dbPath: string): void {
   expect("wait" in Storage.get()).toBe(false);
   expect("approval" in Storage.get()).toBe(false);
   using db = new Database(dbPath, { readonly: true });
-  expect(db.query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('wait','approval')").all()).toEqual([]);
+  expect(
+    db
+      .query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('wait','approval')")
+      .all(),
+  ).toEqual([]);
 }
 
 export function persistedSession(raw: Database, id: string) {

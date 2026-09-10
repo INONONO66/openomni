@@ -61,10 +61,9 @@ it("the model cannot mint or decide Owner consent, and workers cannot see provis
     ).toBe("invalid_input");
   }
   expect(
-    createTools(
-      { provisioning: provisionPort() },
-      { role: "worker", sessionId: "worker" },
-    ).some((tool) => tool.name === "provision"),
+    createTools({ provisioning: provisionPort() }, { role: "worker", sessionId: "worker" }).some(
+      (tool) => tool.name === "provision",
+    ),
   ).toBe(false);
   expect(malloryStanding()).toBe("provisional");
 });

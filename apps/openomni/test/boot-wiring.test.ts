@@ -64,8 +64,8 @@ test("stopping the daemon preserves the durable WebSocket bootstrap grant", asyn
   const database = new Database(config.dbPath, { readonly: true });
   try {
     expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
-    const grants = () => database.query("SELECT * FROM channel_grant WHERE id = ?")
-      .all("openomni-resident-ws");
+    const grants = () =>
+      database.query("SELECT * FROM channel_grant WHERE id = ?").all("openomni-resident-ws");
     const before = grants();
     expect(before).toHaveLength(1);
     await app.stop();

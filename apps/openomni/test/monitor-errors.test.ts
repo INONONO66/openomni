@@ -65,10 +65,15 @@ test("PTY cancellation settles from a subscribed line signal without requiring n
   const ready = eventSignal<string>("PTY ready");
   const errors: Error[] = [];
   const exits: number[] = [];
-  const source = commandSource("printf 'READY\\n'; read hold", ready.resolve, (code) => exits.push(code), (error) => {
-    errors.push(error);
-    ready.reject(error);
-  });
+  const source = commandSource(
+    "printf 'READY\\n'; read hold",
+    ready.resolve,
+    (code) => exits.push(code),
+    (error) => {
+      errors.push(error);
+      ready.reject(error);
+    },
+  );
   try {
     expect(await ready.promise).toBe("READY");
     const closed = eventSignal<void>("PTY cancelled");

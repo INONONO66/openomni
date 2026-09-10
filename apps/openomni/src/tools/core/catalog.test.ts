@@ -80,7 +80,9 @@ describe("tool catalog", () => {
     expect(createTools(ports, { ...origin, sessionId: "other" })).toBe(first);
     const worker = createTools(ports, { ...origin, role: "worker" });
     expect(worker.some((tool) => tool.name === "provision")).toBe(false);
-    expect(worker.find((tool) => tool.name === "read")).toBe(first.find((tool) => tool.name === "read"));
+    expect(worker.find((tool) => tool.name === "read")).toBe(
+      first.find((tool) => tool.name === "read"),
+    );
     const replacement = createTools({ llm: async ({ prompt }) => `second:${prompt}` }, origin);
     expect(replacement).not.toBe(first);
     expect(replacement.find((tool) => tool.name === "completion")).not.toBe(
