@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
+import { z } from "zod";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "../../src/index";
 import { Compaction } from "../../src/compaction/compact";
@@ -580,15 +581,8 @@ describe("Compaction", () => {
       // And the record never carries a marker: it is derived render.
       const anchor = second.messages[0]?.parts[0];
       if (anchor?.type !== "text") throw new Error("shape");
-      const kept = anchor.metadata?.keptWindow;
-      if (!Array.isArray(kept)) throw new Error("expected keptWindow");
-      expect(
-        kept.every(
-          (entry) =>
-            typeof (entry as { time?: unknown }).time === "number" &&
-            !(entry as { text: string }).text.startsWith("[recorded "),
-        ),
-      ).toBe(true);
+      const kept = z.array(z.object({ time: z.number(), text: z.string() })).parse(anchor.metadata?.keptWindow);
+      expect(kept.every((entry) => !entry.text.startsWith("[recorded "))).toBe(true);
     });
 
     it("skips the model call when the cut span holds nothing summarizable", async () => {
