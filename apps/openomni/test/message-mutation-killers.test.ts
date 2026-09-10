@@ -6,32 +6,17 @@ import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 
 import { storageDirectories } from "./helpers/storage-directories";
+import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
 
 const directories = storageDirectories(true);
 
 test("worker actor send is blocked by a compiled B row before transport", async () => {
-  let calls = 0;
-  const fixture = messageFixture("worker", {
-    deliveryRoutes: new Map([
-      [
-        "ws",
-        async () => {
-          calls += 1;
-          return { value: "accepted" as const };
-        },
-      ],
-    ]),
-    grants: () => [],
-  });
+  const { fixture, calls } = ungrantedActor("worker");
   directories.push(fixture.directory);
-  const result = await fixture.send({
-    to: { kind: "actor", actorId: "outside" },
-    type: "message",
-    content: "hello",
-  });
+  const result = await fixture.send(actorMessage("outside"));
   expect(result.isError).toBe(true);
   expect(result.output).toContain("message.worker.actor");
-  expect(calls).toBe(0);
+  expect(calls()).toBe(0);
 });
 
 test("new child configuration and first inbox roll back together on an inbox insertion fault", async () => {

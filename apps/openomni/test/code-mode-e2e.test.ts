@@ -22,6 +22,8 @@ import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
 import { nextFrame } from "./helpers/ws";
 
+import { cellDaemonOptions } from "./helpers/cell-daemon";
+
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
 
@@ -199,16 +201,7 @@ test("a cell creates three child sessions through send_message", async () => {
     },
   });
 
-  const daemon = await attachMachineDaemon({
-    socketPath,
-    offer: {
-      machineId: MACHINE_ID,
-      offeredCapabilities: ["kernel.py"],
-      daemonVersion: "test",
-      platform: "test",
-      offeredAt: 0,
-    },
-  });
+  const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
 
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
@@ -417,16 +410,7 @@ async function startCellHarness(ports: CatalogPorts) {
     now: () => Date.now(),
     callTool: (call) => cells.callTool(call),
   });
-  const daemon = await attachMachineDaemon({
-    socketPath,
-    offer: {
-      machineId: MACHINE_ID,
-      offeredCapabilities: ["kernel.py"],
-      daemonVersion: "test",
-      platform: "test",
-      offeredAt: 0,
-    },
-  });
+  const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
   cells = composeCodemode(host);
   suite.defer(() => cells.close());

@@ -10,6 +10,7 @@ import { loadConfig, type OpenOmniConfig } from "../src/config";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextMessage } from "./helpers/ws";
+import { expectAbsentWebhook } from "./helpers/http";
 
 const REPLY = "A deterministic Resident reply.";
 const WS_TOKEN = "e2e-upgrade-token";
@@ -258,11 +259,7 @@ describe("OpenOmni Resident WebSocket", () => {
   it("boots WebSocket-only when no channel credentials are configured", async () => {
     const app = await bootApp();
 
-    const webhook = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
-      method: "POST",
-    });
-    expect(webhook.status).toBe(404);
-    expect(await webhook.text()).toBe("Not found");
+    await expectAbsentWebhook(app.port);
 
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
     expect(ws.protocol).toBe("auth");
@@ -296,11 +293,7 @@ describe("OpenOmni Resident WebSocket", () => {
       expect(config.channels).toBeUndefined();
 
       const app = await bootWithConfig(config);
-      const webhook = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
-        method: "POST",
-      });
-      expect(webhook.status).toBe(404);
-      expect(await webhook.text()).toBe("Not found");
+      await expectAbsentWebhook(app.port);
     });
   });
 

@@ -10,7 +10,7 @@ import { createResidentGateway } from "../src/gateway";
 import { wakeSession } from "@openomni/agent";
 import { commitMessageInbox, prepareMessage } from "../src/composition/message-session";
 import { residentRunner as createResident } from "./helpers/resident-runner";
-import { assistantMessage } from "./helpers/assistant-message";
+import { providerError, transientProvider } from "./helpers/sdk-provider";
 
 const directories: string[] = [];
 
@@ -39,28 +39,12 @@ describe("Resident model fallback wiring", () => {
     const resolved: Model.Ref[] = [];
     const auths: Auth.Info[] = [];
     const credentials = spyOn(Auth, "get").mockResolvedValue({ type: "api", key: "fallback-key" });
-    let calls = 0;
-
     const resident = createResident({
       model: PRIMARY,
       modelFallbacks: [FALLBACK],
       apiKey: "test-key",
       tools: {},
-      llm: {
-        resolveModel: async (model) => {
-          resolved.push(model);
-          return { id: model.id, name: model.id, providerID: model.provider };
-        },
-        run: async (input, sink) => {
-          auths.push(await Auth.resolve(input.model.providerID, input.auth, input.authProvider));
-          calls += 1;
-          if (calls === 1) {
-            return { type: "error", error: providerFailure("transient blip") };
-          }
-          sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
-          return { type: "stop" };
-        },
-      },
+      llm: transientProvider(resolved, auths),
     });
 
     const result = await resident.prompt(sessionId, "please answer");
@@ -77,26 +61,11 @@ describe("Resident model fallback wiring", () => {
   it("keeps every attempt on the primary when no fallback is configured", async () => {
     const sessionId = openSession("openomni-resident-no-fallback-");
     const resolved: Model.Ref[] = [];
-    let calls = 0;
-
     const resident = createResident({
       model: PRIMARY,
       apiKey: "test-key",
       tools: {},
-      llm: {
-        resolveModel: async (model) => {
-          resolved.push(model);
-          return { id: model.id, name: model.id, providerID: model.provider };
-        },
-        run: async (input, sink) => {
-          calls += 1;
-          if (calls === 1) {
-            return { type: "error", error: providerFailure("transient blip") };
-          }
-          sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
-          return { type: "stop" };
-        },
-      },
+      llm: transientProvider(resolved),
     });
 
     await resident.prompt(sessionId, "please answer");
@@ -104,26 +73,6 @@ describe("Resident model fallback wiring", () => {
     expect(resolved).toEqual([PRIMARY, PRIMARY]);
   });
 });
-
-/**
- * An AI SDK provider error as the SDK actually raises it: the retry facts
- * live on the error object, not under `.data`. Building the fixture this way
- * (rather than importing the llm package's internal APIError) keeps the test
- * on the same shape production coercion has to survive.
- */
-function providerError(fields: {
-  readonly message: string;
-  readonly isRetryable: boolean;
-  readonly statusCode?: number;
-  readonly responseBody?: string;
-}): Error {
-  return Object.assign(new Error(fields.message), {
-    name: "AI_APICallError",
-    isRetryable: fields.isRetryable,
-    ...(fields.statusCode === undefined ? {} : { statusCode: fields.statusCode }),
-    ...(fields.responseBody === undefined ? {} : { responseBody: fields.responseBody }),
-  });
-}
 
 describe("Resident terminal LLM failure surfacing", () => {
   function alwaysFailing(error: Error) {
