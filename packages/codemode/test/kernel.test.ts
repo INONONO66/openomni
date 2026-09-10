@@ -162,6 +162,22 @@ describe("code-mode kernel substrate", () => {
     }
   });
 
+  test("a rejected host tool preserves its message in the cell error", async () => {
+    const kernel = new PythonKernel();
+    try {
+      const result = await kernel.run(
+        { cellId: "tool-error-message", code: "tool.test()", timeoutMs: 1_000 },
+        async () => {
+          throw new Error("disk on fire");
+        },
+      );
+      expect(result).toMatchObject({ status: "raised" });
+      expect(result).toMatchObject({ error: expect.stringContaining("disk on fire") });
+    } finally {
+      await kernel.close();
+    }
+  });
+
   test("an unserializable tool answer rejects the owning cell", async () => {
     const kernel = new PythonKernel();
     try {

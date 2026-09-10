@@ -366,7 +366,7 @@ export function createCodemode(options: Options = {}) {
 
 /** The promise's value once it settles within `ms`, else undefined; a rejection propagates. */
 function toCellError<T>(error: T): Error {
-  return error instanceof Error ? error : new Error(String(error));
+  return error instanceof Error ? error : new Error(String(error), { cause: error });
 }
 
 function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {

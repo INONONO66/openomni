@@ -508,9 +508,9 @@ export class PythonKernel {
       .then(() =>
         pending.callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments }),
       )
-      .catch((): Machine.ToolCallResult => ({
+      .catch((error): Machine.ToolCallResult => ({
         status: "failed",
-        error: "tool call failed",
+        error: error instanceof Error ? error.message : String(error),
       }))
       .then((answer) => {
         // The cell may already have timed out and taken its interpreter with
