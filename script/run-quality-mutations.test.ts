@@ -1,8 +1,21 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decode, execute, sha256 } from "./run-quality-mutations";
+import { decode, execute, main, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
+import { buildInventory, readContract } from "./quality-inventory";
+import { programs, diagnostics } from "./run-quality-mutations";
+import { resolve } from "node:path";
+
+test("real mutation contract has no baseline compiler diagnostics", () => {
+  const root = resolve(import.meta.dir, "..");
+  const contract = readContract(resolve(root, "script/conformance/quality-contract.json"));
+  expect(diagnostics(programs(root, contract, buildInventory(root, contract)))).toEqual([]);
+}, 120_000);
+
+test("mutation main rejects an invalid invocation in process", async () => {
+  expect(await main(["--not-a-real-option"])).toBe(2);
+});
 const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
 

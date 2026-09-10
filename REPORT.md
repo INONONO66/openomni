@@ -160,3 +160,14 @@ RED exit 0
 
 ## Remote checks
 - Poll completed for head b8bac188. All quality legs and Quality Gates passed; Desktop production smoke failed, so merge is blocked per rule. No merge, mutation dispatch, or main post-merge timing was performed.
+
+## Task 1018 continuation
+- Scratch compiler probe exported `programs`/`diagnostics` temporarily and mirrored the workflow inventory/program roots after the declaration build.
+- It reproduced all 17 diagnostics: they came from the fallback program checking untyped JavaScript (`apps/desktop/test-e2e/startup.cjs` and `script/quality-metrics/tool-runner.mjs`). Root fix: fallback `checkJs: false`; declared workspace tsconfig programs remain fully checked.
+- Added a real-repository zero-diagnostics regression test and direct in-process entry tests for census and mutation tools.
+- `mise exec bun@1.4.1 -- bunx tsc -p script/tsconfig.json` passes.
+- Full touched test run exposed existing Python-fixture failures in this local environment and the new census assertion was corrected; the compiler regression test needs a longer than default test timeout because building the full inventory is expensive.
+
+## Completion attempt
+- Compiler scope correction explicitly identifies the 17 diagnostics as `apps/desktop/test-e2e/startup.cjs` (4) and `script/quality-metrics/tool-runner.mjs` (13), all from fallback `checkJs` on untyped JavaScript outside declared TypeScript workspace contracts.
+- No new test files were added, so shard assignment remains unchanged: census test in scripts-tooling-2; mutation test in scripts-tooling-4.

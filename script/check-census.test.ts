@@ -4,6 +4,7 @@ import aiPackage from "ai/package.json";
 import { readFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Fixture, protocol, adapter, assertPublication, assertStoreWrite, configureElectronFixture, hash, cli } from "./census-fixture";
+import { censusMain } from "./check-census";
 import type { Problem } from "./check-census";
 import {
   decodeJson,
@@ -13,6 +14,18 @@ import {
   jsonObject,
   jsonString,
 } from "./quality-inventory";
+
+test("census entry runs in process against a fixture", () => {
+  using fixture = new Fixture({
+    "src/main.ts": 'import { Ready } from "./events"; console.log(Ready.name);',
+    "src/events.ts": protocol,
+  });
+  expect(censusMain([
+    "--json", "--root", fixture.root, "--class", "publisher",
+    "--contract", "contract.json", "--inventory", "inventory.json",
+    "--inventory-sha256", hash(readFileSync(join(fixture.root, "inventory.json"))),
+  ])).toBe(1);
+});
 
 test("scoped census retains resolver inputs but reports only affected sources", () => {
   using fixture = new Fixture({

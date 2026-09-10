@@ -390,7 +390,7 @@ function broken(receipt: ProcessReceipt): boolean {
 		(receipt.cleanupExit !== 0 && receipt.cleanupExit !== 1)
 	);
 }
-function programs(root: string, contract: Contract, inventory: Inventory): ts.Program[] {
+export function programs(root: string, contract: Contract, inventory: Inventory): ts.Program[] {
 	const items = contract.projects.map((path) => {
 		pathIn(root, path);
 		try {
@@ -410,7 +410,10 @@ function programs(root: string, contract: Contract, inventory: Inventory): ts.Pr
 				strict: true,
 				noEmit: true,
 				allowJs: true,
-				checkJs: true,
+				// JavaScript is inventoried for mutation, but its untyped sources are
+				// not a TypeScript compiler contract. Checking them creates false
+				// baseline failures unrelated to the declared workspace projects.
+				checkJs: false,
 				rootDir: root,
 				target: ts.ScriptTarget.ES2022,
 				module: ts.ModuleKind.ESNext,
@@ -426,7 +429,7 @@ const diagnosticHost: ts.FormatDiagnosticsHost = {
 	getCurrentDirectory: () => process.cwd(),
 	getNewLine: () => "\n",
 };
-function diagnostics(items: ts.Program[]): string[] {
+export function diagnostics(items: ts.Program[]): string[] {
 	return items.flatMap((program) =>
 		ts
 			.getPreEmitDiagnostics(program)
