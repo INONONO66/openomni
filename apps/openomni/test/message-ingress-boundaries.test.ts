@@ -7,6 +7,7 @@ import { messageFixture } from "./helpers/message-fixture";
 import { z } from "zod";
 
 import { storageDirectories } from "./helpers/storage-directories";
+import { actorPolicy } from "./helpers/message-scenarios";
 
 const directories = storageDirectories(true);
 
@@ -43,12 +44,7 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
           }),
         ],
       ]),
-      grants: () => [
-        { id: "grant", senderId: "sender", targetActorId: "peer", operations: ["awaited"] },
-      ],
-      budgets: () => [
-        { id: "budget", targetActorId: "peer", maxPerWindow: 20, windowMs: 1000, cooldownMs: 0 },
-      ],
+      ...actorPolicy("peer", 20),
     });
     directories.push(fixture.directory);
     registerPeer();
@@ -121,12 +117,7 @@ for (const refuse of [false, true]) {
           },
         ],
       ]),
-      grants: () => [
-        { id: "grant", senderId: "sender", targetActorId: "peer", operations: ["awaited"] },
-      ],
-      budgets: () => [
-        { id: "budget", targetActorId: "peer", maxPerWindow: 10, windowMs: 1000, cooldownMs: 0 },
-      ],
+      ...actorPolicy("peer", 10),
     });
     directories.push(fixture.directory);
     dbPath = fixture.dbPath;

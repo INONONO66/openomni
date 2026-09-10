@@ -6,6 +6,7 @@ import { Gateway } from "@openomni/protocol";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
 import { monitorTool } from "../src/tools/monitor";
 import { messageFixture } from "./helpers/message-fixture";
+import { actorPolicy } from "./helpers/message-scenarios";
 
 function alarmStore() {
   const alarms = Storage.get().alarms;
@@ -19,18 +20,7 @@ for (const status of ["armed", "fired"] as const) {
       Storage.withIsolation(async () => {
         const fixture = messageFixture("resident", {
           deliveryRoutes: new Map([["ws", async () => ({ value: "accepted" as const })]]),
-          grants: () => [
-            { id: "grant", senderId: "sender", targetActorId: "peer", operations: ["awaited"] },
-          ],
-          budgets: () => [
-            {
-              id: "budget",
-              targetActorId: "peer",
-              maxPerWindow: 10,
-              windowMs: 1000,
-              cooldownMs: 0,
-            },
-          ],
+          ...actorPolicy("peer", 10),
         });
         ActorRegistry.registerIdentity({ id: "peer", kind: "human", trustTier: "owner" });
         ActorRegistry.registerEndpoint({

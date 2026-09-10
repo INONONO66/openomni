@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { Bus } from "@openomni/agent";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { L0Observation } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -98,12 +98,5 @@ test("real external WebSocket reply wakes its original idle request owner withou
   expect(
     SessionHandleStore.inboxRows(source).filter((row) => row.id === request?.replies[0]?.replyId),
   ).toHaveLength(1);
-  expect("wait" in Storage.get()).toBe(false);
-  expect("approval" in Storage.get()).toBe(false);
-  using db = new Database(config.dbPath, { readonly: true });
-  expect(
-    db
-      .query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('wait','approval')")
-      .all(),
-  ).toEqual([]);
+  assertNoLegacyRequestStores(config.dbPath);
 });

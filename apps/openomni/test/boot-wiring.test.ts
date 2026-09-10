@@ -23,6 +23,8 @@ import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame, nextMessage } from "./helpers/ws";
 
+import { persistedSession } from "./helpers/storage-evidence";
+
 const suite = residentSuite();
 
 describe("boot tool catalog", () => {
@@ -136,23 +138,13 @@ test("967 boot preserves promoted expired session", async () => {
     expect(
       seed.alarms.arm({ id: "historical-alarm", sessionId: id, kind: "at", fireAt: 100 }),
     ).toBeDefined();
-    const before = {
-      session: raw.query("SELECT * FROM session WHERE id = ?").get(id),
-      actions: raw.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(id),
-      inbox: raw.query("SELECT * FROM inbox WHERE session_id = ?").all(id),
-      alarms: raw.query("SELECT * FROM alarm WHERE session_id = ?").all(id),
-    };
+    const before = persistedSession(raw, id);
     console.log("967 SQLite before boot", JSON.stringify(before));
     Storage.reset();
     calls = 0;
 
     const app = await suite.boot({ ...options, sessionRuntime: { clock: () => 50 } });
-    const after = {
-      session: raw.query("SELECT * FROM session WHERE id = ?").get(id),
-      actions: raw.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(id),
-      inbox: raw.query("SELECT * FROM inbox WHERE session_id = ?").all(id),
-      alarms: raw.query("SELECT * FROM alarm WHERE session_id = ?").all(id),
-    };
+    const after = persistedSession(raw, id);
     console.log("967 SQLite after boot", JSON.stringify({ ...after, calls }));
     expect(after.session).not.toBeNull();
     expect(after.actions.slice(0, before.actions.length)).toEqual(before.actions);
