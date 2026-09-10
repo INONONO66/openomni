@@ -24,6 +24,13 @@ describe("Tool.Placement", () => {
     }
   });
 
+  test("rejects non-plain input schemas", () => {
+    const values = [() => "nope", new Date(), new (class Example {})(), { [Symbol("key")]: 1 }];
+    for (const inputSchema of values) {
+      expect(Tool.Spec.safeParse({ name: "x", inputSchema }).success).toBe(false);
+    }
+  });
+
   test("requires speaks the capability grammar", () => {
     const result = Tool.Spec.safeParse({
       name: "x",

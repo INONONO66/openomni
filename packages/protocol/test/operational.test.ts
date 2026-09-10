@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { Operational } from "../src/event/operational.js";
-import type { PlainValue } from "../src/json.js";
 
 describe("Operational.envelope", () => {
   test("parses JSON context values with a typed result", () => {
@@ -11,8 +10,7 @@ describe("Operational.envelope", () => {
       msg: "context",
       context: { nullable: null, nested: [[], {}] },
     });
-    const context: Record<string, PlainValue> = event.context ?? {};
-    expect(context).toEqual({ nullable: null, nested: [[], {}] });
+    expect(event.context).toEqual({ nullable: null, nested: [[], {}] });
   });
 
   test("uses the caller-supplied timestamp", () => {

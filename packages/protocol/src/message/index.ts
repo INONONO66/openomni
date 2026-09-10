@@ -2,7 +2,6 @@ import { z } from "zod";
 import { Token } from "../token/index.js";
 import { Tool } from "../tool/index.js";
 import { EpochMs } from "../time.js";
-import { PlainValueSchema } from "../json.js";
 
 export namespace Message {
   const PartBase = z.object({
@@ -20,7 +19,7 @@ export namespace Message {
         end: EpochMs.optional(),
       })
       .optional(),
-    metadata: z.record(z.string(), PlainValueSchema).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   });
   export type TextPart = z.infer<typeof TextPart>;
 
@@ -33,7 +32,7 @@ export namespace Message {
       start: EpochMs,
       end: EpochMs.optional(),
     }),
-    metadata: z.record(z.string(), PlainValueSchema).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   });
   export type ReasoningPart = z.infer<typeof ReasoningPart>;
 

@@ -48,7 +48,7 @@ export class GitHubClient {
         time: Date.now(),
         component: "server",
         msg: "github comment already posted",
-        context: { repo, issueNumber, ...(deliveryId === undefined ? {} : { deliveryId }) },
+        context: { repo, issueNumber, deliveryId },
       });
       return { value: "accepted" };
     }

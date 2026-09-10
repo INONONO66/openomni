@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, expectTypeOf, test } from "bun:test";
+import { Input, RecordedFact } from "../src/ledger/schema.js";
+import type { Input as InputType, RecordedFact as RecordedFactType } from "../src/ledger/schema.js";
 import {
   Alarm,
   canonicalDigest,
@@ -6,11 +8,33 @@ import {
   LedgerAction,
   LedgerSession,
   PolicyRow,
+  type Tool,
+  type PlainObject,
 } from "../src/index.js";
 
 const payload = { encodingVersion: 1, value: { text: "hello" } } as const;
 
 describe("L0 ledger protocol", () => {
+  test("changed payload fields retain the plain-object contract", () => {
+    expectTypeOf<InputType["data"]>().toEqualTypeOf<PlainObject>();
+    expectTypeOf<RecordedFactType["data"]>().toEqualTypeOf<PlainObject>();
+    expectTypeOf<Tool.Spec["inputSchema"]>().toEqualTypeOf<PlainObject>();
+  });
+
+  test("rejects non-plain ledger input data", () => {
+    const values = [() => "nope", new Date(), new (class Example {})(), { [Symbol("key")]: 1 }];
+    for (const data of values) {
+      expect(Input.safeParse({ streamId: "s", type: "t", data }).success).toBe(false);
+    }
+  });
+
+  test("rejects non-plain recorded fact data", () => {
+    const values = [() => "nope", new Date(), new (class Example {})(), { [Symbol("key")]: 1 }];
+    for (const data of values) {
+      expect(RecordedFact.safeParse({ streamId: "s", seq: 1, type: "t", data, timeCreated: 1 }).success).toBe(false);
+    }
+  });
+
   test("parses every confirmed action kind and enforces terminal exclusivity", () => {
     const kinds = [
       "prompt",

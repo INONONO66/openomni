@@ -123,6 +123,23 @@ describe("Tool.StateCompleted", () => {
     expect(metadata).toEqual({ nullable: null, nested: [[], {}] });
   });
 
+  test("rejects non-plain metadata values", () => {
+    const base = {
+      status: "completed",
+      input: {},
+      output: "done",
+      title: "Demo Task",
+      time: { start: 1, end: 2 },
+    };
+    for (const metadata of [
+      { nested: () => "nope" },
+      { nested: new Date() },
+      { nested: new (class Example {})() },
+    ]) {
+      expect(Tool.State.safeParse({ ...base, metadata }).success).toBe(false);
+    }
+  });
+
   test("rejects missing output", () => {
     expect(() =>
       Tool.State.parse({

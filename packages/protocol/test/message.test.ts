@@ -1,7 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { ZodError } from "zod";
 import { Message } from "../src/message/index.js";
-import type { PlainValue } from "../src/json.js";
 
 const base = { id: "p-1", sessionID: "ses-1", messageID: "msg-1" };
 
@@ -40,8 +39,7 @@ describe("Message.TextPart", () => {
       text: "hello",
       metadata: { nullable: null, nested: [[], {}] },
     });
-    const metadata: Record<string, PlainValue> = part.metadata ?? {};
-    expect(metadata).toEqual({ nullable: null, nested: [[], {}] });
+    expect(part.metadata).toEqual({ nullable: null, nested: [[], {}] });
   });
 
   test("rejects missing text", () => {
