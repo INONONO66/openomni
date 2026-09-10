@@ -425,12 +425,26 @@ describe("onboarding", () => {
     ).rejects.toThrow("1 to 65535");
   });
 
-  test.each(["1", "65535", "3e3", "0xBB8"])("onboarding uses the startup parser for %s", async (port) => {
+  test.each(["1", "80", "65535"])("onboarding accepts decimal port %s", async (port) => {
     const entries = await gatherOnboarding(scriptedAsk({
       "Model id": "m", "Model API key": "k", "WebSocket port": port,
     }));
     expect(entries.find((entry) => entry.key === "OPENOMNI_WS_PORT")?.value).toBe(port);
   });
+
+  test.each(["1e2", "0x50", "+80", "80.0", "65536", "invalid", "0"])(
+    "onboarding rejects non-decimal or out-of-range port %s with the original error contract",
+    async (port) => {
+      const result = gatherOnboarding(scriptedAsk({
+        "Model id": "m", "Model API key": "k", "WebSocket port": port,
+      }));
+      await expect(result).rejects.toMatchObject({
+        constructor: Error,
+        name: "Error",
+        message: "WebSocket port must be an integer from 1 to 65535",
+      });
+    },
+  );
 
   test("secret prompts are flagged so the terminal never echoes them", async () => {
     const secretQuestions: string[] = [];
