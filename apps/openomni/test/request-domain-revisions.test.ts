@@ -1,43 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { PersonStore, Storage } from "@openomni/ledger";
-import { type PlainValue, SessionTransition } from "@openomni/protocol";
+import type { PlainValue } from "@openomni/protocol";
+import { approvalRequest } from "./helpers/approval-request";
 import { requestDomainRevisions } from "../src/tools/core/request-domain-revisions";
 
 beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
 afterEach(() => Storage.reset());
-
-function request(
-  parsedInput: PlainValue,
-  domainRevisions: Record<string, number>,
-): SessionTransition.Request {
-  return SessionTransition.Request.parse({
-    requestId: "request",
-    sessionId: "session",
-    turnId: null,
-    callId: "call",
-    mode: "approval",
-    parsedInput,
-    inputHash: "input",
-    effectHash: "effect",
-    generation: 1,
-    toolsGeneration: 1,
-    toolsHash: "tools",
-    systemHash: "system",
-    domainRevisions,
-    deadline: 1000,
-    expectedResponders: ["owner"],
-    correlation: {},
-    allowedActions: ["report_result"],
-    bindingDigest: "binding",
-    resolution: "first",
-    threshold: 1,
-    seenReplyIds: [],
-    replies: [],
-    state: "open",
-    outcome: null,
-    createdAt: 1,
-  });
-}
 
 const manifest = {
   id: "person:sunwoo",
@@ -47,7 +15,7 @@ const manifest = {
 };
 
 test("contact_add reads back the live Person revision, absent as -1", () => {
-  const declare = request(
+  const declare = approvalRequest(
     { operation: { op: "contact_add", args: { manifest } } },
     { [manifest.id]: -1 },
   );
@@ -63,7 +31,7 @@ test("contact_add reads back the live Person revision, absent as -1", () => {
 });
 
 test("a request without domain preconditions reads back nothing", () => {
-  expect(requestDomainRevisions(request({ operation: { op: "status", args: {} } }, {}))).toEqual(
+  expect(requestDomainRevisions(approvalRequest({ operation: { op: "status", args: {} } }, {}))).toEqual(
     {},
   );
 });
@@ -75,7 +43,7 @@ test("domain preconditions on an unrecognized operation fail closed", () => {
     "not-an-input",
   ];
   for (const parsedInput of inputs) {
-    expect(() => requestDomainRevisions(request(parsedInput, { persons: 1 }))).toThrow(
+    expect(() => requestDomainRevisions(approvalRequest(parsedInput, { persons: 1 }))).toThrow(
       "unrecognized request domain preconditions: request",
     );
   }

@@ -1,4 +1,8 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { measuredEntry } from "./helpers/measured-entry";
 import type { SessionTransition } from "@openomni/protocol";
 import { createProcessSessionTransport } from "../src/composition/process-session";
 import { bounded } from "./helpers/protected-dispatch";
@@ -53,6 +57,28 @@ test("an answer whose principal is not the authenticated child is refused", asyn
     "process answer principal does not match its authenticated child",
   );
   expect(f.answers).toEqual([]);
+});
+
+test("native process entry validates and releases a request for a missing durable session", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "openomni-missing-session-"));
+  const request = {
+    sessionId: "MISSING_SESSION_SENTINEL",
+    dbPath: join(directory, "storage.sqlite"),
+    model: { provider: "anthropic", id: "fixture" },
+    apiKey: "fixture-key",
+  };
+  try {
+    const child = await measuredEntry(
+      new URL("../src/process-entry.ts", import.meta.url),
+      { PATH: process.env.PATH ?? "/usr/bin:/bin", OPENOMNI_DISABLE_MODELS_FETCH: "1" },
+      `${JSON.stringify(request)}\n`,
+    );
+    expect(child.exitCode).toBe(1);
+    expect(child.stderr).toContain(request.sessionId);
+    expect(child.stdout).not.toContain('"sessionIds"');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("a child exiting without settling surfaces its exit code", async () => {

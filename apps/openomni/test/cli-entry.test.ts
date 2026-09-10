@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCliDeps, main } from "../src/cli/main";
 import { replaceEnvironment } from "./helpers/environment";
+import { measuredEntry } from "./helpers/measured-entry";
 
 const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
 const directories: string[] = [];
@@ -302,6 +303,32 @@ describe("real CLI entry", () => {
     expect(child.exitCode).toBe(1);
     expect(child.stdout).toBe("");
     expect(child.stderr).toContain("openomni");
+  });
+
+  test("native entry coverage executes the real main guard", async () => {
+    const child = await measuredEntry(new URL("../src/cli/main.ts", import.meta.url), appEnv(tempHome()));
+    expect(child.exitCode).toBe(0);
+    expect(child.stdout).toMatch(/openomni start\s/);
+  });
+
+  test.each(["linux", "win32"])("platform admission %s", async (platform) => {
+    const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+    if (descriptor === undefined) throw new Error("platform descriptor missing");
+    const home = tempHome();
+    const restore = replaceEnvironment(appEnv(home));
+    Object.defineProperty(process, "platform", { value: platform, configurable: true });
+    try {
+      if (platform === "win32") {
+        expect(() => createCliDeps(home)).toThrow();
+      } else {
+        const deps = createCliDeps(home);
+        expect(deps.target.platform).toBe("linux");
+        expect((await deps.doctorPorts()).lingerEnabled).toBe(true);
+      }
+    } finally {
+      Object.defineProperty(process, "platform", descriptor);
+      restore();
+    }
   });
 
   test("exported main uses the same process adapters", async () => {

@@ -29,6 +29,7 @@ type SendMessageInput = z.output<ReturnType<typeof createSendMessageTool>["input
 export function messageFixture(
   role: LedgerSession.Role = "resident",
   messaging?: OutboundMessaging,
+  tools: Parameters<typeof messageMaterialization>[0]["tools"] = [],
 ) {
   const directory = mkdtempSync(join(tmpdir(), "message-policy-"));
   const dbPath = join(directory, "test.sqlite");
@@ -55,7 +56,7 @@ export function messageFixture(
           parentId,
           role: childRole,
           runner,
-          tools: [],
+          tools,
           preset: "",
           at: 100,
         }),

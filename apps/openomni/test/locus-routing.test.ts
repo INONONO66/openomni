@@ -46,6 +46,7 @@ async function fixture(
   remote: boolean,
   run: (api: {
     root: string;
+    machine: MachineHandle;
     rawExec: MachineHandle["exec"];
     endpointCalls: () => { get: number; exec: number };
     path: (name: string) => string;
@@ -132,6 +133,7 @@ async function fixture(
     let call = 0;
     await run({
       root,
+      machine: handle,
       rawExec: handle.exec,
       endpointCalls: () => ({
         get: spies.get.mock.calls.length,
@@ -189,6 +191,9 @@ for (const remote of [false, true]) {
           paths: [file],
           truncated: true,
         });
+        const renderedFind = await model("find", { path: path("."), pattern: "*", limit: 1 });
+        expect(renderedFind.output.split("\n")[0]).toBe(file);
+        expect(renderedFind.output).toContain("[truncated:");
         // A walk root must itself be a regular file or directory; symlinks are never followed.
         expect(await model("find", { path: path("loop"), pattern: "*" })).toMatchObject({
           isError: true,
@@ -377,6 +382,22 @@ test("R3 real daemon Unicode read preserves cells and reports exact dropped byte
       `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
     );
     expect(Buffer.from(result.output, "utf8").toString("utf8")).toBe(result.output);
+  });
+});
+
+test("a truncated remote read without progress is refused instead of looping", async () => {
+  await fixture(true, async ({ machine, path, model }) => {
+    const read = spyOn(machine.fs, "read").mockResolvedValue({
+      op: "read", data: new Uint8Array(), bytesRead: 0, size: 1, truncated: true,
+    });
+    try {
+      const result = await model("read", { path: path("stalled") });
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain("remote read made no progress");
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      read.mockRestore();
+    }
   });
 });
 

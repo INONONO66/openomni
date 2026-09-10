@@ -86,14 +86,6 @@ export function createResident(options: ResidentOptions) {
             systemPrompt: input.system,
             tools,
             toolChoice: tools.length === 0 ? "none" : "auto",
-            toolExecutor: (call, context) =>
-              evidenceOnly
-                ? Promise.resolve(refuseEvidenceOnly(call))
-                : dispatcher.execute(call, {
-                    sessionId: input.sessionId,
-                    turnId: input.turnId,
-                    ...(context?.signal === undefined ? {} : { signal: context.signal }),
-                  }),
             toolWave: (calls, signal) =>
               evidenceOnly
                 ? Promise.resolve(calls.map(refuseEvidenceOnly))

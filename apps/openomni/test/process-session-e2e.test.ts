@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { ownerStart } from "./helpers/owner-start";
-import { Bus } from "@openomni/agent";
+import { Bus, sessionTool } from "@openomni/agent";
+import { createTools } from "../src/tools/core/catalog";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { rmSync } from "node:fs";
 import { serveProcessSession } from "../src/process-entry";
@@ -11,28 +12,36 @@ import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 
 const suite = residentSuite();
-function response(): Response {
-  const block = { type: "text", text: "" };
-  const delta = { type: "text_delta", text: "PROCESS_SENTINEL" };
+function response(target?: string): Response {
+  const block = target === undefined
+    ? { type: "text", text: "" }
+    : { type: "tool_use", id: "process-tool", name: "send_message", input: {} };
+  const delta = target === undefined
+    ? { type: "text_delta", text: "PROCESS_SENTINEL" }
+    : { type: "input_json_delta", partial_json: JSON.stringify({
+        to: { kind: "session", id: target }, message: "PROCESS_TOOL_SENTINEL",
+      }) };
   const frames = [
     messageStart(crypto.randomUUID(), "claude-opus-4-5", 4),
     { type: "content_block_start", index: 0, content_block: block },
     { type: "content_block_delta", index: 0, delta },
     { type: "content_block_stop", index: 0 },
-    ...messageEnd("end_turn", 2),
+    ...messageEnd(target === undefined ? "end_turn" : "tool_use", 2),
   ];
   return sseResponse(frames);
 }
 
-test("process-session entry preserves the commissioned deadline and reports the committed parent", async () => {
-  const fixture = messageFixture();
+test.each([false, true])("process-session entry preserves deadline and parent with tool send %s", async (toolSend) => {
+  const fixture = messageFixture("resident", undefined,
+    toolSend ? createTools({}, { sessionId: "worker", role: "worker" }).map(sessionTool) : [],
+  );
   let requests = 0;
   const provider = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch: () => {
       requests += 1;
-      return response();
+      return response(toolSend && requests === 1 ? "sender" : undefined);
     },
   });
   const deadline = Date.now() + 60_000;
@@ -43,7 +52,7 @@ test("process-session entry preserves the commissioned deadline and reports the 
           to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
           type: "message",
           content: "work",
-          deadline,
+          ...(toolSend ? {} : { deadline }),
           replyTo: "process-original",
         })
       ).isError,
@@ -62,8 +71,9 @@ test("process-session entry preserves the commissioned deadline and reports the 
       (ids) => notified.push(...ids),
     );
     Storage.initialize({ dbPath: fixture.dbPath });
-    expect(requests).toBe(1);
+    expect(requests).toBe(toolSend ? 2 : 1);
     expect(notified).toContain("sender");
+    expect(SessionHandleStore.inboxRows("sender").filter((row) => row.content === "PROCESS_TOOL_SENTINEL")).toHaveLength(toolSend ? 1 : 0);
     const received = SessionHandleStore.inboxRows("sender").filter(
       (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
     );
@@ -103,12 +113,13 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     }),
   );
   let requests = 0;
+  let parentSessionId = "";
   const provider = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch: () => {
       requests += 1;
-      return response();
+      return response(requests === 1 ? parentSessionId : undefined);
     },
   });
   suite.defer(() => provider.stop(true));
@@ -126,6 +137,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     llm: {
       resolveModel: fakeProviderModel,
       run: async (input, sink) => {
+        parentSessionId = input.trace.sessionId;
         if (!commissioned) {
           const output = requestToolStep(input, sink, {
             id: "process-send",
@@ -153,7 +165,8 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
   const replies = SessionHandleStore.inboxRows(child.parentId).filter((row) =>
     row.id.endsWith(":reply"),
   );
-  expect(requests).toBe(1);
+  expect(requests).toBe(2);
+  expect(SessionHandleStore.inboxRows(child.parentId).some((row) => row.content === "PROCESS_TOOL_SENTINEL")).toBe(true);
   expect(replies).toHaveLength(1);
   expect(replies[0]?.content).toBe("PROCESS_SENTINEL");
   expect(replies[0]?.origin.value).toMatchObject({
