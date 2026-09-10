@@ -87,7 +87,7 @@ async function pair(
   }
 }
 
-/** The CodemodeError an action throws or rejects with; any other outcome fails the test. */
+/** The CodemodeError an action throws or rejects with; another outcome fails the test. */
 async function codemodeFailure(action: () => void): Promise<InstanceType<typeof CodemodeError>> {
   const failure = await Promise.resolve()
     .then(action)

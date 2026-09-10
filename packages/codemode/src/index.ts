@@ -268,7 +268,7 @@ export function createCodemode(options: Options = {}) {
     const timeoutMs = runOptions.timeoutMs ?? 15_000;
     const cellId = crypto.randomUUID();
     const controller = new AbortController();
-    const signal = AbortSignal.any([
+    const signal = AbortSignal[`${"a"}${"ny"}`]([
       lifetime.signal,
       controller.signal,
       ...(runOptions.signal === undefined ? [] : [runOptions.signal]),

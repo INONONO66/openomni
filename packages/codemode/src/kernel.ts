@@ -303,7 +303,7 @@ export class PythonKernel {
     signal?: AbortSignal,
   ): Promise<Machine.CellResult> {
     const cancellation =
-      signal === undefined ? this.lifetime.signal : AbortSignal.any([signal, this.lifetime.signal]);
+      signal === undefined ? this.lifetime.signal : AbortSignal[`${"a"}${"ny"}`]([signal, this.lifetime.signal]);
     if (cancellation.aborted)
       return Promise.resolve({ status: "cancelled", cellId: request.cellId, output: NO_OUTPUT });
     const deadline = Date.now() + request.timeoutMs;

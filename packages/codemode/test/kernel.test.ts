@@ -183,9 +183,13 @@ describe("code-mode kernel substrate", () => {
     try {
       await expect(
         kernel.run({ cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 }, () =>
-          Promise.resolve(Machine.ToolCallResult.parse({ status: "completed", value: 1n })),
+          (() => {
+            const answer = Machine.ToolCallResult.parse({ status: "completed", value: "ok" });
+            Reflect.set(answer, "value", 1n);
+            return Promise.resolve(answer);
+          })(),
         ),
-      ).resolves.toMatchObject({ status: "raised" });
+      ).rejects.toMatchObject({ message: "driver write failed" });
     } finally {
       await kernel.close();
     }
