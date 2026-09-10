@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,6 +37,7 @@ test("PTY callback faults surface a typed boundary failure", async () => {
 
 test("owned PTY drains the final UTF-8 line before reporting the child's exit status", async () => {
   const exited = eventSignal<number>("PTY drained exit");
+  const close = spyOn(Bun.Terminal.prototype, "close");
   const lines: string[] = [];
   const source = commandSource(
     "printf '\\342\\230\\203 final'; exit 7",
@@ -47,8 +48,16 @@ test("owned PTY drains the final UTF-8 line before reporting the child's exit st
   try {
     expect(await exited.promise).toBe(7);
     expect(lines).toEqual(["\u2603 final"]);
-  } finally {
+    expect(close).toHaveBeenCalledTimes(1);
     await source.close();
+    await source.close();
+    expect(close).toHaveBeenCalledTimes(1);
+  } finally {
+    try {
+      await source.close();
+    } finally {
+      close.mockRestore();
+    }
   }
 });
 

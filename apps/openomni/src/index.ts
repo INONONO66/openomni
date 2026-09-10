@@ -335,7 +335,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         ? processSessions.wake(id)
         : wakeSession(id, resident.runnerFor(row), sessionRuntime);
     };
-    const residentGateway = createResidentGateway(
+    gateway = createResidentGateway(
       {
         inbox: { commit: commitMessageInbox },
         prepare: prepareMessage(resident.materialize),
@@ -379,8 +379,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
             ),
       },
     );
-    gateway = residentGateway;
-    await composer.mount("gateway", (ctx) => ctx.effect(residentGateway.close));
     const alarmStore = Storage.get().alarms;
     if (alarmStore === undefined) throw new Error("alarm storage unavailable at boot");
     const alarms = createAlarmWorker({
