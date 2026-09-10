@@ -622,6 +622,7 @@ class Provenance {
       if (
         !local &&
         !native &&
+        !this.knownExternalEventSource(receiver) &&
         !this.externalEventOrigin(receiver) &&
         !this.externalEvents.has(call) &&
         !this.domEventTarget(receiver, true)
@@ -1349,6 +1350,17 @@ class Provenance {
     }
     return false;
   }
+  // A platform-owned source resolves registration, not delivery. AbortSignal
+  // still needs an abort producer; keep controller identity in runtimeValues.
+  private knownExternalEventSource(receiver: ts.Node): boolean {
+    const symbol = this.checker.getTypeAtLocation(receiver).getSymbol();
+    return Boolean(
+      symbol?.name === "AbortSignal" &&
+        symbol.declarations?.some((node) =>
+          /typescript\/lib\/lib\.dom\.d\.ts$/.test(node.getSourceFile().fileName),
+        ),
+    );
+  }
   private nativeEventContract(receiver: ts.Node, registration?: ts.CallExpression) {
     const type = this.checker.getTypeAtLocation(receiver),
       symbol = type.getSymbol();
@@ -1359,8 +1371,6 @@ class Provenance {
       (node) =>
         (symbol.name === "Process" &&
           /@types\/node\/process\.d\.ts$/.test(node.getSourceFile().fileName)) ||
-        (symbol.name === "AbortSignal" &&
-          /typescript\/lib\/lib\.dom\.d\.ts$/.test(node.getSourceFile().fileName)) ||
         (["App", "BrowserWindow"].includes(symbol.name) &&
           /electron\/electron\.d\.ts$/.test(node.getSourceFile().fileName)),
     );
@@ -1389,11 +1399,9 @@ class Provenance {
         }
       });
     const events =
-      symbol?.name === "AbortSignal"
-        ? new Set(["abort"])
-        : symbol?.name === "Process"
-          ? this.processEvents(source, declared)
-          : symbol?.name === "BrowserWindow"
+      symbol?.name === "Process"
+        ? this.processEvents(source, declared)
+        : symbol?.name === "BrowserWindow"
           ? this.windowEvents(receiver)
           : this.appEvents(registration);
     return {
