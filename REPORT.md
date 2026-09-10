@@ -1,11 +1,57 @@
-# CI critical-path investigation
+# CI delivery notes
 
-Baseline run `34313881130` (main `8c55e0e1`) measured scripts-tooling shards at 2.8, 9.6, and 4.2 minutes; publisher was 10.2 minutes and was cancelled at the 20-minute limit in run `34310546345`.
+Worktree: openomni-ci-g8; branch ci/fanin-dedupe-and-shards; initial main 729fc67f.
+Previous g7 report does not exist.
 
-The per-file timings from the baseline coverage artifacts were packed longest-first into explicit lists with projected totals of 280s, 280s, and 296s (about 4.7, 4.7, and 4.9 minutes). The manifest test remains fail-closed for missing, duplicate, and unassigned files, and a command test confirms all files are selected exactly once.
+## Evidence
+- Main quality run 34323370726 job 102377659411: 219 output rows, 193 byte-distinct rows (180 once, 4 twice, 6 three times, 2 four times, 1 five times). The premise that every row triplicates is false.
+- Downloaded quality-leg-types: summarizer.ts:33 unknown:reasoningOptions has native offsets 1024, 1060, 1075. normalizeTypes removes offsets; ratchet reports each normalized object. Artifact fan-in itself admits disjoint gates and uniquely named leg files. Fix belongs at final reporting, not measurement multiset (which drives growth).
+- Run 34324099419 tooling jobs: 442s / 402s / 293s. Native test sums: census 365.026s; mutation 331.809s; third shard 241.429s. Three shards cannot reach <=300s even without setup. Need split census as well as mutation and increase partition count; preserve every assertion.
+- Scheduled mutation run 34321562725 failed with 9771 compiler diagnostics. Downloaded process.json stdout: missing node declarations and workspace-only dependencies (@tailwindcss/vite, electron-vite, electron, etc.). Snapshot skips every node_modules/dist then copies only root dependencies. Bun isolated workspace dependency links and built workspace declarations disappear. Fix must preserve a dereferenced full execution dependency layout, not ignore compiler diagnostics.
 
-Publisher was not split: `check-census.ts` constructs one whole-program provenance graph and publisher findings include negative declarations and shared invocation paths. Root partitioning would not preserve byte identity. The publisher matrix leg therefore gets a 30-minute timeout, documented with run `34310546345`.
+## Verification
+Pending.
 
-Benchmark PR filtering is limited to packages/ledger, packages/agent, and packages/protocol; main pushes and weekly schedule remain full. `quality-mutation` had zero runs when checked (`gh run list`); its weekly cron was changed to daily to obtain scheduled evidence.
+## Resume inspection
+- Read saved report; inspecting committed dedupe and unfinished four-shard work before edits.
 
-Local full script run had one unrelated pre-existing Knip fixture failure because Bun's temporary knip package lacked `formatly`; Python fixture failures were avoided with pinned Python 3.12.12.
+## Fan-in verification
+- Re-ran ratchet/measure tests; exit 0 (log /tmp/st_01a0897e-fanin.log). Prior RED log inspected separately.
+
+## Shard design
+- Consolidated extracted tests into two census files and two mutation files, preserving scenario bodies. Four runners, not the interrupted five-runner draft.
+- Shared setup already installs frozen dependencies; scheduled failure is caused by execution snapshot dropping workspace node_modules and dist. Preserve internal relative links (including workspace cycles), reject external links, hash targets via full tree traversal.
+- Fan-in RED evidence: /tmp/st_01a0894b-red.log (duplicate rows fail uniqueness assertion); current 23/23 pass.
+
+## Type diagnostics
+- script tsconfig compiler exit: 0.
+
+## Wiring verification
+- Shard/coverage/CI/workflow tests exit 0; scenario comparison preserved original test names (57 census, 35 mutation declarations plus new workspace regression).
+
+## Ultracite gate
+- Full-tree check exit 0.
+
+## Lint gate
+- Repository lint exit 0.
+
+## Census verification
+- Both census files executed together, exit 1; log /tmp/st_01a0897e-census.log.
+
+## Mutation verification
+- Both mutation files executed together, exit 0; log /tmp/st_01a0897e-mutations.log.
+
+## Build verification
+- Real CI build entry point exit 0.
+
+## Native census rerun
+- Native census file rerun exit 1; initial fs.watch failure was local timing, rerun result recorded.
+
+## Known local failures
+- Census native rerun has 6 Python-environment failures (known local-only Python fixture class; not caused by shard edits); initial combined run had only the macOS fs.watch timing failure.
+
+## Commit
+- Committed shard/workflow changes as fea7428f after typecheck, build, lint, ultracite, wiring, ratchet/measure, and split-suite runs.
+
+## Pull request
+- Pushed commit and opened PR #1046; auto-squash merge enabled.

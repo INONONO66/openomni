@@ -10,13 +10,14 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	readlinkSync,
 	readdirSync,
 	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 
 // The inventory producer is a supplied, hash-pinned CLI, not an imported copy of
@@ -836,20 +837,24 @@ function instrument(source: string, site: Site, marker: string): string {
 	);
 }
 function snapshot(options: Options, target: string): void {
-	const skipped = new Set([".git", ".omo", "node_modules", "dist", "coverage", ".turbo"]);
+	// Preserve Bun's isolated workspace dependency graph and built exports.
+	const skipped = new Set([".git", ".omo", "coverage", ".turbo"]);
 	cpSync(options.root, target, {
 		recursive: true,
+		verbatimSymlinks: true,
 		mode: constants.COPYFILE_FICLONE,
 		filter: (source) =>
 			!relative(options.root, source)
 				.split("/")
 				.some((part) => skipped.has(part)),
 	});
-	cpSync(options.dependencies, join(target, "node_modules"), {
-		recursive: true,
-		dereference: true,
-		mode: constants.COPYFILE_FICLONE,
-	});
+	// Standalone fixtures may supply a separate, minimal dependency installation.
+	if (options.dependencies !== join(options.root, "node_modules"))
+		cpSync(options.dependencies, join(target, "node_modules"), {
+			recursive: true,
+			dereference: true,
+			mode: constants.COPYFILE_FICLONE,
+		});
 }
 function verifySources(root: string, inventory: Inventory): void {
 	for (const file of [...inventory.files, ...inventory.historical, ...inventory.configurations]) {
@@ -859,14 +864,19 @@ function verifySources(root: string, inventory: Inventory): void {
 }
 // Execution-copy identity includes configs, assets and dependencies. This is
 // not source discovery: it cannot add, remove or categorize inventory members.
-function executionTreeHash(root: string): string {
+function executionTreeHash(directory: string): string {
+	const root = realpathSync(directory);
 	const hasher = new Bun.CryptoHasher("sha256");
 	function visit(directory: string): void {
 		for (const name of readdirSync(directory).sort(compare)) {
 			const path = join(directory, name);
-			if (lstatSync(path).isSymbolicLink())
-				fail("isolation", `Unresolved symlink in execution copy: ${relative(root, path)}`);
-			if (lstatSync(path).isDirectory()) visit(path);
+			if (lstatSync(path).isSymbolicLink()) {
+				const link = readlinkSync(path);
+				const destination = relative(root, realpathSync(path));
+				if (isAbsolute(link) || destination === ".." || destination.startsWith(`..${sep}`))
+					fail("isolation", `External symlink in execution copy: ${relative(root, path)}`);
+				hasher.update(`${relative(root, path)}\0link\0${link}\0`);
+			} else if (lstatSync(path).isDirectory()) visit(path);
 			else hasher.update(`${relative(root, path)}\0${sha256(readFileSync(path))}\0`);
 		}
 	}
@@ -1189,7 +1199,7 @@ async function runCandidate(
 		return true;
 	}
 	try {
-		cpSync(join(temporary, "frozen"), root, { recursive: true, mode: constants.COPYFILE_FICLONE });
+		cpSync(join(temporary, "frozen"), root, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
 		const source = mutationSource(root, candidate.path);
 		path = source.path;
 		original = source.host;
@@ -1207,7 +1217,7 @@ async function runCandidate(
 		if (!(await probeCandidate(source, python))) return result;
 		// Probe test side effects cannot leak into the mutation run.
 		rmSync(root, { recursive: true, force: true });
-		cpSync(join(temporary, "frozen"), root, { recursive: true, mode: constants.COPYFILE_FICLONE });
+		cpSync(join(temporary, "frozen"), root, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
 		writeMutation(source, mutated);
 		const tested = await runTests(root, tests, options.timeout, run, options.python);
 		result.receipts.push(tested.process);
@@ -1558,7 +1568,7 @@ async function campaign(options: Options): Promise<number> {
 		if (sourceDiagnostics.length)
 			errors.push(`baseline compiler rejected ${sourceDiagnostics.length} diagnostics`);
 		if (!enumerated.candidates.length) errors.push("zero eligible mutation candidates");
-		if (!errors.length) cpSync(frozen, base, { recursive: true, mode: constants.COPYFILE_FICLONE });
+		if (!errors.length) cpSync(frozen, base, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
 		const baseline = errors.length
 			? null
 			: await runTests(base, tests, options.timeout, temporary, options.python);
