@@ -390,7 +390,7 @@ function broken(receipt: ProcessReceipt): boolean {
 		(receipt.cleanupExit !== 0 && receipt.cleanupExit !== 1)
 	);
 }
-function programs(root: string, contract: Contract, inventory: Inventory): ts.Program[] {
+export function programs(root: string, contract: Contract, inventory: Inventory): ts.Program[] {
 	const items = contract.projects.map((path) => {
 		pathIn(root, path);
 		try {
@@ -409,8 +409,7 @@ function programs(root: string, contract: Contract, inventory: Inventory): ts.Pr
 			ts.createProgram(remaining, {
 				strict: true,
 				noEmit: true,
-				allowJs: true,
-				checkJs: true,
+				allowJs: true, checkJs: false, // untyped inventory JS is outside compiler contracts
 				rootDir: root,
 				target: ts.ScriptTarget.ES2022,
 				module: ts.ModuleKind.ESNext,
@@ -426,7 +425,7 @@ const diagnosticHost: ts.FormatDiagnosticsHost = {
 	getCurrentDirectory: () => process.cwd(),
 	getNewLine: () => "\n",
 };
-function diagnostics(items: ts.Program[]): string[] {
+export function diagnostics(items: ts.Program[]): string[] {
 	return items.flatMap((program) =>
 		ts
 			.getPreEmitDiagnostics(program)
@@ -864,23 +863,23 @@ function verifySources(root: string, inventory: Inventory): void {
 }
 // Execution-copy identity includes configs, assets and dependencies. This is
 // not source discovery: it cannot add, remove or categorize inventory members.
-function executionTreeHash(directory: string): string {
+function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {
+	for (const name of readdirSync(directory).sort(compare)) {
+		const path = join(directory, name);
+		if (lstatSync(path).isSymbolicLink()) {
+			const link = readlinkSync(path);
+			const destination = relative(root, realpathSync(path));
+			if (isAbsolute(link) || destination === ".." || destination.startsWith(`..${sep}`))
+				fail("isolation", `External symlink in execution copy: ${relative(root, path)}`);
+			hasher.update(`${relative(root, path)}\0link\0${link}\0`);
+		} else if (lstatSync(path).isDirectory()) visitExecutionTree(root, hasher, path);
+		else hasher.update(`${relative(root, path)}\0${sha256(readFileSync(path))}\0`);
+	}
+}
+export function executionTreeHash(directory: string): string {
 	const root = realpathSync(directory);
 	const hasher = new Bun.CryptoHasher("sha256");
-	function visit(directory: string): void {
-		for (const name of readdirSync(directory).sort(compare)) {
-			const path = join(directory, name);
-			if (lstatSync(path).isSymbolicLink()) {
-				const link = readlinkSync(path);
-				const destination = relative(root, realpathSync(path));
-				if (isAbsolute(link) || destination === ".." || destination.startsWith(`..${sep}`))
-					fail("isolation", `External symlink in execution copy: ${relative(root, path)}`);
-				hasher.update(`${relative(root, path)}\0link\0${link}\0`);
-			} else if (lstatSync(path).isDirectory()) visit(path);
-			else hasher.update(`${relative(root, path)}\0${sha256(readFileSync(path))}\0`);
-		}
-	}
-	visit(root);
+	visitExecutionTree(root, hasher, root);
 	return hasher.digest("hex");
 }
 type TestsReceipt = {
@@ -1015,7 +1014,7 @@ function defaultResult(candidate: Candidate, tests: string[], selected = true): 
 		restored: true,
 	};
 }
-function mutationSource(
+export function mutationSource(
 	root: string,
 	candidatePath: string,
 ): {
