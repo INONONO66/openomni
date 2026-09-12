@@ -8,13 +8,16 @@ type NativeInput = {
 	receipt?: string;
 	onStderr?: (chunk: Uint8Array) => void;
 };
+function formatErrors(errors: Json[]): string {
+	return errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, 400)).join("; ");
+}
 function structuredFailure(stdout: string): string | undefined {
 	try {
 		const parsed = decodeJson(stdout);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray(parsed.errors))
-			return parsed.errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, 400)).join("; ");
+			return formatErrors(parsed.errors);
 	} catch {
-		return undefined;
+		// Invalid child output falls through to raw stderr.
 	}
 	return undefined;
 }
