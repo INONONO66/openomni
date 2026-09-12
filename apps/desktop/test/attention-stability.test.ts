@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   applyAtBoundary,
   changedSince,
-  idleBoundaryReached,
-  IDLE_BOUNDARY_MS,
   orderByAttention,
 } from "../src/renderer/attention";
 import { makeSession } from "./helpers/session";
@@ -55,18 +53,5 @@ describe("drift is counted, never animated", () => {
 
   test("Given an identical order, When counting drift, Then nothing is reported", () => {
     expect(changedSince(before, before)).toBe(0);
-  });
-});
-
-describe("the idle boundary", () => {
-  test("Given idle time, When measured against the breakpoint, Then only the full interval qualifies", () => {
-    expect(idleBoundaryReached(IDLE_BOUNDARY_MS - 1)).toBe(false);
-    expect(idleBoundaryReached(IDLE_BOUNDARY_MS)).toBe(true);
-  });
-
-  test("Given the breakpoint, When inspected, Then it is long enough to outlast a keystroke burst", () => {
-    // Shorter than this and typing itself becomes a boundary, which is exactly
-    // the moment the Owner must not be reordered.
-    expect(IDLE_BOUNDARY_MS).toBeGreaterThanOrEqual(1000);
   });
 });

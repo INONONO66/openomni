@@ -9,7 +9,6 @@ import {
   createSession,
   cycleTab,
   forward,
-  historyMenuEntries,
   INITIAL_CLIENT_STATE,
   jumpTo,
   navigate,
@@ -20,6 +19,7 @@ import {
   setSidebarFloating,
   type Tab,
 } from "../src/renderer/state/store";
+import { historyMenuEntries } from "../src/renderer/state/selectors";
 
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);

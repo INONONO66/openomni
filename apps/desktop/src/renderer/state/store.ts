@@ -92,27 +92,6 @@ export function activeTab(state: ClientState): Tab | null {
   return state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
 }
 
-export function activePlace(state: ClientState): Place | null {
-  return activeTab(state)?.place ?? null;
-}
-
-export function tabTitle(tab: Tab, state: ClientState = consoleStore.state): string {
-  return titleOf(state, tab.place);
-}
-
-export function historyMenuEntries(
-  state: ClientState = consoleStore.state,
-): readonly { readonly id: string; readonly title: string }[] {
-  const tab = activeTab(state);
-  if (!tab) return [];
-  const { entries, cursor } = tab.history;
-  const newestCount = cursor < entries.length - 20 ? 19 : 20;
-  return entries
-    .map((place, index) => ({ id: String(index), title: titleOf(state, place) }))
-    .filter((_entry, index) => index >= entries.length - newestCount || index === cursor)
-    .reverse();
-}
-
 export function createSession(now: number = Date.now()): SessionId {
   const id = crypto.randomUUID();
   consoleStore.setState((state) => ({
@@ -334,17 +313,6 @@ function samePlace(a: Place, b: Place): boolean {
   return a.kind === "session" && b.kind === "session"
     ? a.sessionId === b.sessionId
     : a.kind === "route" && b.kind === "route" && a.route === b.route;
-}
-
-function titleOf(state: ClientState, place: Place): string {
-  switch (place.kind) {
-    case "session":
-      return (
-        state.sessions.find((session) => session.id === place.sessionId)?.title ?? place.sessionId
-      );
-    case "route":
-      return ROUTE_LABEL[place.route];
-  }
 }
 
 export const ROUTE_LABEL: Record<Route, string> = {

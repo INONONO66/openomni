@@ -6,10 +6,15 @@ import {
   ROUTE_LABEL,
   type Session,
   type SessionId,
+  type Tab,
 } from "./store";
 
 // Session arrays are immutable store snapshots; derived indexes must not own state or a clock.
 const indexes = new WeakMap<readonly Session[], ReadonlyMap<SessionId, Session>>();
+
+export function activePlace(state: ClientState): Place | null {
+  return activeTab(state)?.place ?? null;
+}
 
 export function sessionIndex(sessions: readonly Session[]): ReadonlyMap<SessionId, Session> {
   const existing = indexes.get(sessions);
@@ -17,6 +22,10 @@ export function sessionIndex(sessions: readonly Session[]): ReadonlyMap<SessionI
   const index = new Map(sessions.map((session) => [session.id, session]));
   indexes.set(sessions, index);
   return index;
+}
+
+export function tabTitle(tab: Tab, state: ClientState = consoleStore.state): string {
+  return placeTitle(tab.place, state);
 }
 
 export function historyMenuEntries(

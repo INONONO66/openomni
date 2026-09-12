@@ -10,7 +10,8 @@ import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
-import { activePlace, consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { activePlace } from "../src/renderer/state/selectors";
 import { installGlobals } from "./helpers";
 
 test("mounted shell restores preferences, navigates, creates and searches sessions", async () => {

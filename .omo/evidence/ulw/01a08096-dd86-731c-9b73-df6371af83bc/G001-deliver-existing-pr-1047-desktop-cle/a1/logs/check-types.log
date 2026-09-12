@@ -1,0 +1,5 @@
+$ tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.test.json
+test/app-tabs.fixture.tsx(39,3): error TS2339: Property 'historyMenuEntries' does not exist on type 'typeof import("/Users/ino/Develop/openomni-desktop-cleanup/apps/desktop/src/renderer/state/store")'.
+test/app-tabs.fixture.tsx(370,31): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+test/shell-interactions.test.tsx(14,10): error TS2305: Module '"../src/renderer/state/selectors"' has no exported member 'activePlace'.
+test/store.test.ts(25,10): error TS2305: Module '"../src/renderer/state/selectors"' has no exported member 'activePlace'.

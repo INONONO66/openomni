@@ -1,0 +1,687 @@
+bun test v1.4.1 (4661e494f)
+
+apps/desktop/test/preload-api.test.ts:
+(pass) DesktopApi contract > versions carry the three runtime identifiers [0.10ms]
+(pass) DesktopApi contract > Given the api, When the renderer asks for the gateway, Then it gets an endpoint or nothing [0.13ms]
+(pass) DesktopApi contract > Given the ipc channel name, When read, Then both sides share one literal [0.01ms]
+
+apps/desktop/test/store.test.ts:
+(pass) session creation and titles > creates a placeholder record in the default project without opening a view [0.35ms]
+(pass) session creation and titles > new-session action creates distinct records and fresh active tabs [0.27ms]
+(pass) session creation and titles > whitespace does not earn a title, while the first trimmed 40 code points do [0.25ms]
+(pass) session creation and titles > a literal placeholder prompt is earned and titles resolve live [0.22ms]
+(pass) selection, groups and drafts > explicit session selection reuses the already open view [0.14ms]
+(pass) selection, groups and drafts > project groups toggle independently [0.07ms]
+(pass) selection, groups and drafts > drafts stay with their sessions [0.06ms]
+(pass) tab history has browser semantics > back twice and forward once move the active cursor and place [0.18ms]
+(pass) tab history has browser semantics > a new place truncates forward entries [0.06ms]
+(pass) tab history has browser semantics > same-place selection neither pushes nor truncates forward history [0.03ms]
+(pass) tab history has browser semantics > integer cursor jumps do not push [0.07ms]
+(pass) tab history has browser semantics > empty strips and invalid boundaries leave state unchanged [0.09ms]
+(pass) the sidebar's width and mode > widths are clamped and rounded [0.05ms]
+(pass) the sidebar's width and mode > toggle closes and reopens, explicit state is supported [0.04ms]
+(pass) the sidebar's width and mode > toggling a floating reveal pins it [0.03ms]
+(pass) the sidebar's width and mode > navigation leaves search-owned floating reveal for App to dismiss [0.04ms]
+(pass) the sidebar's width and mode > unchanged reveal state does not churn
+
+apps/desktop/test/search-binding.test.tsx:
+(pass) search binding translates shortcuts, query edits and navigation into focus and selection [35.22ms]
+
+apps/desktop/test/select-transport.test.ts:
+(pass) the transport follows the endpoint > Given an endpoint, When selected, Then the gateway answers with a usable transport [0.15ms]
+(pass) the transport follows the endpoint > Given an endpoint with a token, When selected, Then it is offered as the auth subprotocol [0.10ms]
+(pass) the transport follows the endpoint > Given an endpoint without a token, When selected, Then no subprotocol is offered [0.03ms]
+(pass) the transport follows the endpoint > Given a token no subprotocol can carry, When selected, Then it is refused by name [0.08ms]
+(pass) the transport follows the endpoint > Given a token of ordinary credential characters, When selected, Then it is accepted [0.07ms]
+(pass) the token reaches the wire > Given a token, When the transport connects, Then the upgrade carries auth then the token [5.38ms]
+(pass) the token reaches the wire > Given no token, When the transport connects, Then the upgrade offers no protocol [2.29ms]
+
+apps/desktop/test/shell-interactions.test.tsx:
+(pass) mounted shell restores preferences, navigates, creates and searches sessions [171.81ms]
+
+apps/desktop/test/built-output-contract.test.ts:
+(pass) built desktop security contracts > built renderer retains the CSP [5.04ms]
+(pass) built desktop security contracts > built renderer keeps fonts local [1.47ms]
+(pass) built desktop security contracts > built preload keeps electron external [0.73ms]
+
+apps/desktop/test/search-tree.test.tsx:
+(pass) attention kind headers disambiguate repeated projects > mixed kinds show non-collapsible labels above each project group [15.25ms]
+(pass) attention kind headers disambiguate repeated projects > rest-only sessions keep the plain project tree without a kind label [0.13ms]
+(pass) the field is wired to the tree it filters > Given the sidebar, When rendered, Then the field is a combobox over a real element [0.11ms]
+(pass) the field is wired to the tree it filters > Given the sidebar, When rendered, Then it is labelled for a screen reader [0.01ms]
+(pass) the field is wired to the tree it filters > Given every session row, When rendered, Then each carries the id the field can point at [0.05ms]
+(pass) the field is wired to the tree it filters > Given the rows, When rendered, Then they are options inside the controlled element [0.02ms]
+(pass) the field is wired to the tree it filters > Given no active row, When rendered, Then the field points at nothing [0.02ms]
+(pass) the field is wired to the tree it filters > Given the field open with no query, When rendered, Then there is no count [0.02ms]
+(pass) the tree still reads as a tree under the search field > Given the sidebar, When rendered, Then the two depths survive [0.12ms]
+(pass) the tree still reads as a tree under the search field > Given a selection, When rendered, Then exactly one row is current [0.01ms]
+(pass) the tree still reads as a tree under the search field > Given every row, When rendered, Then its title survives the highlight split [0.03ms]
+(pass) the tree still reads as a tree under the search field > Given the field at rest, When rendered, Then no glyph run is emphasised
+(pass) the tree still reads as a tree under the search field > Given no query, When rendered, Then the selected row keeps the primary tone [0.11ms]
+(pass) the tree still reads as a tree under the search field > Given a match, When the same span markup is produced, Then this test would see it [0.20ms]
+
+apps/desktop/test/attention-stability.test.ts:
+(pass) order is applied at a focus boundary only > Given a new ideal order and no boundary, When applied, Then the shown order is held [0.10ms]
+(pass) order is applied at a focus boundary only > Given each boundary kind, When applied, Then the new order is adopted and the hint clears [0.03ms]
+(pass) order is applied at a focus boundary only > Given the ideal order has not moved, When held, Then no change is reported [0.02ms]
+(pass) drift is counted, never animated > Given rows swapped, When counting drift, Then both moved rows are reported [0.01ms]
+(pass) drift is counted, never animated > Given a session disappears, When counting drift, Then the loss is reported [0.04ms]
+(pass) drift is counted, never animated > Given an identical order, When counting drift, Then nothing is reported
+
+apps/desktop/test/window-bounds.test.ts:
+(pass) window bounds at the file boundary > Given no file, When parsed, Then the default size with no position [0.04ms]
+(pass) window bounds at the file boundary > Given malformed or undersized JSON, When parsed, Then the default [1.57ms]
+(pass) window bounds at the file boundary > Given valid bounds, When serialized and parsed, Then they round-trip [0.10ms]
+
+apps/desktop/test/desktop-bridge.test.ts:
+(pass) browser preview has no desktop bridge [0.13ms]
+(pass) malformed bridge methods fail at lookup [0.66ms]
+(pass) bridge validates gateway and preserves command delivery and disposal [1.16ms]
+
+apps/desktop/test/entry-wiring.test.ts:
+(pass) desktop entries register IPC before window creation and render without awaiting the gateway [11.15ms]
+
+apps/desktop/test/main-lifecycle.test.ts:
+(pass) main window lifecycle, owner routing and persistence (development=%s) [4.04ms]
+(pass) main window lifecycle, owner routing and persistence (development=%s) [2.35ms]
+
+apps/desktop/test/app.test.tsx:
+(pass) nothing open > Given no sessions, When the app renders, Then both columns say so and nothing is fabricated [7.61ms]
+(pass) nothing open > Given the endpoint still in flight, When the app renders, Then the window is already painted [2.17ms]
+(pass) empty routes > renders each non-session route as an honest empty column [7.21ms]
+(pass) one session > Given a created session, When the app renders, Then it is the header and the current row [3.60ms]
+(pass) one session > Given no gateway, When the app renders, Then the composer is disabled and says why [2.78ms]
+(pass) one session > Given the endpoint still in flight, When the app renders, Then the composer waits without a verdict [2.77ms]
+
+apps/desktop/test/renderer-csp.test.ts:
+(pass) the renderer's content security policy > Given the policy, When read, Then the document itself stays locked to its own origin [0.82ms]
+(pass) the renderer's content security policy > Given the policy, When read, Then the gateway's socket schemes are connectable [0.26ms]
+(pass) the renderer's content security policy > Given the policy, When read, Then bundled fonts may load from data URIs [0.21ms]
+(pass) the renderer's content security policy > Given the policy, When read, Then no remote origin is admitted [0.30ms]
+
+apps/desktop/test/app-tabs.test.ts:
+bun test v1.4.1 (4661e494f)
+
+apps/desktop/test/app-tabs.fixture.tsx:
+(pass) one frame survives session, route, empty and reopen; bridge subscribes once per mount [216.67ms]
+Received `true` for a non-boolean attribute `numeric`.
+
+If you want to write it to the DOM, pass a string instead: numeric="true" or numeric={value.toString()}.
+(pass) Sessions list ignores collapsed/filter state, keeps attention order and explicitly dedupes [94.72ms]
+(pass) Sessions list holds its order until a focus boundary after a phase update [40.09ms]
+An update to ScrollAreaRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+(pass) list selection targets its own active tab even when sidebar search was invoked elsewhere [53.13ms]
+(pass) SessionList renders real project/time metadata and an empty list without controls [3.07ms]
+(pass) search captures invocation once: existing B then unopened C targets A and preserves reveal [57.93ms]
+(pass) search uses then-active after invocation closes [32.83ms]
+(pass) search uses new tab after invocation closes [46.05ms]
+(pass) real close commands recover composer/panel/tab focus, inactive closure preserves editor [122.23ms]
+(pass) closing a composer onto a route focuses its tab rather than the removed panel [28.07ms]
+(pass) mounted history menu is newest first at the newest cursor with the current entry included once [117.01ms]
+(pass) mounted history menu is newest first at the oldest cursor with the current entry included once [80.61ms]
+(pass) pointer-pressing an inactive tab's close control leaves the editor focused [17.11ms]
+(pass) history stays local across live duplicate views and tab titles resolve current metadata [38.40ms]
+(pass) real Chat and gateway keep in-flight messages across switch, close and reopen; title earned at send [107.33ms]
+-------------------------------------------------------|---------|---------|-------------------
+File                                                   | % Funcs | % Lines | Uncovered Line #s
+-------------------------------------------------------|---------|---------|-------------------
+All files                                              |   76.06 |   79.54 |
+ apps/desktop/src/preload/validation.ts                |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/app.tsx                     |   87.50 |   96.23 | 271-277,279,286
+ apps/desktop/src/renderer/attention/index.ts          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/attention/order.ts          |   90.00 |   91.18 | 45-49,59
+ apps/desktop/src/renderer/attention/reason.ts         |  100.00 |   70.59 | 14,18-21
+ apps/desktop/src/renderer/attention/stability.ts      |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/chat/adapter.ts             |   75.00 |   57.50 | 41,73,75-81,83-88,91-93,103-133,160-161
+ apps/desktop/src/renderer/chat/gateway-transport.ts   |   70.59 |   75.83 | 44-45,54-55,76-80,107-109,123-127,139,150,168-171,179-184,193-194,211,226-228,235-238,243-245,257,268-271,276-277,294-295
+ apps/desktop/src/renderer/chat/select-transport.ts    |  100.00 |   25.00 | 48,50,53-59,61-66
+ apps/desktop/src/renderer/chat/session-content.tsx    |   77.78 |   98.90 | 79
+ apps/desktop/src/renderer/chat/turn-cost.ts           |   40.00 |   31.58 | 6,9-10,14,21-23,33-39,42-47,49-54
+ apps/desktop/src/renderer/search/filter.ts            |  100.00 |   73.58 | 106,127-128,131,133-142
+ apps/desktop/src/renderer/search/index.ts             |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/search/keyboard.ts          |   75.00 |   92.45 | 61,64,98,102
+ apps/desktop/src/renderer/search/score.ts             |   57.14 |   59.65 | 60,81-84,90,97-99,110-112,121-130,153
+ apps/desktop/src/renderer/shell/commands.ts           |  100.00 |   78.05 | 26-30,49-52
+ apps/desktop/src/renderer/shell/history.ts            |    0.00 |   25.00 | 3-5
+ apps/desktop/src/renderer/shell/place-icon.tsx        |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/row-id.ts             |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-glyph.ts      |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-list.tsx      |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-row.tsx       |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-secondary.tsx |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-tree.tsx      |   84.21 |   92.35 | 93-102,254-257
+ apps/desktop/src/renderer/shell/shortcuts.ts          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/use-search.ts         |   90.91 |   96.74 | 131-132,148
+ apps/desktop/src/renderer/state/desktop-bridge.ts     |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/state/provider.tsx          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/state/queries.ts            |   50.00 |   81.25 | 44-46
+ apps/desktop/src/renderer/state/selectors.ts          |   71.43 |   93.75 | 15,27
+ apps/desktop/src/renderer/state/shell-preferences.ts  |    0.00 |   28.57 | 19-23,27-31
+ apps/desktop/src/renderer/state/store.ts              |   90.74 |   87.78 | 125-132,136-142,218-223,343-347,358
+ apps/desktop/test/app-tabs.fixture.tsx                |   96.88 |  100.00 | 
+ apps/desktop/test/helpers/bridge.ts                   |   75.00 |  100.00 | 
+ apps/desktop/test/helpers/chat-server.ts              |  100.00 |  100.00 | 
+ apps/desktop/test/helpers/session.ts                  |  100.00 |  100.00 | 
+ packages/ui/src/composer.tsx                          |   66.67 |   73.86 | 22,24-29,34-37,39-43,45-48,50-51,53-59,61-62,64-69,71-72,76,78-79,97-98,180-181
+ packages/ui/src/console.tsx                           |  100.00 |  100.00 | 
+ packages/ui/src/history-menu.tsx                      |   75.00 |   96.72 | 99-100
+ packages/ui/src/icons/chevron.tsx                     |  100.00 |  100.00 | 
+ packages/ui/src/icons/sidebar-toggle.tsx              |  100.00 |  100.00 | 
+ packages/ui/src/index.ts                              |  100.00 |  100.00 | 
+ packages/ui/src/names.ts                              |  100.00 |  100.00 | 
+ packages/ui/src/primitives/button.tsx                 |  100.00 |  100.00 | 
+ packages/ui/src/primitives/code.tsx                   |    0.00 |   25.00 | 23-32,59-84
+ packages/ui/src/primitives/epoch-rule.tsx             |    0.00 |    1.67 | 3-60,65
+ packages/ui/src/primitives/gutter.tsx                 |    0.00 |   13.79 | 85-159
+ packages/ui/src/primitives/highlight.tsx              |  100.00 |  100.00 | 
+ packages/ui/src/primitives/props.ts                   |  100.00 |  100.00 | 
+ packages/ui/src/primitives/scroll-area.tsx            |   57.14 |   95.12 | 76,85
+ packages/ui/src/primitives/spinner.tsx                |    0.00 |   20.45 | 13-47
+ packages/ui/src/primitives/state.tsx                  |    0.00 |   10.94 | 15-71
+ packages/ui/src/primitives/surface.tsx                |  100.00 |  100.00 | 
+ packages/ui/src/sidebar-nav.tsx                       |   87.50 |  100.00 | 
+ packages/ui/src/sidebar.tsx                           |   42.86 |   73.89 | 15,58-66,69-77,144,251,254-265,280-285,289-294,297-304
+ packages/ui/src/status-glyph.tsx                      |  100.00 |  100.00 | 
+ packages/ui/src/tab-strip.tsx                         |   75.00 |   84.12 | 51-73,200-203
+ packages/ui/src/timeline/anchor.ts                    |  100.00 |  100.00 | 
+ packages/ui/src/timeline/markdown-block.tsx           |   33.33 |   36.07 | 35-56,73-77,82-89,91-92,102-103
+ packages/ui/src/timeline/spacing.ts                   |  100.00 |  100.00 | 
+ packages/ui/src/timeline/timeline.tsx                 |   64.29 |   72.56 | 43-47,134-142,163-166,191-200,211-220,224-230
+ packages/ui/src/timeline/tool-rows.tsx                |    0.00 |   11.83 | 107-124,129-206,224-291
+ packages/ui/src/timeline/turns.ts                     |   85.71 |   75.56 | 99-102,121-125,127,137
+ packages/ui/src/timeline/voice.tsx                    |  100.00 |  100.00 | 
+ packages/ui/src/timeline/work-group.ts                |    0.00 |    2.08 | 18-50,62-69,80-85
+ packages/ui/src/tree-row.tsx                          |  100.00 |  100.00 | 
+-------------------------------------------------------|---------|---------|-------------------
+
+ 15 pass
+ 0 fail
+ 108 expect() calls
+Ran 15 tests across 1 file. [1.65s]
+(pass) mounted App tab, search, focus and chat contracts [1677.41ms]
+
+apps/desktop/test/chat-adapter.test.ts:
+(pass) uiMessagesToTranscript > dynamic input is parsed before target projection: raw command [0.16ms]
+(pass) uiMessagesToTranscript > dynamic input is parsed before target projection: fallback.ts [0.15ms]
+(pass) uiMessagesToTranscript > dynamic input is parsed before target projection: first [0.02ms]
+(pass) uiMessagesToTranscript > dynamic input is parsed before target projection: last [0.02ms]
+(pass) uiMessagesToTranscript > dynamic input is parsed before target projection:  [0.01ms]
+(pass) uiMessagesToTranscript > dynamic input is parsed before target projection:  [0.17ms]
+(pass) uiMessagesToTranscript > dynamic input is parsed before target projection:  [0.04ms]
+(pass) uiMessagesToTranscript > cost duration 999 preserves unit boundaries [0.12ms]
+(pass) uiMessagesToTranscript > cost duration 1000 preserves unit boundaries [0.02ms]
+(pass) uiMessagesToTranscript > cost duration 61200 preserves unit boundaries [0.01ms]
+(pass) uiMessagesToTranscript > an empty ledger is empty, not a shape with holes in it [0.02ms]
+(pass) uiMessagesToTranscript > a user text part becomes the prompt node, keyed by the message [0.02ms]
+(pass) uiMessagesToTranscript > assistant parts keep arrival order: text, tool, text, tool [0.15ms]
+(pass) uiMessagesToTranscript > adjacent text parts merge into one answer, so paragraphs are one turn's prose [0.03ms]
+(pass) uiMessagesToTranscript > a streaming text part marks the answer as still being written [0.03ms]
+(pass) uiMessagesToTranscript > every tool state maps onto exactly one call outcome [0.15ms]
+(pass) uiMessagesToTranscript > a rejected approval is denied even before a terminal tool chunk arrives [0.04ms]
+(pass) uiMessagesToTranscript > a failed call carries its error text as the payload the chevron reveals [0.05ms]
+(pass) uiMessagesToTranscript > a blocked call docks a decision keyed by the APPROVAL, never the tool call [0.04ms]
+(pass) uiMessagesToTranscript > a data-epoch part becomes the ledger boundary it describes [0.03ms]
+(pass) uiMessagesToTranscript > parts the transcript has no row for are dropped, not thrown on [0.04ms]
+(pass) uiMessagesToTranscript > a system message contributes nothing to the ledger [0.01ms]
+(pass) uiMessagesToTranscript > metadata becomes the turn's cost, keyed by the turn the answer landed in [0.13ms]
+(pass) uiMessagesToTranscript > an answer with no metadata costs nothing rather than costing zero [0.08ms]
+
+apps/desktop/test/session-time.test.tsx:
+(pass) relative time at offset -1 uses a compact whole unit [0.03ms]
+(pass) relative time at offset 0 uses a compact whole unit
+(pass) relative time at offset 59999 uses a compact whole unit
+(pass) relative time at offset 60000 uses a compact whole unit
+(pass) relative time at offset 120000 uses a compact whole unit
+(pass) relative time at offset 14400000 uses a compact whole unit
+(pass) relative time at offset 259200000 uses a compact whole unit
+(pass) interrupted shares activity time and render clock across both surfaces [10.47ms]
+(pass) waiting_approval shares activity time and render clock across both surfaces [7.90ms]
+(pass) waiting_input shares activity time and render clock across both surfaces [7.89ms]
+(pass) running shares activity time and render clock across both surfaces [6.77ms]
+
+apps/desktop/test/gateway-endpoint.test.ts:
+(pass) the gateway endpoint is resolved from the environment > Given an explicit URL, When resolved, Then it is used verbatim [0.03ms]
+(pass) the gateway endpoint is resolved from the environment > Given no URL but a port, When resolved, Then loopback carries that port [0.02ms]
+(pass) the gateway endpoint is resolved from the environment > Given neither URL nor port, When resolved, Then the daemon's default port is used [0.01ms]
+(pass) the gateway endpoint is resolved from the environment > Given a token, When resolved, Then it rides alongside the url [0.01ms]
+(pass) the gateway endpoint is resolved from the environment > Given no token, When resolved, Then the key is absent rather than empty [0.02ms]
+(pass) the gateway endpoint is resolved from the environment > Given padded values, When resolved, Then they are trimmed before use [0.01ms]
+(pass) the gateway endpoint is resolved from the environment > Given a blank URL, When resolved, Then the loopback fallback still applies
+(pass) the gateway endpoint is resolved from the environment > Given an unusable port, When resolved, Then the default is used instead of a broken url [0.06ms]
+
+apps/desktop/test/shell-density.test.tsx:
+(pass) the shell renders at shell density > Given the window root, When rendered, Then it declares the shell density scope [0.05ms]
+(pass) the shell renders at shell density > Given the window, When the scope is counted, Then exactly one element declares it [0.03ms]
+(pass) the shell renders at shell density > Given the density scope, When placed, Then it wraps both columns [0.03ms]
+(pass) the transcript sets exactly three voices > Given the fixture, When adapted, Then there is a prompt and a tool call to assert on [0.04ms]
+(pass) the transcript sets exactly three voices > Given the transcript, When rendered, Then every size is one of the three voices [0.49ms]
+(pass) the transcript sets exactly three voices > Given the transcript markup, When scanned, Then no scale class leaks into it [0.26ms]
+Received `true` for a non-boolean attribute `mono`.
+
+If you want to write it to the DOM, pass a string instead: mono="true" or mono={value.toString()}.
+(pass) the transcript sets exactly three voices > Given a code fence, When rendered, Then the block owns one size for all its tokens [0.85ms]
+(pass) the transcript sets exactly three voices > Given a tool call, When rendered, Then it is ONE line in the meta voice [0.28ms]
+(pass) the transcript sets exactly three voices > Given the transcript, When prose is rendered, Then it is the prose voice [0.17ms]
+(pass) the transcript sets exactly three voices > Given a user message, When rendered, Then it is a right-aligned block with no fill [0.26ms]
+(pass) the sidebar row keeps its own rank > Given a session row, When rendered, Then the row is label and the section title is semibold label [0.05ms]
+(pass) the sidebar row keeps its own rank > Given the navigator, When scanned, Then no element sets a raw font size [0.06ms]
+
+apps/desktop/test/session-card.test.tsx:
+(pass) queued derives its kind and presentation [0.10ms]
+(pass) queued reaches the tab, sidebar and main header [12.28ms]
+(pass) running derives its kind and presentation [0.02ms]
+(pass) running reaches the tab, sidebar and main header [9.93ms]
+(pass) waiting_approval derives its kind and presentation [0.03ms]
+(pass) waiting_approval reaches the tab, sidebar and main header [8.28ms]
+(pass) waiting_input derives its kind and presentation [0.04ms]
+(pass) waiting_input reaches the tab, sidebar and main header [8.71ms]
+(pass) interrupted derives its kind and presentation [0.04ms]
+(pass) interrupted reaches the tab, sidebar and main header [10.14ms]
+(pass) completed derives its kind and presentation [0.03ms]
+(pass) completed reaches the tab, sidebar and main header [7.75ms]
+(pass) failed derives its kind and presentation [0.03ms]
+(pass) failed reaches the tab, sidebar and main header [9.83ms]
+(pass) idle derives its kind and presentation [0.03ms]
+(pass) idle reaches the tab, sidebar and main header [7.50ms]
+(pass) archived derives its kind and presentation [0.02ms]
+(pass) archived reaches the tab, sidebar and main header [7.54ms]
+(pass) row density follows content on both surfaces [43.85ms]
+(pass) unread terminals report; snooze overrides demand; pin overrides snooze [0.24ms]
+(pass) score has a six-hour half-life and residue a 24-hour bonus [0.09ms]
+(pass) kinds precede project best score; ties use session id, not input order [0.12ms]
+(pass) Sessions list paints every kind in order with matching glyphs [1.48ms]
+(pass) scores decrease monotonically for every phase and clamp future activity [0.12ms]
+(pass) setters keep phase timestamps stable on repeated projections [0.16ms]
+
+apps/desktop/test/ui-barrel.test.ts:
+(pass) the ui barrel > Given every export of @openomni/ui, When the app is read, Then each one is imported here [25.24ms]
+
+apps/desktop/test/sidebar-toggle.test.tsx:
+(pass) the one toggle > Given the sidebar open, When rendered, Then the toggle leads the strip's zone and says it will collapse [2.97ms]
+(pass) the one toggle > Given the sidebar collapsed, When rendered, Then the same toggle stays put and says it will expand [1.57ms]
+(pass) the one toggle > Given the reveal floating, When rendered, Then the session tree renders once, as an overlay [2.06ms]
+(pass) the one toggle > Given each store state, When rendered, Then the glyph's bar reads the column's visibility while aria-expanded reads the pin [14.51ms]
+(pass) the one toggle > Given the strip, When rendered from the store, Then the trio closes the zone, right-aligned, at the 28px step [2.78ms]
+
+apps/desktop/test/search-keyboard.test.ts:
+(pass) the shortcut reaches the field from anywhere > Given any state, When the shortcut fires, Then focus moves to the field [0.06ms]
+(pass) the shortcut reaches the field from anywhere > Given a live query, When the shortcut fires, Then it focuses without clearing [0.03ms]
+(pass) the shortcut reaches the field from anywhere > Given an active row, When the shortcut fires, Then the active row is kept [0.01ms]
+(pass) Esc leaves > Given text in the field, When Esc is pressed, Then the query clears and the field closes [0.02ms]
+(pass) Esc leaves > Given an empty field, When Esc is pressed, Then the field closes the same way [0.01ms]
+(pass) Esc leaves > Given an active row and text, When Esc is pressed, Then the active row clears too [0.01ms]
+(pass) typing narrows and invalidates the cursor > Given a keystroke, When reduced, Then the query is stored verbatim [0.01ms]
+(pass) typing narrows and invalidates the cursor > Given an active row, When the query changes, Then the row is released
+(pass) typing narrows and invalidates the cursor > Given a keystroke, When reduced, Then no focus is moved
+(pass) arrows walk the visible results > Given the field owns the caret, When ArrowDown fires, Then the first result activates [0.01ms]
+(pass) arrows walk the visible results > Given the field owns the caret, When ArrowUp fires, Then the last result activates [0.01ms]
+(pass) arrows walk the visible results > Given an active row, When arrows fire, Then the cursor steps one row [0.02ms]
+(pass) arrows walk the visible results > Given the last row, When ArrowDown fires, Then the cursor clamps and does not wrap [0.01ms]
+(pass) arrows walk the visible results > Given no results, When arrows fire, Then nothing changes [0.01ms]
+(pass) arrows walk the visible results > Given the active row left the results, When arrows fire, Then the cursor recovers
+(pass) arrows walk the visible results > Given arrows, When reduced, Then focus is never moved by them
+(pass) Enter selects and hands the caret back to the field > Given an active row, When Enter fires, Then it is selected and focus returns [0.01ms]
+(pass) Enter selects and hands the caret back to the field > Given no active row, When Enter fires, Then the first result is committed [0.02ms]
+(pass) Enter selects and hands the caret back to the field > Given Enter, When reduced, Then the query survives so narrowing can continue
+(pass) Enter selects and hands the caret back to the field > Given no results, When Enter fires, Then nothing is selected
+(pass) Enter selects and hands the caret back to the field > Given Enter, When reduced, Then the field is the last effect [0.01ms]
+(pass) key translation claims only the keys it handles > Given the accelerator in either modifier form, When translated, Then it is the shortcut [0.02ms]
+(pass) key translation claims only the keys it handles > Given k without a modifier, When translated, Then it is just a character
+(pass) key translation claims only the keys it handles > Given each navigation key, When translated, Then it maps to its intent [0.02ms]
+(pass) key translation claims only the keys it handles > Given a key with no behavior, When translated, Then it is not claimed [0.03ms]
+(pass) the reducer is pure > Given a transition, When applied, Then the input state is not mutated [0.04ms]
+(pass) the reducer is pure > Given the same inputs, When reduced twice, Then the transitions are identical [0.01ms]
+
+apps/desktop/test/preload-ipc.test.ts:
+(pass) gateway validates IPC replies and preserves absence [0.33ms]
+(pass) malformed commands are ignored without blocking valid delivery [0.28ms]
+(pass) bridge exposes only versions, gateway, and value-only command subscription [0.17ms]
+(pass) independent subscriptions remove only their exact wrapper, including repeated listener identities [0.06ms]
+(pass) dispose then remount leaves exactly one command delivery [0.03ms]
+
+apps/desktop/test/attention-order.test.ts:
+(pass) recency inside a group > Given two sessions, When ordered, Then the newer one leads [0.10ms]
+(pass) recency inside a group > Given identical timestamps, When ordered from either input order, Then the sequence is stable [0.04ms]
+(pass) groups follow their sessions > Given sessions in two projects, When ordered, Then the project with the newest work leads [0.05ms]
+(pass) groups follow their sessions > Given an unfiled session, When ordered, Then it forms the null group rather than vanishing [0.03ms]
+(pass) groups follow their sessions > Given no sessions, When ordered, Then there are no groups [0.01ms]
+(pass) the engine is pure > Given the same inputs, When called twice, Then the output is identical [0.02ms]
+
+apps/desktop/test/gateway-transport.test.ts:
+(pass) createGatewayChatTransport > empty history sends an empty prompt and does not offer reconnection [1.32ms]
+(pass) createGatewayChatTransport > close before opening rejects and failed send closes its socket [0.30ms]
+(pass) createGatewayChatTransport > a server message becomes start / text-start / text-delta / text-end / finish [3.05ms]
+(pass) createGatewayChatTransport > an error frame becomes one error chunk and closes the stream [1.58ms]
+(pass) createGatewayChatTransport > an outstanding server message id is echoed as replyToId on the next turn [1.25ms]
+(pass) createGatewayChatTransport > reply ids stay with their chat when two turns share the socket [2.11ms]
+(pass) createGatewayChatTransport > preserves subprotocol offers on the real socket [1.52ms]
+(pass) createGatewayChatTransport > ignores malformed frames and retains unsolicited reply correlation [5.72ms]
+(pass) createGatewayChatTransport > cancelling a stream invalidates its socket and clears reply correlation [0.35ms]
+(pass) createGatewayChatTransport > rejects regeneration instead of appending the historical prompt again [2.50ms]
+(pass) createGatewayChatTransport > an already-aborted turn never reaches the gateway [5.84ms]
+(pass) createGatewayChatTransport > an abort settles while the socket is still opening [0.35ms]
+(pass) createGatewayChatTransport > aborting ends the stream [6.86ms]
+(pass) createGatewayChatTransport > aborting one turn fails sibling turns on the invalidated socket [0.32ms]
+(pass) createGatewayChatTransport > a completed turn cannot later close the shared socket [21.10ms]
+(pass) createGatewayChatTransport > an unexpected socket close fails its pending turn [0.36ms]
+(pass) createGatewayChatTransport > an old socket close cannot drain a turn on its replacement [0.30ms]
+(pass) createGatewayChatTransport > a socket that fails while opening is replaced on retry [0.35ms]
+(pass) createGatewayChatTransport > the SDK reduces the chunks into one assistant message [9.13ms]
+
+apps/desktop/test/shortcuts-commands.test.ts:
+(pass) an unknown runtime command fails without mutating tab state [0.19ms]
+(pass) new, close, reopen and empty close dispatch to the real store [0.31ms]
+(pass) every ordinal command and positional cycle selects the real tab [0.27ms]
+(pass) history dispatch stays in its tab when another tab currently shows its destination [0.16ms]
+
+apps/desktop/test/search-filter.test.ts:
+(pass) an empty query leaves the tree untouched > Given no query, When filtered, Then every project and row survives [0.13ms]
+(pass) an empty query leaves the tree untouched > Given whitespace only, When filtered, Then it is the same as no query [0.10ms]
+(pass) an empty query leaves the tree untouched > Given no query, When filtered, Then no glyphs are weighted [0.09ms]
+(pass) filtering preserves the PROJECT to SESSION hierarchy > Given a query matching one session, When filtered, Then its project is still its parent [0.15ms]
+(pass) filtering preserves the PROJECT to SESSION hierarchy > Given a query matching nothing, When filtered, Then there are no groups at all [0.04ms]
+(pass) filtering preserves the PROJECT to SESSION hierarchy > Given a project-name query, When filtered, Then that project's rows all match [0.07ms]
+(pass) the attention order survives the filter > Given a query matching several rows, When filtered, Then they keep the engine's sequence [0.14ms]
+(pass) the attention order survives the filter > Given a query that spells a later row better, When filtered, Then it does not rise [0.09ms]
+(pass) the attention order survives the filter > Given a query, When filtered, Then the count equals the painted sequence [0.14ms]
+(pass) the attention order survives the filter > Given identical inputs, When filtered twice, Then the result is identical [0.05ms]
+(pass) highlight runs weight the matched glyphs only > Given a match on the session title, When run, Then the matched glyphs are marked [0.09ms]
+(pass) highlight runs weight the matched glyphs only > Given a match on the project only, When run, Then the title is left unweighted [0.06ms]
+(pass) highlight runs weight the matched glyphs only > Given any runs, When joined, Then the original label is reproduced exactly [0.14ms]
+(pass) highlight runs weight the matched glyphs only > Given no spans, When run, Then the label is one unmatched run [0.02ms]
+(pass) highlight runs weight the matched glyphs only > Given a multi-byte label, When run, Then a glyph is never split [0.04ms]
+(pass) highlight runs weight the matched glyphs only > Given non-adjacent spans, When run, Then each match is its own run [0.03ms]
+
+apps/desktop/test/app-lifecycle.test.tsx:
+(pass) App restores and persists shell preferences, scopes bracket shortcuts and disposes subscriptions [42.30ms]
+(pass) pointer navigation, local history and list selection keep one frame and preserve tab identities [69.90ms]
+(pass) close commands recover focus from panels and tabs without stealing focus on inactive close [56.22ms]
+(pass) search keeps its invoking tab and reveal while explicit result activation changes the active tab [64.09ms]
+(pass) SessionList preserves attention order, dates and callback ids and has no controls when empty [8.61ms]
+(pass) real Chat sends once, retains in-flight work across tab closure and stops through the composer [64.08ms]
+
+apps/desktop/test/menu.test.ts:
+(pass) darwin production menu > new-tab owns CommandOrControl+T and dispatches its value [0.22ms]
+(pass) darwin production menu > close-tab owns CommandOrControl+W and dispatches its value [0.05ms]
+(pass) darwin production menu > reopen-tab owns CommandOrControl+Shift+T and dispatches its value [0.03ms]
+(pass) darwin production menu > next-tab owns Control+Tab and dispatches its value [0.03ms]
+(pass) darwin production menu > previous-tab owns Control+Shift+Tab and dispatches its value [0.04ms]
+(pass) darwin production menu > back owns CommandOrControl+[ and dispatches its value [0.03ms]
+(pass) darwin production menu > forward owns CommandOrControl+] and dispatches its value [0.02ms]
+(pass) darwin production menu > select-tab-1 owns CommandOrControl+1 and dispatches its value [0.03ms]
+(pass) darwin production menu > select-tab-2 owns CommandOrControl+2 and dispatches its value [0.02ms]
+(pass) darwin production menu > select-tab-3 owns CommandOrControl+3 and dispatches its value [0.03ms]
+(pass) darwin production menu > select-tab-4 owns CommandOrControl+4 and dispatches its value [0.03ms]
+(pass) darwin production menu > select-tab-5 owns CommandOrControl+5 and dispatches its value [0.03ms]
+(pass) darwin production menu > select-tab-6 owns CommandOrControl+6 and dispatches its value [0.03ms]
+(pass) darwin production menu > select-tab-7 owns CommandOrControl+7 and dispatches its value [0.03ms]
+(pass) darwin production menu > select-tab-8 owns CommandOrControl+8 and dispatches its value [0.02ms]
+(pass) darwin production menu > select-tab-9 owns CommandOrControl+9 and dispatches its value [0.03ms]
+(pass) darwin production menu > cycle aliases are separate hidden working accelerators [0.13ms]
+(pass) darwin production menu > File and View are explicit, with no window-close or production debug escape [0.26ms]
+(pass) darwin development menu > new-tab owns CommandOrControl+T and dispatches its value [0.04ms]
+(pass) darwin development menu > close-tab owns CommandOrControl+W and dispatches its value [0.03ms]
+(pass) darwin development menu > reopen-tab owns CommandOrControl+Shift+T and dispatches its value [0.03ms]
+(pass) darwin development menu > next-tab owns Control+Tab and dispatches its value [0.03ms]
+(pass) darwin development menu > previous-tab owns Control+Shift+Tab and dispatches its value [0.03ms]
+(pass) darwin development menu > back owns CommandOrControl+[ and dispatches its value [0.02ms]
+(pass) darwin development menu > forward owns CommandOrControl+] and dispatches its value [0.02ms]
+(pass) darwin development menu > select-tab-1 owns CommandOrControl+1 and dispatches its value [0.01ms]
+(pass) darwin development menu > select-tab-2 owns CommandOrControl+2 and dispatches its value [0.01ms]
+(pass) darwin development menu > select-tab-3 owns CommandOrControl+3 and dispatches its value [0.02ms]
+(pass) darwin development menu > select-tab-4 owns CommandOrControl+4 and dispatches its value [0.01ms]
+(pass) darwin development menu > select-tab-5 owns CommandOrControl+5 and dispatches its value [0.01ms]
+(pass) darwin development menu > select-tab-6 owns CommandOrControl+6 and dispatches its value [0.02ms]
+(pass) darwin development menu > select-tab-7 owns CommandOrControl+7 and dispatches its value [0.01ms]
+(pass) darwin development menu > select-tab-8 owns CommandOrControl+8 and dispatches its value [0.01ms]
+(pass) darwin development menu > select-tab-9 owns CommandOrControl+9 and dispatches its value [0.01ms]
+(pass) darwin development menu > cycle aliases are separate hidden working accelerators [0.03ms]
+(pass) darwin development menu > File and View are explicit, with no window-close or production debug escape [0.07ms]
+(pass) win32 production menu > new-tab owns CommandOrControl+T and dispatches its value [0.04ms]
+(pass) win32 production menu > close-tab owns CommandOrControl+W and dispatches its value [0.03ms]
+(pass) win32 production menu > reopen-tab owns CommandOrControl+Shift+T and dispatches its value [0.01ms]
+(pass) win32 production menu > next-tab owns Control+Tab and dispatches its value [0.02ms]
+(pass) win32 production menu > previous-tab owns Control+Shift+Tab and dispatches its value [0.02ms]
+(pass) win32 production menu > back owns CommandOrControl+[ and dispatches its value [0.01ms]
+(pass) win32 production menu > forward owns CommandOrControl+] and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-1 owns CommandOrControl+1 and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-2 owns CommandOrControl+2 and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-3 owns CommandOrControl+3 and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-4 owns CommandOrControl+4 and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-5 owns CommandOrControl+5 and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-6 owns CommandOrControl+6 and dispatches its value [0.02ms]
+(pass) win32 production menu > select-tab-7 owns CommandOrControl+7 and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-8 owns CommandOrControl+8 and dispatches its value [0.01ms]
+(pass) win32 production menu > select-tab-9 owns CommandOrControl+9 and dispatches its value
+(pass) win32 production menu > cycle aliases are separate hidden working accelerators [0.02ms]
+(pass) win32 production menu > File and View are explicit, with no window-close or production debug escape [0.06ms]
+(pass) win32 development menu > new-tab owns CommandOrControl+T and dispatches its value [0.14ms]
+(pass) win32 development menu > close-tab owns CommandOrControl+W and dispatches its value [0.03ms]
+(pass) win32 development menu > reopen-tab owns CommandOrControl+Shift+T and dispatches its value [0.02ms]
+(pass) win32 development menu > next-tab owns Control+Tab and dispatches its value
+(pass) win32 development menu > previous-tab owns Control+Shift+Tab and dispatches its value [0.05ms]
+(pass) win32 development menu > back owns CommandOrControl+[ and dispatches its value [0.04ms]
+(pass) win32 development menu > forward owns CommandOrControl+] and dispatches its value [0.01ms]
+(pass) win32 development menu > select-tab-1 owns CommandOrControl+1 and dispatches its value [0.01ms]
+(pass) win32 development menu > select-tab-2 owns CommandOrControl+2 and dispatches its value [0.01ms]
+(pass) win32 development menu > select-tab-3 owns CommandOrControl+3 and dispatches its value [0.01ms]
+(pass) win32 development menu > select-tab-4 owns CommandOrControl+4 and dispatches its value [0.02ms]
+(pass) win32 development menu > select-tab-5 owns CommandOrControl+5 and dispatches its value [0.01ms]
+(pass) win32 development menu > select-tab-6 owns CommandOrControl+6 and dispatches its value [0.03ms]
+(pass) win32 development menu > select-tab-7 owns CommandOrControl+7 and dispatches its value [0.02ms]
+(pass) win32 development menu > select-tab-8 owns CommandOrControl+8 and dispatches its value [0.02ms]
+(pass) win32 development menu > select-tab-9 owns CommandOrControl+9 and dispatches its value [0.02ms]
+(pass) win32 development menu > cycle aliases are separate hidden working accelerators [0.03ms]
+(pass) win32 development menu > File and View are explicit, with no window-close or production debug escape [0.08ms]
+(pass) linux production menu > new-tab owns CommandOrControl+T and dispatches its value [0.01ms]
+(pass) linux production menu > close-tab owns CommandOrControl+W and dispatches its value [0.01ms]
+(pass) linux production menu > reopen-tab owns CommandOrControl+Shift+T and dispatches its value [0.02ms]
+(pass) linux production menu > next-tab owns Control+Tab and dispatches its value
+(pass) linux production menu > previous-tab owns Control+Shift+Tab and dispatches its value [0.01ms]
+(pass) linux production menu > back owns CommandOrControl+[ and dispatches its value [0.01ms]
+(pass) linux production menu > forward owns CommandOrControl+] and dispatches its value [0.02ms]
+(pass) linux production menu > select-tab-1 owns CommandOrControl+1 and dispatches its value [0.01ms]
+(pass) linux production menu > select-tab-2 owns CommandOrControl+2 and dispatches its value [0.02ms]
+(pass) linux production menu > select-tab-3 owns CommandOrControl+3 and dispatches its value [0.04ms]
+(pass) linux production menu > select-tab-4 owns CommandOrControl+4 and dispatches its value [0.01ms]
+(pass) linux production menu > select-tab-5 owns CommandOrControl+5 and dispatches its value
+(pass) linux production menu > select-tab-6 owns CommandOrControl+6 and dispatches its value
+(pass) linux production menu > select-tab-7 owns CommandOrControl+7 and dispatches its value
+(pass) linux production menu > select-tab-8 owns CommandOrControl+8 and dispatches its value
+(pass) linux production menu > select-tab-9 owns CommandOrControl+9 and dispatches its value
+(pass) linux production menu > cycle aliases are separate hidden working accelerators [0.03ms]
+(pass) linux production menu > File and View are explicit, with no window-close or production debug escape [0.03ms]
+(pass) linux development menu > new-tab owns CommandOrControl+T and dispatches its value
+(pass) linux development menu > close-tab owns CommandOrControl+W and dispatches its value [0.01ms]
+(pass) linux development menu > reopen-tab owns CommandOrControl+Shift+T and dispatches its value [0.02ms]
+(pass) linux development menu > next-tab owns Control+Tab and dispatches its value [0.02ms]
+(pass) linux development menu > previous-tab owns Control+Shift+Tab and dispatches its value
+(pass) linux development menu > back owns CommandOrControl+[ and dispatches its value [0.01ms]
+(pass) linux development menu > forward owns CommandOrControl+] and dispatches its value [0.01ms]
+(pass) linux development menu > select-tab-1 owns CommandOrControl+1 and dispatches its value [0.01ms]
+(pass) linux development menu > select-tab-2 owns CommandOrControl+2 and dispatches its value [0.01ms]
+(pass) linux development menu > select-tab-3 owns CommandOrControl+3 and dispatches its value
+(pass) linux development menu > select-tab-4 owns CommandOrControl+4 and dispatches its value [0.01ms]
+(pass) linux development menu > select-tab-5 owns CommandOrControl+5 and dispatches its value
+(pass) linux development menu > select-tab-6 owns CommandOrControl+6 and dispatches its value [0.01ms]
+(pass) linux development menu > select-tab-7 owns CommandOrControl+7 and dispatches its value [0.01ms]
+(pass) linux development menu > select-tab-8 owns CommandOrControl+8 and dispatches its value [0.01ms]
+(pass) linux development menu > select-tab-9 owns CommandOrControl+9 and dispatches its value [0.01ms]
+(pass) linux development menu > cycle aliases are separate hidden working accelerators [0.04ms]
+(pass) linux development menu > File and View are explicit, with no window-close or production debug escape [0.04ms]
+(pass) live application recipient > resolves focus on each menu click rather than capturing the initial owner [0.22ms]
+(pass) live application recipient > no owner, destroyed window, destroyed webContents, or removed owner is a no-op [0.07ms]
+(pass) live application recipient > destroyed focused webContents never redirects to a different last owner [0.03ms]
+(pass) live application recipient > unowned focused windows never redirect to an unrelated application window [0.04ms]
+(pass) live application recipient > native menu blur retains a live owner without requiring renderer focus [0.04ms]
+(pass) live application recipient > detached DevTools resolves its application owner, never its own webContents [0.04ms]
+
+apps/desktop/test/tabs-store.test.ts:
+(pass) opening and activating > open appends a fresh single-entry tab and explicit route opens reuse it [0.16ms]
+(pass) opening and activating > activation preserves histories and floating reveal, missing id does nothing [0.06ms]
+(pass) opening and activating > F1 local Back/Forward/jump round trip permits duplicate current views [0.11ms]
+(pass) opening and activating > explicit selection prefers target match, then first matching view in strip order [0.08ms]
+(pass) opening and activating > target-aware search preview reuses B then returns to invocation A for unmatched result [0.04ms]
+(pass) opening and activating > closed invocation falls back to then-active or opens when empty [0.05ms]
+(pass) opening and activating > explicit route navigation changes the target rather than reusing another route tab [0.05ms]
+(pass) closing and reopening > inactive close preserves active; active close chooses right, then left, then null [0.05ms]
+(pass) closing and reopening > missing close and empty reopen are no-ops [0.02ms]
+(pass) closing and reopening > close retains session, draft and immutable snapshot [0.07ms]
+(pass) closing and reopening > 21 closures retain newest 20 snapshots oldest-first [0.13ms]
+(pass) closing and reopening > F2 collision retains snapshot then restores original id, position, cursor and both history sides [0.07ms]
+(pass) closing and reopening > collision retry remains deferred while another matching session view remains [0.06ms]
+(pass) closing and reopening > restoration clamps saved index to current length [0.05ms]
+(pass) closing and reopening > route snapshots restore even when another tab already shows the route [0.03ms]
+(pass) ordinal selection and positional cycling > empty strips ignore ordinal and cycle commands [0.02ms]
+(pass) ordinal selection and positional cycling > 1..8 select ordinals, 9 selects last beyond nine, invalid values are no-ops [0.12ms]
+(pass) ordinal selection and positional cycling > one tab stays active and missing ordinals do nothing [0.02ms]
+(pass) ordinal selection and positional cycling > cycling wraps in strip order rather than activation order [0.04ms]
+(pass) history menu selector > empty history has no menu entries [0.01ms]
+(pass) history menu selector > over 20 visits retain original cursor ids and current plus newest 19 [0.28ms]
+(pass) history menu selector > history titles resolve live metadata, not visit-time snapshots [0.07ms]
+
+apps/desktop/test/app-history.test.ts:
+(pass) captured history jumps reject a changed active tab and changed history, but accept live cursors [0.17ms]
+(pass) empty and invalid cursor callbacks leave the store unchanged [0.03ms]
+
+apps/desktop/test/shell-preferences.test.ts:
+(pass) shell preferences at the storage boundary > Given nothing stored, When read, Then the sidebar is open at the default width [0.07ms]
+(pass) shell preferences at the storage boundary > Given garbage, When read, Then the width falls back and the flag stays open [0.03ms]
+(pass) shell preferences at the storage boundary > Given an out-of-range width and a closed flag, When read, Then the width is clamped and the flag honoured [0.02ms]
+(pass) shell preferences at the storage boundary > Given preferences, When written then read, Then they round-trip [0.03ms]
+
+apps/desktop/test/selection.test.tsx:
+(pass) the sidebar marks exactly one selected row > Given a selection, When the tree renders, Then one row is marked current [0.88ms]
+(pass) the sidebar marks exactly one selected row > Given a different selection, When the tree renders, Then the marker moves [0.91ms]
+(pass) the sidebar marks exactly one selected row > Given no selection, When the tree renders, Then no row is marked [0.78ms]
+(pass) the sidebar is project groups over sessions > Given the ordered groups, When the tree renders, Then every project is a disclosure header [0.12ms]
+(pass) the sidebar is project groups over sessions > Given every row, When the tree renders, Then it is one line: the title [0.04ms]
+(pass) the sidebar is project groups over sessions > Given a collapsed project, When the tree renders, Then its rows are absent from the tree [0.67ms]
+(pass) the sidebar is project groups over sessions > Given no pending drift, When the tree renders, Then no change hint is shown [0.02ms]
+Received `true` for a non-boolean attribute `numeric`.
+
+If you want to write it to the DOM, pass a string instead: numeric="true" or numeric={value.toString()}.
+(pass) the sidebar is project groups over sessions > Given pending drift, When the tree renders, Then the hint reports the count [0.79ms]
+(pass) the empty sidebar says so > Given no sessions, When the tree renders, Then the sentence names the way out and no group is drawn [0.91ms]
+
+apps/desktop/test/search-score.test.ts:
+(pass) subsequence matching > Given a contiguous run, When scored, Then it matches and reports its own glyphs [0.05ms]
+(pass) subsequence matching > Given scattered glyphs in order, When scored, Then the subsequence still matches [0.06ms]
+(pass) subsequence matching > Given glyphs out of order, When scored, Then there is no match
+(pass) subsequence matching > Given a glyph absent from the text, When scored, Then there is no match
+(pass) subsequence matching > Given mixed case on either side, When scored, Then matching ignores it [0.02ms]
+(pass) subsequence matching > Given an empty query, When scored, Then it matches with no glyphs weighted [0.02ms]
+(pass) subsequence matching > Given a repeated glyph, When no word-aligned run exists, Then the leftmost is reported [0.02ms]
+(pass) subsequence matching > Given a fully word-aligned run exists, When scored, Then it beats the leftmost one
+(pass) the tier ordering: prefix > word-start > subsequence > Given a prefix and a word-start match, When compared, Then the prefix wins [0.02ms]
+(pass) the tier ordering: prefix > word-start > subsequence > Given a word-start and a mid-word match, When compared, Then the word start wins [0.03ms]
+(pass) the tier ordering: prefix > word-start > subsequence > Given two subsequence matches, When compared, Then the tighter one wins
+(pass) the tier ordering: prefix > word-start > subsequence > Given the same tier, When compared, Then an earlier match wins the tie [0.01ms]
+(pass) the tier ordering: prefix > word-start > subsequence > Given a tier gap, When compared, Then no tightness bonus can cross it [0.02ms]
+(pass) the tier ordering: prefix > word-start > subsequence > Given identical inputs, When scored twice, Then the score is identical
+(pass) separators define a word start > Given each separator this data uses, When a query hits after it, Then it is a word start [0.07ms]
+(pass) scoring across a row's fields > Given a hit on the session name, When scored, Then field 0 is reported [0.02ms]
+(pass) scoring across a row's fields > Given a hit only on the project, When scored, Then the row still matches [0.01ms]
+(pass) scoring across a row's fields > Given a hit only on the reason, When scored, Then the row still matches
+(pass) scoring across a row's fields > Given a hit on no field, When scored, Then the row does not match [0.01ms]
+(pass) scoring across a row's fields > Given a query the session name spells better, When scored, Then the name wins [0.02ms]
+(pass) scoring across a row's fields > Given an empty field list, When scored, Then nothing matches
+
+apps/desktop/test/shell-shortcuts.test.ts:
+(pass) the shell's keys > native menu accelerators never dispatch again in the renderer [0.14ms]
+(pass) the shell's keys > Given a bare [, When pressed outside a field, Then the sidebar toggles [0.02ms]
+(pass) the shell's keys > Given a bare [, When typed into a field, Then it is a bracket [0.03ms]
+(pass) the shell's keys > Given other keys or chords, When pressed, Then nothing is heard [0.02ms]
+-------------------------------------------------------|---------|---------|-------------------
+File                                                   | % Funcs | % Lines | Uncovered Line #s
+-------------------------------------------------------|---------|---------|-------------------
+All files                                              |   93.29 |   97.14 |
+ apps/desktop/src/main/gateway-endpoint.ts             |  100.00 |  100.00 | 
+ apps/desktop/src/main/index.ts                        |   95.24 |   99.06 | 92
+ apps/desktop/src/main/menu.ts                         |  100.00 |  100.00 | 
+ apps/desktop/src/main/window-bounds.ts                |  100.00 |  100.00 | 
+ apps/desktop/src/preload/api.ts                       |  100.00 |  100.00 | 
+ apps/desktop/src/preload/index.ts                     |  100.00 |  100.00 | 
+ apps/desktop/src/preload/validation.ts                |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/app.tsx                     |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/attention/index.ts          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/attention/order.ts          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/attention/reason.ts         |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/attention/stability.ts      |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/chat/adapter.ts             |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/chat/gateway-transport.ts   |  100.00 |   99.06 | 193-194
+ apps/desktop/src/renderer/chat/select-transport.ts    |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/chat/session-content.tsx    |   83.33 |   98.90 | 79
+ apps/desktop/src/renderer/chat/turn-cost.ts           |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/main.tsx                    |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/search/filter.ts            |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/search/index.ts             |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/search/keyboard.ts          |   75.00 |   94.34 | 61,64,102
+ apps/desktop/src/renderer/search/score.ts             |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/commands.ts           |  100.00 |   97.56 | 52
+ apps/desktop/src/renderer/shell/history.ts            |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/place-icon.tsx        |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/row-id.ts             |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-glyph.ts      |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-list.tsx      |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-row.tsx       |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-secondary.tsx |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/session-tree.tsx      |   84.21 |   94.54 | 93-102
+ apps/desktop/src/renderer/shell/shortcuts.ts          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/shell/use-search.ts         |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/state/desktop-bridge.ts     |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/state/provider.tsx          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/state/queries.ts            |   50.00 |   81.25 | 44-46
+ apps/desktop/src/renderer/state/selectors.ts          |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/state/shell-preferences.ts  |  100.00 |  100.00 | 
+ apps/desktop/src/renderer/state/store.ts              |  100.00 |  100.00 | 
+ apps/desktop/test/helpers.tsx                         |  100.00 |  100.00 | 
+ apps/desktop/test/helpers/bridge.ts                   |   75.00 |  100.00 | 
+ apps/desktop/test/helpers/chat-server.ts              |  100.00 |  100.00 | 
+ apps/desktop/test/helpers/menu.ts                     |  100.00 |  100.00 | 
+ apps/desktop/test/helpers/session.ts                  |  100.00 |  100.00 | 
+ packages/ui/src/composer.tsx                          |   44.44 |   63.69 | 22,24-29,34-37,39-43,45-48,50-51,53-59,61-62,64-69,71-72,76,78-79,90-102,156-163,180-181
+ packages/ui/src/console.tsx                           |  100.00 |  100.00 | 
+ packages/ui/src/history-menu.tsx                      |   75.00 |  100.00 | 
+ packages/ui/src/icons/chevron.tsx                     |  100.00 |  100.00 | 
+ packages/ui/src/icons/sidebar-toggle.tsx              |  100.00 |  100.00 | 
+ packages/ui/src/index.ts                              |  100.00 |  100.00 | 
+ packages/ui/src/names.ts                              |  100.00 |  100.00 | 
+ packages/ui/src/primitives/button.tsx                 |  100.00 |  100.00 | 
+ packages/ui/src/primitives/code.tsx                   |  100.00 |  100.00 | 
+ packages/ui/src/primitives/epoch-rule.tsx             |  100.00 |   72.50 | 49,51-57,59-61
+ packages/ui/src/primitives/gutter.tsx                 |   50.00 |   85.11 | 139-144,146
+ packages/ui/src/primitives/highlight.tsx              |  100.00 |  100.00 | 
+ packages/ui/src/primitives/props.ts                   |  100.00 |  100.00 | 
+ packages/ui/src/primitives/scroll-area.tsx            |   57.14 |   95.12 | 76,85
+ packages/ui/src/primitives/spinner.tsx                |  100.00 |  100.00 | 
+ packages/ui/src/primitives/state.tsx                  |  100.00 |  100.00 | 
+ packages/ui/src/primitives/surface.tsx                |   66.67 |   83.87 | 93-102
+ packages/ui/src/sidebar-nav.tsx                       |  100.00 |  100.00 | 
+ packages/ui/src/sidebar.tsx                           |   46.43 |   74.38 | 58-66,69-77,144,251,254-265,280-285,289-294,297-304
+ packages/ui/src/status-glyph.tsx                      |  100.00 |  100.00 | 
+ packages/ui/src/tab-strip.tsx                         |   58.33 |   83.04 | 51-73,200-203,211-212
+ packages/ui/src/timeline/anchor.ts                    |  100.00 |  100.00 | 
+ packages/ui/src/timeline/markdown-block.tsx           |   80.00 |   72.73 | 73-77,82-89,91-92
+ packages/ui/src/timeline/spacing.ts                   |  100.00 |  100.00 | 
+ packages/ui/src/timeline/timeline.tsx                 |   93.75 |   93.29 | 218-221,224-230
+ packages/ui/src/timeline/tool-rows.tsx                |   83.33 |  100.00 | 
+ packages/ui/src/timeline/turns.ts                     |  100.00 |  100.00 | 
+ packages/ui/src/timeline/voice.tsx                    |  100.00 |  100.00 | 
+ packages/ui/src/timeline/work-group.ts                |   85.71 |  100.00 | 
+ packages/ui/src/tree-row.tsx                          |  100.00 |  100.00 | 
+-------------------------------------------------------|---------|---------|-------------------
+
+ 417 pass
+ 0 fail
+ 1881 expect() calls
+Ran 417 tests across 36 files. [4.00s]
