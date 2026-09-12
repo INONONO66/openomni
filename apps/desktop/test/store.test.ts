@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { SIDEBAR_WIDTH } from "@openomni/ui";
 import {
   activeTab,
-  activeTab,
   back,
   canGoBack,
   canGoForward,
@@ -20,10 +19,10 @@ import {
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
-  tabTitle,
   toggleProject,
   toggleSidebar,
 } from "../src/renderer/state/store";
+import { placeTitle } from "../src/renderer/state/selectors";
 
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
@@ -94,14 +93,14 @@ describe("session creation and titles", () => {
     setSessionTitleIfPlaceholder(id, " New Session ");
     setSessionTitleIfPlaceholder(id, "replacement");
     expect(consoleStore.state.sessions[0]?.titleSource).toBe("prompt");
-    expect(tabTitle(tab)).toBe("New Session");
+    expect(placeTitle(tab.place)).toBe("New Session");
     const other = createSession(2);
     openTab({ kind: "session", sessionId: other });
     const otherTab = currentTab();
     setSessionTitleIfPlaceholder(other, "  earned title  ");
-    expect(tabTitle(otherTab)).toBe("earned title");
+    expect(placeTitle(otherTab.place)).toBe("earned title");
     openTab({ kind: "route", route: "inbox" });
-    expect(tabTitle(currentTab())).toBe("Inbox");
+    expect(placeTitle(currentTab().place)).toBe("Inbox");
   });
 });
 
