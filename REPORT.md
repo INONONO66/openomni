@@ -238,3 +238,25 @@ RED exit 0
 - Final wiring/comparator/workflow tests exit: 0.
 
 - Final local results: compiler 2/2 pass (74.55s wall); campaign 59/59 pass (227.18s wall); wiring/workflow/comparator 125/125 pass. Comparator and shard module both 100% function/line coverage. Compiler/campaign timings use pinned Python and shared workstation load, unlike initial raw baseline timings; CI artifact projections are the reliable before/after comparison.
+
+- Incremental commits and branch push exit: 0.
+
+- Opened PR and enabled auto-squash; URL: https://github.com/INONONO66/openomni/pull/1050. Monitoring will disable auto-merge for non-Quality/CI failures.
+
+- Disabled auto-merge: non-Quality/CI failed checks: Performance Benchmarks.
+
+- PR #1050 monitor is running with a 45-minute bound; all validation gates passed before push.
+
+- Targeted native type census executed for the new comparator and its tests (exit 0); results /tmp/g10-comparator-types.json.
+
+- Actual PR benchmark job failed exactly as expected: 3 bus-fanout regressions and session lookup. Auto-merge is disabled. Targeted native type census found owned unknown/implicit-any JSON boundaries in the new comparator; replacing them with the repository typed JSON decoder (also rejects duplicate keys), without weakening validation.
+
+- Typed JSON boundary native census exit: 0; results /tmp/g10-comparator-types-fixed.json.
+
+- Typed boundary change: tsc/Ultracite/lint/related-tests chain exit 0.
+
+- Typed parser exercised against full real gh-pages history; comparator exit 1 (expected regression failure). Native type census is complete with zero owned violations.
+
+- Removed deprecated no-op Zod finite calls (v4 numbers reject nonfinite inputs already), explicitly tested infinity/NaN/negative metrics. Final typed-boundary tsc/Ultracite/lint/125 tests/build chain exit: 0.
+
+- First measured PR shard result: tooling-4 passed in 306s, down from main 432s. Other shard/quality checks still pending.

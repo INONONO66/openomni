@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compareBenchmarks, main, readBenchmarkHistory, regressionThreshold } from "./check-benchmark-regression";
 import { EXPECTED_BENCHMARK_NAMES } from "./summarize-benchmark-runs";
+import { decodeJson } from "./quality-json";
 
 const metrics = (value: number) => EXPECTED_BENCHMARK_NAMES.map((name) => ({ name, unit: "ns/op", value, p50: value, runs: 5 }));
 const history = (...values: number[]) => ({ entries: { "OpenOmni Benchmarks": values.map((value, index) => ({ commit: { id: `main-${index}` }, tool: "customSmallerIsBetter", benches: metrics(value) })) } });
@@ -51,7 +52,8 @@ test("invalid input and incomplete references fail closed", () => {
   expect(() => compareBenchmarks([], history(100))).toThrow();
   expect(() => compareBenchmarks([...metrics(100), ...metrics(100)], history(100))).toThrow();
   expect(() => compareBenchmarks(metrics(100), history())).toThrow();
-  expect(() => compareBenchmarks(metrics(Number.NaN), history(100))).toThrow();
+  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -1])
+    expect(() => compareBenchmarks(metrics(value), history(100))).toThrow();
   const missing = history(100);
   missing.entries["OpenOmni Benchmarks"][0]?.benches.pop();
   expect(() => compareBenchmarks(metrics(100), missing)).toThrow();
@@ -68,6 +70,7 @@ test("gh-pages wrapper is parsed as data, never evaluated", () => {
   expect(readBenchmarkHistory(JSON.stringify(data))).toEqual(data);
   expect(() => readBenchmarkHistory("window.BENCHMARK_DATA = process.exit(0)")).toThrow();
   expect(() => readBenchmarkHistory("window.BENCHMARK_DATA = {}; process.exit(0)")).toThrow();
+  expect(() => readBenchmarkHistory('window.BENCHMARK_DATA = {"entries":{},"entries":{}}')).toThrow();
 });
 
 test("CLI exposes failing status, artifact and job summary without changing the reference", async () => {
@@ -90,9 +93,8 @@ test("CLI exposes failing status, artifact and job summary without changing the 
       expect(code).toBe(exit);
       process.env.BENCHMARK_REGRESSION_PERCENT = threshold;
       expect(await main([])).toBe(exit);
-      const result = await Bun.file(join(root, "bench-results/regression.json")).json();
-      expect(result.failed).toBe(exit === 1);
-      expect(result.referenceCommit).toBe("main-0");
+      const result = decodeJson(await Bun.file(join(root, "bench-results/regression.json")).text());
+      expect(result).toMatchObject({ failed: exit === 1, referenceCommit: "main-0" });
     }
     expect(await Bun.file(summary).exists()).toBe(true);
     expect(await Bun.file(join(root, "bench-results/reference.js")).text()).toBe(reference);

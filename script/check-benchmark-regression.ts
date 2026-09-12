@@ -1,9 +1,10 @@
 import { appendFileSync } from "node:fs";
 import { z } from "zod";
+import { decodeJson, type Json } from "./quality-json";
 import { EXPECTED_BENCHMARK_NAMES } from "./summarize-benchmark-runs";
 
-const Metric = z.object({ name: z.string(), unit: z.literal("ns/op"), value: z.number().finite().nonnegative() });
-const Statistics = z.array(Metric.extend({ p50: z.number().finite().nonnegative(), runs: z.number().int().positive() }));
+const Metric = z.object({ name: z.string(), unit: z.literal("ns/op"), value: z.number().nonnegative() });
+const Statistics = z.array(Metric.extend({ p50: z.number().nonnegative(), runs: z.number().int().positive() }));
 const History = z.object({ entries: z.object({ "OpenOmni Benchmarks": z.array(z.object({
   commit: z.object({ id: z.string().min(1) }),
   tool: z.literal("customSmallerIsBetter"),
@@ -11,12 +12,12 @@ const History = z.object({ entries: z.object({ "OpenOmni Benchmarks": z.array(z.
 })).nonempty() }) });
 
 export function regressionThreshold(input = "20"): number {
-  return z.coerce.number().finite().positive().parse(input);
+  return z.coerce.number().positive().parse(input);
 }
 
-export function readBenchmarkHistory(source: string): unknown {
+export function readBenchmarkHistory(source: string): Json {
   // data.js is JSON with a fixed assignment wrapper, never executable input.
-  return JSON.parse(source.replace(/^\s*window\.BENCHMARK_DATA\s*=\s*/, "").replace(/;\s*$/, ""));
+  return decodeJson(source.replace(/^\s*window\.BENCHMARK_DATA\s*=\s*/, "").replace(/;\s*$/, ""));
 }
 
 function standardDeviation(values: readonly number[]): number {
@@ -25,7 +26,7 @@ function standardDeviation(values: readonly number[]): number {
   return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1));
 }
 
-export function compareBenchmarks(statistics: unknown, history: unknown, threshold = 20) {
+export function compareBenchmarks(statistics: Json, history: Json, threshold = 20) {
   const percent = regressionThreshold(String(threshold));
   const current = Statistics.parse(statistics);
   const accepted = History.parse(history).entries["OpenOmni Benchmarks"].slice(-20);
@@ -54,7 +55,7 @@ export function compareBenchmarks(statistics: unknown, history: unknown, thresho
 export async function main(args = Bun.argv.slice(2)): Promise<number> {
   const threshold = regressionThreshold(process.env.BENCHMARK_REGRESSION_PERCENT);
   if (args[0] === "--validate-input") return 0;
-  const statistics = await Bun.file(args[0] ?? "bench-results/statistics.json").json();
+  const statistics = decodeJson(await Bun.file(args[0] ?? "bench-results/statistics.json").text());
   const history = readBenchmarkHistory(await Bun.file(args[1] ?? "bench-results/reference.js").text());
   const result = compareBenchmarks(statistics, history, threshold);
   const summary = [
