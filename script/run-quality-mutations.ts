@@ -69,7 +69,7 @@ type Result = Candidate & {
 	typecheck: string;
 	testSelection: string;
 	assertionIdentities: string[];
-	coverage: { reached: boolean; markerSha256: string } | null;
+	coverage: { reached: boolean; markerSha256: string; tests?: string[] } | null;
 	junitReports: string[];
 	receipts: ProcessReceipt[];
 	reason: string;
@@ -84,8 +84,19 @@ type Census = {
 	astNodes: number;
 	operators: { operator: string; candidates: number; reason: string }[];
 };
-type ProbeEvidence = { reached: boolean; markerSha256: string };
-type ProbeCache = Map<string, ProbeEvidence>;
+type ReachSite = { id: string; path: string; sourceSha256: string; site: Site; tests: string[] };
+type ProbeEvidence = { reached: boolean; markerSha256: string; tests?: string[] };
+type ReachMap = {
+	version: 1;
+	executionTreeSha256: string;
+	candidatesSha256: string;
+	testsSha256: string;
+	sites: ReachSite[];
+	runs: { test: string; receipt: TestSelectionReceipt }[];
+	instrumentation: ProcessReceipt[];
+	complete: boolean;
+	sha256: string;
+};
 type Options = {
 	root: string;
 	contract: string;
@@ -110,6 +121,10 @@ type Options = {
 };
 
 let failure: { code: string; message: string } | null = null;
+
+function failureMessage(error: Error | string): string {
+	return error instanceof Error ? error.message : error;
+}
 class MutationError {
 	readonly name = "MutationError";
 	constructor(
@@ -842,33 +857,46 @@ function compareCandidates(a: Candidate, b: Candidate): number {
 function replace(source: string, start: number, end: number, replacement: string): string {
 	return source.slice(0, start) + replacement + source.slice(end);
 }
-function instrument(source: string, site: Site, marker: string): string {
+function caseInsertion(source: string, site: Site): number {
+	const original = source.slice(site.start, site.end);
+	const clause = ts.createSourceFile("site.ts", `switch(0){${original}}`, ts.ScriptTarget.Latest, true);
+	const statement = clause.statements[0];
+	if (!statement || !ts.isSwitchStatement(statement)) return fail("instrumentation", "Missing switch site");
+	const first = statement.caseBlock.clauses[0];
+	if (!first || !ts.isCaseClause(first)) return fail("instrumentation", "Missing case site");
+	return site.start + original.indexOf(":", first.expression.end - "switch(0){".length) + 1;
+}
+function instrumentSingle(source: string, site: Site, marker: string): string {
 	const probe = `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`;
 	const original = source.slice(site.start, site.end);
-	if (site.mode === "statement")
-		return replace(source, site.start, site.end, `{${probe};${original}}`);
-	if (site.mode === "case") {
-		const clause = ts.createSourceFile(
-			"site.ts",
-			`switch(0){${original}}`,
-			ts.ScriptTarget.Latest,
-			true,
-		);
-		const statement = clause.statements[0];
-		if (!statement || !ts.isSwitchStatement(statement))
-			return fail("instrumentation", "Missing switch site");
-		const first = statement.caseBlock.clauses[0];
-		if (!first || !ts.isCaseClause(first)) return fail("instrumentation", "Missing case site");
-		const colon = original.indexOf(":", first.expression.end - "switch(0){".length);
-		return replace(source, site.start + colon + 1, site.start + colon + 1, `${probe};`);
-	}
+	if (site.mode === "statement") return replace(source, site.start, site.end, `{${probe};${original}}`);
+	if (site.mode === "case") return replace(source, caseInsertion(source, site), caseInsertion(source, site), `${probe};`);
 	const expression = `(${probe},(${original}))`;
-	return replace(
-		source,
-		site.start,
-		site.end,
-		site.mode === "jsx" ? `{${expression}}` : expression,
-	);
+	return replace(source, site.start, site.end, site.mode === "jsx" ? `{${expression}}` : expression);
+}
+type ReachInsertion = { offset: number; order: number; text: string };
+function reachInsertions(source: string, row: ReachSite, directory: string, index: number): ReachInsertion[] {
+	const { site } = row;
+	const marker = join(directory, row.id);
+	if (site.mode === "case") {
+		const offset = caseInsertion(source, site);
+		return [{ offset, order: index, text: `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1");` }];
+	}
+	// Use exactly the single-site wrapper, but retain original offsets when
+	// nesting wrappers. Replacing an outer span would truncate inner probes.
+	const single = instrumentSingle(source, site, marker);
+	const added = single.length - source.length;
+	const closeLength = site.mode === "statement" ? 1 : site.mode === "jsx" ? 3 : 2;
+	return [
+		{ offset: site.start, order: index, text: single.slice(site.start, site.start + added - closeLength) },
+		{ offset: site.end, order: -index - 1, text: single.slice(site.end + added - closeLength, site.end + added) },
+	];
+}
+export function instrument(source: string, sites: ReachSite[], directory: string): string {
+	const ordered = [...sites].sort((a, b) => a.site.start - b.site.start || b.site.end - a.site.end);
+	const edits = ordered.flatMap((row, index) => reachInsertions(source, row, directory, index));
+	edits.sort((a, b) => b.offset - a.offset || b.order - a.order);
+	return edits.reduce((result, edit) => replace(result, edit.offset, edit.offset, edit.text), source);
 }
 function gitCopyCommand(root: string, args: string[]): string {
 	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -1084,6 +1112,47 @@ function green(receipt: TestSelectionReceipt): boolean {
 		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
+async function buildReachMap(options: Options, frozen: string, temporary: string, candidates: Candidate[], tests: string[], executionTreeSha256: string): Promise<{ map: Map<string, ProbeEvidence>; receipt: ReachMap }> {
+	const directory = join(temporary, "reach"), markers = join(directory, "markers");
+	copyExecution(frozen, directory);
+	mkdirSync(markers, { recursive: true });
+	const byPath = new Map<string, Candidate[]>();
+	for (const candidate of candidates)
+		if (!candidate.operator.startsWith("py-")) byPath.set(candidate.path, [...(byPath.get(candidate.path) ?? []), candidate]);
+	for (const [candidatePath, rows] of byPath) {
+		const source = mutationSource(directory, candidatePath);
+		const unique = [...new Map(rows.map((row) => [`${row.site.start}:${row.site.end}:${row.site.mode}`, row])).values()];
+		writeMutation(source, instrument(source.source, unique.map((row) => ({ ...row, tests })), markers));
+	}
+	const map = new Map<string, ProbeEvidence>();
+	for (const candidate of candidates) map.set(candidate.id, { reached: false, markerSha256: sha256(""), tests: [] });
+	const runs: { test: string; receipt: TestSelectionReceipt }[] = [];
+	for (const test of tests) {
+		if (readFileSync(join(directory, test), "utf8").trim() === "") continue;
+		rmSync(markers, { recursive: true, force: true });
+		mkdirSync(markers);
+		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout);
+		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0)
+			throw new MutationError("reachMap", `Reach test is not green: ${test}`);
+		runs.push({ test, receipt });
+		for (const candidate of candidates) {
+			const first = candidates.filter((row) => row.path === candidate.path && JSON.stringify(row.site) === JSON.stringify(candidate.site)).at(-1) ?? candidate;
+			const marker = join(markers, first.id);
+			if (!existsSync(marker)) continue;
+			const evidence = map.get(candidate.id);
+			if (evidence) {
+				evidence.reached = true;
+				if (!evidence.tests) evidence.tests = [];
+				evidence.tests.push(test);
+				evidence.markerSha256 = sha256(readFileSync(marker, "utf8"));
+			}
+		}
+	}
+	console.error(`[mutation] reach map: ${[...map.values()].filter((value) => value.reached).length}/${candidates.length} reached`);
+	const body = { version: 1 as const, executionTreeSha256, candidatesSha256: sha256(JSON.stringify(candidates)), testsSha256: sha256(JSON.stringify(tests)), sites: candidates.map((candidate) => ({ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests: map.get(candidate.id)?.tests ?? [] })), runs, complete: true };
+	return { map, receipt: { ...body, instrumentation: [], sha256: sha256(JSON.stringify(body)) } };
+}
+
 function defaultResult(candidate: Candidate, tests: string[], selected = true): Result {
 	return {
 		...candidate,
@@ -1153,6 +1222,7 @@ async function pythonWorker(
 	mode: string,
 	site?: Site,
 	marker?: string,
+	sites?: string,
 ): Promise<ProcessReceipt> {
 	const input = join(directory, "python-input.py");
 	writeFileSync(input, source);
@@ -1169,6 +1239,7 @@ async function pythonWorker(
 			...(site && marker
 				? ["--start", String(site.start), "--end", String(site.end), "--marker", marker]
 				: []),
+			...(mode === "reach" && sites ? ["--sites", sites] : []),
 		],
 		directory,
 		options.timeout,
@@ -1204,132 +1275,131 @@ function probeKey(
 		},
 	}));
 }
+type CandidateContext = {
+	candidate: Candidate;
+	options: Options;
+	contract: Contract;
+	tests: string[];
+	run: string;
+	root: string;
+	result: Result;
+	probeCache: Map<string, ProbeEvidence>;
+};
+
+async function checkMutation(context: CandidateContext, mutated: string, python: boolean): Promise<boolean> {
+	const { options, contract, run, root, result } = context;
+	if (python) {
+		const compiled = await pythonWorker(options, mutated, run, "compile");
+		result.receipts.push(compiled);
+		if (broken(compiled) || ![0, 1].includes(compiled.exitCode ?? -1)) {
+			result.outcome = "infrastructure";
+			result.reason = "python-compiler-process";
+			return false;
+		}
+		if (object(decode(compiled.stdout)).valid !== true) {
+			result.typecheck = "invalid";
+			result.outcome = "invalid";
+			result.reason = "python-compiler-diagnostics";
+			return false;
+		}
+	}
+	const contractPath = join(run, "contract.json");
+	writeFileSync(contractPath, JSON.stringify({ ...contract, version: 1, typescript: "5.9.2" }));
+	const checked = await execute([process.execPath, "--smol", import.meta.path, "--typecheck-root", root, "--contract", contractPath, "--inventory", options.inventory], root, options.timeout * Math.max(1, contract.projects.length));
+	result.receipts.push(checked);
+	if (broken(checked) || ![0, 1].includes(checked.exitCode ?? -1)) {
+		result.outcome = "infrastructure";
+		result.reason = "typecheck-process";
+		return false;
+	}
+	const check = object(decode(checked.stdout));
+	if (check.kind !== "typecheck" || typeof check.valid !== "boolean") return fail("infrastructure", "Missing compiler receipt");
+	result.typecheck = check.valid ? "valid" : "invalid";
+	if (!check.valid) {
+		result.outcome = "invalid";
+		result.reason = "compiler-diagnostics";
+		return false;
+	}
+	return true;
+}
+
+async function probeCandidate(context: CandidateContext, source: ReturnType<typeof mutationSource>, python: boolean): Promise<boolean> {
+	const { candidate, options, tests, run, root, result, probeCache } = context;
+	const marker = join(run, "hit");
+	let probedSource = "";
+	if (python) {
+		const instrumented = await pythonWorker(options, source.source, run, "probe", candidate.site, marker);
+		result.receipts.push(instrumented);
+		if (broken(instrumented) || instrumented.exitCode !== 0) {
+			result.outcome = "infrastructure";
+			result.reason = "python-instrumentation-process";
+			return false;
+		}
+		probedSource = text(object(decode(instrumented.stdout)).source);
+	} else probedSource = instrument(source.source, [{ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests }], run);
+	const key = probeKey(candidate, probedSource, options, tests);
+	const cached = probeCache.get(key);
+	if (cached) {
+		result.coverage = cached;
+		if (!cached.reached) {
+			result.outcome = "noCoverage";
+			result.reason = "original-runtime-site-not-reached";
+			return false;
+		}
+		return true;
+	}
+	writeMutation(source, probedSource);
+	const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+	result.receipts.push(...probe.batches.map((batch) => batch.process));
+	result.junitReports.push(...probe.batches.map((batch) => batch.junit));
+	if (!green(probe)) {
+		result.outcome = "infrastructure";
+		result.reason = "baseline-probe-not-green";
+		return false;
+	}
+	const hit = existsSync(marker) ? readFileSync(marker, "utf8") : "";
+	result.coverage = { reached: hit === "1", markerSha256: sha256(hit), tests };
+	if (existsSync(marker) && hit !== "1") {
+		result.outcome = "infrastructure";
+		result.reason = "malformed-coverage-marker";
+		return false;
+	}
+	probeCache.set(key, result.coverage);
+	if (!result.coverage.reached) {
+		result.outcome = "noCoverage";
+		result.reason = "original-runtime-site-not-reached";
+		return false;
+	}
+	return true;
+}
+
 async function runCandidate(
 	candidate: Candidate,
 	options: Options,
 	contract: Contract,
 	temporary: string,
 	tests: string[],
-	probeCache: ProbeCache,
+	reachMap: Map<string, ProbeEvidence>,
 ): Promise<Result> {
 	const result = defaultResult(candidate, tests);
+	const python = candidate.operator.startsWith("py-");
+	const evidence = reachMap.get(candidate.id);
+	const frozenSource = mutationSource(join(temporary, "frozen"), candidate.path);
+	const frozenSourceSha256 = sha256(frozenSource.host);
+	const probeCache = new Map<string, ProbeEvidence>();
+	result.coverage = evidence ?? null;
+	if (!python && !evidence?.reached) {
+		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
+		result.restored = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host) === frozenSourceSha256;
+		result.outcome = "noCoverage";
+		result.reason = "original-runtime-site-not-reached";
+		return result;
+	}
 	const run = join(temporary, "candidate");
 	const root = join(run, "source");
 	mkdirSync(run, { recursive: true });
 	let original = "";
 	let path = "";
-	async function checkMutation(mutated: string, python: boolean): Promise<boolean> {
-		if (python) {
-			const compiled = await pythonWorker(options, mutated, run, "compile");
-			result.receipts.push(compiled);
-			if (broken(compiled) || ![0, 1].includes(compiled.exitCode ?? -1)) {
-				result.outcome = "infrastructure";
-				result.reason = "python-compiler-process";
-				return false;
-			}
-			if (object(decode(compiled.stdout)).valid !== true) {
-				result.typecheck = "invalid";
-				result.outcome = "invalid";
-				result.reason = "python-compiler-diagnostics";
-				return false;
-			}
-		}
-		const contractPath = join(run, "contract.json");
-		writeFileSync(contractPath, JSON.stringify({ ...contract, version: 1, typescript: "5.9.2" }));
-		const checked = await execute(
-			[
-				process.execPath,
-				"--smol",
-				import.meta.path,
-				"--typecheck-root",
-				root,
-				"--contract",
-				contractPath,
-				"--inventory",
-				options.inventory,
-			],
-			root,
-			options.timeout * Math.max(1, contract.projects.length),
-		);
-		result.receipts.push(checked);
-		if (broken(checked) || ![0, 1].includes(checked.exitCode ?? -1)) {
-			result.outcome = "infrastructure";
-			result.reason = "typecheck-process";
-			return false;
-		}
-		const check = object(decode(checked.stdout));
-		if (check.kind !== "typecheck" || typeof check.valid !== "boolean")
-			return fail("infrastructure", "Missing compiler receipt");
-		result.typecheck = check.valid ? "valid" : "invalid";
-		if (!check.valid) {
-			result.outcome = "invalid";
-			result.reason = "compiler-diagnostics";
-			return false;
-		}
-		return true;
-	}
-	async function probeCandidate(
-		source: ReturnType<typeof mutationSource>,
-		python: boolean,
-	): Promise<boolean> {
-		const marker = join(run, "hit");
-		let probedSource = "";
-		if (python) {
-			const instrumented = await pythonWorker(
-				options,
-				source.source,
-				run,
-				"probe",
-				candidate.site,
-				marker,
-			);
-			result.receipts.push(instrumented);
-			if (broken(instrumented) || instrumented.exitCode !== 0) {
-				result.outcome = "infrastructure";
-				result.reason = "python-instrumentation-process";
-				return false;
-			}
-			probedSource = text(object(decode(instrumented.stdout)).source);
-		} else probedSource = instrument(source.source, candidate.site, marker);
-		const key = probeKey(candidate, probedSource, options, tests);
-		const cached = probeCache.get(key);
-		if (cached) {
-			result.coverage = cached;
-			if (!cached.reached) {
-				result.outcome = "noCoverage";
-				result.reason = "original-runtime-site-not-reached";
-				return false;
-			}
-			return true;
-		}
-		writeMutation(source, probedSource);
-		const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
-		result.receipts.push(...probe.batches.map((batch) => batch.process));
-		result.junitReports.push(...probe.batches.map((batch) => batch.junit));
-		if (!green(probe)) {
-			result.outcome = "infrastructure";
-			result.reason = "baseline-probe-not-green";
-			return false;
-		}
-		const hit = existsSync(marker) ? readFileSync(marker, "utf8") : "";
-		result.coverage = { reached: hit === "1", markerSha256: sha256(hit) };
-		if (existsSync(marker) && hit !== "1") {
-			result.outcome = "infrastructure";
-			result.reason = "malformed-coverage-marker";
-			return false;
-		}
-		if (!result.coverage.reached) {
-			// A green, complete selection with no marker is the only reusable
-			// proof of an unreached original site. Errors and malformed markers
-			// return above without entering the campaign-local cache.
-			probeCache.set(key, result.coverage);
-			result.outcome = "noCoverage";
-			result.reason = "original-runtime-site-not-reached";
-			return false;
-		}
-		probeCache.set(key, result.coverage);
-		return true;
-	}
 	try {
 		copyExecution(join(temporary, "frozen"), root);
 		const source = mutationSource(root, candidate.path);
@@ -1343,11 +1413,12 @@ async function runCandidate(
 			candidate.endOffset,
 			candidate.replacement,
 		);
-		const python = candidate.operator.startsWith("py-");
 		writeMutation(source, mutated);
-		if (!(await checkMutation(mutated, python))) return result;
-		if (!(await probeCandidate(source, python))) return result;
-		// Probe test side effects cannot leak into the mutation run.
+		const context: CandidateContext = { candidate, options, contract, tests, run, root, result, probeCache };
+		if (!(await checkMutation(context, mutated, python))) return result;
+		if (python && !(await probeCandidate(context, source, python))) return result;
+		// TypeScript reach was established once for the campaign.
+		// Test side effects cannot leak into the mutation run.
 		removeExecution(root);
 		copyExecution(join(temporary, "frozen"), root);
 		writeMutation(source, mutated);
@@ -1378,7 +1449,7 @@ async function runCandidate(
 	} finally {
 		if (path && original && existsSync(dirname(path))) {
 			writeFileSync(path, original);
-			result.restored = sha256(readFileSync(path)) === sha256(original);
+			result.restored = sha256(readFileSync(path)) === frozenSourceSha256;
 		}
 		removeExecution(root);
 		rmSync(run, { recursive: true, force: true });
@@ -1596,9 +1667,9 @@ async function executeSelection(
 	enumerated: ReturnType<typeof enumerate>,
 	tests: string[],
 	errors: string[],
+	reachMap: Map<string, ProbeEvidence>,
 ): Promise<Result[]> {
 	const results: Result[] = [];
-	const probeCache: ProbeCache = new Map();
 	const selected = selectedCandidates(options, enumerated.candidates);
 	if (!selected.length) errors.push("zero selected candidates");
 	const selectedIds = new Set(selected.map((candidate) => candidate.id));
@@ -1613,7 +1684,7 @@ async function executeSelection(
 			results.push(defaultResult(candidate, tests));
 		else {
 			console.error(`[mutation] mutant ${executed + 1}/${selected.length} start ${candidate.path}:${candidate.startOffset} ${candidate.operator}`);
-			const result = await runCandidate(candidate, options, contract, temporary, tests, probeCache);
+			const result = await runCandidate(candidate, options, contract, temporary, reachMap.get(candidate.id)?.tests ?? tests, reachMap);
 			results.push(result);
 			executed++;
 			console.error(`[mutation] mutant ${executed}/${selected.length} ${result.outcome}: ${result.reason}`);
@@ -1720,8 +1791,12 @@ async function campaign(options: Options): Promise<number> {
 			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
 		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
+		const selected = selectedCandidates(options, enumerated.candidates);
+		const reachCandidates = selected.filter((candidate) => !candidate.operator.startsWith("py-"));
+		const reach = errors.length ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, tests, executionTreeSha256);
+		removeExecution(join(temporary, "reach"));
 		const results = await executeSelection(
-			options, contract, temporary, started, enumerated, tests, errors,
+			options, contract, temporary, started, enumerated, tests, errors, reach.map,
 		);
 		console.error("[mutation] verifying restoration and cleaning execution copies");
 		verifySources(options.root, inventory);
@@ -1754,6 +1829,7 @@ async function campaign(options: Options): Promise<number> {
 				executionTreeSha256,
 				pythonCapability,
 				testSelections: [{ id: sha256(JSON.stringify(tests)), paths: tests }],
+				reachMap: reach.receipt,
 				sourceDiagnostics,
 				sourceDiagnosticsSha256: sha256(JSON.stringify(sourceDiagnostics)),
 				inventorySha256: options.inventoryHash,
@@ -1814,7 +1890,10 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 			return errors.length ? 1 : 0;
 		}
 		return await campaign(optionsFrom(values));
-	} catch {
+	} catch (error) {
+		const caught = failureMessage(error as Error | string);
+		const prior = failure as { code: string; message: string } | null;
+		failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
 		console.log(
 			JSON.stringify({
 				version: 1,
