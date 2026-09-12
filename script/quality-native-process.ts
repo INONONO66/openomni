@@ -8,15 +8,16 @@ type NativeInput = {
 	receipt?: string;
 	onStderr?: (chunk: Uint8Array) => void;
 };
-export function nativeFailure(stdout: string, stderr: string): string {
+function structuredFailure(stdout: string): string | undefined {
 	try {
 		const parsed = decodeJson(stdout);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray(parsed.errors))
 			return parsed.errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, 400)).join("; ");
-	} catch {
-		// Non-JSON failures retain bounded raw diagnostics.
-	}
-	return (stderr || stdout).slice(0, 4096);
+	} catch {}
+	return undefined;
+}
+export function nativeFailure(stdout: string, stderr: string): string {
+	return structuredFailure(stdout) ?? (stderr || stdout).slice(0, 4096);
 }
 /** Exit 1 is a complete measurement with findings, not infrastructure success. */
 export async function nativeJson(input: NativeInput) {
