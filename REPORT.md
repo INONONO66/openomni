@@ -268,3 +268,17 @@ RED exit 0
 - Shard 1 extra overhead is real: it owns native Python self-tests and more setup, while test execution itself is 294s. Measured PR overheads: 93.94s / 45.48s / 38.32s / 50.76s. Uniform test packing cannot hit the wall target; a second packing weights these measured per-shard overheads (ideal achievable average 334.5s).
 
 - Weighted-shard tsc/Ultracite/lint/125 tests/build chain exit: 0. New projected wall times including measured overhead: 336.0s / 335.9s / 335.5s / 330.6s.
+
+- Pushed weighted shard and typed JSON follow-up commits, exit 0.
+
+- Updated PR body with first measured CI results, weighted final projection, verified gate failure, and zero-owned-type census.
+
+- First Quality job reports 23 rows: 19 owned type findings (fixed), a comment-only coverage line inside the new reader, and 3 workflow test-body CRAP rows. Moving reader documentation outside its executable body; validating the three required jobs in the test schema removes optional fallback branches rather than weakening assertions.
+
+- Quality closure tsc/Ultracite/lint/125 tests/build chain exit: 0.
+
+- Native JavaScript metrics measured workflow-test arrow complexity after requiring jobs at the schema boundary; results /tmp/g10-workflow-metrics.json.
+
+- Workflow test-body cyclomatic complexity is now at most 4 (zero-coverage CRAP 20), below the ratchet limit; every original assertion is retained.
+
+- Final comparator CLI still fails the real known-regressing artifact with exit 1; local comparator LCOV has no zero-hit lines.

@@ -15,8 +15,8 @@ export function regressionThreshold(input = "20"): number {
   return z.coerce.number().positive().parse(input);
 }
 
+/** data.js is JSON with a fixed assignment wrapper, never executable input. */
 export function readBenchmarkHistory(source: string): Json {
-  // data.js is JSON with a fixed assignment wrapper, never executable input.
   return decodeJson(source.replace(/^\s*window\.BENCHMARK_DATA\s*=\s*/, "").replace(/;\s*$/, ""));
 }
 
