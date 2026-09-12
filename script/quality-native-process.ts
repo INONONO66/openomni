@@ -16,9 +16,7 @@ function structuredFailure(stdout: string): string | undefined {
 		const parsed = decodeJson(stdout);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray(parsed.errors))
 			return formatErrors(parsed.errors);
-	} catch {
-		// Invalid child output falls through to raw stderr.
-	}
+	} catch { /* Invalid child output falls through to raw stderr. */ }
 	return undefined;
 }
 export function nativeFailure(stdout: string, stderr: string): string {
