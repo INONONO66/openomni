@@ -73,7 +73,7 @@ export function orderByAttention(facts: readonly SessionFacts[], now: number): O
   const ranked = facts
     .map((session) => {
       const kind = attentionKind(session, now);
-      return { session, kind, score: scoreForKind(session, now, kind) };
+      return { session, kind, score: attentionScore(session, now) };
     })
     .sort((a, b) => b.score - a.score || compareId(a.session.id, b.session.id));
   const groups: Ordered["groups"][number][] = [];
