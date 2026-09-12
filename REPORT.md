@@ -324,3 +324,38 @@ RED exit 0
 - Final full CI had exactly one Quality row: test-body ArrowFunction CRAP 30 in comparator invalid-input test. Converted its three invalid-metric cases to table-driven tests without removing any assertion. Tsc/Ultracite/lint/128 tests/build chain exit: 0.
 
 - Final parameterized comparator tests: native type census complete with zero owned violations; maximum test-body cyclomatic 4 / CRAP 20, replacing the sole CI CRAP-30 row.
+
+
+# Follow-up progress
+
+- Recreated worktree at branch ci/shard4-benchmark-gate.
+
+- Dependencies installed and initial workspace build executed.
+
+- Read helper, session materializer, benchmark entry, kernel read functions and SQL session decoder. Session helper is setup-only, outside timed list/read callbacks; suspected extra SQL-row schema parse in production adapter.
+
+- Collected five repeated ledger benchmark runs at accepted reference and current branch (unchanged product/helper from main), retained all metric JSON under /tmp/g10-follow-bench.
+
+- Local median baseline/current ns: bus 10 494/3570, bus 50 1720/14984, bus 100 3285/29845, session get 1470/2308, list 10 9244/12569. The read regression is production: new SessionSqlRow nullable/array parse precedes unchanged LedgerSession.Row.parse, constructing a Zod wrapper per read. Helper materialization is unchanged and outside measurement.
+
+- Isolated production-only intervention: replaced redundant SQL shape parsing with typed SQLite queries; retained canonical LedgerSession.Row.parse on every read. Five repeated benchmark runs isolate this change before helper edits.
+
+- Production-only medians recovered get-session 2308 -> 1558 ns and list-10 12569 -> 9522 ns, while bus stayed slow. This isolates regression to duplicate SQL row validation, not materializeSession. Helper now parses event once and uses descriptor type witness for already-parsed delivery; added transform/match/reset/snapshot regression tests and retained canonical corrupt-read tests.
+
+- Full ledger suite exit 0; /tmp/g10-follow-ledger-tests.log.
+
+- Five repeated fixed-tree benchmarks completed; all JSON retained under /tmp/g10-follow-bench/fixed.
+
+- Changed ledger files native type census exit 0.
+
+- Script/ledger types, Ultracite, lint, related tests, build and workflow YAML gate chain exit 0.
+
+- Preserved typed descriptor/payload correlation in a single publication envelope, avoiding the native census generic predicate issue; focused census result recorded.
+
+- Final follow-up all requested gates and full ledger suite exit 0.
+
+- Simplified the heterogeneous callback registry to its original never-parameter erasure; only the validated event-name bucket receives parsed T. No predicate revalidation, extra publication wrapper, any, or unknown. Native census result recorded.
+
+- Final push gates (types, full lint, 336 ledger tests, 128 related tests, build): exit 0.
+
+- Final helper representation benchmarked for five repetitions; medians retained. Preserved previous REPORT history and appended this follow-up.

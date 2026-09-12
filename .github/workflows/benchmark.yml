@@ -25,6 +25,7 @@ on:
         description: Number of repeated benchmark runs to summarize
         required: false
         default: "5"
+      # PRs use the stricter repeated-run median gate plus a historical noise band.
       regression-percent:
         description: Maximum median regression percent (also must exceed historical noise)
         required: false
@@ -171,6 +172,8 @@ jobs:
           auto-push: false
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
+          # Main's 50% alert is the publishing safety net; the PR median gate is
+          # intentionally stricter (20% plus two historical standard deviations).
           alert-threshold: "150%"
           comment-on-alert: true
           fail-on-alert: ${{ steps.ghp.outputs.exists == 'true' }}
