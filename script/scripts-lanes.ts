@@ -53,18 +53,19 @@ export const scriptsLanes = {
     "quality-schema.test.ts",
     "quality-source.test.ts",
     "run-quality-mutations.test.ts",
+    "run-quality-mutations-compiler.test.ts",
     "run-quality-mutations-operators.test.ts",
   ],
 } as const;
 export type ScriptsLane = keyof typeof scriptsLanes;
 export const scriptPartitions = ["scripts-contracts", "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3", "scripts-tooling-4"] as const;
-// Run 34324099419's scenario timings, packed with setup headroom below five minutes.
-// Both census (365s) and mutation (332s) must split; three runners cannot fit the total.
+// Run 34545253567: extracting the 116s compiler contract balances test work at
+// 279-290s per runner, leaving setup headroom around the 5.5 minute target.
 export const scriptToolingPartitions = {
-  "scripts-tooling-1": ["check-census-native.test.ts", "check-quality-coverage.test.ts", "quality-ratchet.test.ts", "quality-metrics/tool.test.ts", "quality-ci-metrics.test.ts", "quality-ci-legs.test.ts", "quality-schema.test.ts", "quality-json.test.ts", "quality-mutation-workflow.test.ts", "quality-inventory.test.ts", "quality-ci-receipt.test.ts", "quality-source.test.ts"],
-  "scripts-tooling-2": ["check-census.test.ts", "quality-metrics/type-trivia.test.ts", "quality-measure.test.ts", "check-quality-python.test.ts", "coverage-source-inventory.test.ts", "conformance/summarize-benchmark-runs.test.ts", "quality-native-process.test.ts", "quality-coverage-record.test.ts", "quality-ci-coverage.test.ts", "quality-native-mutation.test.ts", "quality-plan.test.ts", "quality-ci-bound.test.ts"],
-  "scripts-tooling-3": ["run-quality-mutations-operators.test.ts", "check-types-census.test.ts", "quality-metrics/declaration-erasure.test.ts", "census-program.test.ts", "coverage-ratchet.test.ts"],
-  "scripts-tooling-4": ["run-quality-mutations.test.ts", "check-quality-metrics.test.ts"],
+  "scripts-tooling-1": ["check-census-native.test.ts", "run-quality-mutations-compiler.test.ts", "quality-metrics/tool.test.ts", "quality-ci-metrics.test.ts", "quality-ci-legs.test.ts", "quality-schema.test.ts", "quality-json.test.ts", "quality-mutation-workflow.test.ts", "quality-inventory.test.ts", "quality-ci-receipt.test.ts", "quality-source.test.ts"],
+  "scripts-tooling-2": ["check-census.test.ts", "check-quality-coverage.test.ts", "quality-ratchet.test.ts", "census-program.test.ts", "coverage-ratchet.test.ts", "quality-measure.test.ts", "check-quality-python.test.ts", "coverage-source-inventory.test.ts", "conformance/summarize-benchmark-runs.test.ts", "quality-native-process.test.ts", "quality-coverage-record.test.ts", "quality-ci-coverage.test.ts", "quality-native-mutation.test.ts", "quality-plan.test.ts", "quality-ci-bound.test.ts"],
+  "scripts-tooling-3": ["run-quality-mutations-operators.test.ts", "quality-metrics/declaration-erasure.test.ts", "quality-metrics/type-trivia.test.ts", "check-quality-metrics.test.ts"],
+  "scripts-tooling-4": ["run-quality-mutations.test.ts", "check-types-census.test.ts"],
 } as const;
 export type ScriptToolingPartition = keyof typeof scriptToolingPartitions;
 export const scriptContracts = [

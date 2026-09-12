@@ -171,3 +171,70 @@ RED exit 0
 ## Completion attempt
 - Compiler scope correction explicitly identifies the 17 diagnostics as `apps/desktop/test-e2e/startup.cjs` (4) and `script/quality-metrics/tool-runner.mjs` (13), all from fallback `checkJs` on untyped JavaScript outside declared TypeScript workspace contracts.
 - No new test files were added, so shard assignment remains unchanged: census test in scripts-tooling-2; mutation test in scripts-tooling-4.
+
+
+# Shard rebalance and benchmark gate (g10)
+
+# Progress
+
+- Created isolated worktree from origin/main.
+
+- Installed dependencies with Bun 1.4.1.
+
+- Initial workspace build passed (6 packages).
+
+- Measured run-quality-mutations-operators.test.ts (see /tmp/g10-timings.log).
+
+- Confirmed gh-pages contains 583 accepted entries; latest reference 46ce0af6. Main benchmark 34545253605 already fails bus-fanout at 7-10x reference. New gate must not bypass this pre-existing regression. Existing action can compare without pushing, but cannot enforce a historical standard-deviation band, so a small TS comparator is required.
+
+- Measured check-types-census.test.ts (see /tmp/g10-timings.log).
+
+- Measured quality-metrics/declaration-erasure.test.ts (see /tmp/g10-timings.log).
+
+- Measured census-program.test.ts (see /tmp/g10-timings.log).
+
+- Measured coverage-ratchet.test.ts (see /tmp/g10-timings.log).
+
+- Implemented comparator: latest accepted gh-pages reference, repeated-run p50, default 20% and two sample standard deviations across last 20 accepted medians, fail closed on missing/invalid input; PR/dispatch only and no gh-pages writes. Added deterministic CLI/unit cases.
+
+- Script typecheck exit: 0.
+
+- Downloaded main CI per-file timing artifacts. Test execution totals: shard 1 241.6s, shard 2 264.9s, shard 3 254.1s, shard 4 384.5s (setup excluded).
+
+- Preserved previous delivery notes in REPORT.md. CI compiler regression alone takes 114.8s; split is necessary. Local default Python is 3.13.15 while CI-compatible fixtures require installed 3.12.12; final validation will use that interpreter.
+
+- Workflow YAML parsed successfully with PyYAML (action-validator availability checked).
+
+- Exercised comparator CLI against actual prior PR artifact and accepted main gh-pages history: exit 1 (details /tmp/g10-gate-real.log).
+
+- Measured run-quality-mutations.test.ts (see /tmp/g10-timings.log).
+
+- Measured check-quality-metrics.test.ts (see /tmp/g10-timings.log).
+
+- Actual prior PR artifact fails the new gate on bus-fanout (3 metrics) and session lookup; read-only CLI returns exit 1 and records regression.json. YAML fallback validator passed.
+
+- Benchmark comparator/workflow test exit: 0.
+
+- Split only the two direct compiler/real-contract tests into run-quality-mutations-compiler.test.ts; all original test bodies preserved, campaign/tree/Python scenarios stay together. Local baseline files: operators 90.19s, types census 29.94s, declaration erasure 37.21s, census program 6.42s, coverage ratchet 3.03s, campaign 222.56s, metrics 35.57s. Raw timing runs did not retain test summaries, so correctness is verified separately with pinned Python.
+
+- Rebalanced using actual CI timing artifacts: expected test-only sums 289.2s / 289.1s / 278.9s / 288.0s, versus 241.6s / 265.0s / 254.1s / 384.5s. Added separate-compiler shard invariant and assigned comparator to contracts.
+
+- Final script typecheck exit: 1.
+
+- Full-tree Ultracite gate exit: 0.
+
+- Previous validation chain stopped at Python dependency probe, before tsc; no typecheck ran in that chain. Independent script typecheck exit: 0.
+
+- Repository lint gate exit: 0.
+
+- Final workspace build exit: 0. LSP returned no diagnostics for comparator, workflow tests, campaign and compiler files; latest shard/comparator-test refresh timed out, with full tsc passing independently.
+
+- Confirmed Python 3.12.12 with pinned coverage dependencies. Background launch did not start; executing validation synchronously.
+
+- Split file run-quality-mutations-compiler.test.ts validation exit 0; timing/summary in /tmp/g10-after-run-quality-mutations-compiler.test.ts.log.
+
+- Split file run-quality-mutations.test.ts validation exit 0; timing/summary in /tmp/g10-after-run-quality-mutations.test.ts.log.
+
+- Final wiring/comparator/workflow tests exit: 0.
+
+- Final local results: compiler 2/2 pass (74.55s wall); campaign 59/59 pass (227.18s wall); wiring/workflow/comparator 125/125 pass. Comparator and shard module both 100% function/line coverage. Compiler/campaign timings use pinned Python and shared workstation load, unlike initial raw baseline timings; CI artifact projections are the reliable before/after comparison.

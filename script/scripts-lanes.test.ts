@@ -15,6 +15,12 @@ test("every recursive script test belongs to exactly one explicit lane", () => {
   expect(Object.keys(scriptToolingPartitions)).toEqual(scriptPartitions.filter((key) => key !== "scripts-contracts"));
 });
 
+test("compiler contracts run separately from mutation campaigns", () => {
+  expect(scriptToolingPartitions["scripts-tooling-1"]).toContain("run-quality-mutations-compiler.test.ts");
+  expect(scriptToolingPartitions["scripts-tooling-4"]).toContain("run-quality-mutations.test.ts");
+  expect(scriptsLanes["scripts-contracts"]).toContain("check-benchmark-regression.test.ts");
+});
+
 test("shard commands execute each assigned test exactly once without hash sharding", () => {
   const selected = scriptPartitions.flatMap((partition) => {
     const command = scriptTestCommand(partition);
