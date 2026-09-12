@@ -79,8 +79,9 @@ export function orderByAttention(facts: readonly SessionFacts[], now: number): O
   const groups: Ordered["groups"][number][] = [];
   for (const kind of KINDS) {
     const projects = new Map<ProjectId | null, SessionId[]>();
-    for (const { session, kind: sessionKind } of ranked) {
-      if (sessionKind !== kind) continue;
+    for (const entry of ranked) {
+      const session = entry.session;
+      if (entry.kind !== kind) continue;
       const rows = projects.get(session.projectId);
       if (rows) rows.push(session.id);
       else projects.set(session.projectId, [session.id]);

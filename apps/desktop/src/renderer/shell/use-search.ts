@@ -71,7 +71,13 @@ export function useSearch({
 
   const run = useCallback(
     (intent: Parameters<typeof reduce>[1]) => {
-      const { state: next, effects } = reduce(stateRef.current, intent, sequenceRef.current);
+      const transition: ReturnType<typeof reduce> = reduce(
+        stateRef.current,
+        intent,
+        sequenceRef.current,
+      );
+      const next = transition.state;
+      const effects: ReturnType<typeof reduce>["effects"] = transition.effects;
       stateRef.current = next;
       setState(next);
       for (const effect of effects) {
