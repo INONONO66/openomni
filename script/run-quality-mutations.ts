@@ -121,6 +121,10 @@ type Options = {
 };
 
 let failure: { code: string; message: string } | null = null;
+
+function failureMessage(error: Error | string): string {
+	return error instanceof Error ? error.message : error;
+}
 class MutationError {
 	readonly name = "MutationError";
 	constructor(
@@ -1271,6 +1275,104 @@ function probeKey(
 		},
 	}));
 }
+type CandidateContext = {
+	candidate: Candidate;
+	options: Options;
+	contract: Contract;
+	tests: string[];
+	run: string;
+	root: string;
+	result: Result;
+	probeCache: Map<string, ProbeEvidence>;
+};
+
+async function checkMutation(context: CandidateContext, mutated: string, python: boolean): Promise<boolean> {
+	const { options, contract, run, root, result } = context;
+	if (python) {
+		const compiled = await pythonWorker(options, mutated, run, "compile");
+		result.receipts.push(compiled);
+		if (broken(compiled) || ![0, 1].includes(compiled.exitCode ?? -1)) {
+			result.outcome = "infrastructure";
+			result.reason = "python-compiler-process";
+			return false;
+		}
+		if (object(decode(compiled.stdout)).valid !== true) {
+			result.typecheck = "invalid";
+			result.outcome = "invalid";
+			result.reason = "python-compiler-diagnostics";
+			return false;
+		}
+	}
+	const contractPath = join(run, "contract.json");
+	writeFileSync(contractPath, JSON.stringify({ ...contract, version: 1, typescript: "5.9.2" }));
+	const checked = await execute([process.execPath, "--smol", import.meta.path, "--typecheck-root", root, "--contract", contractPath, "--inventory", options.inventory], root, options.timeout * Math.max(1, contract.projects.length));
+	result.receipts.push(checked);
+	if (broken(checked) || ![0, 1].includes(checked.exitCode ?? -1)) {
+		result.outcome = "infrastructure";
+		result.reason = "typecheck-process";
+		return false;
+	}
+	const check = object(decode(checked.stdout));
+	if (check.kind !== "typecheck" || typeof check.valid !== "boolean") return fail("infrastructure", "Missing compiler receipt");
+	result.typecheck = check.valid ? "valid" : "invalid";
+	if (!check.valid) {
+		result.outcome = "invalid";
+		result.reason = "compiler-diagnostics";
+		return false;
+	}
+	return true;
+}
+
+async function probeCandidate(context: CandidateContext, source: ReturnType<typeof mutationSource>, python: boolean): Promise<boolean> {
+	const { candidate, options, tests, run, root, result, probeCache } = context;
+	const marker = join(run, "hit");
+	let probedSource = "";
+	if (python) {
+		const instrumented = await pythonWorker(options, source.source, run, "probe", candidate.site, marker);
+		result.receipts.push(instrumented);
+		if (broken(instrumented) || instrumented.exitCode !== 0) {
+			result.outcome = "infrastructure";
+			result.reason = "python-instrumentation-process";
+			return false;
+		}
+		probedSource = text(object(decode(instrumented.stdout)).source);
+	} else probedSource = instrument(source.source, [{ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests }], run);
+	const key = probeKey(candidate, probedSource, options, tests);
+	const cached = probeCache.get(key);
+	if (cached) {
+		result.coverage = cached;
+		if (!cached.reached) {
+			result.outcome = "noCoverage";
+			result.reason = "original-runtime-site-not-reached";
+			return false;
+		}
+		return true;
+	}
+	writeMutation(source, probedSource);
+	const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+	result.receipts.push(...probe.batches.map((batch) => batch.process));
+	result.junitReports.push(...probe.batches.map((batch) => batch.junit));
+	if (!green(probe)) {
+		result.outcome = "infrastructure";
+		result.reason = "baseline-probe-not-green";
+		return false;
+	}
+	const hit = existsSync(marker) ? readFileSync(marker, "utf8") : "";
+	result.coverage = { reached: hit === "1", markerSha256: sha256(hit), tests };
+	if (existsSync(marker) && hit !== "1") {
+		result.outcome = "infrastructure";
+		result.reason = "malformed-coverage-marker";
+		return false;
+	}
+	probeCache.set(key, result.coverage);
+	if (!result.coverage.reached) {
+		result.outcome = "noCoverage";
+		result.reason = "original-runtime-site-not-reached";
+		return false;
+	}
+	return true;
+}
+
 async function runCandidate(
 	candidate: Candidate,
 	options: Options,
@@ -1298,118 +1400,6 @@ async function runCandidate(
 	mkdirSync(run, { recursive: true });
 	let original = "";
 	let path = "";
-	async function checkMutation(mutated: string, python: boolean): Promise<boolean> {
-		if (python) {
-			const compiled = await pythonWorker(options, mutated, run, "compile");
-			result.receipts.push(compiled);
-			if (broken(compiled) || ![0, 1].includes(compiled.exitCode ?? -1)) {
-				result.outcome = "infrastructure";
-				result.reason = "python-compiler-process";
-				return false;
-			}
-			if (object(decode(compiled.stdout)).valid !== true) {
-				result.typecheck = "invalid";
-				result.outcome = "invalid";
-				result.reason = "python-compiler-diagnostics";
-				return false;
-			}
-		}
-		const contractPath = join(run, "contract.json");
-		writeFileSync(contractPath, JSON.stringify({ ...contract, version: 1, typescript: "5.9.2" }));
-		const checked = await execute(
-			[
-				process.execPath,
-				"--smol",
-				import.meta.path,
-				"--typecheck-root",
-				root,
-				"--contract",
-				contractPath,
-				"--inventory",
-				options.inventory,
-			],
-			root,
-			options.timeout * Math.max(1, contract.projects.length),
-		);
-		result.receipts.push(checked);
-		if (broken(checked) || ![0, 1].includes(checked.exitCode ?? -1)) {
-			result.outcome = "infrastructure";
-			result.reason = "typecheck-process";
-			return false;
-		}
-		const check = object(decode(checked.stdout));
-		if (check.kind !== "typecheck" || typeof check.valid !== "boolean")
-			return fail("infrastructure", "Missing compiler receipt");
-		result.typecheck = check.valid ? "valid" : "invalid";
-		if (!check.valid) {
-			result.outcome = "invalid";
-			result.reason = "compiler-diagnostics";
-			return false;
-		}
-		return true;
-	}
-	async function probeCandidate(
-		source: ReturnType<typeof mutationSource>,
-		python: boolean,
-	): Promise<boolean> {
-		const marker = join(run, "hit");
-		let probedSource = "";
-		if (python) {
-			const instrumented = await pythonWorker(
-				options,
-				source.source,
-				run,
-				"probe",
-				candidate.site,
-				marker,
-			);
-			result.receipts.push(instrumented);
-			if (broken(instrumented) || instrumented.exitCode !== 0) {
-				result.outcome = "infrastructure";
-				result.reason = "python-instrumentation-process";
-				return false;
-			}
-			probedSource = text(object(decode(instrumented.stdout)).source);
-		} else probedSource = instrument(source.source, [{ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests }], run);
-		const key = probeKey(candidate, probedSource, options, tests);
-		const cached = probeCache.get(key);
-		if (cached) {
-			result.coverage = cached;
-			if (!cached.reached) {
-				result.outcome = "noCoverage";
-				result.reason = "original-runtime-site-not-reached";
-				return false;
-			}
-			return true;
-		}
-		writeMutation(source, probedSource);
-		const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
-		result.receipts.push(...probe.batches.map((batch) => batch.process));
-		result.junitReports.push(...probe.batches.map((batch) => batch.junit));
-		if (!green(probe)) {
-			result.outcome = "infrastructure";
-			result.reason = "baseline-probe-not-green";
-			return false;
-		}
-		const hit = existsSync(marker) ? readFileSync(marker, "utf8") : "";
-		result.coverage = { reached: hit === "1", markerSha256: sha256(hit), tests };
-		if (existsSync(marker) && hit !== "1") {
-			result.outcome = "infrastructure";
-			result.reason = "malformed-coverage-marker";
-			return false;
-		}
-		if (!result.coverage?.reached) {
-			// A green, complete selection with no marker is the only reusable
-			// proof of an unreached original site. Errors and malformed markers
-			// return above without entering the campaign-local cache.
-			probeCache.set(key, result.coverage);
-			result.outcome = "noCoverage";
-			result.reason = "original-runtime-site-not-reached";
-			return false;
-		}
-		probeCache.set(key, result.coverage);
-		return true;
-	}
 	try {
 		copyExecution(join(temporary, "frozen"), root);
 		const source = mutationSource(root, candidate.path);
@@ -1424,8 +1414,9 @@ async function runCandidate(
 			candidate.replacement,
 		);
 		writeMutation(source, mutated);
-		if (!(await checkMutation(mutated, python))) return result;
-		if (python && !(await probeCandidate(source, python))) return result;
+		const context: CandidateContext = { candidate, options, contract, tests, run, root, result, probeCache };
+		if (!(await checkMutation(context, mutated, python))) return result;
+		if (python && !(await probeCandidate(context, source, python))) return result;
 		// TypeScript reach was established once for the campaign.
 		// Test side effects cannot leak into the mutation run.
 		removeExecution(root);
@@ -1900,7 +1891,7 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 		}
 		return await campaign(optionsFrom(values));
 	} catch (error) {
-		const caught = error instanceof Error ? error.message : String(error);
+		const caught = failureMessage(error as Error | string);
 		const prior = failure as { code: string; message: string } | null;
 		failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
 		console.log(
