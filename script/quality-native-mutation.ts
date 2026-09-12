@@ -105,9 +105,14 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       baseline: { type: "string" },
       base: { type: "string", default: "origin/main" },
       output: { type: "string", default: "quality-mutation-results" },
+      pilot: { type: "boolean", default: false },
+      limit: { type: "string" },
+      target: { type: "string" },
     },
   });
   requireMeasurement(Boolean(values.baseline), "measured mutation baseline required");
+  requireMeasurement(!(values.limit || values.target) || values.pilot, "--limit/--target require --pilot");
+  console.error(`[mutation] fingerprinting source inventory (pilot=${values.pilot})`);
   const root = resolve(values.root),
     directory = resolve(root, values.output);
   const identity = fingerprint(root, values.contract);
@@ -121,8 +126,10 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
     cwd: root,
     receipt: resolve(directory, "process.json"),
     timeout: 21_000_000,
+    onStderr: (chunk) => { process.stderr.write(chunk); },
     command: [
       process.execPath,
+      "--smol",
       resolve(root, "script/run-quality-mutations.ts"),
       "--root",
       root,
@@ -150,9 +157,19 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "1000000",
       "--budget",
       "20000000",
+      "--suite-timeout",
+      "3600000",
+      ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
+      ...(values.target ? ["--target", values.target] : []),
     ],
   });
   writeFileSync(resolve(directory, "native.json"), JSON.stringify(result), { flag: "wx" });
+  if (values.pilot) {
+    const pilot = completeDocument(result.document);
+    requireMeasurement(pilot.full === false, "pilot must not claim full convergence");
+    console.error(`[mutation] pilot complete: ${JSON.stringify(pilot.selectedCounts)}`);
+    return result.exitCode;
+  }
   const measurement = normalizeMutation(result.document, identity, root);
   requireMeasurement(
     fingerprint(root, values.contract).inventoryHash === identity.inventoryHash,

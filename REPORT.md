@@ -1,411 +1,88 @@
-# CI delivery notes
-
-Worktree: openomni-ci-g8; branch ci/fanin-dedupe-and-shards; initial main 729fc67f.
-Previous g7 report does not exist.
-
-## Evidence
-- Main quality run 34323370726 job 102377659411: 219 output rows, 193 byte-distinct rows (180 once, 4 twice, 6 three times, 2 four times, 1 five times). The premise that every row triplicates is false.
-- Downloaded quality-leg-types: summarizer.ts:33 unknown:reasoningOptions has native offsets 1024, 1060, 1075. normalizeTypes removes offsets; ratchet reports each normalized object. Artifact fan-in itself admits disjoint gates and uniquely named leg files. Fix belongs at final reporting, not measurement multiset (which drives growth).
-- Run 34324099419 tooling jobs: 442s / 402s / 293s. Native test sums: census 365.026s; mutation 331.809s; third shard 241.429s. Three shards cannot reach <=300s even without setup. Need split census as well as mutation and increase partition count; preserve every assertion.
-- Scheduled mutation run 34321562725 failed with 9771 compiler diagnostics. Downloaded process.json stdout: missing node declarations and workspace-only dependencies (@tailwindcss/vite, electron-vite, electron, etc.). Snapshot skips every node_modules/dist then copies only root dependencies. Bun isolated workspace dependency links and built workspace declarations disappear. Fix must preserve a dereferenced full execution dependency layout, not ignore compiler diagnostics.
-
-## Verification
-Pending.
-
-## Resume inspection
-- Read saved report; inspecting committed dedupe and unfinished four-shard work before edits.
-
-## Fan-in verification
-- Re-ran ratchet/measure tests; exit 0 (log /tmp/st_01a0897e-fanin.log). Prior RED log inspected separately.
-
-## Shard design
-- Consolidated extracted tests into two census files and two mutation files, preserving scenario bodies. Four runners, not the interrupted five-runner draft.
-- Shared setup already installs frozen dependencies; scheduled failure is caused by execution snapshot dropping workspace node_modules and dist. Preserve internal relative links (including workspace cycles), reject external links, hash targets via full tree traversal.
-- Fan-in RED evidence: /tmp/st_01a0894b-red.log (duplicate rows fail uniqueness assertion); current 23/23 pass.
-
-## Type diagnostics
-- script tsconfig compiler exit: 0.
-
-## Wiring verification
-- Shard/coverage/CI/workflow tests exit 0; scenario comparison preserved original test names (57 census, 35 mutation declarations plus new workspace regression).
-
-## Ultracite gate
-- Full-tree check exit 0.
-
-## Lint gate
-- Repository lint exit 0.
-
-## Census verification
-- Both census files executed together, exit 1; log /tmp/st_01a0897e-census.log.
-
-## Mutation verification
-- Both mutation files executed together, exit 0; log /tmp/st_01a0897e-mutations.log.
-
-## Build verification
-- Real CI build entry point exit 0.
-
-## Native census rerun
-- Native census file rerun exit 1; initial fs.watch failure was local timing, rerun result recorded.
-
-## Known local failures
-- Census native rerun has 6 Python-environment failures (known local-only Python fixture class; not caused by shard edits); initial combined run had only the macOS fs.watch timing failure.
-
-## Commit
-- Committed shard/workflow changes as fea7428f after typecheck, build, lint, ultracite, wiring, ratchet/measure, and split-suite runs.
-
-## Pull request
-- Pushed commit and opened PR #1046; auto-squash merge enabled.
-
-## PR gate outcome
-- PR #1046, head 67ee9e98, CI run 34436705854. All four tooling jobs passed: 312s / 244s / 229s / 252s (before: 442s / 402s / 293s). Shard 1 remains 12s above five minutes including setup.
-- Quality Static (export), (publisher), and (store) failed; CI aggregation failed and Quality was skipped. Per explicit gate, disabled auto-merge; PR stays OPEN with no merge sha.
-- PR body corrected to measured before/after timing table. No admin override, issue comment, post-merge mutation dispatch, main timing, or new-main fan-in count: blocked by non-Quality/CI failures.
-
-## Task 4 start
-- Lead identified main baseline regression in optional-chained AbortSignal.addEventListener; inspecting state before rebase.
-
-## RED regression
-- Added optional AbortSignal.addEventListener fixture; running it before resolver change.
-RED exit 0
-
-## Real inventory
-- Exact quality inventory command exit 0.
-
-## Task 4 typecheck
-- script tsc exit 0.
-
-## Regression green
-- Optional chained and existing non-optional AbortSignal census tests exit 0.
-
-## Resolver fix
-- Added shared TypeScript-lib EventTarget/AbortSignal classification after unwrapping non-null and nullable receivers; no allowlist downgrade. The local focused fixture passed before the edit, so RED behavior was not reproducible locally, but regression and existing non-optional cases pass after.
-
-## Corrected RED proof
-- Parameter receiver fixture (optional, non-null, non-optional) run against pre-fix classifier: exit 1, /tmp/st_01a0897e-true-red.log. Local controller fixture had resolved provenance and was insufficient.
-
-## Final census suite
-- Shared DOM declaration owner classification, both census files exit 0.
-
-## Real store collection
-- Exact CI collect command with full plan, exit 0; log /tmp/st_01a0897e-real-store.log.
-
-## Final task 4 gates
-- tsc, Ultracite, lint, CI build chain exit 0.
-
-## Correctness review
-- Replaced initial separate libEventTarget validation escape with existing DOM declaration-owner classifier: unwrap receiver and non-nullable type, identify registration only, retain trigger requirements for dispatch.
-- True RED now reproduces unresolved_event_source on parameter signal?.addEventListener; after fix both full census files pass 68/68. Real CI store collect exits 0 on full repo.
-
-## Final PR checks
-- Bounded check loop completed for head 621adc32; results /tmp/st_01a0897e-final-checks.json.
-
-## Final delivery gate - task 4
-- Final head 621adc32, run 34440340907: all non-Quality/CI checks pass, including export/publisher/store. Quality reports 90 rows, all 90 distinct: coverage 24, CRAP 54, testClones 6, type 3, cyclomatic 2, cognitive 1. Rows saved at /tmp/st_01a0897e-final-rows.txt.
-- Remaining rows include script/check-census.ts complexity, script/check-census.test.ts unknown:errors, script/quality-ratchet.ts unknown:error, and test clone findings; these are NOT exclusively zero-coverage spawned CLI rows. Conditional admin-merge authorization does not apply. PR remains OPEN, auto-merge disabled, no merge SHA.
-- Latest measured tooling wall durations: 245s / 284s / 300s / 352s; original 442s / 402s / 293s. Shard 4 exceeds target.
-- No post-merge mutation dispatch or main CI timings/fan-in count because not merged. Further quality-closure work remains; no baseline relaxation or unsafe override made.
-
-## Quality closure start
-- Read prior report and inspecting the 90-row inventory and affected code.
-
-## Closure diagnosis
-- Confirmed split-suite clone sites, catch-binding unknown findings, and inline callback/main complexity. Mutation fixture report processing and setup are nested under one uncovered factory; extracting directly exercised logic preserves spawned integration assertions.
-
-## Closure implementation
-- Shared census store assertion and parameterized Electron setup; shared coverage lane fixture retains both suites and one setup implementation. Extracted synchronous callback classification, DOM receiver classification, and invocation serialization.
-- Ratchet uses the existing census typed failure-record pattern: a catch binding remains unknown even after instanceof narrowing. Local ratchet errors retain detail; external malformed-input failures retain the generic fail-closed message.
-- Mutation fixture now has pure argument/evidence/report functions with direct branch and rejection tests; setup and report assertions are top-level to avoid whole-factory attribution. Added missing carry-forward default-count, global-gate and deleted-source tests.
-- tsc rerun exit 2.
-- tsc final rerun exit 2.
-- Ultracite initial closure gate exit 0.
-- tsc with the exact census nullish-record pattern exit 0.
-
-## Closure tests
-- Combined touched/related tests exit 1; log /tmp/st_01a08b15-tests.log.
-- tsc likely passed (parallel output empty); ultracite failed one unused import; tests exit 1 with 33 failures, inspect log.
-- tsc final exit 0; Python-fixture failures remain known local failures.
-
-## Environment diagnosis
-- Initial combined suite used globally selected Python 3.13.15, but CI pins 3.12.12. All 33 failures are Python fixtures (7 census plus 26 mutation); preparing the pinned interpreter before the reliable final run.
-
-## Real store leg
-- Exact workflow collection with full plan exit 0; /tmp/st_01a08b15-store.log.
-- Final Ultracite exit 0.
-- Lint exit 0.
-
-## Pinned final test run
-- All touched/related tests with CI Python 3.12.12 exit 0; /tmp/st_01a08b15-tests-pinned.log.
-
-## Build and diagnostics
-- Per-file diagnostics: no errors, two pre-existing db.exec deprecation hints. CI build exit 0.
-- Real metrics collection exit 0; /tmp/st_01a08b15-metrics.
-
-## Ready to rebase
-- All 289 tests passed with pinned Python; mutation fixture 100% local function/line coverage. Real metrics and store collections and CI build passed. Shared coverage setup and Electron config have exactly one implementation (rg).
-
-## Rebase
-- Closure commit 724e2e52; fetch and rebase origin/main exit 0.
-- Post-rebase tsc, Ultracite and lint chain exit 0. Rebase made no source changes; 289/289 test result remains the verified tree.
-- Final tsc/Ultracite/lint gate exit 1.
-
-## Main complexity closure
-- Metrics confirmed callback cyclomatic 16/cognitive 13, but censusMain remained 24/24 (nested arrow extraction does not affect its metric). Extracted scoped-plan parsing and class-all traversal. Census suites exit 0.
-- Final real-repo store collection exit 0.
-
-## Final validation
-- Parallel Ultracite saw temporary collector inventory JSON; rerun after collector cleanup: tsc/Ultracite/lint/build exit 0. Census 68/68; real store exit 0. Measured censusMain cyclomatic 20, cognitive 21; callback 16/13.
-
-## Remote closure run
-- Pushed b8bac188 (two incremental commits), rebased against current origin/main. Updated PR body with verification and spawn-only scope.
-
-## Remote checks
-- Poll completed for head b8bac188. All quality legs and Quality Gates passed; Desktop production smoke failed, so merge is blocked per rule. No merge, mutation dispatch, or main post-merge timing was performed.
-
-## Task 1018 continuation
-- Scratch compiler probe exported `programs`/`diagnostics` temporarily and mirrored the workflow inventory/program roots after the declaration build.
-- It reproduced all 17 diagnostics: they came from the fallback program checking untyped JavaScript (`apps/desktop/test-e2e/startup.cjs` and `script/quality-metrics/tool-runner.mjs`). Root fix: fallback `checkJs: false`; declared workspace tsconfig programs remain fully checked.
-- Added a real-repository zero-diagnostics regression test and direct in-process entry tests for census and mutation tools.
-- `mise exec bun@1.4.1 -- bunx tsc -p script/tsconfig.json` passes.
-- Full touched test run exposed existing Python-fixture failures in this local environment and the new census assertion was corrected; the compiler regression test needs a longer than default test timeout because building the full inventory is expensive.
-
-## Completion attempt
-- Compiler scope correction explicitly identifies the 17 diagnostics as `apps/desktop/test-e2e/startup.cjs` (4) and `script/quality-metrics/tool-runner.mjs` (13), all from fallback `checkJs` on untyped JavaScript outside declared TypeScript workspace contracts.
-- No new test files were added, so shard assignment remains unchanged: census test in scripts-tooling-2; mutation test in scripts-tooling-4.
-
-
-# Shard rebalance and benchmark gate (g10)
-
-# Progress
+# Issue #1049 work report
 
 - Created isolated worktree from origin/main.
 
-- Installed dependencies with Bun 1.4.1.
+- Dependencies installed and initial build passed (6 tasks).
 
-- Initial workspace build passed (6 packages).
+- Read issue and native wrapper/workflow; original step died after 146 seconds and even always() artifact upload was skipped. Campaign stdout is captured by nativeJson.
 
-- Measured run-quality-mutations-operators.test.ts (see /tmp/g10-timings.log).
+- Traced campaign: snapshot + execution hash, all TS programs/enumeration/Python, diagnostics, baseline full selection, sequential mutants. execute kills detached child groups with SIGKILL, not SIGTERM; native wrapper buffers both streams.
 
-- Confirmed gh-pages contains 583 accepted entries; latest reference 46ce0af6. Main benchmark 34545253605 already fails bus-fanout at 7-10x reference. New gate must not bypass this pre-existing regression. Existing action can compare without pushing, but cannot enforce a historical standard-deviation band, so a small TS comparator is required.
+- Added first diagnostic increment: streamed stderr with retained receipts, phase/mutant progress, explicit pilot-only wrapper path, workflow pilot_limit + Linux memory/disk/time sampler. No baseline or mutant selection changes in full mode.
 
-- Measured check-types-census.test.ts (see /tmp/g10-timings.log).
+- Diagnostic increment: LSP has no errors/warnings, script TypeScript gate passed, 79 related/CI tests passed including an event-driven stderr-before-exit integration test.
 
-- Measured quality-metrics/declaration-erasure.test.ts (see /tmp/g10-timings.log).
+- Diagnostic increment gates passed: ultracite, lint, and build. Committing and dispatching five-candidate hosted pilot to locate the SIGTERM.
 
-- Measured census-program.test.ts (see /tmp/g10-timings.log).
+- Mutation integration test command completed with exit 1 (log /tmp/g11-mutation-tests2.log). Prior run was interrupted by the tool timeout, not a test verdict.
 
-- Measured coverage-ratchet.test.ts (see /tmp/g10-timings.log).
+- Hosted diagnostic pilot 34674012661: 16 GiB runner, peak RSS 14,835,820 KiB; memory pressure starts in compiler enumeration before baseline. Disk remains 82 GiB free. Baseline then hits hardcoded 15-second whole-suite watchdog (SIGKILL), yielding no mutants. Original SIGTERM was not reproduced; resource pressure and independently broken baseline deadline are observed.
+- Broader tests: 65 pass/26 fail, Python cases; investigating pinned Python environment before rerun.
 
-- Implemented comparator: latest accepted gh-pages reference, repeated-run p50, default 20% and two sample standard deviations across last 20 accepted medians, fail closed on missing/invalid input; PR/dispatch only and no gh-pages writes. Added deterministic CLI/unit cases.
+- Failure mechanism: 29 simultaneously retained compiler programs/checkers reach 12.9 GiB RSS, still retained while spawning baseline children. Baseline uses the per-test 15s setting as the whole-process deadline. Fix preserves the per-test bound and inventory, but processes compiler projects sequentially and releases them before tests.
 
-- Script typecheck exit: 0.
+- Implemented sequential first-owner compiler analysis with unchanged fallback membership, explicit low-memory Bun children, and per-file/project aggregate process deadlines while retaining 15000ms per-test timeout. Added eager-versus-sequential candidate/census equality regression. Python test failures were under local 3.13.15, not the required 3.12.12; pinned interpreter is installed.
 
-- Downloaded main CI per-file timing artifacts. Test execution totals: shard 1 241.6s, shard 2 264.9s, shard 3 254.1s, shard 4 384.5s (setup excluded).
+- Pinned Python 3.12.12 related test run exit: 0 (log /tmp/g11-tests3.log).
 
-- Preserved previous delivery notes in REPORT.md. CI compiler regression alone takes 114.8s; split is necessary. Local default Python is 3.13.15 while CI-compatible fixtures require installed 3.12.12; final validation will use that interpreter.
+- Root-fix gates passed: 171 tests (single complete pinned-runtime run), TypeScript, ultracite, lint, build. Committing second increment and dispatching hosted pilot.
 
-- Workflow YAML parsed successfully with PyYAML (action-validator availability checked).
+- Created PR for the two tested increments; post-fix pilot 34674877134 running.
 
-- Exercised comparator CLI against actual prior PR artifact and accepted main gh-pages history: exit 1 (details /tmp/g10-gate-real.log).
+- Post-fix pilot 34674877134 survived 20m45s without a signal. Peak RSS fell to 6,286,128 KiB; test-time total used memory generally 2-3 GiB. Baseline now finishes: 4400 tests, 173 failures, exit 1, no timeout/signal. Mutants correctly remain blocked by red baseline. PR checks complete; inspecting baseline execution-context failures before deciding next increment.
 
-- Measured run-quality-mutations.test.ts (see /tmp/g10-timings.log).
+- Pilot blockers now proven: missing .git in existing snapshot causes source_revision_unavailable / git repository failures; monolithic suite also has cross-suite/environment failures. These predate this fix and are not suppressed. Full branch dispatch started as requested; PR Quality diagnostics being checked.
 
-- Measured check-quality-metrics.test.ts (see /tmp/g10-timings.log).
+- Added real in-process campaign/receipt comparison and native pilot-wrapper integration coverage; explicit generator return/next types remove quality-census implicit any at yield sites. No test-body wording assertions or bypasses.
 
-- Actual prior PR artifact fails the new gate on bus-fanout (3 metrics) and session lookup; read-only CLI returns exit 1 and records regression.json. YAML fallback validator passed.
+- In-process integration gate test exit: 0 (log /tmp/g11-tests4.log).
 
-- Benchmark comparator/workflow test exit: 0.
+- Third increment gates passed: 173 tests together, TypeScript, ultracite, lint, build. Real campaign is now 91.55% line-covered in process; native wrapper 87.86%. Full branch run 34675894684 remains under background gh run watch.
 
-- Split only the two direct compiler/real-contract tests into run-quality-mutations-compiler.test.ts; all original test bodies preserved, campaign/tree/Python scenarios stay together. Local baseline files: operators 90.19s, types census 29.94s, declaration erasure 37.21s, census program 6.42s, coverage ratchet 3.03s, campaign 222.56s, metrics 35.57s. Raw timing runs did not retain test summaries, so correctness is verified separately with pinned Python.
+- Full branch run 34675894684 completed; bounded phase/resource evidence saved /tmp/g11-branch-full.log.
 
-- Rebalanced using actual CI timing artifacts: expected test-only sums 289.2s / 289.1s / 278.9s / 288.0s, versus 241.6s / 265.0s / 254.1s / 384.5s. Added separate-compiler shard invariant and assigned comparator to contracts.
+- Commented issue #1049 with memory, signal, disk, baseline, and branch-run evidence. PR #1051 remains intentionally unmerged because Quality/CI checks fail; no auto-merge invoked.
 
-- Final script typecheck exit: 1.
+- Resumed #1051: restoring execution-copy Git metadata and resolving changed-line Quality findings before pilot/merge.
 
-- Full-tree Ultracite gate exit: 0.
+- Git needs confirmed: HEAD/tree revision, log/objects for local fetch, index for git grep/ls-files, and refs for CI planning. Detached worktrees now preserve these; overlay includes current dirty/untracked inputs and physical dependencies, no external node_modules symlink exception. Cleanup checks Git registration removal.
 
-- Previous validation chain stopped at Python dependency probe, before tsc; no typecheck ran in that chain. Independent script typecheck exit: 0.
+- Split baseline/probe/mutated test execution by nearest package manifest without excluding inventory tests; this restores package cwd/config and isolates desktop/UI runtime globals. Every batch process/JUnit is retained and a failed batch still blocks scoring.
 
-- Repository lint gate exit: 0.
+- Worktree/package-batch integration test gate exited 1; log /tmp/g11-tests5.log.
 
-- Final workspace build exit: 0. LSP returned no diagnostics for comparator, workflow tests, campaign and compiler files; latest shard/comparator-test refresh timed out, with full tsc passing independently.
+- Gates tsc/ultracite/lint/build passed. New full-wrapper test reached normalization but failed; reading exact assertion before fixing it. Worktree isolation and in-process two-package campaign tests passed.
 
-- Confirmed Python 3.12.12 with pinned coverage dependencies. Background launch did not start; executing validation synchronously.
+- Full-wrapper regression corrected to use a quality-owned packages/... source (the first fixture had no quality-owned inventory). Native wrapper now passes 4 tests and reaches full normalization + fail-closed missing-baseline ratchet; prior complete run had 174/175 with only that fixture failure. Other local gates passed.
 
-- Split file run-quality-mutations-compiler.test.ts validation exit 0; timing/summary in /tmp/g10-after-run-quality-mutations-compiler.test.ts.log.
+- Full related test command after fixture correction exited 0 (log /tmp/g11-tests6.log).
 
-- Split file run-quality-mutations.test.ts validation exit 0; timing/summary in /tmp/g10-after-run-quality-mutations.test.ts.log.
+- Hosted pilot 34677629184: Git/package fix removed all observed assertion failures (3684 tests, 0 failures), but a batch process still failed; inspecting its retained receipt. Local full related run: 175 pass/0 fail.
 
-- Final wiring/comparator/workflow tests exit: 0.
+- Pilot third run has 12 green package batches (3684 tests, zero failures); tooling batch was killed by derived 13-minute watchdog, not OOM. Keeping 15s per-test bound, separating suite deadline. Desktop smoke had Electron startupData null; used the single authorized rerun. Quality changed-line rows plus unrelated census CRAP growth remain under investigation.
 
-- Final local results: compiler 2/2 pass (74.55s wall); campaign 59/59 pass (227.18s wall); wiring/workflow/comparator 125/125 pass. Comparator and shard module both 100% function/line coverage. Compiler/campaign timings use pinned Python and shared workstation load, unlike initial raw baseline timings; CI artifact projections are the reliable before/after comparison.
+- Synchronized origin/main #1052 census performance fix (ordered-removal/scope cache), which landed during this task. Desktop smoke authorized rerun passed. Main comparison drift explained unrelated census rows; no unrelated source edits made.
 
-- Incremental commits and branch push exit: 0.
+- Separating the test-process budget from per-test deadlines: per-test limit remains 15000ms; long tooling suites get an explicit bounded suite budget instead of a deadline inferred from file count.
 
-- Opened PR and enabled auto-squash; URL: https://github.com/INONONO66/openomni/pull/1050. Monitoring will disable auto-merge for non-Quality/CI failures.
+- Explicit suite deadline/refactored assertion parsing test gate: exit 0, /tmp/g11-tests7.log.
 
-- Disabled auto-merge: non-Quality/CI failed checks: Performance Benchmarks.
+- All local gates passed after explicit one-hour per-package suite deadline (15s per-test retained): 175 tests, tsc, ultracite, lint, build. Extracted assertion parsing to reduce runTestBatch complexity; native fixture setup deduplicated.
 
-- PR #1050 monitor is running with a 45-minute bound; all validation gates passed before push.
+- Refactored failedAssertions into assertionDiagnostic to clear CRAP >=22 on changed source without changing matching semantics; comments condensed to lines covered by in-process campaign tests.
 
-- Targeted native type census executed for the new comparator and its tests (exit 0); results /tmp/g10-comparator-types.json.
+- Final parser integration test run exited 0. Previous long pilot was explicitly canceled to free branch concurrency for final parser revision; cancellation is not campaign SIGTERM evidence.
 
-- Actual PR benchmark job failed exactly as expected: 3 bus-fanout regressions and session lookup. Auto-merge is disabled. Targeted native type census found owned unknown/implicit-any JSON boundaries in the new comparator; replacing them with the repository typed JSON decoder (also rejects duplicate keys), without weakening validation.
+- Hosted full baseline confirmed from canceled superseded run: 4417 tests, 0 failures, all 13 batch exit codes 0 at 07:08:16Z; mutant 1/5 started. Final pilot 34680745306 remains running; no rerun to mask failures. New main commits made PR conflicted; resolving before final checks.
 
-- Typed JSON boundary native census exit: 0; results /tmp/g10-comparator-types-fixed.json.
+- Merged main #1050 shard rebalance; retained its move of compiler tests into run-quality-mutations-compiler.test.ts and retained this branch analysis-test imports. Resolved scratch REPORT.md conflict in favor of mutation task evidence.
 
-- Typed boundary change: tsc/Ultracite/lint/related-tests chain exit 0.
+- Post-main-merge related test gate exited 0; compiler tests included at their new path.
 
-- Typed parser exercised against full real gh-pages history; comparator exit 1 (expected regression failure). Native type census is complete with zero owned violations.
+- Pilot 34680745306 completed in 1h49m13s: baseline green, all five first config mutants ran and were noCoverage (complete=true, no infrastructure errors). Peak including nested tooling processes: 9,595,992 KiB; steady package-time memory ~2-3 GiB. Need an explicitly targeted diagnostic pilot to satisfy killed/survived proof, since first five config sites are genuinely not reached. Full campaign selection remains unchanged.
 
-- Removed deprecated no-op Zod finite calls (v4 numbers reject nonfinite inputs already), explicitly tested infinity/NaN/negative metrics. Final typed-boundary tsc/Ultracite/lint/125 tests/build chain exit: 0.
+- Targeted pilot/receipt parsing final tests: exit 0, /tmp/g11-tests10.log. Explicit pilot_target input never affects full default campaign.
 
-- First measured PR shard result: tooling-4 passed in 306s, down from main 432s. Other shard/quality checks still pending.
+- Latest increment gates passed: 176 tests, TypeScript, ultracite, lint, build and changed-file diagnostics. Separately exercised parser machine records and deduplicated native failure detail formatting; preserves bounded failure messages.
 
-- First PR tooling-2 and tooling-3 both passed in 322s (5m22s). Saved post-rebalance per-file timings for shards 2-4.
-
-- First PR shard 1 passed but took 388s, exceeding target. Its measured tests sum only 294s; investigating the extra setup/exit overhead before repacking further.
-
-- Shard 1 extra overhead is real: it owns native Python self-tests and more setup, while test execution itself is 294s. Measured PR overheads: 93.94s / 45.48s / 38.32s / 50.76s. Uniform test packing cannot hit the wall target; a second packing weights these measured per-shard overheads (ideal achievable average 334.5s).
-
-- Weighted-shard tsc/Ultracite/lint/125 tests/build chain exit: 0. New projected wall times including measured overhead: 336.0s / 335.9s / 335.5s / 330.6s.
-
-- Pushed weighted shard and typed JSON follow-up commits, exit 0.
-
-- Updated PR body with first measured CI results, weighted final projection, verified gate failure, and zero-owned-type census.
-
-- First Quality job reports 23 rows: 19 owned type findings (fixed), a comment-only coverage line inside the new reader, and 3 workflow test-body CRAP rows. Moving reader documentation outside its executable body; validating the three required jobs in the test schema removes optional fallback branches rather than weakening assertions.
-
-- Quality closure tsc/Ultracite/lint/125 tests/build chain exit: 0.
-
-- Native JavaScript metrics measured workflow-test arrow complexity after requiring jobs at the schema boundary; results /tmp/g10-workflow-metrics.json.
-
-- Workflow test-body cyclomatic complexity is now at most 4 (zero-coverage CRAP 20), below the ratchet limit; every original assertion is retained.
-
-- Final comparator CLI still fails the real known-regressing artifact with exit 1; local comparator LCOV has no zero-hit lines.
-
-- Continued the same bounded PR monitor while awaiting final weighted-shard measurements before pushing quality-only closure.
-
-- Weighted CI run passed all shards: 323s / 336s / 378s / 346s. Shard 3 remains above target; collecting its test-vs-overhead breakdown before the last adjustment.
-
-- Final conservative packing separates both full-repository compiler suites and projects 344-347s using latest measurements (ideal average 345.75s). Final tsc/Ultracite/lint/125 tests/build chain exit: 0. Exact 330s is below the observed workload lower bound; no test or validation was removed.
-
-- Final source push exit 0; head 64c6cc638b99cfa88789cebe7594ff20178cf179.
-
-- Awaiting final head checks in the same 45-minute loop; main benchmark dispatch and merge-sha timing remain blocked by the intentional PR regression failure.
-
-- PR description now distinguishes both measured intermediate runs from the final projection, including the observed lower bound above a strict 330-second target.
-
-- Correcting the preliminary local timing evidence: repeat original shard-3/4 files with Python 3.12.12, retained pass/fail summaries and wall times; temporarily reconstruct the original mutation file for that measurement only, then restore the committed split.
-
-- Pinned baseline run-quality-mutations-operators.test.ts exit 0; complete output /tmp/g10-baseline-run-quality-mutations-operators.test.ts.log.
-
-- Pinned baseline check-types-census.test.ts exit 0; complete output /tmp/g10-baseline-check-types-census.test.ts.log.
-
-- Pinned baseline quality-metrics/declaration-erasure.test.ts exit 0; complete output /tmp/g10-baseline-quality-metrics_declaration-erasure.test.ts.log.
-
-- Pinned baseline census-program.test.ts exit 0; complete output /tmp/g10-baseline-census-program.test.ts.log.
-
-- Pinned baseline coverage-ratchet.test.ts exit 0; complete output /tmp/g10-baseline-coverage-ratchet.test.ts.log.
-
-- Pinned baseline run-quality-mutations.test.ts exit 0; complete output /tmp/g10-baseline-run-quality-mutations.test.ts.log.
-
-- Pinned baseline check-quality-metrics.test.ts exit 0; complete output /tmp/g10-baseline-check-quality-metrics.test.ts.log.
-
-- Pinned original-file timing sweep passed all 220 tests. Wall seconds: operators 95.30, types census 30.59, declaration erasure 35.61, census program 4.72, coverage ratchet 2.79, original mutation 268.70, metrics 33.85. Original mutation file was byte-identical to a2877746 during measurement; committed split restored exactly afterward.
-
-- Final measured PR shard wall times: 381s / 342s / 324s / 311s, all passed (sum 1358s; ideal average 339.5s). Three distinct packing approaches reduced the original 432s worst shard but did not demonstrate the requested approximately 330s maximum under observed CI variability. This target is explicitly not claimed as met.
-
-- PR body now contains final measured before/after shard table, corrected pinned baseline file timings, explicit unmet 5.5-minute maximum, and blocked merge/post-merge work.
-
-- PR checks terminal; full results saved in /tmp/g10-checks.json.
-
-- Final bounded monitor completed in about 38 minutes; Performance Benchmarks, Quality and CI fail. Inspecting final Quality rows before cleanup.
-
-- Final full CI had exactly one Quality row: test-body ArrowFunction CRAP 30 in comparator invalid-input test. Converted its three invalid-metric cases to table-driven tests without removing any assertion. Tsc/Ultracite/lint/128 tests/build chain exit: 0.
-
-- Final parameterized comparator tests: native type census complete with zero owned violations; maximum test-body cyclomatic 4 / CRAP 20, replacing the sole CI CRAP-30 row.
-
-
-# Follow-up progress
-
-- Recreated worktree at branch ci/shard4-benchmark-gate.
-
-- Dependencies installed and initial workspace build executed.
-
-- Read helper, session materializer, benchmark entry, kernel read functions and SQL session decoder. Session helper is setup-only, outside timed list/read callbacks; suspected extra SQL-row schema parse in production adapter.
-
-- Collected five repeated ledger benchmark runs at accepted reference and current branch (unchanged product/helper from main), retained all metric JSON under /tmp/g10-follow-bench.
-
-- Local median baseline/current ns: bus 10 494/3570, bus 50 1720/14984, bus 100 3285/29845, session get 1470/2308, list 10 9244/12569. The read regression is production: new SessionSqlRow nullable/array parse precedes unchanged LedgerSession.Row.parse, constructing a Zod wrapper per read. Helper materialization is unchanged and outside measurement.
-
-- Isolated production-only intervention: replaced redundant SQL shape parsing with typed SQLite queries; retained canonical LedgerSession.Row.parse on every read. Five repeated benchmark runs isolate this change before helper edits.
-
-- Production-only medians recovered get-session 2308 -> 1558 ns and list-10 12569 -> 9522 ns, while bus stayed slow. This isolates regression to duplicate SQL row validation, not materializeSession. Helper now parses event once and uses descriptor type witness for already-parsed delivery; added transform/match/reset/snapshot regression tests and retained canonical corrupt-read tests.
-
-- Full ledger suite exit 0; /tmp/g10-follow-ledger-tests.log.
-
-- Five repeated fixed-tree benchmarks completed; all JSON retained under /tmp/g10-follow-bench/fixed.
-
-- Changed ledger files native type census exit 0.
-
-- Script/ledger types, Ultracite, lint, related tests, build and workflow YAML gate chain exit 0.
-
-- Preserved typed descriptor/payload correlation in a single publication envelope, avoiding the native census generic predicate issue; focused census result recorded.
-
-- Final follow-up all requested gates and full ledger suite exit 0.
-
-- Simplified the heterogeneous callback registry to its original never-parameter erasure; only the validated event-name bucket receives parsed T. No predicate revalidation, extra publication wrapper, any, or unknown. Native census result recorded.
-
-- Final push gates (types, full lint, 336 ledger tests, 128 related tests, build): exit 0.
-
-- Final helper representation benchmarked for five repetitions; medians retained. Preserved previous REPORT history and appended this follow-up.
-
-- Ledger fix committed ad71d79c; docs commit stopped on MERGE_RR.lock. Inspecting active lock owner before retry.
-
-- Confirmed docs commit actually completed as 265e0e79 despite transient rerere post-commit lock error; no lock remained. Push exit 0.
-
-- Posted one factual root-cause comment on PR #1035; re-enabled auto-squash on #1050 after restoring measured local performance.
-
-- Started one bounded 45-minute follow-up check loop.
-
-- Updated PR with production/helper isolation, fixed local medians, unchanged 20% threshold and accepted shard outcome.
-
-- PR Benchmark run 34677416774 PASSED, including memory guards; publish skipped as required. Reference and artifact downloaded for final comparison.
-
-- Continued bounded PR monitor; Benchmark verified green and remaining CI/quality results recorded.
-
-- Auto-merge remains governed by checks; no thresholds or baselines relaxed.
-
-- PR tooling shards all passed: 372s / 354s / 332s / 275s (sum 1333s); awaiting quality fan-in and review checks.
-
-- PR check loop reached terminal state.
-
-- Continued the same check loop while the publisher analysis completes.
-
-- First follow-up CI completed: Benchmark/all non-Quality checks passed; Quality/CI failed. Inspecting changed-line findings.
-
-- Follow-up Quality has five pre-existing live export findings in sqlite-l0-write.ts (insertSession/appendAction/commitSession/commitInbox/insertInbox), not in modified function bodies. These are known export-census DI artifacts (#1041), not dead code; investigating the smallest correct route without deleting live functions or relaxing baselines.
-
-- Read-adapter-only correction and explicit no-wrapper-construction regression test: full gate chain exit 1. Shared SQL write module and row schemas are byte-identical to main.
-
-- Prior test failed because Bun spyOn cannot spy an accessor (Zod array). Corrected the instrumentation to observe the actual SQL-schema run function, preserving the no-duplicate-parse assertion. Full corrected gate chain exit 0.
-
-- Read-only adapter real benchmark entry passed; write module/schema restored byte-identical to main. Native read-adapter/test census has zero owned findings.
-
-- Read-adapter-only follow-up pushed, exit 0.
-
-- Started final gh pr checks watch (20s refresh); auto-merge remains enabled, Benchmark must pass again.
-
-- PR updated with first passing hosted benchmark and read-boundary-only closure.
-
-- Final-head Benchmark 34678429351 passed at 20% again; remaining CI checks still monitored.
-
-- Remaining CI state recorded; no non-Quality failures observed.
-
-- Final PR check watch completed with exit 1; output /tmp/g10-readonly-watch.log.
-
-- Extended bounded watch while CI tooling/quality jobs complete.
-
-- Final head CI/Quality failed; Benchmark passed. Inspecting Quality findings and changed-file ownership before deciding next fix.
-
-- Final-head Quality failure is 63 global pre-existing check-census complexity rows, not changed ledger rows; no changed-file Quality row is present. This is unrelated baseline drift and must not be fixed by scope broadening.
+- Final changed-line complexity increment: failedAssertions split into appendAssertionFailure; nativeFailure exported and exercised with structured/raw cases. 72 focused tests passed; diagnostics clean. Pilot 34685882066 still running targeted permission mutant.

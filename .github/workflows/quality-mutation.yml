@@ -5,6 +5,15 @@ on:
     # Daily evidence: the initial weekly schedule had no runs as of 2026-09-09.
     - cron: '41 2 * * *'
   workflow_dispatch:
+    inputs:
+      pilot_limit:
+        description: 'Diagnostic pilot candidate limit (0 runs the full campaign)'
+        type: number
+        default: 0
+      pilot_target:
+        description: 'Optional inventory path for a diagnostic pilot (requires pilot_limit > 0)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -39,7 +48,26 @@ jobs:
         run: bun run ci build
       - run: bun run script/check-quality-python.ts
       - name: Execute complete campaign and enforce measured baseline
-        run: bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json
+        env:
+          PILOT_LIMIT: ${{ inputs.pilot_limit || 0 }}
+          PILOT_TARGET: ${{ inputs.pilot_target || '' }}
+        run: |
+          args=()
+          if [[ "$PILOT_LIMIT" != 0 ]]; then
+            args+=(--pilot --limit "$PILOT_LIMIT")
+          fi
+          if [[ -n "$PILOT_TARGET" ]]; then
+            args+=(--target "$PILOT_TARGET")
+          fi
+          while sleep 20; do
+            echo "[mutation-resource] $(date -u +%FT%TZ)"
+            free -m | sed -n 2p
+            ps -o rss,cmd -C bun | sort -rn | head -3
+            df -h / /tmp
+          done &
+          sampler=$!
+          trap 'kill "$sampler"' EXIT
+          /usr/bin/time -v bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json "${args[@]}"
       - name: Preserve complete or failed campaign evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

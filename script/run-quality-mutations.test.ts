@@ -1,9 +1,28 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
+import { copyExecution, removeExecution, decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
+import { buildInventory, readContract } from "./quality-inventory";
+import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
+
+test("assertion receipt parsing separates matcher failures from crashes and other testcases", () => {
+	const stderr = [
+		"src/a.test.ts:", "error: expect(received).toBe(expected)", "(fail) matcher [1ms]",
+		"error: expect(received).not.toEqual(expected)", "(pass) passing [1ms]",
+		"Error: crash", "(fail) crash [1ms]",
+		"error: expect(received).toBe(expected)", "Error: another crash", "(fail) mixed [1ms]",
+		"error:", "Expected promise that rejects", "Received promise that resolved:", "(fail) settlement [1ms]",
+		"::group::src/b.test.ts:", "(fail) without diagnostic [1ms]",
+		"error: expect(received).resolves.toBe(expected)", "(fail) second-file [1ms]",
+	].join("\n");
+	expect(failedAssertions(stderr)).toEqual([
+		"src/a.test.ts\0matcher", "src/a.test.ts\0settlement", "src/b.test.ts\0second-file",
+	]);
+	expect(failedAssertions("")).toEqual([]);
+});
 
 test("mutation helpers cover execution tree recursion and virtual source traversal", () => {
   const root = mkdtempSync(join(tmpdir(), "mutation-tree-"));
@@ -62,6 +81,93 @@ test("fixture evidence preserves present fields and materializes missing fields 
   expect(rows(empty.selected).map(record)[0]).toEqual({ id: null, operator: null, outcome: null, reason: null, assertionIdentities: null, restored: null });
   for (const value of [undefined, null, false, [], "invalid"]) expect(() => record(value)).toThrow();
   for (const value of [undefined, null, {}, "invalid"]) expect(() => rows(value)).toThrow();
+});
+
+test("campaign runs baseline, mutant, restoration and JSON receipt in process", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);", {
+		"src/other/package.json": '{"name":"other","type":"module"}',
+		"src/other/extra.test.ts": 'import {test,expect} from "bun:test";test("isolated package",()=>expect(process.cwd().endsWith("other")).toBe(true));',
+	});
+	fixtureGit(input.root, "init", "-q");
+	fixtureGit(input.root, "add", ".");
+	fixtureGit(input.root, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture");
+	const external = await invoke(input, "in-process-reference", select("boolean-literal"));
+	assertBehavioralKill(external);
+	const argv = rows(evidence.at(-1)?.argv).map(String).slice(2);
+	const output: string[] = [];
+	const log: (value: string) => void = console.log;
+	console.log = (value: string) => { output.push(value); };
+	try {
+		expect(await main(argv)).toBe(0);
+		const report = record(decode(output.join("")));
+		expect(report.complete).toBe(true);
+		expect(report.cleanupVerified).toBe(true);
+		expect(report.originalHashesVerified).toBe(true);
+		expect(report.selectedCounts).toEqual(external.report.selectedCounts);
+		const batches = rows(record(report.baseline).batches).map(record);
+		expect(batches).toHaveLength(2);
+		expect(batches.every((batch) => record(batch.process).timedOut === false)).toBe(true);
+		expect(reportResults(report)[0]?.outcome).toBe("killed");
+	} finally { console.log = log; }
+}, 90000);
+
+test("sequential compiler analysis preserves first-owner candidates and complete census", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);", {
+		"src/driver.py": "print(True)",
+	});
+	const contract = readContract(join(input.root, "contract.json"));
+	contract.projects.push(...contract.projects);
+	const inventory = buildInventory(input.root, contract);
+	const operators = [{ id: "boolean-literal", replacements: new Map<string, string[]>() }];
+	const eager = [...programs(input.root, contract, inventory)];
+	const expected = enumerate(input.root, inventory, operators, eager);
+	const actual = analyze(input.root, contract, inventory, operators);
+	expect(actual.enumerated).toEqual(expected);
+	expect(actual.sourceDiagnostics).toEqual(diagnostics(eager));
+	expect(actual.enumerated.candidates.length).toBeGreaterThan(0);
+}, 90000);
+
+function fixtureGit(root: string, ...args: string[]): string {
+	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+	expect(result.status).toBe(0);
+	return result.stdout.trim();
+}
+
+test("execution worktrees retain Git history, dirty inputs, dependencies and isolated indexes", () => {
+	const root = mkdtempSync(join(tmpdir(), "mutation-git-"));
+	const copy = join(root, "copy"), nested = join(root, "nested"), source = join(root, "source");
+	mkdirSync(source);
+	try {
+		fixtureGit(source, "init", "-q");
+		writeFileSync(join(source, "tracked.ts"), "export const value = true;");
+		fixtureGit(source, "add", ".");
+		fixtureGit(source, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture");
+		const head = fixtureGit(source, "rev-parse", "HEAD");
+		writeFileSync(join(source, "tracked.ts"), "export const value = false;");
+		mkdirSync(join(source, "node_modules/dep/dist"), { recursive: true });
+		writeFileSync(join(source, "node_modules/dep/dist/index.js"), "export const value = 1;");
+		copyExecution(source, copy);
+		copyExecution(copy, nested);
+		expect(fixtureGit(nested, "rev-parse", "HEAD")).toBe(head);
+		expect(fixtureGit(nested, "log", "-1", "--format=%s")).toBe("fixture");
+		expect(fixtureGit(nested, "ls-files")).toBe("tracked.ts");
+		expect(readFileSync(join(nested, "tracked.ts"), "utf8")).toBe("export const value = false;");
+		expect(readFileSync(join(nested, "node_modules/dep/dist/index.js"), "utf8")).toBe("export const value = 1;");
+		const hash = executionTreeHash(copy);
+		writeFileSync(join(nested, "tracked.ts"), "mutant");
+		fixtureGit(nested, "add", "tracked.ts");
+		expect(fixtureGit(source, "diff", "--cached")).toBe("");
+		expect(executionTreeHash(copy)).toBe(hash);
+		removeExecution(nested);
+		removeExecution(copy);
+		expect(fixtureGit(source, "worktree", "list", "--porcelain").match(/^worktree /gm)).toHaveLength(1);
+		expect(existsSync(copy)).toBe(false);
+		expect(existsSync(nested)).toBe(false);
+	} finally {
+		removeExecution(nested);
+		removeExecution(copy);
+		rmSync(root, { recursive: true, force: true });
+	}
 });
 
 test("execution snapshots retain isolated workspace dependencies and built exports", async () => {

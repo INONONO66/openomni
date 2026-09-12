@@ -1,9 +1,61 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalizeMutation } from "./quality-native-mutation";
-import { digest } from "./quality-inventory";
+import { mutationMain, normalizeMutation } from "./quality-native-mutation";
+import { decodeJson, digest, jsonObject } from "./quality-inventory";
+import { mutationFixture } from "./quality-mutation-fixture";
+
+const { fixture, dependencies, decision } = mutationFixture("native-wrapper");
+
+function prepareNative(root: string): string[] {
+  cpSync(import.meta.dir, join(root, "script"), { recursive: true });
+  cpSync(dependencies, join(root, "node_modules"), { recursive: true, dereference: true });
+  return ["--root", root, "--contract", "contract.json", "--decision", decision];
+}
+
+test("native pilot executes the real campaign without creating a full ratchet measurement", async () => {
+  const input = await fixture("export const run = () => true;", "", {
+    "src/a.test.ts": "",
+    "src/z.test.ts": 'import {test,expect} from "bun:test";import {run} from "./a";test("behavior",()=>expect(run()).toBe(true));',
+  });
+  expect(await mutationMain([
+    ...prepareNative(input.root),
+    "--baseline", "unused-for-pilot.json", "--pilot", "--limit", "1", "--target", "src/a.ts",
+  ])).toBe(0);
+  const result = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
+  const document = jsonObject(result.document);
+  expect(document.full).toBe(false);
+  expect(document.complete).toBe(true);
+  expect(jsonObject(document.selectedCounts).killed).toBe(1);
+  expect(existsSync(join(input.root, "quality-mutation-results/current.json"))).toBe(false);
+  await expect(mutationMain(["--limit", "1", "--baseline", "baseline.json"])).rejects.toThrow();
+  await expect(mutationMain(["--target", "src/a.ts", "--baseline", "baseline.json"])).rejects.toThrow();
+  await expect(mutationMain([])).rejects.toThrow();
+}, 90000);
+
+test("native full campaign normalizes all candidates before enforcing the baseline", async () => {
+  const input = await fixture("", "", {
+    "src/a.test.ts": 'import "../support/assertion";',
+    "packages/demo/src/main.ts": "export const run = true;",
+    "support/assertion.ts": 'import {test,expect} from "bun:test";import {run} from "../packages/demo/src/main";test("behavior",()=>expect(run).toBe(true));',
+  });
+  const contractPath = join(input.root, "contract.json");
+  const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
+  writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
+  expect(await mutationMain([
+    ...prepareNative(input.root),
+    "--baseline", "missing-baseline.json",
+  ])).toBe(2);
+  const native = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
+  const document = jsonObject(native.document);
+  expect(document.full).toBe(true);
+  expect(document.complete).toBe(true);
+  expect(jsonObject(document.counts).killed).toBe(1);
+  const current = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/current.json"), "utf8")));
+  expect(current.analyzed).toEqual(["mutation"]);
+  expect(current.findings).toEqual([]);
+}, 90000);
 
 test("mutation normalization rejects pilots missing candidates and stale killed sources", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-mutation-receipt-"));

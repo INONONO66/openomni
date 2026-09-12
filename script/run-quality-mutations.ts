@@ -102,6 +102,7 @@ type Options = {
 	limit: number;
 	maxCandidates: number;
 	timeout: number;
+	suiteTimeout: number;
 	budget: number;
 	pilot: boolean;
 };
@@ -390,23 +391,29 @@ function broken(receipt: ProcessReceipt): boolean {
 		(receipt.cleanupExit !== 0 && receipt.cleanupExit !== 1)
 	);
 }
-export function programs(root: string, contract: Contract, inventory: Inventory): ts.Program[] {
-	const items = contract.projects.map((path) => {
-		pathIn(root, path);
-		try {
-			const parsed = projectOptions(root, path);
-			return ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
-		} catch { return fail("configuration", `invalid native project: ${path}`); }
-	});
+function projectProgram(root: string, path: string): ts.Program {
+	pathIn(root, path);
+	console.error(`[mutation] compiler project ${path}`);
+	try {
+		const parsed = projectOptions(root, path);
+		return ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
+	} catch { return fail("configuration", `invalid native project: ${path}`); }
+}
+export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
+	const covered = new Set<string>();
+	for (const path of contract.projects) {
+		const program = projectProgram(root, path);
+		for (const source of program.getSourceFiles()) covered.add(source.fileName);
+		yield program;
+	}
 	// Supplied native-project coverage first; only canonical remaining members
 	// enter the same strict inventory fallback used by the delegated type owner.
 	const remaining = inventory.files
 		.filter((file) => ["typescript", "javascript"].includes(file.language))
 		.map((file) => pathIn(root, file.path))
-		.filter((path) => !items.some((program) => program.getSourceFile(path)));
+		.filter((path) => !covered.has(path));
 	if (remaining.length)
-		items.push(
-			ts.createProgram(remaining, {
+		yield ts.createProgram(remaining, {
 				strict: true,
 				noEmit: true,
 				allowJs: true, checkJs: false, // untyped inventory JS is outside compiler contracts
@@ -416,21 +423,19 @@ export function programs(root: string, contract: Contract, inventory: Inventory)
 				moduleResolution: ts.ModuleResolutionKind.Bundler,
 				jsx: ts.JsxEmit.Preserve,
 				skipLibCheck: true,
-			}),
-		);
-	return items;
+			});
 }
 const diagnosticHost: ts.FormatDiagnosticsHost = {
 	getCanonicalFileName: (name) => name,
 	getCurrentDirectory: () => process.cwd(),
 	getNewLine: () => "\n",
 };
-export function diagnostics(items: ts.Program[]): string[] {
-	return items.flatMap((program) =>
-		ts
-			.getPreEmitDiagnostics(program)
-			.map((diagnostic) => ts.formatDiagnostics([diagnostic], diagnosticHost)),
-	);
+export function diagnostics(items: Iterable<ts.Program>): string[] {
+	const errors: string[] = [];
+	for (const program of items)
+		for (const diagnostic of ts.getPreEmitDiagnostics(program))
+			errors.push(ts.formatDiagnostics([diagnostic], diagnosticHost));
+	return errors;
 }
 function runtimeNode(node: ts.Node): boolean {
 	if (
@@ -774,6 +779,34 @@ export function enumerate(
 	candidates.sort(compareCandidates);
 	return { candidates, census, errors };
 }
+// Preserve first-project ownership without retaining every project's checker.
+export function analyze(root: string, contract: Contract, inventory: Inventory, operators: Operator[]) {
+	const pending = new Map(inventory.files.map((file) => [file.path, file]));
+	const result: ReturnType<typeof enumerate> = { candidates: [], census: [], errors: [] };
+	const sourceDiagnostics: string[] = [];
+	for (const program of programs(root, contract, inventory)) {
+		const files = [...pending.values()].filter((file) =>
+			["typescript", "javascript"].includes(file.language) && program.getSourceFile(pathIn(root, file.path)),
+		);
+		const part = enumerate(root, { files, historical: [], embedded: inventory.embedded, configurations: [] }, operators, [program]);
+		result.candidates.push(...part.candidates);
+		result.census.push(...part.census.filter((row) => row.language !== "python"));
+		result.errors.push(...part.errors);
+		sourceDiagnostics.push(...diagnostics([program]));
+		for (const file of files) pending.delete(file.path);
+	}
+	const rest = enumerate(root, { ...inventory, files: [...pending.values()] }, operators, []);
+	result.candidates.push(...rest.candidates);
+	result.census.push(...rest.census);
+	result.errors.push(...rest.errors);
+	const rows = new Map(result.census.map((row) => [row.path, row]));
+	result.census = [...inventory.files, ...inventory.historical, ...inventory.embedded].flatMap((file) => {
+		const row = rows.get(file.path);
+		return row ? [row] : [];
+	});
+	return { enumerated: result, sourceDiagnostics };
+}
+
 // Probe a value-producing boundary, never sever a Reference used as a callee,
 // delete operand, or continuing optional chain. Arguments/keys stay lazy.
 function valueBoundary(node: ts.Node): ts.Node {
@@ -835,18 +868,37 @@ function instrument(source: string, site: Site, marker: string): string {
 		site.mode === "jsx" ? `{${expression}}` : expression,
 	);
 }
-function snapshot(options: Options, target: string): void {
-	// Preserve Bun's isolated workspace dependency graph and built exports.
-	const skipped = new Set([".git", ".omo", "coverage", ".turbo"]);
-	cpSync(options.root, target, {
+function gitCopyCommand(root: string, args: string[]): string {
+	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+	if (result.status !== 0) return fail("executionCopy", result.stderr || String(result.error));
+	return result.stdout;
+}
+export function copyExecution(sourceRoot: string, target: string): void {
+	if (existsSync(join(sourceRoot, ".git"))) // Own detached index; share Git objects/history.
+		gitCopyCommand(sourceRoot, ["worktree", "add", "--detach", target, "HEAD"]);
+	const skipped = new Set([".git", ".omo", "coverage", ".turbo"]); // Copy dependencies; reject external links.
+	cpSync(sourceRoot, target, {
 		recursive: true,
 		verbatimSymlinks: true,
 		mode: constants.COPYFILE_FICLONE,
 		filter: (source) =>
-			!relative(options.root, source)
+			!relative(sourceRoot, source)
 				.split("/")
 				.some((part) => skipped.has(part)),
 	});
+}
+export function removeExecution(root: string): void {
+	if (existsSync(join(root, ".git"))) {
+		const owner = gitCopyCommand(root, ["rev-parse", "--git-common-dir"]).trim();
+		gitCopyCommand(root, ["worktree", "remove", "--force", root]);
+		const list = spawnSync("git", ["--git-dir", owner, "worktree", "list", "--porcelain"], { encoding: "utf8" });
+		if (list.status !== 0 || list.stdout.split("\n").includes(`worktree ${root}`))
+			fail("cleanup", `Execution worktree registration remains: ${root}`);
+	}
+	rmSync(root, { recursive: true, force: true });
+}
+function snapshot(options: Options, target: string): void {
+	copyExecution(options.root, target);
 	// Standalone fixtures may supply a separate, minimal dependency installation.
 	if (options.dependencies !== join(options.root, "node_modules"))
 		cpSync(options.dependencies, join(target, "node_modules"), {
@@ -890,18 +942,54 @@ type TestsReceipt = {
 	assertions: string[];
 	valid: boolean;
 };
-async function runTests(
+type TestSelectionReceipt = {
+	batches: TestsReceipt[];
+	tests: number;
+	failures: number;
+	assertions: string[];
+	valid: boolean;
+	exitCode: number;
+};
+function testGroups(root: string, tests: string[]): Map<string, string[]> {
+	const groups = new Map<string, string[]>();
+	for (const test of tests) {
+		let cwd = dirname(join(root, test));
+		while (cwd !== root && !existsSync(join(cwd, "package.json"))) cwd = dirname(cwd);
+		const selected = groups.get(cwd) ?? [];
+		selected.push(relative(cwd, join(root, test)));
+		groups.set(cwd, selected);
+	}
+	return groups;
+}
+async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number): Promise<TestSelectionReceipt> {
+	const batches: TestsReceipt[] = [];
+	for (const [cwd, selected] of testGroups(root, tests)) {
+		console.error(`[mutation] test package ${relative(root, cwd) || "."} (${selected.length} files)`);
+		batches.push(await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout));
+	}
+	return {
+		batches,
+		tests: batches.reduce((sum, batch) => sum + batch.tests, 0),
+		failures: batches.reduce((sum, batch) => sum + batch.failures, 0),
+		assertions: batches.flatMap((batch) => batch.assertions),
+		valid: batches.every((batch) => batch.valid),
+		exitCode: batches.every((batch) => batch.process.exitCode === 0) ? 0 : 1,
+	};
+}
+async function runTestBatch(
 	root: string,
 	tests: string[],
 	timeout: number,
 	directory: string,
 	python: string,
+	suiteTimeout: number,
 ): Promise<TestsReceipt> {
 	const report = join(directory, "tests.xml");
 	rmSync(report, { force: true });
 	const processReceipt = await execute(
 		[
 			process.execPath,
+			"--smol",
 			"test",
 			"--timeout",
 			String(timeout),
@@ -910,45 +998,47 @@ async function runTests(
 			...tests.map((test) => `./${test}`),
 		],
 		root,
-		timeout,
+		Math.max(suiteTimeout, timeout * tests.length),
 		python ? { PATH: `${dirname(python)}:${process.env.PATH ?? ""}` } : {},
 	);
 	const xml = existsSync(report) ? readFileSync(report, "utf8") : "";
 	const header = xml.match(/<testsuites\b[^>]*\btests="(\d+)"[^>]*\bfailures="(\d+)"/);
-	// Bun 1.3.6 labels ordinary thrown errors AssertionError too. Require a real
-	// expect failure diagnostic AND a nonzero assertion count for every failed
-	// testcase; a crash after a successful assertion must not become a kill.
+	return {
+		process: processReceipt,
+		junit: xml,
+		tests: Number(header?.[1] ?? 0),
+		failures: Number(header?.[2] ?? 0),
+		assertions: assertionIdentities(xml, processReceipt.stderr),
+		valid: !!header && !broken(processReceipt),
+	};
+}
+function assertionDiagnostic(segment: string[]): boolean {
+	const errors = segment.filter((item) => /^(?:error|[A-Za-z]*Error):/.test(item));
+	const expectation = errors.length > 0 && errors.every((item) =>
+		/^error: expect\(received\)\.(?:(?:not|resolves|rejects)\.)*[A-Za-z]+\(/.test(item),
+	);
+	const settlement = errors.length === 1 && /^error:\s*$/.test(errors[0] ?? "") &&
+		/^Expected promise that (?:rejects\nReceived promise that resolved|resolves\nReceived promise that rejected):/m.test(segment.join("\n"));
+	return expectation || settlement;
+}
+function appendAssertionFailure(output: string[], file: string, segment: string[], status: RegExpMatchArray | null): void {
+	if (status?.[1] === "fail" && assertionDiagnostic(segment)) output.push(`${file}\0${status[2]}`);
+}
+export function failedAssertions(stderr: string): string[] {
 	const failedNames: string[] = [];
-	let diagnosticFile = "";
+	let file = "";
 	let segment: string[] = [];
-	for (const line of processReceipt.stderr.split("\n")) {
-		const file = line.match(/^(?:::group::)?([^\s].*\.[cm]?[jt]sx?):$/)?.[1];
-		if (file) {
-			diagnosticFile = file.replace(/^\.\//, "");
-			segment = [];
-		}
+	for (const line of stderr.split("\n")) {
+		const found = line.match(/^(?:::group::)?([^\s].*\.[cm]?[jt]sx?):$/)?.[1];
+		if (found) { file = found.replace(/^\.\//, ""); segment = []; }
 		const status = line.match(/^\((pass|fail)\) (.*?)(?: \[[\d.]+ms\])?$/);
-		if (!status) {
-			segment.push(line);
-			continue;
-		}
-		const errors = segment.filter((item) => /^(?:error|[A-Za-z]*Error):/.test(item));
-		const expectation =
-			errors.length > 0 &&
-			errors.every((item) =>
-				/^error: expect\(received\)\.(?:(?:not|resolves|rejects)\.)*[A-Za-z]+\(/.test(item),
-			);
-		// Bun emits no matcher name for a promise settling on the wrong channel.
-		const settlement =
-			errors.length === 1 &&
-			/^error:\s*$/.test(errors[0] ?? "") &&
-			/^Expected promise that (?:rejects\nReceived promise that resolved|resolves\nReceived promise that rejected):/m.test(
-				segment.join("\n"),
-			);
-		if (status[1] === "fail" && (expectation || settlement))
-			failedNames.push(`${diagnosticFile}\0${status[2]}`);
-		segment = [];
+		if (status) { appendAssertionFailure(failedNames, file, segment, status); segment = []; }
+		else segment.push(line);
 	}
+	return failedNames;
+}
+function assertionIdentities(xml: string, stderr: string): string[] {
+	const failedNames = failedAssertions(stderr);
 	const assertionCases = [
 		...xml.matchAll(/<testcase\b([^>]+)(?<!\/)>([\s\S]*?)<\/testcase>/g),
 	].filter(
@@ -985,18 +1075,11 @@ async function runTests(
 		failedNames.splice(index, 1);
 		return [JSON.stringify({ file, name, line: attribute(attributes, "line") })];
 	});
-	return {
-		process: processReceipt,
-		junit: xml,
-		tests: Number(header?.[1] ?? 0),
-		failures: Number(header?.[2] ?? 0),
-		assertions,
-		valid: !!header && !broken(processReceipt),
-	};
+	return assertions;
 }
-function green(receipt: TestsReceipt): boolean {
+function green(receipt: TestSelectionReceipt): boolean {
 	return (
-		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.process.exitCode === 0
+		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
 function defaultResult(candidate: Candidate, tests: string[], selected = true): Result {
@@ -1123,6 +1206,7 @@ async function runCandidate(
 		const checked = await execute(
 			[
 				process.execPath,
+				"--smol",
 				import.meta.path,
 				"--typecheck-root",
 				root,
@@ -1132,7 +1216,7 @@ async function runCandidate(
 				options.inventory,
 			],
 			root,
-			options.timeout,
+			options.timeout * Math.max(1, contract.projects.length),
 		);
 		result.receipts.push(checked);
 		if (broken(checked) || ![0, 1].includes(checked.exitCode ?? -1)) {
@@ -1175,9 +1259,9 @@ async function runCandidate(
 			probedSource = text(object(decode(instrumented.stdout)).source);
 		} else probedSource = instrument(source.source, candidate.site, marker);
 		writeMutation(source, probedSource);
-		const probe = await runTests(root, tests, options.timeout, run, options.python);
-		result.receipts.push(probe.process);
-		result.junitReports.push(probe.junit);
+		const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+		result.receipts.push(...probe.batches.map((batch) => batch.process));
+		result.junitReports.push(...probe.batches.map((batch) => batch.junit));
 		if (!green(probe)) {
 			result.outcome = "infrastructure";
 			result.reason = "baseline-probe-not-green";
@@ -1198,7 +1282,7 @@ async function runCandidate(
 		return true;
 	}
 	try {
-		cpSync(join(temporary, "frozen"), root, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+		copyExecution(join(temporary, "frozen"), root);
 		const source = mutationSource(root, candidate.path);
 		path = source.path;
 		original = source.host;
@@ -1215,18 +1299,18 @@ async function runCandidate(
 		if (!(await checkMutation(mutated, python))) return result;
 		if (!(await probeCandidate(source, python))) return result;
 		// Probe test side effects cannot leak into the mutation run.
-		rmSync(root, { recursive: true, force: true });
-		cpSync(join(temporary, "frozen"), root, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+		removeExecution(root);
+		copyExecution(join(temporary, "frozen"), root);
 		writeMutation(source, mutated);
-		const tested = await runTests(root, tests, options.timeout, run, options.python);
-		result.receipts.push(tested.process);
-		result.junitReports.push(tested.junit);
+		const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+		result.receipts.push(...tested.batches.map((batch) => batch.process));
+		result.junitReports.push(...tested.batches.map((batch) => batch.junit));
 		if (green(tested)) {
 			result.outcome = "survived";
 			result.reason = "green-mutated-test-selection";
 		} else if (
 			tested.valid &&
-			tested.process.exitCode === 1 &&
+			tested.exitCode === 1 &&
 			tested.failures > 0 &&
 			tested.assertions.length === tested.failures
 		) {
@@ -1247,6 +1331,7 @@ async function runCandidate(
 			writeFileSync(path, original);
 			result.restored = sha256(readFileSync(path)) === sha256(original);
 		}
+		removeExecution(root);
 		rmSync(run, { recursive: true, force: true });
 	}
 }
@@ -1280,6 +1365,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		"limit",
 		"max-candidates",
 		"timeout",
+		"suite-timeout",
 		"budget",
 		"pilot",
 	];
@@ -1316,6 +1402,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		limit: bound("limit", 1000000, 1000000),
 		maxCandidates: bound("max-candidates", 10000, 1000000),
 		timeout: bound("timeout", 15000, 15000),
+		suiteTimeout: bound("suite-timeout", 15000, 3600000),
 		budget: bound("budget", 3600000, 604800000),
 		pilot: ["--pilot", "--limit", "--test", "--target", "--operator"].some((key) =>
 			values.has(key),
@@ -1446,6 +1533,12 @@ async function enumeratePython(
 	return pythonCapability;
 }
 
+function selectedCandidates(options: Options, candidates: Candidate[]): Candidate[] {
+	return candidates.filter((candidate) =>
+		(!options.targets.length || options.targets.includes(candidate.path)) &&
+		(!options.families.length || options.families.includes(candidate.operator)),
+	).slice(0, options.pilot ? options.limit : undefined);
+}
 async function executeSelection(
 	options: Options,
 	contract: Contract,
@@ -1456,13 +1549,7 @@ async function executeSelection(
 	errors: string[],
 ): Promise<Result[]> {
 	const results: Result[] = [];
-	const selected = enumerated.candidates
-		.filter(
-			(candidate) =>
-				(!options.targets.length || options.targets.includes(candidate.path)) &&
-				(!options.families.length || options.families.includes(candidate.operator)),
-		)
-		.slice(0, options.pilot ? options.limit : undefined);
+	const selected = selectedCandidates(options, enumerated.candidates);
 	if (!selected.length) errors.push("zero selected candidates");
 	const selectedIds = new Set(selected.map((candidate) => candidate.id));
 	let executed = 0;
@@ -1475,8 +1562,11 @@ async function executeSelection(
 		)
 			results.push(defaultResult(candidate, tests));
 		else {
-			results.push(await runCandidate(candidate, options, contract, temporary, tests));
+			console.error(`[mutation] mutant ${executed + 1}/${selected.length} start ${candidate.path}:${candidate.startOffset} ${candidate.operator}`);
+			const result = await runCandidate(candidate, options, contract, temporary, tests);
+			results.push(result);
 			executed++;
+			console.error(`[mutation] mutant ${executed}/${selected.length} ${result.outcome}: ${result.reason}`);
 		}
 	}
 	return results;
@@ -1534,6 +1624,7 @@ async function campaign(options: Options): Promise<number> {
 				`Compiler project is not hash-pinned in inventory: ${project}`,
 			);
 	const operators = operatorsAt(options.decision);
+	console.error("[mutation] verifying canonical inventory");
 	const canonical = await canonicalVerification(options);
 	verifySources(options.root, inventory);
 	const temporary = mkdtempSync(join(tmpdir(), "omo-quality-mutation-"));
@@ -1541,14 +1632,18 @@ async function campaign(options: Options): Promise<number> {
 	let cleanupVerified = false;
 	try {
 		const frozen = join(temporary, "frozen");
+		console.error(`[mutation] creating frozen execution copy at ${frozen}`);
 		snapshot(options, frozen);
+		console.error("[mutation] hashing frozen execution copy");
 		const executionTreeSha256 = executionTreeHash(frozen);
 		const base = join(temporary, "baseline");
-		const items = programs(frozen, contract, inventory);
-		const enumerated = enumerate(frozen, inventory, operators, items);
+		console.error(`[mutation] enumerating and checking ${contract.projects.length} compiler projects sequentially`);
+		const { enumerated, sourceDiagnostics } = analyze(frozen, contract, inventory, operators);
+		Bun.gc(true); // Release compiler AST/checkers before test children run.
+		console.error(`[mutation] enumerating Python candidates (${enumerated.candidates.length} TS/JS candidates)`);
 		const pythonCapability = await enumeratePython(options, temporary, frozen, enumerated);
 		enumerated.candidates.sort(compareCandidates);
-		const sourceDiagnostics = diagnostics(items);
+		console.error(`[mutation] compiler analysis finished (${enumerated.candidates.length} candidates, ${sourceDiagnostics.length} diagnostics)`);
 		const tests = options.tests.length
 			? options.tests
 			: inventory.files
@@ -1567,14 +1662,18 @@ async function campaign(options: Options): Promise<number> {
 		if (sourceDiagnostics.length)
 			errors.push(`baseline compiler rejected ${sourceDiagnostics.length} diagnostics`);
 		if (!enumerated.candidates.length) errors.push("zero eligible mutation candidates");
-		if (!errors.length) cpSync(frozen, base, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+		console.error(`[mutation] baseline execution copy (${tests.length} test files, ${errors.length} errors)`);
+		if (!errors.length) copyExecution(frozen, base);
+		console.error("[mutation] baseline tests starting");
 		const baseline = errors.length
 			? null
-			: await runTests(base, tests, options.timeout, temporary, options.python);
+			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
+		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const results = await executeSelection(
 			options, contract, temporary, started, enumerated, tests, errors,
 		);
+		console.error("[mutation] verifying restoration and cleaning execution copies");
 		verifySources(options.root, inventory);
 		if (executionTreeHash(frozen) !== executionTreeSha256)
 			return fail("tamper", "Frozen execution copy changed");
@@ -1582,11 +1681,14 @@ async function campaign(options: Options): Promise<number> {
 		pinned(options.contract, options.contractHash);
 		pinned(options.inventory, options.inventoryHash);
 		pinned(options.decision, options.decisionHash);
+		removeExecution(base);
+		removeExecution(frozen);
 		rmSync(temporary, { recursive: true, force: true });
 		cleanupVerified = !existsSync(temporary);
 		const { counts, selectedCounts, complete, exitCode, full } = campaignOutcome(
 			options, enumerated, results, errors, cleanupVerified,
 		);
+		console.error(`[mutation] campaign finished: ${JSON.stringify({ counts, selectedCounts, complete, errors })}`);
 		console.log(
 			JSON.stringify({
 				version: 1,
@@ -1626,7 +1728,12 @@ async function campaign(options: Options): Promise<number> {
 		);
 		return exitCode;
 	} finally {
-		if (!cleanupVerified) rmSync(temporary, { recursive: true, force: true });
+		if (!cleanupVerified) {
+			removeExecution(join(temporary, "candidate/source"));
+			removeExecution(join(temporary, "baseline"));
+			removeExecution(join(temporary, "frozen"));
+			rmSync(temporary, { recursive: true, force: true });
+		}
 	}
 }
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
