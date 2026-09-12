@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
-import { programs, diagnostics } from "./run-quality-mutations";
+import { analyze, enumerate, programs, diagnostics } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
 
 test("fallback compiler ignores untyped JavaScript inventory sources", () => {
@@ -82,6 +82,22 @@ test("fixture evidence preserves present fields and materializes missing fields 
   for (const value of [undefined, null, false, [], "invalid"]) expect(() => record(value)).toThrow();
   for (const value of [undefined, null, {}, "invalid"]) expect(() => rows(value)).toThrow();
 });
+
+test("sequential compiler analysis preserves first-owner candidates and complete census", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);", {
+		"src/driver.py": "print(True)",
+	});
+	const contract = readContract(join(input.root, "contract.json"));
+	contract.projects.push(...contract.projects);
+	const inventory = buildInventory(input.root, contract);
+	const operators = [{ id: "boolean-literal", replacements: new Map<string, string[]>() }];
+	const eager = [...programs(input.root, contract, inventory)];
+	const expected = enumerate(input.root, inventory, operators, eager);
+	const actual = analyze(input.root, contract, inventory, operators);
+	expect(actual.enumerated).toEqual(expected);
+	expect(actual.sourceDiagnostics).toEqual(diagnostics(eager));
+	expect(actual.enumerated.candidates.length).toBeGreaterThan(0);
+}, 90000);
 
 test("execution snapshots retain isolated workspace dependencies and built exports", async () => {
 	const input = await fixture('import { value } from "workspace-dep"; export const run = () => value === 7;', "expect(run()).toBe(true);");

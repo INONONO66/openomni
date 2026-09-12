@@ -390,23 +390,26 @@ function broken(receipt: ProcessReceipt): boolean {
 		(receipt.cleanupExit !== 0 && receipt.cleanupExit !== 1)
 	);
 }
-export function programs(root: string, contract: Contract, inventory: Inventory): ts.Program[] {
-	const items = contract.projects.map((path) => {
+export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program> {
+	const covered = new Set<string>();
+	for (const path of contract.projects) {
 		pathIn(root, path);
+		console.error(`[mutation] compiler project ${path}`);
 		try {
 			const parsed = projectOptions(root, path);
-			return ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
+			const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
+			for (const source of program.getSourceFiles()) covered.add(source.fileName);
+			yield program;
 		} catch { return fail("configuration", `invalid native project: ${path}`); }
-	});
+	}
 	// Supplied native-project coverage first; only canonical remaining members
 	// enter the same strict inventory fallback used by the delegated type owner.
 	const remaining = inventory.files
 		.filter((file) => ["typescript", "javascript"].includes(file.language))
 		.map((file) => pathIn(root, file.path))
-		.filter((path) => !items.some((program) => program.getSourceFile(path)));
+		.filter((path) => !covered.has(path));
 	if (remaining.length)
-		items.push(
-			ts.createProgram(remaining, {
+		yield ts.createProgram(remaining, {
 				strict: true,
 				noEmit: true,
 				allowJs: true, checkJs: false, // untyped inventory JS is outside compiler contracts
@@ -416,21 +419,19 @@ export function programs(root: string, contract: Contract, inventory: Inventory)
 				moduleResolution: ts.ModuleResolutionKind.Bundler,
 				jsx: ts.JsxEmit.Preserve,
 				skipLibCheck: true,
-			}),
-		);
-	return items;
+			});
 }
 const diagnosticHost: ts.FormatDiagnosticsHost = {
 	getCanonicalFileName: (name) => name,
 	getCurrentDirectory: () => process.cwd(),
 	getNewLine: () => "\n",
 };
-export function diagnostics(items: ts.Program[]): string[] {
-	return items.flatMap((program) =>
-		ts
-			.getPreEmitDiagnostics(program)
-			.map((diagnostic) => ts.formatDiagnostics([diagnostic], diagnosticHost)),
-	);
+export function diagnostics(items: Iterable<ts.Program>): string[] {
+	const errors: string[] = [];
+	for (const program of items)
+		for (const diagnostic of ts.getPreEmitDiagnostics(program))
+			errors.push(ts.formatDiagnostics([diagnostic], diagnosticHost));
+	return errors;
 }
 function runtimeNode(node: ts.Node): boolean {
 	if (
@@ -774,6 +775,34 @@ export function enumerate(
 	candidates.sort(compareCandidates);
 	return { candidates, census, errors };
 }
+// Preserve first-project ownership without retaining every project's checker.
+export function analyze(root: string, contract: Contract, inventory: Inventory, operators: Operator[]) {
+	const pending = new Map(inventory.files.map((file) => [file.path, file]));
+	const result: ReturnType<typeof enumerate> = { candidates: [], census: [], errors: [] };
+	const sourceDiagnostics: string[] = [];
+	for (const program of programs(root, contract, inventory)) {
+		const files = [...pending.values()].filter((file) =>
+			["typescript", "javascript"].includes(file.language) && program.getSourceFile(pathIn(root, file.path)),
+		);
+		const part = enumerate(root, { files, historical: [], embedded: inventory.embedded, configurations: [] }, operators, [program]);
+		result.candidates.push(...part.candidates);
+		result.census.push(...part.census.filter((row) => row.language !== "python"));
+		result.errors.push(...part.errors);
+		sourceDiagnostics.push(...diagnostics([program]));
+		for (const file of files) pending.delete(file.path);
+	}
+	const rest = enumerate(root, { ...inventory, files: [...pending.values()] }, operators, []);
+	result.candidates.push(...rest.candidates);
+	result.census.push(...rest.census);
+	result.errors.push(...rest.errors);
+	const rows = new Map(result.census.map((row) => [row.path, row]));
+	result.census = [...inventory.files, ...inventory.historical, ...inventory.embedded].flatMap((file) => {
+		const row = rows.get(file.path);
+		return row ? [row] : [];
+	});
+	return { enumerated: result, sourceDiagnostics };
+}
+
 // Probe a value-producing boundary, never sever a Reference used as a callee,
 // delete operand, or continuing optional chain. Arguments/keys stay lazy.
 function valueBoundary(node: ts.Node): ts.Node {
@@ -902,6 +931,7 @@ async function runTests(
 	const processReceipt = await execute(
 		[
 			process.execPath,
+			"--smol",
 			"test",
 			"--timeout",
 			String(timeout),
@@ -910,7 +940,8 @@ async function runTests(
 			...tests.map((test) => `./${test}`),
 		],
 		root,
-		timeout,
+		// --timeout still bounds each test; a suite is not a single test.
+		timeout * Math.max(1, tests.length),
 		python ? { PATH: `${dirname(python)}:${process.env.PATH ?? ""}` } : {},
 	);
 	const xml = existsSync(report) ? readFileSync(report, "utf8") : "";
@@ -1123,6 +1154,7 @@ async function runCandidate(
 		const checked = await execute(
 			[
 				process.execPath,
+				"--smol",
 				import.meta.path,
 				"--typecheck-root",
 				root,
@@ -1132,7 +1164,7 @@ async function runCandidate(
 				options.inventory,
 			],
 			root,
-			options.timeout,
+			options.timeout * Math.max(1, contract.projects.length),
 		);
 		result.receipts.push(checked);
 		if (broken(checked) || ![0, 1].includes(checked.exitCode ?? -1)) {
@@ -1550,15 +1582,14 @@ async function campaign(options: Options): Promise<number> {
 		console.error("[mutation] hashing frozen execution copy");
 		const executionTreeSha256 = executionTreeHash(frozen);
 		const base = join(temporary, "baseline");
-		console.error(`[mutation] creating compiler programs (${contract.projects.length} projects)`);
-		const items = programs(frozen, contract, inventory);
-		console.error("[mutation] enumerating TypeScript/JavaScript candidates");
-		const enumerated = enumerate(frozen, inventory, operators, items);
+		console.error(`[mutation] enumerating and checking ${contract.projects.length} compiler projects sequentially`);
+		const { enumerated, sourceDiagnostics } = analyze(frozen, contract, inventory, operators);
+		// No compiler AST/checker may remain live while test children run.
+		Bun.gc(true);
 		console.error(`[mutation] enumerating Python candidates (${enumerated.candidates.length} TS/JS candidates)`);
 		const pythonCapability = await enumeratePython(options, temporary, frozen, enumerated);
 		enumerated.candidates.sort(compareCandidates);
-		console.error(`[mutation] checking baseline compiler diagnostics (${enumerated.candidates.length} candidates)`);
-		const sourceDiagnostics = diagnostics(items);
+		console.error(`[mutation] compiler analysis finished (${enumerated.candidates.length} candidates, ${sourceDiagnostics.length} diagnostics)`);
 		const tests = options.tests.length
 			? options.tests
 			: inventory.files

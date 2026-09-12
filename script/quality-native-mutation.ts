@@ -128,6 +128,7 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
     onStderr: (chunk) => { process.stderr.write(chunk); },
     command: [
       process.execPath,
+      "--smol",
       resolve(root, "script/run-quality-mutations.ts"),
       "--root",
       root,
