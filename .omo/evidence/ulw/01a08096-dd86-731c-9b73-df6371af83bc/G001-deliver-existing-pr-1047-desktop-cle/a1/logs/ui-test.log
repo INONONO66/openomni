@@ -1,0 +1,341 @@
+bun test v1.4.1 (4661e494f)
+
+packages/ui/test/timeline-dom.test.tsx:
+(pass) scroll area pins content appended after opening to the end [22.35ms]
+(pass) timeline disclosure keeps expansion scoped to its session [12.05ms]
+
+packages/ui/test/shell.test.tsx:
+Received `true` for a non-boolean attribute `numeric`.
+
+If you want to write it to the DOM, pass a string instead: numeric="true" or numeric={value.toString()}.
+(pass) the width clamp > Given widths outside 224..330, When clamped, Then they land on the edges [0.04ms]
+(pass) the width clamp > Given a fractional width inside the range, When clamped, Then it is a whole pixel [0.01ms]
+(pass) the sidebar root > Given an open sidebar, When rendered, Then the root states it and carries the width [8.03ms]
+(pass) the sidebar root > Given a collapsed sidebar, When rendered, Then the column is hidden, inert, and has no handle [2.03ms]
+(pass) the sidebar root > Given an open sidebar, When rendered, Then the column is pinned, live, and the handle is a focus stop [2.25ms]
+(pass) the sidebar root > Given the three moving parts, When rendered, Then each animates its own property and yields to reduced motion [1.40ms]
+(pass) the hover reveal > Given a collapsed sidebar, When rendered, Then an 8px edge zone listens and the column is hidden [1.76ms]
+(pass) the hover reveal > Given an open sidebar, When rendered, Then there is no edge zone [1.81ms]
+(pass) the hover reveal > Given a collapsed sidebar that is floating, When rendered, Then the SAME column is an inset, raised overlay [1.67ms]
+(pass) the hover reveal > Given an open sidebar, When `floating` is also set, Then pinned wins [1.51ms]
+(pass) the hover reveal > Given the overlay and the pinned column, When compared, Then the ONE box morphs: inset, radius, shadow, and width transition on the frame's curve, opaque in both, and neither starts from zero width [3.18ms]
+(pass) the reveal's timing > Given the pointer rests on a hot zone, When the open delay passes, Then it opens once [0.41ms]
+(pass) the reveal's timing > Given the pointer leaves before the delay, When time passes, Then nothing opens [0.06ms]
+(pass) the reveal's timing > Given it is shown, When the pointer leaves for the close delay, Then it closes [0.15ms]
+(pass) the reveal's timing > Given it is shown, When the pointer hops from the toggle into the panel, Then the close is cancelled [0.05ms]
+(pass) the reveal's timing > Given a pending open or close, When cancelled, Then neither fires [0.05ms]
+(pass) the tab strip's controls zone > Given an open sidebar, When rendered, Then the zone is the sidebar's width and leads with the one toggle [1.49ms]
+(pass) the tab strip's controls zone > Given the zone, When rendered, Then the trio is its last child, pushed to the sidebar's edge by `ml-auto` [1.83ms]
+(pass) the tab strip's controls zone > Given the strip's four controls, When rendered, Then each is the 28px `base` step and the toggle paints no hover fill [1.06ms]
+(pass) the tab strip's controls zone > Given the toggle's glyph, When the column is pinned, hidden, or revealed, Then the bar's width reads 4.5 / 1.5 / 4.5 [4.35ms]
+(pass) the tab strip's controls zone > Given a collapsed sidebar on darwin, When rendered, Then the zone clears the traffic lights, is as wide as the overlay, and the same toggle leads it [0.84ms]
+(pass) the tab strip's controls zone > Given a floating reveal, When rendered, Then the toggle still reads as the collapsed state it would pin [0.62ms]
+(pass) the tab strip's controls zone > Given a collapsed sidebar elsewhere, When rendered, Then the zone starts at the window edge [0.56ms]
+(pass) the tab strip's controls zone > Given the zone, When rendered, Then it animates width on the frame's curve and yields to reduced motion [0.85ms]
+(pass) the tab strip's controls zone > Given no title, When rendered, Then no tab is drawn but the create control is [0.64ms]
+(pass) the tab strip's controls zone > Given a title, When rendered, Then the tab is a 26px card with no status mark [1.64ms]
+(pass) the tab strip's controls zone > Given a history at its ends, When rendered, Then back and forward are disabled [1.15ms]
+(pass) the section header > Given a section at rest, When rendered, Then it is a 32px row with the label on the text x and a search toggle [0.07ms]
+(pass) the section header > Given a searching section, When rendered, Then the field replaces the label, the inset tightens, and the toggle closes [0.02ms]
+(pass) a tree row > Given each level, When rendered, Then the depth is an attribute and a padding step [0.60ms]
+(pass) a tree row > Given a row, When rendered, Then it is one 28px line with no mark or connector [0.09ms]
+(pass) a tree row > Given the current row, When rendered, Then it says so and takes the raised fill [0.06ms]
+(pass) a tree row > Given a group row, When rendered, Then only it carries the chevron and its state [0.26ms]
+(pass) history time > Given elapsed spans, When formatted, Then the coarsest whole unit is used [0.08ms]
+(pass) history time > Given a clock behind the entry, When formatted, Then it never goes negative [0.01ms]
+
+packages/ui/test/fonts.test.ts:
+(pass) fonts are bundled, never fetched > Given the design system's stylesheet, When scanned, Then nothing is fetched over the network [1.20ms]
+(pass) fonts are bundled, never fetched > Given the stylesheet, When scanned, Then both families arrive from npm packages [0.22ms]
+(pass) fonts are bundled, never fetched > Given the font tokens, When read, Then each names its family first and then system fallbacks [1.71ms]
+(pass) fonts are bundled, never fetched > Given the package manifest, When read, Then both font packages are real dependencies [0.52ms]
+(pass) fonts are bundled, never fetched > Given the imported font stylesheets, When read from node_modules, Then their faces are local files [8.28ms]
+
+packages/ui/test/density.test.ts:
+(pass) the shell density type scale > Given the shell block, When each role is read, Then it is on its contracted size [0.22ms]
+(pass) the shell density type scale > Given the shell block, When body and meta are compared, Then meta is exactly one step quieter [0.07ms]
+(pass) the shell density type scale > Given the shell block, When the header is compared to body, Then it is at most one step larger [0.03ms]
+(pass) the shell density type scale > Given the shell block, When compared to the System scale, Then the ledger reads denser [0.54ms]
+(pass) the shell density type scale > Given the shell block, When leading is read, Then it is ledger-tight, never prose [0.10ms]
+(pass) the shell density type scale > Given the shell block, When the family is read, Then density sets no family [0.02ms]
+(pass) the shell density type scale > Given the shell block, When inspected, Then it re-points type and rhythm only [0.01ms]
+(pass) the System scale keeps its own reading > Given the base scale, When read, Then body is sans prose at prose leading [0.02ms]
+(pass) the System scale keeps its own reading > Given both blocks, When body leading is compared, Then shell is materially tighter [0.01ms]
+
+packages/ui/test/names.test.ts:
+(pass) the address book > a part reference does not satisfy its parent token [0.12ms]
+(pass) the address book > Given every name, When src is read, Then each is stamped through UI_NAMES and none by its literal [7.34ms]
+
+packages/ui/test/composer-dom.test.tsx:
+(pass) mounted composer dispatches input, send, stop and approval actions [13.93ms]
+
+packages/ui/test/surface.test.tsx:
+(pass) Panel > Given an edge, When rendered, Then only left and right splits exist [1.10ms]
+(pass) Panel > Given each tone, When rendered, Then the tonal ramp is three steps [0.16ms]
+(pass) Text > Given the announce levels, When rendered, Then weight never reaches 700 [0.15ms]
+(pass) Text > Given numeric text, When rendered, Then tabular figures are requested [0.05ms]
+Received `true` for a non-boolean attribute `mono`.
+
+If you want to write it to the DOM, pass a string instead: mono="true" or mono={value.toString()}.
+(pass) Text > Given mono text, When rendered, Then the machine-truth family is used [0.07ms]
+(pass) Highlight > Given matched runs, When rendered, Then emphasis is weight and tone, never a fill [0.17ms]
+(pass) Highlight > Given a rest tone, When rendered, Then only the unmatched remainder takes it [0.14ms]
+(pass) Highlight > Given every run, When rendered, Then the full label survives in order [0.11ms]
+(pass) Highlight > Given no match, When rendered, Then nothing is emphasised [0.08ms]
+(pass) ScrollArea > Given content, When rendered, Then the viewport is the single scrolling element [1.10ms]
+
+packages/ui/test/transcript-law.test.tsx:
+(pass) the spacing law > Given the four steps, When compared, Then the ratios carry the grouping [0.02ms]
+(pass) the spacing law > Given the turn step, When measured against the turn's insides, Then it wins by 2.5x [0.03ms]
+(pass) the spacing law > Given a user message, When it follows anything, Then the turn gap opens above it [0.01ms]
+(pass) the spacing law > Given a response, When it follows a user message, Then the pair gap binds them
+(pass) the spacing law > Given two paragraphs, When adjacent, Then the smallest step keeps them continuous
+(pass) the spacing law > Given a voice change inside a turn, When rendered, Then the block gap separates them
+(pass) the spacing law > Given every step, When converted to a class, Then it is a literal the scanner can see [0.23ms]
+(pass) the spacing law > Given every step, When converted, Then the class matches the number [0.03ms]
+(pass) the spacing law > Given the first part in the column, When laid out, Then it takes no leading gap
+(pass) the spacing law > Given an epoch, When placed, Then it gets turn air on both sides
+(pass) tool groups follow chronology > Given a prose block between calls, When segmented, Then it splits the group [0.08ms]
+(pass) tool groups follow chronology > Given the split, When the groups are read, Then each holds its own calls [0.07ms]
+(pass) tool groups follow chronology > Given adjacent calls, When segmented, Then only adjacency groups them [0.02ms]
+(pass) tool groups follow chronology > Given a session, When segmented, Then a new turn opens on a prompt or an epoch only [0.03ms]
+(pass) a tool group folds without hiding a claim > Given three calls, When laid out, Then the group does not fold [0.03ms]
+(pass) a tool group folds without hiding a claim > Given four calls, When laid out, Then the group folds [0.01ms]
+(pass) a tool group folds without hiding a claim > Given a settled call, When folded, Then it may be hidden
+(pass) a tool group folds without hiding a claim > Given an unfinished or failed call, When folded, Then it is never hidden [0.03ms]
+(pass) a tool group folds without hiding a claim > Given a folded group, When summarized, Then the loud rows stay pinned [0.05ms]
+(pass) a tool group folds without hiding a claim > Given a summary, When printed, Then it tallies most-frequent first [0.03ms]
+(pass) a tool group folds without hiding a claim > Given a folded group, When rendered, Then the summary shares the rows' text edge [0.91ms]
+(pass) a tool group folds without hiding a claim > Given the tool block, When the indent is traced, Then one constant owns it [0.14ms]
+(pass) a tool group folds without hiding a claim > Given a group with a live call, When rendered folded, Then that row is on screen [0.32ms]
+(pass) tool expansion is scoped to its session > Given the same session, When read, Then the open set is kept [0.02ms]
+(pass) tool expansion is scoped to its session > Given a different session, When read, Then the open set is dropped
+(pass) tool expansion is scoped to its session > Given a second switch, When read, Then it still resets [0.02ms]
+(pass) tool expansion is scoped to its session > Given a reset, When compared, Then the empty set is identity-stable
+(pass) the accent budget > Given the whole screen, When the accent is counted, Then it is spent only where reserved [0.21ms]
+(pass) the accent budget > Given the screen, When the accent fill is counted, Then only Approve takes one [0.07ms]
+(pass) the accent budget > Given a blocked row, When rendered, Then it reports without taking the accent [1.62ms]
+(pass) the accent budget > Given a pending approval, When rendered, Then the transcript row offers no decision [1.48ms]
+(pass) the accent budget > Given the tray, When rendered, Then it sits above the composer in the same column [0.05ms]
+(pass) the accent budget > Given the tray, When rendered, Then the keyboard path is printed [0.03ms]
+(pass) the transcript opens on its newest turn > Given the console, When composed, Then the transcript column pins to the end [0.10ms]
+(pass) the transcript opens on its newest turn > Given the primitive, When pinning is off, Then it never touches scrollTop [0.08ms]
+(pass) the diff exception stays scoped to diff rows > Given a diff line, When rendered, Then the marker and the sign carry the hue [0.03ms]
+(pass) the diff exception stays scoped to diff rows > Given the whole screen, When diff tokens are counted, Then each sits on a diff row [0.24ms]
+(pass) the diff exception stays scoped to diff rows > Given the source tree, When diff tokens are traced, Then only the gutter names them [0.89ms]
+(pass) the diff exception stays scoped to diff rows > Given a diff row, When tinted, Then the row wash stays under 6% and the code stays achromatic [0.22ms]
+
+packages/ui/test/sidebar-interactions.test.tsx:
+(pass) mounted hover reveals, cancels across hot zones and dismisses on Escape, pin and unmount [19.64ms]
+(pass) mounted splitter coalesces pointer frames, commits or cancels, and supports keyboard resizing [10.72ms]
+(pass) sidebar consumers reject a missing provider [0.40ms]
+
+packages/ui/test/strip-mount.test.tsx:
+(pass) the trio's identity > Given the strip open, When the sidebar collapses and re-opens, Then the trio is the same node [11.50ms]
+(pass) the container's identity across modes > Given a collapsed sidebar, When the reveal floats it and a pin lands it, Then hidden -> overlay -> pinned is the same node with one mount [11.28ms]
+
+packages/ui/test/tabs.test.tsx:
+bun test v1.4.1 (4661e494f)
+
+packages/ui/test/tabs.fixture.tsx:
+(pass) composer measures mount/input height and dispatches focused keyboard decisions [51.05ms]
+(pass) real tabs > mounted anatomy, generic icons, active panel links, reserved close geometry and overflow [37.58ms]
+(pass) real tabs > pressing the close control never takes focus: its pointerdown is cancelled [10.94ms]
+(pass) real tabs > close and middle auxiliary clicks close once without activating; right clicks never close [16.66ms]
+(pass) real tabs > Arrow keys wrap and Home/End activate and focus only from activation controls [54.13ms]
+(pass) real tabs > content changes keep the strip, trio and controls mounted; empty has no panel or composer [26.61ms]
+(pass) history menu > renders the caller's order verbatim with current 24 marked once and no fabricated ages [108.83ms]
+(pass) history menu > renders the caller's order verbatim with current 5 marked once and no fabricated ages [45.79ms]
+---------------------------------------------|---------|---------|-------------------
+File                                         | % Funcs | % Lines | Uncovered Line #s
+---------------------------------------------|---------|---------|-------------------
+All files                                    |   48.17 |   59.61 |
+ packages/ui/src/composer.tsx                |   77.78 |   74.43 | 41-43,45-48,50-51,53-59,61-62,64-69,71-72,76,78-79,192-198,202-208,210-211
+ packages/ui/src/console.tsx                 |  100.00 |   94.57 | 94-98
+ packages/ui/src/history-menu.tsx            |   75.00 |   91.67 | 95-99
+ packages/ui/src/icons/chevron.tsx           |  100.00 |  100.00 | 
+ packages/ui/src/icons/sidebar-toggle.tsx    |  100.00 |  100.00 | 
+ packages/ui/src/names.ts                    |  100.00 |  100.00 | 
+ packages/ui/src/primitives/button.tsx       |  100.00 |  100.00 | 
+ packages/ui/src/primitives/code.tsx         |    0.00 |   25.00 | 23-32,59-84
+ packages/ui/src/primitives/epoch-rule.tsx   |    0.00 |    1.67 | 3-60,65
+ packages/ui/src/primitives/gutter.tsx       |    0.00 |   13.79 | 85-159
+ packages/ui/src/primitives/props.ts         |  100.00 |  100.00 | 
+ packages/ui/src/primitives/scroll-area.tsx  |   28.57 |   65.85 | 65-66,68-69,74,76-77,79,85,87-89,91-92
+ packages/ui/src/primitives/spinner.tsx      |    0.00 |   20.45 | 13-47
+ packages/ui/src/primitives/state.tsx        |    0.00 |   10.94 | 15-71
+ packages/ui/src/primitives/surface.tsx      |   33.33 |   65.08 | 77-88,93-102
+ packages/ui/src/sidebar.tsx                 |   35.71 |   72.41 | 15,58-66,69-77,144,153-154,156,251,254-265,280-285,289-294,297-304
+ packages/ui/src/tab-strip.tsx               |  100.00 |  100.00 | 
+ packages/ui/src/timeline/anchor.ts          |    0.00 |    0.00 | 24
+ packages/ui/src/timeline/markdown-block.tsx |    0.00 |    7.69 | 35-56,61-110
+ packages/ui/src/timeline/spacing.ts         |  100.00 |  100.00 | 
+ packages/ui/src/timeline/timeline.tsx       |    0.00 |    9.90 | 18,23-75,86-129,134-142,149-206,211-220,224-230
+ packages/ui/src/timeline/tool-rows.tsx      |    0.00 |   11.83 | 107-124,129-206,224-291
+ packages/ui/src/timeline/turns.ts           |    0.00 |    1.69 | 73,85-133,137,141,146-151
+ packages/ui/src/timeline/voice.tsx          |  100.00 |  100.00 | 
+ packages/ui/src/timeline/work-group.ts      |    0.00 |    2.08 | 18-50,62-69,80-85
+ packages/ui/test/fixture.tsx                |    0.00 |  100.00 | 
+ packages/ui/test/interactive-tabs.tsx       |  100.00 |  100.00 | 
+ packages/ui/test/tabs.fixture.tsx           |   98.28 |  100.00 | 
+---------------------------------------------|---------|---------|-------------------
+
+ 8 pass
+ 0 fail
+ 109 expect() calls
+Ran 8 tests across 1 file. [737.00ms]
+(pass) mounted tabs and history in a client DOM [748.67ms]
+
+packages/ui/test/sidebar-primitives.test.tsx:
+(pass) sidebar navigation controls > renders active and inactive destinations with accessible state [1.07ms]
+(pass) sidebar navigation controls > header toggles search semantics and result announcement [1.77ms]
+(pass) sidebar navigation controls > section and footer preserve their structural slots [0.17ms]
+(pass) drawn primitive behavior > gutter marks encode add, remove, context and anchor interaction [0.29ms]
+(pass) drawn primitive behavior > status shapes use distinct machine attributes [0.87ms]
+(pass) drawn primitive behavior > epoch rule is inert without destination and a button with one [0.34ms]
+(pass) history menu first paint > empty and populated histories expose a closed menu trigger [2.14ms]
+
+packages/ui/test/timeline-ledger.test.tsx:
+(pass) the transcript ledger > Given the fixtures, When surveyed, Then both streaming states are represented [0.05ms]
+(pass) the transcript ledger > Given a streaming turn, When rendered, Then the caret marks the tail [2.46ms]
+(pass) the transcript ledger > Given a settled turn, When rendered, Then no caret survives [0.56ms]
+(pass) the transcript ledger > Given any turn, When rendered, Then nothing closes it with a footer [1.83ms]
+(pass) the transcript ledger > Given a turn with a cost, When rendered, Then the time is on screen at rest [0.54ms]
+(pass) the transcript ledger > Given the stylesheet, When read, Then no rule hides the time again [0.16ms]
+(pass) the transcript ledger > Given an answered turn, When rendered, Then the time is the agent block's LAST line [0.49ms]
+(pass) the transcript ledger > Given a user message, When rendered, Then it carries no time element [2.34ms]
+(pass) the transcript ledger > Given a turn with a cost, When rendered, Then the time hangs under the response [0.70ms]
+(pass) the transcript ledger > Given a turn with no answer yet, When rendered, Then it carries no time [0.16ms]
+(pass) the transcript ledger > Given any timeline, When rendered, Then the column draws no box [2.09ms]
+(pass) the transcript ledger > Given the spacing law, When rendered, Then every gap is one of the four steps [1.74ms]
+(pass) the transcript ledger > Given every part in a turn, When rendered, Then each one carries its gap [1.62ms]
+(pass) the transcript ledger > Given a turn opening with a tool block, When rendered, Then the pair gap survives [1.59ms]
+(pass) the transcript ledger > Given the transcript, When rendered, Then no fixed rhythm survives on the container [1.23ms]
+
+packages/ui/test/status-glyph.test.tsx:
+(pass) glyph tones resolve only to their designated tokens [0.62ms]
+(pass) every shape is an SVG with a crisp stroke [0.54ms]
+(pass) glyph sizes are named and bounded [0.52ms]
+(pass) animated shapes have status keyframes and reduced-motion fallbacks [0.77ms]
+(pass) status tokens may be declared in styles but consumed only by StatusGlyph [7.41ms]
+
+packages/ui/test/strip-geometry.test.ts:
+(pass) the strip's tokens > Given the reference measurements, When read, Then strip 42, tab 26, control 28, safe zone 81 [0.18ms]
+(pass) the strip's tokens > Given the darwin inset, When resolved, Then the toggle starts at 89 = safe zone + 8 [0.11ms]
+(pass) the strip's tokens > Given the collapsed zone and the overlay, When resolved, Then both read ONE token that holds the zone's contents [0.08ms]
+(pass) the strip's tokens > Given the trio, When the CSS is read, Then it has NO fade: no progress property, no opacity or visibility rule, no starting-style [0.33ms]
+(pass) the strip's tokens > Given the strip's source, When read, Then the trio carries no key: one node in both states [0.13ms]
+(pass) the strip's glyphs > Given the reference's 16px icons at 1.5 units, When read, Then the stroked glyphs run 1.5px in screen pixels at the 16px sites only [0.44ms]
+(pass) the strip's glyphs > Given the strip, When its imports are read, Then the toggle and chevrons are ours, not lucide's [0.24ms]
+
+packages/ui/test/primitives.test.tsx:
+(pass) IconButton > xs reserves a 20px box and a 12px glyph [0.29ms]
+(pass) IconButton > Given a label, When rendered, Then it names itself and stays square [0.16ms]
+(pass) IconButton > Given no variant, When rendered, Then it is ghost with the shared state set [0.08ms]
+(pass) CodeFence > Given a fence, When rendered, Then a hairline edge lets the fill stay faint [0.12ms]
+(pass) CodeFence > Given a fence, When rendered, Then its edge is a hairline on the surface radius [0.12ms]
+(pass) CodeToken > Given every tone, When rendered, Then none of them spends chroma [0.21ms]
+(pass) CodeToken > Given distinct tones, When rendered, Then they are still distinguishable [0.06ms]
+
+packages/ui/test/tab-strip.test.tsx:
+(pass) tab keyboard navigation wraps, updates panel ownership and scrolls selection into view [23.26ms]
+(pass) activation, auxiliary close and close-button actions remain distinct [9.57ms]
+(pass) app-owned content replaces the empty transcript without mounting a composer [4.70ms]
+
+packages/ui/test/composer.test.tsx:
+(pass) the composer keyboard > Given a draft, When Enter is pressed, Then it sends [0.05ms]
+(pass) the composer keyboard > Given a draft, When Shift+Enter is pressed, Then it takes a newline [0.01ms]
+(pass) the composer keyboard > Given an empty or in-flight draft, When Enter is pressed, Then nothing happens [0.01ms]
+(pass) the composer keyboard > Given any other key, When pressed, Then the field keeps it [0.03ms]
+(pass) the composer keyboard > Given a pending decision, When ⌘↩ is pressed, Then it approves [0.01ms]
+(pass) the composer keyboard > Given a pending decision, When ⌘⌫ is pressed, Then it denies
+(pass) the composer keyboard > Given no pending decision, When ⌘⌫ is pressed, Then the field keeps it
+(pass) the composer keyboard > Given no pending decision, When Command+Enter is pressed, Then it sends
+(pass) the composer keyboard > Given a decision and a sendable draft, When ⌘↩ is pressed, Then approve wins
+(pass) the composer surface > Given the composer, When rendered, Then it is a hairline and a field [0.36ms]
+(pass) the composer surface > Given the field, When rendered, Then it shares the transcript's measure [0.09ms]
+(pass) the composer surface > Given the send control, When rendered, Then its icon is drawn [0.19ms]
+(pass) the composer surface > Given an empty draft, When rendered, Then send is disabled [0.39ms]
+(pass) the composer surface > Given a turn in flight and a way to stop it, When rendered, Then the primary action is Stop [0.17ms]
+(pass) the composer surface > Given a turn in flight and no stop handler, When rendered, Then the row is unchanged [0.10ms]
+(pass) the composer surface > Given a stop handler and nothing in flight, When rendered, Then send is what is offered [0.08ms]
+(pass) the composer surface > Given the Console, When a turn is in flight, Then the stop handler reaches the composer [1.55ms]
+(pass) the composer surface > Given the hint and meta, When supplied, Then both sit on one line [0.11ms]
+(pass) the approval tray > Given nothing pending, When rendered, Then the tray is absent [0.13ms]
+(pass) the approval tray > Given one pending call, When rendered, Then it is one line with two decisions [0.24ms]
+(pass) the approval tray > Given one pending call, When rendered, Then the reason is stated [0.09ms]
+(pass) the approval tray > Given several pending calls, When rendered, Then one is shown with a count and a way on [0.10ms]
+(pass) the approval tray > Given a queue and no way to rotate, When rendered, Then the depth is still reported [0.08ms]
+(pass) the approval tray > Given the tray, When rendered, Then only Approve takes the accent [0.11ms]
+
+packages/ui/test/tokens.test.ts:
+(pass) the neutral ramp > Given the ramp, When parsed, Then every step is fully achromatic [0.06ms]
+(pass) the neutral ramp > Given the ramp, When ordered by name, Then lightness increases monotonically [0.09ms]
+(pass) the neutral ramp > Given the ramp, When each step is traced, Then a semantic token claims it [0.17ms]
+(pass) both themes stay readable > Given each theme, When the text ramp is read, Then it recedes from fg toward the surface [0.30ms]
+(pass) both themes stay readable > Given each theme, When every text tone meets every surface, Then it clears its WCAG floor [0.36ms]
+(pass) both themes stay readable > Given each theme, When the accent is read as text, Then it clears 4.5:1 on every surface [0.17ms]
+(pass) both themes stay readable > Given each theme, When the accent is read as a fill, Then its own text clears 4.5:1 [0.06ms]
+(pass) both themes stay readable > Given each theme, When the surfaces are compared, Then all three are distinct and quiet [0.08ms]
+(pass) both themes stay readable > Given each theme, When the surface hairline is measured, Then it edges without outlining [0.08ms]
+(pass) both themes stay readable > Given each theme, When the surface hairline is compared to fg-faint, Then it is materially quieter [0.03ms]
+(pass) both themes stay readable > Given each theme, When the hairline is compared to raised, Then they are separate steps [0.03ms]
+(pass) the diff exception > Given each theme, When the diff tones are read, Then both clear 4.5:1 on every surface [0.11ms]
+(pass) the diff exception > Given each theme, When both diff tones are declared, Then the pair is complete [0.06ms]
+(pass) the diff exception > Given each theme, When the diff tones are compared to the accent, Then neither outranks it [0.03ms]
+(pass) the diff exception > Given the two diff tones, When compared, Then they are distinguishable by hue [0.02ms]
+(pass) the accent budget > Given the token file, When accents are counted, Then each theme declares exactly one [0.03ms]
+(pass) the accent budget > Given the token file, When state colors are searched, Then none exist [0.05ms]
+(pass) the accent budget > Given the shell density block, When inspected, Then it re-points no color [0.02ms]
+(pass) the motion budget > Given the token file, When durations are counted, Then content has one owner and the frame three named speeds [0.22ms]
+(pass) the motion budget > Given the retired tokens, When searched, Then neither survives [0.02ms]
+(pass) the motion budget > Given every transition, When inspected, Then all of them use the motion token [0.08ms]
+(pass) the motion budget > Given the animations, When counted, Then only declared status and transcript motion exists [0.05ms]
+(pass) the motion budget > Given reduced motion, When requested, Then animation and transition are both disabled [0.01ms]
+(pass) the motion budget > Given reduced motion, When the live marks are frozen, Then they stay visible [0.01ms]
+(pass) focus is one ring > Given the focus utility, When inspected, Then it is an inset accent ring on the surface radius [0.02ms]
+(pass) focus is one ring > Given the token file, When outlines are searched, Then no browser default survives [0.05ms]
+---------------------------------------------|---------|---------|-------------------
+File                                         | % Funcs | % Lines | Uncovered Line #s
+---------------------------------------------|---------|---------|-------------------
+All files                                    |   93.52 |   99.93 |
+ packages/ui/src/composer.tsx                |  100.00 |  100.00 | 
+ packages/ui/src/console.tsx                 |  100.00 |  100.00 | 
+ packages/ui/src/history-menu.tsx            |   75.00 |  100.00 | 
+ packages/ui/src/icons/chevron.tsx           |  100.00 |  100.00 | 
+ packages/ui/src/icons/sidebar-toggle.tsx    |  100.00 |  100.00 | 
+ packages/ui/src/names.ts                    |  100.00 |  100.00 | 
+ packages/ui/src/primitives/button.tsx       |  100.00 |  100.00 | 
+ packages/ui/src/primitives/code.tsx         |  100.00 |  100.00 | 
+ packages/ui/src/primitives/epoch-rule.tsx   |  100.00 |  100.00 | 
+ packages/ui/src/primitives/gutter.tsx       |   50.00 |  100.00 | 
+ packages/ui/src/primitives/highlight.tsx    |  100.00 |  100.00 | 
+ packages/ui/src/primitives/props.ts         |  100.00 |  100.00 | 
+ packages/ui/src/primitives/scroll-area.tsx  |   71.43 |   97.62 | 76
+ packages/ui/src/primitives/spinner.tsx      |  100.00 |  100.00 | 
+ packages/ui/src/primitives/state.tsx        |  100.00 |  100.00 | 
+ packages/ui/src/primitives/surface.tsx      |  100.00 |  100.00 | 
+ packages/ui/src/sidebar-nav.tsx             |  100.00 |  100.00 | 
+ packages/ui/src/sidebar.tsx                 |  100.00 |  100.00 | 
+ packages/ui/src/status-glyph.tsx            |  100.00 |  100.00 | 
+ packages/ui/src/tab-strip.tsx               |  100.00 |  100.00 | 
+ packages/ui/src/timeline/anchor.ts          |  100.00 |  100.00 | 
+ packages/ui/src/timeline/markdown-block.tsx |  100.00 |  100.00 | 
+ packages/ui/src/timeline/spacing.ts         |  100.00 |  100.00 | 
+ packages/ui/src/timeline/timeline.tsx       |  100.00 |  100.00 | 
+ packages/ui/src/timeline/tool-rows.tsx      |   83.33 |  100.00 | 
+ packages/ui/src/timeline/turns.ts           |  100.00 |  100.00 | 
+ packages/ui/src/timeline/voice.tsx          |  100.00 |  100.00 | 
+ packages/ui/src/timeline/work-group.ts      |  100.00 |  100.00 | 
+ packages/ui/src/tree-row.tsx                |  100.00 |  100.00 | 
+ packages/ui/test/contrast.ts                |  100.00 |  100.00 | 
+ packages/ui/test/fixture.tsx                |    0.00 |  100.00 | 
+ packages/ui/test/interactive-tabs.tsx       |  100.00 |  100.00 | 
+ packages/ui/test/markup.ts                  |  100.00 |  100.00 | 
+ packages/ui/test/timeline-fixture.tsx       |  100.00 |  100.00 | 
+---------------------------------------------|---------|---------|-------------------
+
+ 203 pass
+ 0 fail
+ 749 expect() calls
+Ran 203 tests across 19 files. [1.52s]

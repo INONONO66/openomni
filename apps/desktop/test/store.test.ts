@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { SIDEBAR_WIDTH } from "@openomni/ui";
 import {
-  activePlace,
   activeTab,
   back,
   canGoBack,
@@ -20,10 +19,10 @@ import {
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
-  tabTitle,
   toggleProject,
   toggleSidebar,
 } from "../src/renderer/state/store";
+import { activePlace, tabTitle } from "../src/renderer/state/selectors";
 
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);

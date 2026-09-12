@@ -57,23 +57,30 @@ export function attentionKind(session: SessionFacts, now: number): AttentionKind
 
 /** Six-hour recency half-life; residue adds a unit bonus with a 24-hour half-life. */
 export function attentionScore(session: SessionFacts, now: number): number {
+  return scoreForKind(session, now, attentionKind(session, now));
+}
+
+function scoreForKind(session: SessionFacts, now: number, kind: AttentionKind): number {
   const age = Math.max(0, now - session.lastActivityAt);
   return (
     2 ** (-age / (6 * HOUR)) +
-    (attentionKind(session, now) === "residue" ? 2 ** (-age / (24 * HOUR)) : 0)
+    (kind === "residue" ? 2 ** (-age / (24 * HOUR)) : 0)
   );
 }
 
 /** Rank kinds, then projects by their best row, then rows. No clock or input mutation. */
 export function orderByAttention(facts: readonly SessionFacts[], now: number): Ordered {
   const ranked = facts
-    .map((session) => ({ session, score: attentionScore(session, now) }))
+    .map((session) => {
+      const kind = attentionKind(session, now);
+      return { session, kind, score: scoreForKind(session, now, kind) };
+    })
     .sort((a, b) => b.score - a.score || compareId(a.session.id, b.session.id));
   const groups: Ordered["groups"][number][] = [];
   for (const kind of KINDS) {
     const projects = new Map<ProjectId | null, SessionId[]>();
-    for (const { session } of ranked) {
-      if (attentionKind(session, now) !== kind) continue;
+    for (const { session, kind: sessionKind } of ranked) {
+      if (sessionKind !== kind) continue;
       const rows = projects.get(session.projectId);
       if (rows) rows.push(session.id);
       else projects.set(session.projectId, [session.id]);
