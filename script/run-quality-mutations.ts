@@ -51,6 +51,8 @@ type Candidate = {
 	site: Site;
 };
 type ProcessReceipt = {
+	stage: string;
+	argv: string[];
 	pid: number;
 	exitCode: number | null;
 	signal: string | null;
@@ -110,6 +112,7 @@ type Options = {
 };
 
 let failure: { code: string; message: string } | null = null;
+let lastProcessFailure: ProcessReceipt | null = null;
 class MutationError {
 	readonly name = "MutationError";
 	constructor(
@@ -298,7 +301,12 @@ export async function execute(
 	cwd: string,
 	timeout: number,
 	environment: Record<string, string> = {},
+	stage = "process",
 ): Promise<ProcessReceipt> {
+	const redactedArgv = argv.map((value, index) => {
+		const previous = argv[index - 1]?.toLowerCase() ?? "";
+		return /(?:token|secret|password|credential|key)/.test(previous) ? "[redacted]" : value;
+	});
 	const output = { stdout: "", stderr: "" };
 	const hashes = { stdout: new Bun.CryptoHasher("sha256"), stderr: new Bun.CryptoHasher("sha256") };
 	let timedOut = false;
@@ -354,7 +362,9 @@ export async function execute(
 			consume("stderr", child.stderr),
 			child.exited,
 		]);
-		return {
+		const receipt = {
+			stage,
+			argv: redactedArgv,
 			pid,
 			exitCode: child.exitCode,
 			signal: child.signalCode,
@@ -366,8 +376,12 @@ export async function execute(
 			stderrSha256: hashes.stderr.digest("hex"),
 			cleanupExit: terminate(),
 		};
+		if (broken(receipt)) lastProcessFailure = receipt;
+		return receipt;
 	} catch {
-		return {
+		const receipt = {
+			stage,
+			argv: redactedArgv,
 			pid,
 			exitCode: null,
 			signal: null,
@@ -379,6 +393,8 @@ export async function execute(
 			stderrSha256: hashes.stderr.digest("hex"),
 			cleanupExit: terminate(),
 		};
+		lastProcessFailure = receipt;
+		return receipt;
 	} finally {
 		clearTimeout(timer);
 	}
@@ -1172,6 +1188,8 @@ async function pythonWorker(
 		],
 		directory,
 		options.timeout,
+		{},
+		`python-${mode}`,
 	);
 }
 function probeKey(
@@ -1788,6 +1806,7 @@ async function campaign(options: Options): Promise<number> {
 }
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
 	failure = null;
+	lastProcessFailure = null;
 	try {
 		if (!["1.3.6", "1.4.1"].includes(Bun.version) || ts.version !== "5.9.2")
 			return fail(
@@ -1822,9 +1841,12 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 				full: false,
 				complete: false,
 				globalZero: false,
-				error: failure ?? {
-					code: "infrastructure",
-					message: "Unhandled filesystem, compiler or process failure",
+				error: {
+					...(failure ?? {
+						code: "infrastructure",
+						message: "Unhandled filesystem, compiler or process failure",
+					}),
+					...(lastProcessFailure ? { process: lastProcessFailure } : {}),
 				},
 			}),
 		);

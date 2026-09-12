@@ -38,6 +38,21 @@ test("mutation helpers cover execution tree recursion and virtual source travers
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test("process receipts preserve executed failure context, including signals", async () => {
+  const failed = await execute([process.execPath, "-e", "process.stderr.write('candidate failed'); process.exit(7)"], process.cwd(), 5000, {}, "candidate-test");
+  expect(failed.stage).toBe("candidate-test");
+  expect(failed.argv).toEqual([process.execPath, "-e", "process.stderr.write('candidate failed'); process.exit(7)"]);
+  expect(failed.exitCode).toBe(7);
+  expect(failed.signal).toBeNull();
+  expect(failed.stderr).toBe("candidate failed");
+  expect(failed.stderrSha256).toBe(sha256("candidate failed"));
+  const signaled = await execute([process.execPath, "-e", "process.kill(process.pid, 'SIGTERM')"], process.cwd(), 5000, {}, "signal-test");
+  expect(signaled.stage).toBe("signal-test");
+  expect(signaled.exitCode).toBeNull();
+  expect(signaled.signal).toBe("SIGTERM");
+  expect(signaled.stderrSha256).toBe(sha256(signaled.stderr));
+});
+
 test("mutation main rejects an invalid invocation in process", async () => {
   expect(await main(["--not-a-real-option"])).toBe(2);
 });
