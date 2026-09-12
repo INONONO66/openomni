@@ -51,6 +51,8 @@ type Candidate = {
 	site: Site;
 };
 type ProcessReceipt = {
+	stage: string;
+	argv: string[];
 	pid: number;
 	exitCode: number | null;
 	signal: string | null;
@@ -110,6 +112,7 @@ type Options = {
 };
 
 let failure: { code: string; message: string } | null = null;
+let setupProcessFailure: ProcessReceipt | null = null;
 class MutationError {
 	readonly name = "MutationError";
 	constructor(
@@ -293,12 +296,41 @@ function operatorsAt(path: string): Operator[] {
 	return operators;
 }
 
+const sensitiveOptionName = "--(?:[a-z0-9]+[-_])*(?:token|secret|password|credential|key)";
+function redactArgv(argv: string[]): string[] {
+	const sensitiveOption = new RegExp(`^${sensitiveOptionName}$`, "i");
+	let secretValue = false;
+	return argv.map((value) => {
+		if (secretValue) {
+			secretValue = false;
+			return "[redacted]";
+		}
+		const equals = value.indexOf("=");
+		if (equals >= 0 && sensitiveOption.test(value.slice(0, equals)))
+			return `${value.slice(0, equals + 1)}[redacted]`;
+		secretValue = sensitiveOption.test(value);
+		return value;
+	});
+}
+// Scrub echoed command options only when rendering diagnostics. Raw child
+// output remains available to the compiler/worker decoders and its byte hashes
+// are unchanged, even when the report contains redacted stdout or stderr.
+function diagnosticField(key: string, value: Json): Json {
+	if (typeof value !== "string" || !["message", "stdout", "stderr"].includes(key)) return value;
+	return value.replace(
+		new RegExp(`(^|\\s)(${sensitiveOptionName})(=|\\s+)(?:"[^"]*"|'[^']*'|[^\\s]+)`, "gi"),
+		"$1$2$3[redacted]",
+	);
+}
+
 export async function execute(
 	argv: string[],
 	cwd: string,
 	timeout: number,
 	environment: Record<string, string> = {},
+	stage = "process",
 ): Promise<ProcessReceipt> {
+	const redactedArgv = redactArgv(argv);
 	const output = { stdout: "", stderr: "" };
 	const hashes = { stdout: new Bun.CryptoHasher("sha256"), stderr: new Bun.CryptoHasher("sha256") };
 	let timedOut = false;
@@ -354,7 +386,9 @@ export async function execute(
 			consume("stderr", child.stderr),
 			child.exited,
 		]);
-		return {
+		const receipt = {
+			stage,
+			argv: redactedArgv,
 			pid,
 			exitCode: child.exitCode,
 			signal: child.signalCode,
@@ -366,8 +400,11 @@ export async function execute(
 			stderrSha256: hashes.stderr.digest("hex"),
 			cleanupExit: terminate(),
 		};
+		return receipt;
 	} catch {
-		return {
+		const receipt = {
+			stage,
+			argv: redactedArgv,
 			pid,
 			exitCode: null,
 			signal: null,
@@ -379,6 +416,7 @@ export async function execute(
 			stderrSha256: hashes.stderr.digest("hex"),
 			cleanupExit: terminate(),
 		};
+		return receipt;
 	} finally {
 		clearTimeout(timer);
 	}
@@ -1146,8 +1184,8 @@ function writeMutation(source: ReturnType<typeof mutationSource>, content: strin
 			: replace(source.host, source.start, source.end, JSON.stringify(content)),
 	);
 }
-async function pythonWorker(
-	options: Options,
+export async function pythonWorker(
+	options: Pick<Options, "python" | "decision" | "timeout">,
 	source: string,
 	directory: string,
 	mode: string,
@@ -1172,6 +1210,8 @@ async function pythonWorker(
 		],
 		directory,
 		options.timeout,
+		{},
+		`python-${mode}`,
 	);
 }
 function probeKey(
@@ -1473,12 +1513,16 @@ async function canonicalVerification(options: Options): Promise<ProcessReceipt> 
 		],
 		options.root,
 		options.timeout,
+		{},
+		"setup-canonical-inventory",
 	);
-	if (broken(receipt) || receipt.exitCode !== 0)
+	if (broken(receipt) || receipt.exitCode !== 0) {
+		setupProcessFailure = receipt;
 		return fail(
 			"incompleteInventory",
 			`Canonical inventory verification failed: ${receipt.stderr.slice(0, 2000)}`,
 		);
+	}
 	if (JSON.stringify(decode(receipt.stdout)) !== JSON.stringify(readJson(options.inventory)))
 		return fail("incompleteInventory", "Canonical verification returned a different inventory");
 	return receipt;
@@ -1774,7 +1818,7 @@ async function campaign(options: Options): Promise<number> {
 				results,
 				originalHashesVerified: true,
 				cleanupVerified,
-			}),
+			}, diagnosticField),
 		);
 		return exitCode;
 	} finally {
@@ -1788,6 +1832,7 @@ async function campaign(options: Options): Promise<number> {
 }
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
 	failure = null;
+	setupProcessFailure = null;
 	try {
 		if (!["1.3.6", "1.4.1"].includes(Bun.version) || ts.version !== "5.9.2")
 			return fail(
@@ -1822,11 +1867,14 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 				full: false,
 				complete: false,
 				globalZero: false,
-				error: failure ?? {
-					code: "infrastructure",
-					message: "Unhandled filesystem, compiler or process failure",
+				error: {
+					...(failure ?? {
+						code: "infrastructure",
+						message: "Unhandled filesystem, compiler or process failure",
+					}),
+					...(setupProcessFailure ? { process: setupProcessFailure } : {}),
 				},
-			}),
+			}, diagnosticField),
 		);
 		return 2;
 	}
