@@ -45,7 +45,7 @@ const {
   toggleProject,
 } = await import("../src/renderer/state/store");
 const { setSessionTitleIfPlaceholder } = await import("../src/renderer/state/session-actions");
-const { SessionList"}]} nu nope? Wait malformed JSON.ҵанак. need proper. = await import("../src/renderer/shell/session-list");
+const { SessionList } = await import("../src/renderer/shell/session-list");
 
 const cleanups: (() => void)[] = [];
 const listeners = new Set<(command: ShellCommand) => void>();
