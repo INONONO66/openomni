@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { LedgerSession } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
+import { SessionSqlRow } from "../../src/storage/sqlite-l0-rows";
 import { materializeSession } from "../helpers/session";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
@@ -40,13 +41,18 @@ describe("canonical SQLite reads fail closed", () => {
 
   test("session reads validate the canonical row exactly once per returned record", () => {
     const parse = spyOn(LedgerSession.Row, "parse");
+    const sqlParse = spyOn(SessionSqlRow._zod, "run");
     try {
       expect(SessionHandleStore.row("corrupt").id).toBe("corrupt");
       expect(parse).toHaveBeenCalledTimes(1);
       parse.mockClear();
       expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["corrupt"]);
       expect(parse).toHaveBeenCalledTimes(1);
-    } finally { parse.mockRestore(); }
+      expect(sqlParse).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+      sqlParse.mockRestore();
+    }
   });
 
   test("corrupt inbox origin rejects reads without consuming the row", () => {

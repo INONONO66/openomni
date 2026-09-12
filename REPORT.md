@@ -359,3 +359,35 @@ RED exit 0
 - Final push gates (types, full lint, 336 ledger tests, 128 related tests, build): exit 0.
 
 - Final helper representation benchmarked for five repetitions; medians retained. Preserved previous REPORT history and appended this follow-up.
+
+- Ledger fix committed ad71d79c; docs commit stopped on MERGE_RR.lock. Inspecting active lock owner before retry.
+
+- Confirmed docs commit actually completed as 265e0e79 despite transient rerere post-commit lock error; no lock remained. Push exit 0.
+
+- Posted one factual root-cause comment on PR #1035; re-enabled auto-squash on #1050 after restoring measured local performance.
+
+- Started one bounded 45-minute follow-up check loop.
+
+- Updated PR with production/helper isolation, fixed local medians, unchanged 20% threshold and accepted shard outcome.
+
+- PR Benchmark run 34677416774 PASSED, including memory guards; publish skipped as required. Reference and artifact downloaded for final comparison.
+
+- Continued bounded PR monitor; Benchmark verified green and remaining CI/quality results recorded.
+
+- Auto-merge remains governed by checks; no thresholds or baselines relaxed.
+
+- PR tooling shards all passed: 372s / 354s / 332s / 275s (sum 1333s); awaiting quality fan-in and review checks.
+
+- PR check loop reached terminal state.
+
+- Continued the same check loop while the publisher analysis completes.
+
+- First follow-up CI completed: Benchmark/all non-Quality checks passed; Quality/CI failed. Inspecting changed-line findings.
+
+- Follow-up Quality has five pre-existing live export findings in sqlite-l0-write.ts (insertSession/appendAction/commitSession/commitInbox/insertInbox), not in modified function bodies. These are known export-census DI artifacts (#1041), not dead code; investigating the smallest correct route without deleting live functions or relaxing baselines.
+
+- Read-adapter-only correction and explicit no-wrapper-construction regression test: full gate chain exit 1. Shared SQL write module and row schemas are byte-identical to main.
+
+- Prior test failed because Bun spyOn cannot spy an accessor (Zod array). Corrected the instrumentation to observe the actual SQL-schema run function, preserving the no-duplicate-parse assertion. Full corrected gate chain exit 0.
+
+- Read-only adapter real benchmark entry passed; write module/schema restored byte-identical to main. Native read-adapter/test census has zero owned findings.

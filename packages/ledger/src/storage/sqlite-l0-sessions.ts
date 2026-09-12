@@ -73,7 +73,10 @@ export function createSessions(
       if (result?.created === true) publishCommitted(db, observationSink, result.receipt);
       return result;
     },
-    get: (id) => selectSession(db, id),
+    get(id) {
+      const row = db.query<SessionSqlRow, [string]>(`${sessionSelect} WHERE id = ?`).get(id);
+      return row === null ? undefined : decodeSession(row);
+    },
     openChildCount: (parentId) => openChildCount(db, parentId),
     list() {
       const rows = db.query<SessionSqlRow, []>(`${sessionSelect} WHERE role IS NOT NULL ORDER BY id`).all();
