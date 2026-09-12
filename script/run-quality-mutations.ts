@@ -1099,7 +1099,8 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 	copyExecution(frozen, directory);
 	mkdirSync(markers, { recursive: true });
 	const byPath = new Map<string, Candidate[]>();
-	for (const candidate of candidates) byPath.set(candidate.path, [...(byPath.get(candidate.path) ?? []), candidate]);
+	for (const candidate of candidates)
+		if (!candidate.operator.startsWith("py-")) byPath.set(candidate.path, [...(byPath.get(candidate.path) ?? []), candidate]);
 	for (const [candidatePath, rows] of byPath) {
 		const source = mutationSource(directory, candidatePath);
 		if (rows[0]?.operator.startsWith("py-")) {
@@ -1118,8 +1119,10 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 	for (const candidate of candidates) map.set(candidate.id, { reached: false, markerSha256: sha256(""), tests: [] });
 	const runs: { test: string; receipt: TestSelectionReceipt }[] = [];
 	for (const test of tests) {
+		if (readFileSync(join(directory, test), "utf8").trim() === "") continue;
 		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout);
-		if (!green(receipt)) throw new MutationError("reachMap", `Reach test is not green: ${test}`);
+		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0)
+			throw new MutationError("reachMap", `Reach test is not green: ${test}`);
 		runs.push({ test, receipt });
 		for (const candidate of candidates) {
 			const first = candidates.filter((row) => row.path === candidate.path && JSON.stringify(row.site) === JSON.stringify(candidate.site)).at(-1) ?? candidate;
@@ -1265,12 +1268,13 @@ async function runCandidate(
 	reachMap: Map<string, ProbeEvidence>,
 ): Promise<Result> {
 	const result = defaultResult(candidate, tests);
+	const python = candidate.operator.startsWith("py-");
 	const evidence = reachMap.get(candidate.id);
 	const frozenSource = mutationSource(join(temporary, "frozen"), candidate.path);
 	const frozenSourceSha256 = sha256(frozenSource.host);
 	const probeCache = new Map<string, ProbeEvidence>();
 	result.coverage = evidence ?? null;
-	if (!evidence || !evidence.reached) {
+	if (!python && (!evidence || !evidence.reached)) {
 		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
 		result.restored = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host) === frozenSourceSha256;
 		result.outcome = "noCoverage";
@@ -1407,10 +1411,10 @@ async function runCandidate(
 			candidate.endOffset,
 			candidate.replacement,
 		);
-		const python = candidate.operator.startsWith("py-");
 		writeMutation(source, mutated);
 		if (!(await checkMutation(mutated, python))) return result;
-		// Reach was established once for the campaign; no per-mutant probe run.
+		if (python && !(await probeCandidate(source, python))) return result;
+		// TypeScript reach was established once for the campaign.
 		// Test side effects cannot leak into the mutation run.
 		removeExecution(root);
 		copyExecution(join(temporary, "frozen"), root);
@@ -1785,7 +1789,8 @@ async function campaign(options: Options): Promise<number> {
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
 		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const selected = selectedCandidates(options, enumerated.candidates);
-		const reach = errors.length ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, selected, tests, executionTreeSha256);
+		const reachCandidates = selected.filter((candidate) => !candidate.operator.startsWith("py-"));
+		const reach = errors.length ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, tests, executionTreeSha256);
 		removeExecution(join(temporary, "reach"));
 		const results = await executeSelection(
 			options, contract, temporary, started, enumerated, tests, errors, reach.map,
@@ -1882,7 +1887,8 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 			return errors.length ? 1 : 0;
 		}
 		return await campaign(optionsFrom(values));
-	} catch {
+	} catch (error) {
+		failure = { code: failure?.code ?? "infrastructure", message: `${failure?.message ?? ""}${failure?.message ? "; " : ""}${error instanceof Error ? error.message : String(error)}` };
 		console.log(
 			JSON.stringify({
 				version: 1,
