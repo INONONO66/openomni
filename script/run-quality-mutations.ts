@@ -872,13 +872,19 @@ function probeInsertions(source: string, row: ReachSite, marker: string, index: 
 		: site.mode === "jsx" ? [`{(${probe},(`, "))}"] : [`(${probe},(`, "))"];
 	return [{ offset: site.start, order: index, text: open }, { offset: site.end, order: -index, text: close }];
 }
+function instrumentSingle(source: string, site: Site, marker: string): string {
+	const probe = `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`;
+	const original = source.slice(site.start, site.end);
+	if (site.mode === "statement") return replace(source, site.start, site.end, `{${probe};${original}}`);
+	if (site.mode === "case") return replace(source, caseInsertion(source, site), caseInsertion(source, site), `${probe};`);
+	const expression = `(${probe},(${original}))`;
+	return replace(source, site.start, site.end, site.mode === "jsx" ? `{${expression}}` : expression);
+}
 export function instrument(source: string, sites: ReachSite[], directory: string): string {
-	// Insert against original offsets: nested sites must not shift or overwrite one another.
-	const ordered = [...sites].sort((a, b) => a.site.start - b.site.start || b.site.end - a.site.end);
-	const insertions = ordered.flatMap((row, index) => probeInsertions(source, row, join(directory, row.id), index));
-	// Apply at descending original offsets so every insertion is independent of shifts.
-	insertions.sort((a, b) => b.offset - a.offset || b.order - a.order);
-	return insertions.reduce((result, insertion) => replace(result, insertion.offset, insertion.offset, insertion.text), source);
+	if (sites.length === 1) return instrumentSingle(source, sites[0]!.site, join(directory, sites[0]!.id));
+	// Insert against original offsets; nested sites must not shift or overwrite one another.
+	const ordered = [...sites].sort((a, b) => b.site.start - a.site.start || a.site.end - b.site.end);
+	return ordered.reduce((result, row) => instrumentSingle(result, row.site, join(directory, row.id)), source);
 }
 function gitCopyCommand(root: string, args: string[]): string {
 	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
