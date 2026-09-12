@@ -16,7 +16,8 @@ test("every recursive script test belongs to exactly one explicit lane", () => {
 });
 
 test("compiler contracts run separately from mutation campaigns", () => {
-  expect(scriptToolingPartitions["scripts-tooling-3"]).toContain("run-quality-mutations-compiler.test.ts");
+  expect(scriptToolingPartitions["scripts-tooling-4"]).toContain("run-quality-mutations-compiler.test.ts");
+  expect(scriptToolingPartitions["scripts-tooling-3"]).toContain("check-census.test.ts");
   expect(scriptToolingPartitions["scripts-tooling-1"]).toContain("run-quality-mutations.test.ts");
   expect(scriptsLanes["scripts-contracts"]).toContain("check-benchmark-regression.test.ts");
 });

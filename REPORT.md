@@ -282,3 +282,9 @@ RED exit 0
 - Workflow test-body cyclomatic complexity is now at most 4 (zero-coverage CRAP 20), below the ratchet limit; every original assertion is retained.
 
 - Final comparator CLI still fails the real known-regressing artifact with exit 1; local comparator LCOV has no zero-hit lines.
+
+- Continued the same bounded PR monitor while awaiting final weighted-shard measurements before pushing quality-only closure.
+
+- Weighted CI run passed all shards: 323s / 336s / 378s / 346s. Shard 3 remains above target; collecting its test-vs-overhead breakdown before the last adjustment.
+
+- Final conservative packing separates both full-repository compiler suites and projects 344-347s using latest measurements (ideal average 345.75s). Final tsc/Ultracite/lint/125 tests/build chain exit: 0. Exact 330s is below the observed workload lower bound; no test or validation was removed.
