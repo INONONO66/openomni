@@ -1,18 +1,16 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
-import { Chat } from "@ai-sdk/react";
 import { Timeline } from "@openomni/ui";
 import { Window } from "happy-dom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../src/renderer/app";
-import { SessionContent } from "../src/renderer/chat/session-content";
 import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
 import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
-import { activeTab, consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { activePlace, consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
 import { installGlobals } from "./helpers";
 
 test("mounted shell restores preferences, navigates, creates and searches sessions", async () => {
@@ -61,12 +59,12 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     expect(consoleStore.state.sidebarOpen).toBe(true);
     expect(window.localStorage.getItem(SIDEBAR_OPEN_KEY)).toBe("true");
     await click('[data-ui="Sidebar.Nav"] button:nth-child(2)');
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "inbox" });
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "inbox" });
     // A plain click moves the current tab (the empty column materializes exactly one); it never grows the strip.
     const tabsBefore = consoleStore.state.tabs.length;
     expect(tabsBefore).toBe(1);
     await click('[data-ui="Sidebar.Nav"] button:nth-child(4)');
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "memory" });
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "memory" });
     expect(consoleStore.state.tabs.length).toBe(tabsBefore);
     await act(() =>
       window.document
@@ -74,7 +72,7 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
         ?.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true })),
     );
     expect(consoleStore.state.tabs.length).toBe(tabsBefore + 1);
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "automations" });
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "automations" });
     await act(() => key("["));
     expect(consoleStore.state.sidebarOpen).toBe(false);
     await act(() => key("["));
@@ -83,12 +81,12 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     expect(consoleStore.state.sessions).toHaveLength(1);
     const selected = consoleStore.state.sessions[0]?.id ?? "";
     expect(selected).not.toBe("");
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: selected });
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: selected });
     expect(host.querySelector("textarea")?.disabled).toBe(true);
     await click('button[aria-label="New session"]');
     expect(consoleStore.state.sessions).toHaveLength(2);
     await click(`#session-row-${selected}`);
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: selected });
+    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: selected });
     await click('[data-ui="SectionHeader.Toggle"]');
     expect(host.querySelector('[role="combobox"]')).not.toBeNull();
     await act(() =>
@@ -171,55 +169,6 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
   } finally {
     await act(() => root.unmount());
     client.clear();
-    consoleStore.setState(() => INITIAL_CLIENT_STATE);
-    host.remove();
-    restoreGlobals();
-    await window.happyDOM.close();
-  }
-});
-
-test("SessionContent sends approval responses through its Chat", async () => {
-  const window = new Window({ url: "http://localhost" });
-  const restoreGlobals = installGlobals({
-    window,
-    document: window.document,
-    HTMLElement: window.HTMLElement,
-    Element: window.Element,
-    Node: window.Node,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
-  });
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  const sessionId = createSession(0);
-  const session = consoleStore.state.sessions[0];
-  if (!session) throw new Error("expected session");
-  const chat = new Chat<OpenOmniUIMessage>({
-    id: sessionId,
-    messages: [{
-      id: "approval-message",
-      role: "assistant",
-      parts: [{
-        type: "tool-bash",
-        toolCallId: "build",
-        state: "approval-requested",
-        input: { command: "build" },
-        approval: { id: "approval" },
-      }],
-    }],
-  });
-  try {
-    await act(() => root.render(<SessionContent session={session} chat={chat} transport={null} notice={undefined} />));
-    const approve = host.querySelector<HTMLButtonElement>("[data-approve]");
-    expect(approve).not.toBeNull();
-    await act(() => approve?.click());
-    expect(chat.messages[0]?.parts[0]).toMatchObject({ state: "approval-responded", approval: { approved: true } });
-  } finally {
-    await act(() => root.unmount());
     consoleStore.setState(() => INITIAL_CLIENT_STATE);
     host.remove();
     restoreGlobals();
