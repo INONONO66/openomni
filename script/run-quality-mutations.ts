@@ -874,11 +874,9 @@ function gitCopyCommand(root: string, args: string[]): string {
 	return result.stdout;
 }
 export function copyExecution(sourceRoot: string, target: string): void {
-	// Each copy owns its detached worktree/index; Git objects/history remain shared.
-	// Dependencies are copied (not externally symlinked), preserving isolation checks.
-	if (existsSync(join(sourceRoot, ".git")))
+	if (existsSync(join(sourceRoot, ".git"))) // Own detached index; share Git objects/history.
 		gitCopyCommand(sourceRoot, ["worktree", "add", "--detach", target, "HEAD"]);
-	const skipped = new Set([".git", ".omo", "coverage", ".turbo"]);
+	const skipped = new Set([".git", ".omo", "coverage", ".turbo"]); // Copy dependencies; reject external links.
 	cpSync(sourceRoot, target, {
 		recursive: true,
 		verbatimSymlinks: true,
@@ -1014,6 +1012,15 @@ async function runTestBatch(
 		valid: !!header && !broken(processReceipt),
 	};
 }
+function assertionDiagnostic(segment: string[]): boolean {
+	const errors = segment.filter((item) => /^(?:error|[A-Za-z]*Error):/.test(item));
+	const expectation = errors.length > 0 && errors.every((item) =>
+		/^error: expect\(received\)\.(?:(?:not|resolves|rejects)\.)*[A-Za-z]+\(/.test(item),
+	);
+	const settlement = errors.length === 1 && /^error:\s*$/.test(errors[0] ?? "") &&
+		/^Expected promise that (?:rejects\nReceived promise that resolved|resolves\nReceived promise that rejected):/m.test(segment.join("\n"));
+	return expectation || settlement;
+}
 function failedAssertions(stderr: string): string[] {
 	// Bun 1.3.6 labels ordinary thrown errors AssertionError too. Require a real
 	// expect failure diagnostic AND a nonzero assertion count for every failed
@@ -1032,20 +1039,7 @@ function failedAssertions(stderr: string): string[] {
 			segment.push(line);
 			continue;
 		}
-		const errors = segment.filter((item) => /^(?:error|[A-Za-z]*Error):/.test(item));
-		const expectation =
-			errors.length > 0 &&
-			errors.every((item) =>
-				/^error: expect\(received\)\.(?:(?:not|resolves|rejects)\.)*[A-Za-z]+\(/.test(item),
-			);
-		// Bun emits no matcher name for a promise settling on the wrong channel.
-		const settlement =
-			errors.length === 1 &&
-			/^error:\s*$/.test(errors[0] ?? "") &&
-			/^Expected promise that (?:rejects\nReceived promise that resolved|resolves\nReceived promise that rejected):/m.test(
-				segment.join("\n"),
-			);
-		if (status[1] === "fail" && (expectation || settlement))
+		if (status[1] === "fail" && assertionDiagnostic(segment))
 			failedNames.push(`${diagnosticFile}\0${status[2]}`);
 		segment = [];
 	}
@@ -1653,8 +1647,7 @@ async function campaign(options: Options): Promise<number> {
 		const base = join(temporary, "baseline");
 		console.error(`[mutation] enumerating and checking ${contract.projects.length} compiler projects sequentially`);
 		const { enumerated, sourceDiagnostics } = analyze(frozen, contract, inventory, operators);
-		// No compiler AST/checker may remain live while test children run.
-		Bun.gc(true);
+		Bun.gc(true); // Release compiler AST/checkers before test children run.
 		console.error(`[mutation] enumerating Python candidates (${enumerated.candidates.length} TS/JS candidates)`);
 		const pythonCapability = await enumeratePython(options, temporary, frozen, enumerated);
 		enumerated.candidates.sort(compareCandidates);

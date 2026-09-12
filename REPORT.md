@@ -68,3 +68,5 @@
 - Explicit suite deadline/refactored assertion parsing test gate: exit 0, /tmp/g11-tests7.log.
 
 - All local gates passed after explicit one-hour per-package suite deadline (15s per-test retained): 175 tests, tsc, ultracite, lint, build. Extracted assertion parsing to reduce runTestBatch complexity; native fixture setup deduplicated.
+
+- Refactored failedAssertions into assertionDiagnostic to clear CRAP >=22 on changed source without changing matching semantics; comments condensed to lines covered by in-process campaign tests.
