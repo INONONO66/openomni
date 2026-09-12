@@ -139,6 +139,7 @@ export function mutationFixture(scenario: string) {
     expect(receipt.timedOut).toBe(false);
     expect(receipt.overflow).toBe(false);
     expect(receipt.signal).toBeNull();
+    if (!receipt.stdout || !receipt.stdout.trim().startsWith("{")) console.error("DEBUG-RECEIPT", JSON.stringify({ stdout: receipt.stdout, stderr: receipt.stderr }));
     const report = record(decode(receipt.stdout));
     expect(report.exitCode).toBe(receipt.exitCode);
     expect(report.globalZero).toBe(false);

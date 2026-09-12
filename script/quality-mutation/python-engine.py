@@ -16,6 +16,10 @@ class Site(TypedDict):
     mode: Literal['python-statement', 'python-expression']
 
 
+class ProbeSite(Site):
+    marker: str
+
+
 class Candidate(TypedDict):
     operator: str
     startOffset: int
@@ -208,35 +212,65 @@ def enumerate_nodes(source: str, tree: ast.Module, operators: list[Operator]) ->
     return rows
 
 
-def instrument(source: str, tree: ast.Module, start: int, end: int, marker: str) -> str:
-    patterns = [node for node in ast.walk(tree) if isinstance(node, (ast.MatchValue, ast.MatchSingleton, ast.MatchMapping))]
+class Probe(ast.NodeTransformer):
+    def __init__(self, source: str, sites: list[ProbeSite]):
+        self.source = source
+        self.sites = {(site['start'], site['end'], site['mode']): site['marker'] for site in sites}
+        self.matches: set[tuple[int, int, str]] = set()
+
+    @override
+    def visit(self, node: ast.AST) -> ast.AST | list[ast.AST]:
+        if not isinstance(node, (ast.expr, ast.stmt)):
+            return super().generic_visit(node)
+        start, end = span(self.source, node)
+        key = (start, end, 'python-statement' if isinstance(node, ast.stmt) else 'python-expression')
+        _ = super().generic_visit(node)
+        marker = self.sites.get(key)
+        if marker is None:
+            return node
+        self.matches.add(key)
+        probe = ast.parse(f"__import__('pathlib').Path({marker!r}).write_text('1')", mode='eval').body
+        if isinstance(node, ast.stmt):
+            return [ast.Expr(probe), node]
+        return ast.Subscript(ast.Tuple([probe, node], ast.Load()), ast.Constant(1), ast.Load())
+
+
+def pattern_index(source: str, patterns: list[ast.MatchValue | ast.MatchSingleton | ast.MatchMapping], site: ProbeSite) -> int | None:
     for index, pattern in enumerate(patterns):
         values = pattern.keys if isinstance(pattern, ast.MatchMapping) else [pattern]
-        if any(isinstance(node, (ast.expr, ast.pattern)) and span(source, node) == (start, end)
+        if any(isinstance(node, (ast.expr, ast.pattern)) and span(source, node) == (site['start'], site['end'])
                for value in values for node in ast.walk(value)):
-            # Observe the real matching instruction, not an expression injected
-            # into literal grammar. No comparison, subject or guard is repeated.
-            return pattern_probe(tree, index, marker)
-    probe = ast.parse(f"__import__('pathlib').Path({marker!r}).write_text('1')", mode='eval').body
-    matches: list[ast.AST] = []
-    class Probe(ast.NodeTransformer):
-        @override
-        def visit(self, node: ast.AST) -> ast.AST | list[ast.AST]:
-            if isinstance(node, (ast.expr, ast.stmt)) and span(source, node) == (start, end):
-                matches.append(node)
-                if isinstance(node, ast.stmt):
-                    return [ast.Expr(copy.deepcopy(probe)), node]
-                return ast.Subscript(ast.Tuple([copy.deepcopy(probe), node], ast.Load()), ast.Constant(1), ast.Load())
-            return super().generic_visit(node)
-    _ = Probe().generic_visit(tree)
-    if len(matches) != 1:
-        raise ValueError(f'expected one probe site, got {len(matches)}')
+            return index
+    return None
+
+
+def instrument_sites(source: str, tree: ast.Module, sites: list[ProbeSite]) -> str:
+    patterns = [node for node in ast.walk(tree) if isinstance(node, (ast.MatchValue, ast.MatchSingleton, ast.MatchMapping))]
+    pattern_markers: dict[int, list[str]] = {}
+    expressions: list[ProbeSite] = []
+    for site in sites:
+        index = pattern_index(source, patterns, site)
+        if index is None:
+            expressions.append(site)
+        else:
+            pattern_markers.setdefault(index, []).append(site['marker'])
+    probe = Probe(source, expressions)
+    _ = probe.generic_visit(tree)
+    if len(probe.matches) != len(expressions):
+        raise ValueError(f'expected {len(expressions)} probe sites, got {len(probe.matches)}')
     result = ast.fix_missing_locations(tree)
     _ = compile(result, '<mutation-probe>', 'exec')
-    return ast.unparse(result)
+    return pattern_probe(result, pattern_markers) if pattern_markers else ast.unparse(result)
 
 
-def pattern_probe(tree: ast.Module, index: int, marker: str) -> str:
+def instrument(source: str, tree: ast.Module, start: int, end: int, marker: str) -> str:
+    mode: Literal['python-statement', 'python-expression'] = 'python-expression'
+    if any(isinstance(node, ast.stmt) and span(source, node) == (start, end) for node in ast.walk(tree)):
+        mode = 'python-statement'
+    return instrument_sites(source, tree, [{'start': start, 'end': end, 'mode': mode, 'marker': marker}])
+
+
+def pattern_probe(tree: ast.Module, markers: dict[int, list[str]]) -> str:
     payload = ast.Constant('')
     setup = ast.Expr(ast.Call(ast.Name('exec', ast.Load()), [payload, ast.Dict([], [])], []))
     insertion = 0
@@ -251,9 +285,9 @@ def pattern_probe(tree: ast.Module, index: int, marker: str) -> str:
     rendered = ast.unparse(ast.fix_missing_locations(tree))
     patterns = [node for node in ast.walk(ast.parse(rendered))
                 if isinstance(node, (ast.MatchValue, ast.MatchSingleton, ast.MatchMapping))]
-    pattern = patterns[index]
-    position = (pattern.lineno, pattern.end_lineno, pattern.col_offset, pattern.end_col_offset)
-    opcode = 'MATCH_KEYS' if isinstance(pattern, ast.MatchMapping) else 'LOAD_CONST'
+    targets = [(('MATCH_KEYS' if isinstance(patterns[index], ast.MatchMapping) else 'LOAD_CONST'),
+                (patterns[index].lineno, patterns[index].end_lineno, patterns[index].col_offset, patterns[index].end_col_offset), paths)
+               for index, paths in markers.items()]
     bootstrap = f'''import atexit, dis, pathlib, sys, types
 monitor = sys.monitoring
 tool = next((item for item in range(6) if monitor.get_tool(item) is None), None)
@@ -261,8 +295,9 @@ if tool is None:
     raise RuntimeError('No monitoring slot for mutation pattern probe')
 sites = {{}}
 def collect(code):
-    offsets = {{instruction.offset for instruction in dis.get_instructions(code)
-               if instruction.opname == {opcode!r} and tuple(instruction.positions) == {position!r}}}
+    offsets = {{instruction.offset: paths for instruction in dis.get_instructions(code)
+               for opcode, position, paths in {targets!r}
+               if instruction.opname == opcode and tuple(instruction.positions) == position}}
     if offsets:
         sites[code] = offsets
     for constant in code.co_consts:
@@ -273,8 +308,9 @@ if not sites:
     raise RuntimeError('Unmapped mutation pattern instruction')
 def hit(code, offset):
     if offset in sites[code]:
-        pathlib.Path({marker!r}).write_text('1')
-        return monitor.DISABLE
+        for marker in sites[code][offset]:
+            pathlib.Path(marker).write_text('1')
+        return None
 monitor.use_tool_id(tool, 'd945-pattern')
 monitor.register_callback(tool, monitor.events.INSTRUCTION, hit)
 for code in sites:
@@ -297,6 +333,7 @@ class Arguments(argparse.Namespace):
     start: int = 0
     end: int = 0
     marker: str = ''
+    sites: str = ''
 
 
 def mutation_contract(decoder: Callable[[str], dict[str, dict[str, dict[str, dict[str, object]]]]], text: str) -> dict[str, object]:
@@ -307,14 +344,19 @@ def operator_contract(decoder: Callable[[str], list[Operator]], text: str) -> li
     return decoder(text)
 
 
+def probe_sites(decoder: Callable[[str], list[ProbeSite]], text: str) -> list[ProbeSite]:
+    return decoder(text)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     _ = parser.add_argument('--source', required=True)
     _ = parser.add_argument('--decision', required=True)
-    _ = parser.add_argument('--mode', choices=['enumerate', 'compile', 'probe'], required=True)
+    _ = parser.add_argument('--mode', choices=['enumerate', 'compile', 'probe', 'reach'], required=True)
     _ = parser.add_argument('--start', type=int)
     _ = parser.add_argument('--end', type=int)
     _ = parser.add_argument('--marker')
+    _ = parser.add_argument('--sites')
     args = parser.parse_args(namespace=Arguments())
     if sys.version_info[:3] != (3, 12, 12):
         raise ValueError('Requires CPython 3.12.12')
@@ -335,6 +377,9 @@ def main() -> int:
         result['candidates'] = enumerate_nodes(source, tree, operators)
     elif args.mode == 'probe':
         result['source'] = instrument(source, tree, args.start, args.end, args.marker)
+    elif args.mode == 'reach':
+        sites = probe_sites(json.loads, pathlib.Path(args.sites).read_text())
+        result['source'] = instrument_sites(source, tree, sites)
     print(json.dumps(result))
     return 0
 
