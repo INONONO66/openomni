@@ -70,3 +70,7 @@
 - All local gates passed after explicit one-hour per-package suite deadline (15s per-test retained): 175 tests, tsc, ultracite, lint, build. Extracted assertion parsing to reduce runTestBatch complexity; native fixture setup deduplicated.
 
 - Refactored failedAssertions into assertionDiagnostic to clear CRAP >=22 on changed source without changing matching semantics; comments condensed to lines covered by in-process campaign tests.
+
+- Final parser integration test run exited 0. Previous long pilot was explicitly canceled to free branch concurrency for final parser revision; cancellation is not campaign SIGTERM evidence.
+
+- Hosted full baseline confirmed from canceled superseded run: 4417 tests, 0 failures, all 13 batch exit codes 0 at 07:08:16Z; mutant 1/5 started. Final pilot 34680745306 remains running; no rerun to mask failures. New main commits made PR conflicted; resolving before final checks.
