@@ -391,3 +391,21 @@ RED exit 0
 - Prior test failed because Bun spyOn cannot spy an accessor (Zod array). Corrected the instrumentation to observe the actual SQL-schema run function, preserving the no-duplicate-parse assertion. Full corrected gate chain exit 0.
 
 - Read-only adapter real benchmark entry passed; write module/schema restored byte-identical to main. Native read-adapter/test census has zero owned findings.
+
+- Read-adapter-only follow-up pushed, exit 0.
+
+- Started final gh pr checks watch (20s refresh); auto-merge remains enabled, Benchmark must pass again.
+
+- PR updated with first passing hosted benchmark and read-boundary-only closure.
+
+- Final-head Benchmark 34678429351 passed at 20% again; remaining CI checks still monitored.
+
+- Remaining CI state recorded; no non-Quality failures observed.
+
+- Final PR check watch completed with exit 1; output /tmp/g10-readonly-watch.log.
+
+- Extended bounded watch while CI tooling/quality jobs complete.
+
+- Final head CI/Quality failed; Benchmark passed. Inspecting Quality findings and changed-file ownership before deciding next fix.
+
+- Final-head Quality failure is 63 global pre-existing check-census complexity rows, not changed ledger rows; no changed-file Quality row is present. This is unrelated baseline drift and must not be fixed by scope broadening.
