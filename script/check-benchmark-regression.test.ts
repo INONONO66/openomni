@@ -44,6 +44,10 @@ test("regression must also exceed two historical sample standard deviations", ()
   expect(compareBenchmarks(metrics(121), history(10000, ...Array.from({ length: 20 }, () => 100))).failed).toBe(true);
 });
 
+test.each([Number.NaN, Number.POSITIVE_INFINITY, -1])("invalid metric value %s fails closed", (value) => {
+  expect(() => compareBenchmarks(metrics(value), history(100))).toThrow();
+});
+
 test("invalid input and incomplete references fail closed", () => {
   for (const input of ["", "0", "-1", "NaN", "Infinity", "20%"])
     expect(() => regressionThreshold(input)).toThrow();
@@ -52,8 +56,6 @@ test("invalid input and incomplete references fail closed", () => {
   expect(() => compareBenchmarks([], history(100))).toThrow();
   expect(() => compareBenchmarks([...metrics(100), ...metrics(100)], history(100))).toThrow();
   expect(() => compareBenchmarks(metrics(100), history())).toThrow();
-  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -1])
-    expect(() => compareBenchmarks(metrics(value), history(100))).toThrow();
   const missing = history(100);
   missing.entries["OpenOmni Benchmarks"][0]?.benches.pop();
   expect(() => compareBenchmarks(metrics(100), missing)).toThrow();

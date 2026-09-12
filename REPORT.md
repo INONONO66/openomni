@@ -288,3 +288,39 @@ RED exit 0
 - Weighted CI run passed all shards: 323s / 336s / 378s / 346s. Shard 3 remains above target; collecting its test-vs-overhead breakdown before the last adjustment.
 
 - Final conservative packing separates both full-repository compiler suites and projects 344-347s using latest measurements (ideal average 345.75s). Final tsc/Ultracite/lint/125 tests/build chain exit: 0. Exact 330s is below the observed workload lower bound; no test or validation was removed.
+
+- Final source push exit 0; head 64c6cc638b99cfa88789cebe7594ff20178cf179.
+
+- Awaiting final head checks in the same 45-minute loop; main benchmark dispatch and merge-sha timing remain blocked by the intentional PR regression failure.
+
+- PR description now distinguishes both measured intermediate runs from the final projection, including the observed lower bound above a strict 330-second target.
+
+- Correcting the preliminary local timing evidence: repeat original shard-3/4 files with Python 3.12.12, retained pass/fail summaries and wall times; temporarily reconstruct the original mutation file for that measurement only, then restore the committed split.
+
+- Pinned baseline run-quality-mutations-operators.test.ts exit 0; complete output /tmp/g10-baseline-run-quality-mutations-operators.test.ts.log.
+
+- Pinned baseline check-types-census.test.ts exit 0; complete output /tmp/g10-baseline-check-types-census.test.ts.log.
+
+- Pinned baseline quality-metrics/declaration-erasure.test.ts exit 0; complete output /tmp/g10-baseline-quality-metrics_declaration-erasure.test.ts.log.
+
+- Pinned baseline census-program.test.ts exit 0; complete output /tmp/g10-baseline-census-program.test.ts.log.
+
+- Pinned baseline coverage-ratchet.test.ts exit 0; complete output /tmp/g10-baseline-coverage-ratchet.test.ts.log.
+
+- Pinned baseline run-quality-mutations.test.ts exit 0; complete output /tmp/g10-baseline-run-quality-mutations.test.ts.log.
+
+- Pinned baseline check-quality-metrics.test.ts exit 0; complete output /tmp/g10-baseline-check-quality-metrics.test.ts.log.
+
+- Pinned original-file timing sweep passed all 220 tests. Wall seconds: operators 95.30, types census 30.59, declaration erasure 35.61, census program 4.72, coverage ratchet 2.79, original mutation 268.70, metrics 33.85. Original mutation file was byte-identical to a2877746 during measurement; committed split restored exactly afterward.
+
+- Final measured PR shard wall times: 381s / 342s / 324s / 311s, all passed (sum 1358s; ideal average 339.5s). Three distinct packing approaches reduced the original 432s worst shard but did not demonstrate the requested approximately 330s maximum under observed CI variability. This target is explicitly not claimed as met.
+
+- PR body now contains final measured before/after shard table, corrected pinned baseline file timings, explicit unmet 5.5-minute maximum, and blocked merge/post-merge work.
+
+- PR checks terminal; full results saved in /tmp/g10-checks.json.
+
+- Final bounded monitor completed in about 38 minutes; Performance Benchmarks, Quality and CI fail. Inspecting final Quality rows before cleanup.
+
+- Final full CI had exactly one Quality row: test-body ArrowFunction CRAP 30 in comparator invalid-input test. Converted its three invalid-metric cases to table-driven tests without removing any assertion. Tsc/Ultracite/lint/128 tests/build chain exit: 0.
+
+- Final parameterized comparator tests: native type census complete with zero owned violations; maximum test-body cyclomatic 4 / CRAP 20, replacing the sole CI CRAP-30 row.
