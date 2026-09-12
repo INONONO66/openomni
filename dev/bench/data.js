@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789196393699,
+  "lastUpdate": 1789212456212,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -69033,6 +69033,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 886021,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41389d458049009bf08e70fa4d6a987568b84a35",
+          "message": "ci: fix quality-mutation campaign SIGTERM on hosted runner (#1049) (#1051)\n\n* ci: expose mutation campaign phases and hosted pilot diagnostics\n\n* fix: bound mutation compiler retention and suite watchdogs\n\n* test: cover native mutation campaign and pilot wiring in process\n\n* docs: record hosted mutation campaign findings\n\n* fix: preserve Git metadata and package isolation in mutation copies\n\n* fix: give tooling test suites an explicit process budget\n\n* refactor: lower mutation receipt parser complexity\n\n* docs: record green mutation baseline and verification\n\n* test: verify reached pilot targets and mutation receipt diagnostics\n\n* test: cover streamed mutation failure diagnostics\n\n* refactor: split native failure decoding\n\n* fix: satisfy native diagnostic lint\n\n* refactor: isolate structured native error formatting\n\n* style: keep fallback annotation on catch line",
+          "timestamp": "2026-09-12T20:26:19+09:00",
+          "tree_id": "06673a22696d4862b3c7688df5b1a5bbe6ca8032",
+          "url": "https://github.com/INONONO66/openomni/commit/41389d458049009bf08e70fa4d6a987568b84a35"
+        },
+        "date": 1789212454940,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1025,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1825,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1271112,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 306379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6457675,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1125,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 667,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 539420,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3581,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19165,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 184503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 956787,
             "unit": "ns/op"
           }
         ]
