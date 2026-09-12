@@ -13,7 +13,9 @@ function structuredFailure(stdout: string): string | undefined {
 		const parsed = decodeJson(stdout);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray(parsed.errors))
 			return parsed.errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, 400)).join("; ");
-	} catch {}
+	} catch {
+		return undefined;
+	}
 	return undefined;
 }
 export function nativeFailure(stdout: string, stderr: string): string {
