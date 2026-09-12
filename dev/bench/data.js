@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788989132849,
+  "lastUpdate": 1789196393699,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -68939,6 +68939,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 1014809,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f3fcd84c237a9341cf71da8e058c5a687827c740",
+          "message": "ci: rebalance scripts-tooling shards, benchmark regression gate (#1050)\n\n* ci: gate PR benchmark regressions against accepted main history\n\n* ci: split compiler contracts and rebalance tooling shards\n\n* ci: validate benchmark inputs through typed JSON boundary\n\n* ci: account for tooling shard setup in timing balance\n\n* ci: tighten benchmark workflow contracts and coverage ownership\n\n* ci: separate compiler-heavy suites in final tooling balance\n\n* test: parameterize invalid benchmark metric cases\n\n* fix(ledger): validate observation and session reads once\n\n* docs(ci): explain benchmark thresholds and regression evidence\n\n* fix(ledger): keep session read optimization at adapter boundary\n\n* docs: record ledger regression recovery",
+          "timestamp": "2026-09-12T15:58:48+09:00",
+          "tree_id": "666bbea4622cf70d6f7a574741c6c034d308484b",
+          "url": "https://github.com/INONONO66/openomni/commit/f3fcd84c237a9341cf71da8e058c5a687827c740"
+        },
+        "date": 1789196393239,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1050,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1963,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1443,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1264071,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 340911,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6332475,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 135,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1079,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 664,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 503249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3535,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 175394,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 886021,
             "unit": "ns/op"
           }
         ]
