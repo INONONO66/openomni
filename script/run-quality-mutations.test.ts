@@ -351,6 +351,13 @@ test("crash after a successful assertion is infrastructure despite Bun JUnit lab
 	expect(result.code).toBe(2);
 	expect(result.selected[0]?.outcome).toBe("infrastructure");
 	expect(rows(result.selected[0]?.assertionIdentities)).toHaveLength(0);
+	expect(result.report.error).toBeUndefined();
+	expect(result.selected[0]?.reason).toBe("failure-without-complete-behavioral-assertions");
+	const receipt = rows(result.selected[0]?.receipts).map(record).at(-1);
+	expect(receipt?.exitCode).toBe(1);
+	expect(receipt?.signal).toBeNull();
+	expect(receipt?.stderr).toContain("crash-not-assertion");
+	expect(receipt?.stderrSha256).toBe(sha256(String(receipt?.stderr)));
 }, 90000);
 
 test("GitHub grouped diagnostics preserve kills without promoting crashes", async () => {

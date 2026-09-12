@@ -1210,6 +1210,8 @@ async function pythonWorker(
 		],
 		directory,
 		options.timeout,
+		{},
+		`python-${mode}`,
 	);
 }
 function probeKey(
