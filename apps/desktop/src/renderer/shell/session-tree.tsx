@@ -1,3 +1,4 @@
+import { sessionIndex } from "../state/selectors";
 import {
   Highlight,
   NavItem,
@@ -9,11 +10,14 @@ import {
   SidebarSection,
   Text,
   TreeRow,
+  StatusGlyph,
 } from "@openomni/ui";
-import { SessionRow } from "./session-row";
+import { sessionGlyphProps } from "./session-glyph";
 import { Settings } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { ATTENTION_LABEL } from "../attention/order";
+import { rowDensity } from "../attention/reason";
+import { SessionSecondary } from "./session-secondary";
 import type { Boundary, Ordered } from "../attention";
 import { highlightRuns } from "../search";
 import type { FilteredSession } from "../search";
@@ -29,6 +33,7 @@ import { placeIcon } from "./place-icon";
 import { rowId, TREE_ID } from "./row-id";
 import { useSearch } from "./use-search";
 
+/** Filtering keeps project parents and overrides their collapsed state. */
 export function SessionTree({
   ordered,
   pendingChanges,
@@ -52,7 +57,11 @@ export function SessionTree({
   readonly route: Route | null;
   readonly collapsedProjectIds: ReadonlySet<ProjectId | null>;
   readonly onToggleProject: (id: ProjectId | null) => void;
-
+  /**
+   * `boundary` is how the caller learns whether the order may advance. A row
+   * clicked or arrowed in the tree is a finished decision; one committed from
+   * the search field is not, so that path passes `null` and the order holds.
+   */
   readonly onSelect: (id: SessionId, boundary?: Boundary | null, newTab?: boolean) => void;
   /** `newTab` is the ⌘/Ctrl-click intent: open the route in a new tab instead of moving this one. */
   readonly onNavigate: (route: Route, newTab: boolean) => void;
@@ -60,10 +69,7 @@ export function SessionTree({
   /** Whether the section opens in search mode; uncontrolled after mount. */
   readonly defaultSearching?: boolean;
 }) {
-  const sessionById = useMemo(
-    () => new Map(sessions.map((session) => [session.id, session])),
-    [sessions],
-  );
+  const sessionById = sessionIndex(sessions);
 
   const rowRefs = useRef(new Map<SessionId, HTMLButtonElement>());
   const registerRef = useCallback((id: SessionId, node: HTMLButtonElement | null) => {
@@ -84,11 +90,13 @@ export function SessionTree({
     onSearchingChange,
   });
   const { filtered, state } = search;
+  const showAttentionLabels = filtered.groups.some((entry) => entry.kind !== "rest");
   const selectRow = useCallback(
     (id: SessionId, newTab = false) => onSelect(id, search.searching ? null : "selection", newTab),
     [onSelect, search.searching],
   );
 
+  // Arrow keys cross project boundaries in filtered, painted order.
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>, id: SessionId) => {
       const delta = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
@@ -152,7 +160,7 @@ export function SessionTree({
                 const open = !filtered.unfiltered || !collapsedProjectIds.has(group.id);
                 return (
                   <div key={JSON.stringify([attention.kind, group.id])}>
-                    {filtered.groups.some((entry) => entry.kind !== "rest") && index === 0 ? (
+                    {showAttentionLabels && index === 0 ? (
                       <Text className="px-2" level="meta" tone="faint">
                         {ATTENTION_LABEL[attention.kind]}
                       </Text>
@@ -177,7 +185,7 @@ export function SessionTree({
                           const session = sessionById.get(entry.id);
                           if (!session) return null;
                           return (
-                            <SearchSessionRow
+                            <SessionRow
                               active={entry.id === state.activeId}
                               current={entry.id === selectedId}
                               now={now}
@@ -208,7 +216,8 @@ export function SessionTree({
   );
 }
 
-function SearchSessionRow({
+/** Search cursor and current session share the selection fill. */
+function SessionRow({
   session,
   now,
   entry,
@@ -228,24 +237,29 @@ function SearchSessionRow({
   readonly registerRef: (id: SessionId, node: HTMLButtonElement | null) => void;
 }) {
   return (
-    <SessionRow
-      session={session}
-      now={now}
+    <TreeRow
       aria-selected={active}
       current={current || active}
       id={rowId(session.id)}
       level={1}
+      secondary={
+        rowDensity(session) === "double" ? (
+          <SessionSecondary session={session} now={now} />
+        ) : undefined
+      }
+      trailing={<StatusGlyph {...sessionGlyphProps(session.phase)} />}
       onClick={(event) => onSelect(session.id, event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => onKeyDown(event, session.id)}
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}
       role="treeitem"
     >
+      {/* Matched rows mute the remainder so highlights stay visible on selection. */}
       <Highlight
         className="block min-w-0 truncate"
         runs={highlightRuns(session.title, entry.spans)}
         tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
       />
-    </SessionRow>
+    </TreeRow>
   );
 }
 
