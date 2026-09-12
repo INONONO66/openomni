@@ -27,6 +27,15 @@ function catchCompile(run: () => void): PolicyCompileError {
   throw new Error("expected policy compile failure");
 }
 
+const detachedPolicyCompileErrorGuard = PolicyCompileError.isInstance;
+
+function preservesPolicyCompileErrorNarrowing(error: unknown): PolicyCompileError | undefined {
+  if (detachedPolicyCompileErrorGuard(error)) {
+    return error;
+  }
+  return undefined;
+}
+
 async function catchAppend(run: () => Promise<number>): Promise<PolicyCompileError> {
   try {
     await run();
@@ -37,6 +46,11 @@ async function catchAppend(run: () => Promise<number>): Promise<PolicyCompileErr
 }
 
 describe("policy row compiler enforcement", () => {
+  it("narrows detached guards to PolicyCompileError", () => {
+    const error = new PolicyCompileError({ code: "snapshot_load_failed", generation: 1 });
+    expect(preservesPolicyCompileErrorNarrowing(error)?.code).toBe("snapshot_load_failed");
+  });
+
   it("cannot disable the mandatory rule and fails closed with exact fields", () => {
     const error = catchCompile(() =>
       compilePolicySnapshot({ generation: 1, rows: [], mandatory: [] }),
