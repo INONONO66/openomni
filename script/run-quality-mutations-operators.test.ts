@@ -154,25 +154,27 @@ const families = [
 		outcome: "killed",
 	},
 ];
+async function exerciseOperatorFamily(family: (typeof families)[number]): Promise<void> {
+	const input = await fixture(family.source, family.assert);
+	const before = sha256(readFileSync(join(input.root, "src/a.ts")));
+	const { report, selected, code } = await invoke(input, family.id, select(family.id));
+	expect(code).toBe(family.outcome === "killed" ? 0 : 1);
+	expect(report.full).toBe(false);
+	expect(report.mutationZero).toBe(false);
+	expect(report.complete).toBe(true);
+	expect(report.cleanupVerified).toBe(true);
+	expect(report.originalHashesVerified).toBe(true);
+	expect(selected).toHaveLength(1);
+	expect(selected[0]?.outcome).toBe(family.outcome);
+	expect(selected[0]?.restored).toBe(true);
+	if (family.outcome === "killed")
+		expect(rows(selected[0]?.assertionIdentities).length).toBeGreaterThan(0);
+	expect(sha256(readFileSync(join(input.root, "src/a.ts")))).toBe(before);
+	for (const row of rows(report.census).map(record)) expect(rows(row.operators)).toHaveLength(24);
+}
+
 for (const family of families)
-	test(`real operator seam: ${family.id}`, async () => {
-		const input = await fixture(family.source, family.assert);
-		const before = sha256(readFileSync(join(input.root, "src/a.ts")));
-		const { report, selected, code } = await invoke(input, family.id, select(family.id));
-		expect(code).toBe(family.outcome === "killed" ? 0 : 1);
-		expect(report.full).toBe(false);
-		expect(report.mutationZero).toBe(false);
-		expect(report.complete).toBe(true);
-		expect(report.cleanupVerified).toBe(true);
-		expect(report.originalHashesVerified).toBe(true);
-		expect(selected).toHaveLength(1);
-		expect(selected[0]?.outcome).toBe(family.outcome);
-		expect(selected[0]?.restored).toBe(true);
-		if (family.outcome === "killed")
-			expect(rows(selected[0]?.assertionIdentities).length).toBeGreaterThan(0);
-		expect(sha256(readFileSync(join(input.root, "src/a.ts")))).toBe(before);
-		for (const row of rows(report.census).map(record)) expect(rows(row.operators)).toHaveLength(24);
-	}, 90000);
+	test(`real operator seam: ${family.id}`, () => exerciseOperatorFamily(family), 90000);
 
 
 for (const source of [
