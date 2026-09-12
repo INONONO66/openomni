@@ -148,7 +148,13 @@ function symbolName(node: ts.Node): string {
 }
 function grammarIdentifier(node: ts.Identifier): boolean {
   const parent = node.parent;
-  if (ts.isMetaProperty(parent) || ts.isQualifiedName(parent) || ts.isTypeReferenceNode(parent) || ts.isImportSpecifier(parent)) return true;
+  if (
+    ts.isMetaProperty(parent) ||
+    ts.isQualifiedName(parent) ||
+    ts.isTypeReferenceNode(parent) ||
+    ts.isImportSpecifier(parent)
+  )
+    return true;
   // These identifiers name syntax rather than values/types whose inferred type
   // is part of the census. TypeScript represents them as error-any locations.
   if (ts.isTypePredicateNode(parent)) return true;
@@ -157,14 +163,21 @@ function grammarIdentifier(node: ts.Identifier): boolean {
   if (ts.isModuleDeclaration(parent) && parent.name === node) return true;
   if (ts.isExportSpecifier(parent)) {
     const declaration = parent.parent.parent;
-    if (ts.isExportDeclaration(declaration) && declaration.isTypeOnly) return true;
+    if (parent.isTypeOnly || (ts.isExportDeclaration(declaration) && declaration.isTypeOnly))
+      return true;
   }
-  const jsx = ts.isJsxOpeningElement(parent) || ts.isJsxSelfClosingElement(parent) || ts.isJsxClosingElement(parent);
+  const jsx =
+    ts.isJsxOpeningElement(parent) ||
+    ts.isJsxSelfClosingElement(parent) ||
+    ts.isJsxClosingElement(parent);
   return jsx && parent.tagName === node && /^[a-z]/.test(node.text);
 }
 function literalGrammar(node: ts.Node): boolean {
   const parent = node.parent;
-  return ts.isLiteralTypeNode(parent) || ts.isPrefixUnaryExpression(parent) && ts.isLiteralTypeNode(parent.parent);
+  return (
+    ts.isLiteralTypeNode(parent) ||
+    (ts.isPrefixUnaryExpression(parent) && ts.isLiteralTypeNode(parent.parent))
+  );
 }
 function isQuery(node: ts.Node): boolean {
   if (ts.isSourceFile(node)) return false;
@@ -361,7 +374,11 @@ function typeClassifier(program: ts.Program, checker: ts.TypeChecker, owned: Set
   }
   return (start: ts.Type): { kinds: Kind[]; owned: Set<Kind>; metadata: Set<AbiDeclaration> } => {
     const complete = reach(start, false);
-    return { kinds: [...complete.kinds].sort(), owned: reach(start, true).kinds, metadata: complete.metadata };
+    return {
+      kinds: [...complete.kinds].sort(),
+      owned: reach(start, true).kinds,
+      metadata: complete.metadata,
+    };
   };
 }
 /** A directly top-typed node is attributed to the declaration that typed it:
@@ -369,7 +386,8 @@ function typeClassifier(program: ts.Program, checker: ts.TypeChecker, owned: Set
  * the referenced property/alias. Unresolvable provenance stays owned. */
 function declaredHere(node: ts.Node, checker: ts.TypeChecker, owned: Set<string>): boolean {
   const symbolOwned = (symbol: ts.Symbol | undefined) => {
-    const resolved = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    const resolved =
+      symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
     return !declaredOutside(resolved?.valueDeclaration ?? resolved?.declarations?.[0], owned);
   };
   if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
@@ -378,12 +396,17 @@ function declaredHere(node: ts.Node, checker: ts.TypeChecker, owned: Set<string>
       ? !declaredOutside(declaration, owned)
       : symbolOwned(checker.getSymbolAtLocation(node.expression));
   }
-  if (ts.isPropertyAccessExpression(node)) return symbolOwned(checker.getSymbolAtLocation(node.name));
+  if (ts.isPropertyAccessExpression(node))
+    return symbolOwned(checker.getSymbolAtLocation(node.name));
   if (ts.isElementAccessExpression(node))
     return symbolOwned(checker.getSymbolAtLocation(node.argumentExpression));
   if (ts.isIdentifier(node)) return symbolOwned(checker.getSymbolAtLocation(node));
   if (ts.isTypeReferenceNode(node)) return symbolOwned(checker.getSymbolAtLocation(node.typeName));
-  if (ts.isAwaitExpression(node) || ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node))
+  if (
+    ts.isAwaitExpression(node) ||
+    ts.isParenthesizedExpression(node) ||
+    ts.isNonNullExpression(node)
+  )
     return declaredHere(node.expression, checker, owned);
   return true;
 }
@@ -410,7 +433,11 @@ function scanSource(
 ): CensusResult["violations"] {
   const violations: CensusResult["violations"] = [];
   const path = relative(root, source.fileName);
-  function add(node: ts.Node, kind: CensusResult["violations"][number]["kind"], origin: Origin): void {
+  function add(
+    node: ts.Node,
+    kind: CensusResult["violations"][number]["kind"],
+    origin: Origin,
+  ): void {
     const offset = node.getStart(source);
     violations.push({
       path,
@@ -427,7 +454,8 @@ function scanSource(
     else if (isQuery(node) && !ts.isStringLiteralLike(node)) {
       const type = checker.getTypeAtLocation(node);
       const classified = classify(type);
-      for (const kind of classified.kinds) add(node, kind, originOf(node, type, kind, classified.owned, checker, owned));
+      for (const kind of classified.kinds)
+        add(node, kind, originOf(node, type, kind, classified.owned, checker, owned));
       for (const entry of classified.metadata) {
         const offset = node.getStart(source);
         abiMetadata.push({
@@ -444,7 +472,13 @@ function scanSource(
   visit(source);
   return violations;
 }
-export function census(root: string, contract: Contract, inventory: Inventory, shared = new CensusPrograms(), scope?: ReturnType<typeof qualityPlan>): CensusResult {
+export function census(
+  root: string,
+  contract: Contract,
+  inventory: Inventory,
+  shared = new CensusPrograms(),
+  scope?: ReturnType<typeof qualityPlan>,
+): CensusResult {
   const result: CensusResult = {
     version: 1,
     tool: "typescript@5.9.2",
@@ -459,10 +493,15 @@ export function census(root: string, contract: Contract, inventory: Inventory, s
   };
   const owned = new Set(
     inventory.files
-      .filter((file) => file.language === "typescript" && (!contract.topology || qualitySource(file.path)))
+      .filter(
+        (file) =>
+          file.language === "typescript" && (!contract.topology || qualitySource(file.path)),
+      )
       .map((file) => join(root, file.path)),
   );
-  const selected = new Set([...owned].filter((file) => scope === undefined || scope.paths.includes(relative(root, file))));
+  const selected = new Set(
+    [...owned].filter((file) => scope === undefined || scope.paths.includes(relative(root, file))),
+  );
   const covered = new Set<string>();
   const semanticCovered = new Set<string>();
   const analyzed = new Map<ts.Program, CensusError[]>();
@@ -604,7 +643,9 @@ export function censusMain(): number {
       });
     } else {
       verifyInventory(inventory, expected);
-      const scope = options.plan ? qualityPlan(options.root, options.contract, inventory, options.plan) : undefined;
+      const scope = options.plan
+        ? qualityPlan(options.root, options.contract, inventory, options.plan)
+        : undefined;
       result = census(options.root, contract, inventory, undefined, scope);
     }
   } catch {
