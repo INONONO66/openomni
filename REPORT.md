@@ -38,3 +38,7 @@
 - In-process integration gate test exit: 0 (log /tmp/g11-tests4.log).
 
 - Third increment gates passed: 173 tests together, TypeScript, ultracite, lint, build. Real campaign is now 91.55% line-covered in process; native wrapper 87.86%. Full branch run 34675894684 remains under background gh run watch.
+
+- Full branch run 34675894684 completed; bounded phase/resource evidence saved /tmp/g11-branch-full.log.
+
+- Commented issue #1049 with memory, signal, disk, baseline, and branch-run evidence. PR #1051 remains intentionally unmerged because Quality/CI checks fail; no auto-merge invoked.
