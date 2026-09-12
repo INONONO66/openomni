@@ -260,3 +260,11 @@ RED exit 0
 - Removed deprecated no-op Zod finite calls (v4 numbers reject nonfinite inputs already), explicitly tested infinity/NaN/negative metrics. Final typed-boundary tsc/Ultracite/lint/125 tests/build chain exit: 0.
 
 - First measured PR shard result: tooling-4 passed in 306s, down from main 432s. Other shard/quality checks still pending.
+
+- First PR tooling-2 and tooling-3 both passed in 322s (5m22s). Saved post-rebalance per-file timings for shards 2-4.
+
+- First PR shard 1 passed but took 388s, exceeding target. Its measured tests sum only 294s; investigating the extra setup/exit overhead before repacking further.
+
+- Shard 1 extra overhead is real: it owns native Python self-tests and more setup, while test execution itself is 294s. Measured PR overheads: 93.94s / 45.48s / 38.32s / 50.76s. Uniform test packing cannot hit the wall target; a second packing weights these measured per-shard overheads (ideal achievable average 334.5s).
+
+- Weighted-shard tsc/Ultracite/lint/125 tests/build chain exit: 0. New projected wall times including measured overhead: 336.0s / 335.9s / 335.5s / 330.6s.
