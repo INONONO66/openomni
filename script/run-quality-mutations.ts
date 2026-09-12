@@ -315,7 +315,7 @@ function redactArgv(argv: string[]): string[] {
 // Scrub echoed command options only when rendering diagnostics. Raw child
 // output remains available to the compiler/worker decoders and its byte hashes
 // are unchanged, even when the report contains redacted stdout or stderr.
-function diagnosticField(key: string, value: unknown): unknown {
+function diagnosticField(key: string, value: Json): Json {
 	if (typeof value !== "string" || !["message", "stdout", "stderr"].includes(key)) return value;
 	return value.replace(
 		new RegExp(`(^|\\s)(${sensitiveOptionName})(=|\\s+)(?:"[^"]*"|'[^']*'|[^\\s]+)`, "gi"),
@@ -1210,8 +1210,6 @@ async function pythonWorker(
 		],
 		directory,
 		options.timeout,
-		{},
-		`python-${mode}`,
 	);
 }
 function probeKey(
