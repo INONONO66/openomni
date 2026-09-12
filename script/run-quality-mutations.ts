@@ -69,7 +69,7 @@ type Result = Candidate & {
 	typecheck: string;
 	testSelection: string;
 	assertionIdentities: string[];
-	coverage: { reached: boolean; markerSha256: string } | null;
+	coverage: { reached: boolean; markerSha256: string; tests?: string[] } | null;
 	junitReports: string[];
 	receipts: ProcessReceipt[];
 	reason: string;
@@ -84,8 +84,19 @@ type Census = {
 	astNodes: number;
 	operators: { operator: string; candidates: number; reason: string }[];
 };
-type ProbeEvidence = { reached: boolean; markerSha256: string };
-type ProbeCache = Map<string, ProbeEvidence>;
+type ReachSite = { id: string; path: string; sourceSha256: string; site: Site; tests: string[] };
+type ProbeEvidence = { reached: boolean; markerSha256: string; tests?: string[] };
+type ReachMap = {
+	version: 1;
+	executionTreeSha256: string;
+	candidatesSha256: string;
+	testsSha256: string;
+	sites: ReachSite[];
+	runs: { test: string; receipt: TestSelectionReceipt }[];
+	instrumentation: ProcessReceipt[];
+	complete: boolean;
+	sha256: string;
+};
 type Options = {
 	root: string;
 	contract: string;
@@ -842,33 +853,32 @@ function compareCandidates(a: Candidate, b: Candidate): number {
 function replace(source: string, start: number, end: number, replacement: string): string {
 	return source.slice(0, start) + replacement + source.slice(end);
 }
-function instrument(source: string, site: Site, marker: string): string {
-	const probe = `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`;
+type ProbeInsertion = { offset: number; order: number; text: string };
+function caseInsertion(source: string, site: Site): number {
 	const original = source.slice(site.start, site.end);
-	if (site.mode === "statement")
-		return replace(source, site.start, site.end, `{${probe};${original}}`);
-	if (site.mode === "case") {
-		const clause = ts.createSourceFile(
-			"site.ts",
-			`switch(0){${original}}`,
-			ts.ScriptTarget.Latest,
-			true,
-		);
-		const statement = clause.statements[0];
-		if (!statement || !ts.isSwitchStatement(statement))
-			return fail("instrumentation", "Missing switch site");
-		const first = statement.caseBlock.clauses[0];
-		if (!first || !ts.isCaseClause(first)) return fail("instrumentation", "Missing case site");
-		const colon = original.indexOf(":", first.expression.end - "switch(0){".length);
-		return replace(source, site.start + colon + 1, site.start + colon + 1, `${probe};`);
-	}
-	const expression = `(${probe},(${original}))`;
-	return replace(
-		source,
-		site.start,
-		site.end,
-		site.mode === "jsx" ? `{${expression}}` : expression,
-	);
+	const clause = ts.createSourceFile("site.ts", `switch(0){${original}}`, ts.ScriptTarget.Latest, true);
+	const statement = clause.statements[0];
+	if (!statement || !ts.isSwitchStatement(statement)) return fail("instrumentation", "Missing switch site");
+	const first = statement.caseBlock.clauses[0];
+	if (!first || !ts.isCaseClause(first)) return fail("instrumentation", "Missing case site");
+	return site.start + original.indexOf(":", first.expression.end - "switch(0){".length) + 1;
+}
+function probeInsertions(source: string, row: ReachSite, marker: string, index: number): ProbeInsertion[] {
+	const { site } = row;
+	const key = JSON.stringify(marker);
+	const probe = `require("node:fs").writeFileSync(${key},"1")`;
+	if (site.mode === "case") return [{ offset: caseInsertion(source, site), order: index, text: `${probe};` }];
+	const [open, close] = site.mode === "statement" ? [`{${probe};`, "}"]
+		: site.mode === "jsx" ? [`{(${probe},(`, "))}"] : [`(${probe},(`, "))"];
+	return [{ offset: site.start, order: index, text: open }, { offset: site.end, order: -index, text: close }];
+}
+export function instrument(source: string, sites: ReachSite[], directory: string): string {
+	// Insert against original offsets: nested sites must not shift or overwrite one another.
+	const ordered = [...sites].sort((a, b) => a.site.start - b.site.start || b.site.end - a.site.end);
+	const insertions = ordered.flatMap((row, index) => probeInsertions(source, row, join(directory, row.id), index));
+	// Apply at descending original offsets so every insertion is independent of shifts.
+	insertions.sort((a, b) => b.offset - a.offset || b.order - a.order);
+	return insertions.reduce((result, insertion) => replace(result, insertion.offset, insertion.offset, insertion.text), source);
 }
 function gitCopyCommand(root: string, args: string[]): string {
 	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -1084,6 +1094,46 @@ function green(receipt: TestSelectionReceipt): boolean {
 		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
+async function buildReachMap(options: Options, frozen: string, temporary: string, candidates: Candidate[], tests: string[], executionTreeSha256: string): Promise<{ map: Map<string, ProbeEvidence>; receipt: ReachMap }> {
+	const directory = join(temporary, "reach"), markers = join(directory, "markers");
+	copyExecution(frozen, directory);
+	mkdirSync(markers, { recursive: true });
+	const byPath = new Map<string, Candidate[]>();
+	for (const candidate of candidates) byPath.set(candidate.path, [...(byPath.get(candidate.path) ?? []), candidate]);
+	for (const [candidatePath, rows] of byPath) {
+		const source = mutationSource(directory, candidatePath);
+		if (rows[0]?.operator.startsWith("py-")) {
+			const sites = join(directory, "python-sites.json");
+			writeFileSync(sites, JSON.stringify(rows.map((row) => ({ ...row.site, marker: join(markers, row.id) }))));
+			const process = await pythonWorker(options, source.source, directory, "reach", undefined, undefined, sites);
+			if (process.exitCode !== 0) throw new MutationError("reachMap", "Python reach instrumentation failed");
+			writeMutation(source, text(object(decode(process.stdout)).source));
+		} else {
+			const unique = [...new Map(rows.map((row) => [`${row.site.start}:${row.site.end}:${row.site.mode}`, row])).values()];
+			const instrumented = instrument(source.source, unique.map((row) => ({ id: row.id, path: row.path, sourceSha256: row.sourceSha256, site: row.site, tests })), markers);
+			writeMutation(source, instrumented);
+		}
+	}
+	const map = new Map<string, ProbeEvidence>();
+	for (const candidate of candidates) map.set(candidate.id, { reached: false, markerSha256: sha256(""), tests: [] });
+	const runs: { test: string; receipt: TestSelectionReceipt }[] = [];
+	for (const test of tests) {
+		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout);
+		if (!green(receipt)) throw new MutationError("reachMap", `Reach test is not green: ${test}`);
+		runs.push({ test, receipt });
+		for (const candidate of candidates) {
+			const first = candidates.filter((row) => row.path === candidate.path && JSON.stringify(row.site) === JSON.stringify(candidate.site)).at(-1) ?? candidate;
+			const marker = join(markers, first.id);
+			if (!existsSync(marker)) continue;
+			const evidence = map.get(candidate.id);
+			if (evidence) { evidence.reached = true; (evidence.tests ??= []).push(test); evidence.markerSha256 = sha256(readFileSync(marker, "utf8")); }
+		}
+	}
+	console.error(`[mutation] reach map: ${[...map.values()].filter((value) => value.reached).length}/${candidates.length} reached`);
+	const body = { version: 1 as const, executionTreeSha256, candidatesSha256: sha256(JSON.stringify(candidates)), testsSha256: sha256(JSON.stringify(tests)), sites: candidates.map((candidate) => ({ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests: map.get(candidate.id)?.tests ?? [] })), runs, complete: true };
+	return { map, receipt: { ...body, instrumentation: [], sha256: sha256(JSON.stringify(body)) } };
+}
+
 function defaultResult(candidate: Candidate, tests: string[], selected = true): Result {
 	return {
 		...candidate,
@@ -1153,6 +1203,7 @@ async function pythonWorker(
 	mode: string,
 	site?: Site,
 	marker?: string,
+	sites?: string,
 ): Promise<ProcessReceipt> {
 	const input = join(directory, "python-input.py");
 	writeFileSync(input, source);
@@ -1169,6 +1220,7 @@ async function pythonWorker(
 			...(site && marker
 				? ["--start", String(site.start), "--end", String(site.end), "--marker", marker]
 				: []),
+			...(mode === "reach" && sites ? ["--sites", sites] : []),
 		],
 		directory,
 		options.timeout,
@@ -1210,9 +1262,21 @@ async function runCandidate(
 	contract: Contract,
 	temporary: string,
 	tests: string[],
-	probeCache: ProbeCache,
+	reachMap: Map<string, ProbeEvidence>,
 ): Promise<Result> {
 	const result = defaultResult(candidate, tests);
+	const evidence = reachMap.get(candidate.id);
+	const frozenSource = mutationSource(join(temporary, "frozen"), candidate.path);
+	const frozenSourceSha256 = sha256(frozenSource.host);
+	const probeCache = new Map<string, ProbeEvidence>();
+	result.coverage = evidence ?? null;
+	if (!evidence || !evidence.reached) {
+		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
+		result.restored = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host) === frozenSourceSha256;
+		result.outcome = "noCoverage";
+		result.reason = "original-runtime-site-not-reached";
+		return result;
+	}
 	const run = join(temporary, "candidate");
 	const root = join(run, "source");
 	mkdirSync(run, { recursive: true });
@@ -1290,7 +1354,7 @@ async function runCandidate(
 				return false;
 			}
 			probedSource = text(object(decode(instrumented.stdout)).source);
-		} else probedSource = instrument(source.source, candidate.site, marker);
+		} else probedSource = instrument(source.source, [{ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests }], run);
 		const key = probeKey(candidate, probedSource, options, tests);
 		const cached = probeCache.get(key);
 		if (cached) {
@@ -1312,13 +1376,13 @@ async function runCandidate(
 			return false;
 		}
 		const hit = existsSync(marker) ? readFileSync(marker, "utf8") : "";
-		result.coverage = { reached: hit === "1", markerSha256: sha256(hit) };
+		result.coverage = { reached: hit === "1", markerSha256: sha256(hit), tests };
 		if (existsSync(marker) && hit !== "1") {
 			result.outcome = "infrastructure";
 			result.reason = "malformed-coverage-marker";
 			return false;
 		}
-		if (!result.coverage.reached) {
+		if (!result.coverage?.reached) {
 			// A green, complete selection with no marker is the only reusable
 			// proof of an unreached original site. Errors and malformed markers
 			// return above without entering the campaign-local cache.
@@ -1346,8 +1410,8 @@ async function runCandidate(
 		const python = candidate.operator.startsWith("py-");
 		writeMutation(source, mutated);
 		if (!(await checkMutation(mutated, python))) return result;
-		if (!(await probeCandidate(source, python))) return result;
-		// Probe test side effects cannot leak into the mutation run.
+		// Reach was established once for the campaign; no per-mutant probe run.
+		// Test side effects cannot leak into the mutation run.
 		removeExecution(root);
 		copyExecution(join(temporary, "frozen"), root);
 		writeMutation(source, mutated);
@@ -1378,7 +1442,7 @@ async function runCandidate(
 	} finally {
 		if (path && original && existsSync(dirname(path))) {
 			writeFileSync(path, original);
-			result.restored = sha256(readFileSync(path)) === sha256(original);
+			result.restored = sha256(readFileSync(path)) === frozenSourceSha256;
 		}
 		removeExecution(root);
 		rmSync(run, { recursive: true, force: true });
@@ -1596,9 +1660,9 @@ async function executeSelection(
 	enumerated: ReturnType<typeof enumerate>,
 	tests: string[],
 	errors: string[],
+	reachMap: Map<string, ProbeEvidence>,
 ): Promise<Result[]> {
 	const results: Result[] = [];
-	const probeCache: ProbeCache = new Map();
 	const selected = selectedCandidates(options, enumerated.candidates);
 	if (!selected.length) errors.push("zero selected candidates");
 	const selectedIds = new Set(selected.map((candidate) => candidate.id));
@@ -1613,7 +1677,7 @@ async function executeSelection(
 			results.push(defaultResult(candidate, tests));
 		else {
 			console.error(`[mutation] mutant ${executed + 1}/${selected.length} start ${candidate.path}:${candidate.startOffset} ${candidate.operator}`);
-			const result = await runCandidate(candidate, options, contract, temporary, tests, probeCache);
+			const result = await runCandidate(candidate, options, contract, temporary, reachMap.get(candidate.id)?.tests ?? tests, reachMap);
 			results.push(result);
 			executed++;
 			console.error(`[mutation] mutant ${executed}/${selected.length} ${result.outcome}: ${result.reason}`);
@@ -1720,8 +1784,11 @@ async function campaign(options: Options): Promise<number> {
 			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
 		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
+		const selected = selectedCandidates(options, enumerated.candidates);
+		const reach = errors.length ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, selected, tests, executionTreeSha256);
+		removeExecution(join(temporary, "reach"));
 		const results = await executeSelection(
-			options, contract, temporary, started, enumerated, tests, errors,
+			options, contract, temporary, started, enumerated, tests, errors, reach.map,
 		);
 		console.error("[mutation] verifying restoration and cleaning execution copies");
 		verifySources(options.root, inventory);
@@ -1754,6 +1821,7 @@ async function campaign(options: Options): Promise<number> {
 				executionTreeSha256,
 				pythonCapability,
 				testSelections: [{ id: sha256(JSON.stringify(tests)), paths: tests }],
+				reachMap: reach.receipt,
 				sourceDiagnostics,
 				sourceDiagnosticsSha256: sha256(JSON.stringify(sourceDiagnostics)),
 				inventorySha256: options.inventoryHash,
