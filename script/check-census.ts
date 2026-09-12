@@ -285,7 +285,7 @@ function exitsBefore(parent: ts.Block | ts.SourceFile, child: ts.Node): boolean 
 }
 // Parent chains are immutable; weak keys do not retain completed census programs.
 const scopeOwners = new WeakMap<ts.Node, ts.Node>();
-function scope(node: ts.Node): ts.Node {
+export function scope(node: ts.Node): ts.Node {
   const cached = scopeOwners.get(node);
   if (cached) return cached;
   let current = node.parent;

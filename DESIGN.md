@@ -342,7 +342,8 @@ Raw `publisher.json` and `publisher.process.json` differ ONLY at command array
 index 7 (random temporary inventory pathname); `publisher.identity.json`
 differs ONLY in `durationMs`. Thus the requested all-files raw determinism
 premise is false even before changes. No byte-identity claim for these wrappers
-will be made, and no PR will be opened under that literal gate.
+is made. The owner subsequently accepted the semantic identity proof and
+explicitly authorized shipping; see the shipping addendum below.
 
 Baseline census tests: 63 pass, 7 fail, 627 assertions, 222.56 s. The exact
 command was `mise exec bun@1.4.1 -- bun test script/check-census*.test.ts`, with
@@ -390,23 +391,85 @@ was changed or warning suppressed; both validators passed after build had
 finished. Initial logs are retained (`/tmp/fp/tsc.log`, `/tmp/fp/lint.log`), as
 are the successful post-build logs. The known seven Python failures remain.
 
-### Decision and remaining boundary
+### Shipping addendum (owner authorized the semantic identity gate)
 
-The algorithmic prototype is successful on a fixed input: full byte identity,
-including every invocation and provenance field, with a 67.78% faster actual
-publisher collector. The literal requested ALL-ARTIFACT byte-identity gate is
-NOT satisfied, even by base1 versus base2. Therefore this branch is retained
-as a local commit only: no push, PR, auto-merge, admin override or CI polling.
-There is no merged main run and thus no new main Quality Static publisher
-measurement to report.
+The owner explicitly accepted complete frozen-input stdout identity and
+installed findings/invocations/schemas identity, with expected regenerated
+source inventory hashes and volatile receipt paths/durations. The initial
+prototype commit `d3d297fa` was retained locally pending this authorization;
+shipping now uses the same index and scope cache without changing freshness
+validation or census semantics.
 
-Recommendation: retain the index + pure scope cache. The only authorization
-needed before a PR is accepting the explicit identity-metadata distinction:
-require complete frozen-input stdout equality and installed findings/invocation
-identity while allowing honestly regenerated inventory hashes and inherently
-volatile receipt paths/durations. No change to receipt freshness validation or
-census semantics is recommended. This is the unresolved gate, not a claimed
-raw-output success. All code work is in the isolated worktree; the sole output
-written to the parent worktree is the requested report copy.
+Two additional regressions are in `script/check-census.test.ts:19-49`, already
+assigned to `scripts-tooling-2` in `script/scripts-lanes.ts:64`:
+
+* Two adjacent event registrations publish different schemas. A removal before
+  emission cancels one, while an adjacent removal after emission cannot cancel
+  the other. Runtime prints only `other`, and census reports only `ready` as
+  missing. Dropping a candidate or conflating callback identity would fail.
+* `scope` is exported for direct testing without a test-only implementation.
+  Two functions contain distinct statement nodes with the same syntax. The
+  real parent getter records one read for the first query and none for the
+  second; the other node still resolves to its own function. This asserts both
+  actual caching and isolation, not merely equal output from recomputation.
+
+`quality-results/inventory.json` was regenerated with the documented inventory
+CLI and verified by that CLI. Its analyzer digest is
+`1d000acddd3842c4e1c56e90970ea0d3eb4b0ede210f5f7f2c8a6ead61b3384b`.
+The only tracked hash entry found by the requested search is the historical
+`script/conformance/quality-baseline-lcov-bound.json:1841`; it is not rewritten:
+`quality-ratchet.ts:110-129` uses it as unchanged-source evidence only for
+UNMEASURED sources. Tooling plans remeasure the full inventory. Updating that
+old measurement's hash without recreating its evidence would be incorrect.
+
+### Measured before/after counters
+
+A second temporary instrumented publisher-only analyzer used the exact same
+counters around the final implementation. These are measured, not estimates.
+The final run retained every census document field except the expected new
+inventory hash. Instrumentation was archived under `/tmp/fp/ship` and removed
+before lint. Its elapsed time is not used for the speedup claim because local
+gate tests ran concurrently; the three isolated collector wall times above
+remain the performance proof.
+
+| Counter | Baseline | Index + scope cache |
+| --- | ---: | ---: |
+| Initial queue | 79,580 | 79,580 |
+| First / second drain | 214,218 / 56 | 214,218 / 56 |
+| Removal query passes | 37,722 | 37,722 |
+| Removal candidate visits | 450,777,900 | 603,552 |
+| Scope calls | 1,362,163,594 | 912,133,872 |
+| Unique scope inputs | 16,865 | 16,865 |
+| Scope cache hits | 0 | 912,117,007 |
+| Parent-chain steps | 6,867,689,161 | 84,196 |
+| Function-kind predicate calls | 7,944,060,726 | 6,849,513 |
+| Active-branch calls | 1,091,227,314 | 641,052,966 |
+| Declaration queries | 2,057,595 | 2,057,595 |
+| Walk visits | 1,236,625,667 | 1,236,625,667 |
+
+Queue sizes, scope identity cardinality and declaration work are unchanged;
+only irrelevant candidates and repeated pure parent walks are eliminated.
+
+### Shipping gates
+
+All commands retain `mise exec bun@1.4.1 -- bun ...`:
+
+* Combined census, quality-inventory, CI and scripts-lanes test command:
+  **153 pass, same 7 Python-version failures**, 1,014 assertions, 218.02 s.
+  New regression tests and inventory tests pass. Failure names match the
+  baseline list exactly; no additional failures or skipped tests.
+* Build: **6/6 pass**, 9.538 s, completed before typecheck.
+* Script tsc: **pass**.
+* Ultracite 7.8.3, formatter disabled: **pass**, 1,224 files.
+* Full lint: **pass** (guards, side effects, dependency docs, Ultracite).
+* Diagnostics: no errors; the existing deprecated `db.exec` test signature is
+  an informational TypeScript hint, not suppressed.
+
+Logs: `/tmp/fp/ship/{tests,build,tsc,ultracite,lint,counters-after}.log`.
+The CI reference is the successful main run `34545253567` at `a2877746`:
+Quality Static (publisher) **508 s**, Quality span **584 s** (earliest static
+leg start through Quality completion), workflow total **672 s** (workflow
+start through last job completion). These are GitHub job timestamps, not local
+wall times. PR and merged-main results are recorded in the final report copy.
 
 Report copy: `/Users/ino/Develop/openomni/.omo/reports/publisher-fixpoint-design-20260911.md`.
