@@ -60,11 +60,7 @@ export abstract class NamedError extends Error {
         this.name = name;
       }
 
-      static isInstance<
-        T extends abstract new (
-          ...args: never[]
-        ) => NamedErrorInstance<Name, Data>,
-      >(this: T, input: unknown): input is InstanceType<T> {
+      static isInstance(input: unknown): input is NamedErrorInstance<Name, Data> {
         if (!(input instanceof Error)) return false;
         if ((input as unknown as Partial<Record<symbol, unknown>>)[NAMED_ERROR_BRAND] !== name) {
           return false;
