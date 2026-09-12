@@ -1,3 +1,4 @@
+import { sessionIndex } from "../state/selectors";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Boundary, Ordered } from "../attention";
 import type { Session, SessionId } from "../state/store";
@@ -51,7 +52,7 @@ export function useSearch({
 
   const fieldsFor = useCallback(
     (id: SessionId): SearchFields => {
-      const session = sessions.find((candidate) => candidate.id === id);
+      const session = sessionIndex(sessions).get(id);
       return [session?.title ?? id, session?.projectId ?? ""];
     },
     [sessions],
@@ -70,9 +71,7 @@ export function useSearch({
 
   const run = useCallback(
     (intent: Parameters<typeof reduce>[1]) => {
-      const transition = reduce(stateRef.current, intent, sequenceRef.current);
-      const next = transition.state;
-      const effects = transition.effects;
+      const { state: next, effects } = reduce(stateRef.current, intent, sequenceRef.current);
       stateRef.current = next;
       setState(next);
       for (const effect of effects) {
@@ -102,6 +101,7 @@ export function useSearch({
     [onSelect, focusSelectedRow, onSearchingChange],
   );
 
+  // Document scope lets Cmd/Ctrl+K open search while another control has focus.
   useEffect(() => {
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;

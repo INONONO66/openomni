@@ -61,7 +61,7 @@ interface ClosedTab {
   readonly index: number;
 }
 
-interface ClientState {
+export interface ClientState {
   readonly sessions: readonly Session[];
   readonly tabs: readonly Tab[];
   readonly activeTabId: string | null;
