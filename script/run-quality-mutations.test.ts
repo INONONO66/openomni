@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { copyExecution, removeExecution, decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
+import { copyExecution, removeExecution, decode, execute, executionTreeHash, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -54,6 +54,20 @@ test("process receipts preserve executed failure context, including signals", as
   expect(signaled.exitCode).toBeNull();
   expect(signaled.signal).toBe("SIGTERM");
   expect(signaled.stderrSha256).toBe(sha256(signaled.stderr));
+});
+
+test("Python worker receipt stages execute through the runner path", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "mutation-python-worker-"));
+  try {
+    const receipt = await pythonWorker({
+      python: "/Users/ino/.local/share/mise/installs/python/3.12.12/bin/python3.12",
+      decision: join(import.meta.dir, "conformance/quality-mutation-contract.json"),
+      timeout: 15000,
+    }, "print(True)", directory, "compile");
+    expect(receipt.stage).toBe("python-compile");
+    expect(receipt.exitCode).toBe(0);
+    expect(receipt.signal).toBeNull();
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test("mutation main rejects an invalid invocation in process", async () => {

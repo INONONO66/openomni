@@ -1184,8 +1184,8 @@ function writeMutation(source: ReturnType<typeof mutationSource>, content: strin
 			: replace(source.host, source.start, source.end, JSON.stringify(content)),
 	);
 }
-async function pythonWorker(
-	options: Options,
+export async function pythonWorker(
+	options: Pick<Options, "python" | "decision" | "timeout">,
 	source: string,
 	directory: string,
 	mode: string,
