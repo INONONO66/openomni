@@ -197,8 +197,8 @@ test("optional chain probe keeps skipped key and argument effects lazy", async (
 	// Removing ?. is itself a runtime error, but the ORIGINAL probe must be green.
 	expect(result.code).toBe(2);
 	expect(result.selected[0]?.reason).toBe("failure-without-complete-behavioral-assertions");
-	const receipts = rows(result.selected[0]?.receipts).map(record);
-	expect(receipts[1]?.exitCode).toBe(0);
+	const reachRuns = rows(record(result.report.reachMap).runs).map(record);
+	expect(reachRuns[0]?.receipt && record(reachRuns[0].receipt).exitCode).toBe(0);
 }, 90000);
 
 test("ordinary interpolated template has a runtime string mutant", async () => {
@@ -219,6 +219,7 @@ test("tagged template probe preserves tag receiver, raw data and substitutions",
 	const result = await invoke(input, "tagged-template", select("string-literal"));
 	expect(result.code).toBe(0);
 	expect(result.selected[0]?.outcome).toBe("killed");
-	expect(rows(result.selected[0]?.receipts).map(record)[1]?.exitCode).toBe(0);
+	const reachRuns = rows(record(result.report.reachMap).runs).map(record);
+	expect(reachRuns[0]?.receipt && record(reachRuns[0].receipt).exitCode).toBe(0);
 }, 90000);
 

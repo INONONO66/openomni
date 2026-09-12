@@ -881,7 +881,8 @@ function instrumentSingle(source: string, site: Site, marker: string): string {
 	return replace(source, site.start, site.end, site.mode === "jsx" ? `{${expression}}` : expression);
 }
 export function instrument(source: string, sites: ReachSite[], directory: string): string {
-	if (sites.length === 1) return instrumentSingle(source, sites[0]!.site, join(directory, sites[0]!.id));
+	const [only] = sites;
+	if (only && sites.length === 1) return instrumentSingle(source, only.site, join(directory, only.id));
 	// Insert against original offsets; nested sites must not shift or overwrite one another.
 	const ordered = [...sites].sort((a, b) => b.site.start - a.site.start || a.site.end - b.site.end);
 	return ordered.reduce((result, row) => instrumentSingle(result, row.site, join(directory, row.id)), source);
@@ -1117,7 +1118,8 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 			writeMutation(source, text(object(decode(process.stdout)).source));
 		} else {
 			const unique = [...new Map(rows.map((row) => [`${row.site.start}:${row.site.end}:${row.site.mode}`, row])).values()];
-			const instrumented = instrument(source.source, unique.map((row) => ({ id: row.id, path: row.path, sourceSha256: row.sourceSha256, site: row.site, tests })), markers);
+			const active = unique.filter((row) => !unique.some((other) => other !== row && other.site.start <= row.site.start && other.site.end >= row.site.end && (other.site.start < row.site.start || other.site.end > row.site.end)));
+			const instrumented = instrument(source.source, active.map((row) => ({ id: row.id, path: row.path, sourceSha256: row.sourceSha256, site: row.site, tests })), markers);
 			writeMutation(source, instrumented);
 		}
 	}
@@ -1132,7 +1134,11 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		runs.push({ test, receipt });
 		for (const candidate of candidates) {
 			const first = candidates.filter((row) => row.path === candidate.path && JSON.stringify(row.site) === JSON.stringify(candidate.site)).at(-1) ?? candidate;
-			const marker = join(markers, first.id);
+			let marker = join(markers, first.id);
+			if (!existsSync(marker)) {
+				const covering = candidates.find((row) => row.path === candidate.path && existsSync(join(markers, row.id)));
+				if (covering) marker = join(markers, covering.id);
+			}
 			if (!existsSync(marker)) continue;
 			const evidence = map.get(candidate.id);
 			if (evidence) {
