@@ -5,8 +5,24 @@ import { join, resolve } from "node:path";
 import { copyExecution, removeExecution, decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
-import { analyze, enumerate, programs, diagnostics } from "./run-quality-mutations";
+import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
+
+test("assertion receipt parsing separates matcher failures from crashes and other testcases", () => {
+	const stderr = [
+		"src/a.test.ts:", "error: expect(received).toBe(expected)", "(fail) matcher [1ms]",
+		"error: expect(received).not.toEqual(expected)", "(pass) passing [1ms]",
+		"Error: crash", "(fail) crash [1ms]",
+		"error: expect(received).toBe(expected)", "Error: another crash", "(fail) mixed [1ms]",
+		"error:", "Expected promise that rejects", "Received promise that resolved:", "(fail) settlement [1ms]",
+		"::group::src/b.test.ts:", "(fail) without diagnostic [1ms]",
+		"error: expect(received).resolves.toBe(expected)", "(fail) second-file [1ms]",
+	].join("\n");
+	expect(failedAssertions(stderr)).toEqual([
+		"src/a.test.ts\0matcher", "src/a.test.ts\0settlement", "src/b.test.ts\0second-file",
+	]);
+	expect(failedAssertions("")).toEqual([]);
+});
 
 test("mutation helpers cover execution tree recursion and virtual source traversal", () => {
   const root = mkdtempSync(join(tmpdir(), "mutation-tree-"));

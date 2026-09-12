@@ -76,3 +76,11 @@
 - Hosted full baseline confirmed from canceled superseded run: 4417 tests, 0 failures, all 13 batch exit codes 0 at 07:08:16Z; mutant 1/5 started. Final pilot 34680745306 remains running; no rerun to mask failures. New main commits made PR conflicted; resolving before final checks.
 
 - Merged main #1050 shard rebalance; retained its move of compiler tests into run-quality-mutations-compiler.test.ts and retained this branch analysis-test imports. Resolved scratch REPORT.md conflict in favor of mutation task evidence.
+
+- Post-main-merge related test gate exited 0; compiler tests included at their new path.
+
+- Pilot 34680745306 completed in 1h49m13s: baseline green, all five first config mutants ran and were noCoverage (complete=true, no infrastructure errors). Peak including nested tooling processes: 9,595,992 KiB; steady package-time memory ~2-3 GiB. Need an explicitly targeted diagnostic pilot to satisfy killed/survived proof, since first five config sites are genuinely not reached. Full campaign selection remains unchanged.
+
+- Targeted pilot/receipt parsing final tests: exit 0, /tmp/g11-tests10.log. Explicit pilot_target input never affects full default campaign.
+
+- Latest increment gates passed: 176 tests, TypeScript, ultracite, lint, build and changed-file diagnostics. Separately exercised parser machine records and deduplicated native failure detail formatting; preserves bounded failure messages.

@@ -21,7 +21,7 @@ test("native pilot executes the real campaign without creating a full ratchet me
   });
   expect(await mutationMain([
     ...prepareNative(input.root),
-    "--baseline", "unused-for-pilot.json", "--pilot", "--limit", "1",
+    "--baseline", "unused-for-pilot.json", "--pilot", "--limit", "1", "--target", "src/a.ts",
   ])).toBe(0);
   const result = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
   const document = jsonObject(result.document);
@@ -30,6 +30,7 @@ test("native pilot executes the real campaign without creating a full ratchet me
   expect(jsonObject(document.selectedCounts).killed).toBe(1);
   expect(existsSync(join(input.root, "quality-mutation-results/current.json"))).toBe(false);
   await expect(mutationMain(["--limit", "1", "--baseline", "baseline.json"])).rejects.toThrow();
+  await expect(mutationMain(["--target", "src/a.ts", "--baseline", "baseline.json"])).rejects.toThrow();
   await expect(mutationMain([])).rejects.toThrow();
 }, 90000);
 

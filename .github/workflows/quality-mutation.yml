@@ -10,6 +10,10 @@ on:
         description: 'Diagnostic pilot candidate limit (0 runs the full campaign)'
         type: number
         default: 0
+      pilot_target:
+        description: 'Optional inventory path for a diagnostic pilot (requires pilot_limit > 0)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -46,10 +50,14 @@ jobs:
       - name: Execute complete campaign and enforce measured baseline
         env:
           PILOT_LIMIT: ${{ inputs.pilot_limit || 0 }}
+          PILOT_TARGET: ${{ inputs.pilot_target || '' }}
         run: |
           args=()
           if [[ "$PILOT_LIMIT" != 0 ]]; then
             args+=(--pilot --limit "$PILOT_LIMIT")
+          fi
+          if [[ -n "$PILOT_TARGET" ]]; then
+            args+=(--target "$PILOT_TARGET")
           fi
           while sleep 20; do
             echo "[mutation-resource] $(date -u +%FT%TZ)"

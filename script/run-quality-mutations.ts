@@ -1021,7 +1021,7 @@ function assertionDiagnostic(segment: string[]): boolean {
 		/^Expected promise that (?:rejects\nReceived promise that resolved|resolves\nReceived promise that rejected):/m.test(segment.join("\n"));
 	return expectation || settlement;
 }
-function failedAssertions(stderr: string): string[] {
+export function failedAssertions(stderr: string): string[] {
 	// Bun 1.3.6 labels ordinary thrown errors AssertionError too. Require a real
 	// expect failure diagnostic AND a nonzero assertion count for every failed
 	// testcase; a crash after a successful assertion must not become a kill.

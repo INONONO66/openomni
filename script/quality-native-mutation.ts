@@ -107,10 +107,11 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       output: { type: "string", default: "quality-mutation-results" },
       pilot: { type: "boolean", default: false },
       limit: { type: "string" },
+      target: { type: "string" },
     },
   });
   requireMeasurement(Boolean(values.baseline), "measured mutation baseline required");
-  requireMeasurement(!values.limit || values.pilot, "--limit requires --pilot");
+  requireMeasurement(!(values.limit || values.target) || values.pilot, "--limit/--target require --pilot");
   console.error(`[mutation] fingerprinting source inventory (pilot=${values.pilot})`);
   const root = resolve(values.root),
     directory = resolve(root, values.output);
@@ -159,6 +160,7 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "--suite-timeout",
       "3600000",
       ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
+      ...(values.target ? ["--target", values.target] : []),
     ],
   });
   writeFileSync(resolve(directory, "native.json"), JSON.stringify(result), { flag: "wx" });
