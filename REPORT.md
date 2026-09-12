@@ -54,3 +54,11 @@
 - Gates tsc/ultracite/lint/build passed. New full-wrapper test reached normalization but failed; reading exact assertion before fixing it. Worktree isolation and in-process two-package campaign tests passed.
 
 - Full-wrapper regression corrected to use a quality-owned packages/... source (the first fixture had no quality-owned inventory). Native wrapper now passes 4 tests and reaches full normalization + fail-closed missing-baseline ratchet; prior complete run had 174/175 with only that fixture failure. Other local gates passed.
+
+- Full related test command after fixture correction exited 0 (log /tmp/g11-tests6.log).
+
+- Hosted pilot 34677629184: Git/package fix removed all observed assertion failures (3684 tests, 0 failures), but a batch process still failed; inspecting its retained receipt. Local full related run: 175 pass/0 fail.
+
+- Pilot third run has 12 green package batches (3684 tests, zero failures); tooling batch was killed by derived 13-minute watchdog, not OOM. Keeping 15s per-test bound, separating suite deadline. Desktop smoke had Electron startupData null; used the single authorized rerun. Quality changed-line rows plus unrelated census CRAP growth remain under investigation.
+
+- Synchronized origin/main #1052 census performance fix (ordered-removal/scope cache), which landed during this task. Desktop smoke authorized rerun passed. Main comparison drift explained unrelated census rows; no unrelated source edits made.
