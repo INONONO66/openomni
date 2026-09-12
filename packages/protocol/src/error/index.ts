@@ -13,6 +13,12 @@ import { z } from "zod";
 // actually has the promised shape.
 const NAMED_ERROR_BRAND = Symbol.for("openomni.protocol.namedError");
 
+type NamedErrorInstance<Name extends string, Data extends z.ZodType> = NamedError & {
+  readonly name: Name;
+  readonly data: z.input<Data>;
+  schema(): z.ZodObject<{ name: z.ZodLiteral<Name>; data: Data }>;
+  toObject(): { name: Name; data: z.input<Data> };
+};
 export abstract class NamedError extends Error {
   protected constructor(message: string) {
     super(message);
@@ -54,7 +60,11 @@ export abstract class NamedError extends Error {
         this.name = name;
       }
 
-      static isInstance(input: unknown): input is InstanceType<typeof result> {
+      static isInstance<
+        T extends abstract new (
+          ...args: never[]
+        ) => NamedErrorInstance<Name, Data>,
+      >(this: T, input: unknown): input is InstanceType<T> {
         if (!(input instanceof Error)) return false;
         if ((input as unknown as Partial<Record<symbol, unknown>>)[NAMED_ERROR_BRAND] !== name) {
           return false;
