@@ -102,6 +102,7 @@ type Options = {
 	limit: number;
 	maxCandidates: number;
 	timeout: number;
+	suiteTimeout: number;
 	budget: number;
 	pilot: boolean;
 };
@@ -962,11 +963,11 @@ function testGroups(root: string, tests: string[]): Map<string, string[]> {
 	}
 	return groups;
 }
-async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string): Promise<TestSelectionReceipt> {
+async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number): Promise<TestSelectionReceipt> {
 	const batches: TestsReceipt[] = [];
 	for (const [cwd, selected] of testGroups(root, tests)) {
 		console.error(`[mutation] test package ${relative(root, cwd) || "."} (${selected.length} files)`);
-		batches.push(await runTestBatch(cwd, selected, timeout, directory, python));
+		batches.push(await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout));
 	}
 	return {
 		batches,
@@ -983,6 +984,7 @@ async function runTestBatch(
 	timeout: number,
 	directory: string,
 	python: string,
+	suiteTimeout: number,
 ): Promise<TestsReceipt> {
 	const report = join(directory, "tests.xml");
 	rmSync(report, { force: true });
@@ -998,19 +1000,28 @@ async function runTestBatch(
 			...tests.map((test) => `./${test}`),
 		],
 		root,
-		// --timeout still bounds each test; a suite is not a single test.
-		timeout * Math.max(1, tests.length),
+		Math.max(suiteTimeout, timeout * tests.length),
 		python ? { PATH: `${dirname(python)}:${process.env.PATH ?? ""}` } : {},
 	);
 	const xml = existsSync(report) ? readFileSync(report, "utf8") : "";
 	const header = xml.match(/<testsuites\b[^>]*\btests="(\d+)"[^>]*\bfailures="(\d+)"/);
+	return {
+		process: processReceipt,
+		junit: xml,
+		tests: Number(header?.[1] ?? 0),
+		failures: Number(header?.[2] ?? 0),
+		assertions: assertionIdentities(xml, processReceipt.stderr),
+		valid: !!header && !broken(processReceipt),
+	};
+}
+function failedAssertions(stderr: string): string[] {
 	// Bun 1.3.6 labels ordinary thrown errors AssertionError too. Require a real
 	// expect failure diagnostic AND a nonzero assertion count for every failed
 	// testcase; a crash after a successful assertion must not become a kill.
 	const failedNames: string[] = [];
 	let diagnosticFile = "";
 	let segment: string[] = [];
-	for (const line of processReceipt.stderr.split("\n")) {
+	for (const line of stderr.split("\n")) {
 		const file = line.match(/^(?:::group::)?([^\s].*\.[cm]?[jt]sx?):$/)?.[1];
 		if (file) {
 			diagnosticFile = file.replace(/^\.\//, "");
@@ -1038,6 +1049,10 @@ async function runTestBatch(
 			failedNames.push(`${diagnosticFile}\0${status[2]}`);
 		segment = [];
 	}
+	return failedNames;
+}
+function assertionIdentities(xml: string, stderr: string): string[] {
+	const failedNames = failedAssertions(stderr);
 	const assertionCases = [
 		...xml.matchAll(/<testcase\b([^>]+)(?<!\/)>([\s\S]*?)<\/testcase>/g),
 	].filter(
@@ -1074,14 +1089,7 @@ async function runTestBatch(
 		failedNames.splice(index, 1);
 		return [JSON.stringify({ file, name, line: attribute(attributes, "line") })];
 	});
-	return {
-		process: processReceipt,
-		junit: xml,
-		tests: Number(header?.[1] ?? 0),
-		failures: Number(header?.[2] ?? 0),
-		assertions,
-		valid: !!header && !broken(processReceipt),
-	};
+	return assertions;
 }
 function green(receipt: TestSelectionReceipt): boolean {
 	return (
@@ -1265,7 +1273,7 @@ async function runCandidate(
 			probedSource = text(object(decode(instrumented.stdout)).source);
 		} else probedSource = instrument(source.source, candidate.site, marker);
 		writeMutation(source, probedSource);
-		const probe = await runTests(root, tests, options.timeout, run, options.python);
+		const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
 		result.receipts.push(...probe.batches.map((batch) => batch.process));
 		result.junitReports.push(...probe.batches.map((batch) => batch.junit));
 		if (!green(probe)) {
@@ -1308,7 +1316,7 @@ async function runCandidate(
 		removeExecution(root);
 		copyExecution(join(temporary, "frozen"), root);
 		writeMutation(source, mutated);
-		const tested = await runTests(root, tests, options.timeout, run, options.python);
+		const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
 		result.receipts.push(...tested.batches.map((batch) => batch.process));
 		result.junitReports.push(...tested.batches.map((batch) => batch.junit));
 		if (green(tested)) {
@@ -1371,6 +1379,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		"limit",
 		"max-candidates",
 		"timeout",
+		"suite-timeout",
 		"budget",
 		"pilot",
 	];
@@ -1407,6 +1416,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		limit: bound("limit", 1000000, 1000000),
 		maxCandidates: bound("max-candidates", 10000, 1000000),
 		timeout: bound("timeout", 15000, 15000),
+		suiteTimeout: bound("suite-timeout", 15000, 3600000),
 		budget: bound("budget", 3600000, 604800000),
 		pilot: ["--pilot", "--limit", "--test", "--target", "--operator"].some((key) =>
 			values.has(key),
@@ -1672,7 +1682,7 @@ async function campaign(options: Options): Promise<number> {
 		console.error("[mutation] baseline tests starting");
 		const baseline = errors.length
 			? null
-			: await runTests(base, tests, options.timeout, temporary, options.python);
+			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
 		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const results = await executeSelection(

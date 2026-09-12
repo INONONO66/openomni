@@ -156,6 +156,8 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "1000000",
       "--budget",
       "20000000",
+      "--suite-timeout",
+      "3600000",
       ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
     ],
   });

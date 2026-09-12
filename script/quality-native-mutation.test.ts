@@ -8,15 +8,19 @@ import { mutationFixture } from "./quality-mutation-fixture";
 
 const { fixture, dependencies, decision } = mutationFixture("native-wrapper");
 
+function prepareNative(root: string): string[] {
+  cpSync(import.meta.dir, join(root, "script"), { recursive: true });
+  cpSync(dependencies, join(root, "node_modules"), { recursive: true, dereference: true });
+  return ["--root", root, "--contract", "contract.json", "--decision", decision];
+}
+
 test("native pilot executes the real campaign without creating a full ratchet measurement", async () => {
   const input = await fixture("export const run = () => true;", "", {
     "src/a.test.ts": "",
     "src/z.test.ts": 'import {test,expect} from "bun:test";import {run} from "./a";test("behavior",()=>expect(run()).toBe(true));',
   });
-  cpSync(import.meta.dir, join(input.root, "script"), { recursive: true });
-  cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
   expect(await mutationMain([
-    "--root", input.root, "--contract", "contract.json", "--decision", decision,
+    ...prepareNative(input.root),
     "--baseline", "unused-for-pilot.json", "--pilot", "--limit", "1",
   ])).toBe(0);
   const result = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
@@ -38,10 +42,8 @@ test("native full campaign normalizes all candidates before enforcing the baseli
   const contractPath = join(input.root, "contract.json");
   const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
   writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
-  cpSync(import.meta.dir, join(input.root, "script"), { recursive: true });
-  cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
   expect(await mutationMain([
-    "--root", input.root, "--contract", "contract.json", "--decision", decision,
+    ...prepareNative(input.root),
     "--baseline", "missing-baseline.json",
   ])).toBe(2);
   const native = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));

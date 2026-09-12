@@ -62,3 +62,9 @@
 - Pilot third run has 12 green package batches (3684 tests, zero failures); tooling batch was killed by derived 13-minute watchdog, not OOM. Keeping 15s per-test bound, separating suite deadline. Desktop smoke had Electron startupData null; used the single authorized rerun. Quality changed-line rows plus unrelated census CRAP growth remain under investigation.
 
 - Synchronized origin/main #1052 census performance fix (ordered-removal/scope cache), which landed during this task. Desktop smoke authorized rerun passed. Main comparison drift explained unrelated census rows; no unrelated source edits made.
+
+- Separating the test-process budget from per-test deadlines: per-test limit remains 15000ms; long tooling suites get an explicit bounded suite budget instead of a deadline inferred from file count.
+
+- Explicit suite deadline/refactored assertion parsing test gate: exit 0, /tmp/g11-tests7.log.
+
+- All local gates passed after explicit one-hour per-package suite deadline (15s per-test retained): 175 tests, tsc, ultracite, lint, build. Extracted assertion parsing to reduce runTestBatch complexity; native fixture setup deduplicated.
