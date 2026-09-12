@@ -146,5 +146,5 @@ export function mutationFixture(scenario: string) {
     evidence.push({ ...mutationEvidence(report, selected), name, exitCode: receipt.exitCode, runtime: Bun.version, stdoutSha256: receipt.stdoutSha256, stderrSha256: receipt.stderrSha256, argv, fixture: input.files, runnerSha256: sha256(readFileSync(runner)) });
     return { report, selected, code: receipt.exitCode };
   }
-  return { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError };
+  return { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, dependencies, FixtureError };
 }

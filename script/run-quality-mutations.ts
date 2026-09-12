@@ -390,7 +390,7 @@ function broken(receipt: ProcessReceipt): boolean {
 		(receipt.cleanupExit !== 0 && receipt.cleanupExit !== 1)
 	);
 }
-export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program> {
+export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
 	const covered = new Set<string>();
 	for (const path of contract.projects) {
 		pathIn(root, path);

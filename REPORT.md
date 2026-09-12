@@ -26,3 +26,15 @@
 - Pinned Python 3.12.12 related test run exit: 0 (log /tmp/g11-tests3.log).
 
 - Root-fix gates passed: 171 tests (single complete pinned-runtime run), TypeScript, ultracite, lint, build. Committing second increment and dispatching hosted pilot.
+
+- Created PR for the two tested increments; post-fix pilot 34674877134 running.
+
+- Post-fix pilot 34674877134 survived 20m45s without a signal. Peak RSS fell to 6,286,128 KiB; test-time total used memory generally 2-3 GiB. Baseline now finishes: 4400 tests, 173 failures, exit 1, no timeout/signal. Mutants correctly remain blocked by red baseline. PR checks complete; inspecting baseline execution-context failures before deciding next increment.
+
+- Pilot blockers now proven: missing .git in existing snapshot causes source_revision_unavailable / git repository failures; monolithic suite also has cross-suite/environment failures. These predate this fix and are not suppressed. Full branch dispatch started as requested; PR Quality diagnostics being checked.
+
+- Added real in-process campaign/receipt comparison and native pilot-wrapper integration coverage; explicit generator return/next types remove quality-census implicit any at yield sites. No test-body wording assertions or bypasses.
+
+- In-process integration gate test exit: 0 (log /tmp/g11-tests4.log).
+
+- Third increment gates passed: 173 tests together, TypeScript, ultracite, lint, build. Real campaign is now 91.55% line-covered in process; native wrapper 87.86%. Full branch run 34675894684 remains under background gh run watch.

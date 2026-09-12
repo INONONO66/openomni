@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
@@ -82,6 +82,25 @@ test("fixture evidence preserves present fields and materializes missing fields 
   for (const value of [undefined, null, false, [], "invalid"]) expect(() => record(value)).toThrow();
   for (const value of [undefined, null, {}, "invalid"]) expect(() => rows(value)).toThrow();
 });
+
+test("campaign runs baseline, mutant, restoration and JSON receipt in process", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
+	const external = await invoke(input, "in-process-reference", select("boolean-literal"));
+	assertBehavioralKill(external);
+	const argv = rows(evidence.at(-1)?.argv).map(String).slice(2);
+	const output: string[] = [];
+	const log = spyOn(console, "log").mockImplementation((value) => { output.push(String(value)); });
+	try {
+		expect(await main(argv)).toBe(0);
+		const report = record(decode(output.join("")));
+		expect(report.complete).toBe(true);
+		expect(report.cleanupVerified).toBe(true);
+		expect(report.originalHashesVerified).toBe(true);
+		expect(report.selectedCounts).toEqual(external.report.selectedCounts);
+		expect(record(record(report.baseline).process).timedOut).toBe(false);
+		expect(reportResults(report)[0]?.outcome).toBe("killed");
+	} finally { log.mockRestore(); }
+}, 90000);
 
 test("sequential compiler analysis preserves first-owner candidates and complete census", async () => {
 	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);", {

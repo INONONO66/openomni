@@ -1,9 +1,33 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalizeMutation } from "./quality-native-mutation";
-import { digest } from "./quality-inventory";
+import { mutationMain, normalizeMutation } from "./quality-native-mutation";
+import { decodeJson, digest, jsonObject } from "./quality-inventory";
+import { mutationFixture } from "./quality-mutation-fixture";
+
+const { fixture, dependencies, decision } = mutationFixture("native-wrapper");
+
+test("native pilot executes the real campaign without creating a full ratchet measurement", async () => {
+  const input = await fixture("export const run = () => true;", "", {
+    "src/a.test.ts": "",
+    "src/z.test.ts": 'import {test,expect} from "bun:test";import {run} from "./a";test("behavior",()=>expect(run()).toBe(true));',
+  });
+  cpSync(import.meta.dir, join(input.root, "script"), { recursive: true });
+  cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
+  expect(await mutationMain([
+    "--root", input.root, "--contract", "contract.json", "--decision", decision,
+    "--baseline", "unused-for-pilot.json", "--pilot", "--limit", "1",
+  ])).toBe(0);
+  const result = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
+  const document = jsonObject(result.document);
+  expect(document.full).toBe(false);
+  expect(document.complete).toBe(true);
+  expect(jsonObject(document.selectedCounts).killed).toBe(1);
+  expect(existsSync(join(input.root, "quality-mutation-results/current.json"))).toBe(false);
+  await expect(mutationMain(["--limit", "1", "--baseline", "baseline.json"])).rejects.toThrow();
+  await expect(mutationMain([])).rejects.toThrow();
+}, 90000);
 
 test("mutation normalization rejects pilots missing candidates and stale killed sources", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-mutation-receipt-"));
