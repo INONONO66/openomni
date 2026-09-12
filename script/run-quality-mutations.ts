@@ -1274,7 +1274,7 @@ async function runCandidate(
 	const frozenSourceSha256 = sha256(frozenSource.host);
 	const probeCache = new Map<string, ProbeEvidence>();
 	result.coverage = evidence ?? null;
-	if (!python && (!evidence || !evidence.reached)) {
+	if (!python && !evidence?.reached) {
 		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
 		result.restored = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host) === frozenSourceSha256;
 		result.outcome = "noCoverage";
@@ -1888,7 +1888,8 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 		}
 		return await campaign(optionsFrom(values));
 	} catch (error) {
-		failure = { code: failure?.code ?? "infrastructure", message: `${failure?.message ?? ""}${failure?.message ? "; " : ""}${error instanceof Error ? error.message : String(error)}` };
+		const caught = error instanceof Error ? error.message : String(error);
+		failure = { code: "infrastructure", message: caught };
 		console.log(
 			JSON.stringify({
 				version: 1,
