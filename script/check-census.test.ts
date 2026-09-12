@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import aiPackage from "ai/package.json";
+import ts from "typescript";
 import { readFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Fixture, protocol, adapter, assertPublication, assertStoreWrite, configureElectronFixture, hash, cli } from "./census-fixture";
-import { censusMain } from "./check-census";
+import { censusMain, scope } from "./check-census";
 import type { Problem } from "./check-census";
 import {
   decodeJson,
@@ -14,6 +15,37 @@ import {
   jsonObject,
   jsonString,
 } from "./quality-inventory";
+
+test("scope owner cache reuses node identity without crossing lexical scopes", () => {
+  const source = ts.createSourceFile("scopes.ts", "function first() { tick(); } function second() { tick(); }", ts.ScriptTarget.Latest, true);
+  const owners = source.statements.filter(ts.isFunctionDeclaration);
+  expect(owners).toHaveLength(2);
+  for (const owner of owners) {
+    const node = owner.body?.statements[0];
+    if (!node) throw new Error("missing fixture statement");
+    const parent = node.parent;
+    let parentReads = 0;
+    Object.defineProperty(node, "parent", { get: () => { parentReads++; return parent; } });
+    expect(scope(node)).toBe(owner);
+    expect(parentReads).toBe(1);
+    expect(scope(node)).toBe(owner);
+    expect(parentReads).toBe(1);
+  }
+});
+
+test("adjacent listener removals preserve the unremoved publisher and call order", () => {
+  using fixture = new Fixture({
+    "src/events.ts": `${protocol}\nexport const Other = BusEvent.define("other", {});`,
+    "src/main.ts": `import {EventEmitter} from "node:events";import {Ready,Other} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};const emitter=new EventEmitter();const removed=()=>sink.publish(Ready,{}),retained=()=>sink.publish(Other,{});emitter.on("trigger",removed);emitter.on("trigger",retained);emitter.off("trigger",removed);emitter.emit("trigger");emitter.off("trigger",retained);console.log(JSON.stringify(received));`,
+  });
+  const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], { timeout: 5000 });
+  expect(actual.exitCode).toBe(0);
+  expect(actual.stdout.toString().trim()).toBe('["other"]');
+  const result = fixture.run("publisher");
+  expect(result.code).toBe(1);
+  const findings = jsonArray(jsonObject(decodeJson(result.output)).findings, jsonObject);
+  expect(findings.map((finding) => jsonString(finding.symbol))).toEqual(["ready"]);
+});
 
 test("census entry runs in process against a fixture", () => {
   using fixture = new Fixture({

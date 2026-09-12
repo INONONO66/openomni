@@ -283,10 +283,16 @@ function exitsBefore(parent: ts.Block | ts.SourceFile, child: ts.Node): boolean 
   }
   return false;
 }
-function scope(node: ts.Node): ts.Node {
+// Parent chains are immutable; weak keys do not retain completed census programs.
+const scopeOwners = new WeakMap<ts.Node, ts.Node>();
+export function scope(node: ts.Node): ts.Node {
+  const cached = scopeOwners.get(node);
+  if (cached) return cached;
   let current = node.parent;
   while (current && !ts.isSourceFile(current) && !isFunction(current)) current = current.parent;
-  return current ?? node;
+  const owner = current ?? node;
+  scopeOwners.set(node, owner);
+  return owner;
 }
 function memberName(node: ts.Node): string {
   if (ts.isPropertyAccessExpression(node)) return node.name.text;
@@ -528,6 +534,7 @@ class Provenance {
   readonly reachable = new Map<ts.Node, { root: Locus; chain: Locus[] }>();
   private readonly activeBranches = new Set<ts.Node>();
   readonly calls: ts.CallExpression[] = [];
+  private readonly listenerRemovals: ts.CallExpression[] = [];
   readonly errors: Problem[] = [];
   readonly aliases: Locus[] = [];
   readonly assets: { path: string; sha256: string }[] = [];
@@ -789,6 +796,15 @@ class Provenance {
       this.aliases.push(this.locus(node));
     if (!ts.isCallExpression(node)) return;
     this.calls.push(node);
+    // Syntax cannot change as roots and points grow. Keep candidate order, but
+    // leave reachability, receiver identity and removal ordering to the queries.
+    if (
+      ts.isPropertyAccessExpression(node.expression) &&
+      ["off", "removeListener", "removeAllListeners", "removeEventListener"].includes(
+        memberName(node.expression),
+      )
+    )
+      this.listenerRemovals.push(node);
     if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const argument = node.arguments[0];
       const names = argument ? this.moduleNames(argument) : [];
@@ -1527,7 +1543,7 @@ class Provenance {
           ? this.strings(emission.arguments[0]).map((row) => row.value)
           : [];
     if (!emittedNames.some((name) => names.includes(name))) return;
-    const removed = this.calls.some((call) => {
+    const removed = this.listenerRemovals.some((call) => {
       if (
         !this.path(call) ||
         !ordered.every(({ before, after }) =>
@@ -1604,7 +1620,7 @@ class Provenance {
     const nativeNames = names.filter((name) => {
       if (!contract?.events.has(name)) return false;
       const contexts = this.eventContexts(registration);
-      const removals = this.calls.filter((call) => {
+      const removals = this.listenerRemovals.filter((call) => {
         if (
           !this.path(call) ||
           !ts.isPropertyAccessExpression(call.expression) ||

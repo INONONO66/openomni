@@ -323,6 +323,38 @@ test("native exit listeners removed before termination do not publish", () => {
   }
 }, 180_000);
 
+test.each([
+  ['emitter.off("trigger", callback); emitter.emit("trigger");', false],
+  ['emitter.removeListener("trigger", callback); emitter.emit("trigger");', false],
+  ['emitter.removeAllListeners("trigger"); emitter.emit("trigger");', false],
+  ['other.off("trigger", callback); emitter.emit("trigger");', true],
+  ['emitter.off("other", callback); emitter.emit("trigger");', true],
+  ['emitter.emit("trigger"); emitter.off("trigger", callback);', true],
+  ['const fake = { off() {} }; fake.off(); emitter.emit("trigger");', true],
+] as const)("listener-removal candidates preserve receiver and order: %s", (operation, published) => {
+  using fixture = new Fixture({
+    "src/events.ts": protocol,
+    "src/main.ts": `import {EventEmitter} from "node:events";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};const emitter=new EventEmitter(),other=new EventEmitter();const callback=()=>sink.publish(Ready,{});emitter.on("trigger",callback);${operation}console.log(JSON.stringify(received));`,
+  });
+  assertPublication(fixture, published);
+}, 180_000);
+
+test.each(["off", "removeListener", "removeAllListeners"])("native listener-removal candidates retain %s", (method) => {
+  using fixture = new Fixture({
+    "src/events.ts": protocol,
+    "src/main.ts": `import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};const callback=()=>sink.publish(Ready,{});process.on("exit",callback);process.${method}("exit"${method === "removeAllListeners" ? "" : ",callback"});process.on("exit",()=>console.log(JSON.stringify(received)));`,
+  });
+  assertPublication(fixture, false);
+}, 180_000);
+
+test("DOM listener-removal candidates retain callback identity", () => {
+  using fixture = new Fixture({
+    "src/events.ts": protocol,
+    "src/main.ts": `import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};const controller=new AbortController();const callback=()=>sink.publish(Ready,{});controller.signal.addEventListener("abort",callback);controller.signal.removeEventListener("abort",callback);controller.abort();console.log(JSON.stringify(received));`,
+  });
+  assertPublication(fixture, false);
+}, 180_000);
+
 test("helper-created generators retain distinct advancement identities", () => {
   for (const same of [false, true]) {
     using fixture = new Fixture({
