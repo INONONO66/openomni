@@ -3,20 +3,7 @@ import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, mkdtem
 import { join, resolve } from "node:path";
 import { decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
-import { buildInventory, readContract } from "./quality-inventory";
-import { programs, diagnostics } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
-
-test("fallback compiler ignores untyped JavaScript inventory sources", () => {
-  const root = mkdtempSync(join(tmpdir(), "mutation-fallback-"));
-  try {
-    writeFileSync(join(root, "tool.cjs"), "module.exports = missingName;");
-    writeFileSync(join(root, "tool.mjs"), "export const value = missingName;");
-    const contract: { version: 1; typescript: "5.9.2"; roots: string[]; projects: string[]; topology: false } = { version: 1, typescript: "5.9.2", roots: ["."], projects: [], topology: false };
-    const inventory = buildInventory(root, contract);
-    expect(diagnostics(programs(root, contract, inventory))).toEqual([]);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
 
 test("mutation helpers cover execution tree recursion and virtual source traversal", () => {
   const root = mkdtempSync(join(tmpdir(), "mutation-tree-"));
@@ -31,12 +18,6 @@ test("mutation helpers cover execution tree recursion and virtual source travers
     expect(source.source).toContain("export async function main");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
-
-test("real mutation contract has no baseline compiler diagnostics", () => {
-  const root = resolve(import.meta.dir, "..");
-  const contract = readContract(resolve(root, "script/conformance/quality-contract.json"));
-  expect(diagnostics(programs(root, contract, buildInventory(root, contract)))).toEqual([]);
-}, 300_000);
 
 test("mutation main rejects an invalid invocation in process", async () => {
   expect(await main(["--not-a-real-option"])).toBe(2);
