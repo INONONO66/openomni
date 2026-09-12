@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { copyExecution, removeExecution, decode, execute, executionTreeHash, main, mutationSource, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
@@ -61,6 +61,67 @@ test("mutation main rejects an invalid invocation in process", async () => {
 });
 const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
+
+test("rendered process receipts redact split and inline secrets without hiding ordinary arguments", async () => {
+  const command = [process.execPath, "-e", "process.exit(7)", "--"];
+  const ordinary = ["--name", "public", "--monkey=banana", "--key-file=public.pem", "--tokenizer", "native"];
+  const secrets = ["inline-key-secret", "split-key-secret", "inline-token-secret", "split-token-secret", "api-key-secret"];
+  const receipt = await execute([...command,
+    `--key=${secrets[0]}`, "--key", secrets[1] ?? "", ...ordinary,
+    `--token=${secrets[2]}`, "--token", secrets[3] ?? "", ...ordinary,
+    `--api-key=${secrets[4]}`, ...ordinary,
+  ], process.cwd(), 5000, {}, "redaction-test");
+  expect(receipt.exitCode).toBe(7);
+  const rendered = JSON.stringify(receipt);
+  expect(record(decode(rendered)).argv).toEqual([...command,
+    "--key=[redacted]", "--key", "[redacted]", ...ordinary,
+    "--token=[redacted]", "--token", "[redacted]", ...ordinary,
+    "--api-key=[redacted]", ...ordinary,
+  ]);
+  for (const secret of secrets) expect(rendered).not.toContain(secret);
+});
+
+for (const mode of ["nonzero", "signal"] as const) {
+  test(`top-level setup failure propagates ${mode} process context and redacts rendered diagnostics`, async () => {
+    const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
+    const worker = join(input.root, "canonical-worker.ts");
+    const stdout = "worker-started\n";
+    const stderr = "setup worker failed: --key=inline-key-secret --token split-token-secret --name public\n";
+    const safeStderr = "setup worker failed: --key=[redacted] --token [redacted] --name public\n";
+    writeFileSync(worker, `import {writeFileSync} from "node:fs";
+      writeFileSync(1, ${JSON.stringify(stdout)});
+      writeFileSync(2, ${JSON.stringify(stderr)});
+      ${mode === "nonzero" ? "process.exit(7);" : 'process.kill(process.pid, "SIGTERM");'}`);
+    const result = await invoke(input, `setup-${mode}`, select("boolean-literal"), [
+      "--inventory-tool", worker, "--inventory-tool-sha256", sha256(readFileSync(worker)),
+    ]);
+    expect(result.code).toBe(2);
+    expect(result.report.complete).toBe(false);
+    expect(result.report.results).toBeUndefined();
+    expect(result.selected).toHaveLength(0);
+    const error = record(result.report.error);
+    expect(error.code).toBe("incompleteInventory");
+    const receipt = record(error.process);
+    expect(receipt.stage).toBe("setup-canonical-inventory");
+    expect(receipt.argv).toEqual([
+      process.execPath, worker, "--root", realpathSync(input.root), "--contract", join(input.root, "contract.json"), "--inventory", input.inventory,
+    ]);
+    expect(receipt.exitCode).toBe(mode === "nonzero" ? 7 : null);
+    expect(receipt.signal).toBe(mode === "signal" ? "SIGTERM" : null);
+    expect(receipt.timedOut).toBe(false);
+    expect(receipt.spawnError).toBe(false);
+    expect(receipt.overflow).toBe(false);
+    expect(receipt.stdout).toBe(stdout);
+    expect(receipt.stdoutSha256).toBe(sha256(stdout));
+    expect(receipt.stderr).toBe(safeStderr);
+    expect(receipt.stderrSha256).toBe(sha256(stderr));
+    // The CLI JSON is decoded by invoke; inspect its complete machine-consumed
+    // envelope, not only the execute() helper or the process subobject.
+    const rendered = JSON.stringify(result.report);
+    expect(rendered).not.toContain("inline-key-secret");
+    expect(rendered).not.toContain("split-token-secret");
+  }, 90000);
+}
 
 test("fixture argument replacement is pure and rejects incomplete pairs", () => {
   const argv = ["runner", "--root", "before", "--limit", "1"];
@@ -290,6 +351,13 @@ test("crash after a successful assertion is infrastructure despite Bun JUnit lab
 	expect(result.code).toBe(2);
 	expect(result.selected[0]?.outcome).toBe("infrastructure");
 	expect(rows(result.selected[0]?.assertionIdentities)).toHaveLength(0);
+	expect(result.report.error).toBeUndefined();
+	expect(result.selected[0]?.reason).toBe("failure-without-complete-behavioral-assertions");
+	const receipt = rows(result.selected[0]?.receipts).map(record).at(-1);
+	expect(receipt?.exitCode).toBe(1);
+	expect(receipt?.signal).toBeNull();
+	expect(receipt?.stderr).toContain("crash-not-assertion");
+	expect(receipt?.stderrSha256).toBe(sha256(String(receipt?.stderr)));
 }, 90000);
 
 test("GitHub grouped diagnostics preserve kills without promoting crashes", async () => {
