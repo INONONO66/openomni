@@ -59,8 +59,10 @@ test("process receipts preserve executed failure context, including signals", as
 test("Python worker receipt stages execute through the runner path", async () => {
   const directory = mkdtempSync(join(tmpdir(), "mutation-python-worker-"));
   try {
+    const python = process.env.D945_PYTHON;
+    if (!python) throw new Error("D945_PYTHON is required for the Python worker fixture");
     const receipt = await pythonWorker({
-      python: "/Users/ino/.local/share/mise/installs/python/3.12.12/bin/python3.12",
+      python,
       decision: join(import.meta.dir, "conformance/quality-mutation-contract.json"),
       timeout: 15000,
     }, "print(True)", directory, "compile");
