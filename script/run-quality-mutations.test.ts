@@ -214,6 +214,36 @@ test("weak assertion survives; original location is really covered", async () =>
 	expect(result.selected[0]?.outcome).toBe("survived");
 }, 90000);
 
+test("same-site replacements reuse one original probe and preserve candidate receipts", async () => {
+	const input = await fixture(
+		"export const run = (n:number) => n < 2;",
+		"expect(run(1)).toBe(true);",
+	);
+	const result = await invoke(input, "same-site-reuse", ["--target", "src/a.ts", "--operator", "relational", "--limit", "2"]);
+	expect(result.code).toBe(1);
+	expect(result.selected).toHaveLength(2);
+	expect(new Set(result.selected.map((row) => String(row.id))).size).toBe(2);
+	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)) && row.restored === true)).toBe(true);
+	// Each candidate is compiler-checked once. With one test batch, the first
+	// candidate has compiler + probe + mutation receipts; the second has only
+	// compiler + mutation. Without reuse this would be [3, 3], not [3, 2].
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([3, 2]);
+}, 90000);
+
+test("same-line distinct Sites do not share original probes", async () => {
+	const input = await fixture(
+		"export const run = () => true && false;",
+		"expect(run()).toBe(false);",
+	);
+	const result = await invoke(input, "same-line-distinct-sites", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"]);
+	expect(result.code).toBe(1);
+	expect(result.selected).toHaveLength(2);
+	expect(new Set(result.selected.map((row) => String(row.id))).size).toBe(2);
+	expect(result.selected.every((row) => row.restored === true)).toBe(true);
+	// Each distinct site has its own compiler, probe, and mutation receipts.
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([3, 3]);
+}, 90000);
+
 test("uninvoked function is noCoverage, not survived", async () => {
 	const input = await fixture(
 		"export const run = () => true;",

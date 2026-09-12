@@ -84,6 +84,8 @@ type Census = {
 	astNodes: number;
 	operators: { operator: string; candidates: number; reason: string }[];
 };
+type ProbeEvidence = { reached: boolean; markerSha256: string };
+type ProbeCache = Map<string, ProbeEvidence>;
 type Options = {
 	root: string;
 	contract: string;
@@ -1172,12 +1174,43 @@ async function pythonWorker(
 		options.timeout,
 	);
 }
+function probeKey(
+	candidate: Candidate,
+	instrumentedSource: string,
+	options: Options,
+	tests: string[],
+): string {
+	return sha256(JSON.stringify({
+		path: candidate.path,
+		sourceSha256: candidate.sourceSha256,
+		site: candidate.site,
+		instrumentedSourceSha256: sha256(instrumentedSource),
+		testsSha256: sha256(JSON.stringify(tests)),
+		contractSha256: options.contractHash,
+		inventorySha256: options.inventoryHash,
+		decisionSha256: options.decisionHash,
+		inventoryToolSha256: options.inventoryToolHash,
+		runtime: {
+			bun: Bun.version,
+			node: process.execPath,
+			typescript: ts.version,
+			python: options.python
+				? (() => {
+					const executable = Bun.which(options.python) ?? options.python;
+					return existsSync(executable) ? sha256(readFileSync(executable)) : executable;
+				})()
+				: "",
+			mode: candidate.site.mode,
+		},
+	}));
+}
 async function runCandidate(
 	candidate: Candidate,
 	options: Options,
 	contract: Contract,
 	temporary: string,
 	tests: string[],
+	probeCache: ProbeCache,
 ): Promise<Result> {
 	const result = defaultResult(candidate, tests);
 	const run = join(temporary, "candidate");
@@ -1258,6 +1291,17 @@ async function runCandidate(
 			}
 			probedSource = text(object(decode(instrumented.stdout)).source);
 		} else probedSource = instrument(source.source, candidate.site, marker);
+		const key = probeKey(candidate, probedSource, options, tests);
+		const cached = probeCache.get(key);
+		if (cached) {
+			result.coverage = cached;
+			if (!cached.reached) {
+				result.outcome = "noCoverage";
+				result.reason = "original-runtime-site-not-reached";
+				return false;
+			}
+			return true;
+		}
 		writeMutation(source, probedSource);
 		const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
 		result.receipts.push(...probe.batches.map((batch) => batch.process));
@@ -1275,10 +1319,15 @@ async function runCandidate(
 			return false;
 		}
 		if (!result.coverage.reached) {
+			// A green, complete selection with no marker is the only reusable
+			// proof of an unreached original site. Errors and malformed markers
+			// return above without entering the campaign-local cache.
+			probeCache.set(key, result.coverage);
 			result.outcome = "noCoverage";
 			result.reason = "original-runtime-site-not-reached";
 			return false;
 		}
+		probeCache.set(key, result.coverage);
 		return true;
 	}
 	try {
@@ -1549,6 +1598,7 @@ async function executeSelection(
 	errors: string[],
 ): Promise<Result[]> {
 	const results: Result[] = [];
+	const probeCache: ProbeCache = new Map();
 	const selected = selectedCandidates(options, enumerated.candidates);
 	if (!selected.length) errors.push("zero selected candidates");
 	const selectedIds = new Set(selected.map((candidate) => candidate.id));
@@ -1563,7 +1613,7 @@ async function executeSelection(
 			results.push(defaultResult(candidate, tests));
 		else {
 			console.error(`[mutation] mutant ${executed + 1}/${selected.length} start ${candidate.path}:${candidate.startOffset} ${candidate.operator}`);
-			const result = await runCandidate(candidate, options, contract, temporary, tests);
+			const result = await runCandidate(candidate, options, contract, temporary, tests, probeCache);
 			results.push(result);
 			executed++;
 			console.error(`[mutation] mutant ${executed}/${selected.length} ${result.outcome}: ${result.reason}`);
