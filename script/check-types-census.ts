@@ -149,6 +149,16 @@ function symbolName(node: ts.Node): string {
 function grammarIdentifier(node: ts.Identifier): boolean {
   const parent = node.parent;
   if (ts.isMetaProperty(parent) || ts.isQualifiedName(parent) || ts.isTypeReferenceNode(parent) || ts.isImportSpecifier(parent)) return true;
+  // These identifiers name syntax rather than values/types whose inferred type
+  // is part of the census. TypeScript represents them as error-any locations.
+  if (ts.isTypePredicateNode(parent)) return true;
+  if (ts.isBindingElement(parent) && parent.propertyName === node) return true;
+  if (ts.isNamedTupleMember(parent) && parent.name === node) return true;
+  if (ts.isModuleDeclaration(parent) && parent.name === node) return true;
+  if (ts.isExportSpecifier(parent)) {
+    const declaration = parent.parent.parent;
+    if (ts.isExportDeclaration(declaration) && declaration.isTypeOnly) return true;
+  }
   const jsx = ts.isJsxOpeningElement(parent) || ts.isJsxSelfClosingElement(parent) || ts.isJsxClosingElement(parent);
   return jsx && parent.tagName === node && /^[a-z]/.test(node.text);
 }
@@ -162,6 +172,9 @@ function isQuery(node: ts.Node): boolean {
   // Numeric/bigint literal type leaves have no expression type in the compiler;
   // querying them returns error-any. The enclosing LiteralType is authoritative.
   if (literalGrammar(node)) return false;
+  // A template type span is grammar connecting a literal fragment to its type;
+  // its checker type is not a source value/type position.
+  if (ts.isTemplateLiteralTypeSpan(node)) return false;
   if (ts.isIdentifier(node) && grammarIdentifier(node)) return false;
   if (ts.isTypeReferenceNode(node) && node.typeName.getText() === "const") return false;
   if ((ts.isCallExpression(parent) || ts.isNewExpression(parent)) && parent.expression === node)

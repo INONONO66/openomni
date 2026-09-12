@@ -469,6 +469,30 @@ test("unreferenced explicit type keywords still count", () => {
   ).toBe(true);
 });
 
+test("TypeScript grammar names are not queried, while real controls remain measured", () => {
+  const result = run({
+    "grammar.ts": [
+      "type Predicate = (value: unknown) => value is string;",
+      "type Renamed = { source: unknown }; const { source: renamed } = {} as Renamed;",
+      "type Tuple = [label: unknown];",
+      "type Exported = unknown; export type { Exported };",
+      "namespace Namespaced { export const value = 1; }",
+      "type Template = `prefix-${string}`;",
+      "export const realAny: any = 1;",
+      "export const realUnknown: unknown = 1;",
+    ].join("\n"),
+  });
+  expect(result.status).toBe(1);
+  expect(result.output.complete).toBe(true);
+  expect(result.output.violations.some((v) => v.symbol === "realAny" && v.kind === "explicitAny")).toBe(true);
+  expect(result.output.violations.some((v) => v.symbol === "realUnknown" && v.kind === "unknown")).toBe(true);
+  expect(result.output.violations.some((v) => v.symbol === "Predicate" && v.kind === "implicitAny")).toBe(false);
+  expect(result.output.violations.some((v) => v.symbol === "renamed" && v.kind === "implicitAny")).toBe(false);
+  expect(result.output.violations.some((v) => v.symbol === "label" && v.kind === "implicitAny")).toBe(false);
+  expect(result.output.violations.some((v) => v.symbol === "Exported" && v.kind === "implicitAny")).toBe(false);
+  expect(result.output.violations.some((v) => v.symbol === "Namespaced" && v.kind === "implicitAny")).toBe(false);
+});
+
 
 test("literal type grammar is not inferred any, while actual numeric values are measured", () => {
   const result = run({ "literal.ts": 'export type Receipt = { version: 1; failure: -1; bigint: 1n; text: "ready" }; export const version: Receipt["version"] = 1;\n' });
