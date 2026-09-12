@@ -26,21 +26,20 @@ export const ActionSqlRow = z.object({
 
 export type ActionSqlRow = z.infer<typeof ActionSqlRow>;
 
-export const SessionSqlRow = z.object({
-  id: z.string(),
-  parent_id: z.string().nullable(),
-  role: z.string().nullable(),
-  lease_owner: z.string().nullable(),
-  lease_fence: z.number(),
-  lease_expires_at: z.number().nullable(),
-  revision: z.number(),
-  state: z.string(),
-  tools_generation: z.number(),
-  system_hash: z.string(),
-  policy_generation: z.number(),
-});
-
-export type SessionSqlRow = z.infer<typeof SessionSqlRow>;
+/** SQLite column shape; decodeSession validates the canonical row once on read. */
+export interface SessionSqlRow {
+  id: string;
+  parent_id: string | null;
+  role: string | null;
+  lease_owner: string | null;
+  lease_fence: number;
+  lease_expires_at: number | null;
+  revision: number;
+  state: string;
+  tools_generation: number;
+  system_hash: string;
+  policy_generation: number;
+}
 
 export const InboxSqlRow = z.object({
   id: z.string(),

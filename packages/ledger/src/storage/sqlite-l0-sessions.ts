@@ -5,7 +5,7 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows.js";
+import { type SessionSqlRow, decodeSession } from "./sqlite-l0-rows.js";
 import {
   sessionSelect,
   insertSession,
@@ -76,9 +76,7 @@ export function createSessions(
     get: (id) => selectSession(db, id),
     openChildCount: (parentId) => openChildCount(db, parentId),
     list() {
-      const rows = SessionSqlRow.array().parse(
-        db.query(`${sessionSelect} WHERE role IS NOT NULL ORDER BY id`).all(),
-      );
+      const rows = db.query<SessionSqlRow, []>(`${sessionSelect} WHERE role IS NOT NULL ORDER BY id`).all();
       return rows.map(decodeSession);
     },
     acquireLease(input) {

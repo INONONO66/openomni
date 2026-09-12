@@ -8,7 +8,7 @@ import {
   SessionTransition,
 } from "@openomni/protocol";
 import { inboxAppend } from "./l0-action-builders.js";
-import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
+import { type SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
 
 export const sessionSelect = `SELECT id, parent_id, role, lease_owner, lease_fence,
   lease_expires_at, revision, state, tools_generation, system_hash, policy_generation FROM session`;
@@ -43,7 +43,7 @@ export function insertSession(db: Database, row: LedgerSession.Row): boolean {
 }
 
 export function selectSessionSql(db: Database, id: string): SessionSqlRow | undefined {
-  const row = SessionSqlRow.nullable().parse(db.query(`${sessionSelect} WHERE id = ?`).get(id));
+  const row = db.query<SessionSqlRow, [string]>(`${sessionSelect} WHERE id = ?`).get(id);
   return row === null ? undefined : row;
 }
 
