@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { nativeJson } from "./quality-native-process";
+import { nativeFailure, nativeJson } from "./quality-native-process";
+
+test("native failure detail prefers bounded structured errors and raw fallback", () => {
+	expect(nativeFailure('{"errors":[{"code":"one"},{"code":"two"}]}', "raw")).toContain('"code":"one"');
+	expect(nativeFailure("not json", "raw diagnostic")).toBe("raw diagnostic");
+});
 
 test("native JSON preserves argument boundaries and measured nonzero exits", async () => {
 	const result = await nativeJson({

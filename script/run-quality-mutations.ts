@@ -1021,27 +1021,19 @@ function assertionDiagnostic(segment: string[]): boolean {
 		/^Expected promise that (?:rejects\nReceived promise that resolved|resolves\nReceived promise that rejected):/m.test(segment.join("\n"));
 	return expectation || settlement;
 }
+function appendAssertionFailure(output: string[], file: string, segment: string[], status: RegExpMatchArray | null): void {
+	if (status?.[1] === "fail" && assertionDiagnostic(segment)) output.push(`${file}\0${status[2]}`);
+}
 export function failedAssertions(stderr: string): string[] {
-	// Bun 1.3.6 labels ordinary thrown errors AssertionError too. Require a real
-	// expect failure diagnostic AND a nonzero assertion count for every failed
-	// testcase; a crash after a successful assertion must not become a kill.
 	const failedNames: string[] = [];
-	let diagnosticFile = "";
+	let file = "";
 	let segment: string[] = [];
 	for (const line of stderr.split("\n")) {
-		const file = line.match(/^(?:::group::)?([^\s].*\.[cm]?[jt]sx?):$/)?.[1];
-		if (file) {
-			diagnosticFile = file.replace(/^\.\//, "");
-			segment = [];
-		}
+		const found = line.match(/^(?:::group::)?([^\s].*\.[cm]?[jt]sx?):$/)?.[1];
+		if (found) { file = found.replace(/^\.\//, ""); segment = []; }
 		const status = line.match(/^\((pass|fail)\) (.*?)(?: \[[\d.]+ms\])?$/);
-		if (!status) {
-			segment.push(line);
-			continue;
-		}
-		if (status[1] === "fail" && assertionDiagnostic(segment))
-			failedNames.push(`${diagnosticFile}\0${status[2]}`);
-		segment = [];
+		if (status) { appendAssertionFailure(failedNames, file, segment, status); segment = []; }
+		else segment.push(line);
 	}
 	return failedNames;
 }

@@ -84,3 +84,5 @@
 - Targeted pilot/receipt parsing final tests: exit 0, /tmp/g11-tests10.log. Explicit pilot_target input never affects full default campaign.
 
 - Latest increment gates passed: 176 tests, TypeScript, ultracite, lint, build and changed-file diagnostics. Separately exercised parser machine records and deduplicated native failure detail formatting; preserves bounded failure messages.
+
+- Final changed-line complexity increment: failedAssertions split into appendAssertionFailure; nativeFailure exported and exercised with structured/raw cases. 72 focused tests passed; diagnostics clean. Pilot 34685882066 still running targeted permission mutant.

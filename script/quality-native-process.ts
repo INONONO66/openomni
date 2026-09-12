@@ -8,7 +8,7 @@ type NativeInput = {
 	receipt?: string;
 	onStderr?: (chunk: Uint8Array) => void;
 };
-function nativeFailure(stdout: string, stderr: string): string {
+export function nativeFailure(stdout: string, stderr: string): string {
 	try {
 		const parsed = decodeJson(stdout);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray(parsed.errors))
