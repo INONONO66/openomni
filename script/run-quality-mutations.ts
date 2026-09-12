@@ -1129,7 +1129,12 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 			const marker = join(markers, first.id);
 			if (!existsSync(marker)) continue;
 			const evidence = map.get(candidate.id);
-			if (evidence) { evidence.reached = true; (evidence.tests ??= []).push(test); evidence.markerSha256 = sha256(readFileSync(marker, "utf8")); }
+			if (evidence) {
+				evidence.reached = true;
+				if (!evidence.tests) evidence.tests = [];
+				evidence.tests.push(test);
+				evidence.markerSha256 = sha256(readFileSync(marker, "utf8"));
+			}
 		}
 	}
 	console.error(`[mutation] reach map: ${[...map.values()].filter((value) => value.reached).length}/${candidates.length} reached`);
