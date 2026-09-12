@@ -42,3 +42,15 @@
 - Full branch run 34675894684 completed; bounded phase/resource evidence saved /tmp/g11-branch-full.log.
 
 - Commented issue #1049 with memory, signal, disk, baseline, and branch-run evidence. PR #1051 remains intentionally unmerged because Quality/CI checks fail; no auto-merge invoked.
+
+- Resumed #1051: restoring execution-copy Git metadata and resolving changed-line Quality findings before pilot/merge.
+
+- Git needs confirmed: HEAD/tree revision, log/objects for local fetch, index for git grep/ls-files, and refs for CI planning. Detached worktrees now preserve these; overlay includes current dirty/untracked inputs and physical dependencies, no external node_modules symlink exception. Cleanup checks Git registration removal.
+
+- Split baseline/probe/mutated test execution by nearest package manifest without excluding inventory tests; this restores package cwd/config and isolates desktop/UI runtime globals. Every batch process/JUnit is retained and a failed batch still blocks scoring.
+
+- Worktree/package-batch integration test gate exited 1; log /tmp/g11-tests5.log.
+
+- Gates tsc/ultracite/lint/build passed. New full-wrapper test reached normalization but failed; reading exact assertion before fixing it. Worktree isolation and in-process two-package campaign tests passed.
+
+- Full-wrapper regression corrected to use a quality-owned packages/... source (the first fixture had no quality-owned inventory). Native wrapper now passes 4 tests and reaches full normalization + fail-closed missing-baseline ratchet; prior complete run had 174/175 with only that fixture failure. Other local gates passed.

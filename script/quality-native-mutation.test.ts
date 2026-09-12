@@ -29,6 +29,31 @@ test("native pilot executes the real campaign without creating a full ratchet me
   await expect(mutationMain([])).rejects.toThrow();
 }, 90000);
 
+test("native full campaign normalizes all candidates before enforcing the baseline", async () => {
+  const input = await fixture("", "", {
+    "src/a.test.ts": 'import "../support/assertion";',
+    "packages/demo/src/main.ts": "export const run = true;",
+    "support/assertion.ts": 'import {test,expect} from "bun:test";import {run} from "../packages/demo/src/main";test("behavior",()=>expect(run).toBe(true));',
+  });
+  const contractPath = join(input.root, "contract.json");
+  const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
+  writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
+  cpSync(import.meta.dir, join(input.root, "script"), { recursive: true });
+  cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
+  expect(await mutationMain([
+    "--root", input.root, "--contract", "contract.json", "--decision", decision,
+    "--baseline", "missing-baseline.json",
+  ])).toBe(2);
+  const native = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
+  const document = jsonObject(native.document);
+  expect(document.full).toBe(true);
+  expect(document.complete).toBe(true);
+  expect(jsonObject(document.counts).killed).toBe(1);
+  const current = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/current.json"), "utf8")));
+  expect(current.analyzed).toEqual(["mutation"]);
+  expect(current.findings).toEqual([]);
+}, 90000);
+
 test("mutation normalization rejects pilots missing candidates and stale killed sources", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-mutation-receipt-"));
   const source = "export const enabled = true;\n",

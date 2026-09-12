@@ -390,17 +390,20 @@ function broken(receipt: ProcessReceipt): boolean {
 		(receipt.cleanupExit !== 0 && receipt.cleanupExit !== 1)
 	);
 }
+function projectProgram(root: string, path: string): ts.Program {
+	pathIn(root, path);
+	console.error(`[mutation] compiler project ${path}`);
+	try {
+		const parsed = projectOptions(root, path);
+		return ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
+	} catch { return fail("configuration", `invalid native project: ${path}`); }
+}
 export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
 	const covered = new Set<string>();
 	for (const path of contract.projects) {
-		pathIn(root, path);
-		console.error(`[mutation] compiler project ${path}`);
-		try {
-			const parsed = projectOptions(root, path);
-			const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
-			for (const source of program.getSourceFiles()) covered.add(source.fileName);
-			yield program;
-		} catch { return fail("configuration", `invalid native project: ${path}`); }
+		const program = projectProgram(root, path);
+		for (const source of program.getSourceFiles()) covered.add(source.fileName);
+		yield program;
 	}
 	// Supplied native-project coverage first; only canonical remaining members
 	// enter the same strict inventory fallback used by the delegated type owner.
@@ -864,18 +867,39 @@ function instrument(source: string, site: Site, marker: string): string {
 		site.mode === "jsx" ? `{${expression}}` : expression,
 	);
 }
-function snapshot(options: Options, target: string): void {
-	// Preserve Bun's isolated workspace dependency graph and built exports.
+function gitCopyCommand(root: string, args: string[]): string {
+	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+	if (result.status !== 0) return fail("executionCopy", result.stderr || String(result.error));
+	return result.stdout;
+}
+export function copyExecution(sourceRoot: string, target: string): void {
+	// Each copy owns its detached worktree/index; Git objects/history remain shared.
+	// Dependencies are copied (not externally symlinked), preserving isolation checks.
+	if (existsSync(join(sourceRoot, ".git")))
+		gitCopyCommand(sourceRoot, ["worktree", "add", "--detach", target, "HEAD"]);
 	const skipped = new Set([".git", ".omo", "coverage", ".turbo"]);
-	cpSync(options.root, target, {
+	cpSync(sourceRoot, target, {
 		recursive: true,
 		verbatimSymlinks: true,
 		mode: constants.COPYFILE_FICLONE,
 		filter: (source) =>
-			!relative(options.root, source)
+			!relative(sourceRoot, source)
 				.split("/")
 				.some((part) => skipped.has(part)),
 	});
+}
+export function removeExecution(root: string): void {
+	if (existsSync(join(root, ".git"))) {
+		const owner = gitCopyCommand(root, ["rev-parse", "--git-common-dir"]).trim();
+		gitCopyCommand(root, ["worktree", "remove", "--force", root]);
+		const list = spawnSync("git", ["--git-dir", owner, "worktree", "list", "--porcelain"], { encoding: "utf8" });
+		if (list.status !== 0 || list.stdout.split("\n").includes(`worktree ${root}`))
+			fail("cleanup", `Execution worktree registration remains: ${root}`);
+	}
+	rmSync(root, { recursive: true, force: true });
+}
+function snapshot(options: Options, target: string): void {
+	copyExecution(options.root, target);
 	// Standalone fixtures may supply a separate, minimal dependency installation.
 	if (options.dependencies !== join(options.root, "node_modules"))
 		cpSync(options.dependencies, join(target, "node_modules"), {
@@ -919,7 +943,41 @@ type TestsReceipt = {
 	assertions: string[];
 	valid: boolean;
 };
-async function runTests(
+type TestSelectionReceipt = {
+	batches: TestsReceipt[];
+	tests: number;
+	failures: number;
+	assertions: string[];
+	valid: boolean;
+	exitCode: number;
+};
+function testGroups(root: string, tests: string[]): Map<string, string[]> {
+	const groups = new Map<string, string[]>();
+	for (const test of tests) {
+		let cwd = dirname(join(root, test));
+		while (cwd !== root && !existsSync(join(cwd, "package.json"))) cwd = dirname(cwd);
+		const selected = groups.get(cwd) ?? [];
+		selected.push(relative(cwd, join(root, test)));
+		groups.set(cwd, selected);
+	}
+	return groups;
+}
+async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string): Promise<TestSelectionReceipt> {
+	const batches: TestsReceipt[] = [];
+	for (const [cwd, selected] of testGroups(root, tests)) {
+		console.error(`[mutation] test package ${relative(root, cwd) || "."} (${selected.length} files)`);
+		batches.push(await runTestBatch(cwd, selected, timeout, directory, python));
+	}
+	return {
+		batches,
+		tests: batches.reduce((sum, batch) => sum + batch.tests, 0),
+		failures: batches.reduce((sum, batch) => sum + batch.failures, 0),
+		assertions: batches.flatMap((batch) => batch.assertions),
+		valid: batches.every((batch) => batch.valid),
+		exitCode: batches.every((batch) => batch.process.exitCode === 0) ? 0 : 1,
+	};
+}
+async function runTestBatch(
 	root: string,
 	tests: string[],
 	timeout: number,
@@ -1025,9 +1083,9 @@ async function runTests(
 		valid: !!header && !broken(processReceipt),
 	};
 }
-function green(receipt: TestsReceipt): boolean {
+function green(receipt: TestSelectionReceipt): boolean {
 	return (
-		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.process.exitCode === 0
+		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
 function defaultResult(candidate: Candidate, tests: string[], selected = true): Result {
@@ -1208,8 +1266,8 @@ async function runCandidate(
 		} else probedSource = instrument(source.source, candidate.site, marker);
 		writeMutation(source, probedSource);
 		const probe = await runTests(root, tests, options.timeout, run, options.python);
-		result.receipts.push(probe.process);
-		result.junitReports.push(probe.junit);
+		result.receipts.push(...probe.batches.map((batch) => batch.process));
+		result.junitReports.push(...probe.batches.map((batch) => batch.junit));
 		if (!green(probe)) {
 			result.outcome = "infrastructure";
 			result.reason = "baseline-probe-not-green";
@@ -1230,7 +1288,7 @@ async function runCandidate(
 		return true;
 	}
 	try {
-		cpSync(join(temporary, "frozen"), root, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+		copyExecution(join(temporary, "frozen"), root);
 		const source = mutationSource(root, candidate.path);
 		path = source.path;
 		original = source.host;
@@ -1247,18 +1305,18 @@ async function runCandidate(
 		if (!(await checkMutation(mutated, python))) return result;
 		if (!(await probeCandidate(source, python))) return result;
 		// Probe test side effects cannot leak into the mutation run.
-		rmSync(root, { recursive: true, force: true });
-		cpSync(join(temporary, "frozen"), root, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+		removeExecution(root);
+		copyExecution(join(temporary, "frozen"), root);
 		writeMutation(source, mutated);
 		const tested = await runTests(root, tests, options.timeout, run, options.python);
-		result.receipts.push(tested.process);
-		result.junitReports.push(tested.junit);
+		result.receipts.push(...tested.batches.map((batch) => batch.process));
+		result.junitReports.push(...tested.batches.map((batch) => batch.junit));
 		if (green(tested)) {
 			result.outcome = "survived";
 			result.reason = "green-mutated-test-selection";
 		} else if (
 			tested.valid &&
-			tested.process.exitCode === 1 &&
+			tested.exitCode === 1 &&
 			tested.failures > 0 &&
 			tested.assertions.length === tested.failures
 		) {
@@ -1279,6 +1337,7 @@ async function runCandidate(
 			writeFileSync(path, original);
 			result.restored = sha256(readFileSync(path)) === sha256(original);
 		}
+		removeExecution(root);
 		rmSync(run, { recursive: true, force: true });
 	}
 }
@@ -1478,6 +1537,12 @@ async function enumeratePython(
 	return pythonCapability;
 }
 
+function selectedCandidates(options: Options, candidates: Candidate[]): Candidate[] {
+	return candidates.filter((candidate) =>
+		(!options.targets.length || options.targets.includes(candidate.path)) &&
+		(!options.families.length || options.families.includes(candidate.operator)),
+	).slice(0, options.pilot ? options.limit : undefined);
+}
 async function executeSelection(
 	options: Options,
 	contract: Contract,
@@ -1488,13 +1553,7 @@ async function executeSelection(
 	errors: string[],
 ): Promise<Result[]> {
 	const results: Result[] = [];
-	const selected = enumerated.candidates
-		.filter(
-			(candidate) =>
-				(!options.targets.length || options.targets.includes(candidate.path)) &&
-				(!options.families.length || options.families.includes(candidate.operator)),
-		)
-		.slice(0, options.pilot ? options.limit : undefined);
+	const selected = selectedCandidates(options, enumerated.candidates);
 	if (!selected.length) errors.push("zero selected candidates");
 	const selectedIds = new Set(selected.map((candidate) => candidate.id));
 	let executed = 0;
@@ -1609,13 +1668,13 @@ async function campaign(options: Options): Promise<number> {
 			errors.push(`baseline compiler rejected ${sourceDiagnostics.length} diagnostics`);
 		if (!enumerated.candidates.length) errors.push("zero eligible mutation candidates");
 		console.error(`[mutation] baseline execution copy (${tests.length} test files, ${errors.length} errors)`);
-		if (!errors.length) cpSync(frozen, base, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+		if (!errors.length) copyExecution(frozen, base);
 		console.error("[mutation] baseline tests starting");
 		const baseline = errors.length
 			? null
 			: await runTests(base, tests, options.timeout, temporary, options.python);
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
-		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.process.exitCode, signal: baseline.process.signal, timedOut: baseline.process.timedOut } : { errors })}`);
+		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const results = await executeSelection(
 			options, contract, temporary, started, enumerated, tests, errors,
 		);
@@ -1627,6 +1686,8 @@ async function campaign(options: Options): Promise<number> {
 		pinned(options.contract, options.contractHash);
 		pinned(options.inventory, options.inventoryHash);
 		pinned(options.decision, options.decisionHash);
+		removeExecution(base);
+		removeExecution(frozen);
 		rmSync(temporary, { recursive: true, force: true });
 		cleanupVerified = !existsSync(temporary);
 		const { counts, selectedCounts, complete, exitCode, full } = campaignOutcome(
@@ -1672,7 +1733,12 @@ async function campaign(options: Options): Promise<number> {
 		);
 		return exitCode;
 	} finally {
-		if (!cleanupVerified) rmSync(temporary, { recursive: true, force: true });
+		if (!cleanupVerified) {
+			removeExecution(join(temporary, "candidate/source"));
+			removeExecution(join(temporary, "baseline"));
+			removeExecution(join(temporary, "frozen"));
+			rmSync(temporary, { recursive: true, force: true });
+		}
 	}
 }
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
