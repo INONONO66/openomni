@@ -1,3 +1,4 @@
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
   activateTab,
@@ -15,7 +16,6 @@ import {
   openTab,
   reopenClosedTab,
   setDraft,
-  setSessionTitleIfPlaceholder,
   setSidebarFloating,
   type Tab,
 } from "../src/renderer/state/store";

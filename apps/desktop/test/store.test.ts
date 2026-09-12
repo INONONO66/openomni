@@ -1,3 +1,4 @@
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { SIDEBAR_WIDTH } from "@openomni/ui";
 import {
@@ -15,7 +16,6 @@ import {
   newSessionTab,
   openTab,
   setDraft,
-  setSessionTitleIfPlaceholder,
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
