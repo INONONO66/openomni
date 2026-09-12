@@ -1475,8 +1475,11 @@ async function executeSelection(
 		)
 			results.push(defaultResult(candidate, tests));
 		else {
-			results.push(await runCandidate(candidate, options, contract, temporary, tests));
+			console.error(`[mutation] mutant ${executed + 1}/${selected.length} start ${candidate.path}:${candidate.startOffset} ${candidate.operator}`);
+			const result = await runCandidate(candidate, options, contract, temporary, tests);
+			results.push(result);
 			executed++;
+			console.error(`[mutation] mutant ${executed}/${selected.length} ${result.outcome}: ${result.reason}`);
 		}
 	}
 	return results;
@@ -1534,6 +1537,7 @@ async function campaign(options: Options): Promise<number> {
 				`Compiler project is not hash-pinned in inventory: ${project}`,
 			);
 	const operators = operatorsAt(options.decision);
+	console.error("[mutation] verifying canonical inventory");
 	const canonical = await canonicalVerification(options);
 	verifySources(options.root, inventory);
 	const temporary = mkdtempSync(join(tmpdir(), "omo-quality-mutation-"));
@@ -1541,13 +1545,19 @@ async function campaign(options: Options): Promise<number> {
 	let cleanupVerified = false;
 	try {
 		const frozen = join(temporary, "frozen");
+		console.error(`[mutation] creating frozen execution copy at ${frozen}`);
 		snapshot(options, frozen);
+		console.error("[mutation] hashing frozen execution copy");
 		const executionTreeSha256 = executionTreeHash(frozen);
 		const base = join(temporary, "baseline");
+		console.error(`[mutation] creating compiler programs (${contract.projects.length} projects)`);
 		const items = programs(frozen, contract, inventory);
+		console.error("[mutation] enumerating TypeScript/JavaScript candidates");
 		const enumerated = enumerate(frozen, inventory, operators, items);
+		console.error(`[mutation] enumerating Python candidates (${enumerated.candidates.length} TS/JS candidates)`);
 		const pythonCapability = await enumeratePython(options, temporary, frozen, enumerated);
 		enumerated.candidates.sort(compareCandidates);
+		console.error(`[mutation] checking baseline compiler diagnostics (${enumerated.candidates.length} candidates)`);
 		const sourceDiagnostics = diagnostics(items);
 		const tests = options.tests.length
 			? options.tests
@@ -1567,14 +1577,18 @@ async function campaign(options: Options): Promise<number> {
 		if (sourceDiagnostics.length)
 			errors.push(`baseline compiler rejected ${sourceDiagnostics.length} diagnostics`);
 		if (!enumerated.candidates.length) errors.push("zero eligible mutation candidates");
+		console.error(`[mutation] baseline execution copy (${tests.length} test files, ${errors.length} errors)`);
 		if (!errors.length) cpSync(frozen, base, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
+		console.error("[mutation] baseline tests starting");
 		const baseline = errors.length
 			? null
 			: await runTests(base, tests, options.timeout, temporary, options.python);
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
+		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.process.exitCode, signal: baseline.process.signal, timedOut: baseline.process.timedOut } : { errors })}`);
 		const results = await executeSelection(
 			options, contract, temporary, started, enumerated, tests, errors,
 		);
+		console.error("[mutation] verifying restoration and cleaning execution copies");
 		verifySources(options.root, inventory);
 		if (executionTreeHash(frozen) !== executionTreeSha256)
 			return fail("tamper", "Frozen execution copy changed");
@@ -1587,6 +1601,7 @@ async function campaign(options: Options): Promise<number> {
 		const { counts, selectedCounts, complete, exitCode, full } = campaignOutcome(
 			options, enumerated, results, errors, cleanupVerified,
 		);
+		console.error(`[mutation] campaign finished: ${JSON.stringify({ counts, selectedCounts, complete, errors })}`);
 		console.log(
 			JSON.stringify({
 				version: 1,

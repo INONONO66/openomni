@@ -7,6 +7,7 @@ export async function nativeJson(input: {
 	cwd: string;
 	timeout?: number;
 	receipt?: string;
+	onStderr?: (chunk: Uint8Array) => void;
 }) {
 	const child = Bun.spawn(input.command, {
 		cwd: input.cwd,
@@ -17,7 +18,12 @@ export async function nativeJson(input: {
 	});
 	const [stdout, stderr, exitCode] = await Promise.all([
 		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
+		new Response(child.stderr.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+			transform(chunk, controller) {
+				input.onStderr?.(chunk);
+				controller.enqueue(chunk);
+			},
+		}))).text(),
 		child.exited,
 	]);
 	if (input.receipt) writeFileSync(input.receipt, JSON.stringify({ command: input.command, cwd: input.cwd, runtime: Bun.version, exitCode, signal: child.signalCode, stdout, stderr }), { flag: "wx" });
