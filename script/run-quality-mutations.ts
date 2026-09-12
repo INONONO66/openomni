@@ -853,7 +853,6 @@ function compareCandidates(a: Candidate, b: Candidate): number {
 function replace(source: string, start: number, end: number, replacement: string): string {
 	return source.slice(0, start) + replacement + source.slice(end);
 }
-type ProbeInsertion = { offset: number; order: number; text: string };
 function caseInsertion(source: string, site: Site): number {
 	const original = source.slice(site.start, site.end);
 	const clause = ts.createSourceFile("site.ts", `switch(0){${original}}`, ts.ScriptTarget.Latest, true);
@@ -862,15 +861,6 @@ function caseInsertion(source: string, site: Site): number {
 	const first = statement.caseBlock.clauses[0];
 	if (!first || !ts.isCaseClause(first)) return fail("instrumentation", "Missing case site");
 	return site.start + original.indexOf(":", first.expression.end - "switch(0){".length) + 1;
-}
-function probeInsertions(source: string, row: ReachSite, marker: string, index: number): ProbeInsertion[] {
-	const { site } = row;
-	const key = JSON.stringify(marker);
-	const probe = `require("node:fs").writeFileSync(${key},"1")`;
-	if (site.mode === "case") return [{ offset: caseInsertion(source, site), order: index, text: `${probe};` }];
-	const [open, close] = site.mode === "statement" ? [`{${probe};`, "}"]
-		: site.mode === "jsx" ? [`{(${probe},(`, "))}"] : [`(${probe},(`, "))"];
-	return [{ offset: site.start, order: index, text: open }, { offset: site.end, order: -index, text: close }];
 }
 function instrumentSingle(source: string, site: Site, marker: string): string {
 	const probe = `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`;
