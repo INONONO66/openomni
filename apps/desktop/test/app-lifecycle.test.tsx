@@ -1,3 +1,4 @@
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as ui from "@openomni/ui";
 import { QueryClient } from "@tanstack/react-query";
@@ -24,7 +25,6 @@ import {
   newSessionTab,
   openTab,
   setDraft,
-  setSessionTitleIfPlaceholder,
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,

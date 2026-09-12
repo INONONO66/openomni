@@ -1,3 +1,4 @@
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { afterAll, afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient } from "@tanstack/react-query";
@@ -36,15 +37,14 @@ const {
   consoleStore,
   createSession,
   INITIAL_CLIENT_STATE,
-  historyMenuEntries,
   navigate,
   newSessionTab,
   openTab,
   setDraft,
-  setSessionTitleIfPlaceholder,
   setSidebarOpen,
   toggleProject,
 } = await import("../src/renderer/state/store");
+const { historyMenuEntries } = await import("../src/renderer/state/selectors");
 const { SessionList } = await import("../src/renderer/shell/session-list");
 
 const cleanups: (() => void)[] = [];
@@ -367,7 +367,7 @@ test.each([
   await click(node(host, '[aria-label="History"]'));
   const items = Array.from(document.querySelectorAll<HTMLElement>('[data-ui="HistoryMenu.Item"]'));
   expect(items.map((item) => item.textContent)).toEqual(
-    historyMenuEntries().map((entry) => entry.title),
+    historyMenuEntries().map((entry: { title: string }) => entry.title),
   );
   expect(items).toHaveLength(20);
   expect(items[0]?.textContent).toBe("visit-24");

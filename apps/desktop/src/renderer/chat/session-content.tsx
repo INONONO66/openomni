@@ -1,3 +1,4 @@
+import { setSessionTitleIfPlaceholder } from "../state/session-actions";
 import { Chat, useChat } from "@ai-sdk/react";
 import { ConsoleContent, StatusGlyph } from "@openomni/ui";
 import { useStore } from "@tanstack/react-store";
@@ -9,7 +10,6 @@ import {
   type Session,
   type SessionId,
   setDraft,
-  setSessionTitleIfPlaceholder,
 } from "../state/store";
 import { uiMessagesToTranscript } from "./adapter";
 import type { OpenOmniUIMessage } from "./message";
