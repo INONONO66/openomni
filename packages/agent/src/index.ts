@@ -13,7 +13,7 @@ export {
   wakeSession,
 } from "./session-handle";
 export { createExecutor, ExecutionApprovalError } from "./executor";
-export { ExecutorContextError } from "./executor-context";
+export { ExecutorContextError, withExecutor } from "./executor-context";
 export type { ExecutionApprovalRequest } from "./executor";
 export { SEEDED_POLICY_ROWS } from "@openomni/policy";
 export type { Executor } from "./executor";

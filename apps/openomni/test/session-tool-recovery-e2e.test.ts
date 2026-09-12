@@ -20,23 +20,8 @@ import { L0Observation, Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 
-const Request = z.object({
-  messages: z.array(
-    z.object({
-      role: z.string(),
-      content: z.union([
-        z.string(),
-        z.array(
-          z.object({
-            type: z.string(),
-            tool_use_id: z.string().optional(),
-            content: z.string().optional(),
-          }),
-        ),
-      ]),
-    }),
-  ),
-});
+import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
+import { bounded, commitInterrupt, ProviderRequest as Request } from "./helpers/session-wave";
 
 function response(names: readonly string[]): Response {
   const blocks =
@@ -47,47 +32,11 @@ function response(names: readonly string[]): Response {
         }))
       : [{ start: { type: "text", text: "" }, delta: { type: "text_delta", text: "finished" } }];
   const frames = [
-    {
-      type: "message_start",
-      message: {
-        id: crypto.randomUUID(),
-        type: "message",
-        role: "assistant",
-        model: "claude-opus-4-5",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 10, output_tokens: 0 },
-      },
-    },
-    ...blocks.flatMap((block, index) => [
-      { type: "content_block_start", index, content_block: block.start },
-      { type: "content_block_delta", index, delta: block.delta },
-      { type: "content_block_stop", index },
-    ]),
-    {
-      type: "message_delta",
-      delta: { stop_reason: names.length > 0 ? "tool_use" : "end_turn", stop_sequence: null },
-      usage: { output_tokens: 2 },
-    },
-    { type: "message_stop" },
+    messageStart(crypto.randomUUID(), "claude-opus-4-5", 10),
+    ...contentBlocks(blocks),
+    ...messageEnd(names.length > 0 ? "tool_use" : "end_turn", 2),
   ];
-  return new Response(
-    frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""),
-    {
-      headers: { "content-type": "text/event-stream" },
-    },
-  );
-}
-
-function bounded<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("tool recovery event deadline")), 5000);
-    }),
-  ]).finally(() => clearTimeout(timer));
+  return sseResponse(frames);
 }
 
 // The second slot of a two-tool wave that never completed: a lost process is
@@ -181,16 +130,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         { id: sessionId, role: "resident", runner, tools: definitions.map(sessionTool) },
         runtime,
       );
-      const interruptInbox = () =>
-        SessionHandleStore.commitInbox({
-          id: `interrupt-${mode}`,
-          sessionId,
-          kind: "interrupt",
-          content: "",
-          createdAt: Date.now(),
-          origin: { encodingVersion: 1, value: { kind: "sdk" } },
-          parentActionId: SessionHandleStore.tree(sessionId).at(-1)?.id ?? null,
-        });
+      const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
       let saved = false;
       unsubscribe =
         mode === "crash-window"

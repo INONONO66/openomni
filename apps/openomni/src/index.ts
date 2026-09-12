@@ -119,6 +119,18 @@ function createHttpRoutes(
   };
 }
 
+function residentModelOptions(
+  model: OpenOmniConfig["model"],
+  transport: ReturnType<typeof modelTransport>,
+) {
+  return {
+    model,
+    ...(model.fallbacks === undefined ? {} : { modelFallbacks: model.fallbacks }),
+    apiKey: model.apiKey,
+    ...(transport === undefined ? {} : { transport }),
+  };
+}
+
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
@@ -251,10 +263,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
-      model: config.model,
-      ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
-      apiKey: config.model.apiKey,
-      ...(transport === undefined ? {} : { transport }),
+      ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
         messages,

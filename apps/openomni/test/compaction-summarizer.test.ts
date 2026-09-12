@@ -7,6 +7,7 @@ import {
   SummarizerError,
 } from "../src/compaction/summarizer";
 import { admittedOperation } from "./helpers/admitted-operation";
+import { rejected } from "./helpers/rejected";
 
 function createCompactionSummarizer(config: Parameters<typeof summarizer>[0]) {
   const run = summarizer(config);
@@ -89,9 +90,7 @@ describe("production compaction summarizer", () => {
     };
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await summarize([message("m1", "span")], undefined, BUDGET).catch(
-      (caught: unknown) => caught,
-    );
+    const error = await rejected(summarize([message("m1", "span")], undefined, BUDGET));
     expect(error).toBeInstanceOf(SummarizerError);
     expect((error as SummarizerError).kind).toBe("empty");
   });
@@ -124,9 +123,7 @@ describe("production compaction summarizer", () => {
     };
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await summarize([message("m1", "span")], undefined, BUDGET).catch(
-      (caught: unknown) => caught,
-    );
+    const error = await rejected(summarize([message("m1", "span")], undefined, BUDGET));
     expect(calls).toBe(1);
     expect(error).toBe(failure);
   });

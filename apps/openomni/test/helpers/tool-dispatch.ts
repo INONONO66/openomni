@@ -5,7 +5,7 @@ import { createTools, type CatalogPorts } from "../../src/tools/core/catalog";
 import { createDispatcher } from "@openomni/agent";
 import { executor } from "./executor";
 
-const RESIDENT: CatalogOrigin = { role: "resident", depth: 0, sessionId: "test" };
+const RESIDENT: CatalogOrigin = { role: "resident", sessionId: "test" };
 let nextCallId = 0;
 export function dispatchModelTool(
   name: string,
@@ -13,13 +13,16 @@ export function dispatchModelTool(
   origin: CatalogOrigin = RESIDENT,
   now?: () => number,
 ) {
+  const definitions = now === undefined ? createTools(ports, origin) : undefined;
+  if (definitions !== undefined) ports.cells?.bindTools(origin.sessionId, definitions);
   const persistentDispatcher =
-    now === undefined ? createDispatcher(createTools(ports, origin), { executor }) : undefined;
+    definitions === undefined ? undefined : createDispatcher(definitions, { executor });
   return async (input: PlainObject) => {
     const clock = now === undefined ? undefined : spyOn(Date, "now").mockImplementation(now);
     try {
-      const dispatcher =
-        persistentDispatcher ?? createDispatcher(createTools(ports, origin), { executor });
+      const currentDefinitions = definitions ?? createTools(ports, origin);
+      if (definitions === undefined) ports.cells?.bindTools(origin.sessionId, currentDefinitions);
+      const dispatcher = persistentDispatcher ?? createDispatcher(currentDefinitions, { executor });
       return await dispatcher.execute(
         { id: `test-tool-call-${nextCallId++}`, tool: name, input },
         { sessionId: origin.sessionId, turnId: `test-turn-${nextCallId}` },

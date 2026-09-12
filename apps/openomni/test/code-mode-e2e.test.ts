@@ -22,6 +22,8 @@ import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
 import { nextFrame } from "./helpers/ws";
 
+import { cellDaemonOptions } from "./helpers/cell-daemon";
+
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
 
@@ -199,16 +201,7 @@ test("a cell creates three child sessions through send_message", async () => {
     },
   });
 
-  const daemon = await attachMachineDaemon({
-    socketPath,
-    offer: {
-      machineId: MACHINE_ID,
-      offeredCapabilities: ["kernel.py"],
-      daemonVersion: "test",
-      platform: "test",
-      offeredAt: 0,
-    },
-  });
+  const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
 
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
@@ -372,8 +365,8 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
   const directory = suite.tempDir("openomni-code-mode-failure-");
   const failure = new Error("U1_INJECTED_CELL_FAILURE");
   try {
-    await runWith({ role: "resident", depth: 0, sessionId: "failure-a" }, "1 + 1");
-    await runWith({ role: "resident", depth: 0, sessionId: "failure-b" }, "2 + 2");
+    await runWith({ role: "resident", sessionId: "failure-a" }, "1 + 1");
+    await runWith({ role: "resident", sessionId: "failure-b" }, "2 + 2");
     expect(witness.pids).toHaveLength(2);
     try {
       throw failure;
@@ -400,7 +393,7 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
   }
 }, 30_000);
 
-const CELL_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
+const CELL_ORIGIN: CatalogOrigin = { role: "resident", sessionId: "cell-e2e" };
 
 /**
  * A real host+daemon pair whose cells go through the production eval
@@ -417,16 +410,7 @@ async function startCellHarness(ports: CatalogPorts) {
     now: () => Date.now(),
     callTool: (call) => cells.callTool(call),
   });
-  const daemon = await attachMachineDaemon({
-    socketPath,
-    offer: {
-      machineId: MACHINE_ID,
-      offeredCapabilities: ["kernel.py"],
-      daemonVersion: "test",
-      platform: "test",
-      offeredAt: 0,
-    },
-  });
+  const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
   cells = composeCodemode(host);
   suite.defer(() => cells.close());
@@ -448,8 +432,8 @@ async function startCellHarness(ports: CatalogPorts) {
 
 test("cells from different sessions never share interpreter state", async () => {
   const { runWith } = await startCellHarness({ llm: async () => "ok" });
-  const sessionA: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
-  const sessionB: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
+  const sessionA: CatalogOrigin = { role: "resident", sessionId: "session-a" };
+  const sessionB: CatalogOrigin = { role: "resident", sessionId: "session-b" };
 
   await runWith(sessionA, "shared = 'mine'\n'set'");
   const sameSession = await runWith(sessionA, "shared");
@@ -468,22 +452,28 @@ test("cells from different sessions never share interpreter state", async () => 
  */
 test("eval run answers running after its wait; peek shows the output so far; stop interrupts once", async () => {
   const entered = Promise.withResolvers<void>();
+  const arm = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let calls = 0;
   const { run, execute } = await startCellHarness({
     llm: async () => {
+      await arm.promise;
       calls += 1;
       entered.resolve();
       await release.promise;
       return "late";
     },
   });
+  arm.resolve();
   const started = await run("print('started')\ncompletion('hold')\nprint('never')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
     started,
   )?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
+  // The callback reaches its release boundary while run still owns the
+  // completion IPC; entered is the exact signal for that boundary.
   await entered.promise;
+  expect(calls).toBe(1);
   expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toBe(
     `cell ${cellId} is still running; peek or stop it by cell_id\nstarted\n`,
   );
@@ -501,18 +491,25 @@ test("eval run answers running after its wait; peek shows the output so far; sto
 
 test("eval peek and stop racing on one cell: exactly one is answered, the other finds the id spent", async () => {
   const entered = Promise.withResolvers<void>();
+  const arm = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
+  let calls = 0;
   const { run, execute } = await startCellHarness({
     llm: async () => {
+      await arm.promise;
+      calls += 1;
       entered.resolve();
       await release.promise;
       return "late";
     },
   });
+  arm.resolve();
   const started = await run("completion('hold')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
+  // entered fires only after the callback reaches its release boundary.
   await entered.promise;
+  expect(calls).toBe(1);
   const [peeked, stopped] = await Promise.all([
     execute({ operation: { op: "peek", cell_id: cellId } }),
     execute({ operation: { op: "stop", cell_id: cellId } }),

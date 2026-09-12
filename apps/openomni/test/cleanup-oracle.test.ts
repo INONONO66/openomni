@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
+import { processOutput } from "./helpers/process-output";
 
 test("967-U1 teardown rejection fails the real assertion-failure cleanup test", async () => {
   // Given the real app fixture with a rejection injected only AFTER real cleanup resolves.
@@ -24,11 +25,7 @@ test("967-U1 teardown rejection fails the real assertion-failure cleanup test", 
   }, 25_000);
   try {
     // When the deliberate test failure and the different teardown failure both occur.
-    const [exit, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
+    const [exit, stdout, stderr] = await processOutput(child);
     console.log(stdout, stderr);
     // Then real cleanup happened, and the test runner rejects the cleanup error.
     expect(timedOut).toBe(false);

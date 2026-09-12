@@ -98,7 +98,18 @@ export function writeEnvFile(path: string, entries: readonly EnvEntry[]): void {
  */
 export function applyEnvFile(path: string, env: Record<string, string | undefined>): void {
   if (!existsSync(path)) return;
-  for (const [key, value] of parseEnvFile(readFileSync(path, "utf-8"))) {
-    if (env[key] === undefined) env[key] = value;
+  for (const [key, value] of mergeEnvFile(readFileSync(path, "utf-8"), env)) {
+    env[key] = value;
   }
+}
+
+export function mergeEnvFile(
+  text: string,
+  env: Readonly<Record<string, string | undefined>>,
+): ReadonlyMap<string, string> {
+  const merged = new Map(parseEnvFile(text));
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined) merged.set(key, value);
+  }
+  return merged;
 }

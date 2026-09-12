@@ -1,42 +1,22 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { rmSync } from "node:fs";
 import { Bus } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 
-const directories: string[] = [];
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
+import { storageDirectories } from "./helpers/storage-directories";
+import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
+
+const directories = storageDirectories(true);
 
 test("worker actor send is blocked by a compiled B row before transport", async () => {
-  let calls = 0;
-  const fixture = messageFixture("worker", {
-    deliveryRoutes: new Map([
-      [
-        "ws",
-        async () => {
-          calls += 1;
-          return { value: "accepted" as const };
-        },
-      ],
-    ]),
-    grants: () => [],
-  });
+  const { fixture, calls } = ungrantedActor("worker");
   directories.push(fixture.directory);
-  const result = await fixture.send({
-    to: { kind: "actor", actorId: "outside" },
-    type: "message",
-    content: "hello",
-  });
+  const result = await fixture.send(actorMessage("outside"));
   expect(result.isError).toBe(true);
   expect(result.output).toContain("message.worker.actor");
-  expect(calls).toBe(0);
+  expect(calls()).toBe(0);
 });
 
 test("new child configuration and first inbox roll back together on an inbox insertion fault", async () => {
@@ -135,6 +115,28 @@ test("conversation correlation cannot select the physical default session", asyn
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("message was not committed");
   expect(result.handle.target).not.toBe(fixture.sessionId);
+});
+
+test.each([
+  {
+    mutation: "json_set(intent, '$.matchedRuleIds', json_array(42))",
+    error: "invalid message decision rule identity",
+  },
+  { mutation: "json_remove(intent, '$.inputHash')", error: "message pre decision is missing" },
+])("corrupted persisted policy evidence is refused: %j", async ({ mutation, error }) => {
+  const fixture = messageFixture();
+  directories.push(fixture.directory);
+  using db = new Database(fixture.dbPath);
+  db.exec(
+    `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`,
+  );
+  const result = await fixture.send({
+    to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
+    type: "message",
+    content: "corrupt-evidence",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.output).toContain(error);
 });
 
 test("message observations carry the committed compiled policy rule identity", async () => {

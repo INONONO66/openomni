@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { statSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,7 +20,9 @@ import {
   materializePersons,
   vaultCredentialReader,
 } from "../src/provisioning/declared";
-import { ensureVaultKeyFile, resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
+import { resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
+
+import { putChannelCredential } from "./helpers/channel-credential";
 
 const NOW = 1_756_000_000_000;
 const KEY_B64 = Buffer.from(new Uint8Array(32).fill(7)).toString("base64");
@@ -77,13 +79,14 @@ describe("vault-key resolution", () => {
     expect(resolved.kind === "locked" && resolved.reason.includes(vaultKeyPath(home))).toBe(true);
   });
 
-  test("ensureVaultKeyFile mints once at 0600 and the minted key resolves", () => {
-    const first = ensureVaultKeyFile(home);
-    expect(first.created).toBe(true);
-    expect(statSync(first.path).mode & 0o777).toBe(0o600);
-    const second = ensureVaultKeyFile(home);
-    expect(second.created).toBe(false);
+  test("an operator key file resolves without changing its bytes or permissions", async () => {
+    expect(resolveKek({}, home).kind).toBe("locked");
+    await mkdir(join(home, ".openomni"));
+    const path = vaultKeyPath(home);
+    await writeFile(path, `${KEY_B64}\n`, { mode: 0o600 });
     expect(resolveKek({}, home).kind).toBe("ok");
+    expect(await readFile(path, "utf8")).toBe(`${KEY_B64}\n`);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });
 
@@ -220,18 +223,12 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   // #931: the ChannelInstance grant block is the Owner's tier decision; a
   // declaration without one mounts at the mount tier, never owner.
   test("a declared row carries its grant tier, and an undeclared grant mounts at the mount tier", () => {
-    const envelope = Vault.seal(
-      new TextEncoder().encode('{"token":"tg"}'),
-      Vault.kekOf(new Uint8Array(32).fill(7)),
+    putChannelCredential(
+      "secret:channel-telegram-main",
+      '{"token":"tg"}',
+      new Uint8Array(32).fill(7),
+      NOW,
     );
-    SecretStore.put({
-      id: "secret:channel-telegram-main",
-      ciphertext: envelope.ciphertext,
-      wrappedDek: envelope.wrappedDek,
-      kekId: envelope.kekId,
-      purpose: "channel_credential",
-      createdAt: NOW,
-    });
 
     // Every declared tier threads through exactly: a remap of any single tier
     // (e.g. observer -> owner) fails here rather than surviving on one literal.
@@ -266,18 +263,12 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   });
 
   test("§8.7 the declared bounce key folds revision with the secret's rotation epoch", () => {
-    const envelope = Vault.seal(
-      new TextEncoder().encode('{"token":"tg"}'),
-      Vault.kekOf(new Uint8Array(32).fill(7)),
+    const envelope = putChannelCredential(
+      "secret:channel-telegram-main",
+      '{"token":"tg"}',
+      new Uint8Array(32).fill(7),
+      NOW,
     );
-    SecretStore.put({
-      id: "secret:channel-telegram-main",
-      ciphertext: envelope.ciphertext,
-      wrappedDek: envelope.wrappedDek,
-      kekId: envelope.kekId,
-      purpose: "channel_credential",
-      createdAt: NOW,
-    });
     ChannelInstanceStore.put(instance({ revision: 4 }));
     const get = spyOn(SecretStore, "get");
     let before: ReturnType<typeof desiredChannels>;

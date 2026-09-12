@@ -1,5 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Vault } from "@openomni/ledger";
 
 /**
@@ -40,20 +40,4 @@ export function resolveKek(env: Record<string, string | undefined>, home: string
     return { kind: "locked", reason: `no OPENOMNI_VAULT_KEY and no key file at ${path}` };
   }
   return kekFromBase64(readFileSync(path, "utf-8").trim(), path);
-}
-
-/** `openomni init`: mints the key file once; an existing file is never overwritten. */
-export function ensureVaultKeyFile(home: string): {
-  readonly path: string;
-  readonly created: boolean;
-} {
-  const path = vaultKeyPath(home);
-  if (existsSync(path)) return { path, created: false };
-  mkdirSync(dirname(path), { recursive: true });
-  const key = new Uint8Array(32);
-  crypto.getRandomValues(key);
-  writeFileSync(path, `${Buffer.from(key).toString("base64")}\n`, { mode: 0o600 });
-  // mkdir/write honor umask; the vault key's 0600 is a law, not a suggestion.
-  chmodSync(path, 0o600);
-  return { path, created: true };
 }

@@ -62,14 +62,21 @@ switch (scenario) {
     console.log(JSON.stringify(answer("forged", "someone-else")));
     await next();
     break;
-  case "crash":
-    process.exit(2);
+  case "malformed":
+    console.log("{not-json}");
+    await next();
     break;
   case "linger":
+    console.log(JSON.stringify({ sessionIds: [request.sessionId] }));
     await next();
+    break;
+  case "ack-crash":
+    console.log(JSON.stringify({ sessionIds: [request.sessionId] }));
+    break;
+  case "crash":
     break;
   default:
     throw new Error(`unknown scenario ${scenario}`);
 }
 // readline keeps stdin open; a settled child must not outlive its conversation.
-process.exit(0);
+process.exit(scenario === "crash" || scenario === "ack-crash" ? 2 : 0);

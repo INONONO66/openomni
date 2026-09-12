@@ -106,18 +106,14 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       "state = 41",
       "(ids, list(readback), written['bytesWritten'], shell['stdout'], shell['stderr'], shell['exitCode'], nested['value'])",
     ].join("\n");
-    const run = modelToolOutput(
-      "eval",
-      { cells },
-      { role: "resident", depth: 0, sessionId: "qa-one" },
-    );
+    const run = modelToolOutput("eval", { cells }, { role: "resident", sessionId: "qa-one" });
     const result = await run({ operation: { op: "run", code, timeout: 10 } });
     expect(result).toBe("(['A', 'B'], [0, 255, 128, 65], 4, b'out', b'err', 7, '42')");
     expect(await run({ operation: { op: "run", code: "state + 1", timeout: 1 } })).toBe("42");
     const other = await modelToolOutput(
       "eval",
       { cells },
-      { role: "resident", depth: 0, sessionId: "qa-two" },
+      { role: "resident", sessionId: "qa-two" },
     )({ operation: { op: "run", code: "state", timeout: 1 } });
     expect(other).toContain("NameError");
     const write = await host

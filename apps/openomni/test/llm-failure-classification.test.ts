@@ -1,19 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { classifyTurnFailure } from "../src/observation/llm-failure";
 
-function providerError(fields: {
-  message: string;
-  isRetryable: boolean;
-  statusCode?: number;
-  responseBody?: string;
-}): Error {
-  return Object.assign(new Error(fields.message), {
-    name: "AI_APICallError",
-    isRetryable: fields.isRetryable,
-    ...(fields.statusCode === undefined ? {} : { statusCode: fields.statusCode }),
-    ...(fields.responseBody === undefined ? {} : { responseBody: fields.responseBody }),
-  });
-}
+import { providerError } from "./helpers/sdk-provider";
 
 describe("turn failure classification", () => {
   test("covers every provider failure class without exposing raw details", () => {

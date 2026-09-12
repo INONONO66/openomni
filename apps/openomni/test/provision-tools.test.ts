@@ -10,7 +10,7 @@ import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const NOW = 1_756_000_000_000;
-const RESIDENT = { role: "resident", depth: 0, sessionId: "provision-test" } as const;
+const RESIDENT = { role: "resident", sessionId: "provision-test" } as const;
 
 const provisionTool = (name: string, port: ProvisionPort, now: () => number = Date.now) => {
   const run = modelToolOutput("provision", { provisioning: port }, RESIDENT, now);
@@ -468,7 +468,6 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       { provisioning: port },
       {
         role: "resident",
-        depth: 0,
         sessionId: "s",
       },
     ).map((entry) => entry.name);
@@ -476,7 +475,6 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       { provisioning: port },
       {
         role: "worker",
-        depth: 1,
         sessionId: "s",
       },
     ).map((entry) => entry.name);

@@ -1,17 +1,12 @@
-import { afterEach, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
-import { Bus } from "@openomni/agent";
-import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
+import { expect, test } from "bun:test";
+import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 
-const directories: string[] = [];
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
+import { storageDirectories } from "./helpers/storage-directories";
+import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
+
+const directories = storageDirectories(true);
 
 function registerTarget() {
   ActorRegistry.registerIdentity({ id: "target", kind: "human", trustTier: "owner" });
@@ -48,11 +43,7 @@ test.each([
   });
   directories.push(fixture.directory);
   registerTarget();
-  const result = await fixture.send({
-    to: { kind: "actor", actorId: "target" },
-    type: "message",
-    content: "hello",
-  });
+  const result = await fixture.send(actorMessage("target"));
   expect(result.isError).not.toBe(true);
   const handle = Gateway.SendMessageHandle.parse(JSON.parse(result.output));
   expect(keys).toEqual([handle.messageId]);
@@ -72,29 +63,13 @@ test.each([
 });
 
 test("ungranted app actor send is a compiled pre-denial, never an executed delivery", async () => {
-  let calls = 0;
-  const fixture = messageFixture("resident", {
-    deliveryRoutes: new Map([
-      [
-        "ws",
-        async () => {
-          calls += 1;
-          return { value: "accepted" as const };
-        },
-      ],
-    ]),
-    grants: () => [],
-  });
+  const { fixture, calls } = ungrantedActor("resident");
   directories.push(fixture.directory);
   registerTarget();
-  const result = await fixture.send({
-    to: { kind: "actor", actorId: "target" },
-    type: "message",
-    content: "hello",
-  });
+  const result = await fixture.send(actorMessage("target"));
   expect(result.isError).toBe(true);
   expect(result.output).toContain("message.resident.actor_grant");
-  expect(calls).toBe(0);
+  expect(calls()).toBe(0);
   expect(
     SessionHandleStore.tree(fixture.sessionId).filter((action) => action.kind === "message"),
   ).toEqual([]);

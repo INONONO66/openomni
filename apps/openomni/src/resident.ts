@@ -43,13 +43,18 @@ export interface ResidentOptions {
 
 /** Resident and worker use the same session-owned runner and dispatcher. */
 export function createResident(options: ResidentOptions) {
-  const definitionsFor = (id: string, role: LedgerSession.Role) => [
-    ...createTools(
-      { ...options.tools, clock: options.sessionRuntime.clock ?? Date.now },
-      { sessionId: id, role, depth: role === "resident" ? 0 : 1 },
-    ),
-    ...(options.toolDefinitions ?? []),
-  ];
+  const ports = { ...options.tools, clock: options.sessionRuntime.clock ?? Date.now };
+  const definitions = new Map<LedgerSession.Role, readonly AnyToolDefinition[]>();
+  const definitionsFor = (id: string, role: LedgerSession.Role) => {
+    const cached = definitions.get(role);
+    if (cached !== undefined) return cached;
+    const visible = [
+      ...createTools(ports, { sessionId: id, role }),
+      ...(options.toolDefinitions ?? []),
+    ];
+    definitions.set(role, visible);
+    return visible;
+  };
   const runnerFor =
     (row: LedgerSession.Row): SessionRunner =>
     async (input) => {
@@ -81,14 +86,6 @@ export function createResident(options: ResidentOptions) {
             systemPrompt: input.system,
             tools,
             toolChoice: tools.length === 0 ? "none" : "auto",
-            toolExecutor: (call, context) =>
-              evidenceOnly
-                ? Promise.resolve(refuseEvidenceOnly(call))
-                : dispatcher.execute(call, {
-                    sessionId: input.sessionId,
-                    turnId: input.turnId,
-                    ...(context?.signal === undefined ? {} : { signal: context.signal }),
-                  }),
             toolWave: (calls, signal) =>
               evidenceOnly
                 ? Promise.resolve(calls.map(refuseEvidenceOnly))

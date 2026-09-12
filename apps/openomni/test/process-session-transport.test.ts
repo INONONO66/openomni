@@ -1,15 +1,21 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { measuredEntry } from "./helpers/measured-entry";
 import type { SessionTransition } from "@openomni/protocol";
 import { createProcessSessionTransport } from "../src/composition/process-session";
 import { bounded } from "./helpers/protected-dispatch";
 
-const CHILD = join(import.meta.dir, "fixtures/process-session-child.ts");
+const CHILD = new URL("./fixtures/process-session-child.ts", import.meta.url).pathname;
+const ENTRY = new URL("../src/process-entry.ts", import.meta.url).pathname;
 
 function transport(scenario: string, answer?: SessionTransition.Resolution | Error) {
   const committed: string[][] = [];
   const answers: SessionTransition.Answer[] = [];
+  const ready = Promise.withResolvers<void>();
   return {
+    ready: ready.promise,
     committed,
     answers,
     sessions: createProcessSessionTransport({
@@ -19,7 +25,10 @@ function transport(scenario: string, answer?: SessionTransition.Resolution | Err
         model: { provider: "anthropic", id: "claude-opus-4-5" },
         apiKey: "process-key",
       },
-      committed: (ids) => committed.push([...ids]),
+      committed: (ids) => {
+        committed.push([...ids]);
+        ready.resolve();
+      },
       answer: async (value) => {
         answers.push(value);
         if (answer instanceof Error) throw answer;
@@ -50,6 +59,28 @@ test("an answer whose principal is not the authenticated child is refused", asyn
   expect(f.answers).toEqual([]);
 });
 
+test("native process entry validates and releases a request for a missing durable session", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "openomni-missing-session-"));
+  const request = {
+    sessionId: "MISSING_SESSION_SENTINEL",
+    dbPath: join(directory, "storage.sqlite"),
+    model: { provider: "anthropic", id: "fixture" },
+    apiKey: "fixture-key",
+  };
+  try {
+    const child = await measuredEntry(
+      new URL("../src/process-entry.ts", import.meta.url),
+      { PATH: process.env.PATH ?? "/usr/bin:/bin", OPENOMNI_DISABLE_MODELS_FETCH: "1" },
+      `${JSON.stringify(request)}\n`,
+    );
+    expect(child.exitCode).toBe(1);
+    expect(child.stderr).toContain(request.sessionId);
+    expect(child.stdout).not.toContain('"sessionIds"');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("a child exiting without settling surfaces its exit code", async () => {
   const f = transport("crash");
   await expect(bounded(f.sessions.wake("worker"))).rejects.toThrow(
@@ -64,7 +95,56 @@ test("closing the transport kills lingering children", async () => {
     () => "resolved" as const,
     (error: Error) => error.message,
   );
+  await bounded(f.ready);
   await bounded(f.sessions.close());
   expect(await bounded(settled)).toMatch(/^session process exited /);
-  expect(f.committed).toEqual([]);
+  expect(f.committed).toEqual([["worker"]]);
+});
+
+test("a doorbell is not successful settlement when the child crashes", async () => {
+  const f = transport("ack-crash");
+  await expect(bounded(f.sessions.wake("worker"))).rejects.toThrow(
+    "session process exited 2: worker",
+  );
+  expect(f.committed).toEqual([["worker"]]);
+  expect(f.answers).toEqual([]);
+});
+
+test("malformed child output rejects the wire rather than being acknowledged", async () => {
+  const f = transport("malformed");
+  try {
+    await expect(bounded(f.sessions.wake("worker"))).rejects.toBeInstanceOf(SyntaxError);
+    expect(f.answers).toEqual([]);
+    expect(f.committed).toEqual([]);
+  } finally {
+    await f.sessions.close();
+  }
+});
+
+test.each([
+  { input: "", code: 78, error: false },
+  { input: "{not-json}\n", code: 1, error: true },
+  { input: "{}\n", code: 1, error: true },
+])("real process entry validates its first request: %j", async ({ input, code, error }) => {
+  const child = Bun.spawn([process.execPath, ENTRY], {
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const output = Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  try {
+    child.stdin.write(input);
+    child.stdin.end();
+    expect(await bounded(child.exited)).toBe(code);
+    const [stdout, stderr] = await bounded(output);
+    expect(stdout).toBe("");
+    expect(stderr.length > 0).toBe(error);
+  } finally {
+    if (child.exitCode === null) child.kill();
+    await bounded(child.exited);
+  }
 });

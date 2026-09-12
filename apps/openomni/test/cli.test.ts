@@ -28,13 +28,20 @@ import {
   renderSystemdUnit,
   unitPath,
 } from "../src/cli/daemon";
-import { applyEnvFile, parseEnvFile, renderEnvFile, writeEnvFile } from "../src/cli/env-file";
+import {
+  applyEnvFile,
+  mergeEnvFile,
+  parseEnvFile,
+  renderEnvFile,
+  writeEnvFile,
+} from "../src/cli/env-file";
 import { ConfigurationError, parseWsPort } from "../src/config";
 import { runDoctor } from "../src/cli/doctor";
 import { processEntryPath } from "../src/process-entry-path";
 import type { DoctorPorts } from "../src/cli/doctor";
 import { main } from "../src/cli/main";
 import { gatherOnboarding } from "../src/cli/onboard";
+import { doctorStatuses, failedSystemdStop } from "./helpers/cli-fixtures";
 
 const directories: string[] = [];
 afterEach(() => {
@@ -109,6 +116,17 @@ describe("env file", () => {
     expect(
       readdirSync(dirname(path)).filter((name) => name.startsWith(`${basename(path)}.`)),
     ).toEqual([]);
+  });
+
+  test("merge preserves explicit empty values and does not mutate process env", () => {
+    const env = { OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: undefined };
+    expect(
+      Object.fromEntries(mergeEnvFile("OPENOMNI_MODEL_ID=file\nOPENOMNI_WS_PORT=4000", env)),
+    ).toEqual({
+      OPENOMNI_MODEL_ID: "",
+      OPENOMNI_WS_PORT: "4000",
+    });
+    expect(env).toEqual({ OPENOMNI_MODEL_ID: "", OPENOMNI_WS_PORT: undefined });
   });
 
   test("apply fills only unset keys; process env wins; missing file is a no-op", () => {
@@ -264,12 +282,12 @@ describe("daemon units", () => {
   });
 
   test("uninstall after a failed stop proceeds only when inactive AND disabled are proven", () => {
-    const io = fakeIo((argv) => {
-      if (argv[2] === "disable") return { code: 1, stdout: "", stderr: "boom" };
-      if (argv[2] === "is-active") return { code: 3, stdout: "inactive\n", stderr: "" };
-      if (argv[2] === "is-enabled") return { code: 1, stdout: "disabled\n", stderr: "" };
-      return ok;
-    });
+    const io = fakeIo(
+      failedSystemdStop(
+        { code: 3, stdout: "inactive\n", stderr: "" },
+        { code: 1, stdout: "disabled\n", stderr: "" },
+      ),
+    );
     io.files.set(unitPath(linuxTarget), "unit");
     expect(daemonUninstall(linuxTarget, io)).toContain("uninstalled");
   });
@@ -277,13 +295,13 @@ describe("daemon units", () => {
   test("uninstall keeps the unit when the process stopped but the enable symlink survived", () => {
     // A dangling enable symlink resurrects the service on reinstall; a
     // failed disable is not success just because the process is inactive.
-    const io = fakeIo((argv) => {
-      if (argv[2] === "disable")
-        return { code: 1, stdout: "", stderr: "could not remove default.target.wants" };
-      if (argv[2] === "is-active") return { code: 3, stdout: "inactive\n", stderr: "" };
-      if (argv[2] === "is-enabled") return { code: 0, stdout: "enabled\n", stderr: "" };
-      return ok;
-    });
+    const io = fakeIo(
+      failedSystemdStop(
+        { code: 3, stdout: "inactive\n", stderr: "" },
+        { code: 0, stdout: "enabled\n", stderr: "" },
+        "could not remove default.target.wants",
+      ),
+    );
     io.files.set(unitPath(linuxTarget), "unit");
     expect(() => daemonUninstall(linuxTarget, io)).toThrow("still enabled");
     expect(io.files.has(unitPath(linuxTarget))).toBe(true);
@@ -292,32 +310,19 @@ describe("daemon units", () => {
   test("uninstall keeps the unit when the stop fails and the state is transitional", () => {
     // `activating` is not `inactive`: deleting the unit here orphans a
     // daemon that is actively coming up.
-    const io = fakeIo((argv) => {
-      if (argv[2] === "disable") return { code: 1, stdout: "", stderr: "boom" };
-      if (argv[2] === "is-active") return { code: 0, stdout: "activating\n", stderr: "" };
-      return ok;
-    });
+    const io = fakeIo(failedSystemdStop({ code: 0, stdout: "activating\n", stderr: "" }));
     io.files.set(unitPath(linuxTarget), "unit");
     expect(() => daemonUninstall(linuxTarget, io)).toThrow("could not be stopped");
     expect(io.files.has(unitPath(linuxTarget))).toBe(true);
   });
 
-  test("darwin uninstall keeps the plist while the job is still loaded", () => {
+  test.each([
+    { code: 0, stdout: "state = waiting", stderr: "" },
+    { code: 1, stdout: "", stderr: "Operation not permitted" },
+  ])("darwin uninstall retains the plist without proof of unload: %j", (query) => {
     const io = fakeIo((argv) => {
       if (argv[1] === "bootout") return { code: 5, stdout: "", stderr: "busy" };
-      if (argv[1] === "print") return { code: 0, stdout: "state = waiting", stderr: "" };
-      return ok;
-    });
-    io.files.set(unitPath(darwinTarget), "plist");
-    expect(() => daemonUninstall(darwinTarget, io)).toThrow("may still be loaded");
-    expect(io.files.has(unitPath(darwinTarget))).toBe(true);
-  });
-
-  test("darwin uninstall treats a failed query as unknown, not as proof of unload", () => {
-    // Permission or IPC failures prove nothing about the job's state.
-    const io = fakeIo((argv) => {
-      if (argv[1] === "bootout") return { code: 5, stdout: "", stderr: "busy" };
-      if (argv[1] === "print") return { code: 1, stdout: "", stderr: "Operation not permitted" };
+      if (argv[1] === "print") return query;
       return ok;
     });
     io.files.set(unitPath(darwinTarget), "plist");
@@ -425,6 +430,40 @@ describe("onboarding", () => {
     ).rejects.toThrow("1 to 65535");
   });
 
+  test.each(["1", "80", "65535"])("onboarding accepts decimal port %s", async (port) => {
+    const entries = await gatherOnboarding(
+      scriptedAsk({
+        "Model id": "m",
+        "Model API key": "k",
+        "WebSocket port": port,
+      }),
+    );
+    expect(entries.find((entry) => entry.key === "OPENOMNI_WS_PORT")?.value).toBe(port);
+  });
+
+  test.each([
+    "1e2",
+    "0x50",
+    "+80",
+    "80.0",
+    "65536",
+    "invalid",
+    "0",
+  ])("onboarding rejects non-decimal or out-of-range port %s with the original error contract", async (port) => {
+    const result = gatherOnboarding(
+      scriptedAsk({
+        "Model id": "m",
+        "Model API key": "k",
+        "WebSocket port": port,
+      }),
+    );
+    await expect(result).rejects.toMatchObject({
+      constructor: Error,
+      name: "Error",
+      message: "WebSocket port must be an integer from 1 to 65535",
+    });
+  });
+
   test("secret prompts are flagged so the terminal never echoes them", async () => {
     const secretQuestions: string[] = [];
     await gatherOnboarding((question, options) => {
@@ -489,7 +528,7 @@ describe("doctor", () => {
       probeHealth: () => Promise.resolve(false),
     });
     expect(report.ok).toBe(false);
-    const byName = new Map(report.checks.map((check) => [check.name, check.status]));
+    const byName = doctorStatuses(report);
     expect(byName.get("env file")).toBe("warn");
     expect(byName.get("model config")).toBe("fail");
     expect(byName.get("daemon")).toBe("warn");
@@ -521,11 +560,28 @@ describe("doctor", () => {
     expect(byName.get("model config")).toBe("fail");
   });
 
+  test("an installed but inactive daemon fails diagnostics", async () => {
+    const report = await runDoctor({ ...healthyPorts, daemonActive: false });
+    expect(report.ok).toBe(false);
+    expect(report.checks.find((check) => check.name === "daemon")?.status).toBe("fail");
+  });
+
   test("installed daemon without linger warns", async () => {
     const report = await runDoctor({ ...healthyPorts, lingerEnabled: false });
     const byName = new Map(report.checks.map((check) => [check.name, check.status]));
     expect(byName.get("linger")).toBe("warn");
     expect(report.ok).toBe(true);
+  });
+
+  test("unsupported onboarding provider is refused before credentials", async () => {
+    let prompts = 0;
+    await expect(
+      gatherOnboarding(async () => {
+        prompts += 1;
+        return "unsupported";
+      }),
+    ).rejects.toBeInstanceOf(Error);
+    expect(prompts).toBe(1);
   });
 
   test("active daemon with unreachable health is a failure", async () => {
@@ -535,7 +591,7 @@ describe("doctor", () => {
       probeHealth: () => Promise.resolve(false),
     });
     expect(report.ok).toBe(false);
-    const byName = new Map(report.checks.map((check) => [check.name, check.status]));
+    const byName = doctorStatuses(report);
     expect(byName.get("model config")).toBe("fail");
     expect(byName.get("health")).toBe("fail");
   });

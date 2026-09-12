@@ -65,6 +65,38 @@ export function messageMaterialization(input: {
   };
 }
 
+function sessionDepth(
+  parentId: string | null,
+  rows: ReturnType<typeof SessionHandleStore.listRows>,
+) {
+  let depth = 1;
+  let parent = parentId;
+  while (parent !== null) {
+    depth += 1;
+    parent = rows.find((row) => row.id === parent)?.parentId ?? null;
+  }
+  return depth;
+}
+
+function recipientRelation(
+  source: ReturnType<typeof SessionHandleStore.row>,
+  recipient: ReturnType<typeof SessionHandleStore.row> | undefined,
+  send: Parameters<Ports["prepare"]>[1],
+) {
+  return {
+    ...(recipient === undefined
+      ? send.to.kind === "new_session"
+        ? { targetRole: send.to.role }
+        : {}
+      : { targetRole: recipient.role }),
+    parentChild:
+      recipient === undefined ||
+      recipient.id === source.id ||
+      recipient.parentId === source.id ||
+      source.parentId === recipient.id,
+  };
+}
+
 export function prepareMessage(
   materialize: (
     id: string,
@@ -152,12 +184,7 @@ export function prepareMessage(
     const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
     if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
       throw new Error("child admission bounds missing from pinned policy");
-    let depth = 1;
-    let parent = source.parentId;
-    while (parent !== null) {
-      depth += 1;
-      parent = rows.find((row) => row.id === parent)?.parentId ?? null;
-    }
+    const depth = sessionDepth(source.parentId, rows);
     return {
       target,
       ...(outbound === undefined
@@ -177,17 +204,8 @@ export function prepareMessage(
         sender: "session",
         senderRole: source.role,
         targetKind: send.to.kind,
-        ...(recipient === undefined
-          ? send.to.kind === "new_session"
-            ? { targetRole: send.to.role }
-            : {}
-          : { targetRole: recipient.role }),
+        ...recipientRelation(source, recipient, send),
         type: send.type,
-        parentChild:
-          recipient === undefined ||
-          recipient.id === source.id ||
-          recipient.parentId === source.id ||
-          source.parentId === recipient.id,
         fanout: SessionHandleStore.openChildCount(source.id),
         depth,
         // Mandatory terminal mail answers the original request. Its existing
