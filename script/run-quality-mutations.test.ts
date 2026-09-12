@@ -46,6 +46,9 @@ test("process receipts preserve executed failure context, including signals", as
   expect(failed.signal).toBeNull();
   expect(failed.stderr).toBe("candidate failed");
   expect(failed.stderrSha256).toBe(sha256("candidate failed"));
+  const redacted = await execute([process.execPath, "-e", "process.exit(3)", "--token=inline-secret", "--name", "public"], process.cwd(), 5000, {}, "redaction-test");
+  expect(redacted.argv).toEqual([process.execPath, "-e", "process.exit(3)", "--token=[redacted]", "--name", "public"]);
+  expect(JSON.stringify(redacted)).not.toContain("inline-secret");
   const signaled = await execute([process.execPath, "-e", "process.kill(process.pid, 'SIGTERM')"], process.cwd(), 5000, {}, "signal-test");
   expect(signaled.stage).toBe("signal-test");
   expect(signaled.exitCode).toBeNull();

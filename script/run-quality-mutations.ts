@@ -113,6 +113,7 @@ type Options = {
 
 let failure: { code: string; message: string } | null = null;
 let lastProcessFailure: ProcessReceipt | null = null;
+let setupProcessFailure: ProcessReceipt | null = null;
 class MutationError {
 	readonly name = "MutationError";
 	constructor(
@@ -305,7 +306,11 @@ export async function execute(
 ): Promise<ProcessReceipt> {
 	const redactedArgv = argv.map((value, index) => {
 		const previous = argv[index - 1]?.toLowerCase() ?? "";
-		return /(?:token|secret|password|credential|key)/.test(previous) ? "[redacted]" : value;
+		const inline = value.match(/^--([^=]+)=/i)?.[1]?.toLowerCase() ?? "";
+		if (!previous.includes("=") && /(?:token|secret|password|credential|api-key|access-key)/.test(previous)) return "[redacted]";
+		if (inline && /(?:token|secret|password|credential|api-key|access-key)/.test(inline))
+			return `${value.slice(0, value.indexOf("=") + 1)}[redacted]`;
+		return value;
 	});
 	const output = { stdout: "", stderr: "" };
 	const hashes = { stdout: new Bun.CryptoHasher("sha256"), stderr: new Bun.CryptoHasher("sha256") };
@@ -376,7 +381,7 @@ export async function execute(
 			stderrSha256: hashes.stderr.digest("hex"),
 			cleanupExit: terminate(),
 		};
-		if (broken(receipt)) lastProcessFailure = receipt;
+			if (broken(receipt) || receipt.exitCode !== 0) lastProcessFailure = receipt;
 		return receipt;
 	} catch {
 		const receipt = {
@@ -1491,12 +1496,16 @@ async function canonicalVerification(options: Options): Promise<ProcessReceipt> 
 		],
 		options.root,
 		options.timeout,
+		{},
+		"setup-canonical-inventory",
 	);
-	if (broken(receipt) || receipt.exitCode !== 0)
+	if (broken(receipt) || receipt.exitCode !== 0) {
+		setupProcessFailure = receipt;
 		return fail(
 			"incompleteInventory",
 			`Canonical inventory verification failed: ${receipt.stderr.slice(0, 2000)}`,
 		);
+	}
 	if (JSON.stringify(decode(receipt.stdout)) !== JSON.stringify(readJson(options.inventory)))
 		return fail("incompleteInventory", "Canonical verification returned a different inventory");
 	return receipt;
@@ -1807,6 +1816,7 @@ async function campaign(options: Options): Promise<number> {
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
 	failure = null;
 	lastProcessFailure = null;
+	setupProcessFailure = null;
 	try {
 		if (!["1.3.6", "1.4.1"].includes(Bun.version) || ts.version !== "5.9.2")
 			return fail(
@@ -1846,7 +1856,7 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 						code: "infrastructure",
 						message: "Unhandled filesystem, compiler or process failure",
 					}),
-					...(lastProcessFailure ? { process: lastProcessFailure } : {}),
+					...(setupProcessFailure ? { process: setupProcessFailure } : {}),
 				},
 			}),
 		);
