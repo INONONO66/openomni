@@ -74,3 +74,5 @@
 - Final parser integration test run exited 0. Previous long pilot was explicitly canceled to free branch concurrency for final parser revision; cancellation is not campaign SIGTERM evidence.
 
 - Hosted full baseline confirmed from canceled superseded run: 4417 tests, 0 failures, all 13 batch exit codes 0 at 07:08:16Z; mutant 1/5 started. Final pilot 34680745306 remains running; no rerun to mask failures. New main commits made PR conflicted; resolving before final checks.
+
+- Merged main #1050 shard rebalance; retained its move of compiler tests into run-quality-mutations-compiler.test.ts and retained this branch analysis-test imports. Resolved scratch REPORT.md conflict in favor of mutation task evidence.

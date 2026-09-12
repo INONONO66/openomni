@@ -8,19 +8,17 @@ const Step = z.object({
   if: z.string().optional(),
   with: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional(),
 });
+const Job = z.object({
+  needs: z.union([z.string(), z.array(z.string())]).optional(),
+  steps: z.array(Step),
+});
 const Workflow = z.object({
   on: z.object({
     push: z.object({ branches: z.array(z.string()), paths: z.array(z.string()).optional() }),
     pull_request: z.object({ paths: z.array(z.string()) }),
     schedule: z.array(z.object({ cron: z.string() })),
   }),
-  jobs: z.record(
-    z.string(),
-    z.object({
-      needs: z.union([z.string(), z.array(z.string())]).optional(),
-      steps: z.array(Step),
-    }),
-  ),
+  jobs: z.object({ benchmark: Job, memory: Job, publish: Job }),
 });
 const workflow = Workflow.parse(
   YAML.parse(await Bun.file(new URL("../.github/workflows/benchmark.yml", import.meta.url)).text()),
@@ -37,7 +35,7 @@ test("benchmark PRs select benchmark inputs while main and schedules stay full",
 });
 
 test("benchmark input is validated before collection starts", () => {
-  const steps = workflow.jobs.benchmark?.steps ?? [];
+  const steps = workflow.jobs.benchmark.steps;
   const validation = steps.findIndex((step) => step.run?.includes("--validate-input"));
   const collection = steps.findIndex((step) => step.run?.includes("seq 1"));
   expect(validation).toBeGreaterThanOrEqual(0);
@@ -45,7 +43,7 @@ test("benchmark input is validated before collection starts", () => {
 });
 
 test("failed benchmark comparisons cannot publish a new reference", () => {
-  const steps = workflow.jobs.publish?.steps ?? [];
+  const steps = workflow.jobs.publish.steps;
   const comparison = steps.findIndex((step) =>
     step.uses?.startsWith("benchmark-action/github-action-benchmark@"),
   );
@@ -58,10 +56,22 @@ test("failed benchmark comparisons cannot publish a new reference", () => {
   expect(steps[publication]?.if).toBe("success()");
 });
 
+test("PR and dispatch comparisons read accepted history without publishing", () => {
+  const steps = workflow.jobs.benchmark.steps;
+  const comparison = steps.find((step) => step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"));
+  expect(comparison?.if).toBe("github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'");
+  expect(comparison?.run).toContain("git fetch --no-tags origin gh-pages");
+  expect(comparison?.run).toContain("bun run script/check-benchmark-regression.ts");
+  expect(steps.some((step) => step.run?.includes("git push"))).toBe(false);
+  expect(steps.findIndex((step) => step === comparison)).toBeGreaterThan(
+    steps.findIndex((step) => step.run === "bun run script/summarize-benchmark-runs.ts"),
+  );
+});
+
 test("memory guards do not prevent collection artifacts or comparison", () => {
   expect(workflow.jobs.memory).toBeDefined();
-  expect(workflow.jobs.publish?.needs).toBe("benchmark");
-  const steps = workflow.jobs.benchmark?.steps ?? [];
+  expect(workflow.jobs.publish.needs).toBe("benchmark");
+  const steps = workflow.jobs.benchmark.steps;
   expect(steps.some((step) => step.run?.includes("memory-regression.bench.ts"))).toBe(false);
   const upload = steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
   expect(upload?.if).toBe("always()");
