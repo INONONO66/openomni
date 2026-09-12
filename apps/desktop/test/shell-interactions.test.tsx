@@ -1,16 +1,18 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
+import { Chat } from "@ai-sdk/react";
 import { Timeline } from "@openomni/ui";
 import { Window } from "happy-dom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../src/renderer/app";
+import { SessionContent } from "../src/renderer/chat/session-content";
 import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
 import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
-import { activeTab, consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { activeTab, consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
 import { installGlobals } from "./helpers";
 
 test("mounted shell restores preferences, navigates, creates and searches sessions", async () => {
@@ -169,6 +171,55 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
   } finally {
     await act(() => root.unmount());
     client.clear();
+    consoleStore.setState(() => INITIAL_CLIENT_STATE);
+    host.remove();
+    restoreGlobals();
+    await window.happyDOM.close();
+  }
+});
+
+test("SessionContent sends approval responses through its Chat", async () => {
+  const window = new Window({ url: "http://localhost" });
+  const restoreGlobals = installGlobals({
+    window,
+    document: window.document,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const sessionId = createSession(0);
+  const session = consoleStore.state.sessions[0];
+  if (!session) throw new Error("expected session");
+  const chat = new Chat<OpenOmniUIMessage>({
+    id: sessionId,
+    messages: [{
+      id: "approval-message",
+      role: "assistant",
+      parts: [{
+        type: "tool-bash",
+        toolCallId: "build",
+        state: "approval-requested",
+        input: { command: "build" },
+        approval: { id: "approval" },
+      }],
+    }],
+  });
+  try {
+    await act(() => root.render(<SessionContent session={session} chat={chat} transport={null} notice={undefined} />));
+    const approve = host.querySelector<HTMLButtonElement>("[data-approve]");
+    expect(approve).not.toBeNull();
+    await act(() => approve?.click());
+    expect(chat.messages[0]?.parts[0]).toMatchObject({ state: "approval-responded", approval: { approved: true } });
+  } finally {
+    await act(() => root.unmount());
     consoleStore.setState(() => INITIAL_CLIENT_STATE);
     host.remove();
     restoreGlobals();
