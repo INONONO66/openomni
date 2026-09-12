@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { SIDEBAR_WIDTH } from "@openomni/ui";
 import {
-  activePlace,
+  activeTab,
   activeTab,
   back,
   canGoBack,
@@ -112,7 +112,7 @@ describe("selection, groups and drafts", () => {
     newSessionTab();
     navigate(first.place);
     expect(currentTab()).toBe(first);
-    expect(activePlace(consoleStore.state)).toEqual(first.place);
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual(first.place);
     expect(consoleStore.state.tabs).toHaveLength(2);
   });
 
@@ -143,9 +143,9 @@ describe("tab history has browser semantics", () => {
     navigate({ kind: "route", route: "inbox" });
     back();
     back();
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: first });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: first });
     forward();
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: second });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: second });
     expect(canGoBack(currentTab().history)).toBe(true);
     expect(canGoForward(currentTab().history)).toBe(true);
   });
@@ -179,7 +179,7 @@ describe("tab history has browser semantics", () => {
     jumpTo(0);
     expect(currentTab().history.cursor).toBe(0);
     expect(currentTab().history.entries).toHaveLength(3);
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "sessions" });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "sessions" });
   });
 
   test("empty strips and invalid boundaries leave state unchanged", () => {
@@ -189,7 +189,7 @@ describe("tab history has browser semantics", () => {
     jumpTo(0);
     expect(consoleStore.state).toBe(empty);
     expect(activeTab(empty)).toBeNull();
-    expect(activePlace(empty)).toBeNull();
+    expect(activeTab(empty)?.place ?? null).toBeNull();
     openTab({ kind: "route", route: "sessions" });
     const before = consoleStore.state;
     for (const cursor of [-1, 1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) jumpTo(cursor);
