@@ -1889,7 +1889,8 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 		return await campaign(optionsFrom(values));
 	} catch (error) {
 		const caught = error instanceof Error ? error.message : String(error);
-		failure = { code: "infrastructure", message: caught };
+		const prior = failure as { code: string; message: string } | null;
+		failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
 		console.log(
 			JSON.stringify({
 				version: 1,
