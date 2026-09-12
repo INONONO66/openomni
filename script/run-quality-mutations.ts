@@ -870,12 +870,29 @@ function instrumentSingle(source: string, site: Site, marker: string): string {
 	const expression = `(${probe},(${original}))`;
 	return replace(source, site.start, site.end, site.mode === "jsx" ? `{${expression}}` : expression);
 }
+type ReachInsertion = { offset: number; order: number; text: string };
+function reachInsertions(source: string, row: ReachSite, directory: string, index: number): ReachInsertion[] {
+	const { site } = row;
+	const marker = join(directory, row.id);
+	if (site.mode === "case") {
+		const offset = caseInsertion(source, site);
+		return [{ offset, order: index, text: `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1");` }];
+	}
+	// Use exactly the single-site wrapper, but retain original offsets when
+	// nesting wrappers. Replacing an outer span would truncate inner probes.
+	const single = instrumentSingle(source, site, marker);
+	const added = single.length - source.length;
+	const closeLength = site.mode === "statement" ? 1 : site.mode === "jsx" ? 3 : 2;
+	return [
+		{ offset: site.start, order: index, text: single.slice(site.start, site.start + added - closeLength) },
+		{ offset: site.end, order: -index - 1, text: single.slice(site.end + added - closeLength, site.end + added) },
+	];
+}
 export function instrument(source: string, sites: ReachSite[], directory: string): string {
-	const [only] = sites;
-	if (only && sites.length === 1) return instrumentSingle(source, only.site, join(directory, only.id));
-	// Insert against original offsets; nested sites must not shift or overwrite one another.
-	const ordered = [...sites].sort((a, b) => b.site.start - a.site.start || a.site.end - b.site.end);
-	return ordered.reduce((result, row) => instrumentSingle(result, row.site, join(directory, row.id)), source);
+	const ordered = [...sites].sort((a, b) => a.site.start - b.site.start || b.site.end - a.site.end);
+	const edits = ordered.flatMap((row, index) => reachInsertions(source, row, directory, index));
+	edits.sort((a, b) => b.offset - a.offset || b.order - a.order);
+	return edits.reduce((result, edit) => replace(result, edit.offset, edit.offset, edit.text), source);
 }
 function gitCopyCommand(root: string, args: string[]): string {
 	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -1100,35 +1117,23 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		if (!candidate.operator.startsWith("py-")) byPath.set(candidate.path, [...(byPath.get(candidate.path) ?? []), candidate]);
 	for (const [candidatePath, rows] of byPath) {
 		const source = mutationSource(directory, candidatePath);
-		if (rows[0]?.operator.startsWith("py-")) {
-			const sites = join(directory, "python-sites.json");
-			writeFileSync(sites, JSON.stringify(rows.map((row) => ({ ...row.site, marker: join(markers, row.id) }))));
-			const process = await pythonWorker(options, source.source, directory, "reach", undefined, undefined, sites);
-			if (process.exitCode !== 0) throw new MutationError("reachMap", "Python reach instrumentation failed");
-			writeMutation(source, text(object(decode(process.stdout)).source));
-		} else {
-			const unique = [...new Map(rows.map((row) => [`${row.site.start}:${row.site.end}:${row.site.mode}`, row])).values()];
-			const active = unique.filter((row) => !unique.some((other) => other !== row && other.site.start <= row.site.start && other.site.end >= row.site.end && (other.site.start < row.site.start || other.site.end > row.site.end)));
-			const instrumented = instrument(source.source, active.map((row) => ({ id: row.id, path: row.path, sourceSha256: row.sourceSha256, site: row.site, tests })), markers);
-			writeMutation(source, instrumented);
-		}
+		const unique = [...new Map(rows.map((row) => [`${row.site.start}:${row.site.end}:${row.site.mode}`, row])).values()];
+		writeMutation(source, instrument(source.source, unique.map((row) => ({ ...row, tests })), markers));
 	}
 	const map = new Map<string, ProbeEvidence>();
 	for (const candidate of candidates) map.set(candidate.id, { reached: false, markerSha256: sha256(""), tests: [] });
 	const runs: { test: string; receipt: TestSelectionReceipt }[] = [];
 	for (const test of tests) {
 		if (readFileSync(join(directory, test), "utf8").trim() === "") continue;
+		rmSync(markers, { recursive: true, force: true });
+		mkdirSync(markers);
 		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout);
 		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0)
 			throw new MutationError("reachMap", `Reach test is not green: ${test}`);
 		runs.push({ test, receipt });
 		for (const candidate of candidates) {
 			const first = candidates.filter((row) => row.path === candidate.path && JSON.stringify(row.site) === JSON.stringify(candidate.site)).at(-1) ?? candidate;
-			let marker = join(markers, first.id);
-			if (!existsSync(marker)) {
-				const covering = candidates.find((row) => row.path === candidate.path && existsSync(join(markers, row.id)));
-				if (covering) marker = join(markers, covering.id);
-			}
+			const marker = join(markers, first.id);
 			if (!existsSync(marker)) continue;
 			const evidence = map.get(candidate.id);
 			if (evidence) {
