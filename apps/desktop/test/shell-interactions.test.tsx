@@ -10,8 +10,7 @@ import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
-import { consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
-import { activePlace } from "../src/renderer/state/selectors";
+import { activeTab, consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
 import { installGlobals } from "./helpers";
 
 test("mounted shell restores preferences, navigates, creates and searches sessions", async () => {
@@ -60,12 +59,12 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     expect(consoleStore.state.sidebarOpen).toBe(true);
     expect(window.localStorage.getItem(SIDEBAR_OPEN_KEY)).toBe("true");
     await click('[data-ui="Sidebar.Nav"] button:nth-child(2)');
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "inbox" });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "inbox" });
     // A plain click moves the current tab (the empty column materializes exactly one); it never grows the strip.
     const tabsBefore = consoleStore.state.tabs.length;
     expect(tabsBefore).toBe(1);
     await click('[data-ui="Sidebar.Nav"] button:nth-child(4)');
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "memory" });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "memory" });
     expect(consoleStore.state.tabs.length).toBe(tabsBefore);
     await act(() =>
       window.document
@@ -73,7 +72,7 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
         ?.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true })),
     );
     expect(consoleStore.state.tabs.length).toBe(tabsBefore + 1);
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "automations" });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "automations" });
     await act(() => key("["));
     expect(consoleStore.state.sidebarOpen).toBe(false);
     await act(() => key("["));
@@ -82,12 +81,12 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     expect(consoleStore.state.sessions).toHaveLength(1);
     const selected = consoleStore.state.sessions[0]?.id ?? "";
     expect(selected).not.toBe("");
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: selected });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: selected });
     expect(host.querySelector("textarea")?.disabled).toBe(true);
     await click('button[aria-label="New session"]');
     expect(consoleStore.state.sessions).toHaveLength(2);
     await click(`#session-row-${selected}`);
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: selected });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: selected });
     await click('[data-ui="SectionHeader.Toggle"]');
     expect(host.querySelector('[role="combobox"]')).not.toBeNull();
     await act(() =>
