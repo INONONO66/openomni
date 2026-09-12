@@ -172,12 +172,23 @@ test("emits a concrete cross-package guard type", () => {
     `import { NamedError } from "@openomni/protocol";
 import { z } from "zod";
 const ConcreteError = NamedError.create("ConcreteError", z.object({ message: z.string(), detail: z.number() }));
+class DerivedError extends ConcreteError {
+  derivedOnly(): string { return "derived"; }
+}
 declare const error: Error;
 if (ConcreteError.isInstance(error)) {
   const message: string = error.data.message;
   const detail: number = error.data.detail;
   const missing: string = error.data.missing;
   const wrong: number = error.data.message;
+}
+const guard = ConcreteError.isInstance;
+if (guard(error)) {
+  const detachedMessage: string = error.data.message;
+}
+if (DerivedError.isInstance(error)) {
+  const subclassMessage: string = error.data.message;
+  const subclassOnly: string = error.derivedOnly();
 }
 `,
   );
@@ -189,12 +200,15 @@ if (ConcreteError.isInstance(error)) {
       strict: true,
       skipLibCheck: true,
       baseUrl: fixtureDirectory,
-      paths: { "@openomni/protocol": [join(packageRoot, "dist", "index.d.ts")] },
+      paths: {
+        "@openomni/protocol": [join(packageRoot, "dist", "index.d.ts")],
+        zod: [join(packageRoot, "node_modules", "zod", "index.d.ts")],
+      },
     });
     const diagnostics = ts
       .getPreEmitDiagnostics(program)
       .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
-    expect(diagnostics.map((diagnostic) => diagnostic.code).sort()).toEqual([2322, 2339]);
+    expect(diagnostics.map((diagnostic) => diagnostic.code).sort()).toEqual([2322, 2339, 2339]);
   } finally {
     rmSync(fixtureDirectory, { recursive: true, force: true });
   }
