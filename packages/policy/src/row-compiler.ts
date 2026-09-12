@@ -53,6 +53,10 @@ type CompileErrorOptions = Omit<z.input<typeof CompileErrorData>, "message"> & {
 };
 
 export class PolicyCompileError extends PolicyCompileErrorBase {
+  static isInstance(input: unknown): input is PolicyCompileError {
+    return input instanceof PolicyCompileError && PolicyCompileErrorBase.isInstance(input);
+  }
+
   constructor(options: CompileErrorOptions) {
     super({
       ...options,
