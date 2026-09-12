@@ -58,6 +58,18 @@ test("failed benchmark comparisons cannot publish a new reference", () => {
   expect(steps[publication]?.if).toBe("success()");
 });
 
+test("PR and dispatch comparisons read accepted history without publishing", () => {
+  const steps = workflow.jobs.benchmark?.steps ?? [];
+  const comparison = steps.find((step) => step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"));
+  expect(comparison?.if).toBe("github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'");
+  expect(comparison?.run).toContain("git fetch --no-tags origin gh-pages");
+  expect(comparison?.run).toContain("bun run script/check-benchmark-regression.ts");
+  expect(steps.some((step) => step.run?.includes("git push"))).toBe(false);
+  expect(steps.findIndex((step) => step === comparison)).toBeGreaterThan(
+    steps.findIndex((step) => step.run === "bun run script/summarize-benchmark-runs.ts"),
+  );
+});
+
 test("memory guards do not prevent collection artifacts or comparison", () => {
   expect(workflow.jobs.memory).toBeDefined();
   expect(workflow.jobs.publish?.needs).toBe("benchmark");
