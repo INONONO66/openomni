@@ -1,7 +1,7 @@
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { SIDEBAR_WIDTH } from "@openomni/ui";
 import {
-  activePlace,
   activeTab,
   back,
   canGoBack,
@@ -16,14 +16,13 @@ import {
   newSessionTab,
   openTab,
   setDraft,
-  setSessionTitleIfPlaceholder,
   setSidebarFloating,
   setSidebarOpen,
   setSidebarWidth,
-  tabTitle,
   toggleProject,
   toggleSidebar,
 } from "../src/renderer/state/store";
+import { placeTitle } from "../src/renderer/state/selectors";
 
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
@@ -94,14 +93,14 @@ describe("session creation and titles", () => {
     setSessionTitleIfPlaceholder(id, " New Session ");
     setSessionTitleIfPlaceholder(id, "replacement");
     expect(consoleStore.state.sessions[0]?.titleSource).toBe("prompt");
-    expect(tabTitle(tab)).toBe("New Session");
+    expect(placeTitle(tab.place)).toBe("New Session");
     const other = createSession(2);
     openTab({ kind: "session", sessionId: other });
     const otherTab = currentTab();
     setSessionTitleIfPlaceholder(other, "  earned title  ");
-    expect(tabTitle(otherTab)).toBe("earned title");
+    expect(placeTitle(otherTab.place)).toBe("earned title");
     openTab({ kind: "route", route: "inbox" });
-    expect(tabTitle(currentTab())).toBe("Inbox");
+    expect(placeTitle(currentTab().place)).toBe("Inbox");
   });
 });
 
@@ -112,7 +111,7 @@ describe("selection, groups and drafts", () => {
     newSessionTab();
     navigate(first.place);
     expect(currentTab()).toBe(first);
-    expect(activePlace(consoleStore.state)).toEqual(first.place);
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual(first.place);
     expect(consoleStore.state.tabs).toHaveLength(2);
   });
 
@@ -143,9 +142,9 @@ describe("tab history has browser semantics", () => {
     navigate({ kind: "route", route: "inbox" });
     back();
     back();
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: first });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: first });
     forward();
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "session", sessionId: second });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: second });
     expect(canGoBack(currentTab().history)).toBe(true);
     expect(canGoForward(currentTab().history)).toBe(true);
   });
@@ -179,7 +178,7 @@ describe("tab history has browser semantics", () => {
     jumpTo(0);
     expect(currentTab().history.cursor).toBe(0);
     expect(currentTab().history.entries).toHaveLength(3);
-    expect(activePlace(consoleStore.state)).toEqual({ kind: "route", route: "sessions" });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "sessions" });
   });
 
   test("empty strips and invalid boundaries leave state unchanged", () => {
@@ -189,7 +188,7 @@ describe("tab history has browser semantics", () => {
     jumpTo(0);
     expect(consoleStore.state).toBe(empty);
     expect(activeTab(empty)).toBeNull();
-    expect(activePlace(empty)).toBeNull();
+    expect(activeTab(empty)?.place ?? null).toBeNull();
     openTab({ kind: "route", route: "sessions" });
     const before = consoleStore.state;
     for (const cursor of [-1, 1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) jumpTo(cursor);

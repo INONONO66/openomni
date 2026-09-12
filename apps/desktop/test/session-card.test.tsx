@@ -1,3 +1,5 @@
+import { setSessionAttention } from "../src/renderer/state/session-actions";
+import { setSessionPhase } from "../src/renderer/state/session-actions";
 import { beforeEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -9,8 +11,6 @@ import {
   consoleStore,
   INITIAL_CLIENT_STATE,
   openTab,
-  setSessionPhase,
-  setSessionAttention,
 } from "../src/renderer/state/store";
 import type { SessionPhase } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";

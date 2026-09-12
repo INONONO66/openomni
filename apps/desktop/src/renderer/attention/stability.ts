@@ -28,14 +28,3 @@ export function applyAtBoundary(held: Held, ideal: Ordered, boundary: Boundary |
   }
   return { shown: ideal, pendingChanges: 0 };
 }
-
-/**
- * The idle breakpoint: `userBusy` has been false for long enough that the Owner
- * is reading rather than acting. Two seconds is the spec's figure — long enough
- * that a pause between keystrokes does not count as idle.
- */
-export const IDLE_BOUNDARY_MS = 2000;
-
-export function idleBoundaryReached(idleForMs: number): boolean {
-  return idleForMs >= IDLE_BOUNDARY_MS;
-}

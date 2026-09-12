@@ -8,6 +8,8 @@ Desktop/ui ownership updated on `feat/desktop-tabs` (2026-09-07; `docs/desktop-s
 
 Policy ownership updated on `q945/policy` (PR #1030, 2026-09-09): the unconsumed general effect-composition implementation and its 29 tests are removed, not replaced. Compiled-row and permission evaluation remain; `Policy.EffectiveDecision` is retained protocol schema debt, not a live composition capability. See `docs/implementation-status.md`.
 
+Desktop internals cleanup on `refactor/desktop-cleanup` (PR #1047, reapplied 2026-09-12 onto `b3c3822f`): `state/selectors.ts` owns the shared session index and read-only derivations; `chat/session-content.tsx` binds SDK content while App keeps Chat ownership. Whole-store render/clock cadence, preference writes, preload validation, the desktop bridge, `SessionRow`, turn-cost mapping and UI contracts are unchanged. No development global is exposed. Source inventory: `docs/desktop-shell.md`.
+
 ## OVERVIEW
 
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
