@@ -44,6 +44,13 @@ test("mutation main rejects an invalid invocation in process", async () => {
 const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
 
+function expectRestoredResults(result: RecordValue, count: number): void {
+	const selected = rows(result.selected).map(record);
+	expect(selected).toHaveLength(count);
+	expect(new Set(selected.map((row) => String(row.id))).size).toBe(count);
+	expect(selected.every((row) => row.restored === true)).toBe(true);
+}
+
 test("fixture argument replacement is pure and rejects incomplete pairs", () => {
   const argv = ["runner", "--root", "before", "--limit", "1"];
   expect(replaceArguments(argv, ["--root", "after", "--limit", "2"])).toEqual(["runner", "--root", "after", "--limit", "2"]);
@@ -221,9 +228,8 @@ test("same-site replacements use the campaign reach map and preserve candidate r
 	);
 	const result = await invoke(input, "same-site-reuse", ["--target", "src/a.ts", "--operator", "relational", "--limit", "2"]);
 	expect(result.code).toBe(1);
-	expect(result.selected).toHaveLength(2);
-	expect(new Set(result.selected.map((row) => String(row.id))).size).toBe(2);
-	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)) && row.restored === true)).toBe(true);
+	expectRestoredResults(result, 2);
+	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)))).toBe(true);
 	// The reach map is recorded once for the campaign; each mutant has only
 	// compiler + mutation receipts.
 	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
@@ -236,9 +242,7 @@ test("same-line distinct Sites retain independent reach evidence", async () => {
 	);
 	const result = await invoke(input, "same-line-distinct-sites", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"]);
 	expect(result.code).toBe(1);
-	expect(result.selected).toHaveLength(2);
-	expect(new Set(result.selected.map((row) => String(row.id))).size).toBe(2);
-	expect(result.selected.every((row) => row.restored === true)).toBe(true);
+	expectRestoredResults(result, 2);
 	// Reach is campaign-scoped; each mutant has compiler and mutation receipts.
 	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
 }, 90000);
