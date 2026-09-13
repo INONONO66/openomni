@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { planChanges } from "./ci-plan";
+import { hasCompleteQualityProof } from "./quality-proof";
 import { digest } from "./quality-inventory";
 import { TOPOLOGY, type WorkspaceTopology } from "./topology";
 
@@ -298,6 +299,18 @@ test("a scoped PR remeasures sources whose baseline evidence is stale", () => {
   expect(plan.qualityScope).toContain(unmeasured);
   expect(plan.lanes).toContain("desktopApp");
   expect(plan.lanes).toContain("scripts-tooling-4");
+});
+
+test("quality proof accepts exact base bytes and rejects an unproven source", () => {
+  using repo = fixture();
+  const other = "script/other.ts";
+  writeFileSync(join(repo.root, other), "export const other = 1;\n");
+  const base = repo.snapshot();
+  const planned = planChanges(["packages/machines/src/test.ts"], false, TOPOLOGY, repo.root);
+  const plan = { ...planned, qualityScope: ["script/fixture.ts"], toolingTests: false, full: false, verify: true };
+  expect(hasCompleteQualityProof(repo.root, base, plan)).toBe(false);
+  const full = planChanges(undefined, true, TOPOLOGY, repo.root);
+  expect(hasCompleteQualityProof(repo.root, base, full)).toBe(true);
 });
 
 test("fails the actual CLI when PR input is absent", () => {

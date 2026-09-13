@@ -20,7 +20,6 @@ function readBaseline(root: string, base: string): Proof {
 		sha256: new Map(Object.entries(raw).map(([path, value]) => [path, jsonString(value)])),
 	};
 }
-
 function sourceAt(root: string, base: string, path: string): string | undefined {
 	const result = Bun.spawnSync(["git", "show", `${base}:${path}`], {
 		cwd: root,
@@ -44,13 +43,4 @@ export function hasCompleteQualityProof(root: string, base: string, plan: CiPlan
 			const baseSource = sourceAt(root, base, source.path);
 			return expected !== undefined && baseSource !== undefined && digest(baseSource) === expected;
 		});
-}
-
-export function applyQualityProof(
-	plan: CiPlan,
-	root: string,
-	base: string,
-	full: () => CiPlan,
-): CiPlan {
-	return hasCompleteQualityProof(root, base, plan) ? plan : { ...full(), reason: "unproven-quality-scope" };
 }
