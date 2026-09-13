@@ -190,7 +190,7 @@ test("native collectors transfer receipts and finish joins fresh coverage throug
 		const current = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [
 			normalizeTypes(native("types"), identity),
 			...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement,
-		]);
+		], metrics.executableLines);
 		writeFileSync(join(root, "baseline.json"), JSON.stringify(current));
 		writeFileSync(join(root, "plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"], matrix: { include: [{ dir: "script", coverage: true }] } }));
 		mkdirSync(join(root, "coverage"));
@@ -247,7 +247,7 @@ test("finish preserves full-tier bytes and carries only hash-proven scoped debt"
     for (const leg of legs) expect(await measureMain(["collect", "--root", root, "--leg", leg, "--output", "legacy"])).toBe(0);
     const native = (leg: string) => jsonObject(readDocument(join(root, "legacy", `${leg}.json`))).document ?? null;
     const metrics = joinBounds(parseStatic(readDocument(join(root, "legacy/metrics.json"))), { identity, lines, selectedLanes: ["script"] });
-    const before = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [normalizeTypes(native("types"), identity), ...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement]);
+    const before = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [normalizeTypes(native("types"), identity), ...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement], metrics.executableLines);
     const baseline = { ...before, sha256: Object.fromEntries(identity.inventory.files.map((row) => [row.path, row.sha256])) };
     writeFileSync(join(root, "baseline.json"), JSON.stringify(baseline));
     const finish = (directory: string, output: string) => ["finish", "--root", root, "--legs", directory, "--base", "HEAD", "--baseline", "baseline.json", "--plan", "plan.json", "--run", "equivalent", "--coverage-directory", "coverage", "--output", output];

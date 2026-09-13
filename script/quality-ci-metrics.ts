@@ -56,14 +56,21 @@ export async function measureStatic(options: { root: string; inventory: string; 
 	requireMeasurement(["1.3.6", "1.4.1"].includes(Bun.version), "unsupported Bun runtime");
 	const tools = metricPins();
 	const inventory = loadInventory(options.root, options.inventory);
-	const sources = [...inventory.files.filter((source) => qualitySource(source.path)), ...inventory.embedded.filter((source) => source.hostPath && qualitySource(source.hostPath))];
+	const cloneSources = [
+		...inventory.files.filter((source) => qualitySource(source.path)),
+		...inventory.embedded.filter((source) => source.hostPath && qualitySource(source.hostPath)),
+	];
+	const sources = cloneSources;
 	const measured = sources.filter((source) => options.scope === undefined || options.scope.includes(source.hostPath ?? source.path)).map((source) => {
 		const analysis = source.language === "python" ? analyzePython(source) : {
 			units: analyzeJavascript(source), prepared: prepare(source), receipt: null,
 		};
 		return { source, analysis };
 	});
-	const duplication = await detectClones(sources);
+	// Clone identity crosses the selected quality scope. Measuring only the
+	// selected files silently misses a clone whose other occurrence is in an
+	// unselected workspace.
+	const duplication = await detectClones(cloneSources);
 	return {
 		version: 1, complete: true,
 		inventoryHash: inventory.inventoryHash, contractHash: inventory.contractHash,
@@ -71,15 +78,36 @@ export async function measureStatic(options: { root: string; inventory: string; 
 		pythonProcesses: measured.flatMap((row) => row.analysis.receipt ? [row.analysis.receipt] : []),
 		sources: sources.map((row) => ({ path: row.path, sha256: row.sha256 })),
 		hosts: inventory.files, measured, duplication,
-		...(options.scope === undefined ? {} : { cloneSources: sources }),
+		cloneSources,
 	};
 }
-export type StaticDocument = Awaited<ReturnType<typeof measureStatic>>;
+type MeasuredDocument = Awaited<ReturnType<typeof measureStatic>>;
+export type StaticDocument = Omit<MeasuredDocument, "cloneSources"> & {
+	cloneSources?: MeasuredDocument["cloneSources"];
+};
+type ExecutableLines = { path: string; lines: number[] }[];
+type JoinedMetrics = {
+	version: 1;
+	complete: true;
+	algorithm: string;
+	coverageMeaning: string;
+	coverageScope: readonly string[];
+	inventoryHash: string;
+	contractHash: string;
+	tools: MeasuredDocument["tools"];
+	analyzerProcesses: MeasuredDocument["analyzerProcesses"];
+	pythonProcesses: MeasuredDocument["pythonProcesses"];
+	sources: MeasuredDocument["sources"];
+	executableLines: ExecutableLines;
+	records: ReturnType<typeof joinCoverage>;
+	duplication: MeasuredDocument["duplication"];
+	measurement: Measurement;
+};
 
 export function joinBounds(document: StaticDocument, options: {
 	identity: Pick<Identity, "inventoryHash" | "contractHash">;
 	lines: ReadonlyMap<string, ReadonlyMap<number, number>>; selectedLanes?: readonly string[];
-}) {
+}): JoinedMetrics {
 	requireMeasurement(document.version === 1 && document.complete === true, "incomplete static metrics");
 	requireMeasurement(document.inventoryHash === options.identity.inventoryHash && document.contractHash === options.identity.contractHash, "stale quality leg: metrics");
 	const { hosts, duplication } = document;
@@ -125,6 +153,12 @@ export function joinBounds(document: StaticDocument, options: {
 		inventoryHash: document.inventoryHash, contractHash: document.contractHash,
 		tools: document.tools, analyzerProcesses: document.analyzerProcesses,
 		pythonProcesses: document.pythonProcesses, sources: document.sources,
+		executableLines: measured.map(({ source, analysis }) => ({
+			path: source.path,
+			lines: [...new Set(Object.values(analysis.prepared.statementMap).flatMap((range) =>
+				Array.from({ length: range.end.line - range.start.line + 1 }, (_value: never, index: number) => range.start.line + index),
+			))].sort((a, b) => a - b),
+		})),
 		records, duplication, measurement,
 	};
 }

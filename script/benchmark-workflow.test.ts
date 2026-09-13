@@ -16,22 +16,25 @@ const Workflow = z.object({
   on: z.object({
     push: z.object({ branches: z.array(z.string()), paths: z.array(z.string()).optional() }),
     pull_request: z.object({ paths: z.array(z.string()) }),
-    schedule: z.array(z.object({ cron: z.string() })),
   }),
+  concurrency: z.object({ group: z.string(), "cancel-in-progress": z.string() }),
   jobs: z.object({ benchmark: Job, memory: Job, publish: Job }),
 });
 const workflow = Workflow.parse(
   YAML.parse(await Bun.file(new URL("../.github/workflows/benchmark.yml", import.meta.url)).text()),
 );
 
-test("benchmark PRs select benchmark inputs while main and schedules stay full", () => {
+test("benchmark PRs select benchmark inputs while main stays full", () => {
   expect(workflow.on.push).toEqual({ branches: ["main"] });
-  expect(workflow.on.schedule.length).toBeGreaterThan(0);
   expect(workflow.on.pull_request.paths).toEqual([
     "packages/ledger/**", "packages/agent/**", "packages/protocol/**", "script/**",
     "package.json", "bun.lock", "bunfig.toml", "turbo.json", "tsconfig.base.json",
     ".github/workflows/benchmark.yml", ".github/actions/**",
   ]);
+});
+
+test("benchmark history is never cancelled on main pushes", () => {
+  expect(workflow.concurrency["cancel-in-progress"]).toBe(["$", "{{ github.event_name == 'pull_request' }}"].join(""));
 });
 
 test("benchmark input is validated before collection starts", () => {
