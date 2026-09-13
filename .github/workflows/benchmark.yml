@@ -11,14 +11,15 @@ on:
       - packages/ledger/**
       - packages/agent/**
       - packages/protocol/**
-      - script/**
+      - script/summarize-benchmark-runs.ts
+      - script/check-benchmark-regression.ts
+      - script/conformance/summarize-benchmark-runs.test.ts
+      - script/check-benchmark-regression.test.ts
       - package.json
       - bun.lock
       - bunfig.toml
       - turbo.json
       - tsconfig.base.json
-      - .github/workflows/benchmark.yml
-      - .github/actions/**
   workflow_dispatch:
     inputs:
       runs:

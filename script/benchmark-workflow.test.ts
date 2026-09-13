@@ -29,9 +29,10 @@ test("benchmark PRs select benchmark inputs while main stays full", () => {
   expect(workflow.on.push).toEqual({ branches: ["main"] });
   expect(workflow.on.schedule.length).toBeGreaterThan(0);
   expect(workflow.on.pull_request.paths).toEqual([
-    "packages/ledger/**", "packages/agent/**", "packages/protocol/**", "script/**",
+    "packages/ledger/**", "packages/agent/**", "packages/protocol/**",
+    "script/summarize-benchmark-runs.ts", "script/check-benchmark-regression.ts",
+    "script/conformance/summarize-benchmark-runs.test.ts", "script/check-benchmark-regression.test.ts",
     "package.json", "bun.lock", "bunfig.toml", "turbo.json", "tsconfig.base.json",
-    ".github/workflows/benchmark.yml", ".github/actions/**",
   ]);
 });
 
