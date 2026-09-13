@@ -385,6 +385,33 @@ test("main runs a campaign in process and reports killed and noCoverage candidat
 	expect(results.some((row: RecordValue) => rows(row.receipts).length > 0)).toBe(true);
 }, 120000);
 
+test("main runs Python candidates through probe and restores the source", async () => {
+	const python = process.env.D945_PYTHON ?? process.env.QUALITY_MUTATION_PYTHON;
+	if (!python) throw new Error("D945_PYTHON is required for the Python campaign fixture");
+	const input = await fixture(
+		"export const run = () => true;",
+		`const result = Bun.spawnSync([${JSON.stringify(python)}, "-c", "import sys;sys.path.insert(0, 'src');import calc;print(calc.f(2))"]); expect(result.stdout.toString().trim()).toBe("3"); expect(result.exitCode).toBe(0);`,
+		{
+			"src/calc.py": "def f(value):\n    return value + 1\n\ndef unused(value):\n    return value * 2\n",
+			"src/calc.test.ts": `import { expect, test } from "bun:test"; test("calc", () => { const result = Bun.spawnSync([process.env.D945_PYTHON!, "-c", "import sys;sys.path.insert(0, 'src');import calc;print(calc.f(2))"]); expect(result.stdout.toString().trim()).toBe("3"); expect(result.exitCode).toBe(0); });`,
+		},
+	);
+	const paths = { contract: join(input.root, "contract.json"), inventory: input.inventory, decision, "inventory-tool": tool };
+	const argv = ["--root", input.root, "--dependencies", dependencies, "--python", python];
+	for (const [key, path] of Object.entries(paths)) argv.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
+	argv.push("--target", "src/calc.py", "--operator", "py-number", "--limit", "2");
+	const output: string[] = [];
+	const originalLog = console.log;
+	console.log = (...values: unknown[]) => output.push(values.join(" "));
+	try { expect(await main(argv)).toBe(1); } finally { console.log = originalLog; }
+	const report = record(JSON.parse(output.at(-1) ?? "{}"));
+	const results = reportResults(report).filter((row: RecordValue) => row.path === "src/calc.py");
+	expect(results.map((row: RecordValue) => row.outcome)).toEqual(expect.arrayContaining(["killed", "noCoverage"]));
+	expect(results.every((row: RecordValue) => row.restored === true)).toBe(true);
+	expect(results.flatMap((row: RecordValue) => rows(row.receipts).map(record)).some((receipt: RecordValue) => receipt.stage === "python-probe")).toBe(true);
+	expect(readFileSync(join(input.root, "src/calc.py"), "utf8")).toBe(input.files["src/calc.py"] ?? "");
+}, 120000);
+
 test("same-site replacements use the campaign reach map and preserve candidate receipts", async () => {
 	const input = await fixture(
 		"export const run = (n:number) => n < 2;",

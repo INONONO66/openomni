@@ -1064,7 +1064,11 @@ async function runTestBatch(
 		],
 		root,
 		Math.max(suiteTimeout, timeout * tests.length),
-		python ? { PATH: `${dirname(python)}:${process.env.PATH ?? ""}` } : {},
+		python ? {
+			PATH: `${dirname(python)}:${process.env.PATH ?? ""}`,
+			D945_PYTHON: python,
+			QUALITY_MUTATION_PYTHON: python,
+		} : {},
 	);
 	const xml = existsSync(report) ? readFileSync(report, "utf8") : "";
 	const header = xml.match(/<testsuites\b[^>]*\btests="(\d+)"[^>]*\bfailures="(\d+)"/);
