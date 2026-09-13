@@ -23,18 +23,18 @@ test("nested reach instrumentation preserves lazy boolean evaluation", () => {
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("Python probe worker accepts a reach site and emits instrumented source", async () => {
-	const directory = mkdtempSync(join(tmpdir(), "mutation-python-worker-"));
+test("Python probe worker instruments a site with a marker", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-python-probe-"));
 	try {
+		const python = process.env.D945_PYTHON;
+		if (!python) throw new Error("D945_PYTHON is required for the Python probe fixture");
 		const marker = join(directory, "hit");
 		const receipt = await pythonWorker({
-			root: directory, contract: "", inventory: "", decision: join(import.meta.dir, "conformance/quality-mutation-contract.json"), inventoryTool: "",
-			contractHash: "", inventoryHash: "", decisionHash: "", inventoryToolHash: "",
-			dependencies: "", python: process.env.QUALITY_MUTATION_PYTHON ?? "python3", tests: [],
-			targets: [], families: [], limit: 1, maxCandidates: 1, timeout: 20_000, suiteTimeout: 20_000,
-			budget: 1000, pilot: true,
+			python,
+			decision: join(import.meta.dir, "conformance/quality-mutation-contract.json"),
+			timeout: 15000,
 		}, "value = 1", directory, "probe", { start: 0, end: 9, mode: "python-expression" }, marker);
-		expect(receipt.spawnError).toBe(false);
+		expect(receipt.stage).toBe("python-probe");
 		expect(receipt.exitCode).toBe(0);
 		const output = decode(receipt.stdout);
 		expect(typeof output === "object" && output !== null && !Array.isArray(output) && typeof output.source === "string").toBe(true);
@@ -172,7 +172,6 @@ for (const mode of ["nonzero", "signal"] as const) {
   }, 90000);
 }
 
-||||||| parent of 5fbe7a1b (test(mutation): reduce quality metric complexity)
 
 function expectRestoredResults(result: RecordValue, count: number): void {
 	const selected = rows(result.selected).map(record);
