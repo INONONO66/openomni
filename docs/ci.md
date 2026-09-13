@@ -17,8 +17,8 @@ consumers. Mixed changes take the maximum class in the table; scopes are unions.
 | `docs` | Root `*.md` or `docs/**` only | None | None | No |
 | `desktop` | `apps/desktop/**`, `packages/ui/**` | Affected workspaces and consumers | Affected source inventory | No |
 | `kernel` | Other packages or `apps/openomni/**` | Affected workspaces and consumers | Affected source inventory | No |
-| `tooling` | `script/**` except conformance contracts | Changed workspace lanes, if present | Whole inventory | Three shards |
-| `global` | Protocol, manifests/lockfile, conformance contracts, CI/root configuration, malformed or unowned paths | All | Whole inventory | Three shards |
+| `tooling` | `script/**` except conformance contracts | Changed workspace lanes, if present | Whole inventory | Four tooling shards |
+| `global` | Protocol, manifests/lockfile, conformance contracts, CI/root configuration, malformed or unowned paths | All | Whole inventory | Four tooling shards |
 
 Package-local documentation retains workspace impact. Main pushes, schedules,
 manual dispatch, and the planner's `merge_group` event mode select `global`.
@@ -86,7 +86,9 @@ process environments. Tests do not wait for unrelated lint or typecheck jobs.
 Machine integration uses Python 3.12.
 
 Every selected workspace produces fresh LCOV and runs its ratchet. On tooling/full
-plans, the script floor runs only after merging all four fresh script partitions. #945 adds the first measured floors for machines, UI, and desktop; it does not invent old coverage evidence for those lanes.
+plans, the script floor runs only after merging the contracts partition and all
+four tooling partitions. #945 adds the first measured floors for machines, UI,
+and desktop; it does not invent old coverage evidence for those lanes.
 Missing executable source records, malformed counts, empty instrumentation,
 and an unknown lane fail. A selected PR does not borrow old reports from
 unselected workspaces. Full runs select every lane. Topology remains the owner
@@ -98,10 +100,10 @@ test rejects missing, duplicate and newly unassigned `script/**/*.test.ts` files
 ledger contracts and repository-consumer tests; its command also runs dead-export,
 dependency and import-cycle self-tests plus ledger rename/schema checks.
 `scripts-tooling` contains census, mutation, metrics, coverage and quality engine
-self-tests. It runs only when `toolingTests` is true, as three explicit matrix
-partitions. The file lists are packed longest-first from run 34313881130's
-per-file measurements (280/280/296 seconds), separating `check-census.test.ts`
-from `run-quality-mutations.test.ts`. They still emit
+self-tests. It runs only when `toolingTests` is true, as four explicit matrix
+partitions. The file lists are packed longest-first from run 34675244728's
+per-file measurements (roughly 344–347 seconds), separating
+`check-census.test.ts` from `run-quality-mutations.test.ts`. They still emit
 `--timings=coverage/timings.json --update-timings`, but do not use `--shard`:
 an absent timing input previously fell back to hashing both slowest files into
 shard 2. Contract tests reject unassigned or duplicate files across partitions
@@ -109,7 +111,8 @@ and verify the actual commands select every recursive test exactly once.
 No tests, including the intentional 20-second hang, are removed or skipped.
 
 Each script partition has a separate run/runtime/inventory-bound receipt.
-`quality-coverage-record.ts merge` requires contracts and shards 1, 2 and 3,
+`quality-coverage-record.ts merge` requires contracts and tooling shards 1, 2,
+3 and 4,
 validates every receipt and native LCOV record, and unions line counters before
 running the unchanged script coverage floor. A shard's percentage is never
 averaged or treated as the whole lane. Non-tooling PRs owe no tooling coverage.
@@ -117,6 +120,12 @@ averaged or treated as the whole lane. Non-tooling PRs owe no tooling coverage.
 Quality Static runs five independent matrix legs (`types`, `publisher`, `export`,
 `store`, and `metrics`) after Build, in parallel with tests. The metrics leg
 collects static complexity, instrumentation maps, and clones without coverage.
+Scoped metrics still run clone detection over the complete quality-source
+inventory because clone identity crosses workspace boundaries; only function
+and coverage records are scoped. The metrics receipt also carries the complete
+source-map executable-line set. Quality ratchet treats a touched executable
+line missing from native LCOV as failed proof rather than silently ignoring the
+missing record.
 Each leg uploads `quality-leg-<leg>` with its measurement, identity, and native
 process JSON where applicable. Identity records bind the inventory and contract
 hashes, the scoped plan hash where applicable, and duration. The Quality fan-in
@@ -166,6 +175,12 @@ workspaces and consumers; their shared invocation graph and schema inputs remain
 complete so cross-file provenance is not severed. Knip selects those workspaces.
 Coverage/CRAP use selected lanes, and every changed source must belong to both
 the quality scope and a selected coverage lane.
+
+CRAP remains measured for test sources and retained in the full receipt, but
+the PR ratchet does not block on test-source CRAP. The conservative function
+coverage bound is meaningful for production/tooling complexity; applying it to
+table-driven test bodies turns assertion organization into a false regression
+signal. Test duplication and production/tooling CRAP remain admission checks.
 
 ### Proof or measure
 
@@ -272,8 +287,8 @@ lane requires a complete campaign and reviewed measurement before admission.
 The manifest partitions the recursive script tests without losing conformance
 or tooling tests. Script coverage merges partitions before applying its floor.
 
-`Test` and `CI` are stable completion checks. They run even after upstream
-failure and reject failed, cancelled, missing, or unexpectedly skipped jobs.
+`CI` is the stable completion check. It runs even after upstream failure and
+rejects failed, cancelled, missing, or unexpectedly skipped jobs.
 Only skips justified by the plan and event are accepted; contracts remain required
 for docs-only/empty plans, and tooling coverage is required only for tooling/full plans. Configure
 the repository ruleset to require `CI`; adding the workflow does not itself
@@ -334,7 +349,7 @@ while IFS=$'\t' read -r key lane; do
 done < <(jq -r '.matrix.include[] | select(.dir != "script") | [.key, .dir] | @tsv' ci-plan.json)
 if [[ "$(jq -r .toolingTests ci-plan.json)" == true ]]; then
   mkdir quality-partitions
-  for part in scripts-contracts scripts-tooling-1 scripts-tooling-2 scripts-tooling-3; do
+  for part in scripts-contracts scripts-tooling-1 scripts-tooling-2 scripts-tooling-3 scripts-tooling-4; do
     b run script/quality-coverage-record.ts begin --lane script --partition "$part" --run "$QUALITY_RUN" --output "quality-partitions/$part.json"
     b run ci test --lane "$part"
     b run script/quality-coverage-record.ts finish --lane script --partition "$part" --run "$QUALITY_RUN" --output "quality-partitions/$part.json"

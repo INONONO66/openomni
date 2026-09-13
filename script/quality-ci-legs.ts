@@ -54,7 +54,8 @@ const staticSchema: z.ZodType<StaticDocument> = z.strictObject({
 	pythonProcesses: z.array(pythonProcess),
 	sources: z.array(z.strictObject({ path: z.string(), sha256: hash })).min(1),
 	hosts: z.array(source).min(1),
-	cloneSources: z.array(source).optional(),
+	cloneSources: z.array(source).min(1).optional(),
+	executableLines: z.array(z.strictObject({ path: z.string(), lines: z.array(count) })).min(1).optional(),
 	measured: z.array(z.strictObject({ source, analysis: z.strictObject({ units: z.array(unit), prepared, receipt: pythonProcess.nullable() }) })).min(1),
 	duplication,
 });

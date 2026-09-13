@@ -15,8 +15,8 @@ import { planChanges } from "./ci-plan";
 import { TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 const keys = (paths: readonly string[], topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
-  planChanges(paths, false, topology).lanes;
-const allKeys = [...TOPOLOGY.map((workspace) => workspace.key), "scripts"];
+  planChanges(paths, false, topology).matrix.include.map((row) => row.key);
+const allKeys = [...TOPOLOGY.map((workspace) => workspace.key), "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3", "scripts-tooling-4"];
 const cli = join(import.meta.dir, "ci-plan.ts");
 const planSchema = z
   .object({
@@ -66,7 +66,7 @@ test("v2 scopes desktop quality to its workspace and never kernel projects", () 
   expect(plan.qualityScope.every((path) => path.startsWith("packages/ui/") || path.startsWith("apps/desktop/"))).toBe(true);
   expect(plan.projects.length).toBeGreaterThan(0);
   expect(plan.projects.every((path) => path.startsWith("packages/ui/") || path.startsWith("apps/desktop/"))).toBe(true);
-  expect(plan.lanes).toEqual(["ui", "desktopApp", "scripts"]);
+  expect(plan.lanes).toEqual(["ui", "desktopApp"]);
   const full = planChanges(undefined, true);
   expect(full.class).toBe("global");
   expect(full.qualityScope).toContain("script/ci.ts");
@@ -94,7 +94,7 @@ test.each([
 ])("selects UI consumers and schema-consuming scripts when %s changes", (path) => {
   // Given a workspace-owned file, including package documentation or a removed file.
   // When the impact is planned, then only its reverse closure and scripts run.
-  expect(keys([path])).toEqual(["ui", "desktopApp", "scripts"]);
+  expect(keys([path])).toEqual(["ui", "desktopApp"]);
   expect(planChanges([path]).dependencyReview).toBe(false);
 });
 
@@ -155,7 +155,6 @@ test("includes test-only permitted dependencies transitively without a workspace
     "future",
     "downstream",
     "wildcard",
-    "scripts",
   ]);
 });
 
@@ -248,7 +247,6 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
     "openomniApp",
     "ui",
     "desktopApp",
-    "scripts",
   ]);
   const lines = readFileSync(output, "utf8").trim().split("\n");
   expect(lines.map((line) => line.slice(0, line.indexOf("=")))).toEqual([

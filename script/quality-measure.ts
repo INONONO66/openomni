@@ -38,24 +38,49 @@ async function collectLeg(root: string, contract: string, directory: string, leg
 	const temporary = mkdtempSync(resolve(root, `.quality-${leg}-`));
 	try {
 		const inventory = save(temporary, "inventory", identity.inventory);
-		if (leg === "metrics") return await measureStatic({ root, inventory, ...(scope.whole ? {} : { scope: scope.paths }) });
-		const common = ["--root", root, "--contract", relative(root, contract), "--inventory", relative(root, inventory), ...(plan ? ["--plan", resolve(root, plan)] : [])];
-		const args = leg === "types" ? common : [...common, "--json", "--inventory-sha256", identity.inventoryHash, "--class", leg];
-		if (leg === "export") {
-			const knip = resolve(root, "node_modules/knip/bin/knip.js");
-			args.push("--knip", knip, "--knip-sha256", digest(readFileSync(knip)));
-		}
-		if (leg === "store") {
-			const schemas = qualitySchemas(root, temporary);
-			args.push("--python", process.env.D945_PYTHON ?? "python3",
-				"--schema", relative(root, schemas.fresh), "--schema-sha256", digest(readFileSync(schemas.fresh)),
-				"--upgraded-schema", relative(root, schemas.upgraded), "--upgraded-schema-sha256", digest(readFileSync(schemas.upgraded)));
-		}
-		return await nativeJson({ cwd: root, receipt: resolve(directory, `${leg}.process.json`),
-			command: [process.execPath, resolve(root, leg === "types" ? "script/check-types-census.ts" : "script/check-census.ts"), ...args] });
+		if (leg === "metrics")
+			return await measureStatic({ root, inventory, ...(scope.whole ? {} : { scope: scope.paths }) });
+		return await collectNativeLeg(root, contract, directory, leg, identity, inventory, temporary, plan);
 	} finally {
 		rmSync(temporary, { recursive: true, force: true });
 	}
+}
+async function collectNativeLeg(
+	root: string, contract: string, directory: string, leg: Exclude<Leg, "metrics">,
+	identity: ReturnType<typeof fingerprint>, inventory: string, temporary: string, plan?: string,
+) {
+	const args = nativeArgs(root, contract, inventory, leg, identity, plan);
+	if (leg === "export") addExportArgs(args, root);
+	if (leg === "store") addStoreArgs(args, root, temporary);
+	const source = leg === "types" ? "script/check-types-census.ts" : "script/check-census.ts";
+	return nativeJson({
+		cwd: root, receipt: resolve(directory, `${leg}.process.json`),
+		command: [process.execPath, resolve(root, source), ...args],
+	});
+}
+function nativeArgs(
+	root: string, contract: string, inventory: string, leg: Exclude<Leg, "metrics">,
+	identity: ReturnType<typeof fingerprint>, plan?: string,
+): string[] {
+	const common = [
+		"--root", root, "--contract", relative(root, contract), "--inventory", relative(root, inventory),
+		...(plan ? ["--plan", resolve(root, plan)] : []),
+	];
+	return leg === "types"
+		? common
+		: [...common, "--json", "--inventory-sha256", identity.inventoryHash, "--class", leg];
+}
+function addExportArgs(args: string[], root: string): void {
+	const knip = resolve(root, "node_modules/knip/bin/knip.js");
+	args.push("--knip", knip, "--knip-sha256", digest(readFileSync(knip)));
+}
+function addStoreArgs(args: string[], root: string, temporary: string): void {
+	const schemas = qualitySchemas(root, temporary);
+	args.push(
+		"--python", process.env.D945_PYTHON ?? "python3",
+		"--schema", relative(root, schemas.fresh), "--schema-sha256", digest(readFileSync(schemas.fresh)),
+		"--upgraded-schema", relative(root, schemas.upgraded), "--upgraded-schema-sha256", digest(readFileSync(schemas.upgraded)),
+	);
 }
 function admitLegs(root: string, contract: string, directory: string, plan: string) {
 	const identity = fingerprint(root, contract);
@@ -125,7 +150,11 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 		save(directory, "inventory", identity.inventory);
 		save(directory, "metrics", metrics);
 		save(directory, "coverage", { run: values.run, receipts: coverage.receipts });
-		const measured = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [types, ...census, metrics.measurement]);
+		const measured = mergeMeasurements(
+			[...identity.paths, ...identity.schemaPaths],
+			[types, ...census, metrics.measurement],
+			metrics.executableLines,
+		);
 		const current = save(directory, "current", scope.whole ? measured : carryUnmeasured(root, baselineAt(root, values.baseline ?? ""), measured, [...scope.paths, ...identity.schemaPaths], ["productionClones", "testClones"]));
 		requireMeasurement(fingerprint(root, contract).inventoryHash === identity.inventoryHash, "sources changed during measurement");
 		return current;

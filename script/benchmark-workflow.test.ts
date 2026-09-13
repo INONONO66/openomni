@@ -18,20 +18,26 @@ const Workflow = z.object({
     pull_request: z.object({ paths: z.array(z.string()) }),
     schedule: z.array(z.object({ cron: z.string() })),
   }),
+  concurrency: z.object({ group: z.string(), "cancel-in-progress": z.string() }),
   jobs: z.object({ benchmark: Job, memory: Job, publish: Job }),
 });
 const workflow = Workflow.parse(
   YAML.parse(await Bun.file(new URL("../.github/workflows/benchmark.yml", import.meta.url)).text()),
 );
 
-test("benchmark PRs select benchmark inputs while main and schedules stay full", () => {
+test("benchmark PRs select benchmark inputs while main stays full", () => {
   expect(workflow.on.push).toEqual({ branches: ["main"] });
   expect(workflow.on.schedule.length).toBeGreaterThan(0);
   expect(workflow.on.pull_request.paths).toEqual([
-    "packages/ledger/**", "packages/agent/**", "packages/protocol/**", "script/**",
+    "packages/ledger/**", "packages/agent/**", "packages/protocol/**",
+    "script/summarize-benchmark-runs.ts", "script/check-benchmark-regression.ts",
+    "script/conformance/summarize-benchmark-runs.test.ts", "script/check-benchmark-regression.test.ts",
     "package.json", "bun.lock", "bunfig.toml", "turbo.json", "tsconfig.base.json",
-    ".github/workflows/benchmark.yml", ".github/actions/**",
   ]);
+});
+
+test("benchmark history is never cancelled on main pushes", () => {
+  expect(workflow.concurrency["cancel-in-progress"]).toBe(["$", "{{ github.event_name == 'pull_request' }}"].join(""));
 });
 
 test("benchmark input is validated before collection starts", () => {
@@ -56,10 +62,10 @@ test("failed benchmark comparisons cannot publish a new reference", () => {
   expect(steps[publication]?.if).toBe("success()");
 });
 
-test("PR and dispatch comparisons read accepted history without publishing", () => {
+test("PR, schedule, and dispatch comparisons read accepted history without publishing", () => {
   const steps = workflow.jobs.benchmark.steps;
   const comparison = steps.find((step) => step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"));
-  expect(comparison?.if).toBe("github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'");
+  expect(comparison?.if).toBe("github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'");
   expect(comparison?.run).toContain("git fetch --no-tags origin gh-pages");
   expect(comparison?.run).toContain("bun run script/check-benchmark-regression.ts");
   expect(steps.some((step) => step.run?.includes("git push"))).toBe(false);

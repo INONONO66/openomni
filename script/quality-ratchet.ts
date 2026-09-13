@@ -86,13 +86,23 @@ function finding(value: Json) {
   return result;
 }
 function parseReceipt(value: Json) {
-  const input = jsonObject(value, ["version", "complete", "analyzed", "inventory", "findings", "sha256"]);
+  const input = jsonObject(value, ["version", "complete", "analyzed", "inventory", "findings", "sha256", "executableLines"]);
   const result = {
     version: jsonLiteral(input.version, 1),
     complete: jsonBoolean(input.complete),
     analyzed: jsonArray(input.analyzed, (gate) => jsonChoice(gate, gates)),
     inventory: jsonArray(input.inventory, jsonString),
     findings: jsonArray(input.findings, finding),
+    ...optional("executableLines", input.executableLines, (value) => jsonArray(value, (entry) => {
+      const row = jsonObject(entry, ["path", "lines"]);
+      const path = jsonString(row.path);
+      const lines = jsonArray(row.lines, jsonNumber);
+      if (!path || lines.some((line) => !Number.isSafeInteger(line) || line < 1))
+        fail("invalid executable line map");
+      if (new Set(lines).size !== lines.length)
+        fail("duplicate executable line map");
+      return { path, lines };
+    })),
     ...optional("sha256", input.sha256, (value) => Object.fromEntries(Object.entries(jsonObject(value)).map(([path, hash]) => {
       const sha256 = jsonString(hash);
       if (!/^[a-f0-9]{64}$/.test(sha256)) fail(`invalid baseline hash: ${path}`);
@@ -234,9 +244,19 @@ function identityOf(changes: readonly Change[]): (row: Finding) => string {
 }
 /** Whether a native line inside the finding's extent went unexecuted; a file
  * without any native record fails closed. */
-function unexecuted(executed: Executed, row: Finding): boolean {
+function unexecuted(
+  executed: Executed,
+  executableLines: ReadonlyMap<string, readonly number[]> | undefined,
+  row: Finding,
+): boolean {
   const hits = executed.get(row.path);
   if (!hits) return true;
+  const expected = executableLines?.get(row.path);
+  if (expected) {
+    return expected.some(
+      (line) => line >= row.line && line <= (row.endLine ?? row.line) && (hits.get(line) ?? 0) === 0,
+    );
+  }
   for (const [line, count] of hits)
     if (count === 0 && line >= row.line && line <= (row.endLine ?? row.line)) return true;
   return false;
@@ -249,8 +269,16 @@ function unexecutedLines(
   executed: Executed,
 ): Finding[] {
   const failures: Finding[] = [];
+  const executableLines = new Map(current.executableLines?.map((row) => [row.path, row.lines]) ?? []);
   for (const change of changes.filter((change) => productionSource(change.path))) {
     const hits = executed.get(change.path);
+    const expected = executableLines.get(change.path);
+    if (expected) {
+      for (const line of expected)
+        if (touches(change, line) && (hits?.get(line) ?? 0) === 0)
+          failures.push({ gate: "coverage", path: change.path, line, symbol: "unexecuted-line", value: 1 });
+      continue;
+    }
     if (!hits) {
       failures.push(
         ...current.findings.filter((row) => row.gate === "coverage" && row.path === change.path),
@@ -277,11 +305,18 @@ export function growth(
   comparable(baseline, current);
   const byPath = new Map(changes.map((change) => [change.path, change]));
   const identity = identityOf(changes);
-  const compared = (row: Finding) => row.gate !== "coverage" && row.origin !== "foreign";
+  // Test CRAP remains measured in full receipts, but its conservative
+  // function-coverage upper bound is not a PR admission signal. Test bodies
+  // are deliberately free to use table-driven assertions and fixtures.
+  const compared = (row: Finding) =>
+    row.gate !== "coverage" &&
+    row.origin !== "foreign" &&
+    (row.gate !== "crap" || productionSource(row.path));
   const limits = groups(baseline.findings.filter(compared), identity);
   const observed = groups(current.findings.filter(compared), identity);
   const lcov = current.analyzed.includes("coverage");
-  const counts = (row: Finding) => row.gate !== "crap" || !lcov || unexecuted(executed, row);
+  const executableLines = new Map(current.executableLines?.map((row) => [row.path, row.lines]) ?? []);
+  const counts = (row: Finding) => row.gate !== "crap" || !lcov || unexecuted(executed, executableLines, row);
   const failures: Finding[] = [];
   for (const [id, values] of observed) {
     if (!grew(values, limits.get(id) ?? new Map())) continue;
@@ -322,6 +357,7 @@ export function baselineAt(root: string, path: string, ref?: string): Receipt {
     "findings",
     "fragments",
     "sha256",
+    "executableLines",
   ]);
   if (document.fragments === undefined) return parseReceipt(document);
   if (document.findings !== undefined) fail("baseline has two finding authorities");
@@ -343,7 +379,7 @@ export function baselineAt(root: string, path: string, ref?: string): Receipt {
  * stop matching. Untracked owned sources are added files. */
 export function changedFiles(root: string, base: string): Omit<Change, "ranges">[] {
   const revision = git(root, ["rev-parse", "--verify", `${base}^{commit}`]).trim();
-  const status = git(root, [
+  const status = parseChangedStatus(git(root, [
     "diff",
     "--name-status",
     "--find-renames",
@@ -351,23 +387,31 @@ export function changedFiles(root: string, base: string): Omit<Change, "ranges">
     "--diff-filter=ACMRT",
     revision,
     "--",
-  ]).split("\0");
+  ]).split("\0"));
   const result = new Map<string, string | null>();
-  for (let index = 0; index + 1 < status.length; ) {
-    const [code = "", first = ""] = [status[index], status[index + 1]];
-    if (code.startsWith("R")) {
-      result.set(status[index + 2] ?? "", first);
-      index += 3;
-    } else {
-      result.set(first, code === "A" ? null : first);
-      index += 2;
-    }
-  }
-  const untracked = git(root, ["ls-files", "--others", "--exclude-standard", "-z"]);
-  for (const path of untracked.split("\0")) if (path && !result.has(path)) result.set(path, null);
+  for (const [path, previous] of status) result.set(path, previous);
+  addUntracked(result, git(root, ["ls-files", "--others", "--exclude-standard", "-z"]));
   return [...result]
     .filter(([path]) => qualitySource(path))
     .map(([path, previous]) => ({ path, previous }));
+}
+function parseChangedStatus(status: string[]): [string, string | null][] {
+  const result: [string, string | null][] = [];
+  for (let index = 0; index + 1 < status.length; ) {
+    const code = status[index] ?? "", first = status[index + 1] ?? "";
+    if (code.startsWith("R")) {
+      result.push([status[index + 2] ?? "", first]);
+      index += 3;
+      continue;
+    }
+    result.push([first, code === "A" ? null : first]);
+    index += 2;
+  }
+  return result;
+}
+function addUntracked(result: Map<string, string | null>, output: string): void {
+  for (const path of output.split("\0"))
+    if (path && !result.has(path)) result.set(path, null);
 }
 export function changedSources(root: string, base: string): Set<string> {
   return new Set(changedFiles(root, base).map((change) => change.path));

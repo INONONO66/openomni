@@ -152,7 +152,7 @@ test("full gate executes the required quality jobs in process", () => {
 
 test("final gate rejects absent planner output", () => {
   // Given missing output, even if GitHub reports the plan job as successful.
-  const result = cli(["test-gate"], { CI_PLAN: "", CI_NEEDS: '{"plan":{"result":"success"}}' });
+  const result = cli(["gate"], { CI_PLAN: "", CI_NEEDS: '{"plan":{"result":"success"}}' });
   // When parsing the actual boundary, then the status cannot be successful.
   expect(result.exitCode).not.toBe(0);
 });
@@ -230,7 +230,7 @@ test("workflow restores the one build before every executable consumer", () => {
     expect(job.steps[0]?.with?.ref).toBe(`\${{ github.sha }}`);
     expect(job.steps[0]?.with?.["fetch-depth"]).toBe(0);
   }
-  expect(jobs.test?.if).toBe("always()");
+  expect(jobs.test).toBeUndefined();
   expect(jobs.ci?.if).toBe("always()");
   expect(jobs.static?.steps.some((step) => step.run?.includes("bun run lint:docs"))).toBe(true);
 });
@@ -243,6 +243,7 @@ test("v2 workflow carries scope as an artifact and always runs repository contra
   expect(jobs["scripts-contracts"]?.needs).toEqual(["plan", "prepare"]);
   expect(jobs["scripts-contracts"]?.if).toBeUndefined();
   expect(jobs["scripts-coverage"]?.needs).toContain("tests");
+  expect(jobs.test).toBeUndefined();
   expect(jobs["quality-static"]?.["timeout-minutes"]).toBe(`\${{ matrix.leg == 'publisher' && 30 || 20 }}`);
   expect(jobs.tests?.["timeout-minutes"]).toBe(`\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}`);
   expect(jobs["quality-static"]?.steps.some((step) => step.run?.includes('--plan ci-plan.json'))).toBe(true);
@@ -259,6 +260,22 @@ test("quality collectors run beside tests and join the required final gates", ()
   expect(jobs["quality-gates"].needs).toEqual(["plan", "prepare"]);
   expect(jobs.ci.needs).toContain("quality-static");
   expect(jobs.ci.needs).toContain("quality-gates");
+});
+
+test("quality gates leave repository-contract self-tests to scripts-contracts", () => {
+  const jobs = z
+    .object({ jobs: z.object({ prepare: jobSchema, "quality-gates": jobSchema }) })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
+  expect(jobs.prepare.needs).toBeUndefined();
+  const runs = jobs["quality-gates"].steps.flatMap((step) => step.run ?? []);
+  for (const command of [
+    "check-dead-exports.ts --self-test",
+    "check-import-cycles.ts --self-test",
+    "check-deps.ts --self-test",
+    "verify-ledger-rename.ts",
+    "check-ledger-schema-drift.ts",
+  ])
+    expect(runs.some((run) => run.includes(command))).toBe(false);
 });
 
 test("quality matrix has exactly five bounded legs and no job exceeds sixty minutes", () => {
@@ -292,22 +309,6 @@ test("quality matrix has exactly five bounded legs and no job exceeds sixty minu
     "fail-fast": false,
     matrix: { leg: ["types", "publisher", "export", "store", "metrics"] },
   });
-});
-
-test("the stable Test status accepts only the planned documentation skip", () => {
-  // Given the real docs plan and exactly the Test job's needs.
-  const result = cli(["test-gate"], {
-    CI_PLAN: JSON.stringify(planChanges(["README.md"])),
-    CI_NEEDS: JSON.stringify({
-      plan: { result: "success" },
-      prepare: { result: "success" },
-      tests: { result: "skipped" },
-      "scripts-contracts": { result: "success" },
-      "scripts-coverage": { result: "skipped" },
-    }),
-  });
-  // When its CLI executes, then the always-running status succeeds.
-  expect(result.exitCode).toBe(0);
 });
 
 test("a pull request requires every quality job to succeed", () => {
