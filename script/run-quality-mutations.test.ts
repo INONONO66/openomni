@@ -2,11 +2,44 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { copyExecution, removeExecution, decode, execute, executionTreeHash, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
+import { copyExecution, removeExecution, decode, execute, executionTreeHash, instrument, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
+
+test("nested reach instrumentation preserves lazy boolean evaluation", () => {
+	const source = "const value = false && (b || c);";
+	const directory = mkdtempSync(join(tmpdir(), "mutation-instrument-"));
+	try {
+		const outer = source.indexOf("false");
+		const inner = source.indexOf("b");
+		const transformed = instrument(source, [
+			{ id: "outer", path: "a.ts", sourceSha256: sha256(source), site: { start: outer, end: source.length - 1, mode: "expression" }, tests: [] },
+			{ id: "inner", path: "a.ts", sourceSha256: sha256(source), site: { start: inner, end: source.indexOf(")"), mode: "expression" }, tests: [] },
+		], directory);
+		expect(transformed).toContain("false &&");
+		expect(transformed.match(/writeFileSync/g)?.length).toBe(2);
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("Python probe worker accepts a reach site and emits instrumented source", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-python-worker-"));
+	try {
+		const marker = join(directory, "hit");
+		const receipt = await pythonWorker({
+			root: directory, contract: "", inventory: "", decision: join(import.meta.dir, "conformance/quality-mutation-contract.json"), inventoryTool: "",
+			contractHash: "", inventoryHash: "", decisionHash: "", inventoryToolHash: "",
+			dependencies: "", python: process.env.QUALITY_MUTATION_PYTHON ?? "python3", tests: [],
+			targets: [], families: [], limit: 1, maxCandidates: 1, timeout: 20_000, suiteTimeout: 20_000,
+			budget: 1000, pilot: true,
+		}, "value = 1", directory, "probe", { start: 0, end: 9, mode: "python-expression" }, marker);
+		expect(receipt.spawnError).toBe(false);
+		expect(receipt.exitCode).toBe(0);
+		const output = decode(receipt.stdout);
+		expect(typeof output === "object" && output !== null && !Array.isArray(output) && typeof output.source === "string").toBe(true);
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 test("assertion receipt parsing separates matcher failures from crashes and other testcases", () => {
 	const stderr = [

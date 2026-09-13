@@ -1260,7 +1260,6 @@ export async function pythonWorker(
 	mode: string,
 	site?: Site,
 	marker?: string,
-	sites?: string,
 ): Promise<ProcessReceipt> {
 	const input = join(directory, "python-input.py");
 	writeFileSync(input, source);
@@ -1277,7 +1276,6 @@ export async function pythonWorker(
 			...(site && marker
 				? ["--start", String(site.start), "--end", String(site.end), "--marker", marker]
 				: []),
-			...(mode === "reach" && sites ? ["--sites", sites] : []),
 		],
 		directory,
 		options.timeout,
@@ -1363,20 +1361,17 @@ async function checkMutation(context: CandidateContext, mutated: string, python:
 	return true;
 }
 
-async function probeCandidate(context: CandidateContext, source: ReturnType<typeof mutationSource>, python: boolean): Promise<boolean> {
+async function probeCandidate(context: CandidateContext, source: ReturnType<typeof mutationSource>): Promise<boolean> {
 	const { candidate, options, tests, run, root, result, probeCache } = context;
 	const marker = join(run, "hit");
-	let probedSource = "";
-	if (python) {
-		const instrumented = await pythonWorker(options, source.source, run, "probe", candidate.site, marker);
-		result.receipts.push(instrumented);
-		if (broken(instrumented) || instrumented.exitCode !== 0) {
-			result.outcome = "infrastructure";
-			result.reason = "python-instrumentation-process";
-			return false;
-		}
-		probedSource = text(object(decode(instrumented.stdout)).source);
-	} else probedSource = instrument(source.source, [{ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests }], run);
+	const instrumented = await pythonWorker(options, source.source, run, "probe", candidate.site, marker);
+	result.receipts.push(instrumented);
+	if (broken(instrumented) || instrumented.exitCode !== 0) {
+		result.outcome = "infrastructure";
+		result.reason = "python-instrumentation-process";
+		return false;
+	}
+	const probedSource = text(object(decode(instrumented.stdout)).source);
 	const key = probeKey(candidate, probedSource, options, tests);
 	const cached = probeCache.get(key);
 	if (cached) {
@@ -1456,7 +1451,7 @@ async function runCandidate(
 		writeMutation(source, mutated);
 		const context: CandidateContext = { candidate, options, contract, tests, run, root, result, probeCache };
 		if (!(await checkMutation(context, mutated, python))) return result;
-		if (python && !(await probeCandidate(context, source, python))) return result;
+		if (python && !(await probeCandidate(context, source))) return result;
 		// TypeScript reach was established once for the campaign.
 		// Test side effects cannot leak into the mutation run.
 		removeExecution(root);
