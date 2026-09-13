@@ -1,11 +1,12 @@
 import { appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import ts from "typescript";
-import { buildInventory, readContract } from "./quality-inventory";
+import { buildInventory, decodeJson, digest, jsonObject, jsonString, readContract } from "./quality-inventory";
 import { scriptPartitions } from "./scripts-lanes";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
+import { qualitySource } from "./quality-source";
 
 export const changeClasses = ["docs", "desktop", "kernel", "tooling", "global"] as const;
 export interface CiPlan {
@@ -187,6 +188,35 @@ function validateGraph(topology: readonly WorkspaceTopology[]): void {
   }
 }
 
+function qualityProofIsComplete(root: string, base: string, plan: CiPlan): boolean {
+  if (!plan.verify || plan.toolingTests || plan.full) return true;
+  const baselinePath = "script/conformance/quality-baseline-lcov-bound.json";
+  const result = Bun.spawnSync(["git", "show", `${base}:${baselinePath}`], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) throw new Error(`cannot read quality baseline at ${base}`);
+  const baseline = jsonObject(decodeJson(result.stdout.toString()));
+  const hashes = baseline.sha256 === undefined ? new Map<string, string>() : new Map(
+    Object.entries(jsonObject(baseline.sha256)).map(([path, value]) => [path, jsonString(value)]),
+  );
+  const inventory = buildInventory(root, readContract(resolve(root, "script/conformance/quality-contract.json")));
+  const owned = inventory.files.filter((row) => qualitySource(row.path));
+  const selected = new Set(plan.qualityScope);
+  return owned.every((row) => selected.has(row.path) || hashes.get(row.path) === digest(gitAt(root, base, row.path)));
+}
+
+function gitAt(root: string, revision: string, path: string): string {
+  const result = Bun.spawnSync(["git", "show", `${revision}:${path}`], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) return "";
+  return result.stdout.toString();
+}
+
 function main(): void {
   const { values } = parseArgs({
     args: Bun.argv.slice(2),
@@ -200,9 +230,10 @@ function main(): void {
   const full =
     values.full === true || (event !== undefined && event !== "" && event !== "pull_request");
   let paths: readonly string[] | undefined;
+  let base = "";
   if (!full) {
     const sha = z.string().regex(/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/);
-    const base = sha.parse(values.base);
+    base = sha.parse(values.base);
     const head = sha.parse(values.head);
     // Argument arrays, SHA validation, and NUL delimiters avoid shell expansion,
     // option injection, rename loss, and splitting filenames on whitespace.
@@ -221,7 +252,15 @@ function main(): void {
       throw new Error("git diff output is not NUL terminated");
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
-  const plan = planChanges(paths, full, TOPOLOGY, process.cwd());
+  let plan = planChanges(paths, full, TOPOLOGY, process.cwd());
+  if (!full && !qualityProofIsComplete(process.cwd(), base, plan)) {
+    plan = finishPlan(
+      undefined,
+      fullPlan(TOPOLOGY, "unproven-quality-scope"),
+      "global",
+      process.cwd(),
+    );
+  }
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
     appendFileSync(
