@@ -1151,6 +1151,21 @@ function green(receipt: TestSelectionReceipt): boolean {
 		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
+function siteOwners(candidates: Candidate[]): Map<string, string> {
+	const owners = new Map<string, string>();
+	for (const candidate of candidates) owners.set(`${candidate.path}\u0000${JSON.stringify(candidate.site)}`, candidate.id);
+	return owners;
+}
+function recordReach(map: Map<string, ProbeEvidence>, candidates: Candidate[], owners: Map<string, string>, markers: string, test: string): void {
+	for (const candidate of candidates) {
+		const marker = join(markers, owners.get(`${candidate.path}\u0000${JSON.stringify(candidate.site)}`) ?? candidate.id);
+		const evidence = map.get(candidate.id);
+		if (!evidence || !existsSync(marker)) continue;
+		evidence.reached = true;
+		evidence.tests = [...(evidence.tests ?? []), test];
+		evidence.markerSha256 = sha256(readFileSync(marker, "utf8"));
+	}
+}
 async function buildReachMap(options: Options, frozen: string, temporary: string, candidates: Candidate[], tests: string[], executionTreeSha256: string): Promise<{ map: Map<string, ProbeEvidence>; receipt: ReachMap }> {
 	const directory = join(temporary, "reach"), markers = join(directory, "markers");
 	copyExecution(frozen, directory);
@@ -1166,6 +1181,7 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 	const map = new Map<string, ProbeEvidence>();
 	for (const candidate of candidates) map.set(candidate.id, { reached: false, markerSha256: sha256(""), tests: [] });
 	const runs: { test: string; receipt: TestSelectionReceipt }[] = [];
+	const owners = siteOwners(candidates);
 	for (const test of tests) {
 		if (readFileSync(join(directory, test), "utf8").trim() === "") continue;
 		rmSync(markers, { recursive: true, force: true });
@@ -1174,18 +1190,7 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0)
 			throw new MutationError("reachMap", `Reach test is not green: ${test}`);
 		runs.push({ test, receipt });
-		for (const candidate of candidates) {
-			const first = candidates.filter((row) => row.path === candidate.path && JSON.stringify(row.site) === JSON.stringify(candidate.site)).at(-1) ?? candidate;
-			const marker = join(markers, first.id);
-			if (!existsSync(marker)) continue;
-			const evidence = map.get(candidate.id);
-			if (evidence) {
-				evidence.reached = true;
-				if (!evidence.tests) evidence.tests = [];
-				evidence.tests.push(test);
-				evidence.markerSha256 = sha256(readFileSync(marker, "utf8"));
-			}
-		}
+		recordReach(map, candidates, owners, markers, test);
 	}
 	console.error(`[mutation] reach map: ${[...map.values()].filter((value) => value.reached).length}/${candidates.length} reached`);
 	const body = { version: 1 as const, executionTreeSha256, candidatesSha256: sha256(JSON.stringify(candidates)), testsSha256: sha256(JSON.stringify(tests)), sites: candidates.map((candidate) => ({ id: candidate.id, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests: map.get(candidate.id)?.tests ?? [] })), runs, complete: true };
@@ -1905,53 +1910,55 @@ async function campaign(options: Options): Promise<number> {
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
 	failure = null;
 	setupProcessFailure = null;
-	try {
-		if (!["1.3.6", "1.4.1"].includes(Bun.version) || ts.version !== "5.9.2")
-			return fail(
-				"toolVersion",
-				"Requires Bun 1.3.6 (or explicit current compatibility 1.4.1) and TypeScript 5.9.2",
-			);
-		const values = argumentsMap(argv);
-		if (values.has("--typecheck-root")) {
-			const root =
-				values.get("--typecheck-root")?.[0] ?? fail("arguments", "Missing typecheck root");
-			const contract =
-				values.get("--contract")?.[0] ?? fail("arguments", "Missing typecheck contract");
-			const inventory =
-				values.get("--inventory")?.[0] ?? fail("arguments", "Missing typecheck inventory");
-			const errors = diagnostics(programs(root, contractAt(contract), inventoryAt(inventory)));
-			console.log(
-				JSON.stringify({
-					kind: "typecheck",
-					valid: errors.length === 0,
-					diagnostics: errors,
-					diagnosticsSha256: sha256(JSON.stringify(errors)),
-				}),
-			);
-			return errors.length ? 1 : 0;
-		}
-		return await campaign(optionsFrom(values));
-	} catch (error: any) {
-		const caught = error instanceof Error ? error.message : String(error);
-		const prior = failure as { code: string; message: string } | null;
-		failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
+	return dispatch(argv).catch(reportFailure);
+}
+async function dispatch(argv: string[]): Promise<number> {
+	if (!["1.3.6", "1.4.1"].includes(Bun.version) || ts.version !== "5.9.2")
+		return fail(
+			"toolVersion",
+			"Requires Bun 1.3.6 (or explicit current compatibility 1.4.1) and TypeScript 5.9.2",
+		);
+	const values = argumentsMap(argv);
+	if (values.has("--typecheck-root")) {
+		const root =
+			values.get("--typecheck-root")?.[0] ?? fail("arguments", "Missing typecheck root");
+		const contract =
+			values.get("--contract")?.[0] ?? fail("arguments", "Missing typecheck contract");
+		const inventory =
+			values.get("--inventory")?.[0] ?? fail("arguments", "Missing typecheck inventory");
+		const errors = diagnostics(programs(root, contractAt(contract), inventoryAt(inventory)));
 		console.log(
 			JSON.stringify({
-				version: 1,
-				exitCode: 2,
-				full: false,
-				complete: false,
-				globalZero: false,
-				error: {
-					...(failure ?? {
-						code: "infrastructure",
-						message: "Unhandled filesystem, compiler or process failure",
-					}),
-					...(setupProcessFailure ? { process: setupProcessFailure } : {}),
-				},
-			}, diagnosticField),
+				kind: "typecheck",
+				valid: errors.length === 0,
+				diagnostics: errors,
+				diagnosticsSha256: sha256(JSON.stringify(errors)),
+			}),
 		);
-		return 2;
+		return errors.length ? 1 : 0;
 	}
+	return await campaign(optionsFrom(values));
+}
+function reportFailure(error: Error | string): number {
+	const caught = error instanceof Error ? error.message : String(error);
+	const prior = failure;
+	failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
+	console.log(
+		JSON.stringify({
+			version: 1,
+			exitCode: 2,
+			full: false,
+			complete: false,
+			globalZero: false,
+			error: {
+				...(failure ?? {
+					code: "infrastructure",
+					message: "Unhandled filesystem, compiler or process failure",
+				}),
+				...(setupProcessFailure ? { process: setupProcessFailure } : {}),
+			},
+		}, diagnosticField),
+	);
+	return 2;
 }
 if (import.meta.main) process.exitCode = await main();

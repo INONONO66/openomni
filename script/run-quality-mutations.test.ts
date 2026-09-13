@@ -364,25 +364,26 @@ test("weak assertion survives; original location is really covered", async () =>
 	expect(result.selected[0]?.outcome).toBe("survived");
 }, 90000);
 
-test("main runs a campaign in process and reports killed and noCoverage candidates", async () => {
-	const input = await fixture("export const run = () => true; export const unused = () => false;", "expect(run()).toBe(true);");
+async function runMain(input: Awaited<ReturnType<typeof fixture>>, python: string, selection: string[]): Promise<RecordValue[]> {
 	const paths = { contract: join(input.root, "contract.json"), inventory: input.inventory, decision, "inventory-tool": tool };
-	const argv = ["--root", input.root, "--dependencies", dependencies, "--python", process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3"];
+	const argv = ["--root", input.root, "--dependencies", dependencies, "--python", python];
 	for (const [key, path] of Object.entries(paths)) argv.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
-	argv.push("--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2");
+	argv.push(...selection);
 	const output: string[] = [];
 	const originalLog = console.log;
-	console.log = (...values: any[]) => output.push(values.join(" "));
-	try {
-		expect(await main(argv)).toBe(1);
-	} finally { console.log = originalLog; }
-	const report = record(JSON.parse(output.at(-1) ?? "{}"));
-	const results = reportResults(report);
-	const outcomes = results.map((row: RecordValue) => row.outcome);
+	console.log = (...values: string[]) => output.push(values.join(" "));
+	try { expect(await main(argv)).toBe(1); } finally { console.log = originalLog; }
+	return reportResults(record(JSON.parse(output.at(-1) ?? "{}")));
+}
+
+test("main runs a campaign in process and reports killed and noCoverage candidates", async () => {
+	const input = await fixture("export const run = () => true; export const unused = () => false;", "expect(run()).toBe(true);");
+	const results = await runMain(input, process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"]);
+	const outcomes = results.map((row) => row.outcome);
 	expect(outcomes).toContain("killed");
 	expect(outcomes).toContain("noCoverage");
-	expect(results.filter((row: RecordValue) => ["killed", "noCoverage"].includes(String(row.outcome))).every((row: RecordValue) => row.restored === true)).toBe(true);
-	expect(results.some((row: RecordValue) => rows(row.receipts).length > 0)).toBe(true);
+	expect(results.filter((row) => ["killed", "noCoverage"].includes(String(row.outcome))).every((row) => row.restored === true)).toBe(true);
+	expect(results.some((row) => rows(row.receipts).length > 0)).toBe(true);
 }, 120000);
 
 test("main runs Python candidates through probe and restores the source", async () => {
@@ -396,19 +397,10 @@ test("main runs Python candidates through probe and restores the source", async 
 			"src/calc.test.ts": `import { expect, test } from "bun:test"; test("calc", () => { const result = Bun.spawnSync([process.env.D945_PYTHON!, "-c", "import sys;sys.path.insert(0, 'src');import calc;print(calc.f(2))"]); expect(result.stdout.toString().trim()).toBe("3"); expect(result.exitCode).toBe(0); });`,
 		},
 	);
-	const paths = { contract: join(input.root, "contract.json"), inventory: input.inventory, decision, "inventory-tool": tool };
-	const argv = ["--root", input.root, "--dependencies", dependencies, "--python", python];
-	for (const [key, path] of Object.entries(paths)) argv.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
-	argv.push("--target", "src/calc.py", "--operator", "py-number", "--limit", "2");
-	const output: string[] = [];
-	const originalLog = console.log;
-	console.log = (...values: any[]) => output.push(values.join(" "));
-	try { expect(await main(argv)).toBe(1); } finally { console.log = originalLog; }
-	const report = record(JSON.parse(output.at(-1) ?? "{}"));
-	const results = reportResults(report).filter((row: RecordValue) => row.path === "src/calc.py");
-	expect(results.map((row: RecordValue) => row.outcome)).toEqual(expect.arrayContaining(["killed", "noCoverage"]));
-	expect(results.every((row: RecordValue) => row.restored === true)).toBe(true);
-	expect(results.flatMap((row: RecordValue) => rows(row.receipts).map(record)).some((receipt: RecordValue) => receipt.stage === "python-probe")).toBe(true);
+	const results = (await runMain(input, python, ["--target", "src/calc.py", "--operator", "py-number", "--limit", "2"])).filter((row) => row.path === "src/calc.py");
+	expect(results.map((row) => row.outcome)).toEqual(expect.arrayContaining(["killed", "noCoverage"]));
+	expect(results.every((row) => row.restored === true)).toBe(true);
+	expect(results.flatMap((row) => rows(row.receipts).map(record)).some((receipt) => receipt.stage === "python-probe")).toBe(true);
 	expect(readFileSync(join(input.root, "src/calc.py"), "utf8")).toBe(input.files["src/calc.py"] ?? "");
 }, 120000);
 
