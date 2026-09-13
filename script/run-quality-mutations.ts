@@ -125,9 +125,6 @@ type Options = {
 let failure: { code: string; message: string } | null = null;
 let setupProcessFailure: ProcessReceipt | null = null;
 
-function failureMessage(error: Error | string): string {
-	return error instanceof Error ? error.message : error;
-}
 class MutationError {
 	readonly name = "MutationError";
 	constructor(
@@ -1931,7 +1928,7 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 		}
 		return await campaign(optionsFrom(values));
 	} catch (error) {
-		const caught = failureMessage(error as Error | string);
+		const caught = error instanceof Error ? error.message : String(error);
 		const prior = failure as { code: string; message: string } | null;
 		failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
 		console.log(

@@ -8,6 +8,20 @@ import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
 
+test("switch case reach instrumentation inserts a probe after the label", () => {
+	const source = "switch (value) { case 1: return true; default: return false; }";
+	const directory = mkdtempSync(join(tmpdir(), "mutation-case-instrument-"));
+	try {
+		const start = source.indexOf("case");
+		const end = source.indexOf("default");
+		const transformed = instrument(source, [{
+			id: "case", path: "a.ts", sourceSha256: sha256(source),
+			site: { start, end, mode: "case" }, tests: [],
+		}], directory);
+		expect(transformed).toContain('case 1:require("node:fs").writeFileSync');
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("nested reach instrumentation preserves lazy boolean evaluation", () => {
 	const source = "const value = false && (b || c);";
 	const directory = mkdtempSync(join(tmpdir(), "mutation-instrument-"));
@@ -108,7 +122,7 @@ test("Python worker receipt stages execute through the runner path", async () =>
 test("mutation main rejects an invalid invocation in process", async () => {
   expect(await main(["--not-a-real-option"])).toBe(2);
 });
-const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError } = mutationFixture("campaign");
+const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, dependencies, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
 
 test("rendered process receipts redact split and inline secrets without hiding ordinary arguments", async () => {
@@ -349,6 +363,27 @@ test("weak assertion survives; original location is really covered", async () =>
 	expect(result.code).toBe(1);
 	expect(result.selected[0]?.outcome).toBe("survived");
 }, 90000);
+
+test("main runs a campaign in process and reports killed and noCoverage candidates", async () => {
+	const input = await fixture("export const run = () => true; export const unused = () => false;", "expect(run()).toBe(true);");
+	const paths = { contract: join(input.root, "contract.json"), inventory: input.inventory, decision, "inventory-tool": tool };
+	const argv = ["--root", input.root, "--dependencies", dependencies, "--python", process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3"];
+	for (const [key, path] of Object.entries(paths)) argv.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
+	argv.push("--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2");
+	const output: string[] = [];
+	const originalLog = console.log;
+	console.log = (...values: unknown[]) => output.push(values.join(" "));
+	try {
+		expect(await main(argv)).toBe(1);
+	} finally { console.log = originalLog; }
+	const report = record(JSON.parse(output.at(-1) ?? "{}"));
+	const results = reportResults(report);
+	const outcomes = results.map((row: RecordValue) => row.outcome);
+	expect(outcomes).toContain("killed");
+	expect(outcomes).toContain("noCoverage");
+	expect(results.filter((row: RecordValue) => ["killed", "noCoverage"].includes(String(row.outcome))).every((row: RecordValue) => row.restored === true)).toBe(true);
+	expect(results.some((row: RecordValue) => rows(row.receipts).length > 0)).toBe(true);
+}, 120000);
 
 test("same-site replacements use the campaign reach map and preserve candidate receipts", async () => {
 	const input = await fixture(
