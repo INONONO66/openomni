@@ -372,7 +372,7 @@ test("main runs a campaign in process and reports killed and noCoverage candidat
 	argv.push("--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2");
 	const output: string[] = [];
 	const originalLog = console.log;
-	console.log = (...values: unknown[]) => output.push(values.join(" "));
+	console.log = (...values: any[]) => output.push(values.join(" "));
 	try {
 		expect(await main(argv)).toBe(1);
 	} finally { console.log = originalLog; }
@@ -402,7 +402,7 @@ test("main runs Python candidates through probe and restores the source", async 
 	argv.push("--target", "src/calc.py", "--operator", "py-number", "--limit", "2");
 	const output: string[] = [];
 	const originalLog = console.log;
-	console.log = (...values: unknown[]) => output.push(values.join(" "));
+	console.log = (...values: any[]) => output.push(values.join(" "));
 	try { expect(await main(argv)).toBe(1); } finally { console.log = originalLog; }
 	const report = record(JSON.parse(output.at(-1) ?? "{}"));
 	const results = reportResults(report).filter((row: RecordValue) => row.path === "src/calc.py");

@@ -1931,7 +1931,7 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 			return errors.length ? 1 : 0;
 		}
 		return await campaign(optionsFrom(values));
-	} catch (error) {
+	} catch (error: any) {
 		const caught = error instanceof Error ? error.message : String(error);
 		const prior = failure as { code: string; message: string } | null;
 		failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
