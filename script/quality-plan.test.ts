@@ -48,3 +48,18 @@ test("carry-forward requires a baseline content proof for every unmeasured path,
   writeFileSync(join(repo.root, "script/b.ts"), "export const b = 3;\n");
   expect(() => carryUnmeasured(repo.root, { ...baseline, findings: [] }, current, ["script/a.ts"])).toThrow("script/b.ts");
 });
+
+test("carry-forward verifies unmeasured proof against the base revision", () => {
+  using repo = fixture();
+  const before = Bun.spawnSync(["git", "init"], { cwd: repo.root });
+  expect(before.exitCode).toBe(0);
+  for (const args of [["config", "user.email", "test@example.com"], ["config", "user.name", "test"]])
+    expect(Bun.spawnSync(["git", ...args], { cwd: repo.root }).exitCode).toBe(0);
+  expect(Bun.spawnSync(["git", "add", "."], { cwd: repo.root }).exitCode).toBe(0);
+  expect(Bun.spawnSync(["git", "commit", "-m", "base"], { cwd: repo.root }).exitCode).toBe(0);
+  const finding = { gate: "publisher" as const, path: "script/b.ts", line: 1, symbol: "Ready", value: 1 };
+  const baseline = { version: 1 as const, complete: true, analyzed: ["publisher" as const], inventory: ["script/a.ts", "script/b.ts"], findings: [finding], sha256: { "script/b.ts": digest("export const b = 2;\n") } };
+  const current = { version: 1 as const, complete: true, analyzed: ["publisher" as const], inventory: ["script/a.ts"], findings: [] };
+  writeFileSync(join(repo.root, "script/b.ts"), "export const b = 3;\n");
+  expect(carryUnmeasured(repo.root, baseline, current, ["script/a.ts"], [], "HEAD").findings).toEqual([finding]);
+});

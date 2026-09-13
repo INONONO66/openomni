@@ -118,12 +118,21 @@ type Finding = ReturnType<typeof finding>;
 
 /** Unmeasured findings are debt, not new observations. Only a matching baseline
  * content hash admits them; missing proof (including deletion) fails closed. */
-function verifyUnmeasured(root: string, baseline: Receipt, unmeasured: readonly string[]): void {
+function verifyUnmeasured(
+  root: string,
+  baseline: Receipt,
+  unmeasured: readonly string[],
+  base?: string,
+): void {
   for (const path of unmeasured) {
     const proof = baseline.sha256?.[path];
     if (!proof) fail(`missing unchanged proof: ${path}`);
     let hash: string;
-    try { hash = digest(readFileSync(resolve(root, path))); }
+    try {
+      hash = base
+        ? digest(git(root, ["show", `${base}:${path}`]))
+        : digest(readFileSync(resolve(root, path)));
+    }
     catch { fail(`missing unchanged source: ${path}`); }
     if (hash !== proof) fail(`unchanged proof mismatch: ${path}`);
   }
@@ -134,11 +143,18 @@ function carriedFindings(baseline: Receipt, scope: ReadonlySet<string>, globalGa
     return Array.from({ length: count }, () => finding);
   });
 }
-export function carryUnmeasured(root: string, baseline: Receipt, current: Receipt, measured: readonly string[], globalGates: readonly Finding["gate"][] = []): Receipt {
+export function carryUnmeasured(
+  root: string,
+  baseline: Receipt,
+  current: Receipt,
+  measured: readonly string[],
+  globalGates: readonly Finding["gate"][] = [],
+  base?: string,
+): Receipt {
   comparable(baseline, current);
   const scope = new Set(measured);
   const unmeasured = [...new Set([...baseline.inventory, ...current.inventory])].filter((path) => !scope.has(path));
-  verifyUnmeasured(root, baseline, unmeasured);
+  verifyUnmeasured(root, baseline, unmeasured, base);
   return { ...current, inventory: [...new Set([...current.inventory, ...unmeasured])].sort(), findings: [...current.findings, ...carriedFindings(baseline, scope, globalGates)] };
 }
 

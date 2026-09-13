@@ -155,7 +155,7 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 			[types, ...census, metrics.measurement],
 			metrics.executableLines,
 		);
-		const current = save(directory, "current", scope.whole ? measured : carryUnmeasured(root, baselineAt(root, values.baseline ?? ""), measured, [...scope.paths, ...identity.schemaPaths], ["productionClones", "testClones"]));
+		const current = save(directory, "current", scope.whole ? measured : carryUnmeasured(root, baselineAt(root, values.baseline ?? ""), measured, [...scope.paths, ...identity.schemaPaths], ["productionClones", "testClones"], values.base));
 		requireMeasurement(fingerprint(root, contract).inventoryHash === identity.inventoryHash, "sources changed during measurement");
 		return current;
 	});
