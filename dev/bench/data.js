@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789255436249,
+  "lastUpdate": 1789320647115,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -69597,6 +69597,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 741106,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3df8462d7785cde07f92ae226da1fbee79a47c55",
+          "message": "fix(quality): remeasure unproven scoped sources (#1069)\n\n* fix(quality): remeasure unproven scoped sources\n\nPart of #1049\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* fix(quality): promote unproven scopes to full measurement\n\nPart of #1049\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* refactor(quality): isolate scoped proof promotion\n\nPart of #1049\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* fix(quality): promote unverifiable scopes before ratchet\n\nPart of #1049\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* test(quality): execute scope proof in process\n\nPart of #1049\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n---------\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>",
+          "timestamp": "2026-09-14T02:29:22+09:00",
+          "tree_id": "79a8ed85edd150e40c63a8a1092177b980a86d73",
+          "url": "https://github.com/INONONO66/openomni/commit/3df8462d7785cde07f92ae226da1fbee79a47c55"
+        },
+        "date": 1789320646292,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 864,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1616,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1261,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1302174,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 305782,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6440240,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 118,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 967,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 478784,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3258,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18466,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 178498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 888217,
             "unit": "ns/op"
           }
         ]
