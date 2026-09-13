@@ -6,6 +6,7 @@ import { scriptPartitions } from "./scripts-lanes";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
+import { hasCompleteQualityProof } from "./quality-proof";
 
 export const changeClasses = ["docs", "desktop", "kernel", "tooling", "global"] as const;
 export interface CiPlan {
@@ -128,7 +129,7 @@ export function planChanges(
   }
   const workspaces = topology.filter((workspace) => selected.has(workspace.packageName));
   const verify = workspaces.length > 0 || changeClass === "tooling";
-  return finishPlan(paths, {
+  const plan = finishPlan(paths, {
     full: false,
     verify,
     dependencyReview: false,
@@ -139,6 +140,15 @@ export function planChanges(
         ? "empty-diff"
         : "root-documentation-only",
   }, changeClass, root);
+  if (
+    process.env.QUALITY_BASE &&
+    plan.verify &&
+    !plan.toolingTests &&
+    !plan.full &&
+    !hasCompleteQualityProof(root, process.env.QUALITY_BASE, plan)
+  )
+    return finishPlan(undefined, fullPlan(topology, "unproven-quality-scope"), "global", root);
+  return plan;
 }
 
 function rows(topology: readonly WorkspaceTopology[]) {

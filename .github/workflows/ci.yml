@@ -41,7 +41,7 @@ jobs:
           HEAD: ${{ github.sha }}
         run: |
           if [[ "$EVENT" == pull_request ]]; then
-            bun run script/ci-plan.ts --base "$BASE" --head "$HEAD" > ci-plan.json
+            QUALITY_BASE="$BASE" bun run script/ci-plan.ts --base "$BASE" --head "$HEAD" > ci-plan.json
           else
             bun run script/ci-plan.ts --full > ci-plan.json
           fi

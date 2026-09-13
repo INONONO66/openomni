@@ -49,7 +49,7 @@ test("carry-forward requires a baseline content proof for every unmeasured path,
   expect(() => carryUnmeasured(repo.root, { ...baseline, findings: [] }, current, ["script/a.ts"])).toThrow("script/b.ts");
 });
 
-test("carry-forward verifies unmeasured proof against the base revision", () => {
+test("a matching Git base cannot authorize changed unmeasured source", () => {
   using repo = fixture();
   const before = Bun.spawnSync(["git", "init"], { cwd: repo.root });
   expect(before.exitCode).toBe(0);
@@ -61,5 +61,6 @@ test("carry-forward verifies unmeasured proof against the base revision", () => 
   const baseline = { version: 1 as const, complete: true, analyzed: ["publisher" as const], inventory: ["script/a.ts", "script/b.ts"], findings: [finding], sha256: { "script/b.ts": digest("export const b = 2;\n") } };
   const current = { version: 1 as const, complete: true, analyzed: ["publisher" as const], inventory: ["script/a.ts"], findings: [] };
   writeFileSync(join(repo.root, "script/b.ts"), "export const b = 3;\n");
-  expect(carryUnmeasured(repo.root, baseline, current, ["script/a.ts"], [], "HEAD").findings).toEqual([finding]);
+  expect(carryUnmeasured(repo.root, baseline, current, ["script/a.ts"], [], "HEAD").findings)
+    .toEqual([finding]);
 });
