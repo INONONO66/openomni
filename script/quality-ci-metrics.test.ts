@@ -48,6 +48,10 @@ test("static pinned analyzers survive JSON transfer and join conservative bounds
 		expect(document.sources).toEqual(identity.inventory.files.map(({ path, sha256 }) => ({ path, sha256 })));
 		const lines = new Map<string, ReadonlyMap<number, number>>();
 		const result = joinBounds(document, { identity, lines });
+		const preparedStarts = [...new Set(
+			Object.values(document.measured[0]?.analysis.prepared.statementMap ?? {}).map((range) => range.start.line),
+		)].sort((a, b) => a - b);
+		expect(result.executableLines[0]?.lines).toEqual(preparedStarts);
 		expect(result.algorithm).toBe("d945-lcov-crap-upper-bound@1");
 		expect(result.complete).toBe(true);
 		const answer = result.records.find((row) => row.name === "answer");

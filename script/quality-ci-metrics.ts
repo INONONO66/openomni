@@ -155,9 +155,11 @@ export function joinBounds(document: StaticDocument, options: {
 		pythonProcesses: document.pythonProcesses, sources: document.sources,
 		executableLines: measured.map(({ source, analysis }) => ({
 			path: source.path,
-			lines: [...new Set(Object.values(analysis.prepared.statementMap).flatMap((range) =>
-				Array.from({ length: range.end.line - range.start.line + 1 }, (_value: never, index: number) => range.start.line + index),
-			))].sort((a, b) => a - b),
+			// A statement map range may span blank lines, continuation syntax,
+			// and comments. Only its mapped start is an executable-line proof
+			// obligation; expanding the whole range manufactures coverage debt.
+			lines: [...new Set(Object.values(analysis.prepared.statementMap).map((range) => range.start.line))]
+				.sort((a, b) => a - b),
 		})),
 		records, duplication, measurement,
 	};
