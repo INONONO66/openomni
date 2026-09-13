@@ -45,3 +45,12 @@ export function hasCompleteQualityProof(root: string, base: string, plan: CiPlan
 			return expected !== undefined && baseSource !== undefined && digest(baseSource) === expected;
 		});
 }
+
+export function applyQualityProof(
+	plan: CiPlan,
+	root: string,
+	base: string,
+	full: () => CiPlan,
+): CiPlan {
+	return hasCompleteQualityProof(root, base, plan) ? plan : { ...full(), reason: "unproven-quality-scope" };
+}

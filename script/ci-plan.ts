@@ -6,7 +6,7 @@ import { scriptPartitions } from "./scripts-lanes";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
-import { hasCompleteQualityProof } from "./quality-proof";
+import { applyQualityProof } from "./quality-proof";
 
 export const changeClasses = ["docs", "desktop", "kernel", "tooling", "global"] as const;
 export interface CiPlan {
@@ -188,11 +188,6 @@ function validateGraph(topology: readonly WorkspaceTopology[]): void {
   }
 }
 
-export function applyQualityProof(plan: CiPlan, root: string, base: string): CiPlan {
-  if (hasCompleteQualityProof(root, base, plan)) return plan;
-  return finishPlan(undefined, fullPlan(TOPOLOGY, "unproven-quality-scope"), "global", root);
-}
-
 function main(): void {
   const { values } = parseArgs({
     args: Bun.argv.slice(2),
@@ -228,7 +223,12 @@ function main(): void {
       throw new Error("git diff output is not NUL terminated");
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
-  const plan = applyQualityProof(planChanges(paths, full, TOPOLOGY, process.cwd()), process.cwd(), base);
+  const plan = applyQualityProof(
+    planChanges(paths, full, TOPOLOGY, process.cwd()),
+    process.cwd(),
+    base,
+    () => finishPlan(undefined, fullPlan(TOPOLOGY, "unproven-quality-scope"), "global", process.cwd()),
+  );
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
     appendFileSync(
