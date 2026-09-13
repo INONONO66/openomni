@@ -1,12 +1,12 @@
 import { appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import ts from "typescript";
-import { buildInventory, decodeJson, digest, jsonObject, jsonString, readContract } from "./quality-inventory";
+import { buildInventory, readContract } from "./quality-inventory";
 import { scriptPartitions } from "./scripts-lanes";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
-import { qualitySource } from "./quality-source";
+import { hasCompleteQualityProof } from "./quality-proof";
 
 export const changeClasses = ["docs", "desktop", "kernel", "tooling", "global"] as const;
 export interface CiPlan {
@@ -188,33 +188,9 @@ function validateGraph(topology: readonly WorkspaceTopology[]): void {
   }
 }
 
-function qualityProofIsComplete(root: string, base: string, plan: CiPlan): boolean {
-  if (!plan.verify || plan.toolingTests || plan.full) return true;
-  const baselinePath = "script/conformance/quality-baseline-lcov-bound.json";
-  const result = Bun.spawnSync(["git", "show", `${base}:${baselinePath}`], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  if (result.exitCode !== 0) throw new Error(`cannot read quality baseline at ${base}`);
-  const baseline = jsonObject(decodeJson(result.stdout.toString()));
-  const hashes = baseline.sha256 === undefined ? new Map<string, string>() : new Map(
-    Object.entries(jsonObject(baseline.sha256)).map(([path, value]) => [path, jsonString(value)]),
-  );
-  const inventory = buildInventory(root, readContract(resolve(root, "script/conformance/quality-contract.json")));
-  const owned = inventory.files.filter((row) => qualitySource(row.path));
-  const selected = new Set(plan.qualityScope);
-  return owned.every((row) => selected.has(row.path) || hashes.get(row.path) === digest(gitAt(root, base, row.path)));
-}
-
-function gitAt(root: string, revision: string, path: string): string {
-  const result = Bun.spawnSync(["git", "show", `${revision}:${path}`], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  if (result.exitCode !== 0) return "";
-  return result.stdout.toString();
+export function applyQualityProof(plan: CiPlan, root: string, base: string): CiPlan {
+  if (hasCompleteQualityProof(root, base, plan)) return plan;
+  return finishPlan(undefined, fullPlan(TOPOLOGY, "unproven-quality-scope"), "global", root);
 }
 
 function main(): void {
@@ -252,15 +228,7 @@ function main(): void {
       throw new Error("git diff output is not NUL terminated");
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
-  let plan = planChanges(paths, full, TOPOLOGY, process.cwd());
-  if (!full && !qualityProofIsComplete(process.cwd(), base, plan)) {
-    plan = finishPlan(
-      undefined,
-      fullPlan(TOPOLOGY, "unproven-quality-scope"),
-      "global",
-      process.cwd(),
-    );
-  }
+  const plan = applyQualityProof(planChanges(paths, full, TOPOLOGY, process.cwd()), process.cwd(), base);
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
     appendFileSync(
