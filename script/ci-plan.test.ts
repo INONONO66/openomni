@@ -291,7 +291,7 @@ test("a scoped PR remeasures sources whose baseline evidence is stale", () => {
   mkdirSync(join(repo.root, "packages/machines/src"), { recursive: true });
   writeFileSync(join(repo.root, "packages/machines/src/change.ts"), "export const changed = 1;\n");
   const head = repo.snapshot();
-  const result = repo.run(["--base", base, "--head", head]);
+  const result = repo.run(["--base", base, "--head", head], { QUALITY_BASE: base });
   expect(result.exitCode).toBe(0);
   const plan = planSchema.parse(JSON.parse(result.stdout.toString()));
   expect(plan).toMatchObject({ full: true, class: "global", reason: "unproven-quality-scope" });

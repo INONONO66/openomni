@@ -6,7 +6,7 @@ import { scriptPartitions } from "./scripts-lanes";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
-import { applyQualityProof } from "./quality-proof";
+import { hasCompleteQualityProof } from "./quality-proof";
 
 export const changeClasses = ["docs", "desktop", "kernel", "tooling", "global"] as const;
 export interface CiPlan {
@@ -129,7 +129,7 @@ export function planChanges(
   }
   const workspaces = topology.filter((workspace) => selected.has(workspace.packageName));
   const verify = workspaces.length > 0 || changeClass === "tooling";
-  return finishPlan(paths, {
+  const plan = finishPlan(paths, {
     full: false,
     verify,
     dependencyReview: false,
@@ -140,6 +140,15 @@ export function planChanges(
         ? "empty-diff"
         : "root-documentation-only",
   }, changeClass, root);
+  if (
+    process.env.QUALITY_BASE &&
+    plan.verify &&
+    !plan.toolingTests &&
+    !plan.full &&
+    !hasCompleteQualityProof(root, process.env.QUALITY_BASE, plan)
+  )
+    return finishPlan(undefined, fullPlan(topology, "unproven-quality-scope"), "global", root);
+  return plan;
 }
 
 function rows(topology: readonly WorkspaceTopology[]) {
@@ -201,10 +210,9 @@ function main(): void {
   const full =
     values.full === true || (event !== undefined && event !== "" && event !== "pull_request");
   let paths: readonly string[] | undefined;
-  let base = "";
   if (!full) {
     const sha = z.string().regex(/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/);
-    base = sha.parse(values.base);
+    const base = sha.parse(values.base);
     const head = sha.parse(values.head);
     // Argument arrays, SHA validation, and NUL delimiters avoid shell expansion,
     // option injection, rename loss, and splitting filenames on whitespace.
@@ -223,12 +231,7 @@ function main(): void {
       throw new Error("git diff output is not NUL terminated");
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
-  const plan = applyQualityProof(
-    planChanges(paths, full, TOPOLOGY, process.cwd()),
-    process.cwd(),
-    base,
-    () => finishPlan(undefined, fullPlan(TOPOLOGY, "unproven-quality-scope"), "global", process.cwd()),
-  );
+  const plan = planChanges(paths, full, TOPOLOGY, process.cwd());
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
     appendFileSync(
