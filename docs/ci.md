@@ -216,8 +216,13 @@ closed until a complete campaign and reviewed baseline exist; a missing baseline
 is not a zero-survivor claim. A PR pilot is never reported as zero survivors.
 
 The TypeScript/JavaScript mutation runner builds a campaign-scoped reach map
-before candidate execution. Each test file runs against instrumented original
-sources, and reached sites select the tests for each candidate. The map binds
+before candidate execution. Files recorded in the green baseline's native JUnit
+run against instrumented original sources, and reached sites select the tests
+for each candidate. The baseline still receives every inventoried test path;
+Bun's package configuration decides which files execute. Ignored files remain
+in the source/candidate inventory, not in the reach execution list. Failed
+probes preserve their test identity, process output and JUnit in the failure
+receipt, and cleanup removes the reach worktree's Git registration. The map binds
 the execution tree, candidates, test list, source hashes and site identities.
 An unreached candidate is `noCoverage`, not killed: it produces no candidate
 test or JUnit receipts. Python retains its per-candidate probe. Source restoration,
