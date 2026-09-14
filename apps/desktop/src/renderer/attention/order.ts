@@ -62,10 +62,7 @@ export function attentionScore(session: SessionFacts, now: number): number {
 
 function scoreForKind(session: SessionFacts, now: number, kind: AttentionKind): number {
   const age = Math.max(0, now - session.lastActivityAt);
-  return (
-    2 ** (-age / (6 * HOUR)) +
-    (kind === "residue" ? 2 ** (-age / (24 * HOUR)) : 0)
-  );
+  return 2 ** (-age / (6 * HOUR)) + (kind === "residue" ? 2 ** (-age / (24 * HOUR)) : 0);
 }
 
 /** Rank kinds, then projects by their best row, then rows. No clock or input mutation. */

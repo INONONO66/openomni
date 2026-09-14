@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  applyAtBoundary,
-  changedSince,
-  orderByAttention,
-} from "../src/renderer/attention";
+import { applyAtBoundary, changedSince, orderByAttention } from "../src/renderer/attention";
 import { makeSession } from "./helpers/session";
 
 /**

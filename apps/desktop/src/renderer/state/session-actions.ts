@@ -35,4 +35,3 @@ export function setSessionTitleIfPlaceholder(id: SessionId, text: string): void 
     };
   });
 }
-

@@ -142,9 +142,15 @@ describe("tab history has browser semantics", () => {
     navigate({ kind: "route", route: "inbox" });
     back();
     back();
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: first });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({
+      kind: "session",
+      sessionId: first,
+    });
     forward();
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "session", sessionId: second });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({
+      kind: "session",
+      sessionId: second,
+    });
     expect(canGoBack(currentTab().history)).toBe(true);
     expect(canGoForward(currentTab().history)).toBe(true);
   });
@@ -178,7 +184,10 @@ describe("tab history has browser semantics", () => {
     jumpTo(0);
     expect(currentTab().history.cursor).toBe(0);
     expect(currentTab().history.entries).toHaveLength(3);
-    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({ kind: "route", route: "sessions" });
+    expect(activeTab(consoleStore.state)?.place ?? null).toEqual({
+      kind: "route",
+      route: "sessions",
+    });
   });
 
   test("empty strips and invalid boundaries leave state unchanged", () => {

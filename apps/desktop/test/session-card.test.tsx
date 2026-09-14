@@ -7,11 +7,7 @@ import { attentionKind, attentionScore, orderByAttention } from "../src/renderer
 import { rowDensity } from "../src/renderer/attention/reason";
 import { SessionList } from "../src/renderer/shell/session-list";
 import { sessionGlyphProps } from "../src/renderer/shell/session-glyph";
-import {
-  consoleStore,
-  INITIAL_CLIENT_STATE,
-  openTab,
-} from "../src/renderer/state/store";
+import { consoleStore, INITIAL_CLIENT_STATE, openTab } from "../src/renderer/state/store";
 import type { SessionPhase } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
 import { makeSession } from "./helpers/session";

@@ -5,12 +5,7 @@ import { useStore } from "@tanstack/react-store";
 import type { ChatTransport, UIMessage } from "ai";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { sessionGlyphProps } from "../shell/session-glyph";
-import {
-  consoleStore,
-  type Session,
-  type SessionId,
-  setDraft,
-} from "../state/store";
+import { consoleStore, type Session, type SessionId, setDraft } from "../state/store";
 import { uiMessagesToTranscript } from "./adapter";
 import type { OpenOmniUIMessage } from "./message";
 
