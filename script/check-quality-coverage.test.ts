@@ -4,6 +4,11 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { coverageForMetrics, decode, exactMetric, sha256 } from "./check-quality-coverage";
 import { run as metrics } from "./check-quality-metrics";
+import { statementCounters } from "./quality-ci-bound";
+import { loadCoverage, prepare } from "./quality-metrics/coverage";
+import { loadInventory } from "./quality-metrics/input";
+import { parseNativeLcov } from "./quality-native-lcov";
+import { joinBounds, measureStatic } from "./quality-ci-metrics";
 
 type Json = ReturnType<typeof decode>;
 class FixtureError {
@@ -112,6 +117,98 @@ function collected(sources: Record<string, string> = fixtures, plan = defaultPla
 function findings(result: { [key: string]: Json }): { [key: string]: Json }[] {
 	return list(result.findings).map(obj);
 }
+
+test("real Bun false-positive DA cannot certify an unreachable original statement", async () => {
+	const source = `export function choose(mode: number, count: { value: number }): string {
+  switch (mode) {
+    case 1:
+      count.value += 1;
+      return "one";
+    case 2:
+      count.value += 10;
+      return "two";
+    default:
+      count.value += 100;
+      return "other";
+  }
+}
+
+export function branch(enabled: boolean, count: { value: number }): number {
+  if (enabled) {
+    count.value += 1000;
+    return 1;
+  }
+  count.value += 10000;
+  return 2;
+}
+
+export function dormant(count: { value: number }): void {
+  count.value += 100000;
+}
+
+export function implicitReturn(enabled: boolean, count: { value: number }): void {
+  if (enabled) return;
+  count.value += 1000000;
+}
+export function sameLine(enabled: boolean) { if (enabled) return 3; return 4; }
+export function multiline() {
+  const value = (
+    40 +
+    2
+  );
+  return value;
+}
+`;
+	const f = fixture({
+		"script/subject.ts": source,
+		"script/subject.test.ts": 'import { test, expect } from "bun:test"; import { choose, branch, implicitReturn, sameLine, multiline } from "./subject"; test("successful taken branch", () => { const count = { value: 0 }; expect(choose(1, count)).toBe("one"); expect(branch(true, count)).toBe(1); implicitReturn(true, count); expect(count.value).toBe(1001); expect(sameLine(true)).toBe(3); expect(multiline()).toBe(42); });\n',
+	});
+	try {
+		const native = Bun.spawnSync([process.execPath, "test", "./script/subject.test.ts", "--coverage", "--coverage-reporter=lcov", "--coverage-dir=native"], { cwd: f.root, timeout: 30_000 });
+		expect(native.exitCode).toBe(0);
+		expect(native.stderr.toString()).toContain("1 pass");
+		const lcov = parseNativeLcov(readFileSync(join(f.root, "native/lcov.info"), "utf8"), "script");
+		const lines = new Map(lcov.find((file) => file.path.endsWith("subject.ts"))?.lines.map((row) => [row.line, row.hits]));
+		expect(lines.get(21)).toBeGreaterThan(0);
+		expect(lines.get(25)).toBeGreaterThan(0);
+		const collected = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		expect(collected.exit).toBe(1);
+		expect(collected.result.complete).toBe(true);
+		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
+		const prepared = inventory.files.map(prepare);
+		const file = prepared.find((file) => file.path === "script/subject.ts");
+		if (!file) throw new Error("missing subject map");
+		const exact = loadCoverage(join(f.root, "coverage.json"), inventory, prepared, { root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
+		const counts = exact.totals.get(file.path);
+		if (!counts) throw new Error("missing exact counters");
+		const at = (text: string) => {
+			const offset = source.indexOf(text);
+			const prefix = source.slice(0, offset).split("\n");
+			const entries = Object.entries(file.statementMap).filter(([, range]) => range.start.line === prefix.length && range.start.column === (prefix.at(-1)?.length ?? 0));
+			expect(entries, text).toHaveLength(1);
+			return entries[0]?.[0] ?? "";
+		};
+		for (const text of ['count.value += 1;', 'count.value += 1000;', 'return 1;', 'return 3;', '40 +', 'return value;']) expect(counts.s[at(text)]).toBe(1);
+		for (const text of ['return 2;', 'count.value += 100000;', 'return 4;']) expect(counts.s[at(text)]).toBe(0);
+		expect(Object.entries(file.fnMap).filter(([, fn]) => fn.name === "dormant").map(([id]) => counts.f[id])).toEqual([0]);
+		expect(readFileSync(join(f.root, "script/subject.ts"), "utf8")).toBe(source);
+		console.info(JSON.stringify({ nativeDA21: lines.get(21), nativeDA25: lines.get(25), exactReturn2: counts.s[at("return 2;")], exactDormant: counts.s[at("count.value += 100000;")] }));
+		// The old boundary credited this never-executed return from DA:21,1.
+		expect(statementCounters(file, exact).s[at("return 2;")]).toBe(0);
+		expect(statementCounters(file, exact)).toEqual(counts);
+		expect(() => statementCounters(file)).toThrow("missing exact statement evidence");
+		const document = await measureStatic({ root: f.root, inventory: join(f.root, "inventory.json") });
+		const joined = joinBounds(document, { identity: inventory, coverage: exact, selectedLanes: ["script"] });
+		const branch = joined.records.find((row) => row.name === "branch");
+		expect(branch?.coverage.hit).toBeLessThan(branch?.coverage.total ?? 1);
+		expect(branch?.crap).toBeGreaterThan(branch?.cyclomatic ?? 0);
+		const uncovered = joined.measurement.findings.filter((row) => row.gate === "coverage" && row.path === file.path);
+		expect(uncovered.some((row) => row.line === 21)).toBe(true);
+		expect(uncovered.some((row) => row.line === 25)).toBe(true);
+		expect(uncovered.some((row) => row.line === 17)).toBe(false);
+		console.info(JSON.stringify({ exactRatchetRows: uncovered, branch }));
+	} finally { f.cleanup(); }
+}, 120_000);
 
 test("a single uncovered statement cannot become exact full coverage by rounding", () => {
 	expect(exactMetric(100_000, 99_999)).toEqual({

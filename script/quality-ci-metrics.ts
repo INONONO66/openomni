@@ -1,11 +1,11 @@
 import { analyzeJavascript } from "./quality-metrics/javascript";
 import { analyzePython } from "./quality-metrics/python";
 import { detectClones } from "./quality-metrics/clones";
-import { joinCoverage, prepare } from "./quality-metrics/coverage";
+import { joinCoverage, prepare, type Coverage } from "./quality-metrics/coverage";
 import { loadInventory, toolVersion, type Source } from "./quality-metrics/input";
 import { toolReceipts } from "./quality-metrics/tool";
 import { qualitySource } from "./quality-source";
-import { conservativeCounters } from "./quality-ci-bound";
+import { statementCounters } from "./quality-ci-bound";
 import { requireMeasurement, type Finding, type Identity, type Measurement } from "./quality-ci-receipt";
 import { digest, InventoryError } from "./quality-inventory";
 
@@ -106,16 +106,14 @@ type JoinedMetrics = {
 
 export function joinBounds(document: StaticDocument, options: {
 	identity: Pick<Identity, "inventoryHash" | "contractHash">;
-	lines: ReadonlyMap<string, ReadonlyMap<number, number>>; selectedLanes?: readonly string[];
+	coverage?: Coverage; selectedLanes?: readonly string[];
 }): JoinedMetrics {
 	requireMeasurement(document.version === 1 && document.complete === true, "incomplete static metrics");
 	requireMeasurement(document.inventoryHash === options.identity.inventoryHash && document.contractHash === options.identity.contractHash, "stale quality leg: metrics");
 	const { hosts, duplication } = document;
 	const sources = document.measured.map((row) => row.source);
 	const measured = document.measured.map(({ source, analysis }) => {
-		const counters = conservativeCounters(
-			analysis.prepared, source.text, options.lines.get(source.path) ?? new Map<number, number>(),
-		);
+		const counters = statementCounters(analysis.prepared, options.coverage);
 		return {
 			source, analysis, counters,
 			records: joinCoverage(source, analysis.units, analysis.prepared, counters),
@@ -128,8 +126,8 @@ export function joinBounds(document: StaticDocument, options: {
 		endLine: sourceLocation(source, finding.endLine ?? finding.line, hosts).line,
 		symbol: source.hostPath ? `PYTHON_DRIVER:${finding.symbol}` : finding.symbol,
 	}))));
-	// Every unproven original statement remains visible, including tests and files
-	// without native LCOV. This is a conservative coverage deficit, not measured 0%.
+	// Keep every uncovered original statement, including nested/same-line ranges
+	// and tests. Missing evidence has already failed; zero here is an exact count.
 	for (const { source, analysis, counters } of measured) {
 		if (!selected(source.hostPath ?? source.path)) continue;
 		for (const [id, span] of Object.entries(analysis.prepared.statementMap)) {
@@ -147,8 +145,8 @@ export function joinBounds(document: StaticDocument, options: {
 		findings,
 	};
 	return {
-		version: 1, complete: true, algorithm: "d945-lcov-crap-upper-bound@1",
-		coverageMeaning: "proven-statement lower bound; unproven is not measured zero",
+		version: 1, complete: true, algorithm: "d945-exact-statement-evidence@1",
+		coverageMeaning: "verified original-source statement counters including descendant processes",
 		coverageScope: options.selectedLanes ?? ["all"],
 		inventoryHash: document.inventoryHash, contractHash: document.contractHash,
 		tools: document.tools, analyzerProcesses: document.analyzerProcesses,

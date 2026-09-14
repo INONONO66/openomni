@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { digest, jsonArray, jsonBoolean, jsonObject, jsonString } from "./quality-inventory";
 import { recordObject } from "./quality-ci-input";
@@ -6,6 +6,34 @@ import { completeDocument, requireMeasurement, sameMembers, type Identity } from
 import { mergeNativeLines, parseNativeLcov, type NativeLines } from "./quality-native-lcov";
 import { coverageLanes } from "./topology";
 import { scriptPartitions } from "./scripts-lanes";
+import { loadCoverage, type Prepared } from "./quality-metrics/coverage";
+import { loadInventory } from "./quality-metrics/input";
+
+/** Consume the existing collector, not LCOV, for original statement evidence.
+ * Its plan binds the CI run and selection before execution; its receipt binds
+ * that plan, all original sources/maps and independently observed descendants.
+ * Native lane/shard receipts below remain exclusively line-floor evidence. */
+export function readExactCoverage(options: {
+	root: string; contract: string; directory: string; plan: string; run: string;
+}, identity: Identity, prepared: Prepared[]) {
+	const inventoryPath = resolve(options.directory, "exact.inventory.json");
+	const plan = resolve(options.directory, "exact.plan.json");
+	const coverage = resolve(options.directory, "exact.coverage.json");
+	for (const path of [inventoryPath, plan, coverage, `${coverage}.sha256`])
+		requireMeasurement(existsSync(path), `missing exact statement evidence: ${path}`);
+	const inventory = loadInventory(options.root, inventoryPath);
+	requireMeasurement(inventory.inventoryHash === identity.inventoryHash && inventory.contractHash === identity.contractHash, "stale exact coverage inventory");
+	const run = jsonObject(recordObject(plan).run);
+	requireMeasurement(run.id === options.run && run.selectionHash === digest(readFileSync(options.plan)), "stale exact coverage run or selection");
+	const bytes = readFileSync(coverage);
+	requireMeasurement(readFileSync(`${coverage}.sha256`, "utf8") === digest(bytes), "exact coverage bytes changed");
+	const receipt = recordObject(coverage);
+	requireMeasurement(receipt.version === 1 && receipt.runtime === Bun.version, "exact collector runtime or receipt differs");
+	return loadCoverage(coverage, inventory, prepared, {
+		root: options.root, contract: options.contract, inventory: inventoryPath, plan,
+		scope: prepared.map((file) => file.path),
+	});
+}
 
 function selectedLanes(plan: string): string[] {
 	const document = recordObject(plan);

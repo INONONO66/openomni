@@ -337,8 +337,13 @@ function toolchain() {
 
 function commands(value: Json, entries: Entry[]): Command[] {
 	const plan = object(value);
-	object(value, plan.version === 2 ? ["version", "commands", "faults"] : ["version", "commands"]);
+	object(value, ["version", "commands", ...(plan.version === 2 ? ["faults"] : []), ...(plan.run === undefined ? [] : ["run"])]);
 	if (plan.version !== 1 && plan.version !== 2) fail("schema", "", "unsupported plan version");
+	if (plan.run !== undefined) {
+		const run = object(plan.run, ["id", "selectionHash"]);
+		if (!text(run.id)) fail("identity", "", "empty coverage run");
+		hash(run.selectionHash);
+	}
 	const result = array(plan.commands).map((item) => {
 		const v = object(item);
 		object(item, ["id", "kind", "paths", "args", "expectedExitCode", ...(v.runtime === undefined ? [] : ["runtime"])]);
