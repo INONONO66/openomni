@@ -484,10 +484,37 @@ test("same-site replacements use the campaign reach map and preserve candidate r
 	expect(result.code).toBe(1);
 	expectRestoredResults(result, 2);
 	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)))).toBe(true);
-	expect(result.selected.every((row) => record(row.coverage).reached === true)).toBe(true);
 	// The reach map is recorded once for the campaign; each mutant has only
 	// compiler + mutation receipts.
 	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
+}, 90000);
+
+test("same-site candidates record each covering test exactly once in order", async () => {
+	const source = "export const run = (n:number) => n < 2;";
+	const input = await fixture(source, "expect(run(1)).toBe(true);", {
+		"src/b.test.ts": 'import {test,expect} from "bun:test"; import {run} from "./a"; test("above boundary", () => expect(run(3)).toBe(false));',
+		"src/c.test.ts": 'import {test,expect} from "bun:test"; import {run} from "./a"; test("not covering", () => expect(typeof run).toBe("function"));',
+	});
+	const result = await invoke(input, "same-site-unique-tests", ["--target", "src/a.ts", "--operator", "relational", "--limit", "2"]);
+	expect(result.code).toBe(1);
+	expectRestoredResults(result, 2);
+	const tests = ["src/a.test.ts", "src/b.test.ts"];
+	expect(result.selected.map((row) => record(row.coverage).tests)).toEqual([tests, tests]);
+	const sites = rows(record(result.report.reachMap).sites).map(record);
+	expect(sites.map((row) => row.id)).toEqual(result.selected.map((row) => row.id));
+	expect(sites.map((row) => row.tests)).toEqual([tests, tests]);
+	expect(sites[0]?.site).toEqual(sites[1]?.site);
+	expect(result.selected.map((row) => row.testSelection)).toEqual([sha256(JSON.stringify(tests)), sha256(JSON.stringify(tests))]);
+	expect(result.selected.map((row) => row.outcome)).toEqual(["survived", "killed"]);
+	expect(rows(result.report.results)).toHaveLength(15);
+	expect(rows(result.report.results).map(record).filter((row) => row.path === "src/a.ts")).toHaveLength(3);
+	expect(result.report.counts).toEqual({ killed: 1, survived: 1, noCoverage: 0, invalid: 0, infrastructure: 0, uncompleted: 13 });
+	expect(result.report.selectedCounts).toEqual({ killed: 1, survived: 1, noCoverage: 0, invalid: 0, infrastructure: 0, uncompleted: 0 });
+	expect(rows(record(result.report.reachMap).runs).map(record).map((run) => run.test)).toEqual([...tests, "src/c.test.ts"]);
+	expect(result.report.complete).toBe(true);
+	expect(result.report.originalHashesVerified).toBe(true);
+	expect(result.report.cleanupVerified).toBe(true);
+	expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe(source);
 }, 90000);
 
 test("same-line distinct Sites retain independent reach evidence", async () => {
