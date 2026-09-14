@@ -10,6 +10,14 @@ Policy ownership updated on `q945/policy` (PR #1030, 2026-09-09): the unconsumed
 
 ## OVERVIEW
 
+Benchmark admission updated on `fix/benchmark-paired-reference-20260914`,
+2026-09-14: every event measures the latest accepted SHA and head on one runner
+in alternating serial order, with separate frozen dependencies and canonical
+14-metric summaries. The sole 20% gate uses a fresh one-reference history (zero
+historical noise band); only passing main push/dispatch runs publish original
+head timings. Raw paired observations and hashed provenance remain artifacts.
+See `docs/ci.md`; hosted execution and landing remain parent-owned.
+
 Native coverage merge correction on `fix/quality-lcov-union-20260914`: executing
 lanes contribute the union of observed DA lines rather than their intersection.
 Saved PR #1068 receipts reproduce the lost-positive-evidence defect; regression

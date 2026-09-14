@@ -1,12 +1,21 @@
+import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { z } from "zod";
 import { decodeJson, type Json } from "./quality-json";
 import { EXPECTED_BENCHMARK_NAMES } from "./summarize-benchmark-runs";
 
+const Commit = z.string().regex(/^[0-9a-f]{40}$/).length(40);
 const Metric = z.object({ name: z.string(), unit: z.literal("ns/op"), value: z.number().nonnegative() });
-const Statistics = z.array(Metric.extend({ p50: z.number().nonnegative(), runs: z.number().int().positive() }));
+function completeMetricSet(metrics: readonly { name: string }[]): boolean {
+  const names = metrics.map((metric) => metric.name).sort();
+  const expected = [...EXPECTED_BENCHMARK_NAMES].sort();
+  return names.length === expected.length && names.every((name, index) => name === expected[index]);
+}
+const Statistics = z.array(Metric.extend({ p50: z.number().nonnegative(), runs: z.number().int().positive() }))
+  .refine(completeMetricSet, "Current benchmark metric set is incomplete, unexpected or duplicated");
+const ReferenceMetrics = z.array(Metric).refine(completeMetricSet, "Reference benchmark metric set is incomplete, unexpected or duplicated");
 const History = z.object({ entries: z.object({ "OpenOmni Benchmarks": z.array(z.object({
-  commit: z.object({ id: z.string().min(1) }),
+  commit: z.object({ id: Commit }),
   tool: z.literal("customSmallerIsBetter"),
   benches: z.array(Metric),
 })).nonempty() }) });
@@ -32,10 +41,7 @@ export function compareBenchmarks(statistics: Json, history: Json, threshold = 2
   const accepted = History.parse(history).entries["OpenOmni Benchmarks"].slice(-20);
   const latest = accepted[accepted.length - 1];
   if (!latest) throw new Error("Missing accepted main benchmark reference");
-  const names = [...EXPECTED_BENCHMARK_NAMES].sort();
-  if (current.map((metric) => metric.name).sort().join("\n") !== names.join("\n")) {
-    throw new Error("Current benchmark metric set is incomplete or duplicated");
-  }
+  ReferenceMetrics.parse(latest.benches);
   const comparisons = current.map((metric) => {
     const references = latest.benches.filter((entry) => entry.name === metric.name);
     const reference = references[0];
@@ -52,16 +58,56 @@ export function compareBenchmarks(statistics: Json, history: Json, threshold = 2
   return { referenceCommit: latest.commit.id, threshold: percent, comparisons, failed: comparisons.some((metric) => metric.regressed) };
 }
 
+function sha256(source: string): string {
+  return createHash("sha256").update(source).digest("hex");
+}
+
+async function prepareReference(args: string[]): Promise<void> {
+  const [, statisticsPath, historyPath, measuredCommit, headCommit] = z.tuple([z.literal("--prepare-reference"), z.string(), z.string(), Commit, Commit]).parse(args);
+  const statisticsSource = await Bun.file(statisticsPath).text();
+  const historySource = await Bun.file(historyPath).text();
+  const statistics = Statistics.parse(decodeJson(statisticsSource));
+  const referenceCommit = acceptedCommit(readBenchmarkHistory(historySource));
+  if (measuredCommit !== referenceCommit) throw new Error("Measured reference commit does not match accepted history");
+  const reference = {
+    entries: { "OpenOmni Benchmarks": [{
+      commit: { id: referenceCommit }, tool: "customSmallerIsBetter",
+      benches: statistics.map(({ name, unit, p50 }) => ({ name, unit, value: p50 })),
+    }] },
+    paired: { referenceCommit, headCommit, acceptedHistorySha256: sha256(historySource), referenceStatisticsSha256: sha256(statisticsSource) },
+  };
+  await Bun.write("bench-results/reference.json", `${JSON.stringify(reference, null, 2)}\n`);
+}
+
+function acceptedCommit(history: Json): string {
+  const latest = History.parse(history).entries["OpenOmni Benchmarks"].at(-1);
+  if (!latest) throw new Error("Missing accepted main benchmark reference");
+  ReferenceMetrics.parse(latest.benches);
+  return latest.commit.id;
+}
+
 export async function main(args = Bun.argv.slice(2)): Promise<number> {
   const threshold = regressionThreshold(process.env.BENCHMARK_REGRESSION_PERCENT);
   if (args[0] === "--validate-input") return 0;
-  const statistics = decodeJson(await Bun.file(args[0] ?? "bench-results/statistics.json").text());
-  const history = readBenchmarkHistory(await Bun.file(args[1] ?? "bench-results/reference.js").text());
-  const result = compareBenchmarks(statistics, history, threshold);
+  if (args[0] === "--accepted-commit") {
+    const [, path] = z.tuple([z.literal("--accepted-commit"), z.string()]).parse(args);
+    console.log(acceptedCommit(readBenchmarkHistory(await Bun.file(path).text())));
+    return 0;
+  }
+  if (args[0] === "--prepare-reference") {
+    await prepareReference(args);
+    return 0;
+  }
+  const statisticsSource = await Bun.file(args[0] ?? "bench-results/statistics.json").text();
+  const historySource = await Bun.file(args[1] ?? "bench-results/reference.js").text();
+  const result = {
+    ...compareBenchmarks(decodeJson(statisticsSource), readBenchmarkHistory(historySource), threshold),
+    statisticsSha256: sha256(statisticsSource), historySha256: sha256(historySource),
+  };
   const summary = [
     "## Benchmark regression gate", "",
     `Accepted main reference: ${result.referenceCommit}. Fail above both ${threshold}% and two sample standard deviations of the latest 20 accepted medians (zero band with fewer than two samples).`, "",
-    "| Benchmark | PR p50 ns/op | Reference ns/op | Limit ns/op | Result |",
+    "| Benchmark | Head p50 ns/op | Reference ns/op | Limit ns/op | Result |",
     "| --- | ---: | ---: | ---: | --- |",
     ...result.comparisons.map((metric) => `| ${metric.name} | ${metric.median} | ${metric.reference} | ${metric.limit} | ${metric.regressed ? "FAIL" : "PASS"} |`), "",
   ].join("\n");

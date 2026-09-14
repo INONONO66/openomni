@@ -4,19 +4,25 @@ import { z } from "zod";
 
 const Step = z.object({
   uses: z.string().optional(),
+  "continue-on-error": z.boolean().optional(),
   run: z.string().optional(),
   if: z.string().optional(),
   with: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional(),
 });
 const Job = z.object({
+  if: z.string().optional(),
+  permissions: z.object({ contents: z.string() }).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   needs: z.union([z.string(), z.array(z.string())]).optional(),
   steps: z.array(Step),
 });
 const Workflow = z.object({
+  permissions: z.object({ contents: z.string() }),
   on: z.object({
     push: z.object({ branches: z.array(z.string()), paths: z.array(z.string()).optional() }),
     pull_request: z.object({ paths: z.array(z.string()) }),
     schedule: z.array(z.object({ cron: z.string() })),
+    workflow_dispatch: z.object({ inputs: z.record(z.string(), z.object({ default: z.string() })) }),
   }),
   concurrency: z.object({ group: z.string(), "cancel-in-progress": z.string() }),
   jobs: z.object({ benchmark: Job, memory: Job, publish: Job }),
@@ -29,6 +35,7 @@ test("benchmark PRs select benchmark inputs while main stays full", () => {
   expect(workflow.on.push).toEqual({ branches: ["main"] });
   expect(workflow.on.schedule.length).toBeGreaterThan(0);
   expect(workflow.on.pull_request.paths).toEqual([
+    ".github/workflows/benchmark.yml", "script/benchmark-workflow.test.ts",
     "packages/ledger/**", "packages/agent/**", "packages/protocol/**",
     "script/summarize-benchmark-runs.ts", "script/check-benchmark-regression.ts",
     "script/conformance/summarize-benchmark-runs.test.ts", "script/check-benchmark-regression.test.ts",
@@ -55,6 +62,12 @@ test("failed benchmark comparisons cannot publish a new reference", () => {
   );
   expect(comparison).toBeGreaterThanOrEqual(0);
   expect(steps[comparison]?.with?.["auto-push"]).toBe(false);
+  expect(steps[comparison]?.with?.["output-file-path"]).toBe("bench-results/combined.json");
+  for (const key of ["fail-on-alert", "alert-threshold", "comment-on-alert"]) {
+    expect(steps[comparison]?.with?.[key]).toBeUndefined();
+  }
+  expect(steps.some((step) => step.run?.includes("--orphan"))).toBe(false);
+  expect(workflow.jobs.publish.if).toBe("(github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')");
   const publication = steps.findIndex((step) =>
     step.run?.includes("git push origin gh-pages:gh-pages"),
   );
@@ -62,16 +75,45 @@ test("failed benchmark comparisons cannot publish a new reference", () => {
   expect(steps[publication]?.if).toBe("success()");
 });
 
-test("PR, schedule, and dispatch comparisons read accepted history without publishing", () => {
+test("all events collect the accepted SHA and head on one runner before the sole paired gate", () => {
   const steps = workflow.jobs.benchmark.steps;
-  const comparison = steps.find((step) => step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"));
-  expect(comparison?.if).toBe("github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'");
-  expect(comparison?.run).toContain("git fetch --no-tags origin gh-pages");
-  expect(comparison?.run).toContain("bun run script/check-benchmark-regression.ts");
+  const reference = steps.findIndex((step) => step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"));
+  const collection = steps.findIndex((step) => step.run?.includes("seq 1"));
+  const summary = steps.findIndex((step) => step.run?.includes("summarize-benchmark-runs.ts bench-results/reference/runs"));
+  const gate = steps.findIndex((step) => step.run?.includes("--prepare-reference"));
+  expect(reference).toBeGreaterThanOrEqual(0);
+  expect(collection).toBeGreaterThan(reference);
+  expect(summary).toBeGreaterThan(collection);
+  expect(gate).toBeGreaterThan(summary);
+  expect(steps[reference]?.run).toContain("git fetch --no-tags origin gh-pages");
+  expect(steps[reference]?.run).toContain("reference_commit=$(bun run script/check-benchmark-regression.ts --accepted-commit bench-results/accepted.js)");
+  expect(steps[reference]?.run).toContain('git fetch --no-tags origin "$reference_commit"');
+  expect(steps[reference]?.run).toContain('git worktree add --detach "$REFERENCE_WORKTREE" "$reference_commit"');
+  expect(steps[reference]?.run).toContain('cd "$REFERENCE_WORKTREE"');
+  expect(steps[reference]?.run).toContain("bun install --frozen-lockfile");
+  expect(steps[reference]?.run).toContain("bunx turbo run build --filter=@openomni/protocol");
+  expect(steps[collection]?.run).toContain("if (( run % 2 )); then revisions=(reference head); else revisions=(head reference); fi");
+  expect(steps[collection]?.run).toContain('measure reference "$REFERENCE_WORKTREE" "$GITHUB_WORKSPACE/bench-results/reference/runs/$run"');
+  expect(steps[collection]?.run).toContain('measure head "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/bench-results/runs/$run"');
+  expect(steps[collection]?.run).toContain('cp packages/ledger/bench-results/session.json "$output/session.json"');
+  expect(steps[collection]?.run).toContain('cp packages/agent/bench-results/agent.json "$output/agent.json"');
+  expect(steps[summary]?.run).toContain("bun run script/summarize-benchmark-runs.ts\n");
+  expect(steps[gate]?.run).toContain('--prepare-reference bench-results/reference/statistics.json bench-results/accepted.js "$(git -C "$REFERENCE_WORKTREE" rev-parse HEAD)" "$(git rev-parse HEAD)"');
+  const decision = "bun run script/check-benchmark-regression.ts bench-results/statistics.json bench-results/reference.json";
+  expect(steps[gate]?.run).toContain(decision);
+  expect(steps.filter((step) => step.run?.includes(decision))).toHaveLength(1);
+  expect(workflow.jobs.benchmark.env?.BENCHMARK_REGRESSION_PERCENT).toBe("20");
+  expect(workflow.on.workflow_dispatch.inputs["regression-percent"]).toBeUndefined();
+  expect(workflow.permissions.contents).toBe("read");
+  expect(workflow.jobs.benchmark.permissions).toBeUndefined();
+  expect(workflow.jobs.benchmark.if).toBeUndefined();
   expect(steps.some((step) => step.run?.includes("git push"))).toBe(false);
-  expect(steps.findIndex((step) => step === comparison)).toBeGreaterThan(
-    steps.findIndex((step) => step.run === "bun run script/summarize-benchmark-runs.ts"),
-  );
+  for (const index of [reference, collection, summary, gate]) {
+    expect(steps[index]?.if).toBeUndefined();
+    expect(steps[index]?.["continue-on-error"]).toBeUndefined();
+    expect(steps[index]?.run).toContain("set -euo pipefail");
+    expect(steps[index]?.run).not.toMatch(/\|\|\s*true|set \+e|continue-on-error/);
+  }
 });
 
 test("memory guards do not prevent collection artifacts or comparison", () => {
