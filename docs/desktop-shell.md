@@ -21,58 +21,59 @@ sidebar measurements belong to `feat/desktop-shell-frame`, documented in
 `.omo/reports/desktop-shell-port-20260907.md`. New tab dimensions below are chosen
 defaults, not reference measurements.
 
-## Internals cleanup (2026-09-12)
+## Internals cleanup (PR #1047)
 
-`refactor/desktop-cleanup` (PR #1047) is reapplied selectively onto `b3c3822f`,
-whose desktop and `packages/ui` files match `8f438518`. It preserves the shipped
-shell: every current UI contract, glyph, density rule and behavior described
-below stays as it is.
+`refactor/desktop-cleanup` reorganizes renderer internals without changing the
+shipped shell: every UI contract, glyph, density rule and behavior described
+below stays as it is, and no `packages/ui` source, test or CSS changes.
 
-`state/selectors.ts` owns the read-only derivations: a session index keyed by
-immutable session-array identity (`sessionIndex`), `historyMenuEntries`, and
-`placeTitle`. Tabs, history, tree, list and search share that index instead of
-repeating linear lookups. It caches no clock values; history resolves titles only
-for the displayed entries. `store.ts` keeps every command and state transition.
+`state/selectors.ts` owns three read-only derivations: `sessionIndex`, a
+`Map` per immutable session-array snapshot (`WeakMap`-keyed, so it holds no state
+and no clock), `historyMenuEntries` and `placeTitle`. App resolves the active
+session, tab titles and glyphs and history-menu titles through that index, and
+`use-search.ts` resolves search fields through it. `session-tree.tsx` and
+`session-list.tsx` still build their own per-render maps from the same array;
+they are unchanged.
 
-`chat/session-content.tsx` owns the SDK binding and exposes `useSessionChats` to
-App. One Chat per session lives for App's lifetime; its transport reference
+`state/session-actions.ts` holds the three session mutations that App and tests
+call: `setSessionTitleIfPlaceholder`, `setSessionPhase` and
+`setSessionAttention`, moved out of `store.ts` verbatim. `store.ts` keeps every
+other command and every location transition; `activePlace` and `tabTitle` are
+gone because App reads `activeTab(state)?.place` and `placeTitle` directly.
+
+`chat/session-content.tsx` owns the SDK binding. `useSessionChats` is called by
+App, so one Chat per session lives for App's lifetime, its transport reference
 updates in the same layout-effect phase as before, and `chat.stop()` runs only on
-App teardown. Only the active panel remains keyed by tab id. Send, title, draft,
-approval and stop ordering are unchanged.
+App teardown. `SessionContent` renders the active session's transcript and
+composer; only that panel is keyed by tab id. Send, title, draft, approval and
+stop ordering are unchanged (`test/session-content.test.tsx` drives Approve and
+Deny through a real Chat and asserts the approval id and decision).
 
-App still subscribes to the whole store and reads `Date.now()` on every render,
-so relative times refresh on the same cadence. Callback identities, focus
-effects, scroll behavior and preference writes are untouched. Attention
-classification computes one kind per session and reuses it across groups; scores,
-tie order and the held-order reducer are unchanged. The unused idle-threshold
-helper and its tests go; boundary values stay.
+App's hook sequence is main's: it still subscribes to the whole store, reads
+`Date.now()` on every render so relative times refresh on the same cadence, and
+calls `useChatEndpoint` before its search/focus refs and `useShellLifecycle`.
+Callback identities, focus effects, scroll behavior and preference writes are
+untouched. `orderByAttention` classifies each session once and reuses the kind
+for its score and its group; scores, tie order and the held-order reducer are
+unchanged. The unused idle-threshold helper (`IDLE_BOUNDARY_MS`,
+`idleBoundaryReached`) and its two tests are removed; every other existing
+assertion stays.
 
-### Source disposition
+### Files touched
 
-Paths are relative to `apps/desktop`. `keep` means the current-main file is
-unchanged; `adapt` means the named cleanup is reapplied and everything else in
-the file is preserved.
+Paths are relative to `apps/desktop`. Everything else under `apps/desktop` and
+all of `packages/ui` is byte-identical to main.
 
-| Area / files | Disposition |
+| File | Change |
 | --- | --- |
-| `src/main/{index,gateway-endpoint,window-bounds}.ts` | adapt: comments and private env input type. Startup, security, persistence, error handling and defaults unchanged. |
-| `src/main/menu.ts`, `src/preload/{api,index}.ts` | adapt: comment and type cleanup. Menu behavior and the import-free, value-only preload contract unchanged. |
-| `src/preload/validation.ts`, `src/renderer/state/desktop-bridge.ts` | keep. |
-| `src/renderer/app.tsx`, `src/renderer/chat/session-content.tsx` | adapt: extract `SessionContent`/`useSessionChats`; read the active place and indexed sessions through selectors. Desktop-bridge subscription, validation and phase/glyph behavior unchanged. |
-| `src/renderer/state/{store,selectors}.ts` | adapt: move read-only derivations to `selectors.ts`. All transitions and the exported `setSessionPhase`/`setSessionAttention` commands remain. |
-| `src/renderer/state/{provider,queries,shell-preferences}.{ts,tsx}` | adapt: comments and types only. One QueryClient, one endpoint query, unchanged preference reads/writes. |
-| `src/renderer/shell/{session-tree,session-list}.tsx`, `src/renderer/shell/use-search.ts` | adapt: shared session lookup, hoisted group-label detection, comment/type cleanup. Search subsequence and Unicode behavior, selection, reveal and focus ordering unchanged. |
-| `src/renderer/shell/session-row.tsx` | keep. |
-| `src/renderer/shell/{commands,history,place-icon,row-id,session-glyph,session-secondary,shortcuts}.{ts,tsx}` | keep; `row-id.ts` may lose a stale comment. Phase mapping unchanged. |
-| `src/renderer/attention/{index,order,reason,stability}.ts` | adapt: reuse the computed kind, remove the unused idle threshold, trim stale comments. Relative time, phase boundaries, scoring and held order unchanged. |
-| `src/renderer/search/{index,filter,keyboard,score}.ts` | adapt: comments, unused type exports, shared lookup. Scoring, Unicode handling, stale selection and keyboard transitions unchanged. |
-| `src/renderer/chat/{adapter,gateway-transport,message,select-transport}.ts` | adapt: comments and unused type exports. Wire correlation, parsing, cancellation, approval ids and transcript projection unchanged. |
-| `src/renderer/chat/turn-cost.ts` | keep. |
-| `src/renderer/{main.tsx,env.d.ts,index.html,styles.css}` | adapt: stale comments only. HTML, CSS rules, boot behavior and flags unchanged. |
-| `electron.vite.config.ts`, `package.json`, `tsconfig*.json`, `playwright.config.ts`, `test-e2e/` | keep; no dependency, script or build changes. |
-
-No `packages/ui` source, tests or CSS change. Existing tests keep their
-assertions; only tests that encode the retained cleanup contracts change.
+| `src/renderer/app.tsx` | Chat cache, transport forwarding and the session panel move to `chat/session-content.tsx`; place, titles and glyphs read through `state/selectors.ts`. |
+| `src/renderer/chat/session-content.tsx` | New: `useSessionChats`, `SessionContent`. |
+| `src/renderer/state/selectors.ts` | New: `sessionIndex`, `historyMenuEntries`, `placeTitle`. |
+| `src/renderer/state/session-actions.ts` | New: the three session mutations, unchanged bodies. |
+| `src/renderer/state/store.ts` | Exports `ClientState`; drops the moved functions and the private `titleOf`. |
+| `src/renderer/attention/{index,order,stability}.ts` | Kind computed once per session in `orderByAttention`; idle helper removed from `stability.ts` and the barrel. |
+| `src/renderer/shell/use-search.ts` | Field lookup through `sessionIndex`; explicit reducer result types; one comment. |
+| `test/*` | Imports follow the moved functions; `activePlace` callers read `activeTab(state)?.place`; idle-helper tests removed; `session-content.test.tsx` added. |
 
 ## Ownership
 
