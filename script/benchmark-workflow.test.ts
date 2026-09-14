@@ -102,7 +102,9 @@ test("all events collect the accepted SHA and head on one runner before the sole
   const decision = "bun run script/check-benchmark-regression.ts bench-results/statistics.json bench-results/reference.json";
   expect(steps[gate]?.run).toContain(decision);
   expect(steps.filter((step) => step.run?.includes(decision))).toHaveLength(1);
-  expect(workflow.jobs.benchmark.env?.BENCHMARK_REGRESSION_PERCENT).toBe("20");
+  expect(workflow.jobs.benchmark.env).toEqual({ BENCHMARK_REGRESSION_PERCENT: "20" });
+  expect(steps[reference]?.run).toContain('REFERENCE_WORKTREE="$RUNNER_TEMP/benchmark-reference"');
+  expect(steps[reference]?.run).toContain('printf \'REFERENCE_WORKTREE=%s\\n\' "$REFERENCE_WORKTREE" >> "$GITHUB_ENV"');
   expect(workflow.on.workflow_dispatch.inputs["regression-percent"]).toBeUndefined();
   expect(workflow.permissions.contents).toBe("read");
   expect(workflow.jobs.benchmark.permissions).toBeUndefined();

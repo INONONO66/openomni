@@ -43,7 +43,6 @@ jobs:
     timeout-minutes: 15
     env:
       BENCHMARK_REGRESSION_PERCENT: "20"
-      REFERENCE_WORKTREE: ${{ runner.temp }}/benchmark-reference
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -63,6 +62,8 @@ jobs:
       - name: Prepare accepted benchmark reference
         run: |
           set -euo pipefail
+          REFERENCE_WORKTREE="$RUNNER_TEMP/benchmark-reference"
+          printf 'REFERENCE_WORKTREE=%s\n' "$REFERENCE_WORKTREE" >> "$GITHUB_ENV"
           rm -rf bench-results
           mkdir -p bench-results
           git fetch --no-tags origin gh-pages
