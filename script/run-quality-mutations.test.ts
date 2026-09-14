@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -7,6 +7,7 @@ import { mutationFixture, mutationEvidence, replaceArguments, reportResults } fr
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
+import { MutationCompilerWorker } from "./quality-mutation-compiler";
 
 test("switch case reach instrumentation inserts a probe after the label", () => {
 	const source = "switch (value) { case 1: return true; default: return false; }";
@@ -455,6 +456,40 @@ test("main runs a campaign in process and reports killed and noCoverage candidat
 	expect(outcomes).toContain("noCoverage");
 	expect(results.filter((row) => ["killed", "noCoverage"].includes(String(row.outcome))).every((row) => row.restored === true)).toBe(true);
 	expect(results.some((row) => rows(row.receipts).length > 0)).toBe(true);
+}, 120000);
+
+test("campaign preserves compiler shutdown as infrastructure and restores source", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
+	const check = MutationCompilerWorker.prototype.check;
+	const disposed = spyOn(MutationCompilerWorker.prototype, "check").mockImplementation(async function (this: MutationCompilerWorker, request) {
+		await this.close();
+		return check.call(this, request);
+	});
+	try {
+		const report = await runMain(input, process.env.D945_PYTHON ?? "python3", select("boolean-literal"), 2);
+		const result = reportResults(report)[0];
+		expect(result?.outcome).toBe("infrastructure");
+		expect(result?.reason).toBe("typecheck-engine");
+		expect(result?.compilerFailure).toBe("Compiler worker unavailable");
+		expect(result?.compilerProof).toBeUndefined();
+		expect(result?.receipts).toEqual([]);
+		expect(result?.restored).toBe(true);
+		expect(report.complete).toBe(false);
+		expect(report.cleanupVerified).toBe(true);
+		expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe("export const run = () => true;");
+	} finally { disposed.mockRestore(); }
+}, 120000);
+
+test("campaign rejects frozen source changes made by a baseline descendant", async () => {
+	const source = "export const run=()=>1;";
+	const input = await fixture(source,
+		'expect(typeof run()).toBe("number"); if(process.cwd().endsWith("/baseline")){const {writeFileSync}=await import("node:fs");const {join}=await import("node:path");writeFileSync(join(process.cwd(),"../frozen/src/a.ts"),"export const run=()=>2;");}',
+	);
+	const report = await runMain(input, process.env.D945_PYTHON ?? "python3", select("numeric-literal"), 2);
+	expect(report.complete).toBe(false);
+	expect(record(report.error).code).toBe("tamper");
+	expect(report.results).toBeUndefined();
+	expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe(source);
 }, 120000);
 
 test("main runs Python candidates through probe and restores the source", async () => {
