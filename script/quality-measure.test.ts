@@ -199,13 +199,18 @@ test("native collectors transfer receipts and finish joins fresh coverage throug
 		writeFileSync(join(root, "baseline.json"), JSON.stringify(current));
 		writeFileSync(join(root, "coverage/script.json"), JSON.stringify({ version: 1, complete: true, lane: "script", run, runtime: Bun.version, inventoryHash: identity.inventoryHash, lcovHash: digest(lcov), lcov, files }));
 		const args = ["finish", "--legs", "legs", "--base", "FETCH_HEAD", "--baseline", "baseline.json", "--plan", "plan.json", "--run", run, "--coverage-directory", "coverage"];
-		const sidecar = join(root, "coverage/exact.coverage.json.sha256"), seal = readFileSync(sidecar);
-		rmSync(sidecar);
-		const missing = await childMain(root, args);
-		expect(missing.exitCode).not.toBe(0);
-		expect(missing.stderr).toContain("missing exact statement evidence");
-		expect(existsSync(join(root, "quality-results"))).toBe(false);
-		writeFileSync(sidecar, seal);
+		const artifacts = ["exact.inventory.json", "exact.plan.json", "exact.coverage.json", "exact.coverage.json.sha256"]
+			.map((name) => ({ path: join(root, "coverage", name), bytes: readFileSync(join(root, "coverage", name)) }));
+		// Reproduce CI's wholly absent producer, then reject each partial upload.
+		for (const absent of [artifacts, ...artifacts.map((artifact) => [artifact])]) {
+			for (const artifact of absent) rmSync(artifact.path);
+			await expect(measureMain([...args, "--root", root])).rejects.toMatchObject({ name: "InventoryError", code: "measurement" });
+			const missing = await childMain(root, args);
+			expect(missing.exitCode).not.toBe(0);
+			expect(missing.stdout).toBe("");
+			expect(existsSync(join(root, "quality-results"))).toBe(false);
+			for (const artifact of absent) writeFileSync(artifact.path, artifact.bytes);
+		}
 		const child = await childMain(root, args);
 		expect(child.exitCode).toBe(0);
 		expect(decodeJson(child.stdout)).toMatchObject({ complete: true, violations: 0 });

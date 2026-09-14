@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { digest, jsonArray, jsonBoolean, jsonObject, jsonString } from "./quality-inventory";
+import { digest, inventorySchema, jsonArray, jsonBoolean, jsonObject, jsonString } from "./quality-inventory";
 import { recordObject } from "./quality-ci-input";
 import { completeDocument, requireMeasurement, sameMembers, type Identity } from "./quality-ci-receipt";
 import { mergeNativeLines, parseNativeLcov, type NativeLines } from "./quality-native-lcov";
@@ -8,6 +8,7 @@ import { coverageLanes } from "./topology";
 import { scriptPartitions } from "./scripts-lanes";
 import { loadCoverage, type Prepared } from "./quality-metrics/coverage";
 import { loadInventory } from "./quality-metrics/input";
+import { exactCiPlan, requireExactCiPlan } from "./quality-ci-exact";
 
 /** Consume the existing collector, not LCOV, for original statement evidence.
  * Its plan binds the CI run and selection before execution; its receipt binds
@@ -23,8 +24,10 @@ export function readExactCoverage(options: {
 		requireMeasurement(existsSync(path), `missing exact statement evidence: ${path}`);
 	const inventory = loadInventory(options.root, inventoryPath);
 	requireMeasurement(inventory.inventoryHash === identity.inventoryHash && inventory.contractHash === identity.contractHash, "stale exact coverage inventory");
-	const run = jsonObject(recordObject(plan).run);
+	const frozenPlan = recordObject(plan), run = jsonObject(frozenPlan.run);
 	requireMeasurement(run.id === options.run && run.selectionHash === digest(readFileSync(options.plan)), "stale exact coverage run or selection");
+	if (frozenPlan.version === 3) requireExactCiPlan(frozenPlan, exactCiPlan(options.root, options.contract,
+		inventorySchema.parse(recordObject(inventoryPath)), options.plan, options.run));
 	const bytes = readFileSync(coverage);
 	requireMeasurement(readFileSync(`${coverage}.sha256`, "utf8") === digest(bytes), "exact coverage bytes changed");
 	const receipt = recordObject(coverage);

@@ -1,12 +1,15 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { readExactCoverage, readNativeCoverage } from "./quality-ci-coverage";
-import { digest, jsonArray, jsonObject } from "./quality-inventory";
+import { decodeJson, digest, jsonArray, jsonObject } from "./quality-inventory";
 import { parseNativeLcov } from "./quality-native-lcov";
 import { collectExactFixture, coverageLaneFixture } from "./quality-coverage-fixture";
-import { recordObject } from "./quality-ci-input";
+import { fingerprint, recordObject } from "./quality-ci-input";
+import { exactCiPlan, requireExactCiPlan } from "./quality-ci-exact";
+import { scriptContracts, scriptPartitions, scriptsLanes } from "./scripts-lanes";
+import { planChanges } from "./ci-plan";
 import { prepare } from "./quality-metrics/coverage";
 import { loadInventory } from "./quality-metrics/input";
 
@@ -70,6 +73,94 @@ test("CI consumes run-bound original counters and rejects stale, tampered or mis
 		expect(readFileSync(join(root, child.path), "utf8")).toBe(source);
 	} finally { rmSync(root, { recursive: true, force: true }); }
 }, 120_000);
+
+function selectedCiFixture() {
+	const root = realpathSync(mkdtempSync(join(tmpdir(), "quality-exact-selected-")));
+	const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
+	put("contract.json", JSON.stringify({ version: 1, typescript: "5.9.2", roots: ["apps", "packages", "script"], projects: ["script/tsconfig.json"], topology: false }));
+	put("script/tsconfig.json", '{"compilerOptions":{"strict":true}}');
+	for (const path of Object.values(scriptsLanes).flat()) put(`script/${path}`, `import {test,expect} from "bun:test"; test(${JSON.stringify(path)},()=>expect(process.cwd().endsWith("/script")).toBe(true));\n`);
+	for (const [entry, ...args] of scriptContracts) put(`script/${entry}`, `import {strict as assert} from "node:assert"; if(import.meta.main) assert.deepEqual(process.argv.slice(2),${JSON.stringify(args)});\n`);
+	put("packages/machines/main.test.ts", 'import {test,expect} from "bun:test"; import {answer} from "./subject"; test("machine",()=>{expect(process.cwd().endsWith("/packages/machines")).toBe(true); expect(answer()).toBe(42);});\n');
+	put("packages/machines/subject.ts", "export function answer(){ return 42; }\n");
+	put("apps/desktop/main.test.ts", 'import {test,expect} from "bun:test"; test("desktop",()=>expect(process.cwd().endsWith("/apps/desktop")).toBe(true));\n');
+	put("apps/desktop/test-e2e/not-selected.spec.ts", 'throw new Error("not a Bun selection");\n');
+	put("apps/desktop/bunfig.toml", '[test]\npathIgnorePatterns = ["**/test-e2e/**"]\n');
+	const identity = fingerprint(root, "contract.json");
+	const selection = { version: 2, class: "desktop", qualityScope: identity.inventory.files.map((file) => file.path), projects: ["script/tsconfig.json"], verify: true, toolingTests: false,
+		matrix: { include: [{ key: "machines", dir: "packages/machines", coverage: true }, { key: "desktopApp", dir: "apps/desktop", coverage: true }] } };
+	put("ci-plan.json", JSON.stringify(selection));
+	const options = { root, contract: join(root, "contract.json"), directory: join(root, "coverage"), plan: join(root, "ci-plan.json"), run: "selected-ci" };
+	return { root, put, identity, selection, options, [Symbol.dispose]: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test("v3 real CI adapter and finish compare every selected command rather than only selectionHash", async () => {
+	using repo = selectedCiFixture();
+	const { root, identity, options } = repo;
+	const args = [process.execPath, join(import.meta.dir, "quality-measure.ts"), "collect", "--leg", "exact", "--root", root, "--contract", "contract.json", "--plan", "ci-plan.json", "--run", options.run];
+	const collect = async (directory: string) => {
+		const child = Bun.spawn([...args, "--output", directory], { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+		const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+		return { exitCode, stdout, stderr };
+	};
+	const collected = await collect("coverage");
+	expect(collected.exitCode).toBe(1);
+	const native = recordObject(join(options.directory, "exact.process.json"));
+	expect(native.exitCode).toBe(1);
+	expect(jsonObject(decodeJson(String(native.stdout))).complete).toBe(true);
+	const inventory = loadInventory(root, join(options.directory, "exact.inventory.json")), prepared = inventory.files.map(prepare);
+	const read = () => readExactCoverage(options, identity, prepared);
+	const evidence = read();
+	expect(evidence.totals.get("apps/desktop/test-e2e/not-selected.spec.ts")?.s).toEqual({ "0": 0 });
+	const expected = exactCiPlan(root, options.contract, identity.inventory, options.plan, options.run);
+	expect(evidence.processes.filter((p) => p.parent === "")).toHaveLength(expected.commands.length);
+	expect(expected.commands.find((command) => command.id === "desktopApp")?.paths).toEqual(["apps/desktop/main.test.ts"]);
+	const path = join(options.directory, "exact.plan.json"), original = readFileSync(path);
+	for (const patch of [{ cwd: "." }, { paths: ["packages/machines/subject.ts"] }, { runtime: "node" }, { args: ["--filter"] }, { expectedExitCode: 1 }]) {
+		const changed = recordObject(path);
+		Object.assign(jsonObject(jsonArray(changed.commands, jsonObject)[0]), patch);
+		// Same selectionHash, even a matching receipt plan hash cannot authorize
+		// a different command set. Finish admission precedes coverage verification.
+		writeFileSync(path, JSON.stringify(changed));
+		expect(() => requireExactCiPlan(changed, expected)).toThrow();
+		expect(read).toThrow();
+		writeFileSync(path, original);
+	}
+	const omitted = { ...expected, commands: expected.commands.slice(1) };
+	writeFileSync(path, JSON.stringify(omitted)); expect(read).toThrow(); writeFileSync(path, original);
+	for (const run of [{ ...expected.run, id: "stale" }, { ...expected.run, selectionHash: "0".repeat(64) }]) {
+		writeFileSync(path, JSON.stringify({ ...expected, run })); expect(read).toThrow(); writeFileSync(path, original);
+	}
+	expect(() => requireExactCiPlan(jsonObject(decodeJson(JSON.stringify({ ...expected, run: { selectionHash: expected.run.selectionHash, id: expected.run.id } }))), expected)).not.toThrow();
+	repo.put("apps/desktop/bunfig.toml", '[test]\npathIgnorePatterns = []\n'); expect(read).toThrow();
+	repo.put("apps/desktop/bunfig.toml", '[test]\npathIgnorePatterns = ["**/test-e2e/**"]\n');
+	expect(read().totals.size).toBe(evidence.totals.size);
+	// An incomplete real collection retains diagnostics and cannot be sealed.
+	repo.put("packages/machines/main.test.ts", 'import {test} from "bun:test"; test("failed",()=>{throw new Error("failure");});\n');
+	expect((await collect("failed")).exitCode).not.toBe(0);
+	expect(recordObject(join(root, "failed/exact.process.json")).exitCode).toBe(2);
+	expect(existsSync(join(root, "failed/exact.coverage.json.sha256"))).toBe(false);
+}, 120_000);
+
+test("v3 adapter derives the repository matrix and rejects ownership/discovery drift", () => {
+	const root = join(import.meta.dir, ".."), contract = join(root, "script/conformance/quality-contract.json");
+	const identity = fingerprint(root, contract);
+	using repo = selectedCiFixture();
+	repo.put("full-plan.json", JSON.stringify(planChanges([], true)));
+	const plan = exactCiPlan(root, contract, identity.inventory, join(repo.root, "full-plan.json"), "full");
+	expect(plan.commands.filter((command) => command.kind === "test" && command.cwd === "script").map((command) => command.id).sort()).toEqual([...scriptPartitions].sort());
+	expect(plan.commands.some((command) => command.runtime === "python" && command.paths.includes("script/quality-mutation/python-engine.test.py"))).toBe(true);
+	expect(plan.commands.flatMap((command) => command.paths).some((path) => path.includes("/test-e2e/"))).toBe(false);
+	for (const patch of [{ verify: false }, { toolingTests: true }, { matrix: { include: [{ key: "machines", dir: "../escape", coverage: true }] } }]) {
+		repo.put("ci-plan.json", JSON.stringify({ ...repo.selection, ...patch }));
+		expect(() => exactCiPlan(repo.root, repo.options.contract, repo.identity.inventory, repo.options.plan, "run")).toThrow();
+	}
+	repo.put("ci-plan.json", JSON.stringify(repo.selection));
+	for (const config of ['[test]\nroot = "elsewhere"\n', '[test]\npreload = ["setup.ts"]\n']) {
+		repo.put("apps/desktop/bunfig.toml", config);
+		expect(() => exactCiPlan(repo.root, repo.options.contract, repo.identity.inventory, repo.options.plan, "run")).toThrow();
+	}
+});
 
 test("coverage aggregation unions executing lanes and drops zero-only files", () => {
 	const root = mkdtempSync(join(tmpdir(), "quality-aggregate-union-"));

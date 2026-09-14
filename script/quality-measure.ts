@@ -11,6 +11,7 @@ import { nativeJson } from "./quality-native-process";
 import { qualitySchemas } from "./quality-schema";
 import { baselineAt, carryUnmeasured, changedSources, ratchetMain } from "./quality-ratchet";
 import { qualityPlan } from "./quality-plan";
+import { collectExactCi } from "./quality-ci-exact";
 
 const legs = ["types", "publisher", "export", "store", "metrics"] as const;
 type Leg = typeof legs[number];
@@ -116,6 +117,10 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 	const root = resolve(values.root), contract = resolve(root, values.contract);
 	if (positionals[0] === "collect") {
 		requireMeasurement(Boolean(values.leg && values.output), "collect requires leg and output");
+		if (values.leg === "exact") {
+			requireMeasurement(Boolean(values.plan && values.run), "exact collect requires plan and run");
+			return (await phase("exact", () => collectExactCi({ root, contract, directory: resolve(root, values.output ?? ""), plan: values.plan ?? "", run: values.run ?? "" }))).result;
+		}
 		const leg = jsonChoice(values.leg, legs), directory = resolve(root, values.output ?? "");
 		const collected = await phase(leg, async () => {
 			const identity = fingerprint(root, contract);

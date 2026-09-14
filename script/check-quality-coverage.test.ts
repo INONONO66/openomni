@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { coverageForMetrics, decode, exactMetric, sha256 } from "./check-quality-coverage";
@@ -734,6 +734,73 @@ test("embedded Python raw Unicode retains exact source identity through Bun load
 		const child = pythonProcess(collectReceipt(f));
 		expect(child.entry).toBe("script/main.ts#PYTHON_DRIVER");
 		expect(obj(child.trace).flushed).toBe(true);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test.each([1, 2])("v%i retains all-test and operational CLI omission rejection", (version) => {
+	for (const omitted of ["test", "cli"]) {
+		const f = fixture({ ...fixtures, "script/entry.ts": "if (import.meta.main) console.log(1);\n" });
+		try {
+			const commands = omitted === "test" ? cli("script/entry.ts") : defaultPlan;
+			refreeze(f, "plan", { version, commands: decode(JSON.stringify(commands)), ...(version === 2 ? { faults: [] } : {}) });
+			const result = f.run(["--collect"]);
+			expect(result.exit).toBe(2);
+			expect(result.result.complete).toBe(false);
+			expect(obj(list(result.result.errors)[0]).code).toBe("plan");
+			expect(obj(list(result.result.errors)[0]).path).toBe(omitted === "test" ? "script/subject.test.ts" : "script/entry.ts");
+		} finally { f.cleanup(); }
+	}
+});
+
+test("v3 executes selected roots in two workspaces and retains exact uncovered inventory", () => {
+	const sources = {
+		"script/one/main.test.ts": 'import {test,expect} from "bun:test"; import {answer} from "../shared"; test("one",async ()=>{ expect(process.cwd().endsWith("/script/one")).toBe(true); expect(answer()).toBe(42); const child=Bun.spawnSync([process.execPath,"../child.ts"],{stdout:"pipe"}); expect(child.exitCode).toBe(0); expect(child.stdout.toString()).toBe("child\\n"); await Bun.write("effect.txt","one"); });\n',
+		"script/two/main.test.ts": 'import {test,expect} from "bun:test"; import {readFileSync,writeFileSync} from "node:fs"; test("two",()=>{ expect(process.cwd().endsWith("/script/two")).toBe(true); expect(readFileSync("../one/effect.txt","utf8")).toBe("one"); writeFileSync("effect.txt","two"); });\n',
+		"script/shared.ts": "export function answer(){ return 42; }\n",
+		"script/child.ts": 'console.log("child");\n',
+		"script/unselected.test.ts": 'import {test} from "bun:test"; test("unselected",()=>{ throw new Error("not selected"); });\n',
+		"script/unused.ts": "if (import.meta.main) console.log(7);\n",
+	};
+	const f = fixture(sources);
+	const plan = { version: 3, commands: ["one", "two"].map((name) => ({ id: name, kind: "test", paths: [`script/${name}/main.test.ts`], args: [], cwd: `script/${name}`, runtime: "bun", expectedExitCode: 0 })), faults: [], run: { id: "selected-run", selectionHash: sha256("selection") } };
+	try {
+		refreeze(f, "plan", plan);
+		const result = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		expect(result.exit).toBe(1);
+		expect(result.result.complete).toBe(true);
+		expect(readFileSync(join(f.root, "script/two/effect.txt"), "utf8")).toBe("two");
+		const rows = list(result.result.measurements).map(obj);
+		expect(rows.map((row) => row.path).sort()).toEqual(Object.keys(sources).sort());
+		for (const path of ["script/unused.ts", "script/unselected.test.ts"]) {
+			const counters = obj(obj(rows.find((row) => row.path === path)).metrics);
+			expect(obj(counters.statements).covered).toBe(0);
+			expect(obj(counters.statements).total).toBeGreaterThan(0);
+		}
+		const shared = obj(obj(rows.find((row) => row.path === "script/shared.ts")).metrics);
+		expect(obj(shared.statements).covered).toBe(obj(shared.statements).total);
+		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
+		expect(list(receipt.processes)).toHaveLength(3);
+		expect(list(receipt.processes).map(obj).filter((p) => p.parent === "").map((p) => p.cwd).sort()).toEqual(["script/one", "script/two"]);
+		for (const defect of ["root", "child", "command", "cwd", "map"]) {
+			const changed = obj(decode(JSON.stringify(receipt))), processes = list(changed.processes).map(obj);
+			if (defect === "root") changed.processes = processes.filter((p) => p.command !== "two");
+			if (defect === "child") changed.processes = processes.filter((p) => p.parent === "");
+			if (defect === "command") changed.commands = list(changed.commands).slice(1);
+			if (defect === "cwd") obj(processes.find((p) => p.command === "one" && p.parent === "")).cwd = "script/two";
+			if (defect === "map") obj(list(changed.maps)[0]).mapHash = "0".repeat(64);
+			expect(verifyChanged(f, changed).exit).toBe(2);
+		}
+		symlinkSync(join(f.root, "script/one"), join(f.root, "alias"));
+		for (const cwd of ["../outside", "/tmp", "script/one/..", "script//one", "script/missing", "script/shared.ts", "alias", "script/two"]) {
+			refreeze(f, "plan", { ...plan, commands: plan.commands.map((command, index) => index === 0 ? { ...command, cwd } : command) });
+			expect(f.run(["--collect"]).exit).toBe(2);
+		}
+		for (const run of [null, { id: "", selectionHash: sha256("selection") }, { id: "run", selectionHash: "bad" }]) {
+			refreeze(f, "plan", { ...plan, run });
+			expect(f.run(["--collect"]).exit).toBe(2);
+		}
+		refreeze(f, "plan", { ...plan, run: { ...plan.run, id: "stale" } });
+		expect(verifyChanged(f, receipt).exit).toBe(2);
 	} finally { f.cleanup(); }
 }, 120_000);
 
