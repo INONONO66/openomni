@@ -176,6 +176,14 @@ complete so cross-file provenance is not severed. Knip selects those workspaces.
 Coverage/CRAP use selected lanes, and every changed source must belong to both
 the quality scope and a selected coverage lane.
 
+Native coverage aggregation retains the union of DA lines from lanes that
+executed a file, taking the maximum observed hit value per line. A different
+lane omitting that line cannot erase existing execution evidence. Zero-hit
+lines reported by executing lanes remain zero; when no lane executed a file,
+all observed zero-hit lines remain. Missing executable-line evidence still
+fails the ratchet. The same aggregator is used for live receipts, saved
+`coverage.json`, and script partition merges.
+
 CRAP remains measured for test sources and retained in the full receipt, but
 the PR ratchet does not block on test-source CRAP. The conservative function
 coverage bound is meaningful for production/tooling complexity; applying it to
