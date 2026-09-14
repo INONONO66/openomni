@@ -86,7 +86,7 @@ type Census = {
 	astNodes: number;
 	operators: { operator: string; candidates: number; reason: string }[];
 };
-type ReachSite = { id: string; path: string; sourceSha256: string; site: Site; tests: string[] };
+type ReachSite = { id: string; path: string; sourceSha256: string; site: Site; tests: string[]; markerIds?: string[] };
 type ProbeEvidence = { reached: boolean; markerSha256: string; tests?: string[] };
 type ReachMap = {
 	version: 1;
@@ -906,8 +906,8 @@ function caseInsertion(source: string, site: Site): number {
 	if (!first || !ts.isCaseClause(first)) return fail("instrumentation", "Missing case site");
 	return site.start + original.indexOf(":", first.expression.end - "switch(0){".length) + 1;
 }
-function instrumentSingle(source: string, site: Site, marker: string): string {
-	const probe = `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`;
+function instrumentSingle(source: string, site: Site, markers: string[]): string {
+	const probe = markers.map((marker) => `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`).join(",");
 	const original = source.slice(site.start, site.end);
 	if (site.mode === "statement") return replace(source, site.start, site.end, `{${probe};${original}}`);
 	if (site.mode === "case") return replace(source, caseInsertion(source, site), caseInsertion(source, site), `${probe};`);
@@ -917,14 +917,14 @@ function instrumentSingle(source: string, site: Site, marker: string): string {
 type ReachInsertion = { offset: number; order: number; text: string };
 function reachInsertions(source: string, row: ReachSite, directory: string, index: number): ReachInsertion[] {
 	const { site } = row;
-	const marker = join(directory, row.id);
+	const markers = (row.markerIds ?? [row.id]).map((id) => join(directory, id));
 	if (site.mode === "case") {
 		const offset = caseInsertion(source, site);
-		return [{ offset, order: index, text: `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1");` }];
+		return [{ offset, order: index, text: `${markers.map((marker) => `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`).join(";")};` }];
 	}
 	// Use exactly the single-site wrapper, but retain original offsets when
 	// nesting wrappers. Replacing an outer span would truncate inner probes.
-	const single = instrumentSingle(source, site, marker);
+	const single = instrumentSingle(source, site, markers);
 	const added = single.length - source.length;
 	if (site.mode === "statement" && site.start === site.end)
 		return [{ offset: site.start, order: -index - 1, text: single.slice(site.start, site.start + added) }];
@@ -1178,8 +1178,8 @@ function recordReach(map: Map<string, ProbeEvidence>, candidates: Candidate[], o
 	for (const candidate of candidates) {
 		const key = `${candidate.path}\u0000${JSON.stringify(candidate.site)}`;
 		const ids = owners.get(key) ?? [candidate.id];
-		const marker = join(markers, ids[0] ?? candidate.id);
 		for (const id of ids) {
+			const marker = join(markers, id);
 			const evidence = map.get(id);
 			if (!evidence || !existsSync(marker)) continue;
 			evidence.reached = true;
@@ -1197,7 +1197,14 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		if (!candidate.operator.startsWith("py-")) byPath.set(candidate.path, [...(byPath.get(candidate.path) ?? []), candidate]);
 	for (const [candidatePath, rows] of byPath) {
 		const source = mutationSource(directory, candidatePath);
-		const unique = [...new Map(rows.map((row) => [`${row.site.start}:${row.site.end}:${row.site.mode}`, row])).values()];
+		const sites = new Map<string, ReachSite>();
+		for (const row of rows) {
+			const key = `${row.site.start}:${row.site.end}:${row.site.mode}`;
+			const site = sites.get(key);
+			if (site) site.markerIds?.push(row.id);
+			else sites.set(key, { ...row, markerIds: [row.id] });
+		}
+		const unique = [...sites.values()];
 		writeMutation(source, instrument(source.source, unique.map((row) => ({ ...row, tests })), markers));
 	}
 	const map = new Map<string, ProbeEvidence>();
