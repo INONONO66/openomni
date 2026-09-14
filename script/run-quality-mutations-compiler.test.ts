@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { MessageChannel } from "node:worker_threads";
 import { buildInventory, readContract } from "./quality-inventory";
 import { programs, diagnostics, executionTreeHash, sha256 } from "./run-quality-mutations";
-import { FrozenMutationCompiler, MutationCompilerWorker } from "./quality-mutation-compiler";
+import { FrozenMutationCompiler, MutationCompilerWorker, serveCompiler } from "./quality-mutation-compiler";
 
 test("fallback compiler ignores untyped JavaScript inventory sources", () => {
   const root = mkdtempSync(join(tmpdir(), "mutation-fallback-"));
@@ -140,6 +141,54 @@ test("compiler worker returns actual compiler proof and fails closed on initiali
       expect(failed.closed).toBe(true);
     } finally { await failed.close(); }
   } finally { await worker.close(); rmSync(input.root, { recursive: true, force: true }); }
+}, 120000);
+
+test("compiler message server returns initialization errors and real diagnostics over message ports", async () => {
+  const input = compilerFixture();
+  const { port1, port2 } = new MessageChannel();
+  serveCompiler(port2);
+  const next = () => new Promise<Parameters<Parameters<typeof serveCompiler>[0]["postMessage"]>[0]>((resolveResponse) => port1.once("message", resolveResponse));
+  try {
+    const request = compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent: number = false;");
+    let response = next();
+    port1.postMessage({ kind: "check", request });
+    expect(await response).toEqual({ kind: "error", message: "Compiler worker not initialized" });
+    response = next();
+    port1.postMessage({ kind: "initialize", ...input, identity: sha256("wrong") });
+    expect(await response).toEqual({ kind: "error", message: "Compiler frozen execution identity mismatch" });
+    response = next();
+    port1.postMessage({ kind: "initialize", ...input });
+    expect(await response).toEqual({ kind: "ready" });
+    response = next();
+    port1.postMessage({ kind: "check", request });
+    const checked = await response;
+    if (checked.kind !== "checked") throw new Error("Missing compiler result");
+    expect(checked.proof.valid).toBe(false);
+    expect(checked.proof.diagnostics.some((error) => error.includes("not assignable"))).toBe(true);
+    expect(checked.proof.candidateId).toBe(request.candidateId);
+  } finally {
+    port1.close();
+    port2.close();
+    rmSync(input.root, { recursive: true, force: true });
+  }
+}, 120000);
+
+test("inventory fallback resolves ambient types from its root rather than the process cwd", () => {
+  const input = compilerFixture();
+  const cwd = process.cwd();
+  try {
+    const declarations = join(input.root, "node_modules/@types/campaign");
+    mkdirSync(declarations, { recursive: true });
+    writeFileSync(join(declarations, "index.d.ts"), "declare const campaignValue: number;");
+    writeFileSync(join(input.root, "fallback.ts"), "export const fallback = campaignValue;");
+    const inventory = buildInventory(input.root, input.contract);
+    process.chdir(tmpdir());
+    expect(diagnostics(programs(input.root, input.contract, inventory))).toEqual([]);
+    const compiler = new FrozenMutationCompiler(input.root, input.contract, inventory, executionTreeHash(input.root));
+    const checked = compiler.check(compilerRequest(input.root, compiler.identity, "fallback.ts", "export const fallback: string = campaignValue;"));
+    expect(checked.valid).toBe(false);
+    expect(checked.diagnostics.some((value) => value.includes("Cannot find name"))).toBe(false);
+  } finally { process.chdir(cwd); rmSync(input.root, { recursive: true, force: true }); }
 }, 120000);
 
 test("real mutation contract has no baseline compiler diagnostics", () => {

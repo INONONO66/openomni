@@ -53,7 +53,12 @@ export function* programs(root: string, contract: Contract, inventory: Inventory
   // Native coverage first; only canonical remaining members enter fallback.
   const remaining = inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
     .map((file) => pathIn(root, file.path)).filter((path) => !covered.has(path));
-  if (remaining.length) yield ts.createProgram(remaining, inventoryCompilerOptions(root));
+  if (remaining.length) {
+    const options = inventoryCompilerOptions(root);
+    const host = ts.createCompilerHost(options);
+    host.getCurrentDirectory = () => root;
+    yield ts.createProgram(remaining, options, host);
+  }
 }
 export function diagnostics(items: Iterable<ts.Program>): string[] {
   const errors: string[] = [];

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { parentPort, Worker } from "node:worker_threads";
 import ts from "typescript";
-import { diagnostics, executionTreeHash, inventoryCompilerOptions, programs, sha256 } from "./quality-mutation-input";
+import { diagnostics, executionTreeHash, inventoryCompilerOptions, type MutationError, programs, sha256 } from "./quality-mutation-input";
 
 type Contract = Parameters<typeof programs>[1];
 type Inventory = Parameters<typeof programs>[2];
@@ -94,6 +94,7 @@ export class FrozenMutationCompiler {
       ...ts.sys,
       readFile: (name, encoding) => resolve(name) === path ? request.content : ts.sys.readFile(name, encoding),
     });
+    host.getCurrentDirectory = () => this.root;
     const getSourceFile = host.getSourceFile;
     host.getSourceFile = (name, languageVersion, onError, shouldCreateNewSourceFile) => {
       const cached = sources.get(name);
@@ -225,22 +226,24 @@ export class MutationCompilerWorker {
   }
 }
 
-const port = parentPort;
-if (port) {
+export function serveCompiler(port: {
+  on(event: "message", receive: (request: Request) => void): void;
+  postMessage(response: Response): void;
+}): void {
   let compiler: FrozenMutationCompiler | undefined;
-  port.on("message", (request: Request) => {
-    try {
-      let response: Response;
-      if (request.kind === "initialize") {
-        compiler = new FrozenMutationCompiler(request.root, request.contract, request.inventory, request.identity);
-        response = { kind: "ready" };
-      } else {
-        if (!compiler) throw new Error("Compiler worker not initialized");
-        response = { kind: "checked", proof: compiler.check(request.request) };
-      }
-      port.postMessage(response);
-    } catch (error) {
-      port.postMessage({ kind: "error", message: error instanceof Error ? error.message : "Compiler engine failure" });
+  async function receive(request: Request): Promise<Response> {
+    if (request.kind === "initialize") {
+      compiler = new FrozenMutationCompiler(request.root, request.contract, request.inventory, request.identity);
+      return { kind: "ready" };
     }
+    if (!compiler) throw new Error("Compiler worker not initialized");
+    return { kind: "checked", proof: compiler.check(request.request) };
+  }
+  port.on("message", (request) => {
+    void receive(request).then(
+      (response) => port.postMessage(response),
+      (error: Error | MutationError) => port.postMessage({ kind: "error", message: error.message }),
+    );
   });
 }
+if (parentPort) serveCompiler(parentPort);

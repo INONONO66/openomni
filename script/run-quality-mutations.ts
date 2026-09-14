@@ -1254,28 +1254,27 @@ async function checkMutation(context: CandidateContext, mutated: string, python:
 			return false;
 		}
 	}
-	try {
-		const hostPath = candidate.path.split("#")[0] ?? fail("schema", "Missing candidate host");
-		const content = readFileSync(pathIn(root, hostPath), "utf8");
-		if (!context.compiler) throw new Error("Compiler engine unavailable");
-		const proof = await context.compiler.check({
+	const hostPath = candidate.path.split("#")[0] ?? fail("schema", "Missing candidate host");
+	const content = readFileSync(pathIn(root, hostPath), "utf8");
+	if (!context.compiler) return fail("infrastructure", "Compiler engine unavailable");
+	return context.compiler.check({
 			executionTreeSha256: context.compiler.identity,
 			candidateId: candidate.id,
 			path: hostPath,
 			originalSha256: sha256(readFileSync(pathIn(join(dirname(run), "frozen"), hostPath))),
 			sourceSha256: sha256(content),
 			content,
-		});
+		}).then((proof) => {
 		result.compilerProof = proof;
 		result.typecheck = proof.valid ? "valid" : "invalid";
 		if (!proof.valid) { result.outcome = "invalid"; result.reason = "compiler-diagnostics"; return false; }
 		return true;
-	} catch (error) {
-		result.compilerFailure = error instanceof Error ? error.message : "Compiler engine failure";
+	}, (error: Error) => {
+		result.compilerFailure = error.message;
 		result.outcome = "infrastructure";
 		result.reason = "typecheck-engine";
 		return false;
-	}
+	});
 }
 
 async function probeCandidate(context: CandidateContext, source: ReturnType<typeof mutationSource>): Promise<boolean> {
@@ -1690,7 +1689,7 @@ function campaignOutcome(
 	return { counts, selectedCounts, complete, exitCode, full };
 }
 
-async function campaign(options: Options): Promise<number> {
+function frozenCompilerInputs(options: Options) {
 	pinned(options.contract, options.contractHash);
 	pinned(options.inventory, options.inventoryHash);
 	pinned(options.decision, options.decisionHash);
@@ -1703,6 +1702,11 @@ async function campaign(options: Options): Promise<number> {
 				`Compiler project is not hash-pinned in inventory: ${project}`,
 			);
 	const operators = operatorsAt(options.decision);
+	return { contract, inventory, operators };
+}
+
+async function campaign(options: Options): Promise<number> {
+	const { contract, inventory, operators } = frozenCompilerInputs(options);
 	console.error("[mutation] verifying canonical inventory");
 	const canonical = await canonicalVerification(options);
 	verifySources(options.root, inventory);
