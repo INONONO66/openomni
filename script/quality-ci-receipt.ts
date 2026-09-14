@@ -21,6 +21,8 @@ export type Receipt = {
 	analyzed: Gate[];
 	inventory: string[];
 	findings: Finding[];
+	/** Source-map executable lines used to detect absent native LCOV proof. */
+	executableLines?: { path: string; lines: number[] }[];
 };
 export type Identity = {
 	inventoryHash: string;
@@ -92,7 +94,11 @@ export function normalizeCensus(
 	requireMeasurement(jsonNumber(jsonObject(row.counts)[gate]) === findings.length, "census count mismatch");
 	return { analyzed: [gate], findings };
 }
-export function mergeMeasurements(inventory: string[], measurements: Measurement[]): Receipt {
+export function mergeMeasurements(
+	inventory: string[],
+	measurements: Measurement[],
+	executableLines?: { path: string; lines: number[] }[],
+): Receipt {
 	const analyzed = measurements.flatMap((row) => row.analyzed);
 	const findings = measurements.flatMap((row) => row.findings);
 	requireMeasurement(inventory.length > 0 && analyzed.length > 0, "empty measurement");
@@ -102,5 +108,8 @@ export function mergeMeasurements(inventory: string[], measurements: Measurement
 		requireMeasurement(inventory.includes(row.path), `finding outside inventory: ${row.path}`);
 		requireMeasurement(analyzed.includes(row.gate), "finding outside measured gates");
 	}
-	return { version: 1, complete: true, analyzed, inventory, findings };
+	return {
+		version: 1, complete: true, analyzed, inventory, findings,
+		...(executableLines === undefined ? {} : { executableLines }),
+	};
 }

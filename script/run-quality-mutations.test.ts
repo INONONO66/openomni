@@ -431,13 +431,18 @@ test("same-line distinct Sites retain independent reach evidence", async () => {
 }, 90000);
 
 test("uninvoked function is noCoverage, not survived", async () => {
+	const source = "export const run = () => true;";
 	const input = await fixture(
-		"export const run = () => true;",
+		source,
 		'expect(typeof run).toBe("function");',
 	);
 	const result = await invoke(input, "noCoverage", select("boolean-literal"));
 	expect(result.code).toBe(1);
 	expect(result.selected[0]?.outcome).toBe("noCoverage");
+	expect(result.selected[0]?.receipts).toEqual([]);
+	expect(result.selected[0]?.junitReports).toEqual([]);
+	expect(result.selected[0]?.restored).toBe(true);
+	expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe(source);
 }, 90000);
 
 test("compiler rejection stays invalid and cannot make an all-invalid run green", async () => {

@@ -8,19 +8,27 @@ import { parseStatic } from "./quality-ci-legs";
 import { InventoryError } from "./quality-inventory";
 import { toolReceipts } from "./quality-metrics/tool";
 
+function prepareFixture(root: string): void {
+	mkdirSync(join(root, "script"));
+	writeFileSync(join(root, "script/tsconfig.json"), '{"compilerOptions":{"strict":true},"include":["*.ts"]}');
+	writeFileSync(join(root, "contract.json"), JSON.stringify({
+		version: 1, typescript: "5.9.2", roots: ["script"],
+		projects: ["script/tsconfig.json"], topology: false,
+	}));
+}
+function fixtureIdentity(root: string) {
+	const identity = fingerprint(root, "contract.json");
+	writeFileSync(join(root, "inventory.json"), JSON.stringify(identity.inventory));
+	return identity;
+}
+
 test("static pinned analyzers survive JSON transfer and join conservative bounds", async () => {
 	const root = mkdtempSync(join(tmpdir(), "quality-bound-native-"));
 	try {
-		mkdirSync(join(root, "script"));
+		prepareFixture(root);
 		writeFileSync(join(root, "script/a.ts"), "export function answer(value: boolean): number {\n  if (value) return 1;\n  return 2;\n}\nexport function branching(a: boolean, b: boolean, c: boolean, d: boolean): number {\n  if (a) return 1;\n  if (b) return 2;\n  if (c) return 3;\n  if (d) return 4;\n  return 5;\n}\n");
-		writeFileSync(join(root, "script/tsconfig.json"), '{"compilerOptions":{"strict":true},"include":["*.ts"]}');
-		writeFileSync(join(root, "contract.json"), JSON.stringify({
-			version: 1, typescript: "5.9.2", roots: ["script"],
-			projects: ["script/tsconfig.json"], topology: false,
-		}));
-		const identity = fingerprint(root, "contract.json");
+		const identity = fixtureIdentity(root);
 		const inventory = join(root, "inventory.json");
-		writeFileSync(inventory, JSON.stringify(identity.inventory));
 		// Other tests invoke these analyzers in the same process. Own the receipt
 		// boundary before measurement rather than depending on shard file order.
 		toolReceipts();
@@ -40,6 +48,10 @@ test("static pinned analyzers survive JSON transfer and join conservative bounds
 		expect(document.sources).toEqual(identity.inventory.files.map(({ path, sha256 }) => ({ path, sha256 })));
 		const lines = new Map<string, ReadonlyMap<number, number>>();
 		const result = joinBounds(document, { identity, lines });
+		const preparedStarts = [...new Set(
+			Object.values(document.measured[0]?.analysis.prepared.statementMap ?? {}).map((range) => range.start.line),
+		)].sort((a, b) => a - b);
+		expect(result.executableLines[0]?.lines).toEqual(preparedStarts);
 		expect(result.algorithm).toBe("d945-lcov-crap-upper-bound@1");
 		expect(result.complete).toBe(true);
 		const answer = result.records.find((row) => row.name === "answer");
@@ -60,6 +72,34 @@ test("static pinned analyzers survive JSON transfer and join conservative bounds
 		writeFileSync(join(root, "script/a.ts"), "export const changed = 1;\n");
 		expect(() => joinBounds(document, { identity: fingerprint(root, "contract.json"), lines })).toThrow(InventoryError);
 		await expect(measureStatic({ root, inventory })).rejects.toThrow();
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+}, 30_000);
+
+test("scoped metrics retain clone evidence from unselected sources", async () => {
+	const root = mkdtempSync(join(tmpdir(), "quality-scoped-clones-"));
+	try {
+		prepareFixture(root);
+		const duplicate = `export function duplicate(value: number): number {
+	if (value < 0) return 0;
+	if (value === 0) return 1;
+	if (value === 1) return 2;
+	if (value === 2) return 3;
+	if (value === 3) return 4;
+	return value + 5;
+}
+		`;
+		writeFileSync(join(root, "script/a.ts"), duplicate);
+		writeFileSync(join(root, "script/b.ts"), duplicate);
+		fixtureIdentity(root);
+		const inventory = join(root, "inventory.json");
+		const scoped = await measureStatic({ root, inventory, scope: ["script/a.ts"] });
+		expect(scoped.measured.map((row) => row.source.path)).toEqual(["script/a.ts"]);
+		expect(scoped.cloneSources?.map((source) => source.path).sort()).toEqual(["script/a.ts", "script/b.ts"]);
+		expect(scoped.duplication.clusters.some((cluster) =>
+			cluster.occurrences.map((occurrence) => occurrence.path).sort().join(",") === "script/a.ts,script/b.ts",
+		)).toBe(true);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

@@ -11,14 +11,15 @@ on:
       - packages/ledger/**
       - packages/agent/**
       - packages/protocol/**
-      - script/**
+      - script/summarize-benchmark-runs.ts
+      - script/check-benchmark-regression.ts
+      - script/conformance/summarize-benchmark-runs.test.ts
+      - script/check-benchmark-regression.test.ts
       - package.json
       - bun.lock
       - bunfig.toml
       - turbo.json
       - tsconfig.base.json
-      - .github/workflows/benchmark.yml
-      - .github/actions/**
   workflow_dispatch:
     inputs:
       runs:
@@ -33,7 +34,7 @@ on:
 
 concurrency:
   group: bench-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -88,7 +89,7 @@ jobs:
 
       # Read only: PRs (including forks) never checkout, commit or push gh-pages.
       - name: Compare against accepted main benchmarks
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           git fetch --no-tags origin gh-pages
           git show FETCH_HEAD:dev/bench/data.js > bench-results/reference.js

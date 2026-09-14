@@ -1036,7 +1036,7 @@
     "quality-baseline-lcov-bound/coverage-046.json"
   ],
   "sha256": {
-    "apps/desktop/src/main/gateway-endpoint.ts": "028685f1cd43188e30d2883daf266ff1671e2435f20a79ce87d8158cd3705b53",
+    "apps/desktop/src/main/gateway-endpoint.ts": "c67ea0ebabecfef86d6bcd7df4e2f0cf0d84a784881d22b22377e728fcb4e266",
     "apps/desktop/src/main/index.ts": "9db1955fe5c74b998dba6599f5be355cc620f8610ada64f17955e567bf694343",
     "apps/desktop/src/preload/api.ts": "e91309abf4d9d052c29213db1f669918d50b9e8149832ba35c4b2adbcbe58374",
     "apps/desktop/src/preload/index.ts": "02348fdd75f86d72f6dfb88035c5e486e9886ac1dd61cfb4bc7374a899f829da",

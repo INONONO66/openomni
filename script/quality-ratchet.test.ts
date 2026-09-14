@@ -192,6 +192,29 @@ test("CRAP growth counts only where the function has natively unexecuted lines",
   expect(growth(receipt([], crapOnly), receipt([crap], crapOnly), [moved], new Map([[newPath, new Map([[12, 1]])]]))).toEqual([crap]);
 });
 
+test("test-source CRAP stays measured but does not block PR growth", () => {
+  const path = "packages/a/test/new.test.ts";
+  const change: Change = { path, previous: null, ranges: whole };
+  const crap = at("crap", path, "ArrowFunction:<anonymous@1>", 110);
+  expect(growth(receipt([]), receipt([crap]), [change], none)).toEqual([]);
+});
+
+test("missing executable LCOV lines fail coverage and CRAP attribution", () => {
+  const crap = { ...at("crap", newPath, "FunctionDeclaration:run", 110, 10), endLine: 14 };
+  const current = {
+    ...receipt([crap]),
+    executableLines: [{ path: newPath, lines: [10, 11, 12, 14] }],
+  };
+  const incomplete = new Map([[newPath, new Map([[10, 1], [12, 1], [14, 1]])]]);
+  const failures = growth(receipt([]), current, [moved], incomplete);
+  expect(failures).toContainEqual({
+    gate: "coverage", path: newPath, line: 11, symbol: "unexecuted-line", value: 1,
+  });
+  expect(failures).toContainEqual(crap);
+  const complete = new Map([[newPath, new Map([[10, 1], [11, 1], [12, 1], [14, 1]])]]);
+  expect(growth(receipt([]), current, [moved], complete)).toEqual([]);
+});
+
 test("production sources are production and tooling code, never tests or fixtures", () => {
   expect(productionSource("packages/a/src/x.ts")).toBe(true);
   expect(productionSource("script/quality-ratchet.ts")).toBe(true);
