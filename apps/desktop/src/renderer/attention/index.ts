@@ -10,6 +10,6 @@
  * list never reflows under the cursor.
  */
 export type { Boundary, Held } from "./stability";
-export { applyAtBoundary, IDLE_BOUNDARY_MS, idleBoundaryReached } from "./stability";
+export { applyAtBoundary } from "./stability";
 export type { Ordered } from "./order";
 export { changedSince, orderByAttention } from "./order";

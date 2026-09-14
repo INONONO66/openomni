@@ -36,15 +36,15 @@ const {
   consoleStore,
   createSession,
   INITIAL_CLIENT_STATE,
-  historyMenuEntries,
   navigate,
   newSessionTab,
   openTab,
   setDraft,
-  setSessionTitleIfPlaceholder,
   setSidebarOpen,
   toggleProject,
 } = await import("../src/renderer/state/store");
+const { setSessionTitleIfPlaceholder } = await import("../src/renderer/state/session-actions");
+const { historyMenuEntries } = await import("../src/renderer/state/selectors");
 const { SessionList } = await import("../src/renderer/shell/session-list");
 
 const cleanups: (() => void)[] = [];
