@@ -215,6 +215,15 @@ had not arrived. Daily scheduling closes that initial evidence gap. It retains f
 closed until a complete campaign and reviewed baseline exist; a missing baseline
 is not a zero-survivor claim. A PR pilot is never reported as zero survivors.
 
+The TypeScript/JavaScript mutation runner builds a campaign-scoped reach map
+before candidate execution. Each test file runs against instrumented original
+sources, and reached sites select the tests for each candidate. The map binds
+the execution tree, candidates, test list, source hashes and site identities.
+An unreached candidate is `noCoverage`, not killed: it produces no candidate
+test or JUnit receipts. Python retains its per-candidate probe. Source restoration,
+cleanup and complete campaign receipts remain required. Passing the runner's
+tests does not establish a complete campaign or zero surviving mutants.
+
 Python quality tools are installed from
 `script/conformance/quality-python-requirements.txt` under Python 3.12.12.
 

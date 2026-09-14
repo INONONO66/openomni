@@ -119,7 +119,7 @@ function refused(reason: Refusal["reason"], message: string): Refusal {
   return { status: "refused", reason, message };
 }
 
-function isRefusal(result: WalkResult): result is Refusal {
+function isRefusal(result: WalkResult | WalkLink): result is Refusal {
   return "status" in result;
 }
 
@@ -185,6 +185,55 @@ function refusalForOpenError(errorNumber: number, shown: string): Refusal {
   return refused("io_error", `filesystem operation failed for: ${shown}`);
 }
 
+type WalkLink = { readonly pending: string[]; readonly preservedSymlinkFd?: number } | Refusal;
+
+function expandWalkLink(
+  root: Root,
+  traversed: readonly string[],
+  pending: readonly string[],
+  segment: string,
+  openErrno: number,
+  isFinal: boolean,
+  finalDirectory: boolean,
+  preserveFinalSymlink: boolean,
+  preservedSymlinkFd: number | undefined,
+  expansions: number,
+  shown: string,
+  dirfd: number,
+  testHooks: FsDriverTestHooks,
+): WalkLink {
+  const link = readLinkAt(dirfd, segment);
+  if (!("target" in link)) {
+    if (isFinal && finalDirectory && openErrno === 20)
+      return refused("wrong_kind", `path is not a directory: ${shown}`);
+    return refusalForOpenError(openErrno, shown);
+  }
+  testHooks.afterSymlinkRead?.();
+  const rewritten = resolveLink(root, traversed, link.target);
+  if (rewritten === undefined)
+    return refused("path_escapes_export", `path escapes export: ${shown}`);
+  if (expansions + 1 > MAX_SYMLINK_EXPANSIONS)
+    return refused("io_error", `filesystem operation failed for: ${shown}`);
+  let preserved = preservedSymlinkFd;
+  if (isFinal && preserveFinalSymlink && preserved === undefined) {
+    preserved = openSymlinkAt(dirfd, segment);
+    if (preserved === undefined)
+      return refused("io_error", `filesystem operation failed for: ${shown}`);
+  }
+  return { pending: [...rewritten, ...pending.slice(1)], preservedSymlinkFd: preserved };
+}
+
+function finishWalkTarget(
+  fd: number,
+  remainingSegments: number,
+  preservedSymlinkFd: number | undefined,
+): WalkResult | undefined {
+  if (remainingSegments !== 0) return undefined;
+  const symlinkStat = preservedSymlinkFd === undefined ? undefined : fstatSync(preservedSymlinkFd);
+  if (preservedSymlinkFd !== undefined) closeSync(preservedSymlinkFd);
+  return { fd, symlinkStat };
+}
+
 function walk(
   root: Root,
   initialSegments: readonly string[],
@@ -227,41 +276,30 @@ function walk(
       ownsDirfd = true;
       traversed.push(segment);
       pending.shift();
-      if (pending.length === 0) {
-        const symlinkStat =
-          preservedSymlinkFd === undefined ? undefined : fstatSync(preservedSymlinkFd);
-        if (preservedSymlinkFd !== undefined) closeSync(preservedSymlinkFd);
-        return { fd: dirfd, symlinkStat };
-      }
+      const completed = finishWalkTarget(dirfd, pending.length, preservedSymlinkFd);
+      if (completed !== undefined) return completed;
       continue;
     }
 
-    const link = readLinkAt(dirfd, segment);
-    if (!("target" in link)) {
-      if (isFinal && finalDirectory && opened.errno === 20) {
-        return fail(refused("wrong_kind", `path is not a directory: ${shown}`));
-      }
-      return fail(refusalForOpenError(opened.errno, shown));
-    }
-
-    testHooks.afterSymlinkRead?.();
-    const rewritten = resolveLink(root, traversed, link.target);
-    if (rewritten === undefined) {
-      return fail(refused("path_escapes_export", `path escapes export: ${shown}`));
-    }
+    const expanded = expandWalkLink(
+      root,
+      traversed,
+      pending,
+      segment,
+      opened.errno,
+      isFinal,
+      finalDirectory,
+      preserveFinalSymlink,
+      preservedSymlinkFd,
+      expansions,
+      shown,
+      dirfd,
+      testHooks,
+    );
+    if (isRefusal(expanded)) return fail(expanded);
+    pending = expanded.pending;
+    preservedSymlinkFd = expanded.preservedSymlinkFd;
     expansions += 1;
-    if (expansions > MAX_SYMLINK_EXPANSIONS) {
-      return fail(refused("io_error", `filesystem operation failed for: ${shown}`));
-    }
-
-    if (isFinal && preserveFinalSymlink && preservedSymlinkFd === undefined) {
-      preservedSymlinkFd = openSymlinkAt(dirfd, segment);
-      if (preservedSymlinkFd === undefined) {
-        return fail(refused("io_error", `filesystem operation failed for: ${shown}`));
-      }
-    }
-
-    pending = [...rewritten, ...pending.slice(1)];
     traversed = [];
     closeOwned();
   }
