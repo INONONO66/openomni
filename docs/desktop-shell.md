@@ -21,6 +21,60 @@ sidebar measurements belong to `feat/desktop-shell-frame`, documented in
 `.omo/reports/desktop-shell-port-20260907.md`. New tab dimensions below are chosen
 defaults, not reference measurements.
 
+## Internals cleanup (PR #1047)
+
+`refactor/desktop-cleanup` reorganizes renderer internals without changing the
+shipped shell: every UI contract, glyph, density rule and behavior described
+below stays as it is, and no `packages/ui` source, test or CSS changes.
+
+`state/selectors.ts` owns three read-only derivations: `sessionIndex`, a
+`Map` per immutable session-array snapshot (`WeakMap`-keyed, so it holds no state
+and no clock), `historyMenuEntries` and `placeTitle`. App resolves the active
+session, tab titles and glyphs and history-menu titles through that index, and
+`use-search.ts` resolves search fields through it. `session-tree.tsx` and
+`session-list.tsx` still build their own per-render maps from the same array;
+they are unchanged.
+
+`state/session-actions.ts` holds the three session mutations that App and tests
+call: `setSessionTitleIfPlaceholder`, `setSessionPhase` and
+`setSessionAttention`, moved out of `store.ts` verbatim. `store.ts` keeps every
+other command and every location transition; `activePlace` and `tabTitle` are
+gone because App reads `activeTab(state)?.place` and `placeTitle` directly.
+
+`chat/session-content.tsx` owns the SDK binding. `useSessionChats` is called by
+App, so one Chat per session lives for App's lifetime, its transport reference
+updates in the same layout-effect phase as before, and `chat.stop()` runs only on
+App teardown. `SessionContent` renders the active session's transcript and
+composer; only that panel is keyed by tab id. Send, title, draft, approval and
+stop ordering are unchanged (`test/session-content.test.tsx` drives Approve and
+Deny through a real Chat and asserts the approval id and decision).
+
+App's hook sequence is main's: it still subscribes to the whole store, reads
+`Date.now()` on every render so relative times refresh on the same cadence, and
+calls `useChatEndpoint` before its search/focus refs and `useShellLifecycle`.
+Callback identities, focus effects, scroll behavior and preference writes are
+untouched. `orderByAttention` classifies each session once and reuses the kind
+for its score and its group; scores, tie order and the held-order reducer are
+unchanged. The unused idle-threshold helper (`IDLE_BOUNDARY_MS`,
+`idleBoundaryReached`) and its two tests are removed; every other existing
+assertion stays.
+
+### Files touched
+
+Paths are relative to `apps/desktop`. Everything else under `apps/desktop` and
+all of `packages/ui` is byte-identical to main.
+
+| File | Change |
+| --- | --- |
+| `src/renderer/app.tsx` | Chat cache, transport forwarding and the session panel move to `chat/session-content.tsx`; place, titles and glyphs read through `state/selectors.ts`. |
+| `src/renderer/chat/session-content.tsx` | New: `useSessionChats`, `SessionContent`. |
+| `src/renderer/state/selectors.ts` | New: `sessionIndex`, `historyMenuEntries`, `placeTitle`. |
+| `src/renderer/state/session-actions.ts` | New: the three session mutations, unchanged bodies. |
+| `src/renderer/state/store.ts` | Exports `ClientState`; drops the moved functions and the private `titleOf`. |
+| `src/renderer/attention/{index,order,stability}.ts` | Kind computed once per session in `orderByAttention`; idle helper removed from `stability.ts` and the barrel. |
+| `src/renderer/shell/use-search.ts` | Field lookup through `sessionIndex`; explicit reducer result types; one comment. |
+| `test/*` | Imports follow the moved functions; `activePlace` callers read `activeTab(state)?.place`; idle-helper tests removed; `session-content.test.tsx` added. |
+
 ## Ownership
 
 | Layer | Owns |
@@ -28,7 +82,7 @@ defaults, not reference measurements.
 | `apps/desktop/src/main` | `BrowserWindow`: `hiddenInset`, traffic lights at `{x:17,y:14}` (`y = (42 - 14) / 2`: `y` is the lights' TOP and they measure 14pt tall on Darwin 25, so their centre is 21 — the strip's midline and the 28px controls' centre, `7 + 14`; the classic 12pt lights would need 15. `17 + 52 + 12 = 81` is the strip's traffic safe zone), min `400x600`, background by `nativeTheme` (`#0A0A0C` / `#EFEFF0`, same as `--color-sunken`), bounds persisted to `userData/window-bounds.json` 500ms after the last move (never while minimized/maximized), `backgroundThrottling` off until `ready-to-show` then on. `window-bounds.ts` parses the file fail-closed to the default. |
 | `apps/desktop/src/renderer/state` | One TanStack Store: sessions, drafts, tabs with independent `{place, history:{entries,cursor}}`, active id, closed snapshots, project collapse, and sidebar state. Plain commands own immutable location transitions; no mirrored global route/selection/history. App owns search-aware floating dismissal. `shell-preferences.ts` persists only `openomni:sidebar-width` / `openomni:sidebar-open`, restored before paint. |
 | Main Menu / preload / renderer commands | Main owns tab/history accelerators and dispatches to the live application-window owner, including detached DevTools and native-menu focus. The import-free preload API owns `shell:command` and its command union; `onShellCommand` exposes values only with an exact disposer. App subscribes once per mount and calls `dispatchShellCommand` through its attention/reveal/focus boundary. Renderer owns only bare `[` outside editing and the existing Cmd+K search. |
-| App / `apps/desktop/src/renderer/shell` | App resolves places, titles and icons, retains one stable Console/Sidebar/TabStrip tree, and keys only active content by tab id. `session-tree.tsx` owns project → session navigation; `session-list.tsx` owns the full list; `use-search.ts` owns transient search interaction. App owns the per-session Chat cache and stable forwarding transport for its entire lifetime. |
+| App / `apps/desktop/src/renderer/shell` | App resolves places, titles and icons, retains one stable Console/Sidebar/TabStrip tree, and keys only active content by tab id. `session-tree.tsx` owns project → session navigation; `session-list.tsx` owns the full list; `use-search.ts` owns transient search interaction. App owns the per-session Chat cache and stable forwarding transport for its entire lifetime through `chat/session-content.tsx`. |
 | `packages/ui` | `tab-strip.tsx` (the one sidebar toggle; zone width == sidebar width), `sidebar.tsx` (`Sidebar` root/provider with its two frame parts as statics, `Sidebar.Gap` + `Sidebar.Container` in three modes + content, reveal intent, edge zone, resize handle), `sidebar-nav.tsx` (`SidebarNav`/`NavItem`, `SidebarSection` with `SectionHeader` + `SectionList`, `SectionSearchInput`, `SidebarFooter`), `tree-row.tsx`, `history-menu.tsx`, tokens in `styles.css`. The barrel (`index.ts`) exports exactly what `apps/desktop` imports (`apps/desktop/test/ui-barrel.test.ts`); every `data-ui` address in `names.ts` is stamped from `UI_NAMES` somewhere in `src` (`test/names.test.ts`). Touched Console/ConsoleContent contracts are generic `transcript` presentation records, never application places. The lower-level Timeline `sessionId` adapter is a retained legacy boundary, not a new Console prop. |
 
 ## Geometry (matched to the reference console)
@@ -73,14 +127,14 @@ Measurements: `.omo/reports/sidebar-toggle-ref-20260907.md`. Linear's renderer i
 - History is strictly tab-local: Back, Forward and menu jumps change only the active tab's cursor/place, even when another tab already shows the destination session. Duplicate current views are allowed; history never activates another tab or dedupes. Explicit navigation truncates forward entries only for a different place. The maximum-20 menu is newest-first with original cursor ids; if current is older, it includes current plus newest 19. Ages are omitted rather than inferred from session creation. App rejects callbacks captured from a different tab/history.
 - Sidebar top nav order: Sessions, Inbox, Automations, Memory. Inbox/Automations/Memory render honest empty states — the wire has no data for them yet.
 - Section label is "Sessions" (reference: "Threads"); its search is a toggle beside the label that swaps the header into the field (`SectionHeader.Toggle`).
-- Session rows are ONE line (title only) in a project → session tree (`role="tree"`, project rows `treeitem` + `aria-expanded`, children in a `group`).
+- Session rows live in a project → session tree (`role="tree"`, project rows `treeitem` + `aria-expanded`, children in a `group`). A placeholder-titled idle session is one line (title plus phase glyph); every other session is double density and adds phase/reason and relative activity time (`rowDensity` in `attention/reason.ts`, rendered by `shell/session-row.tsx`).
 
 ## Tabs, sessions and lifetime
 
 - Plus and native New Tab create a session record and open a fresh tab. New titles start as `New Session`. Chosen title default: the first accepted nonempty prompt earns `Array.from(text.trim()).slice(0,40).join("")`, without ellipsis; an earned literal `New Session` is not renamed. Empty, disabled and already-sending submissions do not earn titles. Failed sends retain the earned title and show the error. Titles resolve live in tabs, sidebar, list and history.
-- Explicit session opens (sidebar, search and list rows) prefer the target tab if it already shows that session, otherwise the first matching current view in strip order. Matching activation never overwrites history. Route nav uses `openTab(route)` and reuses equal current routes.
+- Explicit session opens (sidebar, search and list rows) prefer the target tab if it already shows that session, otherwise the first matching current view in strip order. Matching activation never overwrites history. A plain click moves the current tab; Cmd/Ctrl-click uses `openTab(place)`, which reuses an equal current route.
 - Search captures the invoking tab once per open, not per result activation. Selecting an existing session in B leaves invocation A's history unchanged; a later unopened result still navigates A. If A closes, selection uses the then-active tab, or opens a tab when empty. Search preserves the null attention boundary and floating reveal until exit.
-- Sessions is a place tab with an app-owned flat semantic list: every store session once in insertion order, independent of sidebar collapse/filtering, with title, `projectId ?? "no project"` and relative creation time from supplied `now`. No new clock, fabricated projects or composer. Selecting an unmatched row navigates the list tab; a matching view is activated instead. Other routes remain honest empty columns.
+- Sessions is a place tab with an app-owned flat semantic list: every store session once, grouped by held attention kind (`orderByAttention`), independent of sidebar collapse/filtering, with title and phase glyph and, for double-density rows, `projectId ?? "no project"`, reason and relative activity time from supplied `now`. No new clock, fabricated projects or composer. Selecting an unmatched row navigates the list tab; a matching view is activated instead. Other routes remain honest empty columns.
 - Closing removes only a view, never a session, draft, Chat or stream. App keeps one Chat per session and a current-transport forwarding reference; switching, closing and reopening reuse messages and in-flight work, including duplicate history-created views. Window/App teardown ends this cache.
 - Inactive close preserves the active tab and editor focus. Active close chooses old right neighbor, then left, then none. Focus from the removed panel recovers to the successor editor if available, otherwise successor tab; focus from its tab control recovers to successor tab. Empty recovery targets plus. The active panel is `tab-panel-${id}`, labelled by `tab-${id}`; inactive tabs do not point at absent panels.
 - Closed snapshots retain original id/index/history, capped at newest 20. Reopen restores at the clamped position. A session collision activates the matching view but retains the snapshot for retry; after that view navigates away, reopen restores the original back and forward entries. Route snapshots restore even on collision.
@@ -98,10 +152,12 @@ Development-only reload/forceReload/devtools use the same
 excludes them. Pure menu tests do not prove native accelerator delivery or role
 expansion; those receipts belong to integration QA.
 
-## Deferred: status indicators
+## Status indicators
 
-The reference console shows per-thread state (idle, in progress, …) on each row. The Owner ruled
-(2026-09-07) that we ship WITHOUT any row status indicator for now. When the
-session wire carries run state, the indicator returns as a presentation
-primitive in `packages/ui` fed by `apps/desktop`; the attention ordering engine
-already models the classes it would show.
+The shipped base renders phase glyphs in tabs, session rows and headers, and
+attention-kind groups in the list and tree (`StatusGlyph` from `packages/ui`,
+mapped by `shell/session-glyph.ts`). The gateway has no production session-phase
+producer yet: every session starts `idle`, and the exported `setSessionPhase` /
+`setSessionAttention` store commands are called only by tests. No development
+global exposes them. The cleanup preserves those mappings, flags, density rules
+and held-order boundaries; it adds no kernel integration or phase lifecycle.
