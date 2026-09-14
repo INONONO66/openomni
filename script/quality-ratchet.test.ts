@@ -414,7 +414,7 @@ test("synthetic regression fails closed end to end: a measured owned top type in
   }
 });
 
-test("native coverage unions executing lanes and ignores never-loaded lanes", () => {
+test("native coverage retains every observed line across partial lane maps", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-ratchet-lcov-"));
   try {
     const path = join(root, "coverage.json");
@@ -427,12 +427,12 @@ test("native coverage unions executing lanes and ignores never-loaded lanes", ()
         ],
       }),
     );
-    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2]]));
+    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2], [2, 1]]));
     writeFileSync(path, JSON.stringify({ receipts: [
       { files: [{ path: "a.ts", lines: [{ line: 1, hits: 0 }, { line: 2, hits: 1 }] }] },
       { files: [{ path: "a.ts", lines: [{ line: 1, hits: 2 }] }] },
     ] }));
-    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2]]));
+    expect(readExecuted(path).get("a.ts")).toEqual(new Map([[1, 2], [2, 1]]));
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "never.ts", lines: [{ line: 1, hits: 0 }] }] }] }));
     expect(readExecuted(path).get("never.ts")).toEqual(new Map([[1, 0]]));
     writeFileSync(path, JSON.stringify({ receipts: [{ files: [{ path: "a.ts", lines: [{ line: 0, hits: 1 }] }] }] }));
