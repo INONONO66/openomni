@@ -35,6 +35,11 @@ JUnit supplies the executed test files, retaining Bun's package ignore rules
 without removing source or candidate inventory. Probe failures retain process
 and JUnit evidence; failed reach copies are unregistered during cleanup.
 
+Statement probes corrected on `fix/mutation-statement-probes-20260914`:
+block-owned statements retain their lexical position, including `super()`
+with TypeScript parameter properties. Entry markers precede overlapping
+expression probes and still record calls whose base constructor throws.
+
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
 
 ## STRUCTURE

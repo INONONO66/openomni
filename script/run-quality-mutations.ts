@@ -625,6 +625,10 @@ export function enumerate(
 					if (seen.has(id)) return;
 					seen.add(id);
 					const boundary = mode === "expression" ? valueBoundary(siteNode) : siteNode;
+					const start = boundary.getStart(source);
+					// Keep block-owned statements at their original lexical level.
+					// Wrapping super() changes Bun's parameter-property initialization.
+					const end = mode === "statement" && ts.isBlock(boundary.parent) ? start : boundary.end;
 					candidates.push({
 						id,
 						path: file.path,
@@ -634,7 +638,7 @@ export function enumerate(
 						operator: op,
 						replacement,
 						replacementSha256,
-						site: { start: boundary.getStart(source), end: boundary.end, mode },
+						site: { start, end, mode },
 					});
 				}
 				function addScalarMutations(node: ts.Node, raw: string): void {
@@ -922,6 +926,8 @@ function reachInsertions(source: string, row: ReachSite, directory: string, inde
 	// nesting wrappers. Replacing an outer span would truncate inner probes.
 	const single = instrumentSingle(source, site, marker);
 	const added = single.length - source.length;
+	if (site.mode === "statement" && site.start === site.end)
+		return [{ offset: site.start, order: -index - 1, text: single.slice(site.start, site.start + added) }];
 	const closeLength = site.mode === "statement" ? 1 : site.mode === "jsx" ? 3 : 2;
 	return [
 		{ offset: site.start, order: index, text: single.slice(site.start, site.start + added - closeLength) },
