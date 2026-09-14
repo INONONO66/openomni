@@ -1,6 +1,14 @@
 import type { PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 
+function isContainer(value: object): boolean {
+  const array = Array.isArray(value);
+  if (!array && Object.getPrototypeOf(value) !== Object.prototype) return false;
+  if (Object.getOwnPropertySymbols(value).length > 0) return false;
+  if (array && Object.keys(value).length !== value.length) return false;
+  return true;
+}
+
 /** JSON.parse preserves -0 and can overflow numbers; the persisted-fact schema rejects both. */
 export const FrameSchema = z.custom<PlainValue>((input) => {
   const pending = [input];
@@ -12,10 +20,7 @@ export const FrameSchema = z.custom<PlainValue>((input) => {
     if (typeof value !== "object" || value === null) return false;
     if (seen.has(value)) return false;
     seen.add(value);
-    const array = Array.isArray(value);
-    if (!array && Object.getPrototypeOf(value) !== Object.prototype) return false;
-    if (Object.getOwnPropertySymbols(value).length > 0) return false;
-    if (array && Object.keys(value).length !== value.length) return false;
+    if (!isContainer(value)) return false;
     for (const key of Object.keys(value)) {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!descriptor || !("value" in descriptor)) return false;
