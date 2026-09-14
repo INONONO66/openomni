@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789354321195,
+  "lastUpdate": 1789355379065,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -69879,6 +69879,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 967743,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4b1953860497d6605a13a6e4914b45a1fbc4950",
+          "message": "ci(mutation): one-shot reach map + per-mutant test selection (Part of #1049) (#1059)\n\n* chore: remove leaked mutation scratch report\n\n* perf(mutation): select tests from one-shot reach map\n\n* fix(mutation): keep Python probes outside TS reach map\n\n* fix(mutation): handle empty reach-map test files\n\n* fix(mutation): preserve diagnostic failure codes\n\n* style(mutation): clarify reach evidence updates\n\n* fix(mutation): preserve special site instrumentation order\n\n* fix(mutation): preserve lazy reach instrumentation semantics\n\n* fix(mutation): remove unused reach helper\n\n* fix(mutation): preserve lazy multi-site probes\n\n* test(mutation): reduce quality metric complexity\n\n* refactor(mutation): extract candidate execution helpers\n\n* refactor(mutation): delete dead TS probe branch and reach scaffolding, cover nested instrumentation\n\n* test(mutation): align python probe fixture with runner receipt stages\n\n* fix(quality): narrow mutation failures and cover switch probes\n\n* test(quality): exercise Python mutation campaigns\n\n* fix(quality): narrow campaign catch values\n\n* refactor(quality): split reach recording and campaign dispatch, share in-process campaign helper\n\n---------\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>",
+          "timestamp": "2026-09-14T12:08:25+09:00",
+          "tree_id": "3961d80609ec3a63554b3f6c78c09d1b91317d77",
+          "url": "https://github.com/INONONO66/openomni/commit/c4b1953860497d6605a13a6e4914b45a1fbc4950"
+        },
+        "date": 1789355378634,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 823,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1479,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 987262,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 241033,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4877711,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 99,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 840,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 365366,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14346,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 136830,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 676208,
             "unit": "ns/op"
           }
         ]
