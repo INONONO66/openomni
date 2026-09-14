@@ -484,6 +484,7 @@ test("same-site replacements use the campaign reach map and preserve candidate r
 	expect(result.code).toBe(1);
 	expectRestoredResults(result, 2);
 	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)))).toBe(true);
+	expect(result.selected.every((row) => record(row.coverage).reached === true)).toBe(true);
 	// The reach map is recorded once for the campaign; each mutant has only
 	// compiler + mutation receipts.
 	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
