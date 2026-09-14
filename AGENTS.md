@@ -16,6 +16,12 @@ Saved PR #1068 receipts reproduce the lost-positive-evidence defect; regression
 tests retain uncovered-line refusal and the corrected replay reports no growth.
 Full-codebase zero debt and complete mutation are not established by that replay.
 
+Native mutation throughput updated on `fix/mutation-reach-integration-20260914`:
+TypeScript/JavaScript candidates share one campaign reach map and execute only
+tests that reached their original sites. Unreached candidates retain `noCoverage`
+without candidate test receipts; Python retains its existing probe. The 112-test
+runner suite passed, but a complete mutation campaign is still outstanding.
+
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
 
 ## STRUCTURE

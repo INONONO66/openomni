@@ -2,11 +2,58 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { copyExecution, removeExecution, decode, execute, executionTreeHash, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
+import { copyExecution, removeExecution, decode, execute, executionTreeHash, instrument, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
+
+test("switch case reach instrumentation inserts a probe after the label", () => {
+	const source = "switch (value) { case 1: return true; default: return false; }";
+	const directory = mkdtempSync(join(tmpdir(), "mutation-case-instrument-"));
+	try {
+		const start = source.indexOf("case");
+		const end = source.indexOf("default");
+		const transformed = instrument(source, [{
+			id: "case", path: "a.ts", sourceSha256: sha256(source),
+			site: { start, end, mode: "case" }, tests: [],
+		}], directory);
+		expect(transformed).toContain('case 1:require("node:fs").writeFileSync');
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("nested reach instrumentation preserves lazy boolean evaluation", () => {
+	const source = "const value = false && (b || c);";
+	const directory = mkdtempSync(join(tmpdir(), "mutation-instrument-"));
+	try {
+		const outer = source.indexOf("false");
+		const inner = source.indexOf("b");
+		const transformed = instrument(source, [
+			{ id: "outer", path: "a.ts", sourceSha256: sha256(source), site: { start: outer, end: source.length - 1, mode: "expression" }, tests: [] },
+			{ id: "inner", path: "a.ts", sourceSha256: sha256(source), site: { start: inner, end: source.indexOf(")"), mode: "expression" }, tests: [] },
+		], directory);
+		expect(transformed).toContain("false &&");
+		expect(transformed.match(/writeFileSync/g)?.length).toBe(2);
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("Python probe worker instruments a site with a marker", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-python-probe-"));
+	try {
+		const python = process.env.D945_PYTHON;
+		if (!python) throw new Error("D945_PYTHON is required for the Python probe fixture");
+		const marker = join(directory, "hit");
+		const receipt = await pythonWorker({
+			python,
+			decision: join(import.meta.dir, "conformance/quality-mutation-contract.json"),
+			timeout: 15000,
+		}, "value = 1", directory, "probe", { start: 0, end: 9, mode: "python-expression" }, marker);
+		expect(receipt.stage).toBe("python-probe");
+		expect(receipt.exitCode).toBe(0);
+		const output = decode(receipt.stdout);
+		expect(typeof output === "object" && output !== null && !Array.isArray(output) && typeof output.source === "string").toBe(true);
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 test("assertion receipt parsing separates matcher failures from crashes and other testcases", () => {
 	const stderr = [
@@ -75,7 +122,7 @@ test("Python worker receipt stages execute through the runner path", async () =>
 test("mutation main rejects an invalid invocation in process", async () => {
   expect(await main(["--not-a-real-option"])).toBe(2);
 });
-const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, FixtureError } = mutationFixture("campaign");
+const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, dependencies, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
 
 test("rendered process receipts redact split and inline secrets without hiding ordinary arguments", async () => {
@@ -137,6 +184,14 @@ for (const mode of ["nonzero", "signal"] as const) {
     expect(rendered).not.toContain("inline-key-secret");
     expect(rendered).not.toContain("split-token-secret");
   }, 90000);
+}
+
+
+function expectRestoredResults(result: RecordValue, count: number): void {
+	const selected = rows(result.selected).map(record);
+	expect(selected).toHaveLength(count);
+	expect(new Set(selected.map((row) => String(row.id))).size).toBe(count);
+	expect(selected.every((row) => row.restored === true)).toBe(true);
 }
 
 test("fixture argument replacement is pure and rejects incomplete pairs", () => {
@@ -309,44 +364,85 @@ test("weak assertion survives; original location is really covered", async () =>
 	expect(result.selected[0]?.outcome).toBe("survived");
 }, 90000);
 
-test("same-site replacements reuse one original probe and preserve candidate receipts", async () => {
+async function runMain(input: Awaited<ReturnType<typeof fixture>>, python: string, selection: string[]): Promise<RecordValue[]> {
+	const paths = { contract: join(input.root, "contract.json"), inventory: input.inventory, decision, "inventory-tool": tool };
+	const argv = ["--root", input.root, "--dependencies", dependencies, "--python", python];
+	for (const [key, path] of Object.entries(paths)) argv.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
+	argv.push(...selection);
+	const output: string[] = [];
+	const originalLog = console.log;
+	console.log = (...values: string[]) => output.push(values.join(" "));
+	try { expect(await main(argv)).toBe(1); } finally { console.log = originalLog; }
+	return reportResults(record(JSON.parse(output.at(-1) ?? "{}")));
+}
+
+test("main runs a campaign in process and reports killed and noCoverage candidates", async () => {
+	const input = await fixture("export const run = () => true; export const unused = () => false;", "expect(run()).toBe(true);");
+	const results = await runMain(input, process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"]);
+	const outcomes = results.map((row) => row.outcome);
+	expect(outcomes).toContain("killed");
+	expect(outcomes).toContain("noCoverage");
+	expect(results.filter((row) => ["killed", "noCoverage"].includes(String(row.outcome))).every((row) => row.restored === true)).toBe(true);
+	expect(results.some((row) => rows(row.receipts).length > 0)).toBe(true);
+}, 120000);
+
+test("main runs Python candidates through probe and restores the source", async () => {
+	const python = process.env.D945_PYTHON ?? process.env.QUALITY_MUTATION_PYTHON;
+	if (!python) throw new Error("D945_PYTHON is required for the Python campaign fixture");
+	const input = await fixture(
+		"export const run = () => true;",
+		`const result = Bun.spawnSync([${JSON.stringify(python)}, "-c", "import sys;sys.path.insert(0, 'src');import calc;print(calc.f(2))"]); expect(result.stdout.toString().trim()).toBe("3"); expect(result.exitCode).toBe(0);`,
+		{
+			"src/calc.py": "def f(value):\n    return value + 1\n\ndef unused(value):\n    return value * 2\n",
+			"src/calc.test.ts": `import { expect, test } from "bun:test"; test("calc", () => { const result = Bun.spawnSync([process.env.D945_PYTHON!, "-c", "import sys;sys.path.insert(0, 'src');import calc;print(calc.f(2))"]); expect(result.stdout.toString().trim()).toBe("3"); expect(result.exitCode).toBe(0); });`,
+		},
+	);
+	const results = (await runMain(input, python, ["--target", "src/calc.py", "--operator", "py-number", "--limit", "2"])).filter((row) => row.path === "src/calc.py");
+	expect(results.map((row) => row.outcome)).toEqual(expect.arrayContaining(["killed", "noCoverage"]));
+	expect(results.every((row) => row.restored === true)).toBe(true);
+	expect(results.flatMap((row) => rows(row.receipts).map(record)).some((receipt) => receipt.stage === "python-probe")).toBe(true);
+	expect(readFileSync(join(input.root, "src/calc.py"), "utf8")).toBe(input.files["src/calc.py"] ?? "");
+}, 120000);
+
+test("same-site replacements use the campaign reach map and preserve candidate receipts", async () => {
 	const input = await fixture(
 		"export const run = (n:number) => n < 2;",
 		"expect(run(1)).toBe(true);",
 	);
 	const result = await invoke(input, "same-site-reuse", ["--target", "src/a.ts", "--operator", "relational", "--limit", "2"]);
 	expect(result.code).toBe(1);
-	expect(result.selected).toHaveLength(2);
-	expect(new Set(result.selected.map((row) => String(row.id))).size).toBe(2);
-	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)) && row.restored === true)).toBe(true);
-	// Each candidate is compiler-checked once. With one test batch, the first
-	// candidate has compiler + probe + mutation receipts; the second has only
-	// compiler + mutation. Without reuse this would be [3, 3], not [3, 2].
-	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([3, 2]);
+	expectRestoredResults(result, 2);
+	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)))).toBe(true);
+	// The reach map is recorded once for the campaign; each mutant has only
+	// compiler + mutation receipts.
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
 }, 90000);
 
-test("same-line distinct Sites do not share original probes", async () => {
+test("same-line distinct Sites retain independent reach evidence", async () => {
 	const input = await fixture(
 		"export const run = () => true && false;",
 		"expect(run()).toBe(false);",
 	);
 	const result = await invoke(input, "same-line-distinct-sites", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"]);
 	expect(result.code).toBe(1);
-	expect(result.selected).toHaveLength(2);
-	expect(new Set(result.selected.map((row) => String(row.id))).size).toBe(2);
-	expect(result.selected.every((row) => row.restored === true)).toBe(true);
-	// Each distinct site has its own compiler, probe, and mutation receipts.
-	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([3, 3]);
+	expectRestoredResults(result, 2);
+	// Reach is campaign-scoped; each mutant has compiler and mutation receipts.
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
 }, 90000);
 
 test("uninvoked function is noCoverage, not survived", async () => {
+	const source = "export const run = () => true;";
 	const input = await fixture(
-		"export const run = () => true;",
+		source,
 		'expect(typeof run).toBe("function");',
 	);
 	const result = await invoke(input, "noCoverage", select("boolean-literal"));
 	expect(result.code).toBe(1);
 	expect(result.selected[0]?.outcome).toBe("noCoverage");
+	expect(result.selected[0]?.receipts).toEqual([]);
+	expect(result.selected[0]?.junitReports).toEqual([]);
+	expect(result.selected[0]?.restored).toBe(true);
+	expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe(source);
 }, 90000);
 
 test("compiler rejection stays invalid and cannot make an all-invalid run green", async () => {
