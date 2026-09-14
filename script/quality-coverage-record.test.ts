@@ -3,8 +3,30 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { parseNativeLcov, coverageRecord } from "./quality-coverage-record";
+import { mergeNativeLines, type NativeLines } from "./quality-native-lcov";
 
 const lcov = "TN:\nSF:src/a.ts\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n";
+
+test("partial lane maps cannot erase another lane's native line evidence", () => {
+	const path = "packages/machines/src/fs.ts";
+	const records: NativeLines[] = [
+		{ path, lines: [{ line: 223, hits: 86 }, { line: 234, hits: 26 }, { line: 235, hits: 0 }] },
+		{ path, lines: [{ line: 226, hits: 1 }, { line: 234, hits: 26 }] },
+		{ path, lines: [{ line: 226, hits: 0 }] },
+	];
+	const expected = [{
+		path,
+		lines: [
+			{ line: 223, hits: 86 },
+			{ line: 226, hits: 1 },
+			{ line: 234, hits: 26 },
+			{ line: 235, hits: 0 },
+		],
+	}];
+	expect(mergeNativeLines(records)).toEqual(expected);
+	expect(mergeNativeLines([...records].reverse())).toEqual(expected);
+	expect(mergeNativeLines(records.flatMap((record) => mergeNativeLines([record])))).toEqual(expected);
+});
 
 test("LCOV preserves native line counts without inventing statement hits", () => {
 	expect(parseNativeLcov(lcov, "packages/example")).toEqual([

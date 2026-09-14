@@ -3,7 +3,7 @@ import { requireMeasurement } from "./quality-ci-receipt";
 
 export type NativeLines = { path: string; lines: { line: number; hits: number }[] };
 
-/** Merge only lanes that executed the file; when several did, shared DA lines are executable. */
+/** Preserve every DA line observed by an executing lane; another lane's omission is not a zero hit. */
 export function mergeNativeLines(records: readonly NativeLines[]): NativeLines[] {
 	const byPath = new Map<string, NativeLines[]>();
 	for (const record of records) {
@@ -23,15 +23,11 @@ export function mergeNativeLines(records: readonly NativeLines[]): NativeLines[]
 				for (const row of record.lines) lines.set(row.line, 0);
 			return { path, lines: [...lines].sort(([a], [b]) => a - b).map(([line, hits]) => ({ line, hits })) };
 		}
-		const shared = new Set(executed[0]?.lines.map((row) => row.line) ?? []);
-		for (const record of executed.slice(1)) {
-			const present = new Set(record.lines.map((row) => row.line));
-			for (const line of shared) if (!present.has(line)) shared.delete(line);
-		}
-		const lines = [...shared].sort((a, b) => a - b).map((line) => ({
-			line,
-			hits: Math.max(...executed.map((record) => record.lines.find((row) => row.line === line)?.hits ?? 0)),
-		}));
+		const counters = new Map<number, number>();
+		for (const record of executed)
+			for (const row of record.lines)
+				counters.set(row.line, Math.max(counters.get(row.line) ?? 0, row.hits));
+		const lines = [...counters].sort(([a], [b]) => a - b).map(([line, hits]) => ({ line, hits }));
 		return { path, lines };
 	});
 }
