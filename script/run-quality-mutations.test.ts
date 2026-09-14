@@ -37,6 +37,25 @@ test("nested reach instrumentation preserves lazy boolean evaluation", () => {
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+test("statement-entry probes remain outside overlapping expression probes", async () => {
+	const source = "let count = 0; count++; console.log(count);";
+	const directory = mkdtempSync(join(tmpdir(), "mutation-entry-probe-"));
+	try {
+		const start = source.indexOf("count++");
+		const transformed = instrument(source, [
+			{ id: "entry", path: "a.ts", sourceSha256: sha256(source), site: { start, end: start, mode: "statement" }, tests: [] },
+			{ id: "value", path: "a.ts", sourceSha256: sha256(source), site: { start, end: start + "count++".length, mode: "expression" }, tests: [] },
+		], directory);
+		const path = join(directory, "a.ts");
+		writeFileSync(path, transformed);
+		const result = await execute([process.execPath, path], directory, 5000);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout.trim()).toBe("1");
+		expect(readFileSync(join(directory, "entry"), "utf8")).toBe("1");
+		expect(readFileSync(join(directory, "value"), "utf8")).toBe("1");
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("Python probe worker instruments a site with a marker", async () => {
 	const directory = mkdtempSync(join(tmpdir(), "mutation-python-probe-"));
 	try {

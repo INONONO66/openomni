@@ -176,6 +176,28 @@ async function exerciseOperatorFamily(family: (typeof families)[number]): Promis
 for (const family of families)
 	test(`real operator seam: ${family.id}`, () => exerciseOperatorFamily(family), 90000);
 
+for (const [parent, expected] of [
+	["", 3],
+	['constructor(){throw new Error("constructor failed");}', 5],
+] as const) {
+	test("statement probes preserve derived parameter properties and throwing super calls", async () => {
+		const input = await fixture(
+			`class Base {${parent}} class Derived extends Base {constructor(readonly value:number){super();}} export function run(){try{return new Derived(3).value;}catch{return 5;}}`,
+			`expect(run()).toBe(${expected});`,
+		);
+		const result = await invoke(input, "derived-constructor", select("statement-delete"));
+		expect(result.report.error).toBeUndefined();
+		const runs = rows(record(result.report.reachMap).runs).map(record);
+		expect(runs).toHaveLength(1);
+		expect(record(runs[0]?.receipt).exitCode).toBe(0);
+		expect(record(result.selected[0]?.coverage).reached).toBe(true);
+		expect(result.selected[0]?.outcome).toBe("invalid");
+		expect(result.selected[0]?.restored).toBe(true);
+		expect(result.report.originalHashesVerified).toBe(true);
+		expect(result.report.cleanupVerified).toBe(true);
+	}, 90000);
+}
+
 
 for (const source of [
 	"let reads=0; const value={n:3,get method(){reads++;return function(this:{n:number}){return this.n;}}}; export const run=()=>[value?.method(),reads];",
