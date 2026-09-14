@@ -1,0 +1,85 @@
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import ts from "typescript";
+import { projectOptions } from "./check-types-census";
+import type { TestSelectionReceipt } from "./run-quality-mutations";
+
+export type Entry = { path: string; sha256: string; bytes: number; category: string; language: string };
+export type Contract = { projects: string[]; roots: string[]; topology: boolean };
+export type Inventory = { files: Entry[]; historical: Entry[]; embedded: Entry[]; configurations: { path: string; sha256: string }[] };
+export const mutationFailure: { current: { code: string; message: string } | null } = { current: null };
+export class MutationError {
+  readonly name = "MutationError";
+  constructor(readonly code: string, readonly message: string, readonly reach?: { test: string; receipt: TestSelectionReceipt }) { }
+}
+export function fail(code: string, message: string): never {
+  mutationFailure.current = { code, message };
+  throw new MutationError(code, message);
+}
+export function sha256(data: string | Buffer): string {
+  return createHash("sha256").update(data).digest("hex");
+}
+export function pathIn(root: string, path: string): string {
+  if (!path || isAbsolute(path) || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === ".."))
+    return fail("schema", `Unsafe relative path: ${path}`);
+  const absolute = resolve(root, path);
+  if (existsSync(absolute) && (lstatSync(absolute).isSymbolicLink() || !realpathSync(absolute).startsWith(`${realpathSync(root)}/`)))
+    return fail("schema", `Source escapes root: ${path}`);
+  return absolute;
+}
+function projectProgram(root: string, path: string): ts.Program {
+  pathIn(root, path);
+  console.error(`[mutation] compiler project ${path}`);
+  try {
+    const parsed = projectOptions(root, path);
+    return ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
+  } catch { return fail("configuration", `invalid native project: ${path}`); }
+}
+export function inventoryCompilerOptions(root: string): ts.CompilerOptions {
+  return {
+    strict: true, noEmit: true, allowJs: true, checkJs: false,
+    rootDir: root, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler, jsx: ts.JsxEmit.Preserve, skipLibCheck: true,
+  };
+}
+export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
+  const covered = new Set<string>();
+  for (const path of contract.projects) {
+    const program = projectProgram(root, path);
+    for (const source of program.getSourceFiles()) covered.add(source.fileName);
+    yield program;
+  }
+  // Native coverage first; only canonical remaining members enter fallback.
+  const remaining = inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
+    .map((file) => pathIn(root, file.path)).filter((path) => !covered.has(path));
+  if (remaining.length) yield ts.createProgram(remaining, inventoryCompilerOptions(root));
+}
+export function diagnostics(items: Iterable<ts.Program>): string[] {
+  const errors: string[] = [];
+  for (const program of items)
+    for (const diagnostic of ts.getPreEmitDiagnostics(program))
+      errors.push(ts.formatDiagnostics([diagnostic], {
+        getCanonicalFileName: (name) => name, getCurrentDirectory: () => process.cwd(), getNewLine: () => "\n",
+      }));
+  return errors;
+}
+function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {
+  for (const name of readdirSync(directory).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))) {
+    const path = join(directory, name);
+    if (lstatSync(path).isSymbolicLink()) {
+      const link = readlinkSync(path);
+      const destination = relative(root, realpathSync(path));
+      if (isAbsolute(link) || destination === ".." || destination.startsWith(`..${sep}`))
+        fail("isolation", `External symlink in execution copy: ${relative(root, path)}`);
+      hasher.update(`${relative(root, path)}\0link\0${link}\0`);
+    } else if (lstatSync(path).isDirectory()) visitExecutionTree(root, hasher, path);
+    else hasher.update(`${relative(root, path)}\0${sha256(readFileSync(path))}\0`);
+  }
+}
+export function executionTreeHash(directory: string): string {
+  const root = realpathSync(directory);
+  const hasher = new Bun.CryptoHasher("sha256");
+  visitExecutionTree(root, hasher, root);
+  return hasher.digest("hex");
+}

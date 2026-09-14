@@ -233,6 +233,17 @@ test or JUnit receipts. Python retains its per-candidate probe. Source restorati
 cleanup and complete campaign receipts remain required. Passing the runner's
 tests does not establish a complete campaign or zero surviving mutants.
 
+Candidate compiler validation uses a campaign-owned persistent worker over the
+frozen execution tree. Every affected native project and the inventory fallback
+remain checked; only projects whose complete frozen source membership excludes
+the changed file reuse baseline diagnostics. The worker retains at most one
+incremental checker, so shared files can still require multiple cold builds per
+candidate. Baseline validation and `--typecheck-root` remain fresh full checks.
+`compilerProof` records the candidate/source/configuration identities, native
+diagnostics and per-project `frozen`, `cold` or `incremental` modes separately
+from actual subprocess `receipts`. It is not an independent process exit receipt.
+Compiler failure is infrastructure, and workers terminate before source cleanup.
+
 Python quality tools are installed from
 `script/conformance/quality-python-requirements.txt` under Python 3.12.12.
 

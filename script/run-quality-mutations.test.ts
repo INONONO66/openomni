@@ -484,9 +484,18 @@ test("same-site replacements use the campaign reach map and preserve candidate r
 	expect(result.code).toBe(1);
 	expectRestoredResults(result, 2);
 	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)))).toBe(true);
-	// The reach map is recorded once for the campaign; each mutant has only
-	// compiler + mutation receipts.
-	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
+	// Persistent compiler proof is not an independent process receipt.
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([1, 1]);
+	for (const row of result.selected) {
+		const proof = record(row.compilerProof);
+		expect(proof.kind).toBe("persistent-compiler");
+		expect(proof.candidateId).toBe(row.id);
+		expect(proof.executionTreeSha256).toBe(result.report.executionTreeSha256);
+		expect(proof.valid).toBe(true);
+		expect(proof.diagnostics).toEqual([]);
+		expect(proof.exitCode).toBeUndefined();
+		expect(proof.argv).toBeUndefined();
+	}
 }, 90000);
 
 test("same-site candidates record each covering test exactly once in order", async () => {
@@ -525,8 +534,9 @@ test("same-line distinct Sites retain independent reach evidence", async () => {
 	const result = await invoke(input, "same-line-distinct-sites", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"]);
 	expect(result.code).toBe(1);
 	expectRestoredResults(result, 2);
-	// Reach is campaign-scoped; each mutant has compiler and mutation receipts.
-	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
+	// Reach is campaign-scoped; each mutant has one test process and compiler proof.
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([1, 1]);
+	expect(result.selected.map((row) => record(row.compilerProof).valid)).toEqual([true, true]);
 }, 90000);
 
 test("uninvoked function is noCoverage, not survived", async () => {
@@ -550,7 +560,11 @@ test("compiler rejection stays invalid and cannot make an all-invalid run green"
 	expect(result.code).toBe(2);
 	expect(result.selected[0]?.outcome).toBe("invalid");
 	expect(record(result.report.counts).killed).toBe(0);
-	expect(rows(result.selected[0]?.receipts)).toHaveLength(1);
+	expect(rows(result.selected[0]?.receipts)).toHaveLength(0);
+	const proof = record(result.selected[0]?.compilerProof);
+	expect(proof.valid).toBe(false);
+	expect(rows(proof.diagnostics).length).toBeGreaterThan(0);
+	expect(proof.diagnosticsSha256).toBe(sha256(JSON.stringify(proof.diagnostics)));
 }, 90000);
 
 test("crash after a successful assertion is infrastructure despite Bun JUnit label", async () => {
