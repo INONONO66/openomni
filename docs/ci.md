@@ -414,10 +414,36 @@ Its p50 and p95 describe the distribution of per-run means, not operation-level
 tail latency. When a workload changes meaning, review its metric identity and
 comparison reference rather than silently accepting a different measurement.
 
-The publisher compares the new result before pushing a reference update.
-A failed alert cannot advance the remote reference for the next run. Successful
-comparisons advance it; this is not a fixed long-term absolute performance
-budget. Failed observations remain available in run artifacts.
+Every Benchmark event (PR, main push, schedule, dispatch) uses one same-runner
+paired admission gate. Accepted `gh-pages` history supplies the exact latest
+accepted 40-character commit SHA, not cross-runner comparison timings. A detached
+reference worktree uses the same head-pinned Bun toolchain and its own frozen
+lockfile dependencies; protocol declarations are built in both worktrees.
+Each repeat measures reference/head serially, reversing order on even repeats.
+Both sets of all 14 metrics use the canonical summarizer. Missing history,
+invalid commit IDs, and incomplete, unexpected or duplicate metrics fail closed;
+there is no bootstrap or historical-timing fallback.
+
+`check-benchmark-regression.ts --accepted-commit <accepted.js>` validates and
+prints the accepted SHA. `--prepare-reference <reference-statistics.json>
+<accepted.js> <measured-reference-sha> <head-sha>` verifies that identity and
+writes `bench-results/reference.json`: exactly one freshly measured reference,
+using unrounded p50 values. The normal comparison command receives head
+statistics and that file. The workflow fixes the limit at 20%, with zero
+historical noise band because there is only one reference. A slowdown strictly
+above 20% in even one metric fails. This is stricter than both the former PR
+20%-plus-historical-two-sigma gate and the main publisher's 50% alert.
+
+Only successful paired comparisons permit main push/dispatch history storage;
+PRs are read-only, and scheduled runs do not publish. The publisher stores the
+original head summary without a second cross-runner alert decision. Accepted
+references can advance; this is not a fixed long-term absolute performance
+budget. Raw head observations remain in `bench-results/runs`, with fresh
+reference observations in `bench-results/reference/runs`; neither is normalized.
+Artifacts also retain accepted history, both summaries, exact revision IDs,
+Bun/runner details and measurement order. Reference metadata binds both commits
+and SHA-256 hashes of accepted history and fresh reference statistics; the gate
+receipt hashes the head statistics and prepared reference including its metadata.
 
 Memory regression guards run independently, so their failure does not discard
 completed benchmark samples or skip the comparison. Coverage, selection, and

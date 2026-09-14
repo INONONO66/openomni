@@ -8,6 +8,8 @@ on:
     - cron: '23 3 * * 0'
   pull_request:
     paths:
+      - .github/workflows/benchmark.yml
+      - script/benchmark-workflow.test.ts
       - packages/ledger/**
       - packages/agent/**
       - packages/protocol/**
@@ -26,11 +28,6 @@ on:
         description: Number of repeated benchmark runs to summarize
         required: false
         default: "5"
-      # PRs use the stricter repeated-run median gate plus a historical noise band.
-      regression-percent:
-        description: Maximum median regression percent (also must exceed historical noise)
-        required: false
-        default: "20"
 
 concurrency:
   group: bench-${{ github.ref }}
@@ -45,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      BENCHMARK_REGRESSION_PERCENT: ${{ github.event.inputs.regression-percent || '20' }}
+      BENCHMARK_REGRESSION_PERCENT: "20"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -60,40 +57,77 @@ jobs:
           bun run script/check-benchmark-regression.ts --validate-input
       - run: bunx turbo run build --filter=@openomni/protocol
 
-      - name: Run repeated benchmarks
+      # Accepted history is data only. Both revisions use the head-pinned Bun,
+      # but install their own frozen dependency graphs in separate worktrees.
+      - name: Prepare accepted benchmark reference
+        run: |
+          set -euo pipefail
+          REFERENCE_WORKTREE="$RUNNER_TEMP/benchmark-reference"
+          printf 'REFERENCE_WORKTREE=%s\n' "$REFERENCE_WORKTREE" >> "$GITHUB_ENV"
+          rm -rf bench-results
+          mkdir -p bench-results
+          git fetch --no-tags origin gh-pages
+          git show FETCH_HEAD:dev/bench/data.js > bench-results/accepted.js
+          reference_commit=$(bun run script/check-benchmark-regression.ts --accepted-commit bench-results/accepted.js)
+          printf '%s\n' "$reference_commit" > bench-results/accepted-commit.txt
+          git rev-parse HEAD > bench-results/head-commit.txt
+          bun --version > bench-results/bun-version.txt
+          uname -a > bench-results/runner.txt
+          git fetch --no-tags origin "$reference_commit"
+          git worktree add --detach "$REFERENCE_WORKTREE" "$reference_commit"
+          (
+            cd "$REFERENCE_WORKTREE"
+            bun install --frozen-lockfile
+            bunx turbo run build --filter=@openomni/protocol
+          )
+
+      - name: Run repeated paired benchmarks
         env:
           BENCHMARK_RUNS: ${{ github.event.inputs.runs || '5' }}
         run: |
           set -euo pipefail
-          rm -rf bench-results packages/*/bench-results
-          mkdir -p bench-results/runs
-
+          measure() {
+            local revision="$1" checkout="$2" output="$3"
+            printf '%s\t%s\n' "$run" "$revision" >> "$GITHUB_WORKSPACE/bench-results/order.tsv"
+            mkdir -p "$output"
+            (
+              cd "$checkout"
+              rm -rf packages/*/bench-results
+              bun run --cwd packages/ledger bench
+              cp packages/ledger/bench-results/session.json "$output/session.json"
+              bun run --cwd packages/agent bench
+              cp packages/agent/bench-results/agent.json "$output/agent.json"
+            )
+          }
           for run in $(seq 1 "$BENCHMARK_RUNS"); do
-            echo "Benchmark run $run/$BENCHMARK_RUNS"
-            rm -rf packages/*/bench-results
-
-            bun run --cwd packages/ledger bench
-            bun run --cwd packages/agent bench
-            mkdir -p "bench-results/runs/$run"
-            cp packages/ledger/bench-results/session.json "bench-results/runs/$run/session.json"
-            cp packages/agent/bench-results/agent.json "bench-results/runs/$run/agent.json"
+            if (( run % 2 )); then revisions=(reference head); else revisions=(head reference); fi
+            for revision in "${revisions[@]}"; do
+              if [[ "$revision" == reference ]]; then
+                measure reference "$REFERENCE_WORKTREE" "$GITHUB_WORKSPACE/bench-results/reference/runs/$run"
+              else
+                measure head "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/bench-results/runs/$run"
+              fi
+            done
           done
 
       - name: Summarize benchmark runs
         env:
           BENCHMARK_RUNS: ${{ github.event.inputs.runs || '5' }}
-        run: bun run script/summarize-benchmark-runs.ts
+        run: |
+          set -euo pipefail
+          bun run script/summarize-benchmark-runs.ts
+          bun run script/summarize-benchmark-runs.ts bench-results/reference/runs bench-results/reference/combined.json bench-results/reference/statistics.json bench-results/reference/summary.md
 
       - name: Publish benchmark summary
         run: cat bench-results/summary.md >> "$GITHUB_STEP_SUMMARY"
 
-      # Read only: PRs (including forks) never checkout, commit or push gh-pages.
-      - name: Compare against accepted main benchmarks
-        if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      # Sole admission decision for every event: one fresh reference means zero
+      # historical noise band. PRs (including forks) never publish history.
+      - name: Compare paired benchmarks
         run: |
-          git fetch --no-tags origin gh-pages
-          git show FETCH_HEAD:dev/bench/data.js > bench-results/reference.js
-          bun run script/check-benchmark-regression.ts
+          set -euo pipefail
+          bun run script/check-benchmark-regression.ts --prepare-reference bench-results/reference/statistics.json bench-results/accepted.js "$(git -C "$REFERENCE_WORKTREE" rev-parse HEAD)" "$(git rev-parse HEAD)"
+          bun run script/check-benchmark-regression.ts bench-results/statistics.json bench-results/reference.json
 
       - name: Upload benchmark results
         if: always()
@@ -135,34 +169,6 @@ jobs:
           name: benchmark-results
           path: bench-results
 
-      - name: Check gh-pages exists
-        id: ghp
-        run: |
-          set +e
-          git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1
-          rc=$?
-          set -e
-          if [ "$rc" -eq 0 ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          elif [ "$rc" -eq 2 ]; then
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::git ls-remote failed with exit code $rc"
-            exit 1
-          fi
-
-      - name: Bootstrap gh-pages branch
-        if: steps.ghp.outputs.exists == 'false' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
-        run: |
-          git checkout --orphan gh-pages
-          git reset --hard
-          mkdir -p dev/bench
-          echo '[]' > dev/bench/data.js
-          git add dev/bench/data.js
-          git -c user.name="github-actions" -c user.email="github-actions@github.com" commit -m "chore: bootstrap gh-pages for benchmarks"
-          git push origin gh-pages
-          git checkout -
-
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
@@ -173,11 +179,8 @@ jobs:
           auto-push: false
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
-          # Main's 50% alert is the publishing safety net; the PR median gate is
-          # intentionally stricter (20% plus two historical standard deviations).
-          alert-threshold: "150%"
-          comment-on-alert: true
-          fail-on-alert: ${{ steps.ghp.outputs.exists == 'true' }}
+          # Storage only: needs: benchmark already enforced the stricter paired
+          # 20% gate. Cross-runner history must not make a second decision.
           summary-always: true
       - name: Publish accepted benchmark reference
         if: success()

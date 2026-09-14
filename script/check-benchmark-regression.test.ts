@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,8 +7,9 @@ import { compareBenchmarks, main, readBenchmarkHistory, regressionThreshold } fr
 import { EXPECTED_BENCHMARK_NAMES } from "./summarize-benchmark-runs";
 import { decodeJson } from "./quality-json";
 
-const metrics = (value: number) => EXPECTED_BENCHMARK_NAMES.map((name) => ({ name, unit: "ns/op", value, p50: value, runs: 5 }));
-const history = (...values: number[]) => ({ entries: { "OpenOmni Benchmarks": values.map((value, index) => ({ commit: { id: `main-${index}` }, tool: "customSmallerIsBetter", benches: metrics(value) })) } });
+const metrics = (value: number) => EXPECTED_BENCHMARK_NAMES.map((name: string) => ({ name, unit: "ns/op", value, p50: value, runs: 5 }));
+const commit = (index: number) => index.toString(16).padStart(40, "a");
+const history = (...values: number[]) => ({ entries: { "OpenOmni Benchmarks": values.map((value, index) => ({ commit: { id: commit(index) }, tool: "customSmallerIsBetter", benches: metrics(value) })) } });
 
 test("gate uses repeated-run median, latest accepted reference and strict percent boundary", () => {
   expect(compareBenchmarks(metrics(120), history(100)).failed).toBe(false);
@@ -17,7 +19,7 @@ test("gate uses repeated-run median, latest accepted reference and strict percen
   const current = metrics(100).map((metric) => ({ ...metric, value: 999, mean: 999 }));
   expect(compareBenchmarks(current, history(100)).failed).toBe(false);
   const result = compareBenchmarks(metrics(121), history(99, 100));
-  expect(result.referenceCommit).toBe("main-1");
+  expect(result.referenceCommit).toBe(commit(1));
   expect(result.comparisons[0]?.reference).toBe(100);
   expect(result.failed).toBe(true);
 });
@@ -66,6 +68,86 @@ test("invalid input and incomplete references fail closed", () => {
   expect(() => compareBenchmarks(wrongUnit, history(100))).toThrow();
 });
 
+test("accepted history rejects unexpected metrics and malformed commit identities", () => {
+  const extra = history(100);
+  extra.entries["OpenOmni Benchmarks"][0]?.benches.push({ name: "unexpected", unit: "ns/op", value: 100, p50: 100, runs: 5 });
+  expect(() => compareBenchmarks(metrics(100), extra)).toThrow();
+  for (const id of ["", "main", "d6df4980", "g".repeat(40), `${"a".repeat(40)}\n`, "--detach"]) {
+    const malformed = history(100);
+    const entry = malformed.entries["OpenOmni Benchmarks"][0];
+    if (!entry) throw new Error("Missing test reference");
+    entry.commit.id = id;
+    expect(() => compareBenchmarks(metrics(100), malformed)).toThrow();
+  }
+});
+
+test("paired CLI admits host-speed shifts but rejects real regressions and invalid references", async () => {
+  const root = mkdtempSync(join(tmpdir(), "benchmark-paired-"));
+  const cwd = process.cwd(), env = { ...process.env };
+  try {
+    process.chdir(root);
+    process.env.BENCHMARK_REGRESSION_PERCENT = "20";
+    delete process.env.GITHUB_STEP_SUMMARY;
+    const acceptedHistory = history(50, 150, 100);
+    // Retired older metric sets do not replace or invalidate the latest reference.
+    acceptedHistory.entries["OpenOmni Benchmarks"][0]?.benches.pop();
+    const accepted = `window.BENCHMARK_DATA = ${JSON.stringify(acceptedHistory)};\n`;
+    const fresh = JSON.stringify(metrics(180).map((metric) => ({ ...metric, value: 999 })));
+    await Bun.write("bench-results/accepted.js", accepted);
+    await Bun.write("bench-results/reference/statistics.json", fresh);
+    const prepare = ["--prepare-reference", "bench-results/reference/statistics.json", "bench-results/accepted.js", commit(2), commit(3)];
+    expect(await main(prepare)).toBe(0);
+    const referenceSource = await Bun.file("bench-results/reference.json").text();
+    const reference = decodeJson(referenceSource);
+    const hash = (source: string) => createHash("sha256").update(source).digest("hex");
+    expect(reference).toMatchObject({
+      entries: { "OpenOmni Benchmarks": [{ commit: { id: commit(2) }, benches: metrics(180).map(({ name, unit, p50 }) => ({ name, unit, value: p50 })) }] },
+      paired: { headCommit: commit(3), referenceCommit: commit(2), acceptedHistorySha256: hash(accepted), referenceStatisticsSha256: hash(fresh) },
+    });
+    expect(compareBenchmarks(metrics(180), history(100)).failed).toBe(true);
+    for (const { value, exit } of [{ value: 180, exit: 0 }, { value: 216, exit: 0 }, { value: 217, exit: 1 }]) {
+      const current = JSON.stringify(metrics(value));
+      await Bun.write("bench-results/statistics.json", current);
+      expect(await main(["bench-results/statistics.json", "bench-results/reference.json"])).toBe(exit);
+      const result = decodeJson(await Bun.file("bench-results/regression.json").text());
+      expect(result).toMatchObject({ failed: exit === 1, referenceCommit: commit(2), threshold: 20, statisticsSha256: hash(current), historySha256: hash(referenceSource) });
+      expect(compareBenchmarks(metrics(value), reference).comparisons.every((metric) => metric.noiseBand === 0)).toBe(true);
+    }
+    expect(await main(["--accepted-commit", "bench-results/accepted.js"])).toBe(0);
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, "check-benchmark-regression.ts"), "--accepted-commit", "bench-results/accepted.js"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect({ code, stdout, stderr }).toEqual({ code: 0, stdout: `${commit(2)}\n`, stderr: "" });
+    await expect(main(["--prepare-reference", "bench-results/reference/statistics.json", "bench-results/accepted.js", commit(1), commit(3)])).rejects.toThrow("Measured reference commit does not match accepted history");
+    await expect(main([...prepare.slice(0, 4), "main"])).rejects.toThrow();
+    for (const invalid of [[], metrics(180).slice(1), [...metrics(180), ...metrics(180)], [...metrics(180), { name: "unexpected", unit: "ns/op", value: 180, p50: 180, runs: 5 }]]) {
+      await Bun.write("bench-results/reference/statistics.json", JSON.stringify(invalid));
+      await expect(main(prepare)).rejects.toThrow();
+    }
+    for (const benches of [metrics(100).slice(1), [...metrics(100), ...metrics(100)]]) {
+      const invalid = history(100, 100);
+      const latest = invalid.entries["OpenOmni Benchmarks"].at(-1);
+      if (!latest) throw new Error("Missing test reference");
+      latest.benches = benches;
+      await Bun.write("bench-results/accepted.js", JSON.stringify(invalid));
+      await expect(main(["--accepted-commit", "bench-results/accepted.js"])).rejects.toThrow();
+    }
+    await expect(main(["--accepted-commit", "absent.js"])).rejects.toThrow();
+    await Bun.write("bench-results/accepted.js", JSON.stringify(history()));
+    await expect(main(["--accepted-commit", "bench-results/accepted.js"])).rejects.toThrow();
+    const malformed = history(100);
+    const entry = malformed.entries["OpenOmni Benchmarks"][0];
+    if (!entry) throw new Error("Missing test reference");
+    entry.commit.id = "main";
+    await Bun.write("bench-results/accepted.js", JSON.stringify(malformed));
+    await expect(main(["--accepted-commit", "bench-results/accepted.js"])).rejects.toThrow();
+    expect(await Bun.file("bench-results/reference.json").text()).toBe(referenceSource);
+  } finally {
+    process.chdir(cwd);
+    process.env = env;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("gh-pages wrapper is parsed as data, never evaluated", () => {
   const data = history(100);
   expect(readBenchmarkHistory(`window.BENCHMARK_DATA = ${JSON.stringify(data)};\n`)).toEqual(data);
@@ -96,7 +178,7 @@ test("CLI exposes failing status, artifact and job summary without changing the 
       process.env.BENCHMARK_REGRESSION_PERCENT = threshold;
       expect(await main([])).toBe(exit);
       const result = decodeJson(await Bun.file(join(root, "bench-results/regression.json")).text());
-      expect(result).toMatchObject({ failed: exit === 1, referenceCommit: "main-0" });
+      expect(result).toMatchObject({ failed: exit === 1, referenceCommit: commit(0) });
     }
     expect(await Bun.file(summary).exists()).toBe(true);
     expect(await Bun.file(join(root, "bench-results/reference.js")).text()).toBe(reference);
