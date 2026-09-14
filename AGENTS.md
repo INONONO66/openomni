@@ -22,6 +22,11 @@ tests that reached their original sites. Unreached candidates retain `noCoverage
 without candidate test receipts; Python retains its existing probe. The 112-test
 runner suite passed, but a complete mutation campaign is still outstanding.
 
+Reach discovery corrected on `fix/mutation-reach-e2e-20260914`: green baseline
+JUnit supplies the executed test files, retaining Bun's package ignore rules
+without removing source or candidate inventory. Probe failures retain process
+and JUnit evidence; failed reach copies are unregistered during cleanup.
+
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
 
 ## STRUCTURE

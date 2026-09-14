@@ -130,6 +130,7 @@ class MutationError {
 	constructor(
 		readonly code: string,
 		readonly message: string,
+		readonly reach?: { test: string; receipt: TestSelectionReceipt },
 	) { }
 }
 export function sha256(data: string | Buffer): string {
@@ -1009,6 +1010,7 @@ type TestsReceipt = {
 };
 type TestSelectionReceipt = {
 	batches: TestsReceipt[];
+	files: string[];
 	tests: number;
 	failures: number;
 	assertions: string[];
@@ -1028,12 +1030,19 @@ function testGroups(root: string, tests: string[]): Map<string, string[]> {
 }
 async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number): Promise<TestSelectionReceipt> {
 	const batches: TestsReceipt[] = [];
+	const files: string[] = [];
 	for (const [cwd, selected] of testGroups(root, tests)) {
 		console.error(`[mutation] test package ${relative(root, cwd) || "."} (${selected.length} files)`);
-		batches.push(await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout));
+		const batch = await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout);
+		batches.push(batch);
+		for (const suite of batch.junit.matchAll(/<testsuite\b([^>]*)>/g)) {
+			const file = attribute(suite[1] ?? "", "file").replace(/^\.\//, "");
+			files.push(relative(root, pathIn(cwd, file)));
+		}
 	}
 	return {
 		batches,
+		files: [...new Set(files)],
 		tests: batches.reduce((sum, batch) => sum + batch.tests, 0),
 		failures: batches.reduce((sum, batch) => sum + batch.failures, 0),
 		assertions: batches.flatMap((batch) => batch.assertions),
@@ -1124,15 +1133,6 @@ function assertionIdentities(xml: string, stderr: string): string[] {
 						match[2] ?? "",
 					))),
 	);
-	function attribute(attributes: string, name: string): string {
-		const encoded = attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? "";
-		return encoded
-			.replaceAll("&quot;", '"')
-			.replaceAll("&apos;", "'")
-			.replaceAll("&lt;", "<")
-			.replaceAll("&gt;", ">")
-			.replaceAll("&amp;", "&");
-	}
 	const assertions = assertionCases.flatMap((match) => {
 		const attributes = match[1] ?? "";
 		const file = attribute(attributes, "file").replace(/^\.\//, "");
@@ -1145,6 +1145,15 @@ function assertionIdentities(xml: string, stderr: string): string[] {
 		return [JSON.stringify({ file, name, line: attribute(attributes, "line") })];
 	});
 	return assertions;
+}
+function attribute(attributes: string, name: string): string {
+	const encoded = attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? "";
+	return encoded
+		.replaceAll("&quot;", '"')
+		.replaceAll("&apos;", "'")
+		.replaceAll("&lt;", "<")
+		.replaceAll("&gt;", ">")
+		.replaceAll("&amp;", "&");
 }
 function green(receipt: TestSelectionReceipt): boolean {
 	return (
@@ -1188,7 +1197,7 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		mkdirSync(markers);
 		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout);
 		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0)
-			throw new MutationError("reachMap", `Reach test is not green: ${test}`);
+			throw new MutationError("reachMap", `Reach test is not green: ${test}`, { test, receipt });
 		runs.push({ test, receipt });
 		recordReach(map, candidates, owners, markers, test);
 	}
@@ -1838,7 +1847,7 @@ async function campaign(options: Options): Promise<number> {
 		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const selected = selectedCandidates(options, enumerated.candidates);
 		const reachCandidates = selected.filter((candidate) => !candidate.operator.startsWith("py-"));
-		const reach = errors.length ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, tests, executionTreeSha256);
+		const reach = errors.length || !baseline ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, baseline.files, executionTreeSha256);
 		removeExecution(join(temporary, "reach"));
 		const results = await executeSelection(
 			options, contract, temporary, started, enumerated, tests, errors, reach.map,
@@ -1901,6 +1910,7 @@ async function campaign(options: Options): Promise<number> {
 	} finally {
 		if (!cleanupVerified) {
 			removeExecution(join(temporary, "candidate/source"));
+			removeExecution(join(temporary, "reach"));
 			removeExecution(join(temporary, "baseline"));
 			removeExecution(join(temporary, "frozen"));
 			rmSync(temporary, { recursive: true, force: true });
@@ -1939,10 +1949,10 @@ async function dispatch(argv: string[]): Promise<number> {
 	}
 	return await campaign(optionsFrom(values));
 }
-function reportFailure(error: Error | string): number {
-	const caught = error instanceof Error ? error.message : String(error);
+function reportFailure(error: Error | MutationError | string): number {
+	const caught = error instanceof Error || error instanceof MutationError ? error.message : String(error);
 	const prior = failure;
-	failure = { code: prior?.code ?? "infrastructure", message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
+	failure = { code: prior?.code ?? (error instanceof MutationError ? error.code : "infrastructure"), message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
 	console.log(
 		JSON.stringify({
 			version: 1,
@@ -1956,6 +1966,7 @@ function reportFailure(error: Error | string): number {
 					message: "Unhandled filesystem, compiler or process failure",
 				}),
 				...(setupProcessFailure ? { process: setupProcessFailure } : {}),
+				...(error instanceof MutationError && error.reach ? { reach: error.reach } : {}),
 			},
 		}, diagnosticField),
 	);
