@@ -109,10 +109,12 @@ test("all events collect the accepted SHA and head on one runner before the sole
   expect(workflow.jobs.benchmark.if).toBeUndefined();
   expect(steps.some((step) => step.run?.includes("git push"))).toBe(false);
   for (const index of [reference, collection, summary, gate]) {
-    expect(steps[index]?.if).toBeUndefined();
-    expect(steps[index]?.["continue-on-error"]).toBeUndefined();
-    expect(steps[index]?.run).toContain("set -euo pipefail");
-    expect(steps[index]?.run).not.toMatch(/\|\|\s*true|set \+e|continue-on-error/);
+    const step = steps[index];
+    if (!step) throw new Error("Missing required benchmark step");
+    expect(step.if).toBeUndefined();
+    expect(step["continue-on-error"]).toBeUndefined();
+    expect(step.run).toContain("set -euo pipefail");
+    expect(step.run).not.toMatch(/\|\|\s*true|set \+e|continue-on-error/);
   }
 });
 
