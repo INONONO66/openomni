@@ -52,6 +52,7 @@ export function App({ platform, storage }: AppEnvironment) {
   const tab = activeTab(state);
   const place = tab?.place ?? null;
   const byId = sessionIndex(sessions);
+  const { transport, notice } = useChatEndpoint();
   const search = useRef({ searching: false, invokingTabId: state.activeTabId });
   const focusRecovery = useRef<"panel" | "tab" | null>(null);
   const [held, setHeld] = useState<Held>(() => ({
@@ -60,7 +61,6 @@ export function App({ platform, storage }: AppEnvironment) {
   }));
 
   useShellLifecycle(storage);
-  const { transport, notice } = useChatEndpoint();
   const chatFor = useSessionChats(transport);
 
   const arrive = useCallback((boundary: Boundary | null = "selection") => {
