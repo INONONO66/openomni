@@ -1,3 +1,4 @@
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
   activateTab,
@@ -9,17 +10,16 @@ import {
   createSession,
   cycleTab,
   forward,
-  historyMenuEntries,
   INITIAL_CLIENT_STATE,
   jumpTo,
   navigate,
   openTab,
   reopenClosedTab,
   setDraft,
-  setSessionTitleIfPlaceholder,
   setSidebarFloating,
   type Tab,
 } from "../src/renderer/state/store";
+import { historyMenuEntries } from "../src/renderer/state/selectors";
 
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);

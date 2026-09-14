@@ -1,11 +1,8 @@
-import { createRequire } from "node:module";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron, expect, test } from "@playwright/test";
 
-const require = createRequire(import.meta.url);
-const electronExecutable = require("electron") as string;
 const startupScript = join(import.meta.dirname, "startup.cjs");
 
 test("production desktop shell boots with its bridge and CSP", async () => {
@@ -19,7 +16,6 @@ test("production desktop shell boots with its bridge and CSP", async () => {
   environment.DESKTOP_SMOKE_PROFILE = profile;
   environment.DESKTOP_SMOKE_ERRORS = errorsFile;
   const electron = await _electron.launch({
-    executablePath: electronExecutable,
     cwd: join(import.meta.dirname, ".."),
     args: ["--require", startupScript, "--disable-gpu", "dist/main/index.js"],
     env: environment,
