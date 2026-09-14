@@ -1151,19 +1151,26 @@ function green(receipt: TestSelectionReceipt): boolean {
 		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
-function siteOwners(candidates: Candidate[]): Map<string, string> {
-	const owners = new Map<string, string>();
-	for (const candidate of candidates) owners.set(`${candidate.path}\u0000${JSON.stringify(candidate.site)}`, candidate.id);
+function siteOwners(candidates: Candidate[]): Map<string, string[]> {
+	const owners = new Map<string, string[]>();
+	for (const candidate of candidates) {
+		const key = `${candidate.path}\u0000${JSON.stringify(candidate.site)}`;
+		owners.set(key, [...(owners.get(key) ?? []), candidate.id]);
+	}
 	return owners;
 }
-function recordReach(map: Map<string, ProbeEvidence>, candidates: Candidate[], owners: Map<string, string>, markers: string, test: string): void {
+function recordReach(map: Map<string, ProbeEvidence>, candidates: Candidate[], owners: Map<string, string[]>, markers: string, test: string): void {
 	for (const candidate of candidates) {
-		const marker = join(markers, owners.get(`${candidate.path}\u0000${JSON.stringify(candidate.site)}`) ?? candidate.id);
-		const evidence = map.get(candidate.id);
-		if (!evidence || !existsSync(marker)) continue;
-		evidence.reached = true;
-		evidence.tests = [...(evidence.tests ?? []), test];
-		evidence.markerSha256 = sha256(readFileSync(marker, "utf8"));
+		const key = `${candidate.path}\u0000${JSON.stringify(candidate.site)}`;
+		const ids = owners.get(key) ?? [candidate.id];
+		const marker = join(markers, ids[0] ?? candidate.id);
+		for (const id of ids) {
+			const evidence = map.get(id);
+			if (!evidence || !existsSync(marker)) continue;
+			evidence.reached = true;
+			evidence.tests = [...(evidence.tests ?? []), test];
+			evidence.markerSha256 = sha256(readFileSync(marker, "utf8"));
+		}
 	}
 }
 async function buildReachMap(options: Options, frozen: string, temporary: string, candidates: Candidate[], tests: string[], executionTreeSha256: string): Promise<{ map: Map<string, ProbeEvidence>; receipt: ReachMap }> {
