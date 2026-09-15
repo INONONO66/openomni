@@ -1445,7 +1445,8 @@ function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string
 	return path ? resolve(path) : fail("unsupported_process", binary, "executable cannot be resolved");
 }
 function utilityPath(executable: string, binary: string): string | undefined {
-	const expected = executable === "git" ? "/usr/bin/git" : executable === "/bin/kill" ? "/bin/kill" : undefined;
+	const expected = executable === "git" ? realpathSync("/usr/bin/git") :
+		executable === "/bin/kill" ? realpathSync("/bin/kill") : undefined;
 	if (expected === undefined) return undefined;
 	let canonical: string;
 	try { canonical = realpathSync(binary); }
