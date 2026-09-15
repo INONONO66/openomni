@@ -3,9 +3,15 @@ import type { Range } from "istanbul-lib-coverage";
 
 function entireLine(range: Range, lines: string[]): boolean {
 	const line = lines[range.start.line - 1] ?? "";
-	return range.start.line === range.end.line &&
-		line.slice(0, range.start.column).trim() === "" &&
+	return line.slice(0, range.start.column).trim() === "" &&
 		line.slice(range.end.column).trim().replace(/^;$/, "") === "";
+}
+
+function fullyExecuted(range: Range, lines: string[], executed: ReadonlyMap<number, number>): boolean {
+	if (range.start.line > range.end.line || range.end.line > lines.length) return false;
+	for (let line = range.start.line; line <= range.end.line; line++)
+		if ((executed.get(line) ?? 0) <= 0) return false;
+	return range.start.line !== range.end.line || entireLine(range, lines);
 }
 
 /** d945-lcov-crap-upper-bound@1. These are proof bits, NOT statement hit counts.
@@ -18,10 +24,12 @@ export function conservativeCounters(
 	const lines = source.split("\n");
 	const ranges = Object.entries(prepared.statementMap);
 	const s = Object.fromEntries(ranges.map(([id, range]) => {
-		const overlaps = ranges.filter(([, other]) =>
-			other.start.line <= range.start.line && other.end.line >= range.start.line);
-		const proven = (executed.get(range.start.line) ?? 0) > 0 &&
-			entireLine(range, lines) && overlaps.length === 1;
+		// Line evidence cannot distinguish two statements beginning on the same
+		// line. Ranges nested across distinct start lines are independently
+		// proven when every line they span executed.
+		const sameStart = ranges.some(([otherId, other]) =>
+			otherId !== id && other.start.line === range.start.line);
+		const proven = !sameStart && fullyExecuted(range, lines, executed);
 		return [id, Number(proven)];
 	}));
 	const f = Object.fromEntries(Object.keys(prepared.fnMap).map((id) => [id, 0]));
