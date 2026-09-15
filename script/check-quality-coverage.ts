@@ -1452,7 +1452,7 @@ function utilityPath(executable: string, binary: string): string | undefined {
 	try { canonical = realpathSync(binary); }
 	catch { return fail("unsupported_process", executable, "utility executable cannot be resolved"); }
 	if (canonical !== expected) fail("unsupported_process", executable, `utility executable must resolve to ${expected}`);
-	return expected;
+	return binary;
 }
 function launchEntry(data: Inputs, argv: string[], runtime: string, executable: string, cwd: string) {
 	let entry: Prepared | undefined;
