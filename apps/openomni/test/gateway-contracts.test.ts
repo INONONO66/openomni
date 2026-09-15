@@ -1,4 +1,4 @@
-import { wakeSession } from "@openomni/agent";
+import { Bus, wakeSession } from "@openomni/agent";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
@@ -178,6 +178,34 @@ describe("channel grant registration", () => {
 });
 
 describe("authenticated gateway ingress", () => {
+  test("real gateway observations retain stamped metadata for schema consumers", async () => {
+    const resident = testResident(async () => ({ type: "stop" }));
+    const projected = Promise.withResolvers<Gateway.MessageObservation>();
+    const stop = Bus.observe((event, data) => {
+      if (event.name !== Gateway.MessageObserved.name) return;
+      const parsed = event.schema.safeParse(data);
+      if (parsed.success) projected.resolve(Gateway.MessageObservation.parse(parsed.data));
+    });
+    try {
+      const result = await resident.ingest("OBSERVATION_SENTINEL", true);
+      expect(result).toBeDefined();
+      const observation = await Promise.race([
+        projected.promise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("observation projection timeout")), 1000),
+        ),
+      ]);
+      expect(observation).toMatchObject({
+        kind: "message.sent",
+        sessionId: "gateway-ingress",
+        messageId: expect.any(String),
+        eventId: expect.any(String),
+        time: expect.any(Number),
+      });
+    } finally {
+      stop();
+    }
+  });
   test("rejects invalid message types at the boundary without committing inbox state", async () => {
     testResident(async () => {
       throw new Error("model must not run");

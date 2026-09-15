@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BusEvent } from "../bus/index.js";
 import { Actor } from "../actor/index.js";
 import { LedgerSession, SessionTurn } from "../ledger/l0.js";
 import { EpochMs } from "../time.js";
@@ -135,9 +136,9 @@ const RuleTableB = RuleBase.extend({
 });
 
 // Six observation families (admission has admitted/rejected arms). Timing is
-// required only where measurable. Sink identity is intentionally not accepted
-// here; the sink stamps trace/session/run correlation after the action commit.
-const ObservationBase = z.object({ messageId: Id }).strict();
+// required only where measurable. Bus metadata is an observation envelope
+// stamped by the sink after the action commit.
+const ObservationBase = z.object({ messageId: Id }).extend(BusEvent.Metadata.shape).strict();
 const AdmissionBase = ObservationBase.extend({ matchedRuleIds: z.array(Id), ingestMs: DurationMs });
 const Observation = z.discriminatedUnion("kind", [
   ObservationBase.extend({
