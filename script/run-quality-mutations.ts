@@ -439,16 +439,20 @@ function literalValue(node: ts.Node): boolean {
 		return false;
 	return true;
 }
+function isStringExpression(statement: ts.Statement): boolean {
+	return ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression);
+}
+function directiveStatements(parent: ts.Node): readonly ts.Statement[] {
+	if (ts.isBlock(parent)) return parent.statements;
+	if (ts.isSourceFile(parent)) return parent.statements;
+	return [];
+}
 function directive(node: ts.ExpressionStatement): boolean {
-	if (!ts.isStringLiteral(node.expression)) return false;
 	const parent = node.parent;
-	if (!ts.isBlock(parent) && !ts.isSourceFile(parent)) return false;
-	for (const statement of parent.statements) {
-		if (statement === node) return true;
-		if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression))
-			return false;
-	}
-	return false;
+	const statements = directiveStatements(parent);
+	const index = statements.indexOf(node);
+	return ts.isStringLiteral(node.expression) && index >= 0 &&
+		statements.slice(0, index).every(isStringExpression);
 }
 function regexTokenReplacement(char: string | undefined): string | null {
 	return char === "+" ? "*" : char === "*" ? "+" : ["^", "$", "?"].includes(char ?? "") ? "" : null;
@@ -1334,30 +1338,23 @@ async function probeCandidate(context: CandidateContext, source: ReturnType<type
 	return true;
 }
 
-async function runCandidate(
-	candidate: Candidate,
-	compilerWorker: MutationCompilerWorker | null,
-	checked: CompilerCheck | undefined,
-	options: Options,
-	contract: Contract,
-	temporary: string,
-	tests: string[],
-	reachMap: Map<string, ProbeEvidence>,
-): Promise<Result> {
-	const result = defaultResult(candidate, tests);
+type CandidateExecution = {
+	candidate: Candidate;
+	compilerWorker: MutationCompilerWorker | null;
+	checked: CompilerCheck | undefined;
+	options: Options;
+	contract: Contract;
+	temporary: string;
+	tests: string[];
+	result: Result;
+};
+
+async function executeCandidate(context: CandidateExecution): Promise<Result> {
+	const { candidate, compilerWorker, checked, options, contract, temporary, tests, result } = context;
 	const python = candidate.operator.startsWith("py-");
-	const evidence = reachMap.get(candidate.id);
 	const frozenSource = mutationSource(join(temporary, "frozen"), candidate.path);
 	const frozenSourceSha256 = sha256(frozenSource.host);
 	const probeCache = new Map<string, ProbeEvidence>();
-	result.coverage = evidence ?? null;
-	if (!python && !evidence?.reached) {
-		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
-		result.restored = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host) === frozenSourceSha256;
-		result.outcome = "noCoverage";
-		result.reason = "original-runtime-site-not-reached";
-		return result;
-	}
 	const run = join(temporary, "candidate");
 	const root = join(run, "source");
 	mkdirSync(run, { recursive: true });
@@ -1370,18 +1367,14 @@ async function runCandidate(
 		original = source.host;
 		if (sha256(source.source) !== candidate.sourceSha256)
 			return fail("tamper", "Candidate snapshot drift");
-		const mutated = replace(
-			source.source,
-			candidate.startOffset,
-			candidate.endOffset,
-			candidate.replacement,
-		);
+		const mutated = replace(source.source, candidate.startOffset, candidate.endOffset, candidate.replacement);
 		writeMutation(source, mutated);
-		const context: CandidateContext = { candidate, options, contract, tests, run, root, result, probeCache, compiler: compilerWorker, checked };
-		if (!(await checkMutation(context, mutated, python))) return result;
-		if (python && !(await probeCandidate(context, source))) return result;
-		// TypeScript reach was established once for the campaign.
-		// Test side effects cannot leak into the mutation run.
+		const candidateContext: CandidateContext = {
+			candidate, options, contract, tests, run, root, result, probeCache,
+			compiler: compilerWorker, checked,
+		};
+		if (!(await checkMutation(candidateContext, mutated, python))) return result;
+		if (python && !(await probeCandidate(candidateContext, source))) return result;
 		removeExecution(root);
 		copyExecution(join(temporary, "frozen"), root);
 		writeMutation(source, mutated);
@@ -1417,6 +1410,29 @@ async function runCandidate(
 		removeExecution(root);
 		rmSync(run, { recursive: true, force: true });
 	}
+}
+
+async function runCandidate(
+	candidate: Candidate,
+	compilerWorker: MutationCompilerWorker | null,
+	checked: CompilerCheck | undefined,
+	options: Options,
+	contract: Contract,
+	temporary: string,
+	tests: string[],
+	reachMap: Map<string, ProbeEvidence>,
+): Promise<Result> {
+	const result = defaultResult(candidate, tests);
+	const evidence = reachMap.get(candidate.id);
+	result.coverage = evidence ?? null;
+	if (!candidate.operator.startsWith("py-") && !evidence?.reached) {
+		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
+		result.restored = true;
+		result.outcome = "noCoverage";
+		result.reason = "original-runtime-site-not-reached";
+		return result;
+	}
+	return executeCandidate({ candidate, compilerWorker, checked, options, contract, temporary, tests, result });
 }
 function argumentsMap(argv: string[]): Map<string, string[]> {
 	const values = new Map<string, string[]>();
@@ -1869,6 +1885,20 @@ async function campaign(options: Options): Promise<number> {
 		}
 	}
 }
+async function typecheckRoot(values: Map<string, string[]>): Promise<number> {
+	const root = values.get("--typecheck-root")?.[0] ?? fail("arguments", "Missing typecheck root");
+	const contract = values.get("--contract")?.[0] ?? fail("arguments", "Missing typecheck contract");
+	const inventory = values.get("--inventory")?.[0] ?? fail("arguments", "Missing typecheck inventory");
+	const errors = diagnostics(programs(root, contractAt(contract), inventoryAt(inventory)));
+	console.log(JSON.stringify({
+		kind: "typecheck",
+		valid: errors.length === 0,
+		diagnostics: errors,
+		diagnosticsSha256: sha256(JSON.stringify(errors)),
+	}));
+	return errors.length ? 1 : 0;
+}
+
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
 	mutationFailure.current = null;
 	setupProcessFailure = null;
@@ -1879,26 +1909,9 @@ async function dispatch(argv: string[]): Promise<number> {
 		return fail(
 			"toolVersion",
 			"Requires Bun 1.3.6 (or explicit current compatibility 1.4.1) and TypeScript 5.9.2",
-		);
+	);
 	const values = argumentsMap(argv);
-	if (values.has("--typecheck-root")) {
-		const root =
-			values.get("--typecheck-root")?.[0] ?? fail("arguments", "Missing typecheck root");
-		const contract =
-			values.get("--contract")?.[0] ?? fail("arguments", "Missing typecheck contract");
-		const inventory =
-			values.get("--inventory")?.[0] ?? fail("arguments", "Missing typecheck inventory");
-		const errors = diagnostics(programs(root, contractAt(contract), inventoryAt(inventory)));
-		console.log(
-			JSON.stringify({
-				kind: "typecheck",
-				valid: errors.length === 0,
-				diagnostics: errors,
-				diagnosticsSha256: sha256(JSON.stringify(errors)),
-			}),
-		);
-		return errors.length ? 1 : 0;
-	}
+	if (values.has("--typecheck-root")) return typecheckRoot(values);
 	return await campaign(optionsFrom(values));
 }
 function reportFailure(error: Error | MutationError | string): number {
