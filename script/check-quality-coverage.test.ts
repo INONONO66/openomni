@@ -128,7 +128,7 @@ if (git.exitCode !== 0 || kill.status !== 0) process.exit(7);
 	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
 	try {
 		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
-		expect(run.exit).toBe(1);
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
 	} finally { f.cleanup(); }
