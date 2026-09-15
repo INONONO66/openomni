@@ -91,6 +91,7 @@ type Command = {
 	args: string[];
 	expectedExitCode: number;
 	runtime?: string;
+	cwd?: string;
 };
 type Options = {
 	root: string;
@@ -108,6 +109,7 @@ type Inputs = {
 	commands: Command[];
 	roots: string[];
 	faults: Fault[];
+	selected: boolean;
 };
 type ProcessReceipt = {
 	id: string;
@@ -119,6 +121,7 @@ type ProcessReceipt = {
 	entry: string;
 	args: string[];
 	command: string;
+	cwd?: string;
 	lines: { [key: string]: Counts };
 	trace: ObjectValue | null;
 	children: string[];
@@ -335,13 +338,25 @@ function toolchain() {
 	});
 }
 
-function commands(value: Json, entries: Entry[]): Command[] {
+function commandDirectory(value: Json | undefined, root: string): string {
+	const cwd = value === "." ? "." : pathValue(value);
+	const absolute = resolve(root, cwd);
+	if (!existsSync(absolute) || realpathSync(absolute) !== absolute || !lstatSync(absolute).isDirectory())
+		fail("path", cwd, "command cwd must be a canonical repository directory");
+	return cwd;
+}
+function commands(value: Json, entries: Entry[], root: string): Command[] {
 	const plan = object(value);
-	object(value, plan.version === 2 ? ["version", "commands", "faults"] : ["version", "commands"]);
-	if (plan.version !== 1 && plan.version !== 2) fail("schema", "", "unsupported plan version");
+	object(value, ["version", "commands", ...(plan.version === 2 || plan.version === 3 ? ["faults"] : []), ...(plan.version === 3 || plan.run !== undefined ? ["run"] : [])]);
+	if (![1, 2, 3].includes(integer(plan.version))) fail("schema", "", "unsupported plan version");
+	if (plan.run !== undefined) {
+		const run = object(plan.run, ["id", "selectionHash"]);
+		if (!text(run.id)) fail("identity", "", "empty coverage run");
+		hash(run.selectionHash);
+	}
 	const result = array(plan.commands).map((item) => {
 		const v = object(item);
-		object(item, ["id", "kind", "paths", "args", "expectedExitCode", ...(v.runtime === undefined ? [] : ["runtime"])]);
+		object(item, ["id", "kind", "paths", "args", "expectedExitCode", ...(v.runtime === undefined ? [] : ["runtime"]), ...(plan.version === 3 ? ["cwd"] : [])]);
 		const command = {
 			id: text(v.id),
 			kind: choice(v.kind, ["test", "cli"]),
@@ -349,6 +364,7 @@ function commands(value: Json, entries: Entry[]): Command[] {
 			args: array(v.args).map(text),
 			expectedExitCode: integer(v.expectedExitCode),
 			runtime: v.runtime === undefined ? "bun" : choice(v.runtime, ["bun", "node", "python"]),
+			...(plan.version === 3 ? { cwd: commandDirectory(v.cwd, root) } : {}),
 		};
 		if (
 			!/^[a-zA-Z0-9_-]+$/.test(command.id) ||
@@ -371,7 +387,7 @@ function commands(value: Json, entries: Entry[]): Command[] {
 	);
 	if (!result.length) fail("plan", "", "empty command selection");
 	for (const e of entries.filter(
-		(e) => e.category === "test" && /\.(test|spec)\.[cm]?[jt]sx?$/.test(e.path),
+		(e) => plan.version !== 3 && e.category === "test" && /\.(test|spec)\.[cm]?[jt]sx?$/.test(e.path),
 	)) {
 		if (!result.some((c) => c.kind === "test" && c.paths.includes(e.path)))
 			fail("plan", e.path, "missing test entry");
@@ -387,7 +403,7 @@ function nullableSignal(value: Json | undefined): string | null {
 }
 function faultContracts(value: Json, commands: Command[], files: Prepared[]): Fault[] {
 	const plan = object(value);
-	const faults = plan.version === 2 ? array(plan.faults).map((item): Fault => {
+	const faults = plan.version === 2 || plan.version === 3 ? array(plan.faults).map((item): Fault => {
 		const f = object(item, ["id", "command", "entry", "args", "exitCode", "signal", "occurrences", "checkpoint"]);
 		const checkpoint = object(f.checkpoint, ["path", "statement", "minimumHits"]);
 		const result = {
@@ -802,15 +818,16 @@ function inputs(options: Options): Inputs {
 	const { entries, embedded, executable } = inventorySources(options, contract);
 	const files = executable.map((e) => prepare(e, options.root, embedded));
 	const planValue = frozen(options.plan, options.planHash);
-	const plan = commands(planValue, entries);
+	const plan = commands(planValue, entries, options.root);
+	const selected = object(planValue).version === 3;
 	const faults = faultContracts(planValue, plan, files);
 	for (const file of files)
 		if (
-			!file.python && /import\.meta\.main/.test(readFileSync(join(options.root, file.entry.path), "utf8")) &&
+			!selected && !file.python && /import\.meta\.main/.test(readFileSync(join(options.root, file.entry.path), "utf8")) &&
 			!plan.some((c) => c.kind === "cli" && c.paths[0] === file.entry.path)
 		)
 			fail("plan", file.entry.path, "operational CLI entry missing");
-	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, faults };
+	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, faults, selected };
 }
 
 export function exactMetric(total: number, covered: number): Metric {
@@ -923,7 +940,8 @@ function pythonTraceArcs(value: Json | undefined, file: Prepared): ObjectValue {
 }
 
 function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
-	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage"]);
+	const root = data.selected && object(value).parent === "";
+	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage", ...(root ? ["cwd"] : [])]);
 	const loaded = array(r.loaded).map(pathValue);
 	unique(loaded, "loaded source");
 	if ([...loaded].sort().join("\0") !== Object.keys(object(r.coverage)).sort().join("\0"))
@@ -953,6 +971,7 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 		exitCode, signal, lines, trace,
 		runtime: choice(r.runtime, ["bun", "node", "python"]),
 		entry: pathValue(r.entry), args: array(r.args).map(text), command: text(r.command),
+		...(root ? { cwd: commandDirectory(r.cwd, data.options.root) } : {}),
 		children: array(r.children).map(text),
 		loaded,
 		coverage,
@@ -1133,6 +1152,9 @@ function verify(value: Json, data: Inputs) {
 				command.id,
 				"entry never loaded or terminal process receipt missing",
 			);
+		if (data.selected && (receipt.cwd !== command.cwd || receipt.entry !== command.paths[0] ||
+			JSON.stringify(receipt.args) !== JSON.stringify(command.kind === "test" ? commandTestPaths(data, command).slice(1) : command.args)))
+			fail("identity", command.id, "root launch differs from selected command");
 		expectedRoots.add(receipt.id);
 	});
 	const faultCounts = new Map<string, number>();
@@ -1287,6 +1309,7 @@ function collectedProcess(directory: string, id: string, data: Inputs): Json {
 		pid: integer(start.pid),
 		exitCode: nullableExit(observed.exitCode), signal: nullableSignal(observed.signal),
 		runtime: text(request.runtime), entry: text(request.entry), args: array(request.args), command: text(request.command), lines,
+		...(data.selected && request.parent === "" ? { cwd: text(start.cwd) } : {}),
 		trace: existsSync(tracePath) ? decode(readFileSync(tracePath, "utf8")) : null,
 		children: decode(readFileSync(join(directory, `${id}.children.json`), "utf8")),
 		loaded,
@@ -1304,7 +1327,9 @@ function preload(directory: string): void {
 	const startPath = join(directory, `${id}.start.json`);
 	const request = object(decode(readFileSync(join(directory, `${id}.request.json`), "utf8")));
 	const runtime = typeof Bun === "undefined" ? "node" : "bun";
-	writeFileSync(startPath, JSON.stringify({ id, parent, pid: process.pid, runtime, entry: text(request.entry) }), { flag: "wx" });
+	const cwd = relative(data.options.root, realpathSync(process.cwd())) || ".";
+	if (data.selected && parent === "" && request.cwd !== cwd) fail("identity", id, "root cwd differs from launch request");
+	writeFileSync(startPath, JSON.stringify({ id, parent, pid: process.pid, runtime, entry: text(request.entry), ...(data.selected && parent === "" ? { cwd } : {}) }), { flag: "wx" });
 	writeFileSync(join(directory, `${id}.children.json`), "[]", { flag: "wx" });
 	writeFileSync(join(directory, `${id}.loaded.json`), "[]", { flag: "wx" });
 	processCounters(directory, id, data.files);
@@ -1362,20 +1387,22 @@ function preload(directory: string): void {
 	function child(command: string[], env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()) {
 		const childId = randomUUID();
 		const launch = launchCommand(data, directory, childId, id, text(request.command), command, env, cwd);
+		if (launch.id === undefined) return launch;
 		children.push(childId);
 		writeFileSync(join(directory, `${id}.children.json`), JSON.stringify(children));
-		return { id: childId, ...launch };
+		return launch;
 	}
 	installProcessHooks(child, (childId, code, signal) => observe(directory, childId, code, signal), fail);
 	if (runtime === "node") return;
 	// Interposition consumes only argv/environment. Native stdio, IPC payloads,
 	// callbacks and return values pass through untouched; they are not analyzer data.
-	type LaunchOptions = { env?: NodeJS.ProcessEnv; cwd?: string };
+	type LaunchOptions = { env?: NodeJS.ProcessEnv; cwd?: string; shell?: boolean | string };
 	const spawn = Bun.spawn;
 	const spawnSync = Bun.spawnSync;
 	function bunLaunch(command: string[] | (LaunchOptions & { cmd: string[] }), options?: LaunchOptions) {
 		const opts = Array.isArray(command) ? options : command;
 		const argv = Array.isArray(command) ? command : command.cmd;
+		if (opts?.shell) fail("unsupported_process", argv[0] ?? "", "shell execution is not observable");
 		if (opts?.env?.D945_PROCESS && opts.env.D945_PROCESS !== id && existsSync(join(directory, `${opts.env.D945_PROCESS}.request.json`)))
 			return { argv, options: opts, id: undefined };
 		const wrapped = child(argv, opts?.env, opts?.cwd);
@@ -1417,6 +1444,16 @@ function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string
 	const path = binary.includes("/") ? resolve(cwd, binary) : (env.PATH ?? "").split(":").map((p) => join(p, binary)).find(existsSync);
 	return path ? resolve(path) : fail("unsupported_process", binary, "executable cannot be resolved");
 }
+function utilityPath(executable: string, binary: string): string | undefined {
+	const expected = executable === "git" ? realpathSync("/usr/bin/git") :
+		executable === "/bin/kill" ? realpathSync("/bin/kill") : undefined;
+	if (expected === undefined) return undefined;
+	let canonical: string;
+	try { canonical = realpathSync(binary); }
+	catch { return fail("unsupported_process", executable, "utility executable cannot be resolved"); }
+	if (canonical !== expected) fail("unsupported_process", executable, `utility executable must resolve to ${expected}`);
+	return binary;
+}
 function launchEntry(data: Inputs, argv: string[], runtime: string, executable: string, cwd: string) {
 	let entry: Prepared | undefined;
 	let args: string[] = [];
@@ -1454,9 +1491,11 @@ function runtimeVersion(binary: string, runtime: string, executable: string): st
 }
 
 function launchCommand(data: Inputs, directory: string, id: string, parent: string, commandId: string,
-	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { command: string[]; env: NodeJS.ProcessEnv } {
+	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { id?: string; command: string[]; env: NodeJS.ProcessEnv } {
 	const executable = command[0] ?? fail("process", "", "empty executable");
 	const binary = binaryPath(executable, environment, cwd);
+	const utility = utilityPath(executable, binary);
+	if (utility !== undefined) return { command: [utility, ...command.slice(1)], env: environment };
 	const name = basename(binary);
 	const runtime = /^bun(?:\.exe)?$/.test(name) ? "bun" : /^node(?:\.exe)?$/.test(name) ? "node" : /^python(?:3(?:\.\d+)?)?$/.test(name) ? "python" :
 		fail("unsupported_process", executable, "unregistered native executable");
@@ -1464,29 +1503,35 @@ function launchCommand(data: Inputs, directory: string, id: string, parent: stri
 	if (runtime === "bun" && argv[0] === "run") argv = argv.slice(1);
 	const { entry, args } = launchEntry(data, argv, runtime, executable, cwd);
 	const actual = runtimeVersion(binary, runtime, executable);
-	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent, command: commandId, runtime, entry: entry.entry.path, args, binary, version: actual, sha256: sha256(readFileSync(binary)) }), { flag: "wx" });
+	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent, command: commandId, runtime, entry: entry.entry.path, args, binary, version: actual, sha256: sha256(readFileSync(binary)), ...(data.selected && parent === "" ? { cwd: relative(data.options.root, cwd) || "." } : {}) }), { flag: "wx" });
 	const env = {
 		...environment, D945_DIRECTORY: directory, D945_PROCESS: id, D945_PARENT: parent,
-		D945_ASSET_DIRECTORY: asset(""), D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath
+		D945_ASSET_DIRECTORY: asset(""), D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
+		...(data.selected ? { D945_SOURCE_ROOT: data.options.root } : {}),
 	};
-	if (runtime === "python") return { command: [binary, "-u", asset("python.py"), "run", directory, id, entry.entry.path, ...args], env };
-	if (runtime === "node") return { command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
-	return {
+	if (runtime === "python") return { id, command: [binary, "-u", asset("python.py"), "run", directory, id, entry.entry.path, ...args], env };
+	if (runtime === "node") return { id, command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
+	return { id,
 		command: argv[0] === "test" ? [binary, "test", "--preload", join(directory, "preload.js"), ...argv.slice(1)] :
 			[binary, "--preload", join(directory, "preload.js"), ...argv], env
 	};
 }
+function commandTestPaths(data: Inputs, command: Command): string[] {
+	const cwd = resolve(data.options.root, command.cwd ?? ".");
+	return command.paths.map((path) => `./${relative(cwd, resolve(data.options.root, path))}`);
+}
 async function collectCommand(data: Inputs, directory: string, command: Command): Promise<Json> {
 	const id = randomUUID();
+	const cwd = resolve(data.options.root, command.cwd ?? ".");
 	const argv =
 		command.kind === "test"
-			? ["test", "--timeout", "15000", ...command.paths.map((p) => `./${p}`)]
+			? ["test", "--timeout", "15000", ...commandTestPaths(data, command)]
 			: [join(data.options.root, command.paths[0] ?? ""), ...command.args];
 	const runtime = command.runtime ?? "bun";
 	const executable = runtime === "bun" ? process.execPath : runtime === "python" ? pythonBinary() : "node";
-	const launch = launchCommand(data, directory, id, "", command.id, [executable, ...argv], process.env, data.options.root);
+	const launch = launchCommand(data, directory, id, "", command.id, [executable, ...argv], process.env, cwd);
 	const child = Bun.spawn(launch.command, {
-		cwd: data.options.root,
+		cwd,
 		env: launch.env,
 		stdout: "pipe",
 		stderr: "pipe",

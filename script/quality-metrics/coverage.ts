@@ -120,7 +120,7 @@ function counts(
 function unique(values: string[], path: string): void {
   if (new Set(values).size !== values.length) fail("coverage", path, "duplicate identity");
 }
-type CollectorPaths = { root: string; contract: string; inventory: string; plan: string };
+type CollectorPaths = { root: string; contract: string; inventory: string; plan: string; scope?: readonly string[] };
 type ReceiptObject = ReturnType<typeof object>;
 type VerifiedCollector = ReturnType<typeof coverageForMetrics>;
 function joinCollectorFile(file: Prepared, original: VerifiedCollector["files"][number], processes: VerifiedCollector["processes"]): Counters {
@@ -149,7 +149,12 @@ function collectorCoverage(path: string, receipt: ReceiptObject, prepared: Prepa
     const counters = joinCollectorFile(file, original, verified.processes);
     totals.set(file.path, counters);
   }
-  if (totals.size !== verified.files.length) fail("coverage", path, "collector source membership differs");
+  // A scoped metrics leg still verifies the entire frozen collector inventory
+  // and process graph. Only the final metrics projection may select a subset.
+  const selected = collector.scope ?? verified.files.map((file) => file.path);
+  unique([...selected], path);
+  if (totals.size !== selected.length || selected.some((path) => !totals.has(path)))
+    fail("coverage", path, "collector source membership differs");
   return { run: { id: sha(JSON.stringify(receipt)), inventoryHash: hash(receipt.inventoryHash), contractHash: hash(receipt.contractHash), planHash: hash(receipt.planHash) }, totals,
     processes: verified.processes.map((process) => ({ id: process.id, parent: process.parent, children: process.children, exitCode: process.exitCode })),
     receiptHash: sha(JSON.stringify(receipt)) };

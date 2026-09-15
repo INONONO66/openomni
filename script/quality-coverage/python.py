@@ -1090,10 +1090,18 @@ class Runner:
         self.rows: dict[str, OwnedFile] = {}
         self.by_filename: dict[str, OwnedFile] = {}
         self.arc_sets: dict[str, ArcSet] = {}
-        self.receipt("start", {
+        self.source_root: str | None = os.environ.get("D945_SOURCE_ROOT")
+        start: dict[str, JsonValue] = {
             "id": identifier, "parent": os.environ.get("D945_PARENT"),
             "pid": os.getpid(), "runtime": "python", "entry": entry,
-        })
+        }
+        if self.source_root is not None and os.environ.get("D945_PARENT") == "":
+            request = json_object(decode_json((directory / f"{identifier}.request.json").read_text()))
+            cwd = os.path.relpath(os.path.realpath(os.getcwd()), self.source_root)
+            if request.get("cwd") != cwd:
+                raise AnalyzerError("Root cwd differs from launch request")
+            start["cwd"] = cwd
+        self.receipt("start", start)
         self.receipt("children", [])
         self.receipt("loaded", [])
         size = json_object(decode_json((directory / "process-size.json").read_text()))
@@ -1141,7 +1149,9 @@ class Runner:
             _ = temporary.replace(destination)
 
     def filename(self, row: OwnedFile) -> str:
-        return row.model.path if "#" in row.model.path else os.path.abspath(row.model.path)
+        if "#" in row.model.path:
+            return row.model.path
+        return os.path.abspath(os.path.join(self.source_root or os.getcwd(), row.model.path))
 
     def fail(self, error: BaseException) -> None:
         self.receipt("failure", {"error": str(error), "type": type(error).__name__})
