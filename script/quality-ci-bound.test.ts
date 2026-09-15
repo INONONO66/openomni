@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { statementCounters } from "./quality-ci-bound";
+import { conservativeCounters, statementCounters } from "./quality-ci-bound";
 import type { Prepared } from "./quality-metrics/coverage";
 
 const range = (start: number, end = start): import("istanbul-lib-coverage").Range => ({
@@ -13,5 +13,28 @@ const prepared: Prepared = {
 
 test("missing exact counters fail closed instead of inferring hits or fabricating zeros", () => {
 	expect(() => statementCounters(prepared)).toThrow("missing exact statement evidence");
-	expect(() => statementCounters(prepared, { run: { id: "missing", head: "", tree: "" }, totals: new Map(), processes: [], receiptHash: "" })).toThrow("missing exact statement evidence");
+	expect(() => statementCounters(prepared, {
+		run: { id: "missing", head: "", tree: "" }, totals: new Map(), processes: [], receiptHash: "",
+	})).toThrow("missing exact statement evidence");
+});
+
+test("CRAP bound credits only a uniquely mapped entire executed source line", () => {
+	const source = "value = 1;\nleft(); right();\nmultiline(\nvalue);\n";
+	const counters = conservativeCounters(prepared, source, new Map([[1, 4], [2, 8], [3, 2]]));
+	expect(counters.s).toEqual({ a: 1, b: 0, c: 0, d: 0 });
+	expect(counters.f).toEqual({});
+});
+
+test("fully executed multiline and nested statements receive coverage proof", () => {
+	const multiline: Prepared = {
+		...prepared,
+		statementMap: { outer: range(1, 3), inner: range(2, 3) },
+	};
+	const counters = conservativeCounters(multiline, "one(\ntwo(\nthree);\n", new Map([[1, 1], [2, 1], [3, 1]]));
+	expect(counters.s).toEqual({ outer: 1, inner: 1 });
+});
+
+test("missing native line evidence is explicitly an unproven lower bound", () => {
+	expect(conservativeCounters(prepared, "", new Map<number, number>()).s).toEqual({ a: 0, b: 0, c: 0, d: 0 });
+	expect(conservativeCounters(prepared, "value = 1; other();", new Map([[1, 1]])).s.a).toBe(0);
 });
