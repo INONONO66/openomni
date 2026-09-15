@@ -16,6 +16,18 @@ test("CRAP bound credits only a uniquely mapped entire executed source line", ()
 	expect(counters.s).toEqual({ a: 1, b: 0, c: 0, d: 0 });
 	expect(counters.f).toEqual({});
 });
+test("fully executed multiline and nested statements receive coverage proof", () => {
+	const multiline: Prepared = {
+		...prepared,
+		statementMap: {
+			outer: range(1, 3),
+			inner: range(2, 3),
+		},
+	};
+	const counters = conservativeCounters(multiline, "one(\ntwo(\nthree);\n", new Map([[1, 1], [2, 1], [3, 1]]));
+	expect(counters.s).toEqual({ outer: 1, inner: 1 });
+});
+
 test("missing native line evidence is explicitly an unproven lower bound", () => {
 	expect(conservativeCounters(prepared, "", new Map<number, number>()).s).toEqual({ a: 0, b: 0, c: 0, d: 0 });
 	expect(conservativeCounters(prepared, "value = 1; other();", new Map([[1, 1]])).s.a).toBe(0);
