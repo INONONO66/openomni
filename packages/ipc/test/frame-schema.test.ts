@@ -13,6 +13,14 @@ test("wire frames retain primitive entries, reserved keys and JSON numeric edge 
   ]);
 });
 
+test("wire validation accepts a wide frame below the 16 MiB limit", () => {
+  const frame = `[${"1,".repeat(2_000_000)}0]\n`;
+  expect(Buffer.byteLength(frame)).toBeLessThan(16 * 1024 * 1024);
+  const result = new LineDecoder().push(frame);
+  expect(result.malformed).toEqual([]);
+  expect(result.frames).toHaveLength(1);
+});
+
 test("wire validation is iterative for deeply nested parseable frames", () => {
   const depth = 20_000;
   const frame = `${"[".repeat(depth)}0${"]".repeat(depth)}\n`;
@@ -46,6 +54,19 @@ test("wire schema refuses values that JSON.parse cannot produce without reading 
     expect(FrameSchema.safeParse(value).success).toBe(false);
   }
   expect(reads).toBe(0);
+});
+
+test("schema rejects unknown and malformed wire values with the same framing parity", () => {
+  const decoder = new LineDecoder();
+  expect(decoder.push('{"nested":null}\n')).toEqual({
+    frames: [{ nested: null }],
+    malformed: [],
+  });
+  expect(decoder.push('{"nested":}\n')).toEqual({
+    frames: [],
+    malformed: ['{"nested":}'],
+  });
+  expect(FrameSchema.safeParse({ nested: undefined }).success).toBe(false);
 });
 
 test("schema failure marks only its own line malformed", () => {

@@ -21,14 +21,22 @@ function isFrameValue<T>(input: T): boolean {
     if (entry === false) return false;
     if (seen.has(entry)) return false;
     seen.add(entry);
-    if (!isContainer(entry)) return false;
-    for (const key of Object.keys(entry)) {
-      const descriptor = Object.getOwnPropertyDescriptor(entry, key);
-      if (!descriptor || !("value" in descriptor)) return false;
-      pending.push(frameEntry(descriptor.value));
-    }
+    const children = frameChildren(entry);
+    if (children === undefined) return false;
+    for (const child of children) pending.push(child);
   }
   return true;
+}
+
+function frameChildren(value: object): FrameEntry[] | undefined {
+  if (!isContainer(value)) return undefined;
+  const children: FrameEntry[] = [];
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor)) return undefined;
+    children.push(frameEntry(descriptor.value));
+  }
+  return children;
 }
 
 function isContainer(value: object): boolean {
