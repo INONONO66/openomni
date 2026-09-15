@@ -1350,65 +1350,95 @@ type CandidateExecution = {
 	frozenSourceSha256: string;
 };
 
-async function executeCandidate(context: CandidateExecution): Promise<Result> {
-	const { candidate, compilerWorker, checked, options, contract, temporary, tests, result, frozenSourceSha256 } = context;
-	const python = candidate.operator.startsWith("py-");
-	const probeCache = new Map<string, ProbeEvidence>();
+type CandidateWorkspace = {
+	run: string;
+	root: string;
+	source: ReturnType<typeof mutationSource>;
+};
+
+function prepareCandidate(context: CandidateExecution): { workspace: CandidateWorkspace; mutated: string } {
+	const { candidate, temporary } = context;
 	const run = join(temporary, "candidate");
 	const root = join(run, "source");
 	mkdirSync(run, { recursive: true });
-	let original = "";
-	let path = "";
 	try {
 		copyExecution(join(temporary, "frozen"), root);
 		const source = mutationSource(root, candidate.path);
-		path = source.path;
-		original = source.host;
 		if (sha256(source.source) !== candidate.sourceSha256)
 			return fail("tamper", "Candidate snapshot drift");
 		const mutated = replace(source.source, candidate.startOffset, candidate.endOffset, candidate.replacement);
 		writeMutation(source, mutated);
-		const candidateContext: CandidateContext = {
-			candidate, options, contract, tests, run, root, result, probeCache,
-			compiler: compilerWorker, checked,
-		};
-		if (!(await checkMutation(candidateContext, mutated, python))) return result;
-		if (python && !(await probeCandidate(candidateContext, source))) return result;
-		removeExecution(root);
-		copyExecution(join(temporary, "frozen"), root);
-		writeMutation(source, mutated);
-		const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
-		result.receipts.push(...tested.batches.map((batch) => batch.process));
-		result.junitReports.push(...tested.batches.map((batch) => batch.junit));
-		if (green(tested)) {
-			result.outcome = "survived";
-			result.reason = "green-mutated-test-selection";
-		} else if (
-			tested.valid &&
-			tested.exitCode === 1 &&
-			tested.failures > 0 &&
-			tested.assertions.length === tested.failures
-		) {
-			result.outcome = "killed";
-			result.reason = "behavioral-assertion";
-			result.assertionIdentities = tested.assertions;
-		} else {
-			result.outcome = "infrastructure";
-			result.reason = "failure-without-complete-behavioral-assertions";
-		}
-		return result;
-	} catch {
-		result.outcome = "infrastructure";
-		result.reason = mutationFailure.current?.code ?? "candidate-filesystem-or-process-failure";
-		return result;
-	} finally {
-		if (path && original && existsSync(dirname(path))) {
-			writeFileSync(path, original);
-			result.restored = sha256(readFileSync(path)) === frozenSourceSha256;
-		}
+		return { workspace: { run, root, source }, mutated };
+	} catch (error) {
 		removeExecution(root);
 		rmSync(run, { recursive: true, force: true });
+		throw error;
 	}
+}
+
+function behavioralAssertion(tested: Awaited<ReturnType<typeof runTests>>): boolean {
+	return tested.valid && tested.exitCode === 1 && tested.failures > 0 && tested.assertions.length === tested.failures;
+}
+
+function classifyCandidate(result: Result, tested: Awaited<ReturnType<typeof runTests>>): void {
+	if (green(tested)) {
+		result.outcome = "survived";
+		result.reason = "green-mutated-test-selection";
+		return;
+	}
+	if (behavioralAssertion(tested)) {
+		result.outcome = "killed";
+		result.reason = "behavioral-assertion";
+		result.assertionIdentities = tested.assertions;
+		return;
+	}
+	result.outcome = "infrastructure";
+	result.reason = "failure-without-complete-behavioral-assertions";
+}
+
+async function executeMutatedCandidate(context: CandidateExecution, workspace: CandidateWorkspace, mutated: string): Promise<void> {
+	const { candidate, compilerWorker, checked, options, contract, tests, result } = context;
+	const { run, root, source } = workspace;
+	const python = candidate.operator.startsWith("py-");
+	const candidateContext: CandidateContext = {
+		candidate, options, contract, tests, run, root, result, probeCache: new Map(),
+		compiler: compilerWorker, checked,
+	};
+	if (!(await checkMutation(candidateContext, mutated, python))) return;
+	if (python && !(await probeCandidate(candidateContext, source))) return;
+	removeExecution(root);
+	copyExecution(join(context.temporary, "frozen"), root);
+	writeMutation(source, mutated);
+	const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+	result.receipts.push(...tested.batches.map((batch) => batch.process));
+	result.junitReports.push(...tested.batches.map((batch) => batch.junit));
+	classifyCandidate(result, tested);
+}
+
+function cleanupCandidate(workspace: CandidateWorkspace | undefined, result: Result, frozenSourceSha256: string): void {
+	if (!workspace) return;
+	const { path, host: original } = workspace.source;
+	if (existsSync(dirname(path))) {
+		writeFileSync(path, original);
+		result.restored = sha256(readFileSync(path)) === frozenSourceSha256;
+	}
+	removeExecution(workspace.root);
+	rmSync(workspace.run, { recursive: true, force: true });
+}
+
+async function executeCandidate(context: CandidateExecution): Promise<Result> {
+	let workspace: CandidateWorkspace | undefined;
+	try {
+		const prepared = prepareCandidate(context);
+		workspace = prepared.workspace;
+		await executeMutatedCandidate(context, workspace, prepared.mutated);
+	} catch {
+		context.result.outcome = "infrastructure";
+		context.result.reason = mutationFailure.current?.code ?? "candidate-filesystem-or-process-failure";
+	} finally {
+		cleanupCandidate(workspace, context.result, context.frozenSourceSha256);
+	}
+	return context.result;
 }
 
 async function runCandidate(
@@ -1444,6 +1474,9 @@ function argumentsMap(argv: string[]): Map<string, string[]> {
 		values.set(key, [...(values.get(key) ?? []), value]);
 	}
 	return values;
+}
+export function pythonExecutable(command: string): string {
+	return Bun.which(command) ?? command;
 }
 function optionsFrom(values: Map<string, string[]>): Options {
 	const names = [
@@ -1483,6 +1516,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 			return fail("arguments", `Invalid --${key}`);
 		return value;
 	}
+	const configuredPython = values.get("--python")?.[0];
 	return {
 		root: realpathSync(required("root")),
 		contract: resolve(required("contract")),
@@ -1494,7 +1528,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		decisionHash: required("decision-sha256"),
 		inventoryToolHash: required("inventory-tool-sha256"),
 		dependencies: realpathSync(required("dependencies")),
-		python: values.get("--python")?.[0] ?? Bun.which("python3") ?? "",
+		python: configuredPython ? pythonExecutable(configuredPython) : Bun.which("python3") ?? "",
 		tests: values.get("--test") ?? [],
 		targets: values.get("--target") ?? [],
 		families: values.get("--operator") ?? [],

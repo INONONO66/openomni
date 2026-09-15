@@ -2,7 +2,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { parentPort, Worker } from "node:worker_threads";
 import ts from "typescript";
-import { diagnostics, executionTreeHash, inventoryCompilerOptions, type MutationError, programs, sha256 } from "./quality-mutation-input";
+import { diagnostics, executionTreeHash, inventoryCompilerOptions, pathIn, type MutationError, programs, sha256 } from "./quality-mutation-input";
 
 type Contract = Parameters<typeof programs>[1];
 type Inventory = Parameters<typeof programs>[2];
@@ -85,7 +85,7 @@ export class FrozenMutationCompiler {
 
   private verifyConfigurations(): void {
     for (const file of this.inventory.configurations)
-      if (sha256(readFileSync(resolve(this.root, file.path))) !== file.sha256)
+      if (sha256(readFileSync(pathIn(this.root, file.path))) !== file.sha256)
         throw new Error(`Compiler frozen configuration mismatch: ${file.path}`);
   }
 

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { MessageChannel } from "node:worker_threads";
 import { buildInventory, readContract } from "./quality-inventory";
-import { programs, diagnostics, executionTreeHash, main, sha256 } from "./run-quality-mutations";
+import { programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
 import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler } from "./quality-mutation-compiler";
 
 test("fallback compiler ignores untyped JavaScript inventory sources", () => {
@@ -270,6 +270,29 @@ test("inventory fallback resolves ambient types from its root rather than the pr
     expect(checked.diagnostics.some((value) => value.includes("Cannot find name"))).toBe(false);
   } finally { process.chdir(cwd); rmSync(input.root, { recursive: true, force: true }); }
 }, 120000);
+
+test("compiler fallback stays inside the frozen root and Python command names resolve", () => {
+  const input = compilerFixture();
+  const outside = mkdtempSync(join(tmpdir(), "mutation-outside-"));
+  try {
+    const config = join(outside, "tsconfig.json");
+    writeFileSync(config, "{}");
+    const inventory = {
+      ...input.inventory,
+      configurations: [
+        ...input.inventory.configurations,
+        { path: relative(input.root, config), sha256: sha256(readFileSync(config)) },
+      ],
+    };
+    expect(() => new FrozenMutationCompiler(input.root, input.contract, inventory, input.identity)).toThrow(
+      "Unsafe relative path",
+    );
+    expect(pythonExecutable("python3")).toBe(Bun.which("python3") ?? "python3");
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+    rmSync(input.root, { recursive: true, force: true });
+  }
+});
 
 test("real mutation contract has no baseline compiler diagnostics", () => {
   const root = resolve(import.meta.dir, "..");
