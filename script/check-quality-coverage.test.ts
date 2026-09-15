@@ -411,7 +411,7 @@ test("workspace emit receipt binds compiler, artifact, original and map identiti
 		const path = join(f.root, "coverage.json");
 		expect(f.run(["--collect", "--write-coverage", path]).exit).toBe(1);
 		const original = obj(decode(readFileSync(path, "utf8")));
-		for (const field of ["source", "project", "sha256", "mapSha256", "mapHash", "observationSha256"]) {
+		for (const field of ["source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]) {
 			const receipt = structuredClone(original);
 			const process = list(receipt.processes).map(obj).find((process) => process.emitted !== undefined);
 			if (!process) throw new Error("missing emitted provenance");

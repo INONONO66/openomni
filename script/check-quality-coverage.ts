@@ -87,7 +87,10 @@ type EmissionHooks = {
 	onNode: (path: string, phase: "before" | "after", offset: number, node: ts.Node) => void;
 	onToken: (path: string, phase: "before" | "after", offset: number, node: ts.Node) => void;
 };
-type EmissionProof = { path: string; source: string; project: string; sha256: string; mapSha256: string; mapHash: string; observationSha256: string };
+type EmissionProof = {
+	path: string; source: string; project: string; sha256: string; mapSha256: string;
+	mapHash: string; observationSha256: string; observationCount: number; syntheticCount: number;
+};
 type Fault = {
 	id: string; command: string; entry: string; args: string[];
 	exitCode: number | null; signal: string | null; occurrences: number;
@@ -955,10 +958,15 @@ function verifiedEmission(data: Inputs, path: string): { file: Prepared; proof: 
 		const file = instrumentOutput(original.entry, source, javascript, normalizedMap);
 		if (signature(file.mapped) !== signature(original.mapped))
 			fail("source_map", path, "emitted executable map differs from original owner; unsupported lowering");
+		const javascriptObservations = observations.filter((row) => row.path === path);
+		if (!javascriptObservations.length || javascriptObservations.some((row) => row.offset < 0))
+			fail("emitted_source", path, "emitter observation lacks final JavaScript offsets");
 		return { file, proof: {
 			path, source: sourcePath, project, sha256: sha256(javascript), mapSha256: sha256(sourceMap),
 			mapHash: sha256(JSON.stringify({ compiler: compiler.identity, map: file.mapHash, original: original.mapHash })),
-			observationSha256: sha256(JSON.stringify(observations)),
+			observationSha256: sha256(JSON.stringify(javascriptObservations)),
+			observationCount: javascriptObservations.length,
+			syntheticCount: javascriptObservations.filter((row) => row.pos < 0).length,
 		} };
 	}
 	return fail("emitted_config", path, "no declared compiler project produces this path");
@@ -1099,7 +1107,7 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	const trace = r.trace === null ? null : object(r.trace, ["id", "runtime", "python", "coverage", "flushed", "files"]);
 	if (trace) verifyPythonTrace(trace, r, data, lines, coverage, loaded);
 	const emitted = r.emitted === undefined ? undefined : array(r.emitted).map((value) => {
-		const proof = object(value, ["path", "source", "project", "sha256", "mapSha256", "mapHash", "observationSha256"]);
+		const proof = object(value, ["path", "source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]);
 		const verified = verifiedEmission(data, pathValue(proof.path)).proof;
 		if (!loaded.includes(verified.source) || Object.entries(verified).some(([key, value]) => proof[key] !== value))
 			fail("identity", verified.path, "emitted process/source/map identity differs");
