@@ -1347,13 +1347,12 @@ type CandidateExecution = {
 	temporary: string;
 	tests: string[];
 	result: Result;
+	frozenSourceSha256: string;
 };
 
 async function executeCandidate(context: CandidateExecution): Promise<Result> {
-	const { candidate, compilerWorker, checked, options, contract, temporary, tests, result } = context;
+	const { candidate, compilerWorker, checked, options, contract, temporary, tests, result, frozenSourceSha256 } = context;
 	const python = candidate.operator.startsWith("py-");
-	const frozenSource = mutationSource(join(temporary, "frozen"), candidate.path);
-	const frozenSourceSha256 = sha256(frozenSource.host);
 	const probeCache = new Map<string, ProbeEvidence>();
 	const run = join(temporary, "candidate");
 	const root = join(run, "source");
@@ -1424,15 +1423,16 @@ async function runCandidate(
 ): Promise<Result> {
 	const result = defaultResult(candidate, tests);
 	const evidence = reachMap.get(candidate.id);
+	const frozenSourceSha256 = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host);
 	result.coverage = evidence ?? null;
 	if (!candidate.operator.startsWith("py-") && !evidence?.reached) {
 		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
-		result.restored = true;
+		result.restored = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host) === frozenSourceSha256;
 		result.outcome = "noCoverage";
 		result.reason = "original-runtime-site-not-reached";
 		return result;
 	}
-	return executeCandidate({ candidate, compilerWorker, checked, options, contract, temporary, tests, result });
+	return executeCandidate({ candidate, compilerWorker, checked, options, contract, temporary, tests, result, frozenSourceSha256 });
 }
 function argumentsMap(argv: string[]): Map<string, string[]> {
 	const values = new Map<string, string[]>();
