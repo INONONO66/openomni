@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -7,6 +7,7 @@ import { mutationFixture, mutationEvidence, replaceArguments, reportResults } fr
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
 import { tmpdir } from "node:os";
+import { MutationCompilerWorker } from "./quality-mutation-compiler";
 
 test("switch case reach instrumentation inserts a probe after the label", () => {
 	const source = "switch (value) { case 1: return true; default: return false; }";
@@ -102,6 +103,32 @@ test("mutation helpers cover execution tree recursion and virtual source travers
     const source = mutationSource(resolve(import.meta.dir, ".."), "script/run-quality-mutations.ts");
     expect(source.source).toContain("export async function main");
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("virtual mutation sources retain raw bytes and reject ambiguous bindings", () => {
+	const root = mkdtempSync(join(tmpdir(), "mutation-virtual-source-"));
+	const path = join(root, "driver.ts");
+	try {
+		const raw = 'print("\\n")\n';
+		const host = `export const PYTHON_DRIVER = String.raw\`${raw}\`;`;
+		writeFileSync(path, host);
+		const source = mutationSource(root, "driver.ts#PYTHON_DRIVER");
+		expect(source.source).toBe(raw);
+		expect(source.host).toBe(host);
+		expect(host.slice(source.start, source.end)).toBe(`String.raw\`${raw}\``);
+		expect(() => mutationSource(root, "driver.ts#OTHER")).toThrow("Unsupported virtual binding");
+		for (const invalid of [
+			"export const OTHER = 1;",
+			'export const PYTHON_DRIVER = "plain";',
+			"export const PYTHON_DRIVER = tag`value`;",
+			["export const PYTHON_DRIVER = String.raw`value", String.fromCharCode(36, 123), "1}`;"].join(""),
+			`${host}\n${host}`,
+		]) {
+			writeFileSync(path, invalid);
+			expect(() => mutationSource(root, "driver.ts#PYTHON_DRIVER"))
+				.toThrow("Virtual source is not a unique raw template");
+		}
+	} finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("process receipts preserve executed failure context, including signals", async () => {
@@ -348,6 +375,22 @@ test("sequential compiler analysis preserves first-owner candidates and complete
 	expect(actual.enumerated.candidates.length).toBeGreaterThan(0);
 }, 90000);
 
+test("enumeration preserves directive prologues and mutates regex quantifiers and anchors", async () => {
+	const source = '"use strict"; "custom directive"; export function run() { "use strict"; const pattern = /^a+b*c?$/; "ordinary"; if (true) "branch string"; return pattern.test("ab"); }';
+	const input = await fixture(source, "expect(run()).toBe(true);");
+	const contract = readContract(join(input.root, "contract.json"));
+	const operators = ["string-literal", "statement-delete", "regex"]
+		.map((id) => ({ id, replacements: new Map<string, string[]>() }));
+	const result = analyze(input.root, contract, buildInventory(input.root, contract), operators).enumerated;
+	const candidates = result.candidates.filter((candidate) => candidate.path === "src/a.ts");
+	for (const offset of [0, source.indexOf('"custom directive"'), source.lastIndexOf('"use strict"')])
+		expect(candidates.some((candidate) => candidate.startOffset === offset)).toBe(false);
+	for (const value of ['"ordinary"', '"branch string"'])
+		expect(candidates.some((candidate) => candidate.startOffset === source.indexOf(value))).toBe(true);
+	expect(candidates.filter((candidate) => candidate.operator === "regex").map((candidate) => candidate.replacement).sort())
+		.toEqual(["/a+b*c?$/", "/^a*b*c?$/", "/^a+b+c?$/", "/^a+b*c$/", "/^a+b*c?/", "/^a+b*c?$/i", "/^a+b*c?$/g"].sort());
+}, 90000);
+
 function fixtureGit(root: string, ...args: string[]): string {
 	const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
 	expect(result.status).toBe(0);
@@ -457,6 +500,40 @@ test("main runs a campaign in process and reports killed and noCoverage candidat
 	expect(results.some((row) => rows(row.receipts).length > 0)).toBe(true);
 }, 120000);
 
+test("campaign preserves compiler shutdown as infrastructure and restores source", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
+	const check = MutationCompilerWorker.prototype.checkBatch;
+	const disposed = spyOn(MutationCompilerWorker.prototype, "checkBatch").mockImplementation(async function (this: MutationCompilerWorker, requests) {
+		await this.close();
+		return check.call(this, requests);
+	});
+	try {
+		const report = await runMain(input, process.env.D945_PYTHON ?? "python3", select("boolean-literal"), 2);
+		const result = reportResults(report)[0];
+		expect(result?.outcome).toBe("infrastructure");
+		expect(result?.reason).toBe("typecheck-engine");
+		expect(result?.compilerFailure).toBe("Compiler worker unavailable");
+		expect(result?.compilerProof).toBeUndefined();
+		expect(result?.receipts).toEqual([]);
+		expect(result?.restored).toBe(true);
+		expect(report.complete).toBe(false);
+		expect(report.cleanupVerified).toBe(true);
+		expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe("export const run = () => true;");
+	} finally { disposed.mockRestore(); }
+}, 120000);
+
+test("campaign rejects frozen source changes made by a baseline descendant", async () => {
+	const source = "export const run=()=>1;";
+	const input = await fixture(source,
+		'expect(typeof run()).toBe("number"); if(process.cwd().endsWith("/baseline")){const {writeFileSync}=await import("node:fs");const {join}=await import("node:path");writeFileSync(join(process.cwd(),"../frozen/src/a.ts"),"export const run=()=>2;");}',
+	);
+	const report = await runMain(input, process.env.D945_PYTHON ?? "python3", select("numeric-literal"), 2);
+	expect(report.complete).toBe(false);
+	expect(record(report.error).code).toBe("tamper");
+	expect(report.results).toBeUndefined();
+	expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe(source);
+}, 120000);
+
 test("main runs Python candidates through probe and restores the source", async () => {
 	const python = process.env.D945_PYTHON ?? process.env.QUALITY_MUTATION_PYTHON;
 	if (!python) throw new Error("D945_PYTHON is required for the Python campaign fixture");
@@ -484,9 +561,20 @@ test("same-site replacements use the campaign reach map and preserve candidate r
 	expect(result.code).toBe(1);
 	expectRestoredResults(result, 2);
 	expect(result.selected.every((row) => ["killed", "survived"].includes(String(row.outcome)))).toBe(true);
-	// The reach map is recorded once for the campaign; each mutant has only
-	// compiler + mutation receipts.
-	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
+	// Persistent compiler proof is not an independent process receipt.
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([1, 1]);
+	const subsequent = record(result.selected[1]?.compilerProof);
+	expect(rows(subsequent.projects).map(record).some((project) => project.mode === "incremental")).toBe(true);
+	for (const row of result.selected) {
+		const proof = record(row.compilerProof);
+		expect(proof.kind).toBe("persistent-compiler");
+		expect(proof.candidateId).toBe(row.id);
+		expect(proof.executionTreeSha256).toBe(result.report.executionTreeSha256);
+		expect(proof.valid).toBe(true);
+		expect(proof.diagnostics).toEqual([]);
+		expect(proof.exitCode).toBeUndefined();
+		expect(proof.argv).toBeUndefined();
+	}
 }, 90000);
 
 test("same-site candidates record each covering test exactly once in order", async () => {
@@ -525,8 +613,9 @@ test("same-line distinct Sites retain independent reach evidence", async () => {
 	const result = await invoke(input, "same-line-distinct-sites", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"]);
 	expect(result.code).toBe(1);
 	expectRestoredResults(result, 2);
-	// Reach is campaign-scoped; each mutant has compiler and mutation receipts.
-	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([2, 2]);
+	// Reach is campaign-scoped; each mutant has one test process and compiler proof.
+	expect(result.selected.map((row) => rows(row.receipts).length)).toEqual([1, 1]);
+	expect(result.selected.map((row) => record(row.compilerProof).valid)).toEqual([true, true]);
 }, 90000);
 
 test("uninvoked function is noCoverage, not survived", async () => {
@@ -550,7 +639,11 @@ test("compiler rejection stays invalid and cannot make an all-invalid run green"
 	expect(result.code).toBe(2);
 	expect(result.selected[0]?.outcome).toBe("invalid");
 	expect(record(result.report.counts).killed).toBe(0);
-	expect(rows(result.selected[0]?.receipts)).toHaveLength(1);
+	expect(rows(result.selected[0]?.receipts)).toHaveLength(0);
+	const proof = record(result.selected[0]?.compilerProof);
+	expect(proof.valid).toBe(false);
+	expect(rows(proof.diagnostics).length).toBeGreaterThan(0);
+	expect(proof.diagnosticsSha256).toBe(sha256(JSON.stringify(proof.diagnostics)));
 }, 90000);
 
 test("crash after a successful assertion is infrastructure despite Bun JUnit label", async () => {

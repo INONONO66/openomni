@@ -42,6 +42,18 @@ block-owned statements retain their lexical position, including `super()`
 with TypeScript parameter properties. Entry markers precede overlapping
 expression probes and still record calls whose base constructor throws.
 
+Mutation compiler reuse on `perf/mutation-incremental-typecheck-20260914`:
+`quality-mutation-input.ts` owns shared cold compiler/input operations;
+`quality-mutation-compiler.ts` owns the persistent worker and one retained
+incremental checker. Candidate proof is separate from process receipts. The
+bounded project-batch implementation caps requests at eight, canonicalizes
+physical execution roots, and preserves request/proof identity and fallback
+ownership. The final regression run passed 129 tests across five files. A real
+16-candidate non-campaign receipt completed two batches (241.7s then 120.8s),
+matched cold diagnostics at indices 0, 8 and 15, and reported
+`originalRestored:true`. Full campaign completion and six-hour feasibility are
+not established.
+
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
 
 ## STRUCTURE

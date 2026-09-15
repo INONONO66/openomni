@@ -1,39 +1,29 @@
-import { projectOptions } from "./check-types-census";
+import { diagnostics, executionTreeHash, fail, mutationFailure, MutationError, pathIn, programs, sha256, type Entry, type Contract, type Inventory } from "./quality-mutation-input";
+export { diagnostics, executionTreeHash, programs, sha256 } from "./quality-mutation-input";
 import { decodeJson as sharedJson } from "./quality-inventory";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
 	constants,
 	cpSync,
 	existsSync,
-	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
-	readlinkSync,
-	readdirSync,
 	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { COMPILER_BATCH_SIZE, compilerProofMatches, MutationCompilerWorker, type CompilerProof } from "./quality-mutation-compiler";
 
 // The inventory producer is a supplied, hash-pinned CLI, not an imported copy of
 // another lane. Only that producer decides membership, categories and topology.
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type ObjectValue = { [key: string]: Json };
 type Outcome = "killed" | "survived" | "noCoverage" | "invalid" | "infrastructure" | "uncompleted";
-type Entry = { path: string; sha256: string; bytes: number; category: string; language: string };
 type Operator = { id: string; replacements: Map<string, string[]> };
-type Contract = { projects: string[]; roots: string[]; topology: boolean };
-type Inventory = {
-	files: Entry[];
-	historical: Entry[];
-	embedded: Entry[];
-	configurations: { path: string; sha256: string }[];
-};
 type Site = {
 	start: number;
 	end: number;
@@ -74,6 +64,8 @@ type Result = Candidate & {
 	coverage: { reached: boolean; markerSha256: string; tests?: string[] } | null;
 	junitReports: string[];
 	receipts: ProcessReceipt[];
+	compilerProof?: CompilerProof;
+	compilerFailure?: string;
 	reason: string;
 	restored: boolean;
 };
@@ -122,24 +114,7 @@ type Options = {
 	pilot: boolean;
 };
 
-let failure: { code: string; message: string } | null = null;
 let setupProcessFailure: ProcessReceipt | null = null;
-
-class MutationError {
-	readonly name = "MutationError";
-	constructor(
-		readonly code: string,
-		readonly message: string,
-		readonly reach?: { test: string; receipt: TestSelectionReceipt },
-	) { }
-}
-export function sha256(data: string | Buffer): string {
-	return createHash("sha256").update(data).digest("hex");
-}
-function fail(code: string, message: string): never {
-	failure = { code, message };
-	throw new MutationError(code, message);
-}
 function object(value: Json | undefined): ObjectValue {
 	if (!value || typeof value !== "object" || Array.isArray(value))
 		return fail("schema", "Expected object");
@@ -161,23 +136,6 @@ function number(value: Json | undefined): number {
 function hash(value: string): string {
 	if (!/^[a-f0-9]{64}$/.test(value)) return fail("schema", "Expected SHA256");
 	return value;
-}
-function pathIn(root: string, path: string): string {
-	if (
-		!path ||
-		isAbsolute(path) ||
-		path.includes("\\") ||
-		path.split("/").some((part) => !part || part === "." || part === "..")
-	)
-		return fail("schema", `Unsafe relative path: ${path}`);
-	const absolute = resolve(root, path);
-	if (
-		existsSync(absolute) &&
-		(lstatSync(absolute).isSymbolicLink() ||
-			!realpathSync(absolute).startsWith(`${realpathSync(root)}/`))
-	)
-		return fail("schema", `Source escapes root: ${path}`);
-	return absolute;
 }
 
 // Decode JSON through the pinned public compiler AST. No JSON.parse top-typed
@@ -444,52 +402,6 @@ function broken(receipt: ProcessReceipt): boolean {
 		(receipt.cleanupExit !== 0 && receipt.cleanupExit !== 1)
 	);
 }
-function projectProgram(root: string, path: string): ts.Program {
-	pathIn(root, path);
-	console.error(`[mutation] compiler project ${path}`);
-	try {
-		const parsed = projectOptions(root, path);
-		return ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
-	} catch { return fail("configuration", `invalid native project: ${path}`); }
-}
-export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
-	const covered = new Set<string>();
-	for (const path of contract.projects) {
-		const program = projectProgram(root, path);
-		for (const source of program.getSourceFiles()) covered.add(source.fileName);
-		yield program;
-	}
-	// Supplied native-project coverage first; only canonical remaining members
-	// enter the same strict inventory fallback used by the delegated type owner.
-	const remaining = inventory.files
-		.filter((file) => ["typescript", "javascript"].includes(file.language))
-		.map((file) => pathIn(root, file.path))
-		.filter((path) => !covered.has(path));
-	if (remaining.length)
-		yield ts.createProgram(remaining, {
-				strict: true,
-				noEmit: true,
-				allowJs: true, checkJs: false, // untyped inventory JS is outside compiler contracts
-				rootDir: root,
-				target: ts.ScriptTarget.ES2022,
-				module: ts.ModuleKind.ESNext,
-				moduleResolution: ts.ModuleResolutionKind.Bundler,
-				jsx: ts.JsxEmit.Preserve,
-				skipLibCheck: true,
-			});
-}
-const diagnosticHost: ts.FormatDiagnosticsHost = {
-	getCanonicalFileName: (name) => name,
-	getCurrentDirectory: () => process.cwd(),
-	getNewLine: () => "\n",
-};
-export function diagnostics(items: Iterable<ts.Program>): string[] {
-	const errors: string[] = [];
-	for (const program of items)
-		for (const diagnostic of ts.getPreEmitDiagnostics(program))
-			errors.push(ts.formatDiagnostics([diagnostic], diagnosticHost));
-	return errors;
-}
 function runtimeNode(node: ts.Node): boolean {
 	if (
 		ts.isTypeNode(node) ||
@@ -527,16 +439,20 @@ function literalValue(node: ts.Node): boolean {
 		return false;
 	return true;
 }
+function isStringExpression(statement: ts.Statement): boolean {
+	return ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression);
+}
+function directiveStatements(parent: ts.Node): readonly ts.Statement[] {
+	if (ts.isBlock(parent)) return parent.statements;
+	if (ts.isSourceFile(parent)) return parent.statements;
+	return [];
+}
 function directive(node: ts.ExpressionStatement): boolean {
-	if (!ts.isStringLiteral(node.expression)) return false;
 	const parent = node.parent;
-	if (!ts.isBlock(parent) && !ts.isSourceFile(parent)) return false;
-	for (const statement of parent.statements) {
-		if (statement === node) return true;
-		if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression))
-			return false;
-	}
-	return false;
+	const statements = directiveStatements(parent);
+	const index = statements.indexOf(node);
+	return ts.isStringLiteral(node.expression) && index >= 0 &&
+		statements.slice(0, index).every(isStringExpression);
 }
 function regexTokenReplacement(char: string | undefined): string | null {
 	return char === "+" ? "*" : char === "*" ? "+" : ["^", "$", "?"].includes(char ?? "") ? "" : null;
@@ -572,11 +488,12 @@ function regexChanges(raw: string): string[] {
 }
 
 export function enumerate(
-	root: string,
+	directory: string,
 	inventory: Inventory,
 	operators: Operator[],
 	items: ts.Program[],
 ): { candidates: Candidate[]; census: Census[]; errors: string[] } {
+	const root = realpathSync(directory);
 	const candidates: Candidate[] = [];
 	const census: Census[] = [];
 	const errors: string[] = [];
@@ -837,7 +754,8 @@ export function enumerate(
 	return { candidates, census, errors };
 }
 // Preserve first-project ownership without retaining every project's checker.
-export function analyze(root: string, contract: Contract, inventory: Inventory, operators: Operator[]) {
+export function analyze(directory: string, contract: Contract, inventory: Inventory, operators: Operator[]) {
+	const root = realpathSync(directory);
 	const pending = new Map(inventory.files.map((file) => [file.path, file]));
 	const result: ReturnType<typeof enumerate> = { candidates: [], census: [], errors: [] };
 	const sourceDiagnostics: string[] = [];
@@ -985,27 +903,6 @@ function verifySources(root: string, inventory: Inventory): void {
 			fail("tamper", `Source hash mismatch: ${file.path}`);
 	}
 }
-// Execution-copy identity includes configs, assets and dependencies. This is
-// not source discovery: it cannot add, remove or categorize inventory members.
-function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {
-	for (const name of readdirSync(directory).sort(compare)) {
-		const path = join(directory, name);
-		if (lstatSync(path).isSymbolicLink()) {
-			const link = readlinkSync(path);
-			const destination = relative(root, realpathSync(path));
-			if (isAbsolute(link) || destination === ".." || destination.startsWith(`..${sep}`))
-				fail("isolation", `External symlink in execution copy: ${relative(root, path)}`);
-			hasher.update(`${relative(root, path)}\0link\0${link}\0`);
-		} else if (lstatSync(path).isDirectory()) visitExecutionTree(root, hasher, path);
-		else hasher.update(`${relative(root, path)}\0${sha256(readFileSync(path))}\0`);
-	}
-}
-export function executionTreeHash(directory: string): string {
-	const root = realpathSync(directory);
-	const hasher = new Bun.CryptoHasher("sha256");
-	visitExecutionTree(root, hasher, root);
-	return hasher.digest("hex");
-}
 type TestsReceipt = {
 	process: ProcessReceipt;
 	junit: string;
@@ -1014,7 +911,7 @@ type TestsReceipt = {
 	assertions: string[];
 	valid: boolean;
 };
-type TestSelectionReceipt = {
+export type TestSelectionReceipt = {
 	batches: TestsReceipt[];
 	files: string[];
 	tests: number;
@@ -1334,6 +1231,7 @@ function probeKey(
 		},
 	}));
 }
+type CompilerCheck = { proof: CompilerProof } | { failure: string };
 type CandidateContext = {
 	candidate: Candidate;
 	options: Options;
@@ -1343,10 +1241,12 @@ type CandidateContext = {
 	root: string;
 	result: Result;
 	probeCache: Map<string, ProbeEvidence>;
+	compiler: MutationCompilerWorker | null;
+	checked: CompilerCheck | undefined;
 };
 
 async function checkMutation(context: CandidateContext, mutated: string, python: boolean): Promise<boolean> {
-	const { options, contract, run, root, result } = context;
+	const { options, run, root, result, candidate } = context;
 	if (python) {
 		const compiled = await pythonWorker(options, mutated, run, "compile");
 		result.receipts.push(compiled);
@@ -1362,24 +1262,33 @@ async function checkMutation(context: CandidateContext, mutated: string, python:
 			return false;
 		}
 	}
-	const contractPath = join(run, "contract.json");
-	writeFileSync(contractPath, JSON.stringify({ ...contract, version: 1, typescript: "5.9.2" }));
-	const checked = await execute([process.execPath, "--smol", import.meta.path, "--typecheck-root", root, "--contract", contractPath, "--inventory", options.inventory], root, options.timeout * Math.max(1, contract.projects.length));
-	result.receipts.push(checked);
-	if (broken(checked) || ![0, 1].includes(checked.exitCode ?? -1)) {
+	const hostPath = candidate.path.split("#")[0] ?? fail("schema", "Missing candidate host");
+	const content = readFileSync(pathIn(root, hostPath), "utf8");
+	if (!context.compiler) return fail("infrastructure", "Compiler engine unavailable");
+	const request = {
+			executionTreeSha256: context.compiler.identity,
+			candidateId: candidate.id,
+			path: hostPath,
+			originalSha256: sha256(readFileSync(pathIn(join(dirname(run), "frozen"), hostPath))),
+			sourceSha256: sha256(content),
+			content,
+	};
+	const checked = context.checked;
+	const validation = python ? context.compiler.check(request) : checked && "proof" in checked
+		? Promise.resolve(checked.proof)
+		: Promise.reject(new Error(checked && "failure" in checked ? checked.failure : "Missing compiler batch result"));
+	return validation.then((proof) => {
+		if (!compilerProofMatches(request, proof)) return fail("tamper", "Compiler proof differs from candidate source");
+		result.compilerProof = proof;
+		result.typecheck = proof.valid ? "valid" : "invalid";
+		if (!proof.valid) { result.outcome = "invalid"; result.reason = "compiler-diagnostics"; return false; }
+		return true;
+	}, (error: Error) => {
+		result.compilerFailure = error.message;
 		result.outcome = "infrastructure";
-		result.reason = "typecheck-process";
+		result.reason = "typecheck-engine";
 		return false;
-	}
-	const check = object(decode(checked.stdout));
-	if (check.kind !== "typecheck" || typeof check.valid !== "boolean") return fail("infrastructure", "Missing compiler receipt");
-	result.typecheck = check.valid ? "valid" : "invalid";
-	if (!check.valid) {
-		result.outcome = "invalid";
-		result.reason = "compiler-diagnostics";
-		return false;
-	}
-	return true;
+	});
 }
 
 async function probeCandidate(context: CandidateContext, source: ReturnType<typeof mutationSource>): Promise<boolean> {
@@ -1429,8 +1338,113 @@ async function probeCandidate(context: CandidateContext, source: ReturnType<type
 	return true;
 }
 
+type CandidateExecution = {
+	candidate: Candidate;
+	compilerWorker: MutationCompilerWorker | null;
+	checked: CompilerCheck | undefined;
+	options: Options;
+	contract: Contract;
+	temporary: string;
+	tests: string[];
+	result: Result;
+	frozenSourceSha256: string;
+};
+
+type CandidateWorkspace = {
+	run: string;
+	root: string;
+	source: ReturnType<typeof mutationSource>;
+};
+
+function prepareCandidate(context: CandidateExecution): { workspace: CandidateWorkspace; mutated: string } {
+	const { candidate, temporary } = context;
+	const run = join(temporary, "candidate");
+	const root = join(run, "source");
+	mkdirSync(run, { recursive: true });
+	try {
+		copyExecution(join(temporary, "frozen"), root);
+		const source = mutationSource(root, candidate.path);
+		if (sha256(source.source) !== candidate.sourceSha256)
+			return fail("tamper", "Candidate snapshot drift");
+		const mutated = replace(source.source, candidate.startOffset, candidate.endOffset, candidate.replacement);
+		writeMutation(source, mutated);
+		return { workspace: { run, root, source }, mutated };
+	} catch (error) {
+		removeExecution(root);
+		rmSync(run, { recursive: true, force: true });
+		throw error;
+	}
+}
+
+function behavioralAssertion(tested: Awaited<ReturnType<typeof runTests>>): boolean {
+	return tested.valid && tested.exitCode === 1 && tested.failures > 0 && tested.assertions.length === tested.failures;
+}
+
+function classifyCandidate(result: Result, tested: Awaited<ReturnType<typeof runTests>>): void {
+	if (green(tested)) {
+		result.outcome = "survived";
+		result.reason = "green-mutated-test-selection";
+		return;
+	}
+	if (behavioralAssertion(tested)) {
+		result.outcome = "killed";
+		result.reason = "behavioral-assertion";
+		result.assertionIdentities = tested.assertions;
+		return;
+	}
+	result.outcome = "infrastructure";
+	result.reason = "failure-without-complete-behavioral-assertions";
+}
+
+async function executeMutatedCandidate(context: CandidateExecution, workspace: CandidateWorkspace, mutated: string): Promise<void> {
+	const { candidate, compilerWorker, checked, options, contract, tests, result } = context;
+	const { run, root, source } = workspace;
+	const python = candidate.operator.startsWith("py-");
+	const candidateContext: CandidateContext = {
+		candidate, options, contract, tests, run, root, result, probeCache: new Map(),
+		compiler: compilerWorker, checked,
+	};
+	if (!(await checkMutation(candidateContext, mutated, python))) return;
+	if (python && !(await probeCandidate(candidateContext, source))) return;
+	removeExecution(root);
+	copyExecution(join(context.temporary, "frozen"), root);
+	writeMutation(source, mutated);
+	const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+	result.receipts.push(...tested.batches.map((batch) => batch.process));
+	result.junitReports.push(...tested.batches.map((batch) => batch.junit));
+	classifyCandidate(result, tested);
+}
+
+function cleanupCandidate(workspace: CandidateWorkspace | undefined, result: Result, frozenSourceSha256: string): void {
+	if (!workspace) return;
+	const { path, host: original } = workspace.source;
+	if (existsSync(dirname(path))) {
+		writeFileSync(path, original);
+		result.restored = sha256(readFileSync(path)) === frozenSourceSha256;
+	}
+	removeExecution(workspace.root);
+	rmSync(workspace.run, { recursive: true, force: true });
+}
+
+async function executeCandidate(context: CandidateExecution): Promise<Result> {
+	let workspace: CandidateWorkspace | undefined;
+	try {
+		const prepared = prepareCandidate(context);
+		workspace = prepared.workspace;
+		await executeMutatedCandidate(context, workspace, prepared.mutated);
+	} catch {
+		context.result.outcome = "infrastructure";
+		context.result.reason = mutationFailure.current?.code ?? "candidate-filesystem-or-process-failure";
+	} finally {
+		cleanupCandidate(workspace, context.result, context.frozenSourceSha256);
+	}
+	return context.result;
+}
+
 async function runCandidate(
 	candidate: Candidate,
+	compilerWorker: MutationCompilerWorker | null,
+	checked: CompilerCheck | undefined,
 	options: Options,
 	contract: Contract,
 	temporary: string,
@@ -1438,78 +1452,17 @@ async function runCandidate(
 	reachMap: Map<string, ProbeEvidence>,
 ): Promise<Result> {
 	const result = defaultResult(candidate, tests);
-	const python = candidate.operator.startsWith("py-");
 	const evidence = reachMap.get(candidate.id);
-	const frozenSource = mutationSource(join(temporary, "frozen"), candidate.path);
-	const frozenSourceSha256 = sha256(frozenSource.host);
-	const probeCache = new Map<string, ProbeEvidence>();
+	const frozenSourceSha256 = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host);
 	result.coverage = evidence ?? null;
-	if (!python && !evidence?.reached) {
+	if (!candidate.operator.startsWith("py-") && !evidence?.reached) {
 		result.coverage = evidence ?? { reached: false, markerSha256: sha256(""), tests: [] };
 		result.restored = sha256(mutationSource(join(temporary, "frozen"), candidate.path).host) === frozenSourceSha256;
 		result.outcome = "noCoverage";
 		result.reason = "original-runtime-site-not-reached";
 		return result;
 	}
-	const run = join(temporary, "candidate");
-	const root = join(run, "source");
-	mkdirSync(run, { recursive: true });
-	let original = "";
-	let path = "";
-	try {
-		copyExecution(join(temporary, "frozen"), root);
-		const source = mutationSource(root, candidate.path);
-		path = source.path;
-		original = source.host;
-		if (sha256(source.source) !== candidate.sourceSha256)
-			return fail("tamper", "Candidate snapshot drift");
-		const mutated = replace(
-			source.source,
-			candidate.startOffset,
-			candidate.endOffset,
-			candidate.replacement,
-		);
-		writeMutation(source, mutated);
-		const context: CandidateContext = { candidate, options, contract, tests, run, root, result, probeCache };
-		if (!(await checkMutation(context, mutated, python))) return result;
-		if (python && !(await probeCandidate(context, source))) return result;
-		// TypeScript reach was established once for the campaign.
-		// Test side effects cannot leak into the mutation run.
-		removeExecution(root);
-		copyExecution(join(temporary, "frozen"), root);
-		writeMutation(source, mutated);
-		const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
-		result.receipts.push(...tested.batches.map((batch) => batch.process));
-		result.junitReports.push(...tested.batches.map((batch) => batch.junit));
-		if (green(tested)) {
-			result.outcome = "survived";
-			result.reason = "green-mutated-test-selection";
-		} else if (
-			tested.valid &&
-			tested.exitCode === 1 &&
-			tested.failures > 0 &&
-			tested.assertions.length === tested.failures
-		) {
-			result.outcome = "killed";
-			result.reason = "behavioral-assertion";
-			result.assertionIdentities = tested.assertions;
-		} else {
-			result.outcome = "infrastructure";
-			result.reason = "failure-without-complete-behavioral-assertions";
-		}
-		return result;
-	} catch {
-		result.outcome = "infrastructure";
-		result.reason = failure?.code ?? "candidate-filesystem-or-process-failure";
-		return result;
-	} finally {
-		if (path && original && existsSync(dirname(path))) {
-			writeFileSync(path, original);
-			result.restored = sha256(readFileSync(path)) === frozenSourceSha256;
-		}
-		removeExecution(root);
-		rmSync(run, { recursive: true, force: true });
-	}
+	return executeCandidate({ candidate, compilerWorker, checked, options, contract, temporary, tests, result, frozenSourceSha256 });
 }
 function argumentsMap(argv: string[]): Map<string, string[]> {
 	const values = new Map<string, string[]>();
@@ -1521,6 +1474,9 @@ function argumentsMap(argv: string[]): Map<string, string[]> {
 		values.set(key, [...(values.get(key) ?? []), value]);
 	}
 	return values;
+}
+export function pythonExecutable(command: string): string {
+	return Bun.which(command) ?? command;
 }
 function optionsFrom(values: Map<string, string[]>): Options {
 	const names = [
@@ -1560,6 +1516,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 			return fail("arguments", `Invalid --${key}`);
 		return value;
 	}
+	const configuredPython = values.get("--python")?.[0];
 	return {
 		root: realpathSync(required("root")),
 		contract: resolve(required("contract")),
@@ -1571,7 +1528,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		decisionHash: required("decision-sha256"),
 		inventoryToolHash: required("inventory-tool-sha256"),
 		dependencies: realpathSync(required("dependencies")),
-		python: values.get("--python")?.[0] ?? Bun.which("python3") ?? "",
+		python: configuredPython ? pythonExecutable(configuredPython) : Bun.which("python3") ?? "",
 		tests: values.get("--test") ?? [],
 		targets: values.get("--target") ?? [],
 		families: values.get("--operator") ?? [],
@@ -1719,8 +1676,34 @@ function selectedCandidates(options: Options, candidates: Candidate[]): Candidat
 		(!options.families.length || options.families.includes(candidate.operator)),
 	).slice(0, options.pilot ? options.limit : undefined);
 }
+async function compilerBatch(
+	candidates: Candidate[], start: number, selected: Set<string>,
+	reach: Map<string, ProbeEvidence>, compiler: MutationCompilerWorker, temporary: string,
+): Promise<Map<string, CompilerCheck>> {
+	const path = candidates[start]?.path;
+	const batch: Candidate[] = [];
+	for (let index = start; index < candidates.length && batch.length < COMPILER_BATCH_SIZE; index++) {
+		const candidate = candidates[index];
+		if (!candidate || candidate.path !== path) break;
+		if (selected.has(candidate.id) && reach.get(candidate.id)?.reached) batch.push(candidate);
+	}
+	const requests = batch.map((candidate) => {
+		const source = mutationSource(join(temporary, "frozen"), candidate.path);
+		const content = replace(source.source, candidate.startOffset, candidate.endOffset, candidate.replacement);
+		return {
+			executionTreeSha256: compiler.identity, candidateId: candidate.id, path: candidate.path,
+			originalSha256: sha256(source.host), sourceSha256: sha256(content), content,
+		};
+	});
+	return compiler.checkBatch(requests).then(
+		(proofs) => new Map(proofs.map((proof) => [proof.candidateId, { proof }])),
+		(error: Error) => new Map(batch.map((candidate) => [candidate.id, { failure: error.message }])),
+	);
+}
+
 async function executeSelection(
 	options: Options,
+	compilerWorker: MutationCompilerWorker | null,
 	contract: Contract,
 	temporary: string,
 	started: number,
@@ -1734,7 +1717,8 @@ async function executeSelection(
 	if (!selected.length) errors.push("zero selected candidates");
 	const selectedIds = new Set(selected.map((candidate) => candidate.id));
 	let executed = 0;
-	for (const candidate of enumerated.candidates) {
+	let checked = new Map<string, CompilerCheck>();
+	for (const [index, candidate] of enumerated.candidates.entries()) {
 		if (!selectedIds.has(candidate.id)) results.push(defaultResult(candidate, tests, false));
 		else if (
 			errors.length ||
@@ -1744,8 +1728,11 @@ async function executeSelection(
 			results.push(defaultResult(candidate, tests));
 		else {
 			console.error(`[mutation] mutant ${executed + 1}/${selected.length} start ${candidate.path}:${candidate.startOffset} ${candidate.operator}`);
-			const result = await runCandidate(candidate, options, contract, temporary, reachMap.get(candidate.id)?.tests ?? tests, reachMap);
+			if (compilerWorker && !candidate.operator.startsWith("py-") && reachMap.get(candidate.id)?.reached && !checked.has(candidate.id))
+				checked = await compilerBatch(enumerated.candidates, index, selectedIds, reachMap, compilerWorker, temporary);
+			const result = await runCandidate(candidate, compilerWorker, checked.get(candidate.id), options, contract, temporary, reachMap.get(candidate.id)?.tests ?? tests, reachMap);
 			results.push(result);
+			checked.delete(candidate.id);
 			executed++;
 			console.error(`[mutation] mutant ${executed}/${selected.length} ${result.outcome}: ${result.reason}`);
 		}
@@ -1792,7 +1779,7 @@ function campaignOutcome(
 	return { counts, selectedCounts, complete, exitCode, full };
 }
 
-async function campaign(options: Options): Promise<number> {
+function frozenCompilerInputs(options: Options) {
 	pinned(options.contract, options.contractHash);
 	pinned(options.inventory, options.inventoryHash);
 	pinned(options.decision, options.decisionHash);
@@ -1805,12 +1792,18 @@ async function campaign(options: Options): Promise<number> {
 				`Compiler project is not hash-pinned in inventory: ${project}`,
 			);
 	const operators = operatorsAt(options.decision);
+	return { contract, inventory, operators };
+}
+
+async function campaign(options: Options): Promise<number> {
+	const { contract, inventory, operators } = frozenCompilerInputs(options);
 	console.error("[mutation] verifying canonical inventory");
 	const canonical = await canonicalVerification(options);
 	verifySources(options.root, inventory);
 	const temporary = mkdtempSync(join(tmpdir(), "omo-quality-mutation-"));
 	const started = Date.now();
 	let cleanupVerified = false;
+	let compilerWorker: MutationCompilerWorker | null = null;
 	try {
 		const frozen = join(temporary, "frozen");
 		console.error(`[mutation] creating frozen execution copy at ${frozen}`);
@@ -1855,9 +1848,11 @@ async function campaign(options: Options): Promise<number> {
 		const reachCandidates = selected.filter((candidate) => !candidate.operator.startsWith("py-"));
 		const reach = errors.length || !baseline ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, baseline.files, executionTreeSha256);
 		removeExecution(join(temporary, "reach"));
+		compilerWorker = errors.length ? null : new MutationCompilerWorker(frozen, contract, inventory, executionTreeSha256, options.timeout * Math.max(1, contract.projects.length));
 		const results = await executeSelection(
-			options, contract, temporary, started, enumerated, tests, errors, reach.map,
+			options, compilerWorker, contract, temporary, started, enumerated, tests, errors, reach.map,
 		);
+		if (compilerWorker) await compilerWorker.close();
 		console.error("[mutation] verifying restoration and cleaning execution copies");
 		verifySources(options.root, inventory);
 		if (executionTreeHash(frozen) !== executionTreeSha256)
@@ -1914,6 +1909,7 @@ async function campaign(options: Options): Promise<number> {
 		);
 		return exitCode;
 	} finally {
+		if (compilerWorker) await compilerWorker.close();
 		if (!cleanupVerified) {
 			removeExecution(join(temporary, "candidate/source"));
 			removeExecution(join(temporary, "reach"));
@@ -1923,8 +1919,22 @@ async function campaign(options: Options): Promise<number> {
 		}
 	}
 }
+async function typecheckRoot(values: Map<string, string[]>): Promise<number> {
+	const root = values.get("--typecheck-root")?.[0] ?? fail("arguments", "Missing typecheck root");
+	const contract = values.get("--contract")?.[0] ?? fail("arguments", "Missing typecheck contract");
+	const inventory = values.get("--inventory")?.[0] ?? fail("arguments", "Missing typecheck inventory");
+	const errors = diagnostics(programs(root, contractAt(contract), inventoryAt(inventory)));
+	console.log(JSON.stringify({
+		kind: "typecheck",
+		valid: errors.length === 0,
+		diagnostics: errors,
+		diagnosticsSha256: sha256(JSON.stringify(errors)),
+	}));
+	return errors.length ? 1 : 0;
+}
+
 export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
-	failure = null;
+	mutationFailure.current = null;
 	setupProcessFailure = null;
 	return dispatch(argv).catch(reportFailure);
 }
@@ -1933,32 +1943,15 @@ async function dispatch(argv: string[]): Promise<number> {
 		return fail(
 			"toolVersion",
 			"Requires Bun 1.3.6 (or explicit current compatibility 1.4.1) and TypeScript 5.9.2",
-		);
+	);
 	const values = argumentsMap(argv);
-	if (values.has("--typecheck-root")) {
-		const root =
-			values.get("--typecheck-root")?.[0] ?? fail("arguments", "Missing typecheck root");
-		const contract =
-			values.get("--contract")?.[0] ?? fail("arguments", "Missing typecheck contract");
-		const inventory =
-			values.get("--inventory")?.[0] ?? fail("arguments", "Missing typecheck inventory");
-		const errors = diagnostics(programs(root, contractAt(contract), inventoryAt(inventory)));
-		console.log(
-			JSON.stringify({
-				kind: "typecheck",
-				valid: errors.length === 0,
-				diagnostics: errors,
-				diagnosticsSha256: sha256(JSON.stringify(errors)),
-			}),
-		);
-		return errors.length ? 1 : 0;
-	}
+	if (values.has("--typecheck-root")) return typecheckRoot(values);
 	return await campaign(optionsFrom(values));
 }
 function reportFailure(error: Error | MutationError | string): number {
 	const caught = error instanceof Error || error instanceof MutationError ? error.message : String(error);
-	const prior = failure;
-	failure = { code: prior?.code ?? (error instanceof MutationError ? error.code : "infrastructure"), message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
+	const prior = mutationFailure.current;
+	mutationFailure.current = { code: prior?.code ?? (error instanceof MutationError ? error.code : "infrastructure"), message: `${prior?.message ?? ""}${prior?.message ? "; " : ""}${caught}` };
 	console.log(
 		JSON.stringify({
 			version: 1,
@@ -1967,7 +1960,7 @@ function reportFailure(error: Error | MutationError | string): number {
 			complete: false,
 			globalZero: false,
 			error: {
-				...(failure ?? {
+				...(mutationFailure.current ?? {
 					code: "infrastructure",
 					message: "Unhandled filesystem, compiler or process failure",
 				}),
