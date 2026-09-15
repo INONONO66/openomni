@@ -329,7 +329,7 @@ describe("six message observation families", () => {
     }
   });
 
-  test("rejects sibling durations, verdict reversal, and caller-owned sink identity", () => {
+  test("rejects sibling durations, verdict reversal, and unknown fields", () => {
     expect(
       issues(
         Gateway.MessageObservation.safeParse({
@@ -344,16 +344,27 @@ describe("six message observation families", () => {
         Gateway.MessageObservation.safeParse({ messageId: "m-1", ...observations[3], queueMs: 2 }),
       ),
     ).toEqual([{ code: "unrecognized_keys", path: [], keys: ["queueMs"] }]);
+    const stamped = Gateway.MessageObservation.safeParse({
+      messageId: "m-1",
+      ...observations[0],
+      sessionId: "stamped-session",
+      traceId: "stamped-trace",
+      runId: "stamped-run",
+    });
+    expect(stamped.success).toBe(true);
+    expect(stamped.data).toMatchObject({
+      sessionId: "stamped-session",
+      traceId: "stamped-trace",
+      runId: "stamped-run",
+    });
     expect(
       issues(
         Gateway.MessageObservation.safeParse({
           messageId: "m-1",
           ...observations[0],
-          sessionId: "forged",
-          traceId: "forged",
-          runId: "forged",
+          unknownField: "rejected",
         }),
       ),
-    ).toEqual([{ code: "unrecognized_keys", path: [], keys: ["sessionId", "traceId", "runId"] }]);
+    ).toEqual([{ code: "unrecognized_keys", path: [], keys: ["unknownField"] }]);
   });
 });
