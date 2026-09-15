@@ -86,7 +86,7 @@ export async function collectExactCi(options: { root: string; contract: string; 
 	writeFileSync(inventoryPath, JSON.stringify(identity.inventory), { flag: "wx" });
 	writeFileSync(planPath, JSON.stringify(plan), { flag: "wx" });
 	const paths = { contract, inventory: inventoryPath, plan: planPath };
-	const result = await nativeJson({ cwd: root, receipt: resolve(options.directory, "exact.process.json"), command: [process.execPath, resolve(import.meta.dir, "check-quality-coverage.ts"), "--root", root,
+	const result = await nativeJson({ cwd: root, receipt: resolve(options.directory, "exact.process.json"), onStderr: (chunk) => { process.stderr.write(chunk); }, command: [process.execPath, resolve(import.meta.dir, "check-quality-coverage.ts"), "--root", root,
 		...Object.entries(paths).flatMap(([key, path]) => [`--${key}`, path, `--${key}-sha256`, digest(readFileSync(path))]), "--collect", "--write-coverage", coverage] });
 	const document = completeDocument(result.document);
 	requireMeasurement(document.exitCode === result.exitCode, "exact collector status differs from result");

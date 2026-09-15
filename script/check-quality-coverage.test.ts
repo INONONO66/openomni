@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import ts from "typescript";
 import { coverageForMetrics, decode, exactMetric, sha256 } from "./check-quality-coverage";
 import { run as metrics } from "./check-quality-metrics";
 import { statementCounters } from "./quality-ci-bound";
@@ -254,6 +255,176 @@ export function multiline() {
 		expect(uncovered.some((row) => row.line === 25)).toBe(true);
 		expect(uncovered.some((row) => row.line === 17)).toBe(false);
 		console.info(JSON.stringify({ exactRatchetRows: uncovered, branch }));
+	} finally { f.cleanup(); }
+}, 120_000);
+
+function emittedWorkspace(
+	valueSource = "export const value = 42;\n",
+	testSource = 'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; test("emitted entry", () => { expect(choose(true)).toBe(42); });\n',
+) {
+	const source = `import { value } from "./value.js";
+export function choose(taken: boolean) {
+  if (taken) return value;
+  return 99;
+}
+export function dormant() {
+  return 100;
+}
+`;
+	const f = fixture({
+		"script/pkg/src/index.ts": source,
+		"script/pkg/src/value.ts": valueSource,
+		"script/subject.test.ts": testSource,
+	});
+	f.put("script/pkg/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./dist/index.js"}');
+	f.put("tsconfig.base.json", '{"compilerOptions":{"strict":true,"target":"ES2020","module":"ESNext"}}');
+	f.put("script/tsconfig.json", '{"extends":"../tsconfig.base.json","compilerOptions":{"sourceMap":true,"rootDir":"pkg/src","outDir":"pkg/dist"},"include":["pkg/src"]}');
+	const config = join(f.root, "script/tsconfig.json");
+	const parsed = ts.getParsedCommandLineOfConfigFile(config, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => { throw new Error("fixture config"); } });
+	if (!parsed) throw new Error("fixture config absent");
+	const emitted = ts.createProgram(parsed.fileNames, parsed.options).emit();
+	expect(emitted.emitSkipped).toBe(false);
+	expect(emitted.diagnostics).toHaveLength(0);
+	mkdirSync(join(f.root, "node_modules/@fixture"), { recursive: true });
+	symlinkSync(join(f.root, "script/pkg"), join(f.root, "node_modules/@fixture/emitted"));
+	const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+	inventory.configurations = ["script/tsconfig.json", "tsconfig.base.json"].map((path) => ({ path, sha256: sha256(readFileSync(join(f.root, path))) }));
+	f.put("inventory.json", JSON.stringify(inventory));
+	for (const name of ["inventory", "contract"]) f.args[f.args.indexOf(`--${name}-sha256`) + 1] = sha256(readFileSync(join(f.root, `${name}.json`)));
+	return { ...f, source };
+}
+
+test("verified workspace emit preserves package resolution and exact original counters", () => {
+	const f = emittedWorkspace();
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		expect(run.result.errors).toBeUndefined();
+		expect(run.exit).toBe(1);
+		expect(run.result.complete).toBe(true);
+		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
+		const prepared = inventory.files.map(prepare);
+		const exact = loadCoverage(join(f.root, "coverage.json"), inventory, prepared, { root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
+		const file = prepared.find((file) => file.path === "script/pkg/src/index.ts");
+		if (!file) throw new Error("missing original map");
+		const counts = statementCounters(file, exact);
+		const hits = (line: number) => Object.entries(file.statementMap).filter(([, range]) => range.start.line === line).map(([id]) => counts.s[id]);
+		expect(hits(3)).toEqual([1, 1]);
+		expect(hits(4)).toEqual([0]);
+		expect(hits(7)).toEqual([0]);
+		expect(Object.entries(file.fnMap).filter(([, fn]) => fn.name === "dormant").map(([id]) => counts.f[id])).toEqual([0]);
+		expect([...exact.totals.keys()].some((path) => path.includes("/dist/"))).toBe(false);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+for (const defect of ["stale-source", "stale-build", "javascript", "map", "escaping-map", "map-file", "map-source", "configuration", "unmapped-generated"]) {
+	test(`workspace emit rejects ${defect} without generated ownership`, () => {
+		const f = emittedWorkspace();
+		try {
+			const js = "script/pkg/dist/index.js", mapPath = `${js}.map`, sourcePath = "script/pkg/src/index.ts";
+			if (defect === "stale-source" || defect === "stale-build") {
+				const source = f.source.replace("return 99", "return 98");
+				f.put(sourcePath, source);
+				if (defect === "stale-build") {
+					const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+					const entry = list(inventory.files).map(obj).find((entry) => entry.path === sourcePath);
+					if (!entry) throw new Error("missing source");
+					entry.sha256 = sha256(source);
+					f.put("inventory.json", JSON.stringify(inventory));
+					f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+				}
+			} else if (defect === "javascript") f.put(js, readFileSync(join(f.root, js), "utf8").replace("return 99", "return 98"));
+			else if (defect === "configuration") f.put("tsconfig.base.json", '{"compilerOptions":{"target":"ESNext","module":"ESNext"}}');
+			else if (defect === "unmapped-generated") rmSync(join(f.root, mapPath));
+			else {
+				const map = obj(decode(readFileSync(join(f.root, mapPath), "utf8")));
+				if (defect === "map") map.mappings = "AAAA";
+				if (defect === "escaping-map") map.sources = ["../../../../outside.ts"];
+				if (defect === "map-file") map.file = "different.js";
+				if (defect === "map-source") map.sources = ["../src/value.ts"];
+				f.put(mapPath, JSON.stringify(map));
+			}
+			const run = f.run(["--collect"]);
+			expect(run.exit).toBe(2);
+			expect(run.result.complete).toBe(false);
+			expect(list(run.result.errors)).toHaveLength(1);
+		} finally { f.cleanup(); }
+	}, 120_000);
+}
+
+test("workspace emit cannot silently ignore declared project references", () => {
+	const f = emittedWorkspace();
+	try {
+		const configPath = "script/tsconfig.json";
+		const config = obj(decode(readFileSync(join(f.root, configPath), "utf8")));
+		config.references = [{ path: "./referenced-project" }];
+		f.put(configPath, JSON.stringify(config));
+		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+		const configuration = list(inventory.configurations).map(obj).find((entry) => entry.path === configPath);
+		if (!configuration) throw new Error("missing configuration");
+		configuration.sha256 = sha256(readFileSync(join(f.root, configPath)));
+		f.put("inventory.json", JSON.stringify(inventory));
+		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+		const run = f.run(["--collect"]);
+		expect(run.exit).toBe(2);
+		expect(run.result.complete).toBe(false);
+		expect(str(obj(list(run.result.errors)[0]).message)).toContain("emitted_config");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("workspace emit rejects bytes that only decode to the compiler output", () => {
+	const replacement = String.fromCodePoint(0xfffd);
+	const f = emittedWorkspace(`export const value = 42; // ${replacement}\n`);
+	try {
+		const path = join(f.root, "script/pkg/dist/value.js");
+		const bytes = readFileSync(path);
+		const offset = bytes.indexOf(Buffer.from(replacement));
+		expect(offset).toBeGreaterThanOrEqual(0);
+		const corrupted = Buffer.concat([bytes.subarray(0, offset), Buffer.from([255]), bytes.subarray(offset + 3)]);
+		expect(corrupted.toString("utf8")).toBe(bytes.toString("utf8"));
+		writeFileSync(path, corrupted);
+		const run = f.run(["--collect"]);
+		expect(run.exit).toBe(2);
+		expect(run.result.complete).toBe(false);
+		expect(str(obj(list(run.result.errors)[0]).message)).toContain("tamper");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+for (const [name, source] of [
+	["const enum", "const enum Answer { Value = 42 }\nexport const value = Answer.Value;\n"],
+	["downlevel class fields", "class Answer { value = 42; }\nexport const value = new Answer().value;\n"],
+]) test(`workspace emit fails closed for unsupported ${name} maps`, () => {
+	if (!source) throw new Error("missing lowering fixture");
+	const f = emittedWorkspace(source);
+	try {
+		const native = Bun.spawnSync([process.execPath, "test", "./script/subject.test.ts"], { cwd: f.root, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
+		expect(native.exitCode).toBe(0);
+		const run = f.run(["--collect"]);
+		expect(run.exit).toBe(2);
+		expect(run.result.complete).toBe(false);
+		expect(str(obj(list(run.result.errors)[0]).message)).toContain("source_map");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("workspace emit receipt binds compiler, artifact, original and map identities", () => {
+	const f = emittedWorkspace();
+	try {
+		const path = join(f.root, "coverage.json");
+		expect(f.run(["--collect", "--write-coverage", path]).exit).toBe(1);
+		const original = obj(decode(readFileSync(path, "utf8")));
+		for (const field of ["source", "project", "sha256", "mapSha256", "mapHash"]) {
+			const receipt = structuredClone(original);
+			const process = list(receipt.processes).map(obj).find((process) => process.emitted !== undefined);
+			if (!process) throw new Error("missing emitted provenance");
+			const proof = obj(list(process.emitted)[0]);
+			proof[field] = field.endsWith("256") || field === "mapHash" ? "0".repeat(64) : "script/wrong.ts";
+			f.put("coverage.json", JSON.stringify(receipt));
+			const verified = f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+			expect(verified.exit).toBe(2);
+			expect(obj(list(verified.result.errors)[0]).code).toBe("identity");
+		}
+		f.put("coverage.json", JSON.stringify(original));
+		f.put("script/pkg/dist/value.js", readFileSync(join(f.root, "script/pkg/dist/value.js"), "utf8").replace("42", "43"));
+		expect(f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]).exit).toBe(2);
 	} finally { f.cleanup(); }
 }, 120_000);
 
