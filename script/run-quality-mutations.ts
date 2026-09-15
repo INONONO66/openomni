@@ -1361,6 +1361,7 @@ function prepareCandidate(context: CandidateExecution): { workspace: CandidateWo
 	const run = join(temporary, "candidate");
 	const root = join(run, "source");
 	mkdirSync(run, { recursive: true });
+	let prepared = false;
 	try {
 		copyExecution(join(temporary, "frozen"), root);
 		const source = mutationSource(root, candidate.path);
@@ -1368,11 +1369,13 @@ function prepareCandidate(context: CandidateExecution): { workspace: CandidateWo
 			return fail("tamper", "Candidate snapshot drift");
 		const mutated = replace(source.source, candidate.startOffset, candidate.endOffset, candidate.replacement);
 		writeMutation(source, mutated);
+		prepared = true;
 		return { workspace: { run, root, source }, mutated };
-	} catch (error) {
-		removeExecution(root);
-		rmSync(run, { recursive: true, force: true });
-		throw error;
+	} finally {
+		if (!prepared) {
+			removeExecution(root);
+			rmSync(run, { recursive: true, force: true });
+		}
 	}
 }
 
