@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { coverageForMetrics, decode, exactMetric, sha256 } from "./check-quality-coverage";
@@ -98,11 +98,12 @@ function fixture(sources: Record<string, string> = fixtures, commands: Command[]
 			sha256(readFileSync(join(root, `${name}.json`))),
 		]),
 	];
-	function run(extra: string[] = [], entry = checker) {
+	function run(extra: string[] = [], entry = checker, environment: NodeJS.ProcessEnv = {}) {
 		const child = Bun.spawnSync([process.execPath, entry, ...args, ...extra], {
 			stdout: "pipe",
 			stderr: "pipe",
 			timeout: 120_000,
+			env: { ...process.env, ...environment },
 		});
 		const result = obj(decode(child.stdout.toString()));
 		return { exit: child.exitCode, result, stderr: child.stderr.toString() };
@@ -117,6 +118,52 @@ function collected(sources: Record<string, string> = fixtures, plan = defaultPla
 function findings(result: { [key: string]: Json }): { [key: string]: Json }[] {
 	return list(result.findings).map(obj);
 }
+
+test("exact collector permits only canonical git and kill utilities without process receipts", () => {
+	const source = `import { spawnSync } from "node:child_process";
+const git = Bun.spawnSync(["git", "--version"], { stdout: "pipe", stderr: "pipe" });
+const kill = spawnSync("/bin/kill", ["-0", String(process.pid)], { stdio: "ignore" });
+if (git.exitCode !== 0 || kill.status !== 0) process.exit(7);
+`;
+	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		expect(run.exit).toBe(1);
+		expect(run.result.complete).toBe(true);
+		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("exact collector rejects a git executable outside the canonical CI path", () => {
+	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["git", "--version"]);\n' }, cli("script/utility.ts"));
+	try {
+		const fake = join(f.root, "fake-bin", "git");
+		mkdirSync(dirname(fake), { recursive: true });
+		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
+		chmodSync(fake, 0o755);
+		const run = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		expect(run.exit).toBe(2);
+		expect(JSON.stringify(run.result)).toContain("utility executable must resolve to /usr/bin/git");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("exact collector rejects the bare kill command", () => {
+	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["kill", "-0", String(process.pid)]);\n' }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		expect(run.exit).toBe(2);
+		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("exact collector does not turn a utility into a shell escape", () => {
+	const f = fixture({ "script/utility.ts": 'Bun.spawn(["git", "--version"], { shell: true });\n' }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		expect(run.exit).toBe(2);
+		expect(JSON.stringify(run.result)).toContain("shell execution is not observable");
+	} finally { f.cleanup(); }
+}, 120_000);
 
 test("real Bun false-positive DA cannot certify an unreachable original statement", async () => {
 	const source = `export function choose(mode: number, count: { value: number }): string {

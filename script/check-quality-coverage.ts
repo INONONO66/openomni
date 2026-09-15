@@ -1387,20 +1387,22 @@ function preload(directory: string): void {
 	function child(command: string[], env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()) {
 		const childId = randomUUID();
 		const launch = launchCommand(data, directory, childId, id, text(request.command), command, env, cwd);
+		if (launch.id === undefined) return launch;
 		children.push(childId);
 		writeFileSync(join(directory, `${id}.children.json`), JSON.stringify(children));
-		return { id: childId, ...launch };
+		return launch;
 	}
 	installProcessHooks(child, (childId, code, signal) => observe(directory, childId, code, signal), fail);
 	if (runtime === "node") return;
 	// Interposition consumes only argv/environment. Native stdio, IPC payloads,
 	// callbacks and return values pass through untouched; they are not analyzer data.
-	type LaunchOptions = { env?: NodeJS.ProcessEnv; cwd?: string };
+	type LaunchOptions = { env?: NodeJS.ProcessEnv; cwd?: string; shell?: boolean | string };
 	const spawn = Bun.spawn;
 	const spawnSync = Bun.spawnSync;
 	function bunLaunch(command: string[] | (LaunchOptions & { cmd: string[] }), options?: LaunchOptions) {
 		const opts = Array.isArray(command) ? options : command;
 		const argv = Array.isArray(command) ? command : command.cmd;
+		if (opts?.shell) fail("unsupported_process", argv[0] ?? "", "shell execution is not observable");
 		if (opts?.env?.D945_PROCESS && opts.env.D945_PROCESS !== id && existsSync(join(directory, `${opts.env.D945_PROCESS}.request.json`)))
 			return { argv, options: opts, id: undefined };
 		const wrapped = child(argv, opts?.env, opts?.cwd);
@@ -1442,6 +1444,15 @@ function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string
 	const path = binary.includes("/") ? resolve(cwd, binary) : (env.PATH ?? "").split(":").map((p) => join(p, binary)).find(existsSync);
 	return path ? resolve(path) : fail("unsupported_process", binary, "executable cannot be resolved");
 }
+function utilityPath(executable: string, binary: string): string | undefined {
+	const expected = executable === "git" ? "/usr/bin/git" : executable === "/bin/kill" ? "/bin/kill" : undefined;
+	if (expected === undefined) return undefined;
+	let canonical: string;
+	try { canonical = realpathSync(binary); }
+	catch { return fail("unsupported_process", executable, "utility executable cannot be resolved"); }
+	if (canonical !== expected) fail("unsupported_process", executable, `utility executable must resolve to ${expected}`);
+	return expected;
+}
 function launchEntry(data: Inputs, argv: string[], runtime: string, executable: string, cwd: string) {
 	let entry: Prepared | undefined;
 	let args: string[] = [];
@@ -1479,9 +1490,11 @@ function runtimeVersion(binary: string, runtime: string, executable: string): st
 }
 
 function launchCommand(data: Inputs, directory: string, id: string, parent: string, commandId: string,
-	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { command: string[]; env: NodeJS.ProcessEnv } {
+	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { id?: string; command: string[]; env: NodeJS.ProcessEnv } {
 	const executable = command[0] ?? fail("process", "", "empty executable");
 	const binary = binaryPath(executable, environment, cwd);
+	const utility = utilityPath(executable, binary);
+	if (utility !== undefined) return { command: [utility, ...command.slice(1)], env: environment };
 	const name = basename(binary);
 	const runtime = /^bun(?:\.exe)?$/.test(name) ? "bun" : /^node(?:\.exe)?$/.test(name) ? "node" : /^python(?:3(?:\.\d+)?)?$/.test(name) ? "python" :
 		fail("unsupported_process", executable, "unregistered native executable");
@@ -1495,9 +1508,9 @@ function launchCommand(data: Inputs, directory: string, id: string, parent: stri
 		D945_ASSET_DIRECTORY: asset(""), D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
 		...(data.selected ? { D945_SOURCE_ROOT: data.options.root } : {}),
 	};
-	if (runtime === "python") return { command: [binary, "-u", asset("python.py"), "run", directory, id, entry.entry.path, ...args], env };
-	if (runtime === "node") return { command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
-	return {
+	if (runtime === "python") return { id, command: [binary, "-u", asset("python.py"), "run", directory, id, entry.entry.path, ...args], env };
+	if (runtime === "node") return { id, command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
+	return { id,
 		command: argv[0] === "test" ? [binary, "test", "--preload", join(directory, "preload.js"), ...argv.slice(1)] :
 			[binary, "--preload", join(directory, "preload.js"), ...argv], env
 	};
