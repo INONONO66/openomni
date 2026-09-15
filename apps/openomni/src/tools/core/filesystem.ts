@@ -16,6 +16,22 @@ export function fileOperation<T>(name: string, operation: () => Promise<T>): Pro
   });
 }
 
+/** Run a bounded file mutation with the tool's abort and refusal semantics. */
+export async function fileMutation<T>(
+  name: string,
+  path: string,
+  ports: FilePorts,
+  signal: AbortSignal,
+  operation: (endpoint: ReturnType<typeof filesystem>) => Promise<T>,
+): Promise<T> {
+  return fileOperation(name, async () => {
+    signal.throwIfAborted();
+    const result = await operation(filesystem(path, ports));
+    signal.throwIfAborted();
+    return result;
+  });
+}
+
 /** Refusals pass through; coded I/O errors and daemon refusals become this tool's refusal. */
 function fileRefusal(name: string, error: Error): Error {
   if (error instanceof ToolRefused) return error;

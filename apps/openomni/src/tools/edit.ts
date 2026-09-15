@@ -1,6 +1,6 @@
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { z } from "zod";
-import { fileOperation, filesystem, text, type FilePorts } from "./core/filesystem";
+import { fileMutation, text, type FilePorts } from "./core/filesystem";
 
 const Edit = z.object({ oldText: z.string().min(1), newText: z.string() }).strict();
 
@@ -34,11 +34,8 @@ export function createEditTool(ports: FilePorts) {
     output: z.object({ bytesWritten: z.number().int().nonnegative() }),
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
     execute: (args, ctx) =>
-      fileOperation("edit", async () => {
-        ctx.signal.throwIfAborted();
-        const endpoint = filesystem(args.path, ports);
+      fileMutation("edit", args.path, ports, ctx.signal, async (endpoint) => {
         const next = apply(text(await endpoint.read()), args.edits);
-        ctx.signal.throwIfAborted();
         return { bytesWritten: await endpoint.write(Buffer.from(next)) };
       }),
     render: (_args, value) => JSON.stringify(value),
