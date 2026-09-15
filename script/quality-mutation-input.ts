@@ -43,7 +43,8 @@ export function inventoryCompilerOptions(root: string): ts.CompilerOptions {
     moduleResolution: ts.ModuleResolutionKind.Bundler, jsx: ts.JsxEmit.Preserve, skipLibCheck: true,
   };
 }
-export function* programs(root: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
+export function* programs(directory: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
+  const root = realpathSync(directory);
   const covered = new Set<string>();
   for (const path of contract.projects) {
     const program = projectProgram(root, path);

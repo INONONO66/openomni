@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { parentPort, Worker } from "node:worker_threads";
 import ts from "typescript";
@@ -34,6 +34,13 @@ export type CompilerProof = Omit<CompilerRequest, "content"> & {
   projects: ProjectProof[];
 };
 type Active = { key: string; builder: ts.SemanticDiagnosticsBuilderProgram; sources: Map<string, ts.SourceFile>; changed: string };
+export const COMPILER_BATCH_SIZE = 8;
+export function compilerProofMatches(request: CompilerRequest, result: CompilerProof): boolean {
+  return result.candidateId === request.candidateId &&
+    result.sourceSha256 === request.sourceSha256 &&
+    result.executionTreeSha256 === request.executionTreeSha256 &&
+    result.originalSha256 === request.originalSha256 && result.path === request.path;
+}
 
 function proof(project: Project, mode: ProjectProof["mode"]): ProjectProof {
   return {
@@ -48,13 +55,16 @@ function proof(project: Project, mode: ProjectProof["mode"]): ProjectProof {
 // test processes never run in this tree. The campaign verifies the tree again at
 // completion. No watcher, mtime, workspace graph or inferred export signature.
 export class FrozenMutationCompiler {
+  private readonly root: string;
   private readonly native: Project[] = [];
   private readonly fallback: Project | undefined;
   private active: Active | undefined;
   private readonly configurationSha256: string;
   private readonly compilerSha256 = sha256(readFileSync(require.resolve("typescript")));
 
-  constructor(private readonly root: string, contract: Contract, private readonly inventory: Inventory, readonly identity: string) {
+  constructor(directory: string, contract: Contract, private readonly inventory: Inventory, readonly identity: string) {
+    const root = realpathSync(directory);
+    this.root = root;
     if (executionTreeHash(root) !== identity) throw new Error("Compiler frozen execution identity mismatch");
     this.configurationSha256 = sha256(JSON.stringify({ contract, inventory }));
     this.verifyConfigurations();
@@ -121,48 +131,62 @@ export class FrozenMutationCompiler {
   }
 
   check(request: CompilerRequest): CompilerProof {
-    const path = resolve(this.root, request.path);
-    const local = relative(this.root, path);
-    if (request.executionTreeSha256 !== this.identity || isAbsolute(local) || local === ".." || local.startsWith("../"))
-      throw new Error("Compiler request frozen identity mismatch");
-    const original = this.inventory.files.find((file) => file.path === request.path);
-    if (!original || original.sha256 !== request.originalSha256 || sha256(readFileSync(path)) !== request.originalSha256 || sha256(request.content) !== request.sourceSha256)
-      throw new Error("Compiler request source identity mismatch");
+    const result = this.checkBatch([request])[0];
+    if (!result) throw new Error("Missing compiler proof");
+    return result;
+  }
+
+  checkBatch(requests: CompilerRequest[]): CompilerProof[] {
+    if (requests.length === 0 || requests.length > COMPILER_BATCH_SIZE) throw new Error("Invalid compiler batch size");
     this.verifyConfigurations();
-    const projects: ProjectProof[] = [];
-    const errors: string[] = [];
-    const covered = new Set<string>();
+    const checks: { request: CompilerRequest; path: string; projects: ProjectProof[]; errors: string[]; covered: Set<string> }[] = requests.map((request) => {
+      const path = resolve(this.root, request.path);
+      const local = relative(this.root, path);
+      if (request.executionTreeSha256 !== this.identity || isAbsolute(local) || local === ".." || local.startsWith("../"))
+        throw new Error("Compiler request frozen identity mismatch");
+      const original = this.inventory.files.find((file) => file.path === request.path);
+      if (!original || original.sha256 !== request.originalSha256 || sha256(readFileSync(path)) !== request.originalSha256 || sha256(request.content) !== request.sourceSha256)
+        throw new Error("Compiler request source identity mismatch");
+      return { request, path, projects: [], errors: [], covered: new Set<string>() };
+    });
+    // Keep one project active across the bounded batch, then release it before
+    // the next project. Shared sources no longer force a cold build per mutant.
     for (const baseline of this.native) {
-      const checked = baseline.members.has(path) ? this.compile(baseline, baseline.roots, request) : { project: baseline, mode: "frozen" as const };
-      projects.push(proof(checked.project, checked.mode));
-      errors.push(...checked.project.diagnostics);
-      for (const member of checked.project.members) covered.add(member);
+      const frozenProof = proof(baseline, "frozen");
+      for (const state of checks) {
+        const checked = baseline.members.has(state.path) ? this.compile(baseline, baseline.roots, state.request) : { project: baseline, mode: "frozen" as const };
+        state.projects.push(checked.mode === "frozen" ? frozenProof : proof(checked.project, checked.mode));
+        state.errors.push(...checked.project.diagnostics);
+        for (const member of checked.project.members) state.covered.add(member);
+      }
     }
-    const roots = this.inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
-      .map((file) => resolve(this.root, file.path)).filter((name) => !covered.has(name));
-    if (roots.length) {
-      const baseline = this.fallback ?? {
-        project: "inventory-fallback", roots: [], members: new Set<string>(), diagnostics: [],
-        options: inventoryCompilerOptions(this.root),
-      };
-      const checked = baseline.members.has(path) || JSON.stringify(roots) !== JSON.stringify(baseline.roots)
-        ? this.compile(baseline, roots, request) : { project: baseline, mode: "frozen" as const };
-      projects.push(proof(checked.project, checked.mode));
-      errors.push(...checked.project.diagnostics);
+    for (const state of checks) {
+      const roots = this.inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
+        .map((file) => resolve(this.root, file.path)).filter((name) => !state.covered.has(name));
+      if (roots.length) {
+        const baseline = this.fallback ?? {
+          project: "inventory-fallback", roots: [], members: new Set<string>(), diagnostics: [],
+          options: inventoryCompilerOptions(this.root),
+        };
+        const checked = baseline.members.has(state.path) || JSON.stringify(roots) !== JSON.stringify(baseline.roots)
+          ? this.compile(baseline, roots, state.request) : { project: baseline, mode: "frozen" as const };
+        state.projects.push(proof(checked.project, checked.mode));
+        state.errors.push(...checked.project.diagnostics);
+      }
     }
-    return {
+    return checks.map(({ request, projects, errors }) => ({
       kind: "persistent-compiler", compiler: ts.version, compilerSha256: this.compilerSha256,
       configurationSha256: this.configurationSha256, diagnosticRoot: this.root,
       executionTreeSha256: this.identity, candidateId: request.candidateId, path: request.path,
       originalSha256: request.originalSha256, sourceSha256: request.sourceSha256,
       valid: errors.length === 0, diagnostics: errors, diagnosticsSha256: sha256(JSON.stringify(errors)), projects,
-    };
+    }));
   }
 }
 
 type Initialize = { kind: "initialize"; root: string; contract: Contract; inventory: Inventory; identity: string };
-type Request = Initialize | { kind: "check"; request: CompilerRequest };
-type Response = { kind: "ready" } | { kind: "checked"; proof: CompilerProof } | { kind: "error"; message: string };
+type Request = Initialize | { kind: "check"; requests: CompilerRequest[] };
+type Response = { kind: "ready" } | { kind: "checked"; proofs: CompilerProof[] } | { kind: "error"; message: string };
 
 // One sequential worker per campaign, not independent processes per mutant.
 // Worker errors/exits/timeouts permanently poison this client and are awaited
@@ -209,15 +233,24 @@ export class MutationCompilerWorker {
   }
 
   async check(request: CompilerRequest): Promise<CompilerProof> {
+    const proof = (await this.checkBatch([request]))[0];
+    if (!proof) throw new Error("Missing compiler proof");
+    return proof;
+  }
+
+  async checkBatch(requests: CompilerRequest[]): Promise<CompilerProof[]> {
     this.ready ??= this.send({ kind: "initialize", root: this.root, contract: this.contract, inventory: this.inventory, identity: this.compilerIdentity });
     const ready = await this.ready;
     if (ready.kind !== "ready") throw new Error("Missing compiler initialization proof");
-    const response = await this.send({ kind: "check", request });
-    if (response.kind !== "checked" || response.proof.candidateId !== request.candidateId || response.proof.sourceSha256 !== request.sourceSha256 || response.proof.executionTreeSha256 !== request.executionTreeSha256) {
+    const response = await this.send({ kind: "check", requests });
+    if (response.kind !== "checked" || response.proofs.length !== requests.length || response.proofs.some((proof, index) => {
+      const request = requests[index];
+      return !request || !compilerProofMatches(request, proof);
+    })) {
       this.abort(new Error("Compiler response identity mismatch"));
       throw new Error("Compiler response identity mismatch");
     }
-    return response.proof;
+    return response.proofs;
   }
 
   async close(): Promise<void> {
@@ -237,7 +270,7 @@ export function serveCompiler(port: {
       return { kind: "ready" };
     }
     if (!compiler) throw new Error("Compiler worker not initialized");
-    return { kind: "checked", proof: compiler.check(request.request) };
+    return { kind: "checked", proofs: compiler.checkBatch(request.requests) };
   }
   port.on("message", (request) => {
     void receive(request).then(

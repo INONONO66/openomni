@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
-import { MutationCompilerWorker, type CompilerProof } from "./quality-mutation-compiler";
+import { COMPILER_BATCH_SIZE, compilerProofMatches, MutationCompilerWorker, type CompilerProof } from "./quality-mutation-compiler";
 
 // The inventory producer is a supplied, hash-pinned CLI, not an imported copy of
 // another lane. Only that producer decides membership, categories and topology.
@@ -484,11 +484,12 @@ function regexChanges(raw: string): string[] {
 }
 
 export function enumerate(
-	root: string,
+	directory: string,
 	inventory: Inventory,
 	operators: Operator[],
 	items: ts.Program[],
 ): { candidates: Candidate[]; census: Census[]; errors: string[] } {
+	const root = realpathSync(directory);
 	const candidates: Candidate[] = [];
 	const census: Census[] = [];
 	const errors: string[] = [];
@@ -749,7 +750,8 @@ export function enumerate(
 	return { candidates, census, errors };
 }
 // Preserve first-project ownership without retaining every project's checker.
-export function analyze(root: string, contract: Contract, inventory: Inventory, operators: Operator[]) {
+export function analyze(directory: string, contract: Contract, inventory: Inventory, operators: Operator[]) {
+	const root = realpathSync(directory);
 	const pending = new Map(inventory.files.map((file) => [file.path, file]));
 	const result: ReturnType<typeof enumerate> = { candidates: [], census: [], errors: [] };
 	const sourceDiagnostics: string[] = [];
@@ -1225,6 +1227,7 @@ function probeKey(
 		},
 	}));
 }
+type CompilerCheck = { proof: CompilerProof } | { failure: string };
 type CandidateContext = {
 	candidate: Candidate;
 	options: Options;
@@ -1235,6 +1238,7 @@ type CandidateContext = {
 	result: Result;
 	probeCache: Map<string, ProbeEvidence>;
 	compiler: MutationCompilerWorker | null;
+	checked: CompilerCheck | undefined;
 };
 
 async function checkMutation(context: CandidateContext, mutated: string, python: boolean): Promise<boolean> {
@@ -1257,14 +1261,20 @@ async function checkMutation(context: CandidateContext, mutated: string, python:
 	const hostPath = candidate.path.split("#")[0] ?? fail("schema", "Missing candidate host");
 	const content = readFileSync(pathIn(root, hostPath), "utf8");
 	if (!context.compiler) return fail("infrastructure", "Compiler engine unavailable");
-	return context.compiler.check({
+	const request = {
 			executionTreeSha256: context.compiler.identity,
 			candidateId: candidate.id,
 			path: hostPath,
 			originalSha256: sha256(readFileSync(pathIn(join(dirname(run), "frozen"), hostPath))),
 			sourceSha256: sha256(content),
 			content,
-		}).then((proof) => {
+	};
+	const checked = context.checked;
+	const validation = python ? context.compiler.check(request) : checked && "proof" in checked
+		? Promise.resolve(checked.proof)
+		: Promise.reject(new Error(checked && "failure" in checked ? checked.failure : "Missing compiler batch result"));
+	return validation.then((proof) => {
+		if (!compilerProofMatches(request, proof)) return fail("tamper", "Compiler proof differs from candidate source");
 		result.compilerProof = proof;
 		result.typecheck = proof.valid ? "valid" : "invalid";
 		if (!proof.valid) { result.outcome = "invalid"; result.reason = "compiler-diagnostics"; return false; }
@@ -1327,6 +1337,7 @@ async function probeCandidate(context: CandidateContext, source: ReturnType<type
 async function runCandidate(
 	candidate: Candidate,
 	compilerWorker: MutationCompilerWorker | null,
+	checked: CompilerCheck | undefined,
 	options: Options,
 	contract: Contract,
 	temporary: string,
@@ -1366,7 +1377,7 @@ async function runCandidate(
 			candidate.replacement,
 		);
 		writeMutation(source, mutated);
-		const context: CandidateContext = { candidate, options, contract, tests, run, root, result, probeCache, compiler: compilerWorker };
+		const context: CandidateContext = { candidate, options, contract, tests, run, root, result, probeCache, compiler: compilerWorker, checked };
 		if (!(await checkMutation(context, mutated, python))) return result;
 		if (python && !(await probeCandidate(context, source))) return result;
 		// TypeScript reach was established once for the campaign.
@@ -1615,6 +1626,31 @@ function selectedCandidates(options: Options, candidates: Candidate[]): Candidat
 		(!options.families.length || options.families.includes(candidate.operator)),
 	).slice(0, options.pilot ? options.limit : undefined);
 }
+async function compilerBatch(
+	candidates: Candidate[], start: number, selected: Set<string>,
+	reach: Map<string, ProbeEvidence>, compiler: MutationCompilerWorker, temporary: string,
+): Promise<Map<string, CompilerCheck>> {
+	const path = candidates[start]?.path;
+	const batch: Candidate[] = [];
+	for (let index = start; index < candidates.length && batch.length < COMPILER_BATCH_SIZE; index++) {
+		const candidate = candidates[index];
+		if (!candidate || candidate.path !== path) break;
+		if (selected.has(candidate.id) && reach.get(candidate.id)?.reached) batch.push(candidate);
+	}
+	const requests = batch.map((candidate) => {
+		const source = mutationSource(join(temporary, "frozen"), candidate.path);
+		const content = replace(source.source, candidate.startOffset, candidate.endOffset, candidate.replacement);
+		return {
+			executionTreeSha256: compiler.identity, candidateId: candidate.id, path: candidate.path,
+			originalSha256: sha256(source.host), sourceSha256: sha256(content), content,
+		};
+	});
+	return compiler.checkBatch(requests).then(
+		(proofs) => new Map(proofs.map((proof) => [proof.candidateId, { proof }])),
+		(error: Error) => new Map(batch.map((candidate) => [candidate.id, { failure: error.message }])),
+	);
+}
+
 async function executeSelection(
 	options: Options,
 	compilerWorker: MutationCompilerWorker | null,
@@ -1631,7 +1667,8 @@ async function executeSelection(
 	if (!selected.length) errors.push("zero selected candidates");
 	const selectedIds = new Set(selected.map((candidate) => candidate.id));
 	let executed = 0;
-	for (const candidate of enumerated.candidates) {
+	let checked = new Map<string, CompilerCheck>();
+	for (const [index, candidate] of enumerated.candidates.entries()) {
 		if (!selectedIds.has(candidate.id)) results.push(defaultResult(candidate, tests, false));
 		else if (
 			errors.length ||
@@ -1641,8 +1678,11 @@ async function executeSelection(
 			results.push(defaultResult(candidate, tests));
 		else {
 			console.error(`[mutation] mutant ${executed + 1}/${selected.length} start ${candidate.path}:${candidate.startOffset} ${candidate.operator}`);
-			const result = await runCandidate(candidate, compilerWorker, options, contract, temporary, reachMap.get(candidate.id)?.tests ?? tests, reachMap);
+			if (compilerWorker && !candidate.operator.startsWith("py-") && reachMap.get(candidate.id)?.reached && !checked.has(candidate.id))
+				checked = await compilerBatch(enumerated.candidates, index, selectedIds, reachMap, compilerWorker, temporary);
+			const result = await runCandidate(candidate, compilerWorker, checked.get(candidate.id), options, contract, temporary, reachMap.get(candidate.id)?.tests ?? tests, reachMap);
 			results.push(result);
+			checked.delete(candidate.id);
 			executed++;
 			console.error(`[mutation] mutant ${executed}/${selected.length} ${result.outcome}: ${result.reason}`);
 		}

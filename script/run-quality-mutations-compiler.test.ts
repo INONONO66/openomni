@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { MessageChannel } from "node:worker_threads";
 import { buildInventory, readContract } from "./quality-inventory";
-import { programs, diagnostics, executionTreeHash, sha256 } from "./run-quality-mutations";
-import { FrozenMutationCompiler, MutationCompilerWorker, serveCompiler } from "./quality-mutation-compiler";
+import { programs, diagnostics, executionTreeHash, main, sha256 } from "./run-quality-mutations";
+import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler } from "./quality-mutation-compiler";
 
 test("fallback compiler ignores untyped JavaScript inventory sources", () => {
   const root = mkdtempSync(join(tmpdir(), "mutation-fallback-"));
@@ -17,6 +17,19 @@ test("fallback compiler ignores untyped JavaScript inventory sources", () => {
     expect(diagnostics(programs(root, contract, inventory))).toEqual([]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("typecheck CLI reports native valid and invalid source outcomes in process", async () => {
+  const input = compilerFixture();
+  try {
+    const contract = join(input.root, "contract.json"), inventory = join(input.root, "inventory.json");
+    writeFileSync(contract, JSON.stringify(input.contract));
+    writeFileSync(inventory, JSON.stringify(input.inventory));
+    const args = ["--typecheck-root", input.root, "--contract", contract, "--inventory", inventory];
+    expect(await main(args)).toBe(0);
+    writeFileSync(join(input.root, "a/value.ts"), 'export const value = "wrong";');
+    expect(await main(args)).toBe(1);
+  } finally { rmSync(input.root, { recursive: true, force: true }); }
+}, 120000);
 
 function compilerFixture() {
   const root = mkdtempSync(join(tmpdir(), "mutation-incremental-"));
@@ -99,6 +112,70 @@ test("incremental compiler matches the cold oracle through stale-state, consumer
   } finally { rmSync(input.root, { recursive: true, force: true }); }
 }, 120000);
 
+test("batched compiler checks preserve cold diagnostics and reuse affected projects", () => {
+  const input = compilerFixture();
+  try {
+    const compiler = new FrozenMutationCompiler(input.root, input.contract, input.inventory, input.identity);
+    const sources = ["export const value = 2;", 'export const value = "wrong";', "export const value = false;", input.files["a/value.ts"]];
+    const requests = sources.map((source) => compilerRequest(input.root, input.identity, "a/value.ts", source));
+    const results = compiler.checkBatch(requests);
+    expect(results).toHaveLength(requests.length);
+    expect(() => compiler.checkBatch([])).toThrow("Invalid compiler batch size");
+    expect(() => compiler.checkBatch(Array.from({ length: COMPILER_BATCH_SIZE + 1 },
+      () => compilerRequest(input.root, input.identity, "a/value.ts", input.files["a/value.ts"])))).toThrow("Invalid compiler batch size");
+    for (const [index, result] of results.entries()) {
+      const request = requests[index];
+      if (!request) throw new Error("Missing batch request");
+      writeFileSync(join(input.root, request.path), request.content);
+      let cold: string[];
+      try { cold = diagnostics(programs(input.root, input.contract, input.inventory)); }
+      finally { writeFileSync(join(input.root, request.path), input.files["a/value.ts"]); }
+      expect(result.diagnostics).toEqual(cold);
+      expect(result.valid).toBe(cold.length === 0);
+      expect(result.candidateId).toBe(request.candidateId);
+      expect(result.sourceSha256).toBe(request.sourceSha256);
+      expect(result.projects.filter((project) => project.mode !== "frozen").map((project) => [project.project, project.mode])).toEqual([
+        ["a/tsconfig.json", index === 0 ? "cold" : "incremental"],
+        ["b/tsconfig.json", index === 0 ? "cold" : "incremental"],
+        ["inventory-fallback", index === 0 ? "cold" : "incremental"],
+      ]);
+    }
+    expect(executionTreeHash(input.root)).toBe(input.identity);
+  } finally { rmSync(input.root, { recursive: true, force: true }); }
+}, 120000);
+
+test("compiler overlays workspace package consumers through an aliased execution root", () => {
+  const input = compilerFixture();
+  const alias = `${input.root}-alias`;
+  try {
+    mkdirSync(join(input.root, "b/node_modules/@fixture"), { recursive: true });
+    writeFileSync(join(input.root, "a/package.json"), JSON.stringify({ name: "@fixture/value", exports: "./value.ts" }));
+    symlinkSync("../../../a", join(input.root, "b/node_modules/@fixture/value"));
+    writeFileSync(join(input.root, "b/consumer.ts"), 'import { value } from "@fixture/value"; export const result: number = value;');
+    symlinkSync(input.root, alias);
+    const inventory = buildInventory(alias, input.contract);
+    const identity = executionTreeHash(alias);
+    const compiler = new FrozenMutationCompiler(alias, input.contract, inventory, identity);
+    const requests = ['export const value = "wrong";', input.files["a/value.ts"]]
+      .map((content) => compilerRequest(alias, identity, "a/value.ts", content));
+    const results = compiler.checkBatch(requests);
+    for (const [index, result] of results.entries()) {
+      const request = requests[index];
+      if (!request) throw new Error("Missing aliased compiler request");
+      writeFileSync(join(alias, request.path), request.content);
+      try { expect(result.diagnostics).toEqual(diagnostics(programs(alias, input.contract, inventory))); }
+      finally { writeFileSync(join(alias, request.path), input.files["a/value.ts"]); }
+      expect(result.valid).toBe(index === 1);
+      expect(result.projects.find((project) => project.project === "b/tsconfig.json")?.mode)
+        .toBe(index === 0 ? "cold" : "incremental");
+    }
+    expect(executionTreeHash(alias)).toBe(identity);
+  } finally {
+    rmSync(alias, { force: true });
+    rmSync(input.root, { recursive: true, force: true });
+  }
+}, 120000);
+
 test("compiler refuses wrong frozen/source identities and recreated roots cannot inherit stale state", () => {
   const input = compilerFixture();
   const copy = `${input.root}-copy`;
@@ -151,7 +228,7 @@ test("compiler message server returns initialization errors and real diagnostics
   try {
     const request = compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent: number = false;");
     let response = next();
-    port1.postMessage({ kind: "check", request });
+    port1.postMessage({ kind: "check", requests: [request] });
     expect(await response).toEqual({ kind: "error", message: "Compiler worker not initialized" });
     response = next();
     port1.postMessage({ kind: "initialize", ...input, identity: sha256("wrong") });
@@ -160,12 +237,15 @@ test("compiler message server returns initialization errors and real diagnostics
     port1.postMessage({ kind: "initialize", ...input });
     expect(await response).toEqual({ kind: "ready" });
     response = next();
-    port1.postMessage({ kind: "check", request });
+    port1.postMessage({ kind: "check", requests: [request] });
     const checked = await response;
     if (checked.kind !== "checked") throw new Error("Missing compiler result");
-    expect(checked.proof.valid).toBe(false);
-    expect(checked.proof.diagnostics.some((error) => error.includes("not assignable"))).toBe(true);
-    expect(checked.proof.candidateId).toBe(request.candidateId);
+    expect(checked.proofs).toHaveLength(1);
+    const result = checked.proofs[0];
+    if (!result) throw new Error("Missing compiler proof");
+    expect(result.valid).toBe(false);
+    expect(result.diagnostics.some((error) => error.includes("not assignable"))).toBe(true);
+    expect(result.candidateId).toBe(request.candidateId);
   } finally {
     port1.close();
     port2.close();
