@@ -58,7 +58,7 @@ export function installProcessHooks(
     command: string[],
     env: NodeJS.ProcessEnv | undefined,
     cwd: string | undefined,
-  ) => { id: string; command: string[]; env: NodeJS.ProcessEnv },
+  ) => { id?: string; command: string[]; env: NodeJS.ProcessEnv },
   observe: (id: string, code: number | null, signal: string | null) => void,
   reject: (code: string, path: string, message: string) => never,
 ): void {
@@ -106,7 +106,8 @@ export function installProcessHooks(
     return child;
   }
 
-  function launch(run: () => Child, id: string): Child {
+  function launch(run: () => Child, id?: string): Child {
+    if (id === undefined) return run();
     let returned = false;
     insideNative = true;
     try {
@@ -129,12 +130,14 @@ export function installProcessHooks(
         env: wrapped.env,
       });
       returned = true;
-      observe(wrapped.id, result.status, result.signal);
-      if (result.error) failure(wrapped.id, result.error.message);
+      if (wrapped.id !== undefined) {
+        observe(wrapped.id, result.status, result.signal);
+        if (result.error) failure(wrapped.id, result.error.message);
+      }
       return result;
     } finally {
       insideNative = false;
-      if (!returned) failure(wrapped.id, "native synchronous launch threw");
+      if (!returned && wrapped.id !== undefined) failure(wrapped.id, "native synchronous launch threw");
     }
   }
 

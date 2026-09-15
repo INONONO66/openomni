@@ -4,13 +4,14 @@ import { parseArgs } from "node:util";
 import { digest, jsonChoice, jsonNumber, jsonObject } from "./quality-inventory";
 import { fingerprint, readDocument, recordObject } from "./quality-ci-input";
 import { normalizeTypes, normalizeCensus, mergeMeasurements, requireMeasurement, sameMembers } from "./quality-ci-receipt";
-import { readNativeCoverage } from "./quality-ci-coverage";
+import { readExactCoverage, readNativeCoverage } from "./quality-ci-coverage";
 import { joinBounds, measureStatic } from "./quality-ci-metrics";
 import { parseStatic } from "./quality-ci-legs";
 import { nativeJson } from "./quality-native-process";
 import { qualitySchemas } from "./quality-schema";
 import { baselineAt, carryUnmeasured, changedSources, ratchetMain } from "./quality-ratchet";
 import { qualityPlan } from "./quality-plan";
+import { collectExactCi } from "./quality-ci-exact";
 
 const legs = ["types", "publisher", "export", "store", "metrics"] as const;
 type Leg = typeof legs[number];
@@ -116,6 +117,10 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 	const root = resolve(values.root), contract = resolve(root, values.contract);
 	if (positionals[0] === "collect") {
 		requireMeasurement(Boolean(values.leg && values.output), "collect requires leg and output");
+		if (values.leg === "exact") {
+			requireMeasurement(Boolean(values.plan && values.run), "exact collect requires plan and run");
+			return (await phase("exact", () => collectExactCi({ root, contract, directory: resolve(root, values.output ?? ""), plan: values.plan ?? "", run: values.run ?? "" }))).result;
+		}
 		const leg = jsonChoice(values.leg, legs), directory = resolve(root, values.output ?? "");
 		const collected = await phase(leg, async () => {
 			const identity = fingerprint(root, contract);
@@ -145,11 +150,18 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 	const joined = await phase("join", () => {
 		const document = parseStatic(readDocument(resolve(legDirectory, "metrics.json")));
 		sameMembers(document.measured.map((row) => row.source.path), [...identity.paths.filter((path) => scope.paths.includes(path)), ...identity.embedded.filter((row) => scope.paths.includes(row.hostPath)).map((row) => row.path)]);
-		const metrics = joinBounds(document, { identity, lines: coverage.lines, selectedLanes });
+		const exact = readExactCoverage({
+			root, contract, directory: resolve(root, values["coverage-directory"] ?? ""),
+			plan: resolve(root, values.plan ?? ""), run: values.run ?? "",
+		}, identity, document.measured.map((row) => row.analysis.prepared));
+		const metrics = joinBounds(document, { identity, coverage: exact, selectedLanes });
 		mkdirSync(directory);
 		save(directory, "inventory", identity.inventory);
 		save(directory, "metrics", metrics);
-		save(directory, "coverage", { run: values.run, receipts: coverage.receipts });
+		save(directory, "coverage", {
+			run: values.run, receipts: coverage.receipts,
+			exact: { run: exact.run, receiptHash: exact.receiptHash, processes: exact.processes },
+		});
 		const measured = mergeMeasurements(
 			[...identity.paths, ...identity.schemaPaths],
 			[types, ...census, metrics.measurement],

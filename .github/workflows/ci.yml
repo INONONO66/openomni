@@ -536,6 +536,16 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ci-plan
+      - name: Collect exact original statement evidence
+        env:
+          QUALITY_RUN: ${{ github.run_id }}:${{ github.run_attempt }}:${{ github.sha }}
+        run: |
+          if bun run script/quality-measure.ts collect --root . --contract script/conformance/quality-contract.json --leg exact --plan ci-plan.json --run "$QUALITY_RUN" --output quality-receipts; then
+            :
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then exit "$status"; fi
+          fi
       - name: Fail-closed measured quality ratchet
         env:
           QUALITY_RUN: ${{ github.run_id }}:${{ github.run_attempt }}:${{ github.sha }}
@@ -550,6 +560,7 @@ jobs:
           path: |
             quality-results/
             quality-legs/
+            quality-receipts/
             ci-plan.json
           if-no-files-found: warn
           retention-days: 14

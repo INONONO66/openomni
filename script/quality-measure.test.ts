@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { measureMain } from "./quality-measure";
@@ -9,6 +9,8 @@ import { parseStatic } from "./quality-ci-legs";
 import { decodeJson, digest, InventoryError, jsonNumber, jsonObject } from "./quality-inventory";
 import { mergeMeasurements, normalizeCensus, normalizeTypes } from "./quality-ci-receipt";
 import { parseNativeLcov } from "./quality-native-lcov";
+import { collectExactFixture } from "./quality-coverage-fixture";
+import { readExactCoverage } from "./quality-ci-coverage";
 
 const legs = ["types", "publisher", "export", "store", "metrics"] as const;
 const finishFlags = ["legs", "base", "baseline", "plan", "run", "coverage-directory"];
@@ -94,10 +96,10 @@ test("metrics collect writes transferable static evidence without coverage and r
 		expect(Number.isSafeInteger(durationMs)).toBe(true);
 		expect(durationMs).toBeGreaterThanOrEqual(0);
 		const document = parseStatic(readDocument(join(root, "legs/metrics.json")));
-		const result = joinBounds(document, { identity, lines: new Map(), selectedLanes: ["script"] });
-		expect(result.records.find((row) => row.name === "answer")).toMatchObject({ cyclomatic: 2, crap: 6 });
-		expect(result.measurement.findings.some((row) => row.gate === "coverage")).toBe(true);
-		expect(joinBounds(document, { identity, lines: new Map(), selectedLanes: [] }).measurement.findings.some((row) => row.gate === "coverage")).toBe(false);
+		// Static collection remains independent, but cannot certify coverage/CRAP
+		// even when LCOV would project positive DA onto this unreachable return.
+		expect(() => joinBounds(document, { identity, selectedLanes: ["script"] })).toThrow("missing exact statement evidence");
+		expect(() => joinBounds(document, { identity, selectedLanes: [] })).toThrow("missing exact statement evidence");
 		await expect(measureMain(["collect", "--root", root, "--contract", "contract.json", "--leg", "metrics", "--output", "legs"])).rejects.toThrow();
 	} finally {
 		rmSync(root, { recursive: true, force: true });
@@ -184,18 +186,31 @@ test("native collectors transfer receipts and finish joins fresh coverage throug
 		const staticDocument = parseStatic(readDocument(join(root, "legs/metrics.json")));
 		const lcov = "SF:a.ts\nDA:2,1\nDA:3,0\nLF:2\nLH:1\nend_of_record\n";
 		const run = "fixture-run", files = parseNativeLcov(lcov, "script");
-		const lines = new Map(files.map((file) => [file.path, new Map(file.lines.map((row) => [row.line, row.hits]))]));
-		const metrics = joinBounds(staticDocument, { identity, lines, selectedLanes: ["script"] });
+		writeFileSync(join(root, "plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"], matrix: { include: [{ dir: "script", coverage: true }] } }));
+		const exactOptions = { root, contract: join(root, "contract.json"), directory: join(root, "coverage"), plan: join(root, "plan.json"), run };
+		collectExactFixture(exactOptions);
+		const exact = readExactCoverage(exactOptions, identity, staticDocument.measured.map((row) => row.analysis.prepared));
+		const metrics = joinBounds(staticDocument, { identity, coverage: exact, selectedLanes: ["script"] });
 		const native = (leg: string) => jsonObject(readDocument(join(root, "legs", `${leg}.json`))).document ?? null;
 		const current = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [
 			normalizeTypes(native("types"), identity),
 			...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement,
 		], metrics.executableLines);
 		writeFileSync(join(root, "baseline.json"), JSON.stringify(current));
-		writeFileSync(join(root, "plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"], matrix: { include: [{ dir: "script", coverage: true }] } }));
-		mkdirSync(join(root, "coverage"));
 		writeFileSync(join(root, "coverage/script.json"), JSON.stringify({ version: 1, complete: true, lane: "script", run, runtime: Bun.version, inventoryHash: identity.inventoryHash, lcovHash: digest(lcov), lcov, files }));
 		const args = ["finish", "--legs", "legs", "--base", "FETCH_HEAD", "--baseline", "baseline.json", "--plan", "plan.json", "--run", run, "--coverage-directory", "coverage"];
+		const artifacts = ["exact.inventory.json", "exact.plan.json", "exact.coverage.json", "exact.coverage.json.sha256"]
+			.map((name) => ({ path: join(root, "coverage", name), bytes: readFileSync(join(root, "coverage", name)) }));
+		// Reproduce CI's wholly absent producer, then reject each partial upload.
+		for (const absent of [artifacts, ...artifacts.map((artifact) => [artifact])]) {
+			for (const artifact of absent) rmSync(artifact.path);
+			await expect(measureMain([...args, "--root", root])).rejects.toMatchObject({ name: "InventoryError", code: "measurement" });
+			const missing = await childMain(root, args);
+			expect(missing.exitCode).not.toBe(0);
+			expect(missing.stdout).toBe("");
+			expect(existsSync(join(root, "quality-results"))).toBe(false);
+			for (const artifact of absent) writeFileSync(artifact.path, artifact.bytes);
+		}
 		const child = await childMain(root, args);
 		expect(child.exitCode).toBe(0);
 		expect(decodeJson(child.stdout)).toMatchObject({ complete: true, violations: 0 });
@@ -216,7 +231,7 @@ test("native collectors transfer receipts and finish joins fresh coverage throug
 			console.error = (line: string) => {
 				if (line.startsWith("[quality-phase] name=coverage ")) writeFileSync(join(root, "script/a.ts"), "export const changed = 1;\n");
 			};
-			await expect(measureMain([...args, "--root", root, "--output", "drift-results"])).rejects.toMatchObject({ name: "InventoryError", code: "measurement" });
+			await expect(measureMain([...args, "--root", root, "--output", "drift-results"])).rejects.toMatchObject({ name: "MetricsError", code: "tamper", path: "script/a.ts" });
 		} finally {
 			console.error = error;
 		}
@@ -241,12 +256,14 @@ test("finish preserves full-tier bytes and carries only hash-proven scoped debt"
     writeFileSync(join(root, "plan.json"), JSON.stringify(plan));
     const lcov = "SF:a.ts\nDA:2,1\nDA:3,0\nLF:2\nLH:1\nend_of_record\n";
     const files = parseNativeLcov(lcov, "script");
-    const lines = new Map(files.map((file) => [file.path, new Map(file.lines.map((row) => [row.line, row.hits]))]));
-    mkdirSync(join(root, "coverage"));
+    const exactOptions = { root, contract: join(root, "contract.json"), directory: join(root, "coverage"), plan: join(root, "plan.json"), run: "equivalent" };
+    collectExactFixture(exactOptions);
     writeFileSync(join(root, "coverage/script.json"), JSON.stringify({ version: 1, complete: true, lane: "script", run: "equivalent", runtime: Bun.version, inventoryHash: identity.inventoryHash, lcovHash: digest(lcov), lcov, files }));
     for (const leg of legs) expect(await measureMain(["collect", "--root", root, "--leg", leg, "--output", "legacy"])).toBe(0);
     const native = (leg: string) => jsonObject(readDocument(join(root, "legacy", `${leg}.json`))).document ?? null;
-    const metrics = joinBounds(parseStatic(readDocument(join(root, "legacy/metrics.json"))), { identity, lines, selectedLanes: ["script"] });
+    const document = parseStatic(readDocument(join(root, "legacy/metrics.json")));
+    const exact = readExactCoverage(exactOptions, identity, document.measured.map((row) => row.analysis.prepared));
+    const metrics = joinBounds(document, { identity, coverage: exact, selectedLanes: ["script"] });
     const before = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [normalizeTypes(native("types"), identity), ...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement], metrics.executableLines);
     const baseline = { ...before, sha256: Object.fromEntries(identity.inventory.files.map((row) => [row.path, row.sha256])) };
     writeFileSync(join(root, "baseline.json"), JSON.stringify(baseline));
@@ -264,6 +281,7 @@ test("finish preserves full-tier bytes and carries only hash-proven scoped debt"
     await expect(measureMain(finish("global", "missing-metrics"))).rejects.toMatchObject({ code: "measurement" });
     writeFileSync(join(root, "global/metrics.json"), JSON.stringify(completeMetrics));
     writeFileSync(join(root, "plan.json"), JSON.stringify({ ...plan, class: "desktop", qualityScope: ["script/a.ts"] }));
+    collectExactFixture(exactOptions);
     for (const leg of legs) expect(await measureMain(["collect", "--root", root, "--leg", leg, "--plan", "plan.json", "--output", "scoped"])).toBe(0);
     expect(await measureMain(finish("scoped", "carried"))).toBe(0);
     writeFileSync(join(root, "baseline.json"), JSON.stringify({ ...baseline, sha256: { ...baseline.sha256, "script/check-census.ts": "0".repeat(64) } }));

@@ -260,6 +260,12 @@ test("quality collectors run beside tests and join the required final gates", ()
   expect(jobs["quality-gates"].needs).toEqual(["plan", "prepare"]);
   expect(jobs.ci.needs).toContain("quality-static");
   expect(jobs.ci.needs).toContain("quality-gates");
+  const exact = jobs.quality.steps.find((step) => step.run?.includes("quality-measure.ts collect --root ."));
+  expect(exact?.run).toContain("--leg exact");
+  expect(exact?.run).toContain('--run "$QUALITY_RUN"');
+  expect(exact?.run).toContain("status=$?");
+  expect(exact?.run).toContain('[[ "$status" -ne 1 ]]');
+  expect(jobs.quality.steps.some((step) => step.run?.includes("quality-measure.ts finish"))).toBe(true);
 });
 
 test("quality gates leave repository-contract self-tests to scripts-contracts", () => {
