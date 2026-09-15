@@ -500,6 +500,29 @@ test("main runs a campaign in process and reports killed and noCoverage candidat
 	expect(results.some((row) => rows(row.receipts).length > 0)).toBe(true);
 }, 120000);
 
+test("in-process campaign records survived and infrastructure outcomes", async () => {
+	const survivor = await fixture("export const run = () => true;", 'expect(typeof run()).toBe("boolean");');
+	const survivorReport = reportResults(await runMain(
+		survivor,
+		process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3",
+		select("boolean-literal"),
+		1,
+	));
+	expect(survivorReport[0]?.outcome).toBe("survived");
+	expect(survivorReport[0]?.restored).toBe(true);
+
+	const crash = await fixture("export const run = () => true;", 'if (!run()) throw new Error("mutant");');
+	const crashReport = reportResults(await runMain(
+		crash,
+		process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3",
+		select("boolean-literal"),
+		2,
+	));
+	expect(crashReport[0]?.outcome).toBe("infrastructure");
+	expect(crashReport[0]?.reason).toBe("failure-without-complete-behavioral-assertions");
+	expect(crashReport[0]?.restored).toBe(true);
+}, 120000);
+
 test("campaign preserves compiler shutdown as infrastructure and restores source", async () => {
 	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
 	const check = MutationCompilerWorker.prototype.checkBatch;
