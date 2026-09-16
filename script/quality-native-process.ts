@@ -20,7 +20,8 @@ function structuredFailure(stdout: string): string | undefined {
 	return undefined;
 }
 export function nativeFailure(stdout: string, stderr: string): string {
-	return structuredFailure(stdout) ?? (stderr || stdout).slice(0, 4096);
+	const failure = structuredFailure(stdout) ?? (stderr || stdout);
+	return failure.slice(-2048);
 }
 /** Exit 1 is a complete measurement with findings, not infrastructure success. */
 export async function nativeJson(input: NativeInput) {

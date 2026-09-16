@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import { parentPort, Worker } from "node:worker_threads";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { diagnostics, executionTreeHash, inventoryCompilerOptions, pathIn, type MutationError, programs, sha256 } from "./quality-mutation-input";
 
@@ -187,48 +188,95 @@ export class FrozenMutationCompiler {
 type Initialize = { kind: "initialize"; root: string; contract: Contract; inventory: Inventory; identity: string };
 type Request = Initialize | { kind: "check"; requests: CompilerRequest[] };
 type Response = { kind: "ready" } | { kind: "checked"; proofs: CompilerProof[] } | { kind: "error"; message: string };
+type CompilerPort = {
+  on(event: "message", receive: (request: Request) => void): void;
+  postMessage(response: Response): void;
+};
+
+// Newline-delimited JSON framing shared by the client and the stdio child port.
+function frames(framing: { input: string }, chunk: string): string[] {
+  framing.input += chunk;
+  const lines = framing.input.split("\n");
+  framing.input = lines.pop() ?? "";
+  return lines;
+}
 
 // One sequential worker per campaign, not independent processes per mutant.
 // Worker errors/exits/timeouts permanently poison this client and are awaited
 // through terminate(), so no compiler can outlive execution-copy cleanup.
+export type CompilerProcessReceipt = {
+  pid: number;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+  cleanupExit: number | null;
+};
+
 export class MutationCompilerWorker {
   get identity(): string { return this.compilerIdentity; }
-  private readonly worker = new Worker(new URL(import.meta.url));
+  get processReceipt(): CompilerProcessReceipt | undefined { return this.receipt; }
+  private readonly child: ChildProcessWithoutNullStreams;
   private ready: Promise<Response> | undefined;
   private pending: { resolve: (response: Response) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
   private closing: Promise<number> | undefined;
+  private readonly exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+  private exitObserved = false;
+  private cleanupKillResult: number | null = null;
+  private receipt: CompilerProcessReceipt | undefined;
+  private readonly framing = { input: "" };
   closed = false;
 
-  constructor(private readonly root: string, private readonly contract: Contract, private readonly inventory: Inventory, private readonly compilerIdentity: string, private readonly timeout: number) {
-    this.worker.on("message", (response: Response) => {
-      if (response.kind === "error") { this.abort(new Error(response.message)); return; }
-      const pending = this.pending;
-      if (!pending) { this.abort(new Error("Unexpected compiler response")); return; }
-      this.pending = undefined;
-      clearTimeout(pending.timer);
-      pending.resolve(response);
+  constructor(
+    private readonly root: string,
+    private readonly contract: Contract,
+    private readonly inventory: Inventory,
+    private readonly compilerIdentity: string,
+    private readonly timeout: number,
+    onSpawn?: (child: ChildProcessWithoutNullStreams) => void,
+  ) {
+    this.child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--compiler-child"], { stdio: "pipe" });
+    onSpawn?.(this.child);
+    this.exited = new Promise((resolve) => this.child.once("exit", (code, signal) => resolve({ code, signal })));
+    this.child.stdout.setEncoding("utf8");
+    this.child.stderr.setEncoding("utf8");
+    this.child.stdout.on("data", (chunk: string) => {
+      for (const line of frames(this.framing, chunk)) {
+        try { this.receive(JSON.parse(line) as Response); } catch { this.abort(new Error("Malformed compiler response")); }
+      }
     });
-    this.worker.on("error", (error: Error) => this.abort(error));
-    this.worker.on("exit", (code: number) => this.abort(new Error(`Compiler worker exited: ${code}`)));
+    this.child.stderr.on("data", (chunk: string) => { this.stderr += chunk; });
+    this.child.on("error", (error) => this.abort(error));
+    this.child.on("exit", (code, signal) => {
+      this.exitObserved = true;
+      this.receipt = { pid: this.child.pid ?? 0, exitCode: code, signal, stderr: this.stderr, cleanupExit: this.receipt?.cleanupExit ?? this.cleanupKillResult };
+      if (!this.closed) this.abort(new Error(`Compiler worker exited: ${code ?? signal}`));
+    });
+  }
+  private stderr = "";
+  private receive(response: Response): void {
+    if (response.kind === "error") { this.abort(new Error(response.message)); return; }
+    const pending = this.pending;
+    if (!pending) { this.abort(new Error("Unexpected compiler response")); return; }
+    this.pending = undefined; clearTimeout(pending.timer); pending.resolve(response);
   }
 
   private send(request: Request): Promise<Response> {
-    if (this.closed || this.pending) return Promise.reject(new Error("Compiler worker unavailable"));
+    if (this.closed || this.pending || !this.child.stdin.writable) return Promise.reject(new Error("Compiler worker unavailable"));
     return new Promise((resolveResponse, reject) => {
       const timer = setTimeout(() => this.abort(new Error("Compiler worker timeout")), this.timeout);
       this.pending = { resolve: resolveResponse, reject, timer };
-      this.worker.postMessage(request);
+      this.child.stdin.write(`${JSON.stringify(request)}\n`);
     });
   }
 
   private abort(error: Error): void {
-    const pending = this.pending;
-    this.pending = undefined;
-    this.closed = true;
-    this.closing ??= this.worker.terminate();
-    if (pending) {
-      clearTimeout(pending.timer);
-      void this.closing.then(() => pending.reject(error), () => pending.reject(error));
+    const pending = this.pending; this.pending = undefined; this.closed = true;
+    if (pending) { clearTimeout(pending.timer); pending.reject(error); }
+    if (!this.closing) {
+      const killed = !this.exitObserved && this.child.kill("SIGKILL");
+      this.cleanupKillResult = killed ? 0 : 1;
+      if (this.receipt) this.receipt.cleanupExit = killed ? 0 : 1;
+      this.closing = this.exited.then(({ code }) => code ?? 1);
     }
   }
 
@@ -259,10 +307,7 @@ export class MutationCompilerWorker {
   }
 }
 
-export function serveCompiler(port: {
-  on(event: "message", receive: (request: Request) => void): void;
-  postMessage(response: Response): void;
-}): void {
+export function serveCompiler(port: CompilerPort): void {
   let compiler: FrozenMutationCompiler | undefined;
   async function receive(request: Request): Promise<Response> {
     if (request.kind === "initialize") {
@@ -279,4 +324,19 @@ export function serveCompiler(port: {
     );
   });
 }
-if (parentPort) serveCompiler(parentPort);
+export function stdioCompilerPort(stdin: NodeJS.ReadableStream, stdout: NodeJS.WritableStream): CompilerPort {
+  const framing = { input: "" };
+  const postMessage = (response: Response): void => { stdout.write(`${JSON.stringify(response)}\n`); };
+  return {
+    on(_event, receive) {
+      stdin.setEncoding("utf8");
+      stdin.on("data", (chunk: string) => {
+        for (const line of frames(framing, chunk)) {
+          try { receive(JSON.parse(line) as Request); } catch { postMessage({ kind: "error", message: "Malformed compiler request" }); }
+        }
+      });
+    },
+    postMessage,
+  };
+}
+if (process.argv.includes("--compiler-child")) serveCompiler(stdioCompilerPort(process.stdin, process.stdout));

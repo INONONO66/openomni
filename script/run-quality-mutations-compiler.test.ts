@@ -2,10 +2,28 @@ import { expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { PassThrough } from "node:stream";
 import { MessageChannel } from "node:worker_threads";
 import { buildInventory, readContract } from "./quality-inventory";
 import { programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
-import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler } from "./quality-mutation-compiler";
+import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler, stdioCompilerPort } from "./quality-mutation-compiler";
+
+type CompilerResponse = Parameters<Parameters<typeof serveCompiler>[0]["postMessage"]>[0];
+const parseResponse = (line: string): CompilerResponse => JSON.parse(line) as CompilerResponse;
+
+async function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timed out")), 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 test("fallback compiler ignores untyped JavaScript inventory sources", () => {
   const root = mkdtempSync(join(tmpdir(), "mutation-fallback-"));
@@ -198,6 +216,45 @@ test("compiler refuses wrong frozen/source identities and recreated roots cannot
   } finally { rmSync(input.root, { recursive: true, force: true }); rmSync(copy, { recursive: true, force: true }); }
 }, 120000);
 
+test("compiler worker closes after an unexpected child exit and preserves its receipt", async () => {
+  const input = compilerFixture();
+  let child: import("node:child_process").ChildProcessWithoutNullStreams | undefined;
+  const exited = Promise.withResolvers<[number | null, NodeJS.Signals | null]>();
+  const worker = new MutationCompilerWorker(
+    input.root,
+    input.contract,
+    input.inventory,
+    input.identity,
+    120000,
+    (spawned) => {
+      child = spawned;
+      spawned.once("exit", (code, signal) => exited.resolve([code, signal]));
+    },
+  );
+  try {
+    await worker.check(compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = false;"));
+    if (child === undefined) throw new Error("compiler child was not captured");
+    expect(child.kill("SIGKILL")).toBe(true);
+    expect(await bounded(exited.promise)).toEqual([null, "SIGKILL"]);
+    await bounded(worker.close());
+    const receipt = worker.processReceipt;
+    if (!receipt) throw new Error("missing compiler process receipt");
+    expect(receipt.pid).toBe(child.pid ?? -1);
+    expect(receipt.exitCode).toBe(null);
+    expect(receipt.signal).toBe("SIGKILL");
+    expect(receipt.cleanupExit).toBe(1);
+    expect(typeof receipt.stderr).toBe("string");
+    expect(child.exitCode).toBe(null);
+    expect(child.signalCode).toBe("SIGKILL");
+  } finally {
+    try {
+      await bounded(worker.close());
+    } finally {
+      rmSync(input.root, { recursive: true, force: true });
+    }
+  }
+}, 120000);
+
 test("compiler worker returns actual compiler proof and fails closed on initialization error and disposal", async () => {
   const input = compilerFixture();
   const worker = new MutationCompilerWorker(input.root, input.contract, input.inventory, input.identity, 120000);
@@ -211,6 +268,13 @@ test("compiler worker returns actual compiler proof and fails closed on initiali
     expect(result).not.toHaveProperty("argv");
     await worker.close();
     expect(worker.closed).toBe(true);
+    const receipt = worker.processReceipt;
+    if (!receipt) throw new Error("missing compiler process receipt");
+    expect(receipt.pid).toBeGreaterThan(0);
+    expect(receipt.exitCode).toBe(null);
+    expect(receipt.signal).toBe("SIGKILL");
+    expect(receipt.cleanupExit).toBe(0);
+    expect(receipt.stderr).toContain("compiler project");
     await expect(worker.check(request)).rejects.toThrow();
     const failed = new MutationCompilerWorker(input.root, input.contract, input.inventory, sha256("wrong"), 120000);
     try {
@@ -249,6 +313,52 @@ test("compiler message server returns initialization errors and real diagnostics
   } finally {
     port1.close();
     port2.close();
+    rmSync(input.root, { recursive: true, force: true });
+  }
+}, 120000);
+
+test("stdio compiler port frames split newline-delimited requests and rejects malformed lines", async () => {
+  const input = compilerFixture();
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const lines: string[] = [];
+  const waiters: Array<() => void> = [];
+  const framing = { input: "" };
+  stdout.setEncoding("utf8");
+  stdout.on("data", (chunk: string) => {
+    framing.input += chunk;
+    const parts = framing.input.split("\n");
+    framing.input = parts.pop() ?? "";
+    lines.push(...parts);
+    for (const wake of waiters.splice(0)) wake();
+  });
+  const until = (count: number): Promise<void> => bounded(new Promise<void>((resolveCount) => {
+    const check = (): void => {
+      if (lines.length >= count) resolveCount();
+      else waiters.push(check);
+    };
+    check();
+  }));
+  try {
+    serveCompiler(stdioCompilerPort(stdin, stdout));
+    stdin.write("{not json\n");
+    await until(1);
+    expect(parseResponse(lines[0] ?? "")).toEqual({ kind: "error", message: "Malformed compiler request" });
+    const request = compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = false;");
+    const initialize = JSON.stringify({ kind: "initialize", ...input });
+    stdin.write(initialize.slice(0, 16));
+    stdin.write(`${initialize.slice(16)}\n${JSON.stringify({ kind: "check", requests: [request] })}\n`);
+    await until(3);
+    expect(parseResponse(lines[1] ?? "")).toEqual({ kind: "ready" });
+    const checked = parseResponse(lines[2] ?? "");
+    if (checked.kind !== "checked") throw new Error("Missing compiler result");
+    expect(checked.proofs).toHaveLength(1);
+    expect(checked.proofs[0]?.candidateId).toBe(request.candidateId);
+    expect(checked.proofs[0]?.valid).toBe(true);
+    expect(framing.input).toBe("");
+  } finally {
+    stdin.end();
+    stdout.end();
     rmSync(input.root, { recursive: true, force: true });
   }
 }, 120000);
