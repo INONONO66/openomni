@@ -79,7 +79,19 @@ type Prepared = {
 	mapHash: string;
 	coverage: FileCoverageData;
 	mapped: FileCoverageData;
+	unmapped?: UnmappedCounter[];
+	transfer?: EmittedTransfer;
 	python?: { source: string; lines: number[]; arcs: Json };
+};
+type UnmappedCounter = {
+	kind: "statement" | "function" | "branch";
+	id: string;
+	start: Location;
+	end: Location;
+};
+type EmittedTransfer = {
+	signature: string;
+	slots: Record<string, string | null>;
 };
 type EmissionObservation = {
 	path: string; phase: "before" | "after"; kind: number; pos: number; end: number;
@@ -522,6 +534,8 @@ function mapCoverage(
 	sourceMap: string,
 	source: string,
 	path: string,
+	allowUnmapped = false,
+	unmapped: UnmappedCounter[] = [],
 ): FileCoverageData {
 	const map = object(decode(sourceMap));
 	if (
@@ -535,9 +549,9 @@ function mapCoverage(
 		fail("source_map", path, "original source identity differs");
 	const lines = source.split(/\r?\n/);
 	const traceMap = new sourceMapping.TraceMap(sourceMap);
-	function position(location: Location): Location {
+	function position(location: Location): Location | undefined {
 		if (!Number.isInteger(location.line) || !Number.isInteger(location.column))
-			return fail("source_map", path, "missing executable position");
+			return allowUnmapped ? undefined : fail("source_map", path, "missing executable position");
 		const p = sourceMapping.originalPositionFor(traceMap, location);
 		if (
 			p.source !== basename(path) ||
@@ -547,48 +561,57 @@ function mapCoverage(
 			p.line > lines.length ||
 			p.column > (lines[p.line - 1]?.length ?? 0)
 		)
-			return fail("source_map", path, "unmapped executable position");
+			return allowUnmapped ? undefined : fail("source_map", path, "unmapped executable position");
 		return { line: p.line, column: p.column };
 	}
-	function range(r: Range): Range {
+	function range(r: Range): Range | undefined {
 		const start = position(r.start);
 		const end = position(r.end);
+		if (!start || !end) return undefined;
 		if (start.line > end.line || (start.line === end.line && start.column > end.column))
 			fail("source_map", path, "reversed original range");
 		return { start, end };
 	}
 	const statementMap = Object.fromEntries(
-		Object.entries(raw.statementMap).map(([id, r]) => [id, range(r)]),
+		Object.entries(raw.statementMap).flatMap(([id, r]) => {
+			const mapped = range(r);
+			if (!mapped) unmapped.push({ kind: "statement", id, start: r.start, end: r.end });
+			return mapped ? [[id, mapped]] : [];
+		}),
 	);
 	const fnMap = Object.fromEntries(
-		Object.entries(raw.fnMap).map(([id, f]) => [
-			id,
-			{ name: f.name, decl: range(f.decl), loc: range(f.loc), line: position(f.loc.start).line },
-		]),
+		Object.entries(raw.fnMap).flatMap(([id, f]) => {
+			const decl = range(f.decl);
+			const loc = range(f.loc);
+			if (!decl || !loc) {
+				unmapped.push({ kind: "function", id, start: f.loc.start, end: f.loc.end });
+				return [];
+			}
+			return [[id, { name: f.name, decl, loc, line: loc.start.line }]];
+		}),
 	);
 	const branchMap = Object.fromEntries(
-		Object.entries(raw.branchMap).map(([id, b]) => [
-			id,
-			{
-				type: b.type,
-				loc: range(b.loc),
-				// Istanbul 6's implicit else is the one deliberately locationless arm.
-				// It belongs to the enclosing if, whose original range must still map.
-				locations: b.locations.map((r, index) =>
-					range(
-						b.type === "if" &&
-							index === 1 &&
-							r.start.line === undefined &&
-							r.start.column === undefined &&
-							r.end.line === undefined &&
-							r.end.column === undefined
-							? b.loc
-							: r,
-					),
-				),
-				line: position(b.loc.start).line,
-			},
-		]),
+		Object.entries(raw.branchMap).flatMap(([id, b]) => {
+			const loc = range(b.loc);
+			const locations = b.locations.flatMap((r, index) => {
+				const mapped = range(
+					b.type === "if" &&
+						index === 1 &&
+						r.start.line === undefined &&
+						r.start.column === undefined &&
+						r.end.line === undefined &&
+						r.end.column === undefined
+						? b.loc
+						: r,
+				);
+				return mapped ? [mapped] : [];
+			});
+			if (!loc || locations.length !== b.locations.length) {
+				unmapped.push({ kind: "branch", id, start: b.loc.start, end: b.loc.end });
+				return [];
+			}
+			return [[id, { type: b.type, loc, locations, line: loc.start.line }]];
+		}),
 	);
 	return {
 		path,
@@ -750,10 +773,19 @@ function prepare(e: Entry, root: string, embedded: Entry[]): Prepared {
 	return instrumentOutput(e, source, output.outputText, output.sourceMapText);
 }
 
-function instrumentOutput(e: Entry, source: string, javascript: string, sourceMap: string): Prepared {
+function instrumentOutput(
+	e: Entry,
+	source: string,
+	javascript: string,
+	sourceMap: string,
+	allowUnmapped = false,
+): Prepared {
 	const instrumenter: {
 		instrumentSync(code: string, path: string): string;
-		lastFileCoverage(): FileCoverageData;
+		lastFileCoverage(): FileCoverageData & {
+			readonly hash?: string;
+			readonly _coverageSchema?: string;
+		};
 	} = instrument.createInstrumenter({
 		coverageVariable: "__d945Coverage",
 		coverageGlobalScope: "globalThis",
@@ -764,11 +796,62 @@ function instrumentOutput(e: Entry, source: string, javascript: string, sourceMa
 		produceSourceMap: false,
 		ignoreClassMethods: [],
 	});
-	const code = instrumenter.instrumentSync(
+	let code = instrumenter.instrumentSync(
 		javascript.replace(/\/\/# sourceMappingURL=.*$/m, ""),
 		e.path,
 	);
 	const raw = instrumenter.lastFileCoverage();
+	let injectedId: string | undefined;
+	let coverageFunction: string | undefined;
+	if (allowUnmapped && e.path === "packages/protocol/src/error/index.ts") {
+		// This transfer is a proof for one inspected lowering, not a general
+		// class-field heuristic. A new source or emit needs a new proof.
+		if (sha256(source) !== "c03959dee663c141cf5c5aad8717d0d5d6e3d39f821bd7b102fed89ad2dd0eac" ||
+			sha256(javascript) !== "651f266300f7177f597ba6e245b67ff6cde55479c660e90fe2b4182b08d1602a")
+			fail("source_map", e.path, "NamedError transfer identity differs");
+		const target = /\b[A-Za-z_$][\w$]*\.Schema\s*=\s*schema\b/.exec(code);
+		const originalTarget = /\b[A-Za-z_$][\w$]*\.Schema\s*=\s*schema\b/.exec(javascript);
+		coverageFunction = /function (cov_[A-Za-z0-9_$]+)\(\)/.exec(code)?.[1];
+		if (!target || !originalTarget || !coverageFunction)
+			fail("emitted_source", e.path, "NamedError Schema probe anchor is missing");
+		const id = String(Math.max(-1, ...Object.keys(raw.s).map(Number)) + 1);
+		injectedId = id;
+		code = `${code.slice(0, target.index)}${coverageFunction}().s[${id}]++, ${code.slice(target.index)}`;
+		const before = javascript.slice(0, originalTarget.index);
+		const line = before.split(/\r?\n/).length;
+		const column = before.length - (before.lastIndexOf("\n") + 1);
+		raw.s[id] = 0;
+		raw.statementMap[id] = {
+			start: { line, column },
+			end: { line, column: column + originalTarget[0].length },
+		};
+	}
+	if (coverageFunction && injectedId !== undefined) {
+		const runtimeCoverage = JSON.stringify({
+			path: raw.path,
+			statementMap: raw.statementMap,
+			fnMap: raw.fnMap,
+			branchMap: raw.branchMap,
+			s: raw.s,
+			f: raw.f,
+			b: raw.b,
+			hash: raw.hash,
+			_coverageSchema: raw._coverageSchema,
+		});
+		const sourceFile = ts.createSourceFile("instrumented.js", code, ts.ScriptTarget.Latest, true);
+		let initializer: ts.Expression | undefined;
+		function find(node: ts.Node): void {
+			if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "coverageData") {
+				if (initializer) fail("source_map", e.path, "multiple Istanbul coverageData initializers");
+				initializer = node.initializer;
+			}
+			ts.forEachChild(node, find);
+		}
+		find(sourceFile);
+		if (!initializer) fail("source_map", e.path, "missing Istanbul coverageData initializer");
+		const start = initializer.getStart(sourceFile);
+		code = `${code.slice(0, start)}${runtimeCoverage}${code.slice(initializer.end)}`;
+	}
 	const coverage: FileCoverageData = {
 		path: raw.path,
 		statementMap: raw.statementMap,
@@ -778,13 +861,17 @@ function instrumentOutput(e: Entry, source: string, javascript: string, sourceMa
 		f: raw.f,
 		b: raw.b,
 	};
-	const mapped = mapCoverage(coverage, sourceMap, source, e.path);
+	const unmapped: UnmappedCounter[] = [];
+	const mapped = mapCoverage(coverage, sourceMap, source, e.path, allowUnmapped, unmapped);
+	if (injectedId !== undefined)
+		unmapped.splice(0, unmapped.length, ...unmapped.filter((counter) => counter.id !== injectedId));
 	return {
 		entry: e,
 		code,
 		mapHash: sha256(JSON.stringify({ coverage, mapped, sourceMap, code })),
 		coverage,
 		mapped,
+		...(unmapped.length ? { unmapped } : {}),
 	};
 }
 
@@ -884,7 +971,6 @@ function inputs(options: Options): Inputs {
 			fail("plan", file.entry.path, "operational CLI entry missing");
 	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, faults, selected, projects: contract.projects, configurations };
 }
-
 // Only the declared compiler can prove a generated module. Programs are lazy:
 // unrelated build outputs never enter ownership or change its denominator.
 const emitPrograms = new WeakMap<Inputs, Map<string, {
@@ -985,15 +1071,26 @@ function verifiedEmission(data: Inputs, path: string): { file: Prepared; proof: 
 		// original owner still requires a complete, ordered statement/function/
 		// branch bijection; helper-producing lowering is not guessed or dropped.
 		const normalizedMap = JSON.stringify({ ...map, sources: [basename(sourcePath)], sourcesContent: [source] });
-		const file = instrumentOutput(original.entry, source, javascript, normalizedMap);
-		if (signature(file.mapped) !== signature(original.mapped))
-			fail("source_map", path, "emitted executable map differs from original owner; unsupported lowering");
+		const file = instrumentOutput(original.entry, source, javascript, normalizedMap, true);
+		const transfer = sourcePath === "packages/protocol/src/error/index.ts"
+			? namedErrorTransfer(original.mapped, file, path, source, javascript, observations.filter((row) => row.path === path))
+			: (() => {
+				if (signature(file.mapped) !== signature(original.mapped))
+					fail("source_map", path, "emitted executable map differs from original owner; unsupported lowering");
+				return identityTransfer(original.coverage, file);
+			})();
+		file.transfer = transfer;
 		const javascriptObservations = observations.filter((row) => row.path === path);
 		if (!javascriptObservations.length || javascriptObservations.some((row) => row.offset < 0))
 			fail("emitted_source", path, "emitter observation lacks final JavaScript offsets");
 		return { file, proof: {
 			path, source: sourcePath, project, sha256: sha256(javascript), mapSha256: sha256(sourceMap),
-			mapHash: sha256(JSON.stringify({ compiler: compiler.identity, map: file.mapHash, original: original.mapHash })),
+			mapHash: sha256(JSON.stringify({
+				compiler: compiler.identity,
+				map: file.mapHash,
+				original: original.mapHash,
+				transfer: file.transfer,
+			})),
 			observationSha256: sha256(JSON.stringify(javascriptObservations)),
 			observationCount: javascriptObservations.length,
 			syntheticCount: javascriptObservations.filter((row) => row.pos < 0).length,
@@ -1019,6 +1116,89 @@ function signature(data: FileCoverageData): string {
 		fnMap: data.fnMap,
 		branchMap: data.branchMap,
 	});
+}
+function identityTransfer(original: FileCoverageData, emitted: Prepared): EmittedTransfer {
+	return {
+		signature: signature(emitted.coverage),
+		slots: Object.fromEntries(counterSlots(original).map(({ label }) => [label, label])),
+	};
+}
+function namedErrorTransfer(
+	original: FileCoverageData,
+	emitted: Prepared,
+	path: string,
+	source: string,
+	javascript: string,
+	observations: EmissionObservation[],
+): EmittedTransfer {
+	if (
+		Object.keys(original.s).length !== 24 ||
+		Object.keys(original.f).length !== 6 ||
+		Object.keys(original.b).length !== 6 ||
+		Object.keys(emitted.coverage.s).length !== 28 ||
+		Object.keys(emitted.coverage.f).length !== 7 ||
+		Object.keys(emitted.coverage.b).length !== 10
+	)
+		fail("source_map", path, "NamedError counter cardinality differs from pinned transfer");
+	const unmapped = (emitted.unmapped ?? []).map((counter) => `${counter.kind}:${counter.id}`).sort();
+	if (JSON.stringify(unmapped) !== JSON.stringify([
+		"branch:0", "branch:1", "branch:2", "branch:3",
+		"function:0", "statement:0", "statement:1", "statement:2", "statement:3",
+		"statement:8",
+	]))
+		fail("source_map", path, `NamedError helper partition differs from pinned transfer: ${JSON.stringify(unmapped)}`);
+	const statements = [
+		[0, 4], [1, 5], [2, 6], [3, 7], [4, 8], [5, 27], [6, 12],
+		[7, 9], [8, 10], [9, 11], [10, 13], [11, 14], [12, 15], [13, 16],
+		[14, 17], [15, 18], [16, 19], [17, 20], [18, 21], [19, 22], [20, 23],
+		[21, 24], [22, 25], [23, 26],
+	].map(([canonical, emittedId]) => [`s:${emittedId}`, `s:${canonical}`]);
+	const functions = Object.keys(original.f).map((id) => [`f:${Number(id) + 1}`, `f:${id}`]);
+	const branches = Object.entries(original.b).flatMap(([id, counts]) => {
+		const lowered = emitted.coverage.branchMap[String(Number(id) + 4)];
+		if (!lowered || lowered.type !== original.branchMap[id]?.type || lowered.locations.length !== counts.length)
+			fail("source_map", path, `NamedError branch shape differs: ${id}`);
+		return counts.map((_, index) => [`b:${Number(id) + 4}:${index}`, `b:${id}:${index}`]);
+	});
+	const slots: EmittedTransfer["slots"] = Object.fromEntries([...statements, ...functions, ...branches]);
+	for (const { label } of counterSlots(emitted.coverage)) {
+		if (/^(s:[0-3]|f:0|b:[0-3]:\d+)$/.test(label)) {
+			if (Object.hasOwn(slots, label)) fail("source_map", path, "NamedError helper counter received source ownership");
+			slots[label] = null;
+		}
+	}
+	const emittedLabels = counterSlots(emitted.coverage).map(({ label }) => label).sort();
+	const canonicalLabels = counterSlots(original).map(({ label }) => label).sort();
+	if (JSON.stringify(Object.keys(slots).sort()) !== JSON.stringify(emittedLabels) ||
+		JSON.stringify(Object.values(slots).filter((label) => label !== null).sort()) !== JSON.stringify(canonicalLabels))
+		fail("source_map", path, "NamedError transfer is not a complete counter bijection");
+	const canonicalSchema = original.statementMap["5"];
+	if (!canonicalSchema ||
+		JSON.stringify(canonicalSchema) !== JSON.stringify({
+			start: { line: 37, column: 38 },
+			end: { line: 37, column: 44 },
+		}))
+		fail("source_map", path, `NamedError canonical Schema obligation changed: ${JSON.stringify(canonicalSchema)}`);
+	const schemaFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+	let schemaNode: ts.PropertyDeclaration | undefined;
+	function findSchema(node: ts.Node): void {
+		if (ts.isPropertyDeclaration(node) && node.name.getText(schemaFile) === "Schema")
+			schemaNode = schemaNode ? fail("source_map", path, "multiple NamedError Schema declarations") : node;
+		ts.forEachChild(node, findSchema);
+	}
+	findSchema(schemaFile);
+	const generatedSchemaOffset = javascript.indexOf("_a.Schema = schema");
+	const schema = schemaNode ?? fail("source_map", path, "missing NamedError Schema declaration");
+	const schemaAnchors = observations.filter((row) =>
+		row.originalPos === schema.pos &&
+		row.originalEnd === schema.end &&
+		row.kind === ts.SyntaxKind.BinaryExpression);
+	if (schemaAnchors.length !== 2 ||
+		Math.max(...schemaAnchors.map((row) => row.offset)) < generatedSchemaOffset ||
+		Math.min(...schemaAnchors.map((row) => row.offset)) > generatedSchemaOffset ||
+		javascript.slice(Math.min(...schemaAnchors.map((row) => row.offset)), Math.max(...schemaAnchors.map((row) => row.offset))).trim() !== "_a.Schema = schema")
+		fail("emitted_source", path, `NamedError Schema observer anchor is missing or moved: generated=${generatedSchemaOffset} candidates=${JSON.stringify(schemaAnchors.map((row) => ({ kind: row.kind, offset: row.offset })))}`);
+	return { signature: signature(emitted.coverage), slots };
 }
 function checkedCoverage(value: Json, expected: Prepared): FileCoverageData {
 	const v = object(value);
@@ -1384,13 +1564,13 @@ function optionsFrom(value: Json): Options {
 
 function counterSlots(
 	coverage: FileCoverageData,
-): { counts: Counts | number[]; key: string; slot: number }[] {
+): { counts: Counts | number[]; key: string; slot: number; label: string }[] {
 	let slot = 0;
 	return [
-		...Object.keys(coverage.s).map((key) => ({ counts: coverage.s, key, slot: slot++ })),
-		...Object.keys(coverage.f).map((key) => ({ counts: coverage.f, key, slot: slot++ })),
-		...Object.values(coverage.b).flatMap((counts) =>
-			Object.keys(counts).map((key) => ({ counts, key, slot: slot++ })),
+		...Object.keys(coverage.s).map((key) => ({ counts: coverage.s, key, slot: slot++, label: `s:${key}` })),
+		...Object.keys(coverage.f).map((key) => ({ counts: coverage.f, key, slot: slot++, label: `f:${key}` })),
+		...Object.entries(coverage.b).flatMap(([id, counts]) =>
+			Object.keys(counts).map((key) => ({ counts, key, slot: slot++, label: `b:${id}:${key}` })),
 		),
 	];
 }
@@ -1401,7 +1581,7 @@ function observe(directory: string, id: string, exitCode: number | null, signal:
 	});
 }
 
-function processCounters(directory: string, id: string, files: Prepared[], emittedMaps: Map<string, string[]>): void {
+function processCounters(directory: string, id: string, files: Prepared[], emittedMaps: Map<string, EmittedTransfer[]>): void {
 	const offsets = new Map<string, number>();
 	let size = 0;
 	for (const file of files) {
@@ -1423,19 +1603,30 @@ function processCounters(directory: string, id: string, files: Prepared[], emitt
 			enumerable: true,
 			get: () => loaded.get(file.entry.path),
 			set: (value: FileCoverageData) => {
-				if (signature(value) !== signature(file.coverage) && !emittedMaps.get(file.entry.path)?.includes(signature(value)))
+				const transfer = emittedMaps.get(file.entry.path)?.find((candidate) => candidate.signature === signature(value));
+				if (signature(value) !== signature(file.coverage) && !transfer)
 					fail("source_map", file.entry.path, "instrumented code changed its map");
-				for (const { counts, key, slot } of counterSlots(value)) {
-					const offset = (offsets.get(file.entry.path) ?? 0) + slot;
+				const canonical = new Map(counterSlots(file.coverage).map((slot) => [slot.label, slot.slot]));
+				for (const { counts, key, label } of counterSlots(value)) {
+					const target = transfer ? transfer.slots[label] : label;
+					if (target === undefined) fail("source_map", file.entry.path, `unowned emitted counter: ${label}`);
+					const slot = target === null ? undefined :
+						canonical.get(target) ?? fail("source_map", file.entry.path, `missing canonical counter: ${target}`);
+					let ignored = 0;
+					const position = slot === undefined ? undefined : (offsets.get(file.entry.path) ?? 0) + slot;
 					Object.defineProperty(counts, key, {
 						enumerable: true,
 						configurable: false,
-						get: () => counters[offset],
+						get: () => position === undefined ? ignored : counters[position],
 						set: (n: number) => {
-							counters[offset] = integer(n);
+							if (position === undefined) {
+								ignored = integer(n);
+								return;
+							}
+							counters[position] = integer(n);
 							if (!isBun) {
 								slotBytes.writeDoubleLE(n);
-								if (writeSync(fd, slotBytes, 0, 8, offset * 8) !== 8)
+								if (writeSync(fd, slotBytes, 0, 8, position * 8) !== 8)
 									fail("incomplete_coverage", file.entry.path, "short persistent counter write");
 							}
 						},
@@ -1514,7 +1705,7 @@ function preload(directory: string): void {
 	writeFileSync(startPath, JSON.stringify({ id, parent, pid: process.pid, runtime, entry: text(request.entry), ...(data.selected && parent === "" ? { cwd } : {}) }), { flag: "wx" });
 	writeFileSync(join(directory, `${id}.children.json`), "[]", { flag: "wx" });
 	writeFileSync(join(directory, `${id}.loaded.json`), "[]", { flag: "wx" });
-	const emittedMaps = new Map<string, string[]>();
+	const emittedMaps = new Map<string, EmittedTransfer[]>();
 	const emissions = new Map<string, EmissionProof>();
 	processCounters(directory, id, data.files, emittedMaps);
 	function loadedCode(absolute: string): string | undefined {
@@ -1527,7 +1718,8 @@ function preload(directory: string): void {
 		}
 		if (data.roots.some((r) => path.startsWith(`${r}/`)) && !path.split("/").includes("node_modules")) {
 			const emitted = verifiedEmission(data, path);
-			emittedMaps.set(emitted.proof.source, [...(emittedMaps.get(emitted.proof.source) ?? []), signature(emitted.file.coverage)]);
+			if (!emitted.file.transfer) fail("source_map", path, "emitted transfer proof is missing");
+			emittedMaps.set(emitted.proof.source, [...(emittedMaps.get(emitted.proof.source) ?? []), emitted.file.transfer]);
 			emissions.set(path, emitted.proof);
 			writeFileSync(join(directory, `${id}.emitted.json`), JSON.stringify([...emissions.values()]));
 			return emitted.file.code;
@@ -1786,12 +1978,13 @@ async function collectCommand(data: Inputs, directory: string, command: Command)
 	observe(directory, id, child.signalCode ? null : exitCode, signalName(child.signalCode));
 	const out = await stdout;
 	const err = await stderr;
-	if (child.signalCode || exitCode !== command.expectedExitCode)
+	if (child.signalCode || exitCode !== command.expectedExitCode) {
 		fail(
 			"execution",
 			command.id,
 			`exit ${exitCode}; stdout=${out.slice(-2000)} stderr=${err.slice(-4000)}`,
 		);
+	}
 	if (command.kind === "test" && !/[1-9]\d* pass/.test(err))
 		fail("execution", command.id, "no successful test selection");
 	return { id: command.id, process: id, exitCode };

@@ -174,6 +174,71 @@ function findings(result: { [key: string]: Json }): { [key: string]: Json }[] {
 	return list(result.findings).map(obj);
 }
 
+test.each(["original", "changed-source", "changed-emit"] as const)("NamedError exact transfer preserves Schema independence or refuses changed identity: %s", (mode) => {
+	const sourcePath = "packages/protocol/src/error/index.ts";
+	const original = readFileSync(join(import.meta.dir, "..", sourcePath), "utf8");
+	const source = mode === "changed-source" ? original.replace('this.name = "NamedError";', 'this.name = "ChangedErr";') : original;
+	const f = fixture({
+		[sourcePath]: source,
+		"script/subject.ts": `import assert from "node:assert/strict";
+import { z } from "zod";
+import { NamedError } from "../packages/protocol/dist/error/index.js";
+const schema = z.object({ message: z.string() });
+const Example = NamedError.create("Example", schema);
+assert.equal(Example.Schema.shape.data, schema);
+assert.equal(new Example({ message: "ok" }).message, "ok");
+const nativeDefine = Object.defineProperty;
+const failure = new Error("stop before Schema");
+Object.defineProperty = function (target, key, descriptor) {
+  if (typeof target === "function" && key === "name") throw failure;
+  return nativeDefine(target, key, descriptor);
+};
+try { assert.throws(() => NamedError.create("Rejected", schema), (error) => error === failure); }
+finally { Object.defineProperty = nativeDefine; }
+`,
+	}, cli("script/subject.ts"));
+	try {
+		mkdirSync(join(f.root, "node_modules"), { recursive: true });
+		symlinkSync(dirname(require.resolve("zod/package.json")), join(f.root, "node_modules/zod"));
+		const project = "packages/protocol/tsconfig.json";
+		f.put(project, JSON.stringify({
+			compilerOptions: { target: "ES2020", module: "ESNext", moduleResolution: "Bundler", sourceMap: true, rootDir: "src", outDir: "dist", ...(mode === "changed-emit" ? { removeComments: true } : {}) },
+			include: ["src"],
+		}));
+		const config = ts.getParsedCommandLineOfConfigFile(join(f.root, project), {}, {
+			...ts.sys, onUnRecoverableConfigFileDiagnostic: () => { throw new FixtureError("invalid NamedError project"); },
+		});
+		if (!config) throw new FixtureError("missing NamedError project");
+		const built = ts.createProgram(config.fileNames, config.options).emit();
+		expect(built.emitSkipped).toBe(false);
+		expect(built.diagnostics).toHaveLength(0);
+		const contract = { version: 1, typescript: "5.9.2", roots: ["packages", "script"], projects: [project, "script/tsconfig.json"], topology: false };
+		refreeze(f, "contract", contract);
+		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+		inventory.contractHash = sha256(JSON.stringify(contract));
+		inventory.configurations = contract.projects.map((path) => ({ path, sha256: sha256(readFileSync(join(f.root, path))) }));
+		refreeze(f, "inventory", inventory);
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		if (mode !== "original") {
+			expect(run.exit).toBe(2);
+			expect(run.result.complete).toBe(false);
+			expect(str(obj(list(run.result.errors)[0]).message)).toContain("NamedError transfer identity differs");
+			return;
+		}
+		expect(run.result.errors).toBeUndefined();
+		expect(run.result.complete).toBe(true);
+		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
+		const root = list(receipt.processes).map(obj).find((row) => row.parent === "");
+		const coverage = obj(obj(obj(root).coverage)[sourcePath]);
+		const statements = obj(coverage.s);
+		expect(Object.keys(statements)).toHaveLength(24);
+		expect(Object.keys(obj(coverage.f))).toHaveLength(6);
+		expect(Object.values(obj(coverage.b)).flatMap(list)).toHaveLength(14);
+		expect(statements["4"]).toBe(3);
+		expect(statements["5"]).toBe(2);
+	} finally { f.cleanup(); }
+}, 120_000);
+
 test("exact collector permits only canonical git and kill utilities without process receipts", () => {
 	const source = `import { spawnSync } from "node:child_process";
 const git = Bun.spawnSync(["git", "--version"], { stdout: "pipe", stderr: "pipe" });
