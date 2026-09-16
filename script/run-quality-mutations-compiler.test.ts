@@ -7,6 +7,20 @@ import { buildInventory, readContract } from "./quality-inventory";
 import { programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
 import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler } from "./quality-mutation-compiler";
 
+async function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timed out")), 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 test("fallback compiler ignores untyped JavaScript inventory sources", () => {
   const root = mkdtempSync(join(tmpdir(), "mutation-fallback-"));
   try {
@@ -196,6 +210,45 @@ test("compiler refuses wrong frozen/source identities and recreated roots cannot
       rmSync(copy, { recursive: true, force: true });
     }
   } finally { rmSync(input.root, { recursive: true, force: true }); rmSync(copy, { recursive: true, force: true }); }
+}, 120000);
+
+test("compiler worker closes after an unexpected child exit and preserves its receipt", async () => {
+  const input = compilerFixture();
+  let child: import("node:child_process").ChildProcessWithoutNullStreams | undefined;
+  const exited = Promise.withResolvers<[number | null, NodeJS.Signals | null]>();
+  const worker = new MutationCompilerWorker(
+    input.root,
+    input.contract,
+    input.inventory,
+    input.identity,
+    120000,
+    (spawned) => {
+      child = spawned;
+      spawned.once("exit", (code, signal) => exited.resolve([code, signal]));
+    },
+  );
+  try {
+    await worker.check(compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = false;"));
+    if (child === undefined) throw new Error("compiler child was not captured");
+    expect(child.kill("SIGKILL")).toBe(true);
+    expect(await bounded(exited.promise)).toEqual([null, "SIGKILL"]);
+    await bounded(worker.close());
+    expect(worker.processReceipt).toMatchObject({
+      pid: expect.any(Number),
+      exitCode: null,
+      signal: "SIGKILL",
+      cleanupExit: 1,
+      stderr: expect.any(String),
+    });
+    expect(child.exitCode).toBe(null);
+    expect(child.signalCode).toBe("SIGKILL");
+  } finally {
+    try {
+      await bounded(worker.close());
+    } finally {
+      rmSync(input.root, { recursive: true, force: true });
+    }
+  }
 }, 120000);
 
 test("compiler worker returns actual compiler proof and fails closed on initialization error and disposal", async () => {
