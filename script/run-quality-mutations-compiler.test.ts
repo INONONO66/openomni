@@ -211,6 +211,10 @@ test("compiler worker returns actual compiler proof and fails closed on initiali
     expect(result).not.toHaveProperty("argv");
     await worker.close();
     expect(worker.closed).toBe(true);
+    expect(worker.processReceipt).toMatchObject({
+      pid: expect.any(Number), exitCode: null, signal: "SIGKILL", cleanupExit: 0,
+    });
+    expect(worker.processReceipt?.stderr).toContain("compiler project");
     await expect(worker.check(request)).rejects.toThrow();
     const failed = new MutationCompilerWorker(input.root, input.contract, input.inventory, sha256("wrong"), 120000);
     try {
