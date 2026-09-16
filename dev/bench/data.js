@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789509715799,
+  "lastUpdate": 1789580496406,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -71007,6 +71007,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 928718,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1e9280ebf6991d627768924b62d8edbd032d5173",
+          "message": "fix(quality): collect compiler worker process receipts (#1085)\n\n* fix(quality): collect compiler worker process receipts\n\n* fix(quality): settle compiler worker cleanup on exit\n\n* fix(quality): accept Bun 1.4.x versions in compiler mutation check\n\n* fix(quality): cover the stdio compiler child port and keep the pinned Bun contract\n\nExtract the newline-delimited JSON framing into one shared helper and expose\nstdioCompilerPort so the --compiler-child transport is exercised in-process\nwith PassThrough streams (malformed line, split initialize frame, real check).\nReceipt assertions use typed fields instead of expect.any literals. The Bun\nversion guard in run-quality-mutations.ts is restored to the pinned\n1.3.6/1.4.1 contract; the rebase-time 1.4.x widening was not authorized.",
+          "timestamp": "2026-09-17T02:39:43+09:00",
+          "tree_id": "ac68b329ac97afd8303f5ac4fa516f4d9690188f",
+          "url": "https://github.com/INONONO66/openomni/commit/1e9280ebf6991d627768924b62d8edbd032d5173"
+        },
+        "date": 1789580495069,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 946,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 766,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 695005,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 172023,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 3677806,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 77,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 565,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 253197,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1767,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100758,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 508535,
             "unit": "ns/op"
           }
         ]
