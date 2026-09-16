@@ -188,6 +188,18 @@ export class FrozenMutationCompiler {
 type Initialize = { kind: "initialize"; root: string; contract: Contract; inventory: Inventory; identity: string };
 type Request = Initialize | { kind: "check"; requests: CompilerRequest[] };
 type Response = { kind: "ready" } | { kind: "checked"; proofs: CompilerProof[] } | { kind: "error"; message: string };
+type CompilerPort = {
+  on(event: "message", receive: (request: Request) => void): void;
+  postMessage(response: Response): void;
+};
+
+// Newline-delimited JSON framing shared by the client and the stdio child port.
+function frames(framing: { input: string }, chunk: string): string[] {
+  framing.input += chunk;
+  const lines = framing.input.split("\n");
+  framing.input = lines.pop() ?? "";
+  return lines;
+}
 
 // One sequential worker per campaign, not independent processes per mutant.
 // Worker errors/exits/timeouts permanently poison this client and are awaited
@@ -211,7 +223,7 @@ export class MutationCompilerWorker {
   private exitObserved = false;
   private cleanupKillResult: number | null = null;
   private receipt: CompilerProcessReceipt | undefined;
-  private input = "";
+  private readonly framing = { input: "" };
   closed = false;
 
   constructor(
@@ -228,11 +240,7 @@ export class MutationCompilerWorker {
     this.child.stdout.setEncoding("utf8");
     this.child.stderr.setEncoding("utf8");
     this.child.stdout.on("data", (chunk: string) => {
-      this.input += chunk;
-      while (true) {
-        const end = this.input.indexOf("\n");
-        if (end < 0) break;
-        const line = this.input.slice(0, end); this.input = this.input.slice(end + 1);
+      for (const line of frames(this.framing, chunk)) {
         try { this.receive(JSON.parse(line) as Response); } catch { this.abort(new Error("Malformed compiler response")); }
       }
     });
@@ -299,10 +307,7 @@ export class MutationCompilerWorker {
   }
 }
 
-export function serveCompiler(port: {
-  on(event: "message", receive: (request: Request) => void): void;
-  postMessage(response: Response): void;
-}): void {
+export function serveCompiler(port: CompilerPort): void {
   let compiler: FrozenMutationCompiler | undefined;
   async function receive(request: Request): Promise<Response> {
     if (request.kind === "initialize") {
@@ -319,24 +324,19 @@ export function serveCompiler(port: {
     );
   });
 }
-if (process.argv.includes("--compiler-child")) {
-  let buffer = "";
-  const port = {
-    on(event: "message", receive: (request: Request) => void): void {
-      if (event !== "message") return;
-      process.stdin.setEncoding("utf8");
-      process.stdin.on("data", (chunk: string) => {
-        buffer += chunk;
-        while (true) {
-          const end = buffer.indexOf("\n");
-          if (end < 0) break;
-          const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
-          try { receive(JSON.parse(line) as Request); }
-          catch (error) { port.postMessage({ kind: "error", message: error instanceof Error ? error.message : "Malformed compiler request" }); }
+export function stdioCompilerPort(stdin: NodeJS.ReadableStream, stdout: NodeJS.WritableStream): CompilerPort {
+  const framing = { input: "" };
+  const postMessage = (response: Response): void => { stdout.write(`${JSON.stringify(response)}\n`); };
+  return {
+    on(_event, receive) {
+      stdin.setEncoding("utf8");
+      stdin.on("data", (chunk: string) => {
+        for (const line of frames(framing, chunk)) {
+          try { receive(JSON.parse(line) as Request); } catch { postMessage({ kind: "error", message: "Malformed compiler request" }); }
         }
       });
     },
-    postMessage(response: Response): void { process.stdout.write(`${JSON.stringify(response)}\n`); },
+    postMessage,
   };
-  serveCompiler(port);
 }
+if (process.argv.includes("--compiler-child")) serveCompiler(stdioCompilerPort(process.stdin, process.stdout));

@@ -1942,10 +1942,10 @@ export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> 
 	return dispatch(argv).catch(reportFailure);
 }
 async function dispatch(argv: string[]): Promise<number> {
-	if ((!Bun.version.startsWith("1.3.6") && !Bun.version.startsWith("1.4.")) || ts.version !== "5.9.2")
+	if (!["1.3.6", "1.4.1"].includes(Bun.version) || ts.version !== "5.9.2")
 		return fail(
 			"toolVersion",
-			"Requires Bun 1.3.6 or 1.4.x and TypeScript 5.9.2",
+			"Requires Bun 1.3.6 (or explicit current compatibility 1.4.1) and TypeScript 5.9.2",
 	);
 	const values = argumentsMap(argv);
 	if (values.has("--typecheck-root")) return typecheckRoot(values);
