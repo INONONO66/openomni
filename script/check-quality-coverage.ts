@@ -19,7 +19,8 @@ import {
 import { tmpdir, constants as osConstants } from "node:os";
 import nativeProcesses from "node:child_process";
 import * as nodeModules from "node:module";
-import { installProcessHooks } from "./quality-coverage/node";
+import * as workerThreads from "node:worker_threads";
+import { installProcessHooks, installWorkerHooks } from "./quality-coverage/node";
 const analyzerNative: {
 	spawnSync(binary: string, args: string[], options: { input?: string; encoding: "utf8"; timeout: number }): {
 		status: number | null; stdout: string; stderr: string; signal: string | null;
@@ -452,8 +453,36 @@ function syntax(source: string, path: string): void {
 			// Dynamic module specifiers are resolved by the actual runtime loader;
 			// its onLoad/registerHooks boundary checks the frozen source identity.
 		}
-		if (ts.isNewExpression(node) && ["Function", "Worker"].includes(node.expression.getText(sf)))
-			fail("unsupported_syntax", path, "untracked execution context");
+		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Function")
+			fail("unsupported_syntax", path, "dynamic executable source");
+		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Worker") {
+			const argument = node.arguments?.[0];
+			const urlArguments = argument && ts.isNewExpression(argument) ? argument.arguments ?? [] : [];
+			const importMetaUrl = (value: ts.Node | undefined): boolean =>
+				value !== undefined &&
+				ts.isPropertyAccessExpression(value) &&
+				value.name.text === "url" &&
+				ts.isMetaProperty(value.expression) &&
+				value.expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
+				value.expression.name.text === "meta";
+			const firstTarget = urlArguments[0];
+			const baseTarget = urlArguments[1];
+			const validTarget = urlArguments.length === 1
+				? importMetaUrl(firstTarget)
+				: urlArguments.length === 2 &&
+					firstTarget !== undefined &&
+					ts.isStringLiteral(firstTarget) &&
+					importMetaUrl(baseTarget);
+			if (
+				!node.arguments ||
+				(node.arguments.length !== 1 && node.arguments.length !== 2) ||
+				!argument ||
+				!ts.isNewExpression(argument) ||
+				argument.expression.getText(sf) !== "URL" ||
+				!validTarget
+			)
+				fail("unsupported_process", path, "worker target is not a frozen file URL");
+		}
 		const moduleArgument =
 			ts.isStringLiteral(node) &&
 			ts.isCallExpression(node.parent) &&
@@ -464,7 +493,7 @@ function syntax(source: string, path: string): void {
 			(ts.isImportDeclaration(node.parent) ||
 				ts.isExportDeclaration(node.parent) ||
 				moduleArgument) &&
-			/^(node:)?(worker_threads|cluster|vm)$/.test(node.text)
+			/^(node:)?(cluster|vm)$/.test(node.text)
 		)
 			fail(
 				"unsupported_process",
@@ -1552,6 +1581,59 @@ function preload(directory: string): void {
 		return launch;
 	}
 	installProcessHooks(child, (childId, code, signal) => observe(directory, childId, code, signal), fail);
+	installWorkerHooks(
+		(filename, options) => {
+			if (options?.env === workerThreads.SHARE_ENV)
+				fail("unsupported_process", id, "worker SHARE_ENV is not observable");
+			if (options?.eval === true)
+				fail("unsupported_process", id, "worker eval is not observable");
+			const target = typeof filename === "string" ? pathToFileURL(resolve(process.cwd(), filename)) : filename;
+			if (target.protocol !== "file:") fail("unsupported_process", id, "worker target must be a file URL");
+			const targetPath = relative(data.options.root, fileURLToPath(target));
+			const entry = data.files.find((file) => file.entry.path === targetPath) ??
+				fail("unsupported_process", targetPath, "worker target is absent from frozen language inventory");
+			const childId = randomUUID();
+			const runtime = typeof Bun === "undefined" ? "node" : "bun";
+			const version = runtime === "node" ? `v${process.versions.node}` : Bun.version;
+			writeFileSync(join(directory, `${childId}.request.json`), JSON.stringify({
+				parent: id, command: text(request.command), runtime, entry: entry.entry.path, args: [],
+				binary: process.execPath, version, sha256: sha256(readFileSync(process.execPath)),
+			}), { flag: "wx" });
+			children.push(childId);
+			writeFileSync(join(directory, `${id}.children.json`), JSON.stringify(children));
+			const environment = {
+				...(options?.env === undefined ? process.env : options.env),
+				D945_DIRECTORY: directory, D945_PROCESS: childId, D945_PARENT: id,
+				D945_ASSET_DIRECTORY: asset(""), D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
+				...(data.selected ? { D945_SOURCE_ROOT: data.options.root } : {}),
+			};
+			const baseOptions = options ?? {};
+			if (runtime === "node") {
+				const inherited = options?.execArgv ?? process.execArgv;
+				const execArgv: string[] = [];
+				for (let index = 0; index < inherited.length; index++) {
+					const value = inherited[index];
+					const next = inherited[index + 1];
+					if (value === "--import" && next?.endsWith("preload.mjs")) {
+						index++;
+						continue;
+					}
+					if (value?.endsWith("preload.mjs")) continue;
+					if (value !== undefined) execArgv.push(value);
+				}
+				return {
+					id: childId,
+					filename: target,
+					options: { ...baseOptions, env: environment, execArgv: [...execArgv, "--import", pathToFileURL(join(directory, "preload.mjs")).href] },
+				};
+			}
+			const bootstrap = join(directory, `${childId}.worker.mjs`);
+			writeFileSync(bootstrap, `import ${JSON.stringify(pathToFileURL(join(directory, "preload.js")).href)};\nawait import(${JSON.stringify(target.href)});\n`, { flag: "wx" });
+			return { id: childId, filename: bootstrap, options: { ...baseOptions, env: environment } };
+		},
+		(childId, code) => observe(directory, childId, code, null),
+		fail,
+	);
 	if (runtime === "node") return;
 	// Interposition consumes only argv/environment. Native stdio, IPC payloads,
 	// callbacks and return values pass through untouched; they are not analyzer data.
@@ -1775,6 +1857,7 @@ async function collect(data: Inputs): Promise<Json> {
 		for (const file of readdirSync(directory).filter((p) => p.endsWith(".start.json"))) {
 			if (!existsSync(join(directory, file.replace(".start.json", ".observed.json")))) {
 				const start = object(decode(readFileSync(join(directory, file), "utf8")));
+				if (text(start.parent) !== "") continue;
 				try {
 					process.kill(integer(start.pid), "SIGKILL");
 				} catch {

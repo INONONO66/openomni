@@ -116,6 +116,60 @@ function collected(sources: Record<string, string> = fixtures, plan = defaultPla
 	const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 	return { ...f, ...run };
 }
+test("exact collector observes an inventoried worker as a child execution context", () => {
+	const f = fixture({
+		"script/shared.ts": "export const shared = 1;\n",
+		"script/worker.ts": 'import { shared } from "./shared"; export const ready = shared;\n',
+		"script/subject.ts": 'import { shared } from "./shared"; import { Worker } from "node:worker_threads"; void shared; const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("exit", () => resolve()));\n',
+		"script/subject.test.ts": 'import { test } from "bun:test"; import "./subject"; test("worker", () => {});\n',
+	}, [{ id: "tests", kind: "test", paths: ["script/subject.test.ts"], args: [], expectedExitCode: 0 }]);
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
+		expect(run.exit).toBe(0);
+		const processes = list(receipt.processes).map(obj);
+		expect(processes).toHaveLength(2);
+		const root = processes.find((process) => str(process.parent) === "");
+		const worker = processes.find((process) => str(process.parent) !== "");
+		if (!root || !worker) throw new FixtureError("missing worker receipt");
+		expect(str(worker.parent)).toBe(str(root.id));
+		expect(worker.pid).toBe(root.pid);
+		expect(list(worker.loaded).map(str)).toContain("script/shared.ts");
+		expect(list(root.loaded).map(str)).toContain("script/shared.ts");
+	} finally { f.cleanup(); }
+}, 120_000);
+test("exact collector observes a Node worker with inherited preload identity", () => {
+	const f = fixture({
+		"script/shared.ts": "export const shared = 1;\n",
+		"script/worker.ts": 'import { shared } from "./shared"; export const ready = shared;\n',
+		"script/subject.ts": 'import { shared } from "./shared"; import { Worker } from "node:worker_threads"; void shared; const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("exit", () => resolve()));\n',
+	}, cli("script/subject.ts", "node"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		expect(run.exit).toBe(0);
+		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
+		const processes = list(receipt.processes).map(obj);
+		expect(processes).toHaveLength(2);
+		const root = processes.find((process) => str(process.parent) === "");
+		const worker = processes.find((process) => str(process.parent) !== "");
+		if (!root || !worker) throw new FixtureError("missing Node worker receipt");
+		expect(str(worker.parent)).toBe(str(root.id));
+		expect(worker.runtime).toBe("node");
+		expect(worker.pid).toBe(root.pid);
+		expect(list(worker.loaded).map(str)).toContain("script/worker.ts");
+	} finally { f.cleanup(); }
+}, 120_000);
+test("exact collector rejects a worker with an unapproved nonzero exit", () => {
+	const f = fixture({
+		"script/worker.ts": 'throw new Error("worker failure");\n',
+		"script/subject.ts": 'import { Worker } from "node:worker_threads"; const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("error", () => resolve()));\n',
+	}, cli("script/subject.ts", "node"));
+	try {
+		const run = f.run(["--collect"]);
+		expect(run.exit).toBe(2);
+		expect(JSON.stringify(run.result)).toContain("worker failure");
+	} finally { f.cleanup(); }
+}, 120_000);
 function findings(result: { [key: string]: Json }): { [key: string]: Json }[] {
 	return list(result.findings).map(obj);
 }
