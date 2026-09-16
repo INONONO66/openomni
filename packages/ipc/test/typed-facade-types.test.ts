@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { Ipc } from "@openomni/protocol";
 import type { z } from "zod";
 import { connectIpcClient, createIpcServer, typedCall } from "../src/index";
@@ -10,27 +11,11 @@ const fixtureConfig = fileURLToPath(
 );
 
 test("typed facade rejects schema-invalid calls while generic calls remain valid", () => {
-  const result = Bun.spawnSync(
-    [
-      process.execPath,
-      fileURLToPath(import.meta.resolve("typescript/bin/tsc")),
-      "--noEmit",
-      "-p",
-      fixtureConfig,
-    ],
-    {
-      timeout: 10_000,
-      killSignal: "SIGKILL",
-      stdin: "ignore",
-      stderr: "pipe",
-      stdout: "pipe",
-    },
-  );
-
-  if (result.exitCode !== 0) {
-    const output = `${result.stdout.toString()}${result.stderr.toString()}`;
-    throw new Error(`typed facade compile fixture failed:\n${output}`);
-  }
+  const config = ts.readConfigFile(fixtureConfig, ts.sys.readFile);
+  if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, fileURLToPath(new URL("./typed-facade-fixtures", import.meta.url)));
+  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  expect(ts.getPreEmitDiagnostics(program)).toHaveLength(0);
 }, 15_000);
 
 test("typed facade round-trips a known method through the public transport barrel", async () => {
