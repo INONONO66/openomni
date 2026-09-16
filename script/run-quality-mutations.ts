@@ -1855,6 +1855,7 @@ async function campaign(options: Options): Promise<number> {
 				signal: batch.process.signal,
 				timedOut: batch.process.timedOut,
 				failureIdentities: batch.assertions,
+				stdoutTail: batch.failures || batch.process.exitCode !== 0 ? batch.process.stdout.slice(-8192) : "",
 				stderrTail: batch.failures || batch.process.exitCode !== 0 ? batch.process.stderr.slice(-8192) : "",
 				junitSha256: sha256(batch.junit),
 			})),
