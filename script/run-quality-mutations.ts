@@ -112,6 +112,7 @@ type Options = {
 	suiteTimeout: number;
 	budget: number;
 	pilot: boolean;
+	failureOutput: string;
 };
 
 let setupProcessFailure: ProcessReceipt | null = null;
@@ -1099,8 +1100,14 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		rmSync(markers, { recursive: true, force: true });
 		mkdirSync(markers);
 		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout);
-		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0)
+		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0) {
+			const assertions = receipt.assertions.length ? receipt.assertions.join(", ") : "<none>";
+			const stderr = receipt.batches.map((batch) => batch.process.stderr).join("\n").slice(-2048);
+			console.error(`[mutation] reach test not green: ${test} assertions: ${assertions}\n${stderr}`);
+			if (options.failureOutput)
+				writeFileSync(options.failureOutput, JSON.stringify({ version: 1, test, receipt }), { flag: "w" });
 			throw new MutationError("reachMap", `Reach test is not green: ${test}`, { test, receipt });
+		}
 		runs.push({ test, receipt });
 		recordReach(map, candidates, owners, markers, test);
 	}
@@ -1503,6 +1510,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		"suite-timeout",
 		"budget",
 		"pilot",
+		"failure-output",
 	];
 	for (const [key, entries] of values)
 		if (
@@ -1540,6 +1548,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		timeout: bound("timeout", 15000, 15000),
 		suiteTimeout: bound("suite-timeout", 15000, 3600000),
 		budget: bound("budget", 3600000, 604800000),
+		failureOutput: values.get("--failure-output")?.[0] ?? "",
 		pilot: ["--pilot", "--limit", "--test", "--target", "--operator"].some((key) =>
 			values.has(key),
 		),

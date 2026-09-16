@@ -161,6 +161,8 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "3600000",
       ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
       ...(values.target ? ["--target", values.target] : []),
+      "--failure-output",
+      resolve(directory, "reach-failure.json"),
     ],
   });
   writeFileSync(resolve(directory, "native.json"), JSON.stringify(result), { flag: "wx" });
