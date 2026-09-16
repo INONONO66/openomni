@@ -273,7 +273,10 @@ test("durable filesystem discovery and Python operations use real files and rows
     "package.json",
     JSON.stringify({ name: "fixture", scripts: { start: "python3 src/main.py" } }),
   );
-  const executed = Bun.spawnSync(["python3", join(python.root, "src/main.py")], { timeout: 5000 });
+	const executed = Bun.spawnSync(
+		[process.env.D945_PYTHON ?? "python3", join(python.root, "src/main.py")],
+		{ timeout: 5000 },
+	);
   expect(executed.exitCode).toBe(0);
   expect(executed.stdout.toString().trim()).toBe("1");
   const result = python.run("store", python.schema());
