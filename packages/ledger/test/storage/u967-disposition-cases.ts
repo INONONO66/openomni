@@ -121,12 +121,7 @@ describe("967 WAL rollback crash and resumability", () => {
       }
       expect(signal).toContain('"boundary":"locked"');
       const writer = Bun.spawnSync(
-        [
-          process.execPath,
-          "-e",
-          'import {Database} from "bun:sqlite"; using db=new Database(process.argv[1]); db.run("PRAGMA busy_timeout=0"); db.run("BEGIN IMMEDIATE"); db.run("ROLLBACK");',
-          fixture.path,
-        ],
+        [process.execPath, resolve(import.meta.dir, "../helpers/disposition-967-contender.ts"), fixture.path],
         { stdout: "pipe", stderr: "pipe", timeout: 5_000 },
       );
       expect(writer.exitCode).toBe(1);

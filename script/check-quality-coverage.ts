@@ -139,6 +139,9 @@ type Inputs = {
 	projects: string[];
 	configurations: { path: string; sha256: string }[];
 };
+// The instrumented processes only consume the prepared inventory; commands and
+// fault contracts stay with the collector.
+type PreloadInputs = Pick<Inputs, "options" | "entries" | "files" | "roots" | "selected" | "projects" | "configurations">;
 type ProcessReceipt = {
 	id: string;
 	parent: string;
@@ -651,28 +654,38 @@ function embeddedSource(e: Entry, root: string): string {
 	if (matches.length !== 1) fail("inventory", e.path, "virtual source binding is not unique");
 	return matches[0] ?? fail("inventory", e.path, "missing virtual source");
 }
-function coverageSchema(value: Json): FileCoverageData {
+// Istanbul records the implicit else of an `if` as an empty location. The raw
+// map keeps it, and istanbul's key order, so the runtime signature stays
+// byte-identical; mapped coverage admits neither.
+const implicitLocation: Location = Object.freeze({}) as Location;
+function location(value: Json | undefined, raw = false): Location {
+	const p = object(value);
+	if (raw && Object.keys(p).length === 0) return implicitLocation;
+	object(p, ["line", "column"]);
+	const line = integer(p.line);
+	if (line < 1) fail("source_map", "", "line is not positive");
+	return { line, column: integer(p.column) };
+}
+function range(value: Json | undefined, raw = false): Range {
+	const r = object(value, ["start", "end"]);
+	return { start: location(r.start, raw), end: location(r.end, raw) };
+}
+function coverageSchema(value: Json, raw = false): FileCoverageData {
 	const v = object(value, ["path", "statementMap", "fnMap", "branchMap", "s", "f", "b"]);
-	function location(value: Json | undefined): Location {
-		const p = object(value, ["line", "column"]);
-		const line = integer(p.line);
-		if (line < 1) fail("source_map", "", "line is not positive");
-		return { line, column: integer(p.column) };
-	}
-	function range(value: Json | undefined): Range {
-		const r = object(value, ["start", "end"]);
-		return { start: location(r.start), end: location(r.end) };
-	}
 	return {
 		path: pathValue(v.path),
-		statementMap: Object.fromEntries(Object.entries(object(v.statementMap)).map(([id, r]) => [id, range(r)])),
+		statementMap: Object.fromEntries(Object.entries(object(v.statementMap)).map(([id, r]) => [id, range(r, raw)])),
 		fnMap: Object.fromEntries(Object.entries(object(v.fnMap)).map(([id, item]) => {
 			const f = object(item, ["name", "decl", "loc", "line"]);
-			return [id, { name: text(f.name), decl: range(f.decl), loc: range(f.loc), line: integer(f.line) }];
+			return [id, { name: text(f.name), decl: range(f.decl, raw), loc: range(f.loc, raw), line: integer(f.line) }];
 		})),
 		branchMap: Object.fromEntries(Object.entries(object(v.branchMap)).map(([id, item]) => {
 			const b = object(item, ["type", "loc", "locations", "line"]);
-			return [id, { type: text(b.type), loc: range(b.loc), locations: array(b.locations).map(range), line: integer(b.line) }];
+			const type = text(b.type);
+			const loc = range(b.loc, raw);
+			const locations = array(b.locations).map((item) => range(item, raw));
+			const line = integer(b.line);
+			return [id, raw ? { loc, type, locations, line } : { type, loc, locations, line }];
 		})),
 		s: counter(v.s), f: counter(v.f),
 		b: Object.fromEntries(Object.entries(object(v.b)).map(([id, n]) => [id, array(n).map(integer)])),
@@ -971,14 +984,65 @@ function inputs(options: Options): Inputs {
 			fail("plan", file.entry.path, "operational CLI entry missing");
 	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, faults, selected, projects: contract.projects, configurations };
 }
+// The collector prepares the inventory once and every instrumented process reads
+// the same snapshot: re-instrumenting the repository per spawned child made one
+// workspace suite exceed hosted-runner deadlines. Loaded sources are still hashed
+// against the frozen entries at load time.
+function preparedFrom(value: Json): Prepared {
+	const v = object(value);
+	const transfer = v.transfer === undefined ? undefined : object(v.transfer, ["signature", "slots"]);
+	const python = v.python === undefined ? undefined : object(v.python, ["source", "lines", "arcs"]);
+	return {
+		entry: entry(object(v.entry)),
+		code: text(v.code),
+		mapHash: hash(v.mapHash),
+		coverage: coverageSchema(object(v.coverage), python === undefined),
+		mapped: coverageSchema(object(v.mapped)),
+		...(v.unmapped === undefined ? {} : {
+			unmapped: array(v.unmapped).map((item) => {
+				const u = object(item, ["kind", "id", "start", "end"]);
+				const kind = text(u.kind);
+				if (kind !== "statement" && kind !== "function" && kind !== "branch") return fail("schema", "", "invalid enum");
+				return { kind, id: text(u.id), start: location(u.start), end: location(u.end) };
+			}),
+		}),
+		...(transfer ? {
+			transfer: {
+				signature: text(transfer.signature),
+				slots: Object.fromEntries(Object.entries(object(transfer.slots)).map(([label, slot]) => [label, slot === null ? null : text(slot)])),
+			},
+		} : {}),
+		...(python ? { python: { source: text(python.source), lines: array(python.lines).map(integer), arcs: python.arcs ?? null } } : {}),
+	};
+}
+function preloadInputsFrom(value: Json): PreloadInputs {
+	const v = object(value, ["options", "entries", "files", "roots", "selected", "projects", "configurations"]);
+	if (typeof v.selected !== "boolean") fail("schema", "", "expected boolean");
+	return {
+		options: optionsFrom(object(v.options)),
+		entries: array(v.entries).map(entry),
+		files: array(v.files).map(preparedFrom),
+		roots: array(v.roots).map(text),
+		selected: v.selected === true,
+		projects: array(v.projects).map(text),
+		configurations: array(v.configurations).map((item) => {
+			const c = object(item, ["path", "sha256"]);
+			return { path: pathValue(c.path), sha256: hash(c.sha256) };
+		}),
+	};
+}
+function preloadInputs(data: Inputs): PreloadInputs {
+	const { options, entries, files, roots, selected, projects, configurations } = data;
+	return { options, entries, files, roots, selected, projects, configurations };
+}
 // Only the declared compiler can prove a generated module. Programs are lazy:
 // unrelated build outputs never enter ownership or change its denominator.
-const emitPrograms = new WeakMap<Inputs, Map<string, {
+const emitPrograms = new WeakMap<PreloadInputs, Map<string, {
 	program: ts.Program;
 	identity: string;
 	capture<T>(rows: EmissionObservation[], action: () => T): T;
 }>>();
-function emittedProgram(data: Inputs, project: string, parsed: ts.ParsedCommandLine) {
+function emittedProgram(data: PreloadInputs, project: string, parsed: ts.ParsedCommandLine) {
 	let programs = emitPrograms.get(data);
 	if (!programs) { programs = new Map(); emitPrograms.set(data, programs); }
 	const cached = programs.get(project);
@@ -1019,7 +1083,7 @@ function emittedProgram(data: Inputs, project: string, parsed: ts.ParsedCommandL
 	programs.set(project, result);
 	return result;
 }
-function verifiedEmission(data: Inputs, path: string): { file: Prepared; proof: EmissionProof } {
+function verifiedEmission(data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
 	pathValue(path);
 	if (!/\.[cm]?js$/.test(path) || !existsSync(join(data.options.root, `${path}.map`)))
 		return fail("identity", path, "loaded source absent from frozen inventory and verified compiler output");
@@ -1693,7 +1757,8 @@ function collectedProcess(directory: string, id: string, data: Inputs): Json {
 // The preload is built outside the owned tree so the gate's actual CLI source
 // remains instrumentable. Bun.spawn is interposed before owned code imports it.
 function preload(directory: string): void {
-	const data = inputs(optionsFrom(decode(readFileSync(join(directory, "options.json"), "utf8"))));
+	if (ts.version !== "5.9.2") fail("toolchain", "", "TypeScript must be 5.9.2");
+	const data = preloadInputsFrom(decode(readFileSync(join(directory, "inputs.json"), "utf8")));
 	const id = process.env.D945_PROCESS ?? fail("process", "", "missing process identity");
 	const parent = process.env.D945_PARENT ?? "";
 	const children: string[] = [];
@@ -1888,7 +1953,7 @@ function utilityPath(executable: string, binary: string): string | undefined {
 	if (canonical !== expected) fail("unsupported_process", executable, `utility executable must resolve to ${expected}`);
 	return binary;
 }
-function launchEntry(data: Inputs, argv: string[], runtime: string, executable: string, cwd: string) {
+function launchEntry(data: PreloadInputs, argv: string[], runtime: string, executable: string, cwd: string) {
 	let entry: Prepared | undefined;
 	let args: string[] = [];
 	if (runtime === "python" && argv.includes("-c")) {
@@ -1924,7 +1989,7 @@ function runtimeVersion(binary: string, runtime: string, executable: string): st
 	return actual;
 }
 
-function launchCommand(data: Inputs, directory: string, id: string, parent: string, commandId: string,
+function launchCommand(data: PreloadInputs, directory: string, id: string, parent: string, commandId: string,
 	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { id?: string; command: string[]; env: NodeJS.ProcessEnv } {
 	const executable = command[0] ?? fail("process", "", "empty executable");
 	const binary = binaryPath(executable, environment, cwd);
@@ -1954,6 +2019,9 @@ function commandTestPaths(data: Inputs, command: Command): string[] {
 	const cwd = resolve(data.options.root, command.cwd ?? ".");
 	return command.paths.map((path) => `./${relative(cwd, resolve(data.options.root, path))}`);
 }
+// Hang guard for one instrumented command, not a performance budget: instrumented
+// workspace suites (ledger) exceed two minutes on hosted runners; the job timeout owns the total.
+const COMMAND_DEADLINE_MS = 600_000;
 async function collectCommand(data: Inputs, directory: string, command: Command): Promise<Json> {
 	const id = randomUUID();
 	const cwd = resolve(data.options.root, command.cwd ?? ".");
@@ -1972,17 +2040,22 @@ async function collectCommand(data: Inputs, directory: string, command: Command)
 	});
 	const stdout = new Response(child.stdout).text();
 	const stderr = new Response(child.stderr).text();
-	const timeout = setTimeout(() => child.kill("SIGKILL"), 120_000);
+	let deadline = false;
+	const timeout = setTimeout(() => {
+		deadline = true;
+		child.kill("SIGKILL");
+	}, COMMAND_DEADLINE_MS);
 	const exitCode = await child.exited;
 	clearTimeout(timeout);
 	observe(directory, id, child.signalCode ? null : exitCode, signalName(child.signalCode));
 	const out = await stdout;
 	const err = await stderr;
-	if (child.signalCode || exitCode !== command.expectedExitCode) {
+	if (deadline || child.signalCode || exitCode !== command.expectedExitCode) {
+		const outcome = deadline ? `killed at the ${COMMAND_DEADLINE_MS}ms command deadline` : `exit ${exitCode}`;
 		fail(
 			"execution",
 			command.id,
-			`exit ${exitCode}; stdout=${out.slice(-2000)} stderr=${err.slice(-4000)}`,
+			`${outcome}; stdout=${out.slice(-2000)} stderr=${err.slice(-4000)}`,
 		);
 	}
 	if (command.kind === "test" && !/[1-9]\d* pass/.test(err))
@@ -1994,7 +2067,7 @@ async function collect(data: Inputs): Promise<Json> {
 	if (!["1.3.6", "1.4.1"].includes(Bun.version)) fail("toolchain", "", "unsupported Bun version");
 	const directory = realpathSync(mkdtempSync(join(tmpdir(), "openomni-d945-coverage-")));
 	try {
-		writeFileSync(join(directory, "options.json"), JSON.stringify(data.options));
+		writeFileSync(join(directory, "inputs.json"), JSON.stringify(preloadInputs(data)));
 		const build = await Bun.build({
 			entrypoints: [import.meta.path],
 			outdir: directory,
