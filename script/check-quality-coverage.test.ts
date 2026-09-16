@@ -254,6 +254,83 @@ if (git.exitCode !== 0 || kill.status !== 0) process.exit(7);
 	} finally { f.cleanup(); }
 }, 120_000);
 
+test("exact collector permits canonical system shells and POSIX utilities without receipts", () => {
+	const source = `import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+const sh = Bun.spawnSync(["/bin/sh", "-c", "printf ok"], { stdout: "pipe", stderr: "pipe" });
+const bash = Bun.spawnSync(["/bin/bash", "-c", "exit 0"], { stdout: "pipe", stderr: "pipe" });
+const fifo = spawnSync("mkfifo", [join(mkdtempSync(join(tmpdir(), "d945-fifo-")), "pipe")], { stdio: "ignore" });
+const ps = Bun.spawnSync(["ps", "-p", String(process.pid), "-o", "stat="], { stdout: "pipe", stderr: "pipe" });
+const tar = Bun.spawnSync(["tar", "--version"], { stdout: "pipe", stderr: "pipe" });
+if (sh.stdout.toString() !== "ok" || bash.exitCode !== 0 || fifo.status !== 0 || ps.exitCode !== 0 || tar.exitCode !== 0) process.exit(7);
+`;
+	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(run.result.complete).toBe(true);
+		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("exact collector runs an owned runtime entry outside the frozen root natively, without credit or receipt", () => {
+	const source = `import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+const outside = mkdtempSync(join(tmpdir(), "d945-outside-"));
+writeFileSync(join(outside, "copy.ts"), "process.exit(Number(process.argv[2]));\\n");
+const external = Bun.spawnSync([process.execPath, "copy.ts", "0"], { cwd: outside, stdout: "pipe", stderr: "pipe" });
+if (external.exitCode !== 0) process.exit(7);
+if (process.argv[2] === "inside") {
+	writeFileSync("script/unlisted.ts", "process.exit(0);\\n");
+	if (Bun.spawnSync([process.execPath, "script/unlisted.ts"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(8);
+}
+`;
+	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(run.result.complete).toBe(true);
+		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
+	} finally { f.cleanup(); }
+	const inside = fixture({ "script/utility.ts": source }, [{ id: "cli", kind: "cli", paths: ["script/utility.ts"], args: ["inside"], expectedExitCode: 0, runtime: "bun" }]);
+	try {
+		const run = inside.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		expect(run.exit).toBe(2);
+		expect(JSON.stringify(run.result)).toContain("entry/source is absent from frozen language inventory");
+	} finally { inside.cleanup(); }
+}, 120_000);
+
+test("exact collector rejects a utility executable outside the system directories", () => {
+	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["tar", "--version"]);\n' }, cli("script/utility.ts"));
+	try {
+		const fake = join(f.root, "fake-bin", "tar");
+		mkdirSync(dirname(fake), { recursive: true });
+		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
+		chmodSync(fake, 0o755);
+		const run = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		expect(run.exit).toBe(2);
+		expect(JSON.stringify(run.result)).toContain("utility executable must resolve to ");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("exact collector permits bunx only when it is the pinned Bun binary", () => {
+	const f = fixture({ "script/utility.ts": 'if (Bun.spawnSync(["bunx", "--version"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(7);\n' }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect"], checker, { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` });
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		const fake = join(f.root, "fake-bin", "bunx");
+		mkdirSync(dirname(fake), { recursive: true });
+		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
+		chmodSync(fake, 0o755);
+		const rejected = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		expect(rejected.exit).toBe(2);
+		expect(JSON.stringify(rejected.result)).toContain("utility executable must resolve to ");
+	} finally { f.cleanup(); }
+}, 120_000);
+
 test("exact collector rejects a git executable outside the canonical CI path", () => {
 	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["git", "--version"]);\n' }, cli("script/utility.ts"));
 	try {
@@ -264,15 +341,6 @@ test("exact collector rejects a git executable outside the canonical CI path", (
 		const run = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("utility executable must resolve to /usr/bin/git");
-	} finally { f.cleanup(); }
-}, 120_000);
-
-test("exact collector rejects the bare kill command", () => {
-	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["kill", "-0", String(process.pid)]);\n' }, cli("script/utility.ts"));
-	try {
-		const run = f.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
-		expect(run.exit).toBe(2);
-		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -803,7 +871,7 @@ test("real 99 of 100 statements fails without percentage rounding", () => {
 test("killed real child and caught unsupported subprocess cannot become clean coverage", () => {
 	for (const child of [
 		'process.kill(process.pid, "SIGKILL");',
-		'try { Bun.spawnSync(["/bin/echo", "external"]); } catch {}',
+		'try { Bun.spawnSync(["/usr/bin/true"]); } catch {}',
 	]) {
 		const f = collected(
 			{

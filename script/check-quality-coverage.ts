@@ -1943,17 +1943,29 @@ function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string
 	const path = binary.includes("/") ? resolve(cwd, binary) : (env.PATH ?? "").split(":").map((p) => join(p, binary)).find(existsSync);
 	return path ? resolve(path) : fail("unsupported_process", binary, "executable cannot be resolved");
 }
+// Native utilities execute without receipts and never earn coverage credit. A shell may
+// hide an owned runtime from observation, which only loses credit; it can never fabricate it.
+// Matched by basename: Bun's node:child_process re-enters Bun.spawnSync with the already
+// canonical path, so the second interposition must recognize the same utility.
+const SYSTEM_UTILITIES = new Set(["git", "kill", "sh", "bash", "echo", "mkfifo", "ps", "tar"]);
+function canonicalUtilityPaths(name: string): string[] {
+	const paths = ["/usr/bin", "/bin"].map((dir) => join(dir, name)).filter(existsSync).map((p) => realpathSync(p));
+	return [...new Set(paths)];
+}
 function utilityPath(executable: string, binary: string): string | undefined {
-	const expected = executable === "git" ? realpathSync("/usr/bin/git") :
-		executable === "/bin/kill" ? realpathSync("/bin/kill") : undefined;
+	const expected = SYSTEM_UTILITIES.has(basename(executable)) ? canonicalUtilityPaths(basename(executable)) :
+		basename(binary) === "bunx" ? [realpathSync(process.env.D945_BUN ?? process.execPath)] : undefined;
 	if (expected === undefined) return undefined;
 	let canonical: string;
 	try { canonical = realpathSync(binary); }
 	catch { return fail("unsupported_process", executable, "utility executable cannot be resolved"); }
-	if (canonical !== expected) fail("unsupported_process", executable, `utility executable must resolve to ${expected}`);
+	if (!expected.includes(canonical)) fail("unsupported_process", executable, `utility executable must resolve to ${expected.join(" or ")}`);
 	return binary;
 }
-function launchEntry(data: PreloadInputs, argv: string[], runtime: string, executable: string, cwd: string) {
+// An owned runtime launched on an entry outside the frozen root (a gate copied into a
+// throwaway fixture repository) runs natively: like a utility it earns no credit and
+// leaves no receipt. Entries inside the root must still be frozen inventory.
+function launchEntry(data: PreloadInputs, argv: string[], runtime: string, executable: string, cwd: string): { entry: Prepared; args: string[] } | { external: string } {
 	let entry: Prepared | undefined;
 	let args: string[] = [];
 	if (runtime === "python" && argv.includes("-c")) {
@@ -1971,7 +1983,9 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 			else if (!["-u", "--no-warnings", "--enable-source-maps"].includes(flag ?? ""))
 				fail("unsupported_process", executable, `unregistered interpreter option ${flag}`);
 		}
-		const path = relative(data.options.root, resolve(cwd, argv[index] ?? ""));
+		const absolute = resolve(cwd, argv[index] ?? "");
+		const path = relative(data.options.root, absolute);
+		if (argv[index] !== undefined && path.startsWith("..") && existsSync(absolute)) return { external: absolute };
 		entry = data.files.find((f) => f.entry.path === path);
 		args = argv.slice(index + 1);
 	}
@@ -2000,7 +2014,9 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 		fail("unsupported_process", executable, "unregistered native executable");
 	let argv = command.slice(1);
 	if (runtime === "bun" && argv[0] === "run") argv = argv.slice(1);
-	const { entry, args } = launchEntry(data, argv, runtime, executable, cwd);
+	const launched = launchEntry(data, argv, runtime, executable, cwd);
+	if ("external" in launched) return { command: [binary, ...command.slice(1)], env: environment };
+	const { entry, args } = launched;
 	const actual = runtimeVersion(binary, runtime, executable);
 	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent, command: commandId, runtime, entry: entry.entry.path, args, binary, version: actual, sha256: sha256(readFileSync(binary)), ...(data.selected && parent === "" ? { cwd: relative(data.options.root, cwd) || "." } : {}) }), { flag: "wx" });
 	const env = {

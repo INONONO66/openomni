@@ -59,6 +59,7 @@
         "src/index.ts",
         "test/**/*.test.ts",
         "test/helpers/disposition-967-archive-fault.ts",
+        "test/helpers/disposition-967-contender.ts",
         "test/helpers/disposition-967-fault.ts"
       ],
       "project": ["src/**/*.ts", "test/**/*.ts"]
@@ -72,7 +73,7 @@
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/machines": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/helpers/fifo-request.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/policy": {

@@ -18,7 +18,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Machine } from "@openomni/protocol";
 import { createFsDriver } from "../src/fs";
 import { expectEscape, expectInsideRead } from "./helpers";
@@ -81,17 +80,12 @@ function descriptorLedger(): DescriptorLedger {
 }
 
 function runFifoRequest(root: string, request: Machine.FsRequest): string {
-  const moduleUrl = pathToFileURL(join(import.meta.dir, "../src/fs.ts")).href;
-  const script = `
-    import { createFsDriver } from ${JSON.stringify(moduleUrl)};
-    const driver = createFsDriver(new Map([["docs", ${JSON.stringify(root)}]]));
-    const result = await driver(${JSON.stringify(request)});
-    driver.close();
-    process.stdout.write(JSON.stringify(result));
-  `;
-  const child = spawnSync(process.execPath, ["--eval", script], {
+  const helper = join(import.meta.dir, "helpers", "fifo-request.ts");
+  const child = spawnSync(process.execPath, [helper, root, JSON.stringify(request)], {
     encoding: "utf8",
-    timeout: 2_000,
+    // A blocking FIFO open never returns; the bound must still absorb an
+    // instrumented cold start when the suite runs under the exact collector.
+    timeout: 15_000,
   });
   expect(child.error).toBeUndefined();
   expect(child.signal).toBeNull();
