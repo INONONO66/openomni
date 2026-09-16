@@ -1846,7 +1846,19 @@ async function campaign(options: Options): Promise<number> {
 			? null
 			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
 		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
-		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
+		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? {
+			tests: baseline.tests,
+			failures: baseline.failures,
+			exitCode: baseline.exitCode,
+			processes: baseline.batches.map((batch) => ({
+				exitCode: batch.process.exitCode,
+				signal: batch.process.signal,
+				timedOut: batch.process.timedOut,
+				failureIdentities: batch.assertions,
+				stderrTail: batch.failures || batch.process.exitCode !== 0 ? batch.process.stderr.slice(-8192) : "",
+				junitSha256: sha256(batch.junit),
+			})),
+		} : { errors })}`);
 		const selected = selectedCandidates(options, enumerated.candidates);
 		const reachCandidates = selected.filter((candidate) => !candidate.operator.startsWith("py-"));
 		const reach = errors.length || !baseline ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, baseline.files, executionTreeSha256);
