@@ -1,6 +1,5 @@
 import childProcess from "node:child_process";
 import * as modules from "node:module";
-import * as workerThreads from "node:worker_threads";
 import { syncBuiltinESMExports } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -43,28 +42,13 @@ type Native = {
   execFile(command: string, args: string[], options: Options, callback?: Callback | null): Child;
   fork(modulePath: string | URL, args: string[], options?: ForkOptions): Child;
 };
-type WorkerFilename = ConstructorParameters<typeof workerThreads.Worker>[0];
-type WorkerOptions = ConstructorParameters<typeof workerThreads.Worker>[1];
-type NativeWorker = InstanceType<typeof workerThreads.Worker>;
-type WorkerPreparation = {
-  readonly id: string;
-  readonly filename: WorkerFilename;
-  readonly options: WorkerOptions | undefined;
-};
-
 const builtins: {
   Error: new (message: string) => Error;
   process: { readonly _eval?: string; once(event: "exit", listener: () => void): void };
 } = globalThis;
 const moduleLoader: {
-  createRequire(path: string): {
-    (id: "node:worker_threads"): {
-    Worker: typeof workerThreads.Worker;
-    SHARE_ENV: typeof workerThreads.SHARE_ENV;
-    };
-    (id: "bun:test"): {
+  createRequire(path: string): (id: string) => {
     mock: { module(id: string, factory: () => unknown): void };
-    };
   };
 } = modules;
 
@@ -273,46 +257,5 @@ export function installProcessHooks(
     // existing named bindings while keeping this same mutable native object.
     const { mock } = moduleLoader.createRequire(import.meta.url)("bun:test");
     mock.module("node:child_process", () => ({ ...native, default: native }));
-  }
-}
-
-export function installWorkerHooks(
-  prepare: (
-    filename: WorkerFilename,
-    options: WorkerOptions | undefined,
-  ) => WorkerPreparation,
-  observe: (id: string, code: number) => void,
-  reject: (code: string, path: string, message: string) => never,
-): void {
-  const NativeWorker = workerThreads.Worker;
-  class ObservedWorker extends NativeWorker {
-    readonly #id: string;
-
-    constructor(filename: WorkerFilename, options?: WorkerOptions) {
-      const prepared = prepare(filename, options);
-      super(prepared.filename, prepared.options);
-      this.#id = prepared.id;
-      let terminal = false;
-      this.once("exit", (code) => {
-        if (terminal) return;
-        terminal = true;
-        observe(this.#id, code);
-      });
-      this.once("error", (error) => {
-        if (!terminal) reject("execution", this.#id, error.message);
-      });
-    }
-
-    override unref(): void {
-      reject("unsupported_process", this.#id, "worker unref is not observable");
-    }
-  }
-
-  const nativeWorkerModule = moduleLoader.createRequire(import.meta.url)("node:worker_threads");
-  nativeWorkerModule.Worker = ObservedWorker;
-  syncBuiltinESMExports();
-  if ("Bun" in globalThis) {
-    const { mock } = moduleLoader.createRequire(import.meta.url)("bun:test");
-    mock.module("node:worker_threads", () => ({ ...workerThreads, Worker: ObservedWorker, default: workerThreads }));
   }
 }

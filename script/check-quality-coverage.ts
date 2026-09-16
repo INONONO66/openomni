@@ -20,7 +20,8 @@ import { tmpdir, constants as osConstants } from "node:os";
 import nativeProcesses from "node:child_process";
 import * as nodeModules from "node:module";
 import * as workerThreads from "node:worker_threads";
-import { installProcessHooks, installWorkerHooks } from "./quality-coverage/node";
+import { installProcessHooks } from "./quality-coverage/node";
+import { installWorkerHooks } from "./quality-coverage/worker";
 const analyzerNative: {
 	spawnSync(binary: string, args: string[], options: { input?: string; encoding: "utf8"; timeout: number }): {
 		status: number | null; stdout: string; stderr: string; signal: string | null;
