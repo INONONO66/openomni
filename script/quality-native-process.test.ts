@@ -28,7 +28,7 @@ test("native JSON streams stderr before child exit and preserves it in the recei
 				const watcher = watch(".", (event, name) => {
 					if (name === "release") { watcher.close(); console.log('{"complete":true}'); }
 				});
-				process.stderr.write("ready");
+				setImmediate(() => process.stderr.write("ready"));
 			`],
 			cwd,
 			timeout: 5000,
