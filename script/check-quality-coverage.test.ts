@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import ts from "typescript";
-import { coverageForMetrics, decode, exactMetric, sha256 } from "./check-quality-coverage";
+import { coverageForMetrics, decode, exactMetric, sha256, failureExcerpt } from "./check-quality-coverage";
 import { run as metrics } from "./check-quality-metrics";
 import { statementCounters } from "./quality-ci-bound";
 import { loadCoverage, prepare } from "./quality-metrics/coverage";
@@ -1330,9 +1330,11 @@ test("exact collector admits a receipt-less executable outside the frozen root a
 		const refused = f.run(["--collect"], checker, { PATH: `${join(f.root, "fake-bin")}:/usr/bin:/bin` });
 		expect(refused.exit).toBe(2);
 		expect(JSON.stringify(refused.result)).toContain("unregistered native executable");
+		// A name that resolves nowhere is the operating system's refusal, observed by the caller.
 		const missing = f.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
 		expect(missing.exit).toBe(2);
-		expect(JSON.stringify(missing.result)).toContain("cannot be resolved");
+		expect(JSON.stringify(missing.result)).toContain("ENOENT");
+		expect(JSON.stringify(missing.result)).not.toContain("cannot be resolved");
 	} finally { f.cleanup(); rmSync(outside, { recursive: true, force: true }); }
 }, 120_000);
 
@@ -1344,3 +1346,23 @@ test("instrumented child processes report the command the caller asked for", () 
 		expect(run.result.complete).toBe(true);
 	} finally { f.cleanup(); }
 }, 120_000);
+
+test("a failed lane message keeps each failing test's error block, not a tail", () => {
+	const stderr = [
+		"test/a.test.ts:",
+		"(pass) fine [1ms]",
+		"12 | expect(value).toBe(1)",
+		"error: expect(received).toBe(expected)",
+		"      at test/a.test.ts:12:3",
+		"(fail) a > breaks [2ms]",
+		"(pass) later [1ms]",
+		"",
+		" 2 pass",
+		" 1 fail",
+	].join("\n");
+	expect(failureExcerpt(stderr)).toBe(
+		"12 | expect(value).toBe(1)\nerror: expect(received).toBe(expected)\n      at test/a.test.ts:12:3\n(fail) a > breaks [2ms]",
+	);
+	expect(failureExcerpt("no test summary")).toBe("no test summary");
+	expect(failureExcerpt(`${"x".repeat(20_000)}\n(fail) huge [1ms]`)).toHaveLength(16_000);
+});

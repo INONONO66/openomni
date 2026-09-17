@@ -112,7 +112,9 @@ for (const stop of [false, true]) {
       });
 
     try {
-      // The one-second wait is eval's public background-run boundary, not a polling delay.
+      // The one-second wait is eval's public background-run boundary, not a polling delay;
+      // the interpreter is warmed first so a cold start cannot stand in for that boundary.
+      expect((await execute({ op: "run", code: "0", timeout: 15 })).output).toBe("0");
       const running = execute({
         op: "run",
         code: "print('started')\nanswer = completion('hold')\nanswer",

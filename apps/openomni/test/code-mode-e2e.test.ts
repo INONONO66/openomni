@@ -465,6 +465,9 @@ test("eval run answers running after its wait; peek shows the output so far; sto
     },
   });
   arm.resolve();
+  // The interpreter is warmed first: the one-second wait below is the background-run
+  // boundary under test, not the cold start of a fresh instrumented interpreter.
+  expect(await run("0")).toBe("0");
   const started = await run("print('started')\ncompletion('hold')\nprint('never')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
     started,

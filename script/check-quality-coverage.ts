@@ -1930,9 +1930,11 @@ function signalName(signal: string | number | null | undefined): string | null {
 	if (typeof signal === "string") return nullableSignal(signal);
 	return Object.entries(osConstants.signals).find(([, n]) => n === signal)?.[0] ?? fail("execution", "", "unrecognized native signal");
 }
-function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string {
+// An executable that does not resolve runs nothing, so the operating system's refusal
+// (ENOENT) is the caller's real observation; the collector does not replace it.
+function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string | undefined {
 	const path = binary.includes("/") ? resolve(cwd, binary) : (env.PATH ?? "").split(":").map((p) => join(p, binary)).find(existsSync);
-	return path ? resolve(path) : fail("unsupported_process", binary, "executable cannot be resolved");
+	return path === undefined || !existsSync(path) ? undefined : resolve(path);
 }
 // Native utilities execute without receipts and never earn coverage credit. A shell may
 // hide an owned runtime from observation, which only loses credit; it can never fabricate it.
@@ -1944,10 +1946,8 @@ const OWNED_RUNTIMES = /^(?:bun|node)(?:\.exe)?$|^python(?:3(?:\.\d+)?)?$/;
 // no credit and leaves no receipt, so it cannot inflate the measurement. Inside the root
 // only owned runtimes on frozen inventory may run.
 function utilityPath(executable: string, binary: string, root: string): string | undefined {
-	let canonical: string;
-	try { canonical = realpathSync(binary); }
-	catch { return fail("unsupported_process", executable, "utility executable cannot be resolved"); }
 	if (OWNED_RUNTIMES.test(basename(binary))) return undefined;
+	const canonical = realpathSync(binary);
 	if (!relative(realpathSync(root), canonical).startsWith("..")) fail("unsupported_process", executable, "unregistered native executable");
 	return binary;
 }
@@ -1998,6 +1998,7 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { id?: string; command: string[]; env: NodeJS.ProcessEnv } {
 	const executable = command[0] ?? fail("process", "", "empty executable");
 	const binary = binaryPath(executable, environment, cwd);
+	if (binary === undefined) return { command, env: environment };
 	const utility = utilityPath(executable, binary, data.options.root);
 	if (utility !== undefined) return { command: [utility, ...command.slice(1)], env: environment };
 	const name = basename(binary);
@@ -2024,6 +2025,23 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 function commandTestPaths(data: Inputs, command: Command): string[] {
 	const cwd = resolve(data.options.root, command.cwd ?? ".");
 	return command.paths.map((path) => `./${relative(cwd, resolve(data.options.root, path))}`);
+}
+// The collector's output is the only record of a failed lane, so it keeps the
+// error block above each failing test instead of an arbitrary tail.
+const FAILURE_EXCERPT_LIMIT = 16_000;
+export function failureExcerpt(stderr: string): string {
+	const lines = stderr.split("\n");
+	const blocks: string[] = [];
+	let start = 0;
+	for (const [index, line] of lines.entries()) {
+		if (/^\((pass|skip|todo)\)/.test(line) || /^\S+\.(test|spec)\.[cm]?[jt]sx?:$/.test(line)) start = index + 1;
+		if (line.startsWith("(fail)")) {
+			blocks.push(lines.slice(start, index + 1).join("\n"));
+			start = index + 1;
+		}
+	}
+	const excerpt = blocks.length ? blocks.join("\n\n") : stderr;
+	return excerpt.length > FAILURE_EXCERPT_LIMIT ? excerpt.slice(-FAILURE_EXCERPT_LIMIT) : excerpt;
 }
 // Hang guard for one instrumented command, not a performance budget: instrumented
 // workspace suites (ledger) exceed two minutes on hosted runners; the job timeout owns the total.
@@ -2061,7 +2079,7 @@ async function collectCommand(data: Inputs, directory: string, command: Command)
 		fail(
 			"execution",
 			command.id,
-			`${outcome}; stdout=${out.slice(-2000)} stderr=${err.slice(-4000)}`,
+			`${outcome}; stdout=${out.slice(-2000)} stderr=${failureExcerpt(err)}`,
 		);
 	}
 	if (command.kind === "test" && !/[1-9]\d* pass/.test(err))
