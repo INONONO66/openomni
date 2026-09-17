@@ -1968,6 +1968,9 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 		if (argv.slice(0, index).some((a) => a !== "-u")) fail("unsupported_process", executable, "unrecognized Python interpreter option");
 		const source = argv[index + 1];
 		entry = data.files.find((f) => f.python?.source === source);
+		// Inline program text that is not a frozen Python source (a test's native control
+		// program) has no entry to credit: it runs natively, like an external entry.
+		if (entry === undefined) return { external: executable };
 		args = argv.slice(index + 2);
 	} else {
 		let index = 0;
