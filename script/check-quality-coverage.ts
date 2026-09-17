@@ -39,7 +39,7 @@ function analyzerProcess(binary: string, args: string[], input?: string): { stat
 	const result = nativeSpawnSync(binary, args, { input, encoding: "utf8", timeout: 120_000 });
 	return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "", signal: result.signal };
 }
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -168,9 +168,13 @@ class CoverageError {
 	) { }
 }
 let lastFailure: CoverageError | undefined;
+// Only the instrumented process itself files a failure with its collector. A checker CLI
+// launched under a collection (a test fixture exercising the gate) reports through its own
+// result and must not leave an inherited process identity's failure in the outer directory.
+let instrumented = false;
 function fail(code: string, path: string, message: string): never {
 	lastFailure = new CoverageError(code, path, message);
-	if (process.env.D945_DIRECTORY && process.env.D945_PROCESS)
+	if (instrumented && process.env.D945_DIRECTORY && process.env.D945_PROCESS)
 		writeFileSync(
 			join(process.env.D945_DIRECTORY, `${process.env.D945_PROCESS}.failure.json`),
 			JSON.stringify(lastFailure),
@@ -1751,6 +1755,7 @@ function sharedEmission(directory: string, data: PreloadInputs, path: string): {
 // The preload is built outside the owned tree so the gate's actual CLI source
 // remains instrumentable. Bun.spawn is interposed before owned code imports it.
 function preload(directory: string): void {
+	instrumented = true;
 	if (ts.version !== "5.9.2") fail("toolchain", "", "TypeScript must be 5.9.2");
 	const data = preloadInputsFrom(decode(readFileSync(join(directory, "inputs.json"), "utf8")));
 	const id = process.env.D945_PROCESS ?? fail("process", "", "missing process identity");
@@ -1857,8 +1862,8 @@ function preload(directory: string): void {
 				...(options?.env === undefined ? process.env : options.env),
 				D945_DIRECTORY: directory, D945_PROCESS: childId, D945_PARENT: id,
 				D945_ASSET_DIRECTORY: directory, D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
-				...(data.selected ? { D945_SOURCE_ROOT: data.options.root } : {}),
 			};
+			sourceRoot(data, environment);
 			const baseOptions = options ?? {};
 			if (runtime === "node") {
 				const inherited = options?.execArgv ?? process.execArgv;
@@ -1954,6 +1959,14 @@ function utilityPath(executable: string, binary: string, root: string): string |
 	if (!relative(realpathSync(root), canonical).startsWith("..")) fail("unsupported_process", executable, "unregistered native executable");
 	return binary;
 }
+// A selected collection pins the root every top-level Python launch is checked against. An
+// unselected collection (a fixture repository driven by a test that itself runs under a selected
+// outer collector) must not inherit the outer root, or its root cwd check compares against the
+// wrong repository.
+function sourceRoot(data: PreloadInputs, env: Record<string, string | undefined>): void {
+	if (data.selected) env.D945_SOURCE_ROOT = data.options.root;
+	else delete env.D945_SOURCE_ROOT;
+}
 // An owned runtime launched on an entry outside the frozen root (a gate copied into a
 // throwaway fixture repository) runs natively: like a utility it earns no credit and
 // leaves no receipt, whatever interpreter options it carries (the mutation runner's
@@ -1997,6 +2010,9 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 		const absolute = resolve(cwd, program);
 		const path = relative(data.options.root, absolute);
 		if (path.startsWith("..") && existsSync(absolute)) return { external: absolute };
+		// A dependency's own program (knip, a vendored CLI) is third-party code: never a frozen
+		// entry, so it runs natively like an out-of-root program.
+		if (path.split(sep).includes("node_modules") && existsSync(absolute)) return { external: absolute };
 		const forwarded = runtime === "python" ? FORWARDED_PYTHON_OPTIONS : [];
 		const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag) && !forwarded.includes(flag));
 		if (unregistered !== undefined) fail("unsupported_process", executable, `unregistered interpreter option ${unregistered}`);
@@ -2037,8 +2053,8 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 	const env = {
 		...environment, D945_DIRECTORY: directory, D945_PROCESS: id, D945_PARENT: parent,
 		D945_ASSET_DIRECTORY: directory, D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
-		...(data.selected ? { D945_SOURCE_ROOT: data.options.root } : {}),
 	};
+	sourceRoot(data, env);
 	// The Python runner executes from this copy, like the preload: its own frames run inside every traced region
 	// and must never be credited to the frozen script/quality-coverage/python.py it was copied from.
 	if (runtime === "python") return { id, command: [binary, ...interpreter, "-u", join(directory, "python.py"), "run", directory, id, entry.entry.path, ...args], env };

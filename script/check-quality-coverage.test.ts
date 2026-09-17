@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import ts from "typescript";
@@ -1140,6 +1140,37 @@ test("the frozen Python runner source is never credited with its own driver fram
 		const process = obj(list(receipt.processes)[0]);
 		expect(process.loaded).toEqual(["script/main.py"]);
 		expect(obj(obj(process.trace).files)["script/quality-coverage/python.py"]).toEqual({ arcs: [], translatedArcs: [] });
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("a dependency program under node_modules runs natively instead of needing a frozen entry", () => {
+	const f = fixture({
+		"script/main.ts": 'import assert from "node:assert/strict"; const child = Bun.spawnSync([process.execPath, "node_modules/dep/bin/cli.js"], { stdout: "pipe" }); assert.equal(child.exitCode, 0); assert.equal(child.stdout.toString(), "dep\\n");',
+	}, cli("script/main.ts"));
+	f.put("node_modules/dep/bin/cli.js", 'console.log("dep");\n');
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		expect(run.exit).toBe(0);
+		expect(run.result.complete).toBe(true);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("a failing checker CLI under an outer collection leaves no failure file for the inherited process identity", () => {
+	const f = fixture();
+	const outer = realpathSync(mkdtempSync(join(tmpdir(), "d945-outer-")));
+	try {
+		const run = f.run(["--plan-sha256", "0".repeat(64)], undefined, { D945_DIRECTORY: outer, D945_PROCESS: "outer-1" });
+		expect(run.exit).toBe(2);
+		expect(existsSync(join(outer, "outer-1.failure.json"))).toBe(false);
+	} finally { f.cleanup(); rmSync(outer, { recursive: true, force: true }); }
+}, 120_000);
+
+test("an unselected collection ignores an inherited outer D945_SOURCE_ROOT for its Python launches", () => {
+	const f = fixture({ "script/main.py": "print(42)\n" }, cli("script/main.py", "python"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], undefined, { D945_SOURCE_ROOT: join(f.root, "elsewhere") });
+		expect(run.exit).toBe(0);
+		expect(run.result.complete).toBe(true);
 	} finally { f.cleanup(); }
 }, 120_000);
 
