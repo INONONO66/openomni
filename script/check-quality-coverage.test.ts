@@ -276,13 +276,17 @@ if (sh.stdout.toString() !== "ok" || bash.exitCode !== 0 || fifo.status !== 0 ||
 }, 120_000);
 
 test("exact collector runs an owned runtime entry outside the frozen root natively, without credit or receipt", () => {
-	const source = `import { mkdtempSync, writeFileSync } from "node:fs";
+	const source = `import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const outside = mkdtempSync(join(tmpdir(), "d945-outside-"));
 writeFileSync(join(outside, "copy.ts"), "process.exit(Number(process.argv[2]));\\n");
 const external = Bun.spawnSync([process.execPath, "copy.ts", "0"], { cwd: outside, stdout: "pipe", stderr: "pipe" });
 if (external.exitCode !== 0) process.exit(7);
+writeFileSync(join(outside, "copy.test.ts"), 'import { test, expect } from "bun:test"; test("copy", () => expect(1).toBe(1));\\n');
+const suite = Bun.spawnSync([process.execPath, "--smol", "test", "--timeout", "5000", "--reporter=junit", \`--reporter-outfile=\${join(outside, "tests.xml")}\`, "./copy.test.ts"], { cwd: outside, stdout: "pipe", stderr: "pipe" });
+if (suite.exitCode !== 0 || !existsSync(join(outside, "tests.xml"))) process.exit(9);
+if (process.argv[2] === "options" && Bun.spawnSync([process.execPath, "--smol", "script/utility.ts", "noop"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(10);
 if (process.argv[2] === "inside") {
 	writeFileSync("script/unlisted.ts", "process.exit(0);\\n");
 	if (Bun.spawnSync([process.execPath, "script/unlisted.ts"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(8);
@@ -301,7 +305,13 @@ if (process.argv[2] === "inside") {
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("entry/source is absent from frozen language inventory");
 	} finally { inside.cleanup(); }
-}, 120_000);
+	const options = fixture({ "script/utility.ts": source }, [{ id: "cli", kind: "cli", paths: ["script/utility.ts"], args: ["options"], expectedExitCode: 0, runtime: "bun" }]);
+	try {
+		const run = options.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		expect(run.exit).toBe(2);
+		expect(JSON.stringify(run.result)).toContain("unregistered interpreter option --smol");
+	} finally { options.cleanup(); }
+}, 180_000);
 
 test("exact collector rejects a utility executable planted inside the frozen root", () => {
 	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["tar", "--version"]);\n' }, cli("script/utility.ts"));

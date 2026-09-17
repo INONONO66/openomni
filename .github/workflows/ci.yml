@@ -504,7 +504,10 @@ jobs:
             status=$?
             if [[ "$status" -ne 1 ]]; then exit "$status"; fi
           fi
+      # A refused shard still uploads its frozen plan and process receipts;
+      # finish rejects the unsealed evidence, and the receipts hold the reason.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
         with:
           name: quality-exact-${{ matrix.shard }}
           path: quality-exact/

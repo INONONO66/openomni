@@ -1955,7 +1955,11 @@ function utilityPath(executable: string, binary: string, root: string): string |
 }
 // An owned runtime launched on an entry outside the frozen root (a gate copied into a
 // throwaway fixture repository) runs natively: like a utility it earns no credit and
-// leaves no receipt. Entries inside the root must still be frozen inventory.
+// leaves no receipt, whatever interpreter options it carries (the mutation runner's
+// `--smol test --reporter=junit` copies). Entries inside the root must still be frozen
+// inventory launched with recognized options only.
+const VALUE_OPTIONS = ["--timeout", "--import", "--require", "-r"];
+const NEUTRAL_OPTIONS = ["-u", "--no-warnings", "--enable-source-maps"];
 function launchEntry(data: PreloadInputs, argv: string[], runtime: string, executable: string, cwd: string): { entry: Prepared; args: string[] } | { external: string } {
 	let entry: Prepared | undefined;
 	let args: string[] = [];
@@ -1967,18 +1971,21 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 		args = argv.slice(index + 2);
 	} else {
 		let index = 0;
-		if (argv[0] === "test") index++;
-		while (argv[index]?.startsWith("-")) {
-			const flag = argv[index++];
+		const options: string[] = [];
+		const valued = [...VALUE_OPTIONS, ...(runtime === "bun" ? ["--preload"] : [])];
+		for (let subcommand = false; argv[index]?.startsWith("-") || (argv[index] === "test" && !subcommand);) {
+			if (argv[index] === "test") { subcommand = true; index++; continue; }
+			const flag = argv[index++] ?? "";
 			// Inline program text has no frozen entry: it runs natively, like an external entry.
-			if (runtime !== "python" && ["-e", "--eval", "-p", "--print"].includes(flag ?? "")) return { external: executable };
-			if (["--timeout", "--import", "--require", "-r", ...(runtime === "bun" ? ["--preload"] : [])].includes(flag ?? "")) index++;
-			else if (!["-u", "--no-warnings", "--enable-source-maps"].includes(flag ?? ""))
-				fail("unsupported_process", executable, `unregistered interpreter option ${flag}`);
+			if (runtime !== "python" && ["-e", "--eval", "-p", "--print"].includes(flag)) return { external: executable };
+			options.push(flag);
+			if (valued.includes(flag)) index++;
 		}
 		const absolute = resolve(cwd, argv[index] ?? "");
 		const path = relative(data.options.root, absolute);
 		if (argv[index] !== undefined && path.startsWith("..") && existsSync(absolute)) return { external: absolute };
+		const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag));
+		if (unregistered !== undefined) fail("unsupported_process", executable, `unregistered interpreter option ${unregistered}`);
 		entry = data.files.find((f) => f.entry.path === path);
 		args = argv.slice(index + 1);
 	}
