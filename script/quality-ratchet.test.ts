@@ -354,6 +354,8 @@ test("Git changes are rename-aware and hunk-anchored; the CLI applies growth, no
   }
 });
 
+// Under the instrumented exact collection every spawned ratchet child carries the preload
+// and a runtime probe; the native 15 s default is not this end-to-end test's budget.
 test("synthetic regression fails closed end to end: a measured owned top type in a PR hunk stops the ratchet", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-ratchet-regression-"));
   try {
@@ -412,7 +414,7 @@ test("synthetic regression fails closed end to end: a measured owned top type in
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 120_000);
 
 test("native coverage retains every observed line across partial lane maps", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-ratchet-lcov-"));
