@@ -132,7 +132,9 @@ test("v3 real CI adapter and finish compare every selected command rather than o
 	writeFileSync(shardPlan, readFileSync(join(sharded.directory, "exact.desktopApp.plan.json"))); expect(readSharded).toThrow(); writeFileSync(shardPlan, shardPlanBytes);
 	copyFileSync(join(options.directory, "exact.coverage.json"), join(sharded.directory, "exact.coverage.json"));
 	expect(readSharded).toThrow("both whole and sharded"); rmSync(join(sharded.directory, "exact.coverage.json"));
-	expect((await collect("sharded", "unknown")).exitCode).not.toBe(0);
+	const unknown = await collect("sharded", "unknown");
+	expect(unknown.exitCode).toBe(2);
+	expect(unknown.stderr).toContain("unknown exact CI shard: unknown");
 	const path = join(options.directory, "exact.plan.json"), original = readFileSync(path);
 	for (const patch of [{ cwd: "." }, { paths: ["packages/machines/subject.ts"] }, { runtime: "node" }, { args: ["--filter"] }, { expectedExitCode: 1 }]) {
 		const changed = recordObject(path);

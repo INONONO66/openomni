@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { digest, jsonChoice, jsonNumber, jsonObject } from "./quality-inventory";
+import { digest, InventoryError, jsonChoice, jsonNumber, jsonObject } from "./quality-inventory";
 import { fingerprint, readDocument, recordObject } from "./quality-ci-input";
 import { normalizeTypes, normalizeCensus, mergeMeasurements, requireMeasurement, sameMembers } from "./quality-ci-receipt";
 import { readExactCoverage, readNativeCoverage } from "./quality-ci-coverage";
@@ -175,4 +175,10 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 	return (await phase("ratchet", () => ratchetMain(["--root", root, "--contract", contract, "--base", values.base ?? "",
 		"--baseline", values.baseline ?? "", "--current", joined.result]))).result;
 }
-if (import.meta.main) process.exitCode = await measureMain();
+// Exit 1 is a measured verdict (uncovered findings); refused measurement exits 2
+// with its whole message, which the runtime's uncaught-error display truncates.
+if (import.meta.main) process.exitCode = await measureMain().catch((error: unknown) => {
+	if (!(error instanceof InventoryError)) throw error;
+	console.error(`${error.name} ${error.code} ${error.path}: ${error.message}`);
+	return 2;
+});

@@ -465,7 +465,7 @@ jobs:
     # statement evidence"). Exit 1 is measured uncovered evidence, not failure.
     if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.exactShards) }}

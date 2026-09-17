@@ -2046,8 +2046,8 @@ export function failureExcerpt(stderr: string): string {
 	return excerpt.length > FAILURE_EXCERPT_LIMIT ? excerpt.slice(-FAILURE_EXCERPT_LIMIT) : excerpt;
 }
 // Hang guard for one instrumented command, not a performance budget: instrumented
-// workspace suites (ledger) exceed two minutes on hosted runners; the job timeout owns the total.
-const COMMAND_DEADLINE_MS = 600_000;
+// tooling shards exceed ten minutes on hosted runners; the job timeout owns the total.
+const COMMAND_DEADLINE_MS = 1_500_000;
 async function collectCommand(data: Inputs, directory: string, command: Command): Promise<Json> {
 	const id = randomUUID();
 	const cwd = resolve(data.options.root, command.cwd ?? ".");

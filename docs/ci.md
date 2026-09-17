@@ -421,7 +421,8 @@ fi
 b run script/check-quality-python.ts
 # Exact statement evidence: one instrumented shard per selected lane plus the
 # contracts shard, exactly as the `quality-exact` matrix runs them. Exit 1 is
-# measured uncovered evidence; finish merges the sealed shard receipts.
+# measured uncovered evidence, exit 2 a refused measurement with its full
+# message; finish merges the sealed shard receipts.
 for shard in $(jq -r '.lanes[]' ci-plan.json) scripts-contracts; do
   b run script/quality-measure.ts collect --leg exact --shard "$shard" --plan ci-plan.json \
     --run "$QUALITY_RUN" --output quality-receipts || [[ $? -eq 1 ]]
