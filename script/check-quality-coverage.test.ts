@@ -286,7 +286,7 @@ if (external.exitCode !== 0) process.exit(7);
 writeFileSync(join(outside, "copy.test.ts"), 'import { test, expect } from "bun:test"; test("copy", () => expect(1).toBe(1));\\n');
 const suite = Bun.spawnSync([process.execPath, "--smol", "test", "--timeout", "5000", "--reporter=junit", \`--reporter-outfile=\${join(outside, "tests.xml")}\`, "./copy.test.ts"], { cwd: outside, stdout: "pipe", stderr: "pipe" });
 if (suite.exitCode !== 0 || !existsSync(join(outside, "tests.xml"))) process.exit(9);
-const control = Bun.spawnSync([process.env.D945_PYTHON, "-c", "print(7)"], { cwd: outside, stdout: "pipe", stderr: "pipe" });
+const control = Bun.spawnSync([process.env.D945_PYTHON, "-I", "-c", "print(7)"], { cwd: outside, stdout: "pipe", stderr: "pipe" });
 if (control.exitCode !== 0 || control.stdout.toString() !== "7\\n") process.exit(11);
 if (Bun.spawnSync([process.env.D945_PYTHON, "--version"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(12);
 if (process.argv[2] === "options" && Bun.spawnSync([process.execPath, "--smol", "script/utility.ts", "noop"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(10);

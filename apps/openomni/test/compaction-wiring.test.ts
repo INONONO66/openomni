@@ -90,5 +90,5 @@ describe("compaction composition configuration", () => {
 
     expect(messageCounts).toHaveLength(2);
     expect(messageCounts[1]).toBeLessThan(messageCounts[0] ?? 0);
-  });
+  }, 60_000); // instrumented: ~6 real SSE turns through the production root
 });

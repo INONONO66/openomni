@@ -1966,12 +1966,13 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 	let args: string[] = [];
 	if (runtime === "python" && argv.includes("-c")) {
 		const index = argv.indexOf("-c");
-		if (argv.slice(0, index).some((a) => a !== "-u")) fail("unsupported_process", executable, "unrecognized Python interpreter option");
 		const source = argv[index + 1];
 		entry = data.files.find((f) => f.python?.source === source);
 		// Inline program text that is not a frozen Python source (a test's native control
-		// program) has no entry to credit: it runs natively, like an external entry.
+		// program) has no entry to credit: it runs natively, like an external entry,
+		// whatever interpreter options (`-I`) precede it.
 		if (entry === undefined) return { external: executable };
+		if (argv.slice(0, index).some((a) => a !== "-u")) fail("unsupported_process", executable, "unrecognized Python interpreter option");
 		args = argv.slice(index + 2);
 	} else {
 		let index = 0;
