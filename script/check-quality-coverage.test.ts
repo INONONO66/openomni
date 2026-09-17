@@ -275,7 +275,7 @@ if (sh.stdout.toString() !== "ok" || bash.exitCode !== 0 || fifo.status !== 0 ||
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector runs an owned runtime entry outside the frozen root or an unfrozen inline program natively, without credit or receipt", () => {
+test("exact collector runs an owned runtime entry outside the frozen root or an unfrozen inline program or a runtime probe natively, without credit or receipt", () => {
 	const source = `import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -288,6 +288,7 @@ const suite = Bun.spawnSync([process.execPath, "--smol", "test", "--timeout", "5
 if (suite.exitCode !== 0 || !existsSync(join(outside, "tests.xml"))) process.exit(9);
 const control = Bun.spawnSync([process.env.D945_PYTHON, "-c", "print(7)"], { cwd: outside, stdout: "pipe", stderr: "pipe" });
 if (control.exitCode !== 0 || control.stdout.toString() !== "7\\n") process.exit(11);
+if (Bun.spawnSync([process.env.D945_PYTHON, "--version"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(12);
 if (process.argv[2] === "options" && Bun.spawnSync([process.execPath, "--smol", "script/utility.ts", "noop"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(10);
 if (process.argv[2] === "inside") {
 	writeFileSync("script/unlisted.ts", "process.exit(0);\\n");

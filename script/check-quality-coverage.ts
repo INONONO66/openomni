@@ -1984,9 +1984,13 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 			options.push(flag);
 			if (valued.includes(flag)) index++;
 		}
-		const absolute = resolve(cwd, argv[index] ?? "");
+		// An option-only invocation (`python3 --version`, a runtime probe) launches no
+		// program at all: nothing to credit, so it runs natively.
+		const program = argv[index];
+		if (program === undefined) return { external: executable };
+		const absolute = resolve(cwd, program);
 		const path = relative(data.options.root, absolute);
-		if (argv[index] !== undefined && path.startsWith("..") && existsSync(absolute)) return { external: absolute };
+		if (path.startsWith("..") && existsSync(absolute)) return { external: absolute };
 		const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag));
 		if (unregistered !== undefined) fail("unsupported_process", executable, `unregistered interpreter option ${unregistered}`);
 		entry = data.files.find((f) => f.entry.path === path);
