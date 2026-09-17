@@ -710,17 +710,22 @@ test("unimported nested tooling receives regenerated zero counters, never an emp
 	}
 }, 120_000);
 
-test("TSX executable maps retain original identity", () => {
-	const f = collected({
+test("TSX executable maps retain original identity under the automatic JSX runtime", () => {
+	// Like packages/ui, the view imports no React binding: JSX resolves through
+	// react/jsx-runtime, which the fixture supplies outside the inventory.
+	const f = fixture({
 		...fixtures,
 		"script/subject.ts":
 			'import { view } from "./view"; export function select(value: boolean) { view(); if(value) return 1; return 0; }',
-		"script/view.tsx":
-			"const React = { createElement(tag: string, props: null, child: number) { return {tag,props,child}; } }; export function view(){ return <div>{1}</div>; }",
+		"script/view.tsx": "export function view(){ return <div>{1}</div>; }",
 	});
 	try {
-		expect(f.exit).toBe(0);
-		expect(list(f.result.measurements).some((m) => obj(m).path === "script/view.tsx")).toBe(true);
+		mkdirSync(join(f.root, "node_modules/react"), { recursive: true });
+		writeFileSync(join(f.root, "node_modules/react/package.json"), '{"name":"react","exports":{"./jsx-runtime":"./jsx-runtime.js"}}');
+		writeFileSync(join(f.root, "node_modules/react/jsx-runtime.js"), "export function jsx(tag, props) { return { tag, props }; }\nexport const jsxs = jsx;\n");
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		if (run.exit !== 0) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(list(run.result.measurements).some((m) => obj(m).path === "script/view.tsx")).toBe(true);
 	} finally {
 		f.cleanup();
 	}

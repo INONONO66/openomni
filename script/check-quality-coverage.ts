@@ -747,7 +747,9 @@ function prepare(e: Entry, root: string, embedded: Entry[]): Prepared {
 		compilerOptions: {
 			target: ts.ScriptTarget.ESNext,
 			module: ts.ModuleKind.ESNext,
-			jsx: ts.JsxEmit.React,
+			// The repository's JSX is the automatic runtime (tsconfig "react-jsx"): no file
+			// imports React, so classic emission would reference an undefined binding.
+			jsx: ts.JsxEmit.ReactJSX,
 			sourceMap: true,
 			inlineSources: true,
 			removeComments: true,
