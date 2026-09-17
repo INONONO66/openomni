@@ -151,8 +151,9 @@ describe("interpreter bridge ownership", () => {
 
       // Timeout replaced the interpreter. The successor completes before the
       // old callback is released, so its result cannot depend on scheduler luck.
+      // It also runs on a cold interpreter, so it takes the file's 15 s deadline.
       const second = await kernel.run(
-        { cellId: "two", code: "tool.mine()", timeoutMs: 2000 },
+        { cellId: "two", code: "tool.mine()", timeoutMs: 15_000 },
         async () => ({ status: "completed", value: "mine" }),
       );
       expect(second).toMatchObject({ status: "completed", cellId: "two", value: "'mine'" });
