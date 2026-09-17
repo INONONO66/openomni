@@ -268,12 +268,14 @@ test("compiler worker returns actual compiler proof and fails closed on initiali
     expect(result).not.toHaveProperty("argv");
     await worker.close();
     expect(worker.closed).toBe(true);
+    // Disposal ends stdin: the child exits on its own (so exit-time receipts
+    // flush) instead of being killed.
     const receipt = worker.processReceipt;
     if (!receipt) throw new Error("missing compiler process receipt");
     expect(receipt.pid).toBeGreaterThan(0);
-    expect(receipt.exitCode).toBe(null);
-    expect(receipt.signal).toBe("SIGKILL");
-    expect(receipt.cleanupExit).toBe(0);
+    expect(receipt.exitCode).toBe(0);
+    expect(receipt.signal).toBe(null);
+    expect(receipt.cleanupExit).toBe(null);
     expect(receipt.stderr).toContain("compiler project");
     await expect(worker.check(request)).rejects.toThrow();
     const failed = new MutationCompilerWorker(input.root, input.contract, input.inventory, sha256("wrong"), 120000);

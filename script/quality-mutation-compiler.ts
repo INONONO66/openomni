@@ -269,15 +269,22 @@ export class MutationCompilerWorker {
     });
   }
 
-  private abort(error: Error): void {
+  private settle(error: Error): boolean {
     const pending = this.pending; this.pending = undefined; this.closed = true;
     if (pending) { clearTimeout(pending.timer); pending.reject(error); }
-    if (!this.closing) {
-      const killed = !this.exitObserved && this.child.kill("SIGKILL");
-      this.cleanupKillResult = killed ? 0 : 1;
-      if (this.receipt) this.receipt.cleanupExit = killed ? 0 : 1;
-      this.closing = this.exited.then(({ code }) => code ?? 1);
-    }
+    return this.closing === undefined;
+  }
+
+  private kill(): void {
+    const killed = !this.exitObserved && this.child.kill("SIGKILL");
+    this.cleanupKillResult = killed ? 0 : 1;
+    if (this.receipt) this.receipt.cleanupExit = killed ? 0 : 1;
+  }
+
+  private abort(error: Error): void {
+    if (!this.settle(error)) return;
+    this.kill();
+    this.closing = this.exited.then(({ code }) => code ?? 1);
   }
 
   async check(request: CompilerRequest): Promise<CompilerProof> {
@@ -301,8 +308,14 @@ export class MutationCompilerWorker {
     return response.proofs;
   }
 
+  // Disposal closes the child's stdin so it exits on its own and can flush
+  // any exit-time receipts; SIGKILL is only the bounded fallback.
   async close(): Promise<void> {
-    this.abort(new Error("Compiler worker disposed"));
+    if (this.settle(new Error("Compiler worker disposed"))) {
+      if (!this.exitObserved && this.child.stdin.writable) this.child.stdin.end();
+      const grace = setTimeout(() => this.kill(), this.timeout);
+      this.closing = this.exited.then(({ code }) => { clearTimeout(grace); return code ?? 1; });
+    }
     await this.closing;
   }
 }
