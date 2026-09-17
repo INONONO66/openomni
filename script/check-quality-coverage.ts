@@ -4,6 +4,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import {
+	copyFileSync,
 	existsSync,
 	openSync,
 	writeSync,
@@ -1855,7 +1856,7 @@ function preload(directory: string): void {
 			const environment = {
 				...(options?.env === undefined ? process.env : options.env),
 				D945_DIRECTORY: directory, D945_PROCESS: childId, D945_PARENT: id,
-				D945_ASSET_DIRECTORY: asset(""), D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
+				D945_ASSET_DIRECTORY: directory, D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
 				...(data.selected ? { D945_SOURCE_ROOT: data.options.root } : {}),
 			};
 			const baseOptions = options ?? {};
@@ -2028,10 +2029,12 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent, command: commandId, runtime, entry: entry.entry.path, args, binary, version: actual, sha256: sha256(readFileSync(binary)), ...(data.selected && parent === "" ? { cwd: relative(data.options.root, cwd) || "." } : {}) }), { flag: "wx" });
 	const env = {
 		...environment, D945_DIRECTORY: directory, D945_PROCESS: id, D945_PARENT: parent,
-		D945_ASSET_DIRECTORY: asset(""), D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
+		D945_ASSET_DIRECTORY: directory, D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
 		...(data.selected ? { D945_SOURCE_ROOT: data.options.root } : {}),
 	};
-	if (runtime === "python") return { id, command: [binary, "-u", asset("python.py"), "run", directory, id, entry.entry.path, ...args], env };
+	// The Python runner executes from this copy, like the preload: its own frames run inside every traced region
+	// and must never be credited to the frozen script/quality-coverage/python.py it was copied from.
+	if (runtime === "python") return { id, command: [binary, "-u", join(directory, "python.py"), "run", directory, id, entry.entry.path, ...args], env };
 	if (runtime === "node") return { id, command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
 	return { id,
 		command: argv[0] === "test" ? [binary, "test", "--preload", join(directory, "preload.js"), ...argv.slice(1)] :
@@ -2118,6 +2121,7 @@ async function collect(data: Inputs): Promise<Json> {
 		if (!build.success) fail("toolchain", "", "preload build failed");
 		const nodeBuild = await Bun.build({ entrypoints: [import.meta.path], outdir: directory, naming: "preload.mjs", target: "node", packages: "external" });
 		if (!nodeBuild.success) fail("toolchain", "", "Node preload build failed");
+		copyFileSync(asset("python.py"), join(directory, "python.py"));
 		let slots = 0;
 		const pythonFiles = data.files.flatMap((file) => {
 			const offset = slots;

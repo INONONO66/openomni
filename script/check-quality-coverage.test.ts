@@ -1129,6 +1129,20 @@ test("unexecuted Python files retain legitimate empty traces and uncovered count
 	} finally { f.cleanup(); }
 }, 120_000);
 
+test("the frozen Python runner source is never credited with its own driver frames", () => {
+	const driver = readFileSync(join(import.meta.dir, "quality-coverage/python.py"), "utf8");
+	const f = fixture({ "script/main.py": "print(42)\n", "script/quality-coverage/python.py": driver }, cli("script/main.py", "python"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], undefined, { D945_ASSET_DIRECTORY: join(f.root, "script/quality-coverage") });
+		expect(run.exit).toBe(1);
+		expect(run.result.complete).toBe(true);
+		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
+		const process = obj(list(receipt.processes)[0]);
+		expect(process.loaded).toEqual(["script/main.py"]);
+		expect(obj(obj(process.trace).files)["script/quality-coverage/python.py"]).toEqual({ arcs: [], translatedArcs: [] });
+	} finally { f.cleanup(); }
+}, 120_000);
+
 test("Python static branch counters must agree with the flushed raw arc set", () => {
 	const f = collected({ "script/main.py": "def choose(x):\n    if x:\n        return 1\n    return 0\nchoose(True)\nchoose(False)\n" }, cli("script/main.py", "python"));
 	try {
