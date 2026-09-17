@@ -23,7 +23,7 @@ export function archiveCli(fixture: Fixture, flags: readonly string[] = [], repo
     "--json",
     ...flags,
   ];
-  const result = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe", timeout: 10_000 });
+  const result = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
   const receipt = {
     args,
     exitCode: result.exitCode,

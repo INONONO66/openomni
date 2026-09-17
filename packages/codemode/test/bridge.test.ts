@@ -57,6 +57,15 @@ describe("interpreter bridge ownership", () => {
     };
     rejectionEvents.on("unhandledRejection", onUnhandled);
     try {
+      // Warm the interpreter first so the 1 s deadline lands while the tool calls
+      // are in flight; a cold start under coverage instrumentation would time the
+      // cell out before `callEntered` ever settles.
+      await expect(
+        kernel.run({ cellId: "warm", code: "1 + 1", timeoutMs: 15_000 }, async () => ({
+          status: "failed",
+          error: "no tools during warmup",
+        })),
+      ).resolves.toMatchObject({ status: "completed", value: "2" });
       const running = kernel.run(
         {
           cellId: "timeout-in-flight",

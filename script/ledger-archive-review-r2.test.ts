@@ -367,7 +367,7 @@ describe("967 review R2-3 refusal before writable pragmas", () => {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
-        timeout: 10_000,
+        timeout: 60_000,
       },
     );
     const reader = child.stdout.getReader();

@@ -252,6 +252,11 @@ describe("code-mode kernel substrate", () => {
   test("a wedged cell's timeout reports the output it produced first", async () => {
     const kernel = new PythonKernel();
     try {
+      // Warm the interpreter first: the 300 ms deadline measures the wedge, not
+      // a cold start, which exceeds it under coverage instrumentation.
+      await expect(
+        kernel.run({ cellId: "warm", code: "1 + 1", timeoutMs: 15_000 }, noTools),
+      ).resolves.toMatchObject({ status: "completed", value: "2" });
       let seen: Machine.CellOutput | undefined;
       const result = await kernel.run(
         { cellId: "wedged-output", code: "print('progress')\ntool.hold()", timeoutMs: 300 },
