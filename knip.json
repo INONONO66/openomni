@@ -73,7 +73,11 @@
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/machines": {
-      "entry": ["src/index.ts", "test/**/*.test.ts", "test/helpers/fifo-request.ts"],
+      "entry": [
+        "src/index.ts",
+        "test/**/*.test.ts",
+        "test/helpers/fifo-request.ts"
+      ],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/policy": {

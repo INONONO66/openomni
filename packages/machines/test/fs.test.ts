@@ -79,11 +79,11 @@ function descriptorLedger(): DescriptorLedger {
   };
 }
 
-function runFifoRequest(root: string, request: Machine.FsRequest): string {
+function runFifoRequests(root: string, requests: Machine.FsRequest[]): string {
   const helper = join(import.meta.dir, "helpers", "fifo-request.ts");
-  const child = spawnSync(process.execPath, [helper, root, JSON.stringify(request)], {
+  const child = spawnSync(process.execPath, [helper, root, JSON.stringify(requests)], {
     encoding: "utf8",
-    // A blocking FIFO open never returns; the bound must still absorb an
+    // A blocking FIFO open never returns; the bound must still absorb one
     // instrumented cold start when the suite runs under the exact collector.
     timeout: 15_000,
   });
@@ -558,24 +558,24 @@ describe("daemon filesystem driver", () => {
       expect(created.stdout).toBe("");
       expect(created.stderr).toBe("");
 
-      expect(runFifoRequest(root, { op: "read", export: "docs", path: "pipe" })).toBe(
-        JSON.stringify({
-          status: "refused",
-          reason: "wrong_kind",
-          message: "path is not a file: pipe",
-        }),
-      );
-      expect(runFifoRequest(root, { op: "stat", export: "docs", path: "pipe" })).toBe(
-        JSON.stringify({
-          status: "completed",
-          value: { op: "stat", kind: "other", size: 0, mtimeMs: lstatSync(fifo).mtimeMs },
-        }),
-      );
-      expect(runFifoRequest(root, { op: "list", export: "docs", path: "" })).toBe(
-        JSON.stringify({
-          status: "completed",
-          value: { op: "list", entries: [{ name: "pipe", kind: "other" }], truncated: false },
-        }),
+      expect(
+        runFifoRequests(root, [
+          { op: "read", export: "docs", path: "pipe" },
+          { op: "stat", export: "docs", path: "pipe" },
+          { op: "list", export: "docs", path: "" },
+        ]),
+      ).toBe(
+        JSON.stringify([
+          { status: "refused", reason: "wrong_kind", message: "path is not a file: pipe" },
+          {
+            status: "completed",
+            value: { op: "stat", kind: "other", size: 0, mtimeMs: lstatSync(fifo).mtimeMs },
+          },
+          {
+            status: "completed",
+            value: { op: "list", entries: [{ name: "pipe", kind: "other" }], truncated: false },
+          },
+        ]),
       );
     });
   });
