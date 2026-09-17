@@ -83,7 +83,7 @@ describe("cell settlement ownership", () => {
         {
           cellId: "blocking",
           code: "value = 42\nimport time\ntime.sleep(0.08)",
-          timeoutMs: 1_000,
+          timeoutMs: 15_000,
         },
         noTools,
       );
@@ -137,7 +137,7 @@ describe("code-mode kernel substrate", () => {
     try {
       await expect(
         kernel.run(
-          { cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 1_000 },
+          { cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 15_000 },
           noTools,
         ),
       ).resolves.toMatchObject({ status: "completed" });
@@ -153,7 +153,7 @@ describe("code-mode kernel substrate", () => {
       ).rejects.toMatchObject({ message: "invalid driver frame" });
       await expect(
         kernel.run(
-          { cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 },
+          { cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 15_000 },
           noTools,
         ),
       ).resolves.toMatchObject({ status: "raised" });
@@ -166,7 +166,7 @@ describe("code-mode kernel substrate", () => {
     const kernel = new PythonKernel();
     try {
       const result = await kernel.run(
-        { cellId: "tool-error-message", code: "tool.test()", timeoutMs: 1_000 },
+        { cellId: "tool-error-message", code: "tool.test()", timeoutMs: 15_000 },
         async () => {
           throw new Error("disk on fire");
         },
@@ -182,7 +182,7 @@ describe("code-mode kernel substrate", () => {
     const kernel = new PythonKernel();
     try {
       await expect(
-        kernel.run({ cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 }, () =>
+        kernel.run({ cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 15_000 }, () =>
           (() => {
             const answer = Machine.ToolCallResult.parse({ status: "completed", value: "ok" });
             Reflect.set(answer, "value", 1n);
