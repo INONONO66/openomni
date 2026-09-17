@@ -378,7 +378,11 @@ equals the collector's `exactCiShards`). Every shard freezes the same
 verdict and process receipt. `finish` requires every shard of the frozen plan,
 rejects a shard whose plan is not the planner's subset, rejects evidence that is
 both whole and sharded, and merges the shard counters under one run identity
-derived from the shard receipt hashes. A whole `exact.coverage.json` from a
+derived from the shard receipt hashes. Python test files
+(`script/quality-coverage/test_*.py`, `python-engine.test.py`) are not exact
+commands: each spawns interpreters, which the Python runner refuses as
+unobservable, so their sources remain uncovered evidence until the runner
+observes children as the Bun collector does. A whole `exact.coverage.json` from a
 single unsharded collect remains accepted.
 
 For measured quality, use Python 3.12.12 and Node 24.19.0 as in CI. Start from

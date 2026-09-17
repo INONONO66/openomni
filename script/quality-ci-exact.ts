@@ -53,8 +53,10 @@ export function exactCiPlan(root: string, contract: string, inventory: Inventory
 	// These run on every CI plan, independently of the tooling matrix.
 	add("scripts-contracts", "script", contracts.map((path) => `script/${path}`));
 	for (const [index, [entry, ...args]] of scriptContracts.entries()) add(`script-contract-${index}`, ".", [`script/${entry}`], "cli", args);
-	if (tooling) for (const [index, file] of inventory.files.filter((file) => /^script\/quality-coverage\/test_.*\.py$/.test(file.path) || file.path === "script/quality-mutation/python-engine.test.py").entries())
-		add(`python-${index}`, ".", [file.path], "cli", [], "python");
+	// Python test files are not exact commands: every one spawns interpreters and
+	// the Python runner refuses process creation as unobservable (python.py
+	// PROCESS_EVENTS). Their sources stay in the inventory as uncovered evidence
+	// until the runner observes children the way the Bun collector does.
 	return { version: 3, commands, run: { id: run, selectionHash: digest(readFileSync(path)) } };
 }
 

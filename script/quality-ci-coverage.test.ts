@@ -169,7 +169,8 @@ test("v3 adapter derives the repository matrix and rejects ownership/discovery d
 	repo.put("full-plan.json", JSON.stringify(planChanges([], true)));
 	const plan = exactCiPlan(root, contract, identity.inventory, join(repo.root, "full-plan.json"), "full");
 	expect(plan.commands.filter((command) => command.kind === "test" && command.cwd === "script").map((command) => command.id).sort()).toEqual([...scriptPartitions].sort());
-	expect(plan.commands.some((command) => command.runtime === "python" && command.paths.includes("script/quality-mutation/python-engine.test.py"))).toBe(true);
+	// Python tests spawn interpreters, which python.py refuses as unobservable.
+	expect(plan.commands.some((command) => command.runtime === "python")).toBe(false);
 	expect(plan.commands.flatMap((command) => command.paths).some((path) => path.includes("/test-e2e/"))).toBe(false);
 	for (const patch of [{ verify: false }, { toolingTests: true }, { matrix: { include: [{ key: "machines", dir: "../escape", coverage: true }] } }]) {
 		repo.put("ci-plan.json", JSON.stringify({ ...repo.selection, ...patch }));
