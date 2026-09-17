@@ -1179,6 +1179,16 @@ test("only a signal-terminated Python child may omit its normal trace", () => {
 	} finally { f.cleanup(); }
 }, 120_000);
 
+test("a frozen Python entry launched in isolated mode is credited and stays isolated", () => {
+	const f = fixture({ "script/main.ts": 'import assert from "node:assert/strict"; const child=Bun.spawnSync([process.env.D945_PYTHON,"-I","script/child.py"],{stdout:"pipe",stderr:"pipe"}); assert.equal(child.exitCode,0,child.stderr.toString()); assert.equal(child.stdout.toString(),"1\\n");', "script/child.py": 'import sys\nprint(sys.flags.isolated)\n' }, cli("script/main.ts"));
+	try {
+		const child = pythonProcess(collectReceipt(f));
+		expect(child.entry).toBe("script/child.py");
+		expect(child.exitCode).toBe(0);
+		expect(obj(child.trace).flushed).toBe(true);
+	} finally { f.cleanup(); }
+}, 120_000);
+
 test("embedded Python raw Unicode retains exact source identity through Bun loading", () => {
 	const source = "# \u2014\nprint(42)\n";
 	const f = fixture({ "script/main.ts": `import assert from "node:assert/strict"; const PYTHON_DRIVER=String.raw\`${source}\`; const child=Bun.spawnSync([process.env.D945_PYTHON,"-u","-c",PYTHON_DRIVER],{stdout:"pipe"}); assert.equal(child.exitCode,0); assert.equal(child.stdout.toString(),"42\\n");` }, cli("script/main.ts"));

@@ -1961,9 +1961,13 @@ function utilityPath(executable: string, binary: string, root: string): string |
 // inventory launched with recognized options only.
 const VALUE_OPTIONS = ["--timeout", "--import", "--require", "-r"];
 const NEUTRAL_OPTIONS = ["-u", "--no-warnings", "--enable-source-maps"];
-function launchEntry(data: PreloadInputs, argv: string[], runtime: string, executable: string, cwd: string): { entry: Prepared; args: string[] } | { external: string } {
+// Python isolated mode changes what the entry sees (no PYTHON* environment, no user site,
+// no script directory on sys.path), so the driver interpreter is launched with it too.
+const FORWARDED_PYTHON_OPTIONS = ["-I"];
+function launchEntry(data: PreloadInputs, argv: string[], runtime: string, executable: string, cwd: string): { entry: Prepared; args: string[]; interpreter: string[] } | { external: string } {
 	let entry: Prepared | undefined;
 	let args: string[] = [];
+	let interpreter: string[] = [];
 	if (runtime === "python" && argv.includes("-c")) {
 		const index = argv.indexOf("-c");
 		const source = argv[index + 1];
@@ -1993,14 +1997,16 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 		const absolute = resolve(cwd, program);
 		const path = relative(data.options.root, absolute);
 		if (path.startsWith("..") && existsSync(absolute)) return { external: absolute };
-		const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag));
+		const forwarded = runtime === "python" ? FORWARDED_PYTHON_OPTIONS : [];
+		const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag) && !forwarded.includes(flag));
 		if (unregistered !== undefined) fail("unsupported_process", executable, `unregistered interpreter option ${unregistered}`);
+		interpreter = options.filter((flag) => forwarded.includes(flag));
 		entry = data.files.find((f) => f.entry.path === path);
 		args = argv.slice(index + 1);
 	}
 	if (!entry || (runtime === "python") !== Boolean(entry.python))
 		fail("unsupported_process", executable, "entry/source is absent from frozen language inventory");
-	return { entry, args };
+	return { entry, args, interpreter };
 }
 
 function runtimeVersion(binary: string, runtime: string, executable: string): string {
@@ -2025,7 +2031,7 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 	if (runtime === "bun" && argv[0] === "run") argv = argv.slice(1);
 	const launched = launchEntry(data, argv, runtime, executable, cwd);
 	if ("external" in launched) return { command: [binary, ...command.slice(1)], env: environment };
-	const { entry, args } = launched;
+	const { entry, args, interpreter } = launched;
 	const actual = runtimeVersion(binary, runtime, executable);
 	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent, command: commandId, runtime, entry: entry.entry.path, args, binary, version: actual, sha256: sha256(readFileSync(binary)), ...(data.selected && parent === "" ? { cwd: relative(data.options.root, cwd) || "." } : {}) }), { flag: "wx" });
 	const env = {
@@ -2035,7 +2041,7 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 	};
 	// The Python runner executes from this copy, like the preload: its own frames run inside every traced region
 	// and must never be credited to the frozen script/quality-coverage/python.py it was copied from.
-	if (runtime === "python") return { id, command: [binary, "-u", join(directory, "python.py"), "run", directory, id, entry.entry.path, ...args], env };
+	if (runtime === "python") return { id, command: [binary, ...interpreter, "-u", join(directory, "python.py"), "run", directory, id, entry.entry.path, ...args], env };
 	if (runtime === "node") return { id, command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
 	return { id,
 		command: argv[0] === "test" ? [binary, "test", "--preload", join(directory, "preload.js"), ...argv.slice(1)] :
