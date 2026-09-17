@@ -12,6 +12,7 @@ import {
 	readFileSync,
 	readdirSync,
 	realpathSync,
+	renameSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -181,10 +182,15 @@ export function sha256(text: string | Buffer): string {
 
 // Strict JSON at the external boundary: no top-typed JSON.parse payload, duplicate
 // object keys, non-finite numbers, trailing data, or prototype mutation.
+// Sticky scanners keep the pass linear: instrumented children decode the whole
+// prepared inventory at startup, so per-character work is process latency.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: JSON forbids raw U+0000..U+001F inside strings, so a plain run must stop there
+const PLAIN_RUN = /[^"\\\u0000-\u001f]*/y;
+const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 export function decode(text: string): Json {
 	let i = 0;
 	const ws = () => {
-		while (/\s/.test(text[i] ?? "") && i < text.length) i++;
+		for (let c = text.charCodeAt(i); c === 32 || c === 10 || c === 13 || c === 9; c = text.charCodeAt(i)) i++;
 	};
 	function escapedCharacter(): string {
 		const escapeCode = text[i++];
@@ -202,16 +208,18 @@ export function decode(text: string): Json {
 	}
 	function string(): string {
 		if (text[i++] !== '"') fail("schema", "", "expected string");
+		// Runs of plain characters are copied as one slice; only escapes and
+		// control characters are examined individually.
 		let result = "";
 		while (i < text.length) {
+			PLAIN_RUN.lastIndex = i;
+			PLAIN_RUN.test(text);
+			result += text.slice(i, PLAIN_RUN.lastIndex);
+			i = PLAIN_RUN.lastIndex;
 			const c = text[i++];
 			if (c === '"') return result;
-			if (c === "\\") {
-				result += escapedCharacter();
-			} else {
-				if (!c || c.charCodeAt(0) < 32) fail("schema", "", "invalid string");
-				result += c;
-			}
+			if (c !== "\\") fail("schema", "", c === undefined ? "unterminated string" : "invalid string");
+			result += escapedCharacter();
 		}
 		return fail("schema", "", "unterminated string");
 	}
@@ -244,17 +252,11 @@ export function decode(text: string): Json {
 		const c = text[i];
 		if (c === '"') return string();
 		if (c === "[" || c === "{") return container(c);
-		for (const [token, literal] of [
-			["true", true],
-			["false", false],
-			["null", null],
-		] as const) {
-			if (text.startsWith(token, i)) {
-				i += token.length;
-				return literal;
-			}
-		}
-		const number = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(i));
+		if (c === "t" && text.startsWith("true", i)) { i += 4; return true; }
+		if (c === "f" && text.startsWith("false", i)) { i += 5; return false; }
+		if (c === "n" && text.startsWith("null", i)) { i += 4; return null; }
+		NUMBER.lastIndex = i;
+		const number = NUMBER.exec(text);
 		if (!number || !Number.isFinite(Number(number[0])))
 			return fail("schema", "", "invalid JSON value");
 		i += number[0].length;
@@ -1713,6 +1715,36 @@ function collectedProcess(directory: string, id: string, data: Inputs): Json {
 	};
 }
 
+// Every child that imports a compiled package re-proves the same dist files.
+// The proof is keyed by the exact bytes it proved, so a sibling process reuses
+// it only while the JavaScript and map are unchanged; the collector still
+// re-runs the compiler for every reported proof when it verifies receipts.
+function sharedEmission(directory: string, data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
+	if (!existsSync(join(data.options.root, `${path}.map`))) return verifiedEmission(data, path);
+	const javascriptSha256 = sha256(content(data.options.root, path));
+	const mapSha256 = sha256(content(data.options.root, `${path}.map`));
+	const cachePath = join(directory, `emitted-${sha256(`${path}\n${javascriptSha256}\n${mapSha256}`)}.json`);
+	if (existsSync(cachePath)) {
+		const cached = object(decode(readFileSync(cachePath, "utf8")), ["file", "proof"]);
+		if (cached.file === undefined) fail("schema", path, "expected object");
+		const proof = object(cached.proof, ["path", "source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]);
+		const count = (value: Json | undefined): number =>
+			typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fail("schema", path, "expected count");
+		return {
+			file: preparedFrom(cached.file),
+			proof: {
+				path: pathValue(proof.path), source: pathValue(proof.source), project: pathValue(proof.project),
+				sha256: hash(proof.sha256), mapSha256: hash(proof.mapSha256), mapHash: hash(proof.mapHash),
+				observationSha256: hash(proof.observationSha256), observationCount: count(proof.observationCount), syntheticCount: count(proof.syntheticCount),
+			},
+		};
+	}
+	const emitted = verifiedEmission(data, path);
+	const temporary = `${cachePath}.${process.pid}.tmp`;
+	writeFileSync(temporary, JSON.stringify(emitted));
+	renameSync(temporary, cachePath);
+	return emitted;
+}
 // The preload is built outside the owned tree so the gate's actual CLI source
 // remains instrumentable. Bun.spawn is interposed before owned code imports it.
 function preload(directory: string): void {
@@ -1741,7 +1773,7 @@ function preload(directory: string): void {
 			return file.code;
 		}
 		if (data.roots.some((r) => path.startsWith(`${r}/`)) && !path.split("/").includes("node_modules")) {
-			const emitted = verifiedEmission(data, path);
+			const emitted = sharedEmission(directory, data, path);
 			if (!emitted.file.transfer) fail("source_map", path, "emitted transfer proof is missing");
 			emittedMaps.set(emitted.proof.source, [...(emittedMaps.get(emitted.proof.source) ?? []), emitted.file.transfer]);
 			emissions.set(path, emitted.proof);
@@ -1906,19 +1938,17 @@ function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string
 // hide an owned runtime from observation, which only loses credit; it can never fabricate it.
 // Matched by basename: Bun's node:child_process re-enters Bun.spawnSync with the already
 // canonical path, so the second interposition must recognize the same utility.
-const SYSTEM_UTILITIES = new Set(["git", "kill", "sh", "bash", "echo", "mkfifo", "ps", "tar"]);
-function canonicalUtilityPaths(name: string): string[] {
-	const paths = ["/usr/bin", "/bin"].map((dir) => join(dir, name)).filter(existsSync).map((p) => realpathSync(p));
-	return [...new Set(paths)];
-}
-function utilityPath(executable: string, binary: string): string | undefined {
-	const expected = SYSTEM_UTILITIES.has(basename(executable)) ? canonicalUtilityPaths(basename(executable)) :
-		basename(binary) === "bunx" ? [realpathSync(process.env.D945_BUN ?? process.execPath)] : undefined;
-	if (expected === undefined) return undefined;
+const OWNED_RUNTIMES = /^(?:bun|node)(?:\.exe)?$|^python(?:3(?:\.\d+)?)?$/;
+// A non-runtime executable outside the frozen root (a system utility, a platform tool such
+// as launchctl, or a fixture stand-in written to a throwaway HOME) runs natively: it earns
+// no credit and leaves no receipt, so it cannot inflate the measurement. Inside the root
+// only owned runtimes on frozen inventory may run.
+function utilityPath(executable: string, binary: string, root: string): string | undefined {
 	let canonical: string;
 	try { canonical = realpathSync(binary); }
 	catch { return fail("unsupported_process", executable, "utility executable cannot be resolved"); }
-	if (!expected.includes(canonical)) fail("unsupported_process", executable, `utility executable must resolve to ${expected.join(" or ")}`);
+	if (OWNED_RUNTIMES.test(basename(binary))) return undefined;
+	if (!relative(realpathSync(root), canonical).startsWith("..")) fail("unsupported_process", executable, "unregistered native executable");
 	return binary;
 }
 // An owned runtime launched on an entry outside the frozen root (a gate copied into a
@@ -1938,6 +1968,8 @@ function launchEntry(data: PreloadInputs, argv: string[], runtime: string, execu
 		if (argv[0] === "test") index++;
 		while (argv[index]?.startsWith("-")) {
 			const flag = argv[index++];
+			// Inline program text has no frozen entry: it runs natively, like an external entry.
+			if (runtime !== "python" && ["-e", "--eval", "-p", "--print"].includes(flag ?? "")) return { external: executable };
 			if (["--timeout", "--import", "--require", "-r", ...(runtime === "bun" ? ["--preload"] : [])].includes(flag ?? "")) index++;
 			else if (!["-u", "--no-warnings", "--enable-source-maps"].includes(flag ?? ""))
 				fail("unsupported_process", executable, `unregistered interpreter option ${flag}`);
@@ -1966,11 +1998,10 @@ function launchCommand(data: PreloadInputs, directory: string, id: string, paren
 	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { id?: string; command: string[]; env: NodeJS.ProcessEnv } {
 	const executable = command[0] ?? fail("process", "", "empty executable");
 	const binary = binaryPath(executable, environment, cwd);
-	const utility = utilityPath(executable, binary);
+	const utility = utilityPath(executable, binary, data.options.root);
 	if (utility !== undefined) return { command: [utility, ...command.slice(1)], env: environment };
 	const name = basename(binary);
-	const runtime = /^bun(?:\.exe)?$/.test(name) ? "bun" : /^node(?:\.exe)?$/.test(name) ? "node" : /^python(?:3(?:\.\d+)?)?$/.test(name) ? "python" :
-		fail("unsupported_process", executable, "unregistered native executable");
+	const runtime = /^bun(?:\.exe)?$/.test(name) ? "bun" : /^node(?:\.exe)?$/.test(name) ? "node" : "python";
 	let argv = command.slice(1);
 	if (runtime === "bun" && argv[0] === "run") argv = argv.slice(1);
 	const launched = launchEntry(data, argv, runtime, executable, cwd);

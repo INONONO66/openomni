@@ -146,10 +146,13 @@ export function installProcessHooks(
     const opts = (hasArgs ? options : args) ?? options ?? {};
     if (insideNative) return spawn(command, argv, opts);
     const wrapped = prepare([command, ...argv], opts);
-    return launch(
-      () => spawn(wrapped.command[0] ?? reject("process", command, "missing wrapped executable"), wrapped.command.slice(1), { ...opts, env: wrapped.env }),
-      wrapped.id,
-    );
+    return launch(() => {
+      const child = spawn(wrapped.command[0] ?? reject("process", command, "missing wrapped executable"), wrapped.command.slice(1), { ...opts, env: wrapped.env });
+      // The caller observes the command it asked for, not the instrumented launch.
+      Object.defineProperty(child, "spawnfile", { value: command, configurable: true, enumerable: true, writable: true });
+      Object.defineProperty(child, "spawnargs", { value: [command, ...argv], configurable: true, enumerable: true, writable: true });
+      return child;
+    }, wrapped.id);
   }
 
   function hookedSpawnSync(command: string, args?: string[] | Options, options?: Options): SyncResult {

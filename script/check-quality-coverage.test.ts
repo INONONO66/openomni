@@ -303,7 +303,7 @@ if (process.argv[2] === "inside") {
 	} finally { inside.cleanup(); }
 }, 120_000);
 
-test("exact collector rejects a utility executable outside the system directories", () => {
+test("exact collector rejects a utility executable planted inside the frozen root", () => {
 	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["tar", "--version"]);\n' }, cli("script/utility.ts"));
 	try {
 		const fake = join(f.root, "fake-bin", "tar");
@@ -312,7 +312,7 @@ test("exact collector rejects a utility executable outside the system directorie
 		chmodSync(fake, 0o755);
 		const run = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
 		expect(run.exit).toBe(2);
-		expect(JSON.stringify(run.result)).toContain("utility executable must resolve to ");
+		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -327,11 +327,11 @@ test("exact collector permits bunx only when it is the pinned Bun binary", () =>
 		chmodSync(fake, 0o755);
 		const rejected = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
 		expect(rejected.exit).toBe(2);
-		expect(JSON.stringify(rejected.result)).toContain("utility executable must resolve to ");
+		expect(JSON.stringify(rejected.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector rejects a git executable outside the canonical CI path", () => {
+test("exact collector rejects a git executable planted inside the frozen root", () => {
 	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["git", "--version"]);\n' }, cli("script/utility.ts"));
 	try {
 		const fake = join(f.root, "fake-bin", "git");
@@ -340,7 +340,7 @@ test("exact collector rejects a git executable outside the canonical CI path", (
 		chmodSync(fake, 0o755);
 		const run = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
 		expect(run.exit).toBe(2);
-		expect(JSON.stringify(run.result)).toContain("utility executable must resolve to /usr/bin/git");
+		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -886,16 +886,21 @@ test("real 99 of 100 statements fails without percentage rounding", () => {
 }, 120_000);
 
 test("caught unsupported subprocess cannot become clean coverage", () => {
-	const f = collected(
+	const f = fixture(
 		{
-			"script/child.ts": 'try { Bun.spawnSync(["/usr/bin/true"]); } catch {}',
+			"script/child.ts": 'try { Bun.spawnSync([new URL("../fake-bin/tool", import.meta.url).pathname]); } catch {}',
 			"script/parent.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);',
 		},
 		[{ id: "parent", kind: "cli", paths: ["script/parent.ts"], args: [], expectedExitCode: 0 }],
 	);
 	try {
-		expect(f.exit).toBe(2);
-		expect(f.result.complete).toBe(false);
+		mkdirSync(join(f.root, "fake-bin"));
+		writeFileSync(join(f.root, "fake-bin/tool"), "#!/bin/sh\nexit 0\n");
+		chmodSync(join(f.root, "fake-bin/tool"), 0o755);
+		const run = f.run(["--collect"]);
+		expect(run.exit).toBe(2);
+		expect(run.result.complete).toBe(false);
+		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally {
 		f.cleanup();
 	}
@@ -1265,5 +1270,77 @@ test("metrics consumes the actual verified collector receipt without fabricated 
 		const corrupted = Bun.spawnSync(argv, { timeout: 60_000 });
 		expect(corrupted.exitCode).toBe(2);
 		expect(() => coverageForMetrics(paths)).toThrow();
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("decode rejects invalid escapes and leading zeros while accepting unicode escapes", () => {
+	expect(decode('"a\\u0041b"')).toBe("aAb");
+	expect(decode('[1, -0.5, 2e3, "x\\n"]')).toEqual([1, -0.5, 2000, "x\n"]);
+	for (const text of ['"\\q"', "01", '"\\u12"', '"unterminated', '"raw\ttab"', "[1,]", '{"a":1,}', "1 2"]) {
+		let thrown: unknown;
+		try { decode(text); } catch (error) { thrown = error; }
+		expect(obj(thrown as Json).code, text).toBe("schema");
+	}
+});
+
+test("shared emission cache serves a second process the same verified identity", () => {
+	const f = emittedWorkspace(
+		"export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; import { Worker } from "node:worker_threads"; test("emitted entry", async () => { expect(choose(true)).toBe(42); const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("exit", () => resolve())); });\n',
+	);
+	try {
+		f.put("script/worker.ts", 'import { choose } from "@fixture/emitted"; export const ready = choose(false);\n');
+		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+		list(inventory.files).push({ path: "script/worker.ts", sha256: sha256(readFileSync(join(f.root, "script/worker.ts"))), bytes: readFileSync(join(f.root, "script/worker.ts")).byteLength, category: "tooling", language: "typescript" });
+		list(inventory.files).sort((a, b) => str(obj(a).path).localeCompare(str(obj(b).path)));
+		f.put("inventory.json", JSON.stringify(inventory));
+		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(run.result.complete).toBe(true);
+		const processes = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
+		expect(processes).toHaveLength(2);
+		for (const process of processes) expect(list(process.loaded).map(str)).toContain("script/pkg/src/index.ts");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("exact collector runs an inline runtime evaluation as an external utility", () => {
+	const f = fixture({ "script/utility.ts": 'const run = Bun.spawnSync([process.execPath, "-e", "process.stdout.write(\'ok\')"], { stdout: "pipe", stderr: "pipe" }); if (run.stdout.toString() !== "ok") process.exit(7);\n' }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(run.result.complete).toBe(true);
+		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("exact collector admits a receipt-less executable outside the frozen root and refuses one inside", () => {
+	const source = 'const run = Bun.spawnSync(["fixture-tool", "print"], { stdout: "pipe", stderr: "pipe" }); if (run.stdout.toString().trim() !== "fixture-tool print") process.exit(7);\n';
+	const outside = realpathSync(mkdtempSync(join(tmpdir(), "d945-outside-")));
+	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
+	try {
+		for (const directory of [outside, join(f.root, "fake-bin")]) {
+			mkdirSync(directory, { recursive: true });
+			writeFileSync(join(directory, "fixture-tool"), '#!/bin/sh\necho "fixture-tool $@"\n');
+			chmodSync(join(directory, "fixture-tool"), 0o755);
+		}
+		const admitted = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: `${outside}:/usr/bin:/bin` });
+		if (admitted.exit !== 1) throw new Error(JSON.stringify({ exit: admitted.exit, result: admitted.result, stderr: admitted.stderr }));
+		expect(admitted.result.complete).toBe(true);
+		const refused = f.run(["--collect"], checker, { PATH: `${join(f.root, "fake-bin")}:/usr/bin:/bin` });
+		expect(refused.exit).toBe(2);
+		expect(JSON.stringify(refused.result)).toContain("unregistered native executable");
+		const missing = f.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		expect(missing.exit).toBe(2);
+		expect(JSON.stringify(missing.result)).toContain("cannot be resolved");
+	} finally { f.cleanup(); rmSync(outside, { recursive: true, force: true }); }
+}, 120_000);
+
+test("instrumented child processes report the command the caller asked for", () => {
+	const f = fixture({ "script/utility.ts": 'import { spawn } from "node:child_process"; const child = spawn("tail", ["-n", "1", "/dev/null"]); if (child.spawnfile !== "tail" || JSON.stringify(child.spawnargs) !== JSON.stringify(["tail", "-n", "1", "/dev/null"])) process.exit(7); await new Promise((resolve) => child.once("exit", resolve));\n' }, cli("script/utility.ts"));
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(run.result.complete).toBe(true);
 	} finally { f.cleanup(); }
 }, 120_000);
