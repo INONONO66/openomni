@@ -2128,6 +2128,15 @@ export function coverageForMetrics(paths: { root: string; contract: string; inve
 	};
 }
 
+// A pipe reader may receive a cut multi-megabyte verdict; the file written before
+// the stdout pointer is the complete document, and the pointer names its bytes.
+function writeResult(result: ReturnType<typeof verify>, path: string | undefined) {
+	if (path === undefined) return result;
+	const encoded = JSON.stringify(result);
+	writeFileSync(path, encoded, { flag: "wx" });
+	return { complete: result.complete, exitCode: result.exitCode, aggregate: result.aggregate, result: path, resultSha256: sha256(encoded) };
+}
+
 export async function qualityCoverageMain(args = process.argv.slice(2)): Promise<number> {
 	lastFailure = undefined;
 	try {
@@ -2146,6 +2155,7 @@ export async function qualityCoverageMain(args = process.argv.slice(2)): Promise
 				"coverage-input": { type: "string" },
 				"coverage-sha256": { type: "string" },
 				"write-coverage": { type: "string" },
+				"write-result": { type: "string" },
 			},
 		});
 		const required = (value: string | undefined, name: string) =>
@@ -2176,7 +2186,7 @@ export async function qualityCoverageMain(args = process.argv.slice(2)): Promise
 		// rejects the receipt. Writing a receipt does not mark it complete.
 		if (values["write-coverage"]) writeFileSync(values["write-coverage"], JSON.stringify(input));
 		const result = verify(input, data);
-		console.log(JSON.stringify(result));
+		console.log(JSON.stringify(writeResult(result, values["write-result"])));
 		return result.exitCode;
 	} catch {
 		const record = lastFailure ?? {

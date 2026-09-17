@@ -80,15 +80,18 @@ export async function collectExactCi(options: { root: string; contract: string; 
 	const root = realpathSync(options.root), contract = resolve(root, options.contract), selection = resolve(root, options.plan);
 	const identity = fingerprint(root, contract), plan = exactCiPlan(root, contract, identity.inventory, selection, options.run);
 	mkdirSync(options.directory, { recursive: true });
-	const inventoryPath = resolve(options.directory, "exact.inventory.json"), planPath = resolve(options.directory, "exact.plan.json"), coverage = resolve(options.directory, "exact.coverage.json");
-	requireMeasurement(!existsSync(coverage) && !existsSync(`${coverage}.sha256`), "exact collection requires fresh output");
+	const inventoryPath = resolve(options.directory, "exact.inventory.json"), planPath = resolve(options.directory, "exact.plan.json"), coverage = resolve(options.directory, "exact.coverage.json"), verdict = resolve(options.directory, "exact.result.json");
+	requireMeasurement(!existsSync(coverage) && !existsSync(`${coverage}.sha256`) && !existsSync(verdict), "exact collection requires fresh output");
 	writeFileSync(inventoryPath, JSON.stringify(identity.inventory), { flag: "wx" });
 	writeFileSync(planPath, JSON.stringify(plan), { flag: "wx" });
 	const paths = { contract, inventory: inventoryPath, plan: planPath };
 	const result = await nativeJson({ cwd: root, receipt: resolve(options.directory, "exact.process.json"), onStderr: (chunk) => { process.stderr.write(chunk); }, command: [process.execPath, resolve(import.meta.dir, "check-quality-coverage.ts"), "--root", root,
-		...Object.entries(paths).flatMap(([key, path]) => [`--${key}`, path, `--${key}-sha256`, digest(readFileSync(path))]), "--collect", "--write-coverage", coverage] });
+		...Object.entries(paths).flatMap(([key, path]) => [`--${key}`, path, `--${key}-sha256`, digest(readFileSync(path))]), "--collect", "--write-coverage", coverage, "--write-result", verdict] });
 	const document = completeDocument(result.document);
 	requireMeasurement(document.exitCode === result.exitCode, "exact collector status differs from result");
+	// The pointer on stdout is small; the verdict bytes it names must be the complete document.
+	requireMeasurement(document.result === verdict && existsSync(verdict) && document.resultSha256 === digest(readFileSync(verdict)), "exact collector verdict differs from its receipt");
+	requireMeasurement(completeDocument(decodeJson(readFileSync(verdict, "utf8"))).exitCode === result.exitCode, "exact collector verdict status differs");
 	requireMeasurement(fingerprint(root, contract).inventoryHash === identity.inventoryHash, "sources changed during exact collection");
 	requireExactCiPlan(recordObject(planPath), exactCiPlan(root, contract, identity.inventory, selection, options.run));
 	writeFileSync(`${coverage}.sha256`, digest(readFileSync(coverage)), { flag: "wx" });

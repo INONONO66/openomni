@@ -592,6 +592,23 @@ for (const [name, source] of [
 	} finally { f.cleanup(); }
 }, 120_000);
 
+test("write-result stores the complete verdict and prints a hashed pointer", () => {
+	const f = fixture();
+	try {
+		const coverage = join(f.root, "coverage.json"), verdict = join(f.root, "result.json");
+		const run = f.run(["--collect", "--write-coverage", coverage, "--write-result", verdict]);
+		const stored = obj(decode(readFileSync(verdict, "utf8")));
+		expect(stored.exitCode).toBe(run.exit);
+		expect(Object.keys(run.result).sort()).toEqual(["aggregate", "complete", "exitCode", "result", "resultSha256"]);
+		expect(run.result.result).toBe(verdict);
+		expect(run.result.resultSha256).toBe(sha256(readFileSync(verdict)));
+		expect(run.result.complete).toBe(true);
+		expect(run.result.aggregate).toEqual(stored.aggregate);
+		expect(list(stored.measurements).length).toBeGreaterThan(0);
+		expect(f.run(["--collect", "--write-coverage", join(f.root, "again.json"), "--write-result", verdict]).exit).toBe(2);
+	} finally { f.cleanup(); }
+}, 120_000);
+
 test("workspace emit receipt binds compiler, artifact, original and map identities", () => {
 	const f = emittedWorkspace();
 	try {
