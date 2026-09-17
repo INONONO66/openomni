@@ -1001,6 +1001,26 @@ test("Python statements, functions, static arcs, short circuits and lines are re
 	} finally { f.cleanup(); }
 }, 120_000);
 
+test("the Python collector map joins the metrics analyzer map for methods, nested defs and lambdas", async () => {
+	const source = 'class Box:\n    def __init__(self, value):\n        self.value = value\n\n    def scale(self, factor):\n        def inner(v):\n            return v * factor\n        return inner(self.value)\n\n\ndouble = lambda v: v * 2\nassert Box(3).scale(2) == 6\nassert double(4) == 8\n';
+	const f = collected({ "script/main.py": source }, cli("script/main.py", "python"));
+	try {
+		expect(f.exit).toBe(0);
+		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
+		const document = await measureStatic({ root: f.root, inventory: join(f.root, "inventory.json") });
+		const prepared = document.measured.map((row) => row.analysis.prepared);
+		const file = prepared.find((row) => row.path === "script/main.py");
+		if (!file) throw new Error("missing Python map");
+		expect(Object.values(file.fnMap).map((fn) => fn.name).sort()).toEqual(["<lambda>", "__init__", "inner", "scale"]);
+		const exact = loadCoverage(join(f.root, "coverage.json"), inventory, prepared, { root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
+		const counts = exact.totals.get("script/main.py");
+		if (!counts) throw new Error("missing exact counters");
+		expect(Object.values(counts.f)).toEqual([1, 1, 1, 1]);
+		const joined = joinBounds(document, { identity: inventory, coverage: exact, selectedLanes: ["script"] });
+		expect(joined.measurement.findings.filter((row) => row.gate === "coverage" && row.path === "script/main.py")).toEqual([]);
+	} finally { f.cleanup(); }
+}, 120_000);
+
 test("unexecuted Python is uncovered, not unsupported and not credited by a host string", () => {
 	const f = collected({ "script/main.ts": "console.log(42);", "script/unloaded.py": "def missing():\n    return 1\n" }, cli("script/main.ts"));
 	try { expect(f.exit).toBe(1); expect(findings(f.result).some((v) => v.path === "script/unloaded.py" && v.class === "functions")).toBe(true); }
