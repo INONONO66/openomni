@@ -868,24 +868,19 @@ test("real 99 of 100 statements fails without percentage rounding", () => {
 	}
 }, 120_000);
 
-test("killed real child and caught unsupported subprocess cannot become clean coverage", () => {
-	for (const child of [
-		'process.kill(process.pid, "SIGKILL");',
-		'try { Bun.spawnSync(["/usr/bin/true"]); } catch {}',
-	]) {
-		const f = collected(
-			{
-				"script/child.ts": child,
-				"script/parent.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);',
-			},
-			[{ id: "parent", kind: "cli", paths: ["script/parent.ts"], args: [], expectedExitCode: 0 }],
-		);
-		try {
-			expect(f.exit).toBe(2);
-			expect(f.result.complete).toBe(false);
-		} finally {
-			f.cleanup();
-		}
+test("caught unsupported subprocess cannot become clean coverage", () => {
+	const f = collected(
+		{
+			"script/child.ts": 'try { Bun.spawnSync(["/usr/bin/true"]); } catch {}',
+			"script/parent.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);',
+		},
+		[{ id: "parent", kind: "cli", paths: ["script/parent.ts"], args: [], expectedExitCode: 0 }],
+	);
+	try {
+		expect(f.exit).toBe(2);
+		expect(f.result.complete).toBe(false);
+	} finally {
+		f.cleanup();
 	}
 }, 120_000);
 
@@ -972,27 +967,24 @@ test("unexecuted Python is uncovered, not unsupported and not credited by a host
 	finally { f.cleanup(); }
 }, 120_000);
 
-test("approved native killed boundary keeps counters and requires exact signal, checkpoint and count", () => {
-	const f = fixture({ "script/main.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);', "script/child.ts": 'process.kill(process.pid,"SIGKILL");' }, cli("script/main.ts"));
-	const fault: Json = { id: "kill", command: "cli", entry: "script/child.ts", args: [], exitCode: null, signal: "SIGKILL", occurrences: 1, checkpoint: { path: "script/child.ts", statement: "0", minimumHits: 1 } };
+test.each([
+	["refusing", 'console.error("refused"); process.exit(1);', 1, null],
+	["killed", 'process.kill(process.pid,"SIGKILL");', null, "SIGKILL"],
+])("a %s child's flushed receipt is complete evidence; a missing child receipt is not", (_, body, exitCode, signal) => {
+	const f = collected({ "script/main.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);', "script/child.ts": body }, cli("script/main.ts"));
 	try {
-		refreeze(f, "plan", { version: 2, commands: decode(JSON.stringify(cli("script/main.ts"))), faults: [fault] });
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
-		expect(run.exit).toBe(0);
+		expect(f.exit).toBe(0);
 		const original = readFileSync(join(f.root, "coverage.json"), "utf8");
 		const receipt = obj(decode(original));
-		const child = list(receipt.processes).map(obj).find((p) => p.parent !== "");
-		expect(obj(child).exitCode).toBe(null);
-		expect(obj(child).signal).toBe("SIGKILL");
-		for (const defect of ["signal", "checkpoint", "partial"]) {
-			const changed = obj(decode(original));
-			const processes = list(changed.processes);
-			const target = processes.map(obj).find((p) => p.parent !== "");
-			if (defect === "signal") obj(target).signal = "SIGTERM";
-			if (defect === "checkpoint") obj(obj(obj(target).coverage)["script/child.ts"]).s = { "0": 0 };
-			if (defect === "partial") changed.processes = processes.filter((p) => obj(p).parent === "");
-			expect(verifyChanged(f, changed).exit).toBe(2);
-		}
+		const processes = list(receipt.processes).map(obj);
+		const child = obj(processes.find((p) => p.parent !== ""));
+		expect(child.exitCode).toBe(exitCode);
+		expect(child.signal).toBe(signal);
+		expect(Object.values(obj(obj(obj(child.coverage)["script/child.ts"]).s))).toEqual(body.split(";").filter(Boolean).map(() => 1));
+		expect(verifyChanged(f, receipt).exit).toBe(0);
+		const partial = obj(decode(original));
+		partial.processes = list(partial.processes).filter((p) => obj(p).parent === "");
+		expect(verifyChanged(f, partial).exit).toBe(2);
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -1116,16 +1108,20 @@ test("Python static branch counters must agree with the flushed raw arc set", ()
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("only the exact approved Python kill can omit normal trace", () => {
+test("only a signal-terminated Python child may omit its normal trace", () => {
 	const f = fixture({ "script/main.ts": 'Bun.spawnSync([process.env.D945_PYTHON,"script/child.py"]);', "script/child.py": 'import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n' }, cli("script/main.ts"));
 	try {
-		refreeze(f, "plan", { version: 2, commands: decode(JSON.stringify(cli("script/main.ts"))), faults: [{ id: "kill", command: "cli", entry: "script/child.py", args: [], exitCode: null, signal: "SIGKILL", occurrences: 1, checkpoint: { path: "script/child.py", statement: "0", minimumHits: 1 } }] });
 		const receipt = collectReceipt(f);
 		const child = pythonProcess(receipt);
 		expect(child.trace).toBe(null);
 		expect(child.signal).toBe("SIGKILL");
-		child.signal = null; child.exitCode = 0;
-		expect(verifyChanged(f, receipt).exit).toBe(2);
+		expect(verifyChanged(f, receipt).exit).toBe(0);
+		for (const exitCode of [0, 1]) {
+			const normal = obj(decode(JSON.stringify(receipt)));
+			const process = pythonProcess(normal);
+			process.signal = null; process.exitCode = exitCode;
+			expect(verifyChanged(f, normal).exit).toBe(2);
+		}
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -1147,7 +1143,7 @@ test.each([1, 2])("v%i retains all-test and operational CLI omission rejection",
 		const f = fixture({ ...fixtures, "script/entry.ts": "if (import.meta.main) console.log(1);\n" });
 		try {
 			const commands = omitted === "test" ? cli("script/entry.ts") : defaultPlan;
-			refreeze(f, "plan", { version, commands: decode(JSON.stringify(commands)), ...(version === 2 ? { faults: [] } : {}) });
+			refreeze(f, "plan", { version, commands: decode(JSON.stringify(commands)) });
 			const result = f.run(["--collect"]);
 			expect(result.exit).toBe(2);
 			expect(result.result.complete).toBe(false);
@@ -1167,7 +1163,7 @@ test("v3 executes selected roots in two workspaces and retains exact uncovered i
 		"script/unused.ts": "if (import.meta.main) console.log(7);\n",
 	};
 	const f = fixture(sources);
-	const plan = { version: 3, commands: ["one", "two"].map((name) => ({ id: name, kind: "test", paths: [`script/${name}/main.test.ts`], args: [], cwd: `script/${name}`, runtime: "bun", expectedExitCode: 0 })), faults: [], run: { id: "selected-run", selectionHash: sha256("selection") } };
+	const plan = { version: 3, commands: ["one", "two"].map((name) => ({ id: name, kind: "test", paths: [`script/${name}/main.test.ts`], args: [], cwd: `script/${name}`, runtime: "bun", expectedExitCode: 0 })), run: { id: "selected-run", selectionHash: sha256("selection") } };
 	try {
 		refreeze(f, "plan", plan);
 		const result = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);

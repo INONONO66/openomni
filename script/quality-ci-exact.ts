@@ -55,7 +55,7 @@ export function exactCiPlan(root: string, contract: string, inventory: Inventory
 	for (const [index, [entry, ...args]] of scriptContracts.entries()) add(`script-contract-${index}`, ".", [`script/${entry}`], "cli", args);
 	if (tooling) for (const [index, file] of inventory.files.filter((file) => /^script\/quality-coverage\/test_.*\.py$/.test(file.path) || file.path === "script/quality-mutation/python-engine.test.py").entries())
 		add(`python-${index}`, ".", [file.path], "cli", [], "python");
-	return { version: 3, commands, faults: [], run: { id: run, selectionHash: digest(readFileSync(path)) } };
+	return { version: 3, commands, run: { id: run, selectionHash: digest(readFileSync(path)) } };
 }
 
 export function requireExactCiPlan(actual: ReturnType<typeof recordObject>, expected: ReturnType<typeof exactCiPlan>): void {
@@ -72,7 +72,6 @@ export function requireExactCiPlan(actual: ReturnType<typeof recordObject>, expe
 		const fields = jsonObject(decodeJson(JSON.stringify(command)));
 		for (const key of Object.keys(row)) requireMeasurement(JSON.stringify(row[key]) === JSON.stringify(fields[key]), `exact CI command differs: ${command.id}/${key}`);
 	}
-	requireMeasurement(JSON.stringify(actual.faults) === JSON.stringify(expected.faults), "exact CI fault contracts differ");
 }
 
 /** Real collector only. Exit 1 is complete uncovered evidence, never a passing

@@ -13,7 +13,7 @@ export function collectExactFixture(options: {
   const plan = join(options.directory, "exact.plan.json");
   const coverage = join(options.directory, "exact.coverage.json");
   writeFileSync(inventory, JSON.stringify(identity.inventory));
-  writeFileSync(plan, JSON.stringify({ version: 2, commands, faults: [], run: { id: options.run, selectionHash: digest(readFileSync(options.plan)) } }));
+  writeFileSync(plan, JSON.stringify({ version: 2, commands, run: { id: options.run, selectionHash: digest(readFileSync(options.plan)) } }));
   const paths = { contract: resolve(options.root, options.contract), inventory, plan };
   const child = Bun.spawnSync([process.execPath, join(import.meta.dir, "check-quality-coverage.ts"), "--root", options.root,
     ...Object.entries(paths).flatMap(([key, path]) => [`--${key}`, path, `--${key}-sha256`, digest(readFileSync(path))]),

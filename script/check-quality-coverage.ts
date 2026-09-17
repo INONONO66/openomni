@@ -105,11 +105,6 @@ type EmissionProof = {
 	path: string; source: string; project: string; sha256: string; mapSha256: string;
 	mapHash: string; observationSha256: string; observationCount: number; syntheticCount: number;
 };
-type Fault = {
-	id: string; command: string; entry: string; args: string[];
-	exitCode: number | null; signal: string | null; occurrences: number;
-	checkpoint: { path: string; statement: string; minimumHits: number };
-};
 type Command = {
 	id: string;
 	kind: string;
@@ -134,13 +129,12 @@ type Inputs = {
 	files: Prepared[];
 	commands: Command[];
 	roots: string[];
-	faults: Fault[];
 	selected: boolean;
 	projects: string[];
 	configurations: { path: string; sha256: string }[];
 };
-// The instrumented processes only consume the prepared inventory; commands and
-// fault contracts stay with the collector.
+// The instrumented processes only consume the prepared inventory; commands stay
+// with the collector.
 type PreloadInputs = Pick<Inputs, "options" | "entries" | "files" | "roots" | "selected" | "projects" | "configurations">;
 type ProcessReceipt = {
 	id: string;
@@ -379,7 +373,7 @@ function commandDirectory(value: Json | undefined, root: string): string {
 }
 function commands(value: Json, entries: Entry[], root: string): Command[] {
 	const plan = object(value);
-	object(value, ["version", "commands", ...(plan.version === 2 || plan.version === 3 ? ["faults"] : []), ...(plan.version === 3 || plan.run !== undefined ? ["run"] : [])]);
+	object(value, ["version", "commands", ...(plan.version === 3 || plan.run !== undefined ? ["run"] : [])]);
 	if (![1, 2, 3].includes(integer(plan.version))) fail("schema", "", "unsupported plan version");
 	if (plan.run !== undefined) {
 		const run = object(plan.run, ["id", "selectionHash"]);
@@ -432,27 +426,6 @@ function nullableExit(value: Json | undefined): number | null {
 }
 function nullableSignal(value: Json | undefined): string | null {
 	return value === null ? null : choice(value, Object.keys(osConstants.signals));
-}
-function faultContracts(value: Json, commands: Command[], files: Prepared[]): Fault[] {
-	const plan = object(value);
-	const faults = plan.version === 2 || plan.version === 3 ? array(plan.faults).map((item): Fault => {
-		const f = object(item, ["id", "command", "entry", "args", "exitCode", "signal", "occurrences", "checkpoint"]);
-		const checkpoint = object(f.checkpoint, ["path", "statement", "minimumHits"]);
-		const result = {
-			id: text(f.id), command: text(f.command), entry: pathValue(f.entry), args: array(f.args).map(text),
-			exitCode: nullableExit(f.exitCode), signal: nullableSignal(f.signal), occurrences: integer(f.occurrences),
-			checkpoint: { path: pathValue(checkpoint.path), statement: text(checkpoint.statement), minimumHits: integer(checkpoint.minimumHits) },
-		};
-		if (!commands.some((c) => c.id === result.command) || !files.some((f) => f.entry.path === result.entry) ||
-			result.occurrences < 1 || result.checkpoint.minimumHits < 1 ||
-			(result.exitCode === null) === (result.signal === null) || result.exitCode === 0 ||
-			!files.some((f) => f.entry.path === result.checkpoint.path && Object.hasOwn(f.coverage.s, result.checkpoint.statement)))
-			fail("plan", result.id, "invalid approved fault boundary");
-		return result;
-	}) : [];
-	unique(faults.map((f) => f.id), "fault contract");
-	unique(faults.map((f) => JSON.stringify([f.command, f.entry, f.args, f.exitCode, f.signal])), "fault selector");
-	return faults;
 }
 function syntax(source: string, path: string): void {
 	const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
@@ -975,14 +948,13 @@ function inputs(options: Options): Inputs {
 	const planValue = frozen(options.plan, options.planHash);
 	const plan = commands(planValue, entries, options.root);
 	const selected = object(planValue).version === 3;
-	const faults = faultContracts(planValue, plan, files);
 	for (const file of files)
 		if (
 			!selected && !file.python && /import\.meta\.main/.test(readFileSync(join(options.root, file.entry.path), "utf8")) &&
 			!plan.some((c) => c.kind === "cli" && c.paths[0] === file.entry.path)
 		)
 			fail("plan", file.entry.path, "operational CLI entry missing");
-	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, faults, selected, projects: contract.projects, configurations };
+	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, selected, projects: contract.projects, configurations };
 }
 // The collector prepares the inventory once and every instrumented process reads
 // the same snapshot: re-instrumenting the repository per spawned child made one
@@ -1491,17 +1463,6 @@ function summary(data: Inputs, receipts: ProcessReceipt[]) {
 	return { complete: true, exitCode: findings.length ? 1 : 0, aggregate, measurements, findings };
 }
 
-function approvedProcessFault(receipt: ProcessReceipt, faults: Fault[], counts: Map<string, number>): boolean {
-	if (!receipt.parent || (receipt.exitCode === 0 && receipt.signal === null)) return false;
-	const fault = faults.find((f) => f.command === receipt.command && f.entry === receipt.entry &&
-		JSON.stringify(f.args) === JSON.stringify(receipt.args) && f.exitCode === receipt.exitCode && f.signal === receipt.signal);
-	if (!fault) fail("execution", receipt.id, "unapproved native process failure");
-	if ((receipt.coverage[fault.checkpoint.path]?.s[fault.checkpoint.statement] ?? 0) < fault.checkpoint.minimumHits)
-		fail("incomplete_coverage", receipt.id, "approved boundary was not independently counted before termination");
-	counts.set(fault.id, (counts.get(fault.id) ?? 0) + 1);
-	return true;
-}
-
 function verifyProcessGraph(receipt: ProcessReceipt, receipts: ProcessReceipt[], roots: Set<string>): void {
 	unique(receipt.children, "child expectation");
 	if (
@@ -1582,19 +1543,17 @@ function verify(value: Json, data: Inputs) {
 			fail("identity", command.id, "root launch differs from selected command");
 		expectedRoots.add(receipt.id);
 	});
-	const faultCounts = new Map<string, number>();
+	// A child's exit code is its parent test's assertion, not the collector's:
+	// refusal-path CLI tests exit nonzero by design. The flushed receipt is the
+	// evidence; only a normally exiting Python child can run its trace flush, so
+	// only a signal-terminated one may lack it.
 	for (const receipt of receipts) {
-		const approvedFault = approvedProcessFault(receipt, data.faults, faultCounts);
-		if (receipt.runtime === "python" && receipt.trace === null && !approvedFault)
+		if (receipt.runtime === "python" && receipt.trace === null && receipt.signal === null)
 			fail("incomplete_coverage", receipt.id, "Python normal-completion trace was not flushed");
 		verifyProcessGraph(receipt, receipts, expectedRoots);
 	}
-	for (const fault of data.faults)
-		if (faultCounts.get(fault.id) !== fault.occurrences)
-			fail("incomplete_coverage", fault.id, "approved fault boundary occurrence count differs");
 	return {
 		...summary(data, receipts),
-		approvedFaults: data.faults.map((f) => ({ id: f.id, observed: faultCounts.get(f.id) ?? 0 })),
 		processOutcomes: receipts.map((r) => ({ id: r.id, parent: r.parent, runtime: r.runtime, entry: r.entry, exitCode: r.exitCode, signal: r.signal })),
 		runtime: v.runtime,
 		authoritative: v.runtime === "1.3.6",
@@ -2214,7 +2173,7 @@ export async function qualityCoverageMain(args = process.argv.slice(2)): Promise
 				required(values["coverage-sha256"], "coverage-sha256"),
 			);
 		// Preserve authentic counter/native-outcome provenance even when verification
-		// rejects an unapproved fault. Writing a receipt does not mark it complete.
+		// rejects the receipt. Writing a receipt does not mark it complete.
 		if (values["write-coverage"]) writeFileSync(values["write-coverage"], JSON.stringify(input));
 		const result = verify(input, data);
 		console.log(JSON.stringify(result));
