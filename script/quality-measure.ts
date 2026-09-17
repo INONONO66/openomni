@@ -110,16 +110,17 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 			contract: { type: "string", default: "script/conformance/quality-contract.json" },
 			leg: { type: "string" }, legs: { type: "string" },
 			baseline: { type: "string" }, base: { type: "string" }, output: { type: "string" },
-			"coverage-directory": { type: "string" }, plan: { type: "string" }, run: { type: "string" },
+			"coverage-directory": { type: "string" }, plan: { type: "string" }, run: { type: "string" }, shard: { type: "string" },
 		}
 	});
 	requireMeasurement(positionals.length === 1 && argv[0] === positionals[0] && (positionals[0] === "collect" || positionals[0] === "finish"), "expected collect or finish");
 	const root = resolve(values.root), contract = resolve(root, values.contract);
+	requireMeasurement(values.shard === undefined || (positionals[0] === "collect" && values.leg === "exact"), "shard applies to exact collect only");
 	if (positionals[0] === "collect") {
 		requireMeasurement(Boolean(values.leg && values.output), "collect requires leg and output");
 		if (values.leg === "exact") {
 			requireMeasurement(Boolean(values.plan && values.run), "exact collect requires plan and run");
-			return (await phase("exact", () => collectExactCi({ root, contract, directory: resolve(root, values.output ?? ""), plan: values.plan ?? "", run: values.run ?? "" }))).result;
+			return (await phase("exact", () => collectExactCi({ root, contract, directory: resolve(root, values.output ?? ""), plan: values.plan ?? "", run: values.run ?? "", ...(values.shard === undefined ? {} : { shard: values.shard }) }))).result;
 		}
 		const leg = jsonChoice(values.leg, legs), directory = resolve(root, values.output ?? "");
 		const collected = await phase(leg, async () => {

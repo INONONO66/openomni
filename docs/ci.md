@@ -367,6 +367,20 @@ b run script/verify-ledger-rename.ts
 b run script/check-ledger-schema-drift.ts
 ```
 
+### Exact statement evidence
+
+The `quality-exact` job runs the plan's selected test commands under the
+instrumented collector, one matrix shard per selected lane plus the
+`scripts-contracts` shard (the planner emits the list as `exactShards`; it
+equals the collector's `exactCiShards`). Every shard freezes the same
+`exact.inventory.json` and `exact.plan.json`, runs only its subset plan
+(`exact.<shard>.plan.json`), and seals `exact.<shard>.coverage.json` with its
+verdict and process receipt. `finish` requires every shard of the frozen plan,
+rejects a shard whose plan is not the planner's subset, rejects evidence that is
+both whole and sharded, and merges the shard counters under one run identity
+derived from the shard receipt hashes. A whole `exact.coverage.json` from a
+single unsharded collect remains accepted.
+
 For measured quality, use Python 3.12.12 and Node 24.19.0 as in CI. Start from
 fresh lane coverage directories and a new receipt directory: `begin` rejects
 pre-existing LCOV. The following uses `jq` to run every selected lane, wrapping
@@ -405,6 +419,13 @@ else
   b run ci test --lane scripts-contracts
 fi
 b run script/check-quality-python.ts
+# Exact statement evidence: one instrumented shard per selected lane plus the
+# contracts shard, exactly as the `quality-exact` matrix runs them. Exit 1 is
+# measured uncovered evidence; finish merges the sealed shard receipts.
+for shard in $(jq -r '.lanes[]' ci-plan.json) scripts-contracts; do
+  b run script/quality-measure.ts collect --leg exact --shard "$shard" --plan ci-plan.json \
+    --run "$QUALITY_RUN" --output quality-receipts || [[ $? -eq 1 ]]
+done
 b run script/quality-measure.ts finish --legs quality-legs --base "$QUALITY_BASE" \
   --baseline script/conformance/quality-baseline-lcov-bound.json --plan ci-plan.json \
   --run "$QUALITY_RUN" --coverage-directory quality-receipts --output quality-results

@@ -8,7 +8,7 @@ import { gate } from "./ci";
 import { TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
-const QUALITY_JOBS = ["quality-static", "quality-gates", "quality"];
+const QUALITY_JOBS = ["quality-static", "quality-exact", "quality-gates", "quality"];
 function cli(args: readonly string[], env: Record<string, string> = {}) {
   return Bun.spawnSync([process.execPath, "script/ci.ts", ...args], {
     cwd: root,
@@ -35,13 +35,14 @@ function fixture() {
 const jobSchema = z.object({
   needs: z.array(z.string()).optional(),
   if: z.string().optional(),
+  strategy: z.object({ "fail-fast": z.boolean(), matrix: z.union([z.string(), z.object({ leg: z.array(z.string()).optional() })]) }).optional(),
   steps: z.array(
     z.object({
       run: z.string().optional(),
       if: z.string().optional(),
       uses: z.string().optional(),
       with: z
-        .object({ ref: z.string().optional(), "fetch-depth": z.number().optional() })
+        .object({ ref: z.string().optional(), "fetch-depth": z.number().optional(), pattern: z.string().optional(), path: z.string().optional() })
         .optional(),
       "working-directory": z.string().optional(),
     }),
@@ -53,7 +54,7 @@ test("docs-only planning keeps both final statuses successful while work is inte
   const plan = planChanges(["README.md"]);
   const needs = Object.fromEntries(
     [
-      "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+      "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
       "dependency-review", "scripts-coverage",
     ].map((job) => [job, { result: "skipped" }]),
   );
@@ -68,7 +69,7 @@ test("docs-only planning keeps both final statuses successful while work is inte
 });
 
 for (const job of [
-  "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+  "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
   "dependency-review", "scripts-contracts", "scripts-coverage",
 ]) {
   for (const status of ["failure", "cancelled", "skipped", "missing"]) {
@@ -77,7 +78,7 @@ for (const job of [
       // is required on pushes, so the push event exercises every job.
       const needs: Record<string, { result: string }> = Object.fromEntries(
         [
-          "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+          "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
           "dependency-review", "scripts-contracts", "scripts-coverage",
         ].map((key) => [key, { result: "success" }]),
       );
@@ -131,7 +132,7 @@ test("full gate executes the required quality jobs in process", () => {
   const env = {
     CI_NEEDS: JSON.stringify({
       ...Object.fromEntries([
-        "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality",
+        "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
         "scripts-contracts", "scripts-coverage",
       ].map((job) => [job, { result: "success" }])),
       "dependency-review": { result: "skipped" },
@@ -218,7 +219,7 @@ test("workflow restores the one build before every executable consumer", () => {
     .object({ jobs: z.record(z.string(), jobSchema) })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
   // When discovering consumers, then none rebuilds or bypasses artifact validation.
-  for (const name of ["tests", "static", "deps", "quality-static", "quality-gates", "quality"]) {
+  for (const name of ["tests", "static", "deps", "quality-static", "quality-exact", "quality-gates", "quality"]) {
     expect(
       jobs[name]?.steps.some((step) => step.uses?.startsWith("actions/download-artifact@")),
     ).toBe(true);
@@ -251,20 +252,29 @@ test("v2 workflow carries scope as an artifact and always runs repository contra
 
 test("quality collectors run beside tests and join the required final gates", () => {
   const jobs = z
-    .object({ jobs: z.object({ quality: jobSchema, "quality-static": jobSchema, "quality-gates": jobSchema, ci: jobSchema }) })
+    .object({ jobs: z.object({ quality: jobSchema, "quality-static": jobSchema, "quality-exact": jobSchema, "quality-gates": jobSchema, ci: jobSchema }) })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
   expect(jobs.quality.needs).toContain("quality-static");
+  expect(jobs.quality.needs).toContain("quality-exact");
   expect(jobs.quality.needs).toContain("tests");
   expect(jobs["quality-static"].needs).toEqual(["plan", "prepare"]);
   expect(jobs["quality-static"].needs).not.toContain("tests");
+  expect(jobs["quality-exact"].needs).toEqual(["plan", "prepare"]);
   expect(jobs["quality-gates"].needs).toEqual(["plan", "prepare"]);
   expect(jobs.ci.needs).toContain("quality-static");
+  expect(jobs.ci.needs).toContain("quality-exact");
   expect(jobs.ci.needs).toContain("quality-gates");
-  const exact = jobs.quality.steps.find((step) => step.run?.includes("quality-measure.ts collect --root ."));
+  // Exact statement evidence is sharded by the planner and collected beside
+  // the tests; finish only consumes the sealed shard artifacts.
+  expect(jobs["quality-exact"].strategy).toEqual({ "fail-fast": false, matrix: ["$", "{{ fromJSON(needs.plan.outputs.exactShards) }}"].join("") });
+  const exact = jobs["quality-exact"].steps.find((step) => step.run?.includes("quality-measure.ts collect --root ."));
   expect(exact?.run).toContain("--leg exact");
+  expect(exact?.run).toContain('--shard "$SHARD"');
   expect(exact?.run).toContain('--run "$QUALITY_RUN"');
   expect(exact?.run).toContain("status=$?");
   expect(exact?.run).toContain('[[ "$status" -ne 1 ]]');
+  expect(jobs.quality.steps.some((step) => step.run?.includes("quality-measure.ts collect"))).toBe(false);
+  expect(jobs.quality.steps.some((step) => step.with?.pattern === "quality-exact-*" && step.with?.path === "quality-receipts")).toBe(true);
   expect(jobs.quality.steps.some((step) => step.run?.includes("quality-measure.ts finish"))).toBe(true);
 });
 
@@ -289,15 +299,7 @@ test("quality matrix has exactly five bounded legs and no job exceeds sixty minu
     .object({
       jobs: z.record(
         z.string(),
-        jobSchema.extend({
-          "timeout-minutes": z.union([z.number(), z.string()]),
-          strategy: z
-            .object({
-              "fail-fast": z.boolean(),
-              matrix: z.union([z.string(), z.object({ leg: z.array(z.string()).optional() })]),
-            })
-            .optional(),
-        }),
+        jobSchema.extend({ "timeout-minutes": z.union([z.number(), z.string()]) }),
       ),
     })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
@@ -340,12 +342,12 @@ test("quality jobs run on executable pull requests and merge groups", () => {
   // Only pull requests cancel superseded runs; merge groups and main keep every run.
   expect(workflow.concurrency["cancel-in-progress"]).toBe(["$", "{{ github.event_name == 'pull_request' }}"].join(""));
   const conditions = QUALITY_JOBS.map((q) => workflow.jobs[q]?.if);
-  expect(conditions.slice(0, 2)).toEqual(["needs.plan.outputs.verify == 'true'", "needs.plan.outputs.verify == 'true'"]);
+  expect(conditions.slice(0, 3)).toEqual(new Array(3).fill("needs.plan.outputs.verify == 'true'"));
   // A skipped need (scripts-coverage on non-tooling PRs) skips a dependent job
   // unless its condition carries a status-check function; without `!cancelled()`
   // the `skipped` branch below is unreachable and the fan-in is skipped.
-  expect(conditions[2]).toBe(
-    "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')",
+  expect(conditions[3]).toBe(
+    "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && needs.quality-exact.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')",
   );
 });
 
@@ -353,7 +355,7 @@ test("the full push gate accepts successful checks without PR-only dependency re
   // Given full main-branch results with only the PR-specific check disabled.
   const needs = Object.fromEntries(
     [
-      "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-gates", "quality", "scripts-contracts", "scripts-coverage",
+      "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality", "scripts-contracts", "scripts-coverage",
     ].map((key) => [key, { result: "success" }]),
   );
   // When the real gate executes, then all mandatory work is accepted.

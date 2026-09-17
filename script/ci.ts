@@ -101,6 +101,7 @@ export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void 
           ["static", plan.verify],
           ["deps", plan.verify],
           ["quality-static", plan.verify],
+          ["quality-exact", plan.verify],
           ["quality-gates", plan.verify],
           ["quality", plan.verify],
           ["dependency-review", plan.dependencyReview && process.env.CI_EVENT === "pull_request"],

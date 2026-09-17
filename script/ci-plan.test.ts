@@ -262,6 +262,7 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
     "matrix",
     "class",
     "toolingTests",
+    "exactShards",
   ]);
   expect(lines).toEqual([
     `full=${plan.full}`,
@@ -270,6 +271,7 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
     `matrix=${JSON.stringify(plan.matrix)}`,
     `class=${plan.class}`,
     `toolingTests=${plan.toolingTests}`,
+    `exactShards=${JSON.stringify({ include: [...plan.lanes, "scripts-contracts"].map((shard) => ({ shard })) })}`,
   ]);
   expect(existsSync(join(repo.root, "PWNED"))).toBe(false);
 });

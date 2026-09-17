@@ -309,6 +309,32 @@ export function loadCoverage(path: string, inventory: Inventory, prepared: Prepa
   };
 }
 export type Coverage = ReturnType<typeof loadCoverage>;
+/** Sum verified shard receipts of one run: identical file sets and inventory,
+ * distinct process graphs. The merged identity is the ordered shard receipts. */
+export function mergeCoverage(parts: Coverage[], planHash: string): Coverage {
+  const first = parts[0];
+  if (!first || !("inventoryHash" in first.run)) fail("coverage", "exact", "sharded coverage requires collector receipts");
+  const totals = new Map<string, Counters>();
+  const processes = parts.flatMap((part) => part.processes);
+  if (new Set(processes.map((process) => process.id)).size !== processes.length)
+    fail("coverage", "exact", "shard process identities overlap");
+  for (const part of parts) {
+    if (!("inventoryHash" in part.run) || part.run.inventoryHash !== first.run.inventoryHash || part.run.contractHash !== first.run.contractHash)
+      fail("identity", "exact", "shard inventory differs");
+    if (part.totals.size !== first.totals.size) fail("coverage", "exact", "shard file membership differs");
+    for (const [path, counters] of part.totals) {
+      const out = totals.get(path) ?? { s: {}, f: {} };
+      for (const key of ["s", "f"] as const) {
+        const expected = Object.keys(first.totals.get(path)?.[key] ?? {}).sort().join("\0");
+        if (Object.keys(counters[key]).sort().join("\0") !== expected) fail("coverage", path, "shard counters differ");
+        for (const [id, n] of Object.entries(counters[key])) out[key][id] = integer((out[key][id] ?? 0) + n);
+      }
+      totals.set(path, out);
+    }
+  }
+  const receiptHash = sha(JSON.stringify(parts.map((part) => part.receiptHash)));
+  return { run: { id: receiptHash, inventoryHash: first.run.inventoryHash, contractHash: first.run.contractHash, planHash }, totals, processes, receiptHash };
+}
 function offset(source: Source, p: Location): number {
   const lines = source.text.split("\n");
   if (

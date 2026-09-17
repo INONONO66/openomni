@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { readExactCoverage, readNativeCoverage } from "./quality-ci-coverage";
@@ -7,9 +7,9 @@ import { decodeJson, digest, jsonArray, jsonObject } from "./quality-inventory";
 import { parseNativeLcov } from "./quality-native-lcov";
 import { collectExactFixture, coverageLaneFixture } from "./quality-coverage-fixture";
 import { fingerprint, recordObject } from "./quality-ci-input";
-import { exactCiPlan, requireExactCiPlan } from "./quality-ci-exact";
+import { exactCiPlan, exactCiShards, requireExactCiPlan } from "./quality-ci-exact";
 import { scriptContracts, scriptPartitions, scriptsLanes } from "./scripts-lanes";
-import { planChanges } from "./ci-plan";
+import { exactShards, planChanges } from "./ci-plan";
 import { prepare } from "./quality-metrics/coverage";
 import { loadInventory } from "./quality-metrics/input";
 
@@ -98,8 +98,8 @@ test("v3 real CI adapter and finish compare every selected command rather than o
 	using repo = selectedCiFixture();
 	const { root, identity, options } = repo;
 	const args = [process.execPath, join(import.meta.dir, "quality-measure.ts"), "collect", "--leg", "exact", "--root", root, "--contract", "contract.json", "--plan", "ci-plan.json", "--run", options.run];
-	const collect = async (directory: string) => {
-		const child = Bun.spawn([...args, "--output", directory], { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+	const collect = async (directory: string, shard?: string) => {
+		const child = Bun.spawn([...args, "--output", directory, ...(shard === undefined ? [] : ["--shard", shard])], { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 120_000 });
 		const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
 		return { exitCode, stdout, stderr };
 	};
@@ -115,6 +115,24 @@ test("v3 real CI adapter and finish compare every selected command rather than o
 	const expected = exactCiPlan(root, options.contract, identity.inventory, options.plan, options.run);
 	expect(evidence.processes.filter((p) => p.parent === "")).toHaveLength(expected.commands.length);
 	expect(expected.commands.find((command) => command.id === "desktopApp")?.paths).toEqual(["apps/desktop/main.test.ts"]);
+	// Sharded collection: the planner's shard list is the collector's, every
+	// shard seals its own receipt and finish merges them into the whole evidence.
+	const shards = exactCiShards(expected);
+	expect([...shards.keys()].sort()).toEqual(exactShards({ lanes: repo.selection.matrix.include.map((row) => row.key) }).include.map((row) => row.shard).sort());
+	expect([...shards.values()].flat().sort()).toEqual(expected.commands.map((command) => command.id).sort());
+	for (const shard of shards.keys()) expect((await collect("sharded", shard)).exitCode).toBeLessThanOrEqual(1);
+	const sharded = { ...options, directory: join(root, "sharded") }, readSharded = () => readExactCoverage(sharded, identity, prepared);
+	expect(existsSync(join(sharded.directory, "exact.coverage.json"))).toBe(false);
+	const merged = readSharded();
+	expect([...merged.totals.entries()].map(([file, total]) => [file, total.s])).toEqual([...evidence.totals.entries()].map(([file, total]) => [file, total.s]));
+	expect(merged.processes.filter((p) => p.parent === "")).toHaveLength(expected.commands.length);
+	const machinesReceipt = join(sharded.directory, "exact.machines.coverage.json"), machinesBytes = readFileSync(machinesReceipt);
+	rmSync(machinesReceipt); expect(readSharded).toThrow("missing exact statement evidence"); writeFileSync(machinesReceipt, machinesBytes);
+	const shardPlan = join(sharded.directory, "exact.machines.plan.json"), shardPlanBytes = readFileSync(shardPlan);
+	writeFileSync(shardPlan, readFileSync(join(sharded.directory, "exact.desktopApp.plan.json"))); expect(readSharded).toThrow(); writeFileSync(shardPlan, shardPlanBytes);
+	copyFileSync(join(options.directory, "exact.coverage.json"), join(sharded.directory, "exact.coverage.json"));
+	expect(readSharded).toThrow("both whole and sharded"); rmSync(join(sharded.directory, "exact.coverage.json"));
+	expect((await collect("sharded", "unknown")).exitCode).not.toBe(0);
 	const path = join(options.directory, "exact.plan.json"), original = readFileSync(path);
 	for (const patch of [{ cwd: "." }, { paths: ["packages/machines/subject.ts"] }, { runtime: "node" }, { args: ["--filter"] }, { expectedExitCode: 1 }]) {
 		const changed = recordObject(path);

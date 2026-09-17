@@ -58,6 +58,23 @@ export function exactCiPlan(root: string, contract: string, inventory: Inventory
 	return { version: 3, commands, run: { id: run, selectionHash: digest(readFileSync(path)) } };
 }
 
+export type ExactPlan = ReturnType<typeof exactCiPlan>;
+/** One shard per selected matrix lane; contracts, CLI self-tests and Python
+ * tests share the `scripts-contracts` shard. Every command has one shard. */
+export function exactCiShards(plan: ExactPlan): Map<string, string[]> {
+	const shards = new Map<string, string[]>([["scripts-contracts", []]]);
+	for (const command of plan.commands) {
+		const shard = command.kind === "test" && command.id !== "scripts-contracts" ? command.id : "scripts-contracts";
+		shards.set(shard, [...(shards.get(shard) ?? []), command.id]);
+	}
+	return shards;
+}
+export function exactCiShardPlan(plan: ExactPlan, shard: string): ExactPlan {
+	const ids = exactCiShards(plan).get(shard);
+	requireMeasurement(ids !== undefined, `unknown exact CI shard: ${shard}`);
+	return { ...plan, commands: plan.commands.filter((command) => ids?.includes(command.id)) };
+}
+
 export function requireExactCiPlan(actual: ReturnType<typeof recordObject>, expected: ReturnType<typeof exactCiPlan>): void {
 	// Compare parsed machine fields, not object key ordering or a claimed hash.
 	sameMembers(Object.keys(actual), Object.keys(expected));
@@ -76,16 +93,28 @@ export function requireExactCiPlan(actual: ReturnType<typeof recordObject>, expe
 
 /** Real collector only. Exit 1 is complete uncovered evidence, never a passing
  * quality verdict. Failure leaves frozen inputs/native diagnostics, no seal. */
-export async function collectExactCi(options: { root: string; contract: string; directory: string; plan: string; run: string }): Promise<number> {
+function freeze(path: string, bytes: string): void {
+	// Shards of one run share the frozen inventory and full plan byte for byte.
+	if (existsSync(path)) requireMeasurement(readFileSync(path, "utf8") === bytes, `frozen exact CI input differs: ${path}`);
+	else writeFileSync(path, bytes, { flag: "wx" });
+}
+export function exactArtifactPaths(directory: string, shard?: string) {
+	const name = shard === undefined ? "exact" : `exact.${shard}`;
+	return { inventory: resolve(directory, "exact.inventory.json"), fullPlan: resolve(directory, "exact.plan.json"), plan: resolve(directory, `${name}.plan.json`),
+		coverage: resolve(directory, `${name}.coverage.json`), verdict: resolve(directory, `${name}.result.json`), receipt: resolve(directory, `${name}.process.json`) };
+}
+export async function collectExactCi(options: { root: string; contract: string; directory: string; plan: string; run: string; shard?: string }): Promise<number> {
 	const root = realpathSync(options.root), contract = resolve(root, options.contract), selection = resolve(root, options.plan);
-	const identity = fingerprint(root, contract), plan = exactCiPlan(root, contract, identity.inventory, selection, options.run);
+	const identity = fingerprint(root, contract), full = exactCiPlan(root, contract, identity.inventory, selection, options.run);
+	const plan = options.shard === undefined ? full : exactCiShardPlan(full, options.shard);
 	mkdirSync(options.directory, { recursive: true });
-	const inventoryPath = resolve(options.directory, "exact.inventory.json"), planPath = resolve(options.directory, "exact.plan.json"), coverage = resolve(options.directory, "exact.coverage.json"), verdict = resolve(options.directory, "exact.result.json");
+	const { inventory: inventoryPath, fullPlan, plan: planPath, coverage, verdict, receipt } = exactArtifactPaths(options.directory, options.shard);
 	requireMeasurement(!existsSync(coverage) && !existsSync(`${coverage}.sha256`) && !existsSync(verdict), "exact collection requires fresh output");
-	writeFileSync(inventoryPath, JSON.stringify(identity.inventory), { flag: "wx" });
-	writeFileSync(planPath, JSON.stringify(plan), { flag: "wx" });
+	freeze(inventoryPath, JSON.stringify(identity.inventory));
+	freeze(fullPlan, JSON.stringify(full));
+	if (options.shard !== undefined) writeFileSync(planPath, JSON.stringify(plan), { flag: "wx" });
 	const paths = { contract, inventory: inventoryPath, plan: planPath };
-	const result = await nativeJson({ cwd: root, receipt: resolve(options.directory, "exact.process.json"), onStderr: (chunk) => { process.stderr.write(chunk); }, command: [process.execPath, resolve(import.meta.dir, "check-quality-coverage.ts"), "--root", root,
+	const result = await nativeJson({ cwd: root, receipt, onStderr: (chunk) => { process.stderr.write(chunk); }, command: [process.execPath, resolve(import.meta.dir, "check-quality-coverage.ts"), "--root", root,
 		...Object.entries(paths).flatMap(([key, path]) => [`--${key}`, path, `--${key}-sha256`, digest(readFileSync(path))]), "--collect", "--write-coverage", coverage, "--write-result", verdict] });
 	const document = completeDocument(result.document);
 	requireMeasurement(document.exitCode === result.exitCode, "exact collector status differs from result");
@@ -93,7 +122,8 @@ export async function collectExactCi(options: { root: string; contract: string; 
 	requireMeasurement(document.result === verdict && existsSync(verdict) && document.resultSha256 === digest(readFileSync(verdict)), "exact collector verdict differs from its receipt");
 	requireMeasurement(completeDocument(decodeJson(readFileSync(verdict, "utf8"))).exitCode === result.exitCode, "exact collector verdict status differs");
 	requireMeasurement(fingerprint(root, contract).inventoryHash === identity.inventoryHash, "sources changed during exact collection");
-	requireExactCiPlan(recordObject(planPath), exactCiPlan(root, contract, identity.inventory, selection, options.run));
+	const expected = exactCiPlan(root, contract, identity.inventory, selection, options.run);
+	requireExactCiPlan(recordObject(planPath), options.shard === undefined ? expected : exactCiShardPlan(expected, options.shard));
 	writeFileSync(`${coverage}.sha256`, digest(readFileSync(coverage)), { flag: "wx" });
 	return result.exitCode;
 }
