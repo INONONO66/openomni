@@ -268,6 +268,11 @@ function expectCompactedProjection(
   expect(texts).toHaveLength(2);
   expect(projection[0]?.info.role).toBe("user");
   expect(texts[0]).toBe(renderAnchorText("checkpoint", false));
+  expect(Message.TextPart.parse(projection[0]?.parts[0]).metadata).toEqual({
+    compactionAnchor: true,
+    anchorBody: "checkpoint",
+    keptWindow: [{ role: "assistant", text: "answer", time: originalAnswer?.info.time.created }],
+  });
   expect(originalAnswer?.info.id).toBe("answer");
   expect(projection[1]).toEqual(originalAnswer);
   expect(texts[1]).toBe("answer");
