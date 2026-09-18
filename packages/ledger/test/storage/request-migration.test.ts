@@ -14,7 +14,7 @@ import { Migration } from "../../src/storage/migration-runner";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
 import { archiveCli, disposeCli } from "../helpers/disposition-967-cli";
 import { computeActionHash, GENESIS_PREV_HASH } from "../../src/storage/l0-hash";
-import { ActionSqlRow } from "../../src/storage/sqlite-l0-rows";
+import { ActionSqlRowSafeIntegers } from "../../src/storage/sqlite-l0-rows";
 
 const migrationDir = join(import.meta.dir, "../../migration");
 
@@ -47,7 +47,7 @@ function upgradeFixture() {
 function hashedHistoricalRows(rows: ReturnType<typeof snapshotDatabase>["tables"][number]["rows"]) {
   const heads = new Map<string, string>();
   const hashes = new Map<string, { prev_hash: string; action_hash: string }>();
-  const parsed = ActionSqlRow.omit({ prev_hash: true, action_hash: true }).array().parse(rows);
+  const parsed = ActionSqlRowSafeIntegers.omit({ prev_hash: true, action_hash: true }).array().parse(rows);
   for (const row of parsed.sort((left, right) => left.ordinal - right.ordinal)) {
     const prevHash = heads.get(row.session_id) ?? GENESIS_PREV_HASH;
     const actionHash = computeActionHash({ ...row, prev_hash: prevHash });

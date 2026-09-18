@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { ActionSqlRow } from "./sqlite-l0-rows";
+import { ActionSqlRowSafeIntegers, type ActionSqlRow } from "./sqlite-l0-rows";
 
 export const ACTION_HASH_MIGRATION = "0039_action_hash_chain/migration.sql";
 export const GENESIS_PREV_HASH = "openomni:l0:genesis:v1";
@@ -47,7 +47,7 @@ export class ActionChainMigrationError extends Error {
 }
 
 export function backfillActionHashes(db: Database): void {
-  const rows = ActionSqlRow.omit({ prev_hash: true, action_hash: true })
+  const rows = ActionSqlRowSafeIntegers.omit({ prev_hash: true, action_hash: true })
     .array()
     .parse(db.query("SELECT * FROM action ORDER BY session_id, ordinal").all());
   let sessionId: string | null = null;

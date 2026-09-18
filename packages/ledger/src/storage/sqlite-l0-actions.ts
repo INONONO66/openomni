@@ -7,7 +7,7 @@ import {
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
 import { computeActionHash, GENESIS_PREV_HASH } from "./l0-hash";
-import { ActionSqlRow, decodeAction } from "./sqlite-l0-rows.js";
+import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "./sqlite-l0-rows.js";
 import { appendAction } from "./sqlite-l0-write.js";
 import { publishCommitted } from "./sqlite-l0-observation.js";
 
@@ -131,7 +131,7 @@ function describeHashCell(cell: z.infer<typeof HashCell>): string {
   return String(cell);
 }
 
-const VerifyRow = ActionSqlRow.extend({ prev_hash: HashCell, action_hash: HashCell });
+const VerifyRow = ActionSqlRowSafeIntegers.extend({ prev_hash: HashCell, action_hash: HashCell });
 
 export function verifyChain(db: Database, sessionId: string): LedgerAction.ChainVerdict {
   const rows = VerifyRow.array().parse(
