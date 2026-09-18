@@ -134,9 +134,26 @@ function artifacts(mode: "pack" | "restore", root: string): void {
   if (mode === "pack") run(["tar", "-cf", archive, ...dirs], root);
 }
 
-function main(): void {
+function testLane(key: string | undefined): void {
+  if (key && scriptPartitions.some((partition) => partition === key)) {
+    run(scriptTestCommand(key), join(ROOT, "script"));
+    if (key === "scripts-contracts") for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)]);
+    return;
+  }
+  const lane = LANES.find((candidate) => candidate.key === key);
+  if (!lane) throw new CiError(`unknown lane: ${key}`);
+  const workspace = TOPOLOGY.find((candidate) => candidate.key === lane.key);
+  const override = workspace && "ciTestCommand" in workspace ? workspace.ciTestCommand : undefined;
+  run(override ? override.split(" ") : [
+    "bun", "test", "--timeout", "15000",
+    ...(lane.coverage ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"] : []),
+  ], join(ROOT, lane.dir));
+  if (lane.coverage) run(["bun", "run", "script/check-coverage-ratchet.ts", "--lane", lane.dir]);
+}
+
+export function ciMain(argv = Bun.argv.slice(2)): void {
   const { values, positionals } = parseArgs({
-    args: Bun.argv.slice(2),
+    args: argv,
     allowPositionals: true,
     options: {
       plan: { type: "string" },
@@ -167,35 +184,9 @@ function main(): void {
       if (plan.toolingTests) run(["bunx", "tsc", "-p", "script/tsconfig.json"]);
       return;
     }
-    case "test": {
-      if (values.lane && scriptPartitions.some((key) => key === values.lane)) {
-        run(scriptTestCommand(values.lane), join(ROOT, "script"));
-        if (values.lane === "scripts-contracts") for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)]);
-        return;
-      }
-      const lane = LANES.find((candidate) => candidate.key === values.lane);
-      if (!lane) throw new CiError(`unknown lane: ${values.lane}`);
-      const workspace = TOPOLOGY.find((candidate) => candidate.key === lane.key);
-      const override =
-        workspace && "ciTestCommand" in workspace ? workspace.ciTestCommand : undefined;
-      run(
-        override
-          ? override.split(" ")
-          : [
-              "bun",
-              "test",
-              "--timeout",
-              "15000",
-              ...(lane.coverage
-                ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"]
-                : []),
-            ],
-        join(ROOT, lane.dir),
-      );
-      if (lane.coverage)
-        run(["bun", "run", "script/check-coverage-ratchet.ts", "--lane", lane.dir]);
+    case "test":
+      testLane(values.lane);
       return;
-    }
     default:
       throw new CiError(
         "expected build, pack, restore, check-types --plan FILE, test --lane KEY, gate or test-gate",
@@ -203,4 +194,4 @@ function main(): void {
   }
 }
 
-if (import.meta.main) main();
+if (import.meta.main) ciMain();

@@ -55,7 +55,15 @@ export function decodeCoverage(text: string): Coverage {
 	return { run: { id: jsonString(run.id), head: jsonString(run.head), tree: jsonString(run.tree) }, totals, processes: processes.map((process) => ({ ...process, exitCode: jsonNumber(process.exitCode) })), receiptHash };
 }
 
-export function shardMain(argv: string[]): number {
+export async function shardMain(argv: string[]): Promise<number> {
+	return await Promise.resolve().then(() => runShard(argv)).catch((error: Error) => {
+		if (!(error instanceof InventoryError)) throw error;
+		process.stderr.write(`${error.name} ${error.code} ${error.path}: ${error.message}\n`);
+		return 2;
+	});
+}
+
+function runShard(argv: string[]): number {
 	const { values } = parseArgs({ args: argv, options: { root: { type: "string" }, contract: { type: "string" }, inventory: { type: "string" }, plan: { type: "string" }, coverage: { type: "string" }, prepared: { type: "string" }, out: { type: "string" } } });
 	const required = (key: keyof typeof values): string => {
 		const value = values[key];
@@ -69,10 +77,4 @@ export function shardMain(argv: string[]): number {
 	return 0;
 }
 
-if (import.meta.main) {
-	try { process.exitCode = shardMain(Bun.argv.slice(2)); } catch (error) {
-		if (!(error instanceof InventoryError)) throw error;
-		process.stderr.write(`${error.name} ${error.code} ${error.path}: ${error.message}\n`);
-		process.exitCode = 2;
-	}
-}
+if (import.meta.main) process.exitCode = await shardMain(Bun.argv.slice(2));

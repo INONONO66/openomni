@@ -1,10 +1,11 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { planChanges } from "./ci-plan";
-import { gate } from "./ci";
+import { ciMain, gate } from "./ci";
+import { scriptContracts, scriptTestCommand } from "./scripts-lanes";
 import { TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
@@ -156,6 +157,32 @@ test("final gate rejects absent planner output", () => {
   const result = cli(["gate"], { CI_PLAN: "", CI_NEEDS: '{"plan":{"result":"success"}}' });
   // When parsing the actual boundary, then the status cannot be successful.
   expect(result.exitCode).not.toBe(0);
+});
+
+test("test entry dispatches workspace and script lanes through their canonical commands", () => {
+  const commands: string[][] = [];
+  const native = Bun.spawnSync;
+  const runner: { spawnSync(args: string[]): { exitCode: number } } = Bun;
+  const spawn = spyOn(runner, "spawnSync").mockImplementation((args: string[]) => {
+    commands.push(args);
+    return native(["/usr/bin/true"]);
+  });
+  try {
+    ciMain(["test", "--lane", "protocol"]);
+    expect(commands.splice(0)).toEqual([
+      [process.execPath, "test", "--timeout", "15000", "--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"],
+      [process.execPath, "run", "script/check-coverage-ratchet.ts", "--lane", "packages/protocol"],
+    ]);
+    ciMain(["test", "--lane", "agent"]);
+    expect(commands[0]).toEqual([process.execPath, "run", "test:ci"]);
+    commands.length = 0;
+    ciMain(["test", "--lane", "scripts-contracts"]);
+    expect(commands).toEqual([
+      [process.execPath, ...scriptTestCommand("scripts-contracts").slice(1)],
+      ...scriptContracts.map(([entry, ...args]) => [process.execPath, "run", `script/${entry}`, ...args]),
+    ]);
+    expect(() => ciMain(["test", "--lane", "absent"])).toThrow("unknown lane");
+  } finally { spawn.mockRestore(); }
 });
 
 test("documentation typecheck invokes no executable workspace", () => {

@@ -175,10 +175,11 @@ export async function collectExactCi(options: { root: string; contract: string; 
 	return result.exitCode;
 }
 
-if (import.meta.main) {
-	const { values } = parseArgs({ args: Bun.argv.slice(2), strict: true, options: {
+export function embedExactMain(argv = Bun.argv.slice(2)): void {
+	const { values } = parseArgs({ args: argv, strict: true, options: {
 		root: { type: "string", default: process.cwd() }, contract: { type: "string", default: "script/conformance/quality-contract.json" }, plan: { type: "string" },
 	} });
 	requireMeasurement(Boolean(values.plan), "embedding exact commands requires --plan");
 	embedExactCommands(resolve(values.root), values.contract, resolve(values.root, values.plan ?? ""));
 }
+if (import.meta.main) embedExactMain();

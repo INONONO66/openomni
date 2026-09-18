@@ -103,8 +103,8 @@ function admitLegs(root: string, contract: string, directory: string, plan: stri
 	return { identity, scope };
 }
 
-export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
-	const { values, positionals } = parseArgs({
+function measurementArguments(argv: string[]) {
+	return parseArgs({
 		args: argv, strict: true, allowPositionals: true, options: {
 			root: { type: "string", default: process.cwd() },
 			contract: { type: "string", default: "script/conformance/quality-contract.json" },
@@ -113,27 +113,33 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 			"coverage-directory": { type: "string" }, plan: { type: "string" }, run: { type: "string" }, shard: { type: "string" },
 		}
 	});
+}
+
+async function collectMeasurement(root: string, contract: string, values: ReturnType<typeof measurementArguments>["values"]): Promise<number> {
+	requireMeasurement(Boolean(values.leg && values.output), "collect requires leg and output");
+	if (values.leg === "exact") {
+		requireMeasurement(Boolean(values.plan && values.run), "exact collect requires plan and run");
+		return (await phase("exact", () => collectExactCi({ root, contract, directory: resolve(root, values.output ?? ""), plan: values.plan ?? "", run: values.run ?? "", ...(values.shard === undefined ? {} : { shard: values.shard }) }))).result;
+	}
+	const leg = jsonChoice(values.leg, legs), directory = resolve(root, values.output ?? "");
+	const collected = await phase(leg, async () => {
+		const identity = fingerprint(root, contract);
+		mkdirSync(directory, { recursive: true });
+		const scope = qualityPlan(root, contract, identity.inventory, values.plan);
+		save(directory, leg, await collectLeg(root, contract, directory, leg, identity, scope, values.plan));
+		return { identity, scope };
+	});
+	const { identity, scope } = collected.result;
+	save(directory, `${leg}.identity`, { version: 1, leg, inventoryHash: identity.inventoryHash, contractHash: identity.contractHash, durationMs: collected.durationMs, ...(scope.whole ? {} : { scopeHash: scope.hash }) });
+	return 0;
+}
+
+export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
+	const { values, positionals } = measurementArguments(argv);
 	requireMeasurement(positionals.length === 1 && argv[0] === positionals[0] && (positionals[0] === "collect" || positionals[0] === "finish"), "expected collect or finish");
 	const root = resolve(values.root), contract = resolve(root, values.contract);
 	requireMeasurement(values.shard === undefined || (positionals[0] === "collect" && values.leg === "exact"), "shard applies to exact collect only");
-	if (positionals[0] === "collect") {
-		requireMeasurement(Boolean(values.leg && values.output), "collect requires leg and output");
-		if (values.leg === "exact") {
-			requireMeasurement(Boolean(values.plan && values.run), "exact collect requires plan and run");
-			return (await phase("exact", () => collectExactCi({ root, contract, directory: resolve(root, values.output ?? ""), plan: values.plan ?? "", run: values.run ?? "", ...(values.shard === undefined ? {} : { shard: values.shard }) }))).result;
-		}
-		const leg = jsonChoice(values.leg, legs), directory = resolve(root, values.output ?? "");
-		const collected = await phase(leg, async () => {
-			const identity = fingerprint(root, contract);
-			mkdirSync(directory, { recursive: true });
-			const scope = qualityPlan(root, contract, identity.inventory, values.plan);
-			save(directory, leg, await collectLeg(root, contract, directory, leg, identity, scope, values.plan));
-			return { identity, scope };
-		});
-		const { identity, scope } = collected.result;
-		save(directory, `${leg}.identity`, { version: 1, leg, inventoryHash: identity.inventoryHash, contractHash: identity.contractHash, durationMs: collected.durationMs, ...(scope.whole ? {} : { scopeHash: scope.hash }) });
-		return 0;
-	}
+	if (positionals[0] === "collect") return await collectMeasurement(root, contract, values);
 	requireMeasurement(Boolean(values.legs && values.base && values.baseline && values.plan && values.run && values["coverage-directory"]), "finish requires legs, base, baseline, plan, run and fresh coverage directory");
 	const directory = resolve(root, values.output ?? "quality-results"), legDirectory = resolve(root, values.legs ?? "");
 	const { identity, scope } = (await phase("fingerprint", () => admitLegs(root, contract, legDirectory, values.plan ?? ""))).result;
@@ -177,8 +183,11 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 }
 // Exit 1 is a measured verdict (uncovered findings); refused measurement exits 2
 // with its whole message, which the runtime's uncaught-error display truncates.
-if (import.meta.main) process.exitCode = await measureMain().catch((error: Error) => {
-	if (!(error instanceof InventoryError)) throw error;
-	console.error(`${error.name} ${error.code} ${error.path}: ${error.message}`);
-	return 2;
-});
+export async function measureCli(argv = Bun.argv.slice(2)): Promise<number> {
+	return await measureMain(argv).catch((error: Error) => {
+		if (!(error instanceof InventoryError)) throw error;
+		console.error(`${error.name} ${error.code} ${error.path}: ${error.message}`);
+		return 2;
+	});
+}
+if (import.meta.main) process.exitCode = await measureCli();

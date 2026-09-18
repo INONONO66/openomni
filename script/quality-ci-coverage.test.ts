@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -7,10 +7,12 @@ import { decodeJson, digest, jsonArray, jsonObject } from "./quality-inventory";
 import { parseNativeLcov } from "./quality-native-lcov";
 import { collectExactFixture, coverageLaneFixture } from "./quality-coverage-fixture";
 import { fingerprint, recordObject } from "./quality-ci-input";
-import { embedExactCommands, exactCiPlan, exactCiShards, requireExactCiPlan } from "./quality-ci-exact";
+import { embedExactMain, embedExactCommands, exactCiPlan, exactCiShards, requireExactCiPlan } from "./quality-ci-exact";
 import { scriptContracts, scriptPartitions, scriptsLanes } from "./scripts-lanes";
 import { exactShards, planChanges } from "./ci-plan";
 import { prepare } from "./quality-metrics/coverage";
+import { measureCli } from "./quality-measure";
+import { shardMain, verifyExactShard, encodeCoverage, decodeCoverage } from "./quality-ci-shard";
 import { loadInventory } from "./quality-metrics/input";
 
 test("CI consumes run-bound original counters and rejects stale, tampered or missing descendant evidence", async () => {
@@ -28,6 +30,22 @@ test("CI consumes run-bound original counters and rejects stale, tampered or mis
 		const inventoryPath = join(options.directory, "exact.inventory.json"), planPath = join(options.directory, "exact.plan.json"), path = join(options.directory, "exact.coverage.json");
 		const inventory = loadInventory(root, inventoryPath), prepared = inventory.files.map(prepare);
 		const evidence = await readExactCoverage(options, identity, prepared);
+		const preparedPath = join(root, "prepared.json");
+		writeFileSync(preparedPath, JSON.stringify(prepared));
+		const paths = { root, contract: options.contract, inventory: inventoryPath, plan: planPath, coverage: path, prepared: preparedPath };
+		expect(verifyExactShard(paths)).toEqual(evidence);
+		expect(decodeCoverage(encodeCoverage(evidence))).toEqual(evidence);
+		const out = join(root, "shard-result.json");
+		let stdout = "";
+		const capture = spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
+			stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+			return true;
+		});
+		try {
+			expect(await shardMain([...Object.entries(paths).flatMap(([key, value]) => [`--${key}`, value]), "--out", out])).toBe(0);
+		} finally { capture.mockRestore(); }
+		expect(decodeJson(stdout)).toEqual({ result: out, resultSha256: digest(readFileSync(out)) });
+		expect(decodeCoverage(readFileSync(out, "utf8"))).toEqual(evidence);
 		expect(evidence.processes).toHaveLength(2);
 		expect(evidence.processes.filter((process) => process.parent)).toHaveLength(1);
 		const child = prepared.find((file) => file.path === "script/child.ts");
@@ -91,7 +109,7 @@ function selectedCiFixture() {
 		matrix: { include: [{ key: "machines", dir: "packages/machines", coverage: true }, { key: "desktopApp", dir: "apps/desktop", coverage: true }] } };
 	put("ci-plan.json", JSON.stringify(selection));
 	// The plan job embeds the derived commands into the selection it uploads.
-	embedExactCommands(root, "contract.json", join(root, "ci-plan.json"));
+	embedExactMain(["--root", root, "--contract", "contract.json", "--plan", "ci-plan.json"]);
 	expect(() => embedExactCommands(root, "contract.json", join(root, "ci-plan.json"))).toThrow("already carries exact commands");
 	const options = { root, contract: join(root, "contract.json"), directory: join(root, "coverage"), plan: join(root, "ci-plan.json"), run: "selected-ci" };
 	return { root, put, identity, selection, options, [Symbol.dispose]: () => rmSync(root, { recursive: true, force: true }) };
@@ -100,11 +118,18 @@ function selectedCiFixture() {
 test("v3 real CI adapter and finish compare every selected command rather than only selectionHash", async () => {
 	using repo = selectedCiFixture();
 	const { root, identity, options } = repo;
-	const args = [process.execPath, join(import.meta.dir, "quality-measure.ts"), "collect", "--leg", "exact", "--root", root, "--contract", "contract.json", "--plan", "ci-plan.json", "--run", options.run];
+	const args = ["collect", "--leg", "exact", "--root", root, "--contract", "contract.json", "--plan", "ci-plan.json", "--run", options.run];
 	const collect = async (directory: string, shard?: string) => {
-		const child = Bun.spawn([...args, "--output", directory, ...(shard === undefined ? [] : ["--shard", shard])], { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 120_000 });
-		const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
-		return { exitCode, stdout, stderr };
+		let stderr = "";
+		const capture = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+			stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+			return true;
+		});
+		const errors = spyOn(console, "error").mockImplementation((message: string) => { stderr += `${message}\n`; });
+		try {
+			const exitCode = await measureCli([...args, "--output", directory, ...(shard === undefined ? [] : ["--shard", shard])]);
+			return { exitCode, stderr };
+		} finally { capture.mockRestore(); errors.mockRestore(); }
 	};
 	const collected = await collect("coverage");
 	expect(collected.exitCode).toBe(1);
