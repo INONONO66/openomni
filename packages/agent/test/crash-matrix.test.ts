@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { LedgerAction, Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
+import { renderAnchorText } from "../src/compaction/summary";
 import { createExecutor } from "../src/executor";
 import { closeSessions, wakeSession, type SessionRuntime } from "../src/session-handle";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
@@ -266,8 +267,7 @@ function expectCompactedProjection(
   ]);
   expect(texts).toHaveLength(2);
   expect(projection[0]?.info.role).toBe("user");
-  expect(texts[0]).toContain("checkpoint");
-  expect(texts[0]).not.toContain("earlier evidence");
+  expect(texts[0]).toBe(renderAnchorText("checkpoint", false));
   expect(originalAnswer?.info.id).toBe("answer");
   expect(projection[1]).toEqual(originalAnswer);
   expect(texts[1]).toBe("answer");

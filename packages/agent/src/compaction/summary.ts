@@ -232,6 +232,11 @@ function selectPreservedUsers(
   return kept;
 }
 
+/** Summary-only render of an anchor: fixed header, summarizer body, optional marker legend. */
+export function renderAnchorText(anchorBody: string, withMarkerLegend: boolean): string {
+  return `${ANCHOR_HEADER}${anchorBody}${withMarkerLegend ? `\n\n${MARKER_LEGEND}` : ""}`;
+}
+
 function buildAnchorMessage(
   anchorBody: string,
   sessionID: string,
@@ -241,7 +246,7 @@ function buildAnchorMessage(
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
-  const render = `${ANCHOR_HEADER}${anchorBody}${withMarkerLegend ? `\n\n${MARKER_LEGEND}` : ""}`;
+  const render = renderAnchorText(anchorBody, withMarkerLegend);
   const info: Message.UserMessage = {
     id,
     sessionID,
