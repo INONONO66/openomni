@@ -64,7 +64,7 @@
     {
       "crashPoint": "platform_attempt_marker_before_send_reconciled_not_sent",
       "recovery": "rearmed",
-      "note": "Nearest cut is after the outbound open row and before dispatch body entry; no durable send-attempt marker exists, and no action of any kind follows open before recovery. Wake sends the same obligation once and records delivered; there is no not_sent reconciliation."
+      "note": "Nearest cut is after the outbound open row, at dispatcher entry and before any platform-side effect; no durable send-attempt marker exists, and no action of any kind follows open before recovery. Wake sends the same obligation once and records delivered; there is no not_sent reconciliation."
     },
     {
       "crashPoint": "platform_send_ambiguous_without_reconciliation",

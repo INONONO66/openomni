@@ -223,7 +223,7 @@ async function recoverCommittedCompaction(witness: Witness) {
     .parse(effectOf(result).result);
   const history = foldSessionHistory(sessionId, before);
   expect(history).toEqual(committed.projection);
-  expect(history).toHaveLength(2);
+  expectCompactedProjection(history);
   if (witness.crashPoint === "compaction_concurrent_tail_committed_before_owner_crash") {
     expect(inbox.map((item) => item.id)).toEqual(["tail"]);
     expect(SessionHandleStore.inboxRows(sessionId).map((item) => item.id)).toEqual(["tail"]);
@@ -232,12 +232,27 @@ async function recoverCommittedCompaction(witness: Witness) {
   const executor = createExecutor({ ...recording, observations, policy: compiledPolicy() });
   await executor.recover();
   expect(actions()).toEqual(before);
-  expect(foldSessionHistory(sessionId, actions())).toEqual(history);
+  const recovered = foldSessionHistory(sessionId, actions());
+  expect(recovered).toEqual(history);
+  expectCompactedProjection(recovered);
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual(inbox);
   await executor.recover();
   expect(actions()).toEqual(before);
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual(inbox);
   return terminalClass(result);
+}
+
+/** Independent of the stored projection: the summary replaced `earlier`, the protected answer survived. */
+function expectCompactedProjection(projection: Message.WithParts[]) {
+  const texts = projection.map((message) =>
+    message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),
+  );
+  expect(projection.map((message) => message.info.id)).not.toContain("earlier");
+  expect(texts).toHaveLength(2);
+  expect(texts[0]).toContain("checkpoint");
+  expect(texts[0]).not.toContain("earlier evidence");
+  expect(projection[1]?.info.id).toBe("answer");
+  expect(texts[1]).toBe("answer");
 }
 
 async function recoverTurn(witness: Witness, resumeCount: number, onModel = () => undefined) {
