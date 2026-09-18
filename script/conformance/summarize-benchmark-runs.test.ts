@@ -28,10 +28,10 @@ afterEach(() => {
 async function invoke(args: string[], runs: string): Promise<{ code: number; stderr: string }> {
   process.env.BENCHMARK_RUNS = runs;
   let stderr = "";
-  process.stderr.write = ((chunk: string | Uint8Array) => {
+  process.stderr.write = (chunk: string | Uint8Array) => {
     stderr += chunk.toString();
     return true;
-  }) as typeof process.stderr.write;
+  };
   try {
     return { code: await main(args), stderr };
   } finally {
@@ -47,6 +47,28 @@ describe("benchmark run aggregation", () => {
       expect(result.stderr).toBe(value === "5" ? "" : "ERROR: BENCHMARK_RUNS must be a positive integer\n");
     }
     expect(await invoke(["--reference", "--validate-input"], "2")).toEqual({ code: 0, stderr: "" });
+  });
+
+  test("the executable forwards the summarizer exit code to the operating system", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "summarize-benchmark-runs-cli-"));
+    try {
+      const results = await Promise.all(
+        ["5", "0"].map(async (runs) => {
+          const child = Bun.spawn(
+            [process.execPath, "run", join(import.meta.dir, "..", "summarize-benchmark-runs.ts"), "--validate-input"],
+            { cwd, env: { ...process.env, BENCHMARK_RUNS: runs }, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+          );
+          const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+          return { code, stderr };
+        }),
+      );
+      expect(results).toEqual([
+        { code: 0, stderr: "" },
+        { code: 1, stderr: "ERROR: BENCHMARK_RUNS must be a positive integer\n" },
+      ]);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   test("reference runs accept a consistent subset but head runs remain complete", () => {
