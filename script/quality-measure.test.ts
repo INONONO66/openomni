@@ -189,7 +189,7 @@ test("native collectors transfer receipts and finish joins fresh coverage throug
 		writeFileSync(join(root, "plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"], matrix: { include: [{ dir: "script", coverage: true }] } }));
 		const exactOptions = { root, contract: join(root, "contract.json"), directory: join(root, "coverage"), plan: join(root, "plan.json"), run };
 		collectExactFixture(exactOptions);
-		const exact = readExactCoverage(exactOptions, identity, staticDocument.measured.map((row) => row.analysis.prepared));
+		const exact = await readExactCoverage(exactOptions, identity, staticDocument.measured.map((row) => row.analysis.prepared));
 		const metrics = joinBounds(staticDocument, { identity, coverage: exact, selectedLanes: ["script"] });
 		const native = (leg: string) => jsonObject(readDocument(join(root, "legs", `${leg}.json`))).document ?? null;
 		const current = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [
@@ -262,7 +262,7 @@ test("finish preserves full-tier bytes and carries only hash-proven scoped debt"
     for (const leg of legs) expect(await measureMain(["collect", "--root", root, "--leg", leg, "--output", "legacy"])).toBe(0);
     const native = (leg: string) => jsonObject(readDocument(join(root, "legacy", `${leg}.json`))).document ?? null;
     const document = parseStatic(readDocument(join(root, "legacy/metrics.json")));
-    const exact = readExactCoverage(exactOptions, identity, document.measured.map((row) => row.analysis.prepared));
+    const exact = await readExactCoverage(exactOptions, identity, document.measured.map((row) => row.analysis.prepared));
     const metrics = joinBounds(document, { identity, coverage: exact, selectedLanes: ["script"] });
     const before = mergeMeasurements([...identity.paths, ...identity.schemaPaths], [normalizeTypes(native("types"), identity), ...(["publisher", "export", "store"] as const).map((leg) => normalizeCensus(native(leg), identity, leg)), metrics.measurement], metrics.executableLines);
     const baseline = { ...before, sha256: Object.fromEntries(identity.inventory.files.map((row) => [row.path, row.sha256])) };

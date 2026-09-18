@@ -1064,6 +1064,19 @@ function emittedProgram(data: PreloadInputs, project: string, parsed: ts.ParsedC
 	programs.set(project, result);
 	return result;
 }
+// Receipt verification proves each emitted module once per frozen input: the
+// proof depends only on frozen bytes, so every process that reports the same
+// dist file compares against one compiler emission instead of repeating it.
+const receiptEmissions = new WeakMap<PreloadInputs, Map<string, EmissionProof>>();
+function receiptEmission(data: PreloadInputs, path: string): EmissionProof {
+	let proofs = receiptEmissions.get(data);
+	if (!proofs) { proofs = new Map(); receiptEmissions.set(data, proofs); }
+	const cached = proofs.get(path);
+	if (cached) return cached;
+	const { proof } = verifiedEmission(data, path);
+	proofs.set(path, proof);
+	return proof;
+}
 function verifiedEmission(data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
 	pathValue(path);
 	if (!/\.[cm]?js$/.test(path) || !existsSync(join(data.options.root, `${path}.map`)))
@@ -1363,7 +1376,7 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	if (trace) verifyPythonTrace(trace, r, data, lines, coverage, loaded);
 	const emitted = r.emitted === undefined ? undefined : array(r.emitted).map((value) => {
 		const proof = object(value, ["path", "source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]);
-		const verified = verifiedEmission(data, pathValue(proof.path)).proof;
+		const verified = receiptEmission(data, pathValue(proof.path));
 		if (!loaded.includes(verified.source) || Object.entries(verified).some(([key, value]) => proof[key] !== value))
 			fail("identity", verified.path, "emitted process/source/map identity differs");
 		return verified;
@@ -1724,8 +1737,8 @@ function collectedProcess(directory: string, id: string, data: Inputs): Json {
 
 // Every child that imports a compiled package re-proves the same dist files.
 // The proof is keyed by the exact bytes it proved, so a sibling process reuses
-// it only while the JavaScript and map are unchanged; the collector still
-// re-runs the compiler for every reported proof when it verifies receipts.
+// it only while the JavaScript and map are unchanged; receipt verification
+// re-runs the compiler once per emitted module for each frozen input.
 function sharedEmission(directory: string, data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
 	if (!existsSync(join(data.options.root, `${path}.map`))) return verifiedEmission(data, path);
 	const javascriptSha256 = sha256(content(data.options.root, path));

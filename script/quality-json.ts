@@ -1,93 +1,87 @@
-import ts from "typescript";
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 class JsonFailure {
   constructor(readonly message: string) {}
 }
 function invalid(message: string): never { throw new JsonFailure(message); }
-function validateString(token: string): void {
-  if (!token.startsWith('"') || !token.endsWith('"')) invalid("invalid JSON string delimiter");
-  for (let index = 1; index < token.length - 1; index++) {
-    const character = token[index];
-    if (token.charCodeAt(index) < 32 || character === '"') invalid("invalid JSON string character");
-    if (character !== "\\") continue;
-    const escaped = token[++index];
-    if (escaped === "u") {
-      if (!/^[0-9a-fA-F]{4}$/.test(token.slice(index + 1, index + 5))) invalid("invalid Unicode escape");
-      index += 4;
-    } else if (!escaped || !'"\\/bfnrt'.includes(escaped)) invalid("invalid JSON escape");
-  }
-}
+// A strict single-pass decoder: one linear scan of the input and one allocation
+// per value. Receipts reach a hundred megabytes; routing them through a syntax
+// tree and a compiler program peaked above ten gigabytes per decode.
+const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+const WHITESPACE = /[ \t\n\r]*/y;
 export function decodeJson(input: string): Json {
-  const source = ts.createSourceFile(
-    "input.json",
-    input,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.JSON,
-  );
-  const options = { noLib: true, allowNonTsExtensions: true, resolveJsonModule: true };
-  const program = ts.createProgram(["input.json"], options, {
-    ...ts.createCompilerHost(options),
-    getSourceFile: (path) => (path === "input.json" ? source : undefined),
-  });
-  if (program.getSyntacticDiagnostics(source).length) invalid("malformed JSON");
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    false,
-    ts.LanguageVariant.Standard,
-    input,
-  );
-  let previous = ts.SyntaxKind.Unknown;
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (
-      token === ts.SyntaxKind.SingleLineCommentTrivia ||
-      token === ts.SyntaxKind.MultiLineCommentTrivia ||
-      (previous === ts.SyntaxKind.CommaToken &&
-        (token === ts.SyntaxKind.CloseBraceToken || token === ts.SyntaxKind.CloseBracketToken))
-    )
-      invalid("non-JSON syntax");
-    if (token === ts.SyntaxKind.StringLiteral) validateString(scanner.getTokenText());
-    if (token !== ts.SyntaxKind.WhitespaceTrivia && token !== ts.SyntaxKind.NewLineTrivia)
-      previous = token;
-  }
-  function objectValue(node: ts.ObjectLiteralExpression): Json {
+  let index = 0;
+  const skip = (): void => { WHITESPACE.lastIndex = index; WHITESPACE.exec(input); index = WHITESPACE.lastIndex; };
+  const literal = (token: string, value: Json): Json => { if (!input.startsWith(token, index)) invalid("non-JSON value"); index += token.length; return value; };
+  const string = (): string => {
+    const start = index++;
+    for (; ; index++) {
+      const code = input.charCodeAt(index);
+      if (Number.isNaN(code) || code < 32) invalid("invalid JSON string character");
+      if (code === 34) break;
+      if (code !== 92) continue;
+      const escaped = input[++index];
+      if (escaped === "u") {
+        if (!/^[0-9a-fA-F]{4}$/.test(input.slice(index + 1, index + 5))) invalid("invalid Unicode escape");
+        index += 4;
+      } else if (!escaped || !'"\\/bfnrt'.includes(escaped)) invalid("invalid JSON escape");
+    }
+    return JSON.parse(input.slice(start, ++index)) as string;
+  };
+  const number = (): number => {
+    NUMBER.lastIndex = index;
+    const match = NUMBER.exec(input);
+    if (!match) invalid("invalid JSON number");
+    index = NUMBER.lastIndex;
+    const value = Number(match[0]);
+    if (!Number.isFinite(value)) invalid("invalid JSON number");
+    return value;
+  };
+  const array = (): Json[] => {
+    const values: Json[] = [];
+    index++;
+    skip();
+    if (input[index] === "]") { index++; return values; }
+    for (; ; index++) {
+      values.push(value());
+      skip();
+      if (input[index] === "]") { index++; return values; }
+      if (input[index] !== ",") invalid("malformed JSON");
+    }
+  };
+  const object = (): Json => {
     const entries: [string, Json][] = [];
-    for (const property of node.properties) {
-      if (!ts.isPropertyAssignment(property) || !ts.isStringLiteral(property.name) || !property.name.getText(source).startsWith('"')) invalid("invalid JSON key");
-      const name = property.name.text;
-      if (entries.some(([key]) => key === name)) invalid("duplicate JSON key");
-      entries.push([name, value(property.initializer)]);
+    const keys = new Set<string>();
+    index++;
+    skip();
+    if (input[index] === "}") { index++; return Object.fromEntries(entries); }
+    for (; ; index++) {
+      skip();
+      if (input[index] !== '"') invalid("invalid JSON key");
+      const key = string();
+      if (keys.has(key)) invalid("duplicate JSON key");
+      keys.add(key);
+      skip();
+      if (input[index++] !== ":") invalid("malformed JSON");
+      entries.push([key, value()]);
+      skip();
+      if (input[index] === "}") { index++; return Object.fromEntries(entries); }
+      if (input[index] !== ",") invalid("malformed JSON");
     }
-    return Object.fromEntries(entries);
+  };
+  function value(): Json {
+    skip();
+    switch (input[index]) {
+      case '"': return string();
+      case "{": return object();
+      case "[": return array();
+      case "t": return literal("true", true);
+      case "f": return literal("false", false);
+      case "n": return literal("null", null);
+      default: return number();
+    }
   }
-  function value(node: ts.Expression): Json {
-    if (ts.isStringLiteral(node) && node.getText(source).startsWith('"')) return node.text;
-    if (ts.isNumericLiteral(node)) {
-      const n = Number(node.text);
-      if (
-        !Number.isFinite(n) ||
-        !/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(node.getText(source))
-      )
-        invalid("invalid JSON number");
-      return n;
-    }
-    if (node.kind === ts.SyntaxKind.NullKeyword) return null;
-    if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
-    if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
-    if (
-      ts.isPrefixUnaryExpression(node) &&
-      node.operator === ts.SyntaxKind.MinusToken &&
-      ts.isNumericLiteral(node.operand)
-    ) {
-      const n = value(node.operand);
-      if (typeof n === "number") return -n;
-    }
-    if (ts.isArrayLiteralExpression(node)) return node.elements.map(value);
-    if (ts.isObjectLiteralExpression(node)) return objectValue(node);
-    return invalid("non-JSON value");
-  }
-  const statement = source.statements[0];
-  if (!statement || source.statements.length !== 1 || !ts.isExpressionStatement(statement))
-    invalid("expected one JSON value");
-  return value(statement.expression);
+  const result = value();
+  skip();
+  if (index !== input.length) invalid("expected one JSON value");
+  return result;
 }

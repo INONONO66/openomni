@@ -37,7 +37,7 @@ test("static leg JSON is validated before joining instead of trusting an untyped
 		writeFileSync(join(root, "ci-plan.json"), "{}");
 		const options = { root, contract: join(root, "contract.json"), directory: join(root, "exact"), plan: join(root, "ci-plan.json"), run: "static-json" };
 		collectExactFixture(options);
-		const coverage = readExactCoverage(options, identity, document.measured.map((row) => row.analysis.prepared));
+		const coverage = await readExactCoverage(options, identity, document.measured.map((row) => row.analysis.prepared));
 		const joined = joinBounds(parseStatic(json), { identity, coverage });
 		expect(joined.measurement.findings.some((row) => row.gate === "coverage")).toBe(false);
 	} finally {

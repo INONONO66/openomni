@@ -148,10 +148,10 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 		requireMeasurement(selectedLanes.some((lane) => path.startsWith(`${lane}/`)), `changed source has no selected coverage lane: ${path}`);
 		requireMeasurement(scope.paths.includes(path), `changed source outside quality scope: ${path}`);
 	}
-	const joined = await phase("join", () => {
+	const joined = await phase("join", async () => {
 		const document = parseStatic(readDocument(resolve(legDirectory, "metrics.json")));
 		sameMembers(document.measured.map((row) => row.source.path), [...identity.paths.filter((path) => scope.paths.includes(path)), ...identity.embedded.filter((row) => scope.paths.includes(row.hostPath)).map((row) => row.path)]);
-		const exact = readExactCoverage({
+		const exact = await readExactCoverage({
 			root, contract, directory: resolve(root, values["coverage-directory"] ?? ""),
 			plan: resolve(root, values.plan ?? ""), run: values.run ?? "",
 		}, identity, document.measured.map((row) => row.analysis.prepared));

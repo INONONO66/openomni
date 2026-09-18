@@ -13,7 +13,7 @@ import { exactShards, planChanges } from "./ci-plan";
 import { prepare } from "./quality-metrics/coverage";
 import { loadInventory } from "./quality-metrics/input";
 
-test("CI consumes run-bound original counters and rejects stale, tampered or missing descendant evidence", () => {
+test("CI consumes run-bound original counters and rejects stale, tampered or missing descendant evidence", async () => {
 	const root = mkdtempSync(join(tmpdir(), "quality-exact-ci-"));
 	try {
 		mkdirSync(join(root, "script"));
@@ -27,7 +27,7 @@ test("CI consumes run-bound original counters and rejects stale, tampered or mis
 		const identity = collectExactFixture(options, [{ id: "tests", kind: "test", paths: ["script/main.test.ts"], args: [], expectedExitCode: 0 }]);
 		const inventoryPath = join(options.directory, "exact.inventory.json"), planPath = join(options.directory, "exact.plan.json"), path = join(options.directory, "exact.coverage.json");
 		const inventory = loadInventory(root, inventoryPath), prepared = inventory.files.map(prepare);
-		const evidence = readExactCoverage(options, identity, prepared);
+		const evidence = await readExactCoverage(options, identity, prepared);
 		expect(evidence.processes).toHaveLength(2);
 		expect(evidence.processes.filter((process) => process.parent)).toHaveLength(1);
 		const child = prepared.find((file) => file.path === "script/child.ts");
@@ -35,17 +35,17 @@ test("CI consumes run-bound original counters and rejects stale, tampered or mis
 		const countsAt = (line: number) => Object.entries(child.statementMap).filter(([, span]) => span.start.line === line).map(([id]) => evidence.totals.get(child.path)?.s[id]);
 		expect(countsAt(2)).toEqual([1]);
 		expect(countsAt(5)).toEqual([0]);
-		const scoped = readExactCoverage(options, identity, [child]);
+		const scoped = await readExactCoverage(options, identity, [child]);
 		expect(scoped.totals.size).toBe(1);
 		expect(scoped.totals.get(child.path)).toEqual(evidence.totals.get(child.path));
-		expect(() => readExactCoverage({ ...options, run: "another-run" }, identity, prepared)).toThrow();
+		await expect(readExactCoverage({ ...options, run: "another-run" }, identity, prepared)).rejects.toThrow();
 		const planBytes = readFileSync(planPath), receiptBytes = readFileSync(path), hashBytes = readFileSync(`${path}.sha256`);
 		const plan = recordObject(planPath);
 		writeFileSync(planPath, JSON.stringify({ ...plan, run: { id: "relabelled", selectionHash: digest(readFileSync(options.plan)) } }));
-		expect(() => readExactCoverage({ ...options, run: "relabelled" }, identity, prepared)).toThrow();
+		await expect(readExactCoverage({ ...options, run: "relabelled" }, identity, prepared)).rejects.toThrow();
 		writeFileSync(planPath, planBytes);
 		writeFileSync(path, `${receiptBytes.toString()} `);
-		expect(() => readExactCoverage(options, identity, prepared)).toThrow("exact coverage bytes changed");
+		await expect(readExactCoverage(options, identity, prepared)).rejects.toThrow("exact coverage bytes changed");
 		writeFileSync(path, receiptBytes);
 		for (const defect of ["child", "counter", "map"]) {
 			const receipt = recordObject(path);
@@ -59,15 +59,15 @@ test("CI consumes run-bound original counters and rejects stale, tampered or mis
 			if (defect === "map") jsonObject(jsonArray(receipt.maps, jsonObject)[0]).mapHash = "0".repeat(64);
 			const bytes = JSON.stringify(receipt);
 			writeFileSync(path, bytes); writeFileSync(`${path}.sha256`, digest(bytes));
-			expect(() => readExactCoverage(options, identity, prepared)).toThrow();
+			await expect(readExactCoverage(options, identity, prepared)).rejects.toThrow();
 			writeFileSync(path, receiptBytes); writeFileSync(`${path}.sha256`, hashBytes);
 		}
 		writeFileSync(join(root, child.path), `${source}// drift\n`);
-		expect(() => readExactCoverage(options, identity, prepared)).toThrow();
+		await expect(readExactCoverage(options, identity, prepared)).rejects.toThrow();
 		writeFileSync(join(root, child.path), source);
 		for (const file of [inventoryPath, planPath, path, `${path}.sha256`]) {
 			const bytes = readFileSync(file); rmSync(file);
-			expect(() => readExactCoverage(options, identity, prepared)).toThrow("missing exact statement evidence");
+			await expect(readExactCoverage(options, identity, prepared)).rejects.toThrow("missing exact statement evidence");
 			writeFileSync(file, bytes);
 		}
 		expect(readFileSync(join(root, child.path), "utf8")).toBe(source);
@@ -110,7 +110,7 @@ test("v3 real CI adapter and finish compare every selected command rather than o
 	expect(jsonObject(decodeJson(String(native.stdout))).complete).toBe(true);
 	const inventory = loadInventory(root, join(options.directory, "exact.inventory.json")), prepared = inventory.files.map(prepare);
 	const read = () => readExactCoverage(options, identity, prepared);
-	const evidence = read();
+	const evidence = await read();
 	expect(evidence.totals.get("apps/desktop/test-e2e/not-selected.spec.ts")?.s).toEqual({ "0": 0 });
 	const expected = exactCiPlan(root, options.contract, identity.inventory, options.plan, options.run);
 	expect(evidence.processes.filter((p) => p.parent === "")).toHaveLength(expected.commands.length);
@@ -123,15 +123,15 @@ test("v3 real CI adapter and finish compare every selected command rather than o
 	for (const shard of shards.keys()) expect((await collect("sharded", shard)).exitCode).toBeLessThanOrEqual(1);
 	const sharded = { ...options, directory: join(root, "sharded") }, readSharded = () => readExactCoverage(sharded, identity, prepared);
 	expect(existsSync(join(sharded.directory, "exact.coverage.json"))).toBe(false);
-	const merged = readSharded();
+	const merged = await readSharded();
 	expect([...merged.totals.entries()].map(([file, total]) => [file, total.s])).toEqual([...evidence.totals.entries()].map(([file, total]) => [file, total.s]));
 	expect(merged.processes.filter((p) => p.parent === "")).toHaveLength(expected.commands.length);
 	const machinesReceipt = join(sharded.directory, "exact.machines.coverage.json"), machinesBytes = readFileSync(machinesReceipt);
-	rmSync(machinesReceipt); expect(readSharded).toThrow("missing exact statement evidence"); writeFileSync(machinesReceipt, machinesBytes);
+	rmSync(machinesReceipt); await expect(readSharded()).rejects.toThrow("missing exact statement evidence"); writeFileSync(machinesReceipt, machinesBytes);
 	const shardPlan = join(sharded.directory, "exact.machines.plan.json"), shardPlanBytes = readFileSync(shardPlan);
-	writeFileSync(shardPlan, readFileSync(join(sharded.directory, "exact.desktopApp.plan.json"))); expect(readSharded).toThrow(); writeFileSync(shardPlan, shardPlanBytes);
+	writeFileSync(shardPlan, readFileSync(join(sharded.directory, "exact.desktopApp.plan.json"))); await expect(readSharded()).rejects.toThrow(); writeFileSync(shardPlan, shardPlanBytes);
 	copyFileSync(join(options.directory, "exact.coverage.json"), join(sharded.directory, "exact.coverage.json"));
-	expect(readSharded).toThrow("both whole and sharded"); rmSync(join(sharded.directory, "exact.coverage.json"));
+	await expect(readSharded()).rejects.toThrow("both whole and sharded"); rmSync(join(sharded.directory, "exact.coverage.json"));
 	const unknown = await collect("sharded", "unknown");
 	expect(unknown.exitCode).toBe(2);
 	expect(unknown.stderr).toContain("unknown exact CI shard: unknown");
@@ -143,18 +143,18 @@ test("v3 real CI adapter and finish compare every selected command rather than o
 		// a different command set. Finish admission precedes coverage verification.
 		writeFileSync(path, JSON.stringify(changed));
 		expect(() => requireExactCiPlan(changed, expected)).toThrow();
-		expect(read).toThrow();
+		await expect(read()).rejects.toThrow();
 		writeFileSync(path, original);
 	}
 	const omitted = { ...expected, commands: expected.commands.slice(1) };
-	writeFileSync(path, JSON.stringify(omitted)); expect(read).toThrow(); writeFileSync(path, original);
+	writeFileSync(path, JSON.stringify(omitted)); await expect(read()).rejects.toThrow(); writeFileSync(path, original);
 	for (const run of [{ ...expected.run, id: "stale" }, { ...expected.run, selectionHash: "0".repeat(64) }]) {
-		writeFileSync(path, JSON.stringify({ ...expected, run })); expect(read).toThrow(); writeFileSync(path, original);
+		writeFileSync(path, JSON.stringify({ ...expected, run })); await expect(read()).rejects.toThrow(); writeFileSync(path, original);
 	}
 	expect(() => requireExactCiPlan(jsonObject(decodeJson(JSON.stringify({ ...expected, run: { selectionHash: expected.run.selectionHash, id: expected.run.id } }))), expected)).not.toThrow();
-	repo.put("apps/desktop/bunfig.toml", '[test]\npathIgnorePatterns = []\n'); expect(read).toThrow();
+	repo.put("apps/desktop/bunfig.toml", '[test]\npathIgnorePatterns = []\n'); await expect(read()).rejects.toThrow();
 	repo.put("apps/desktop/bunfig.toml", '[test]\npathIgnorePatterns = ["**/test-e2e/**"]\n');
-	expect(read().totals.size).toBe(evidence.totals.size);
+	expect((await read()).totals.size).toBe(evidence.totals.size);
 	// An incomplete real collection retains diagnostics and cannot be sealed.
 	repo.put("packages/machines/main.test.ts", 'import {test} from "bun:test"; test("failed",()=>{throw new Error("failure");});\n');
 	expect((await collect("failed")).exitCode).not.toBe(0);

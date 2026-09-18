@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { InventoryError, type Json } from "./quality-inventory";
 import type { StaticDocument } from "./quality-ci-metrics";
+import type { Prepared } from "./quality-metrics/coverage";
 
 const count = z.number().int().nonnegative();
 const number = z.number().nonnegative();
@@ -60,6 +61,10 @@ const staticSchema: z.ZodType<StaticDocument> = z.strictObject({
 	duplication,
 });
 
+/** The metrics leg's prepared original maps, transferred to a shard verifier. */
+export function parsePrepared(value: Json): Prepared[] {
+	return z.array(prepared).parse(value);
+}
 /** Artifacts cross a JSON boundary; a type annotation on BunFile.json() would
  * silently trust missing arrays or malformed analyzer values as measurements. */
 export function parseStatic(value: Json): StaticDocument {

@@ -53,7 +53,7 @@ test("static pinned analyzers survive JSON transfer and join conservative bounds
 		writeFileSync(join(root, "ci-plan.json"), "{}");
 		const options = { root, contract: join(root, "contract.json"), directory: join(root, "exact"), plan: join(root, "ci-plan.json"), run: "metrics-run" };
 		collectExactFixture(options, [{ id: "tests", kind: "test", paths: ["script/main.test.ts"], args: [], expectedExitCode: 0 }]);
-		const coverage = readExactCoverage(options, identity, document.measured.map((row) => row.analysis.prepared));
+		const coverage = await readExactCoverage(options, identity, document.measured.map((row) => row.analysis.prepared));
 		const result = joinBounds(document, { identity, coverage });
 		const preparedStarts = [...new Set(
 			Object.values(document.measured[0]?.analysis.prepared.statementMap ?? {}).map((range) => range.start.line),

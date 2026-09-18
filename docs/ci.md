@@ -141,7 +141,9 @@ Each selected coverage test lane seals one immutable native receipt. Quality
 waits for tests and all Quality Static legs, downloads their artifacts, checks
 Python, and runs `quality-measure.ts finish`. Finish rejects missing or stale
 leg identities, verifies native coverage, joins coverage-dependent metrics, and
-runs the ratchet. Its `quality-measurements` artifact retains `quality-results/`,
+runs the ratchet. Each exact statement receipt is verified in its own Bun child
+(`script/quality-ci-shard.ts`, at most two at once); the finish process admits
+only the child's digest-checked merge document, never the receipt bytes. Its `quality-measurements` artifact retains `quality-results/`,
 `quality-legs/`, and `ci-plan.json`, including available results on failure.
 Per-leg artifacts and measurements are retained for 14 days.
 
