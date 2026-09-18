@@ -488,11 +488,74 @@ export function dormant() {
 	mkdirSync(join(f.root, "node_modules/@fixture"), { recursive: true });
 	symlinkSync(join(f.root, "script/pkg"), join(f.root, "node_modules/@fixture/emitted"));
 	const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
-	inventory.configurations = ["script/tsconfig.json", "tsconfig.base.json"].map((path) => ({ path, sha256: sha256(readFileSync(join(f.root, path))) }));
+	inventory.configurations = ["script/pkg/package.json", "script/tsconfig.json", "tsconfig.base.json"].map((path) => ({ path, sha256: sha256(readFileSync(join(f.root, path))) }));
 	f.put("inventory.json", JSON.stringify(inventory));
 	for (const name of ["inventory", "contract"]) f.args[f.args.indexOf(`--${name}-sha256`) + 1] = sha256(readFileSync(join(f.root, `${name}.json`)));
 	return { ...f, source };
 }
+
+const dynamicEmittedTest = 'import { test, expect } from "bun:test"; const { choose } = await import("@fixture/emitted"); test("dynamic emitted entry", () => { expect(choose(true)).toBe(42); });\n';
+const originalBeforeDynamicTest = 'import { test, expect } from "bun:test"; import { choose as original } from "./pkg/src/index.ts"; const { choose } = await import("@fixture/emitted"); test("both instances", () => { expect(original(true)).toBe(42); expect(choose(false)).toBe(99); });\n';
+
+// Erased provenance can never keep credit from a changed compiled artifact:
+// the frozen tree (static imports of the loaded test and of the compiled
+// barrel) and the process's own counters (an evaluated dynamic import) pin
+// the proofs a process must carry, whichever records it drops.
+for (const [mode, testSource, message] of [
+	["static", undefined, "emitted module imported by script/subject.test.ts has no emission proof"],
+	["dynamic", dynamicEmittedTest, "emitted module imported by script/subject.test.ts has no emission proof"],
+	["original-before-dynamic", originalBeforeDynamicTest, "emitted module imported by script/subject.test.ts has no emission proof"],
+	["barrel-child", undefined, "emitted module imported by script/pkg/dist/index.js has no emission proof"],
+	["manifest-retarget", undefined, "configuration drift"],
+] as const) test(`erased emission provenance cannot credit a changed artifact (${mode})`, () => {
+	const f = emittedWorkspace("export const value = 42;\n", testSource);
+	try {
+		const path = join(f.root, "coverage.json");
+		const collected = f.run(["--collect", "--write-coverage", path]);
+		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
+		const receipt = obj(decode(readFileSync(path, "utf8")));
+		for (const process of list(receipt.processes).map(obj)) {
+			expect(list(process.emitted)).toHaveLength(2);
+			// barrel-child keeps the barrel's proof and drops only value.js's.
+			const keep = (name: string) => mode === "barrel-child" && !/\/value\.[jt]s$/.test(name);
+			process.emitted = list(process.emitted).filter((row) => keep(str(obj(row).path)));
+			process.transferred = list(process.transferred).filter((row) => keep(str(row)));
+		}
+		f.put("coverage.json", JSON.stringify(receipt));
+		const valuePath = "script/pkg/dist/value.js";
+		f.put(valuePath, readFileSync(join(f.root, valuePath), "utf8").replace("42", "43"));
+		if (mode === "manifest-retarget") f.put("script/pkg/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./src/index.ts"}');
+		const verified = f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+		expect(verified.exit).toBe(2);
+		expect(verified.result.complete).toBe(false);
+		expect(str(obj(list(verified.result.errors)[0]).message)).toContain(message);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("a bare specifier routed by an unfrozen package manifest cannot anchor an emission", () => {
+	const f = emittedWorkspace();
+	try {
+		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+		inventory.configurations = list(inventory.configurations).filter((row) => obj(row).path !== "script/pkg/package.json");
+		f.put("inventory.json", JSON.stringify(inventory));
+		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+		const run = f.run(["--collect"]);
+		expect(run.exit).toBe(2);
+		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package manifest script/pkg/package.json routing "@fixture/emitted" is not frozen');
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("an untaken dynamic import legitimately carries no emission proof", () => {
+	const f = emittedWorkspace("export const value = 42;\n", 'import { test, expect } from "bun:test"; if (process.argv.includes("--load-emitted")) await import("@fixture/emitted"); test("untaken", () => { expect(1).toBe(1); });\n');
+	try {
+		const path = join(f.root, "coverage.json");
+		const collected = f.run(["--collect", "--write-coverage", path]);
+		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
+		expect(collected.result.complete).toBe(true);
+		for (const process of list(obj(decode(readFileSync(path, "utf8"))).processes).map(obj)) expect(process.emitted).toEqual([]);
+		expect(f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]).exit).toBe(1);
+	} finally { f.cleanup(); }
+}, 120_000);
 
 test("verified workspace emit preserves package resolution and exact original counters", () => {
 	const f = emittedWorkspace();
@@ -646,7 +709,7 @@ test("workspace emit receipt binds compiler, artifact, original and map identiti
 		for (const [tampered, message] of [
 			[(process: ReturnType<typeof obj>) => { delete process.emitted; }, "object keys differ"],
 			[(process: ReturnType<typeof obj>) => { process.emitted = []; }, "emission proofs do not match the transferred sources"],
-			[(process: ReturnType<typeof obj>) => { process.emitted = []; process.transferred = []; }, "emitted module statically imported by script/subject.test.ts has no emission proof"],
+			[(process: ReturnType<typeof obj>) => { process.emitted = []; process.transferred = []; }, "emitted module imported by script/subject.test.ts has no emission proof"],
 		] as const) {
 			const receipt = structuredClone(original);
 			const process = list(receipt.processes).map(obj).find((process) => list(process.emitted ?? []).length > 0);

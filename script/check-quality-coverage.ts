@@ -1410,14 +1410,10 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	// proof, and every proof names such a source: provenance cannot be dropped.
 	if (emitted && transferred && [...new Set(emitted.map((proof) => proof.source))].sort().join("\0") !== [...transferred].sort().join("\0"))
 		fail("identity", text(r.id), "emission proofs do not match the transferred sources");
-	// Both records above are the process's own claims. The frozen tree pins what
-	// a loaded original statically imports, so erasing both records together
-	// still cannot hide an owned compiled module the process must have loaded.
-	if (emitted)
-		for (const path of loaded)
-			for (const target of staticEmissionImports(data, path))
-				if (!emitted.some((proof) => proof.path === target))
-					fail("identity", target, `emitted module statically imported by ${path} has no emission proof`);
+	// Both records above are the process's own claims. The frozen tree and the
+	// process's own counters pin which owned compiled modules it must have
+	// loaded, so erasing both records together still cannot hide one.
+	if (emitted) requiredEmissions(data, loaded, emitted, coverage);
 	return {
 		id: text(r.id),
 		parent: text(r.parent),
@@ -1434,39 +1430,128 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	};
 }
 
-const staticImportTargets = new WeakMap<Prepared, readonly string[]>();
+type DynamicImport = { specifier: string; line: number; column: number };
+type ModuleSpecifiers = { static: readonly string[]; dynamic: readonly DynamicImport[] };
 
-// Owned compiled modules that evaluating this original must load: the static
-// import and re-export specifiers of its instrumented JavaScript (type-only
-// imports are already erased), resolved in the frozen tree exactly as the
-// loader classifies them. Dynamic imports are conditional and never required.
-function staticEmissionImports(data: Inputs, path: string): readonly string[] {
-	const file = data.files.find((f) => f.entry.path === path);
-	if (!file || file.python) return [];
-	const cached = staticImportTargets.get(file);
-	if (cached) return cached;
-	const program = ts.createSourceFile(path, file.code, ts.ScriptTarget.ESNext, false, ts.ScriptKind.JS);
-	const targets = new Set<string>();
-	for (const statement of program.statements) {
-		const specifier = (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
-			? statement.moduleSpecifier.text : undefined;
-		if (specifier === undefined || nodeModules.isBuiltin(specifier) || specifier.startsWith("bun:")) continue;
-		let resolved: string;
-		try {
-			resolved = realpathSync(Bun.resolveSync(specifier, join(data.options.root, dirname(path))));
-		} catch (error) {
-			if (specifier.startsWith(".")) continue; // relative imports of originals; the loader binds them by inventory
-			return fail("identity", path, `static import ${JSON.stringify(specifier)} does not resolve in the frozen tree: ${error instanceof Error ? error.message : String(error)}`);
+// The string-literal module specifiers of one module: top-level import and
+// re-export declarations, and `import("...")` calls with their positions.
+function moduleSpecifiers(path: string, code: string, kind: ts.ScriptKind): ModuleSpecifiers {
+	const program = ts.createSourceFile(path, code, ts.ScriptTarget.ESNext, true, kind);
+	const statics: string[] = [];
+	const dynamic: DynamicImport[] = [];
+	for (const statement of program.statements)
+		if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier))
+			statics.push(statement.moduleSpecifier.text);
+	function visit(node: ts.Node): void {
+		if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+			const [argument] = node.arguments;
+			if (argument && ts.isStringLiteralLike(argument)) {
+				const { line, character } = program.getLineAndCharacterOfPosition(node.getStart(program));
+				dynamic.push({ specifier: argument.text, line: line + 1, column: character });
+			}
 		}
-		const target = relative(data.options.root, resolved);
-		if (target.startsWith("..") || isAbsolute(target) || target.split("/").includes("node_modules")) continue;
-		if (!data.roots.some((r) => target.startsWith(`${r}/`)) || !/\.[cm]?[jt]sx?$/.test(target)) continue;
-		if (data.files.some((f) => f.entry.path === target)) continue;
-		targets.add(target);
+		ts.forEachChild(node, visit);
 	}
-	const result = [...targets].sort();
-	staticImportTargets.set(file, result);
-	return result;
+	visit(program);
+	return { static: statics, dynamic };
+}
+
+const originalStaticSpecifiers = new WeakMap<Prepared, readonly string[]>();
+const originalDynamicImports = new WeakMap<Prepared, readonly DynamicImport[]>();
+const emittedSpecifiers = new Map<string, ModuleSpecifiers>();
+
+// Static specifiers come from the instrumented JavaScript, where type-only
+// imports are already erased; dynamic import positions come from the frozen
+// original source, where the mapped statement counters locate them.
+function originalImports(data: Inputs, file: Prepared): { static: readonly string[]; dynamic: readonly DynamicImport[] } {
+	let statics = originalStaticSpecifiers.get(file);
+	let dynamic = originalDynamicImports.get(file);
+	if (!statics || !dynamic) {
+		const path = file.entry.path;
+		statics = moduleSpecifiers(path, file.code, ts.ScriptKind.JS).static;
+		dynamic = moduleSpecifiers(path, content(data.options.root, path).toString("utf8"), path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS).dynamic;
+		originalStaticSpecifiers.set(file, statics);
+		originalDynamicImports.set(file, dynamic);
+	}
+	return { static: statics, dynamic };
+}
+
+// A dynamic import the process's own counters prove it evaluated: the
+// innermost mapped statement containing the call has a positive count. A
+// call outside every mapped statement cannot prove it went untaken.
+function executedDynamicSpecifiers(data: Inputs, file: Prepared, hits: FileCoverageData): string[] {
+	const inside = (range: Range, at: DynamicImport) =>
+		(at.line > range.start.line || (at.line === range.start.line && at.column >= range.start.column)) &&
+		(at.line < range.end.line || (at.line === range.end.line && at.column <= range.end.column));
+	const span = (range: Range) => (range.end.line - range.start.line) * 1_000_000 + (range.end.column - range.start.column);
+	return originalImports(data, file).dynamic.filter((at) => {
+		const containing = Object.entries(file.mapped.statementMap).filter(([, range]) => inside(range, at)).sort(([, a], [, b]) => span(a) - span(b));
+		const [innermost] = containing;
+		return innermost === undefined || (hits.s[innermost[0]] ?? 0) > 0;
+	}).map((at) => at.specifier);
+}
+
+// Resolves one specifier exactly as the loader classifies it and returns the
+// owned compiled module it names, or undefined for builtins, dependencies,
+// paths outside the roots, and inventoried originals. A bare specifier that
+// lands in the owned tree also pins the package manifest that routed it.
+function ownedEmissionTarget(data: Inputs, specifier: string, importer: string): string | undefined {
+	if (nodeModules.isBuiltin(specifier) || specifier.startsWith("bun:")) return undefined;
+	let resolved: string;
+	try {
+		resolved = realpathSync(Bun.resolveSync(specifier, join(data.options.root, dirname(importer))));
+	} catch {
+		if (specifier.startsWith(".")) return undefined; // relative imports of originals; the loader binds them by inventory
+		return fail("identity", importer, `import ${JSON.stringify(specifier)} does not resolve in the frozen tree`);
+	}
+	const target = relative(data.options.root, resolved);
+	if (target.startsWith("..") || isAbsolute(target) || target.split("/").includes("node_modules")) return undefined;
+	if (!data.roots.some((r) => target.startsWith(`${r}/`))) return undefined;
+	if (!specifier.startsWith(".") && !isAbsolute(specifier)) {
+		let directory = dirname(target);
+		while (directory !== "." && !existsSync(join(data.options.root, directory, "package.json"))) directory = dirname(directory);
+		const manifest = join(directory, "package.json");
+		if (!data.configurations.some((config) => config.path === manifest))
+			fail("identity", importer, `package manifest ${manifest} routing ${JSON.stringify(specifier)} is not frozen`);
+	}
+	if (!/\.[cm]?[jt]sx?$/.test(target) || data.files.some((f) => f.entry.path === target)) return undefined;
+	return target;
+}
+
+// Every owned compiled module the process must have loaded needs an emission
+// proof: the static imports of each loaded original and of each proved
+// emission (resolved from the emission's own directory, so a compiled barrel
+// pins its compiled dependencies), and every dynamic import the counters show
+// was evaluated. An untaken dynamic import legitimately carries no proof.
+function requiredEmissions(data: Inputs, loaded: readonly string[], emitted: readonly EmissionProof[], coverage: ProcessReceipt["coverage"]): void {
+	const demand = (target: string | undefined, importer: string) => {
+		if (target !== undefined && !emitted.some((proof) => proof.path === target))
+			fail("identity", target, `emitted module imported by ${importer} has no emission proof`);
+	};
+	const executed = new Map<string, string[]>();
+	const evaluated = (file: Prepared) => {
+		const cached = executed.get(file.entry.path);
+		if (cached) return cached;
+		const specifiers = executedDynamicSpecifiers(data, file, coverage[file.entry.path] ?? fail("incomplete_coverage", file.entry.path, "loaded source counter record missing"));
+		executed.set(file.entry.path, specifiers);
+		return specifiers;
+	};
+	for (const path of loaded) {
+		const file = data.files.find((f) => f.entry.path === path);
+		if (!file || file.python) continue;
+		for (const specifier of [...originalImports(data, file).static, ...evaluated(file)]) demand(ownedEmissionTarget(data, specifier, path), path);
+	}
+	for (const proof of emitted) {
+		const key = `${proof.path}\0${proof.sha256}`;
+		let specifiers = emittedSpecifiers.get(key);
+		if (!specifiers) {
+			specifiers = moduleSpecifiers(proof.path, content(data.options.root, proof.path).toString("utf8"), ts.ScriptKind.JS);
+			emittedSpecifiers.set(key, specifiers);
+		}
+		const source = data.files.find((f) => f.entry.path === proof.source) ?? fail("identity", proof.source, "emitted original absent from frozen inventory");
+		const dynamic = specifiers.dynamic.map((at) => at.specifier).filter((specifier) => evaluated(source).includes(specifier));
+		for (const specifier of [...specifiers.static, ...dynamic]) demand(ownedEmissionTarget(data, specifier, proof.path), proof.path);
+	}
 }
 
 function summary(data: Inputs, receipts: ProcessReceipt[]) {
