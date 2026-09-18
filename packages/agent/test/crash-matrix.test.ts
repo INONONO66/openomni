@@ -408,8 +408,9 @@ async function recoverStaleOwner(witness: Witness) {
     return undefined;
   });
   expect(refusals).toBe(1);
+  // The typed rejection is atomic: the stale writer's effect row never appears.
   expect(actions().some((action) => action.id === staleAction.id)).toBe(false);
-  return "lost";
+  return "rejected";
 }
 
 function assertOutboundCut(witness: Witness) {

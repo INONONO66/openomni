@@ -83,8 +83,8 @@
     },
     {
       "crashPoint": "owner_reclaimed_before_stale_transcript_flush",
-      "recovery": "lost",
-      "note": "Cut at the model attempt result commit after its body returns while owner A holds the lease, retaining the exact uncommitted action. After expiry, wake acquires owner B; replaying A's witnessed result with its old owner/fence is refused as stale without changing the tree. B settles the original turn once; A's effect row never appears."
+      "recovery": "rejected",
+      "note": "Cut at the model attempt result commit after its body returns while owner A holds the lease. After expiry a successor acquires a higher fence; A's commit with its old fence is rejected as a typed stale outcome at commit time, atomically, leaving no partial row. B settles the original turn once."
     }
   ]
 }
