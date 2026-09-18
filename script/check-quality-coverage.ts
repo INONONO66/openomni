@@ -1429,29 +1429,35 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 }
 
 type DynamicImport = { specifier: string; line: number; column: number };
-type ModuleSpecifiers = { static: readonly string[]; dynamic: readonly DynamicImport[] };
+type ComputedImport = { line: number; column: number };
+type ModuleSpecifiers = { static: readonly string[]; dynamic: readonly DynamicImport[]; computed: readonly ComputedImport[] };
 
-// The string-literal module specifiers of one module: top-level import and
-// re-export declarations, and `import("...")` calls with their positions.
+// The module specifiers of one module: top-level import and re-export
+// declarations, and `import(...)` / `require(...)` calls with their positions.
+// A parenthesized literal is still a literal; any other computed argument is
+// recorded as such, so an owned emission cannot hide a dependency behind it.
 function moduleSpecifiers(path: string, code: string, kind: ts.ScriptKind): ModuleSpecifiers {
 	const program = ts.createSourceFile(path, code, ts.ScriptTarget.ESNext, true, kind);
 	const statics: string[] = [];
 	const dynamic: DynamicImport[] = [];
+	const computed: ComputedImport[] = [];
 	for (const statement of program.statements)
 		if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier))
 			statics.push(statement.moduleSpecifier.text);
+	const loads = (expression: ts.Expression) =>
+		expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(expression) && expression.text === "require");
 	function visit(node: ts.Node): void {
-		if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-			const [argument] = node.arguments;
-			if (argument && ts.isStringLiteralLike(argument)) {
-				const { line, character } = program.getLineAndCharacterOfPosition(node.getStart(program));
-				dynamic.push({ specifier: argument.text, line: line + 1, column: character });
-			}
+		if (ts.isCallExpression(node) && loads(node.expression)) {
+			let [argument] = node.arguments;
+			while (argument && ts.isParenthesizedExpression(argument)) argument = argument.expression;
+			const { line, character } = program.getLineAndCharacterOfPosition(node.getStart(program));
+			if (argument && ts.isStringLiteralLike(argument)) dynamic.push({ specifier: argument.text, line: line + 1, column: character });
+			else computed.push({ line: line + 1, column: character });
 		}
 		ts.forEachChild(node, visit);
 	}
 	visit(program);
-	return { static: statics, dynamic };
+	return { static: statics, dynamic, computed };
 }
 
 const originalStaticSpecifiers = new WeakMap<Prepared, readonly string[]>();
@@ -1475,37 +1481,115 @@ function originalImports(data: Inputs, file: Prepared): { static: readonly strin
 }
 
 // A dynamic import the process's own counters prove it evaluated: the
-// innermost mapped statement containing the call has a positive count. A
-// call outside every mapped statement cannot prove it went untaken.
+// innermost mapped statement containing the call has a positive count, and so
+// does the innermost mapped branch arm containing it, so an untaken ternary or
+// short-circuit arm carries no obligation. `if` arms share the statement's own
+// range and are located by the statements they contain instead. A call outside
+// every mapped statement cannot prove it went untaken.
 function executedDynamicSpecifiers(data: Inputs, file: Prepared, hits: FileCoverageData): string[] {
 	const inside = (range: Range, at: DynamicImport) =>
 		(at.line > range.start.line || (at.line === range.start.line && at.column >= range.start.column)) &&
 		(at.line < range.end.line || (at.line === range.end.line && at.column <= range.end.column));
 	const span = (range: Range) => (range.end.line - range.start.line) * 1_000_000 + (range.end.column - range.start.column);
+	const innermost = <T>(rows: readonly (readonly [T, Range])[], at: DynamicImport): T | undefined =>
+		rows.filter(([, range]) => inside(range, at)).sort(([, a], [, b]) => span(a) - span(b))[0]?.[0];
+	const statements = Object.entries(file.mapped.statementMap);
+	const arms = Object.entries(file.mapped.branchMap).flatMap(([key, branch]) =>
+		branch.type === "if" ? [] : branch.locations.map((range, index) => [[key, index] as const, range] as const));
 	return originalImports(data, file).dynamic.filter((at) => {
-		const containing = Object.entries(file.mapped.statementMap).filter(([, range]) => inside(range, at)).sort(([, a], [, b]) => span(a) - span(b));
-		const [innermost] = containing;
-		return innermost === undefined || (hits.s[innermost[0]] ?? 0) > 0;
+		const statement = innermost(statements, at);
+		const arm = innermost(arms, at);
+		return (statement === undefined || (hits.s[statement] ?? 0) > 0) && (arm === undefined || (hits.b[arm[0]]?.[arm[1]] ?? 0) > 0);
 	}).map((at) => at.specifier);
+}
+
+const lexicalExists = (path: string) => {
+	try {
+		lstatSync(path);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+// The loader reads owned files through their lexical path and refuses
+// symlinks; a relative import must reach its target the same way, so a
+// compiled entry cannot be retargeted at an inventoried original by a link.
+function lexicalIdentity(data: Inputs, specifier: string, importer: string): void {
+	const base = isAbsolute(specifier) ? specifier : resolve(data.options.root, dirname(importer), specifier);
+	const candidate = [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, join(base, "index.ts"), join(base, "index.js"), base.replace(/\.[cm]?js$/, ".ts")].find(lexicalExists);
+	if (candidate === undefined) return;
+	const path = relative(data.options.root, candidate);
+	if (path.startsWith("..") || isAbsolute(path) || path.split("/").includes("node_modules") || !data.roots.some((r) => path.startsWith(`${r}/`))) return;
+	if (realpathSync(candidate) !== candidate) fail("identity", importer, `import ${JSON.stringify(specifier)} reaches ${path} through a symlink`);
+}
+
+const ownedManifestNames = new WeakMap<Inputs, readonly { path: string; name: string }[]>();
+// The frozen package manifests inside the owned roots, with the package names
+// they declare. The manifest bytes are re-read under their frozen digest.
+function ownedManifests(data: Inputs): readonly { path: string; name: string }[] {
+	let cached = ownedManifestNames.get(data);
+	if (!cached) {
+		cached = data.configurations
+			.filter((config) => basename(config.path) === "package.json" && !config.path.split("/").includes("node_modules") && data.roots.some((r) => config.path.startsWith(`${r}/`)))
+			.flatMap((config) => {
+				const bytes = content(data.options.root, config.path);
+				if (sha256(bytes) !== config.sha256) fail("tamper", config.path, "frozen package manifest differs");
+				const name = object(decode(bytes.toString("utf8"))).name;
+				return typeof name === "string" ? [{ path: config.path, name }] : [];
+			});
+		ownedManifestNames.set(data, cached);
+	}
+	return cached;
+}
+
+// The nearest `node_modules` entry for a package name above the importer,
+// located with plain file-system calls rather than the resolver's cache.
+function packageLink(root: string, importer: string, name: string): string | undefined {
+	for (let directory = join(root, dirname(importer)); ; directory = dirname(directory)) {
+		const link = join(directory, "node_modules", name);
+		if (lexicalExists(link)) return link;
+		if (directory === root) return undefined;
+	}
+}
+
+// A frozen owned package manifest binds its name: a bare specifier carrying
+// that name must land inside the package, and the link the loader follows to
+// reach it must point there, whatever the dependency tree links now.
+function ownedPackageBinding(data: Inputs, specifier: string, importer: string, target: string): void {
+	const name = specifier.split("/").slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+	for (const manifest of ownedManifests(data)) {
+		if (manifest.name !== name) continue;
+		const owner = dirname(manifest.path);
+		const link = packageLink(data.options.root, importer, name);
+		if (!target.startsWith(`${owner}/`) || (link !== undefined && relative(data.options.root, realpathSync(link)) !== owner))
+			fail("identity", importer, `import ${JSON.stringify(specifier)} resolves outside frozen package ${manifest.path}`);
+	}
 }
 
 // Resolves one specifier exactly as the loader classifies it and returns the
 // owned compiled module it names, or undefined for builtins, dependencies,
-// paths outside the roots, and inventoried originals. A bare specifier that
-// lands in the owned tree also pins the package manifest that routed it.
+// paths outside the roots, and inventoried originals. The binding is checked
+// against the frozen tree rather than the current one: a specifier that no
+// longer resolves fails identity, a relative specifier may not cross a
+// symlink, a bare specifier named by a frozen owned manifest must land in that
+// package, and a bare specifier that lands in the owned tree also pins the
+// package manifest that routed it.
 function ownedEmissionTarget(data: Inputs, specifier: string, importer: string): string | undefined {
 	if (nodeModules.isBuiltin(specifier) || specifier.startsWith("bun:")) return undefined;
+	const bare = !specifier.startsWith(".") && !isAbsolute(specifier);
+	if (!bare) lexicalIdentity(data, specifier, importer);
 	let resolved: string;
 	try {
 		resolved = realpathSync(Bun.resolveSync(specifier, join(data.options.root, dirname(importer))));
 	} catch {
-		if (specifier.startsWith(".")) return undefined; // relative imports of originals; the loader binds them by inventory
 		return fail("identity", importer, `import ${JSON.stringify(specifier)} does not resolve in the frozen tree`);
 	}
 	const target = relative(data.options.root, resolved);
+	if (bare) ownedPackageBinding(data, specifier, importer, target);
 	if (target.startsWith("..") || isAbsolute(target) || target.split("/").includes("node_modules")) return undefined;
 	if (!data.roots.some((r) => target.startsWith(`${r}/`))) return undefined;
-	if (!specifier.startsWith(".") && !isAbsolute(specifier)) {
+	if (bare) {
 		let directory = dirname(target);
 		while (directory !== "." && !existsSync(join(data.options.root, directory, "package.json"))) directory = dirname(directory);
 		const manifest = join(directory, "package.json");
@@ -1520,7 +1604,9 @@ function ownedEmissionTarget(data: Inputs, specifier: string, importer: string):
 // proof: the static imports of each loaded original and of each proved
 // emission (resolved from the emission's own directory, so a compiled barrel
 // pins its compiled dependencies), and every dynamic import the counters show
-// was evaluated. An untaken dynamic import legitimately carries no proof.
+// was evaluated. An untaken dynamic import legitimately carries no proof. A
+// computed specifier inside an owned emission cannot be pinned at all and
+// fails identity; computed specifiers in originals remain the loader's.
 function requiredEmissions(data: Inputs, loaded: readonly string[], emitted: readonly EmissionProof[], coverage: ProcessReceipt["coverage"]): void {
 	const demand = (target: string | undefined, importer: string) => {
 		if (target !== undefined && !emitted.some((proof) => proof.path === target))
@@ -1546,6 +1632,8 @@ function requiredEmissions(data: Inputs, loaded: readonly string[], emitted: rea
 			specifiers = moduleSpecifiers(proof.path, content(data.options.root, proof.path).toString("utf8"), ts.ScriptKind.JS);
 			emittedSpecifiers.set(key, specifiers);
 		}
+		const [computed] = specifiers.computed;
+		if (computed) fail("identity", proof.path, `emitted module loads a computed specifier at ${computed.line}:${computed.column}; its dependencies cannot be pinned`);
 		const source = data.files.find((f) => f.entry.path === proof.source) ?? fail("identity", proof.source, "emitted original absent from frozen inventory");
 		const dynamic = specifiers.dynamic.map((at) => at.specifier).filter((specifier) => evaluated(source).includes(specifier));
 		for (const specifier of [...specifiers.static, ...dynamic]) demand(ownedEmissionTarget(data, specifier, proof.path), proof.path);
