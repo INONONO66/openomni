@@ -81,7 +81,10 @@ async function prepareReference(args: string[]): Promise<void> {
   const statisticsSource = await Bun.file(statisticsPath).text();
   const historySource = await Bun.file(historyPath).text();
   const statistics = ReferenceStatistics.parse(decodeJson(statisticsSource));
-  const referenceCommit = acceptedCommit(readBenchmarkHistory(historySource));
+  const accepted = acceptedReference(readBenchmarkHistory(historySource));
+  const referenceCommit = accepted.commit.id;
+  const expectedNames = metricNames(accepted.benches);
+  if (metricNames(statistics) !== expectedNames) throw new Error("Measured reference metrics do not match accepted history");
   if (measuredCommit !== referenceCommit) throw new Error("Measured reference commit does not match accepted history");
   const reference = {
     entries: { "OpenOmni Benchmarks": [{
@@ -93,11 +96,15 @@ async function prepareReference(args: string[]): Promise<void> {
   await Bun.write("bench-results/reference.json", `${JSON.stringify(reference, null, 2)}\n`);
 }
 
-function acceptedCommit(history: Json): string {
+function metricNames(metrics: readonly { readonly name: string }[]): string {
+  return metrics.map((metric) => metric.name).sort().join("\n");
+}
+
+function acceptedReference(history: Json) {
   const latest = History.parse(history).entries["OpenOmni Benchmarks"].at(-1);
   if (!latest) throw new Error("Missing accepted main benchmark reference");
   ReferenceMetrics.parse(latest.benches);
-  return latest.commit.id;
+  return latest;
 }
 
 export async function main(args = Bun.argv.slice(2)): Promise<number> {
@@ -105,7 +112,7 @@ export async function main(args = Bun.argv.slice(2)): Promise<number> {
   if (args[0] === "--validate-input") return 0;
   if (args[0] === "--accepted-commit") {
     const [, path] = z.tuple([z.literal("--accepted-commit"), z.string()]).parse(args);
-    console.log(acceptedCommit(readBenchmarkHistory(await Bun.file(path).text())));
+    console.log(acceptedReference(readBenchmarkHistory(await Bun.file(path).text())).commit.id);
     return 0;
   }
   if (args[0] === "--prepare-reference") {

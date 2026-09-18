@@ -155,6 +155,8 @@ test("paired CLI admits host-speed shifts but rejects real regressions and inval
       await Bun.write("bench-results/reference/statistics.json", JSON.stringify(invalid));
       await expect(main(prepare)).rejects.toThrow();
     }
+    await Bun.write("bench-results/reference/statistics.json", JSON.stringify(metrics(180).slice(1, 14)));
+    await expect(main(prepare)).rejects.toThrow("Measured reference metrics do not match accepted history");
     for (const benches of [[], [...metrics(100), ...metrics(100)]]) {
       const invalid = history(100, 100);
       const latest = invalid.entries["OpenOmni Benchmarks"].at(-1);
