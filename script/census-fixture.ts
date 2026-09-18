@@ -11,6 +11,8 @@ const knip = resolve(import.meta.dir, "../node_modules/knip/bin/knip.js");
 export function hash(content: string | Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
+export const SPAWN_TIMEOUT_MS = 30_000;
+
 export class Fixture {
   readonly root = mkdtempSync(join(tmpdir(), "census-fixture-"));
   readonly sources: Record<string, string>;
@@ -116,7 +118,7 @@ export class Fixture {
     ];
     const result = Bun.spawnSync([process.execPath, cli, ...argv], {
       cwd: this.root,
-      timeout: 30_000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
     const lines: string[] = [];
     const log = console.log;
@@ -139,6 +141,37 @@ export class Fixture {
     rmSync(this.root, { recursive: true, force: true });
   }
 }
+
+export function runFixtureProgram(fixture: Fixture, argv: string[], cwd = fixture.root) {
+  return Bun.spawnSync([process.execPath, ...argv], {
+    cwd,
+    timeout: SPAWN_TIMEOUT_MS,
+  });
+}
+
+export function assertFixtureProgramOutput(
+  fixture: Fixture,
+  argv: string[],
+  output: string,
+  cwd = fixture.root,
+  stderr?: string,
+): void {
+  const actual = runFixtureProgram(fixture, argv, cwd);
+  expect(actual.exitCode).toBe(0);
+  expect(actual.stdout.toString().trim()).toBe(output);
+  if (stderr !== undefined) expect(actual.stderr.toString()).toBe(stderr);
+}
+
+export function assertFixturePublisherOutput(
+  fixture: Fixture,
+  argv: string[],
+  output: string,
+  cwd = fixture.root,
+): void {
+  assertFixtureProgramOutput(fixture, argv, output, cwd);
+  expect(fixture.run("publisher").code).toBe(0);
+}
+
 export const protocol = `export namespace BusEvent {
   export interface Descriptor { name: string; schema: object }
   export function define(name: string, schema: object): Descriptor { return { name, schema }; }
@@ -165,9 +198,7 @@ export function configureElectronFixture(fixture: Fixture, html: string): void {
 }
 
 export function assertPublication(fixture: Fixture, published: boolean): void {
-  const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: 5000,
-  });
+  const actual = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe(published ? '["ready"]' : "[]");
   expect(fixture.run("publisher").code).toBe(published ? 0 : 1);
