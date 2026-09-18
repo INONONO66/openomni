@@ -797,7 +797,6 @@ function assignmentConsumer(node: ts.Node): ts.Node | undefined {
 		ts.isArrayLiteralExpression(parent) ||
 		ts.isSpreadElement(parent) ||
 		ts.isSpreadAssignment(parent) ||
-		ts.isParenthesizedExpression(parent) ||
 		(ts.isPropertyAssignment(parent) && parent.initializer === node)
 	)
 		return assignmentConsumer(parent);
