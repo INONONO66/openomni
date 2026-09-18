@@ -639,6 +639,20 @@ test("workspace emit receipt binds compiler, artifact, original and map identiti
 			expect(verified.exit).toBe(2);
 			expect(obj(list(verified.result.errors)[0]).code).toBe("identity");
 		}
+		// Emission provenance is mandatory for every JavaScript process: deleting
+		// the proofs (with a fresh digest) is rejected, not read as direct source loads.
+		for (const tampered of [
+			(process: ReturnType<typeof obj>) => { delete process.emitted; },
+			(process: ReturnType<typeof obj>) => { process.emitted = []; },
+		]) {
+			const receipt = structuredClone(original);
+			const process = list(receipt.processes).map(obj).find((process) => list(process.emitted ?? []).length > 0);
+			if (!process) throw new Error("missing emitted provenance");
+			tampered(process);
+			f.put("coverage.json", JSON.stringify(receipt));
+			const verified = f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+			expect(verified.exit).toBe(2);
+		}
 		f.put("coverage.json", JSON.stringify(original));
 		f.put("script/pkg/dist/value.js", readFileSync(join(f.root, "script/pkg/dist/value.js"), "utf8").replace("42", "43"));
 		expect(f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]).exit).toBe(2);
@@ -1372,9 +1386,9 @@ test("decode rejects invalid escapes and leading zeros while accepting unicode e
 	expect(decode('"a\\u0041b"')).toBe("aAb");
 	expect(decode('[1, -0.5, 2e3, "x\\n"]')).toEqual([1, -0.5, 2000, "x\n"]);
 	for (const text of ['"\\q"', "01", '"\\u12"', '"unterminated', '"raw\ttab"', "[1,]", '{"a":1,}', "1 2"]) {
-		let thrown: unknown;
-		try { decode(text); } catch (error) { thrown = error; }
-		expect(obj(thrown as Json).code, text).toBe("schema");
+		let thrown: Json = null;
+		try { decode(text); } catch (error) { thrown = obj(error as Json); }
+		expect(obj(thrown).code, text).toBe("schema");
 	}
 });
 

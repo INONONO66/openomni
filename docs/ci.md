@@ -165,11 +165,12 @@ Script Coverage has five minutes.
 The final CI gate requires Quality Static, Quality Gates, and Quality to succeed
 for executable plans; only planned documentation skips are accepted.
 
-`d945-lcov-crap-upper-bound@1` uses only uniquely mapped, wholly executed source
-lines; ambiguous line hits never become statement hits. These counters are a
-lower bound on proven statement coverage, so the unchanged CRAP formula yields
-an explicitly labeled upper bound. Missing or ambiguous proof remains a finding,
-not fabricated coverage. Metrics measure the plan's source inventory; clones
+`d945-exact-statement-evidence@1` takes its statement counters only from the
+verified exact receipt: original-source statement hits including every
+descendant process. There is no LCOV line inference and no bound; a statement
+without exact evidence is an `unproven-statement` finding, and a source missing
+from the receipt refuses measurement rather than fabricating coverage. CRAP
+uses these exact counters directly. Metrics measure the plan's source inventory; clones
 remain whole-inventory because they cross file boundaries. Type census measures
 only scoped files in the selected projects, retaining complete ownership for
 origin attribution. Publisher/store/export findings are scoped to affected
@@ -371,11 +372,21 @@ b run script/check-ledger-schema-drift.ts
 
 ### Exact statement evidence
 
+The plan job derives the exact commands once (`quality-ci-exact.ts --plan
+ci-plan.json`: lane test discovery, `scripts-contracts`, and the script CLI
+contracts) and embeds them into the uploaded selection as `exact.commands`
+with `exact.derived: true`. Consumers take commands only from the selection
+whose bytes every exact receipt binds through `run.selectionHash`; a frozen
+plan cannot author its own list. Because the selection declares the commands
+derived, every consumer re-derives them against its checkout and rejects lane
+ownership or test discovery drift. Fixtures embed authored commands with
+`derived: false`, which the fixture's own selection hash still binds.
+
 The `quality-exact` job runs the plan's selected test commands under the
 instrumented collector, one matrix shard per selected lane plus the
 `scripts-contracts` shard (the planner emits the list as `exactShards`; it
 equals the collector's `exactCiShards`). Every shard freezes the same
-`exact.inventory.json` and `exact.plan.json`, runs only its subset plan
+`exact.inventory.json` and `exact.plan.json` (version 3), runs only its subset plan
 (`exact.<shard>.plan.json`), and seals `exact.<shard>.coverage.json` with its
 verdict and process receipt. `finish` requires every shard of the frozen plan,
 rejects a shard whose plan is not the planner's subset, rejects evidence that is

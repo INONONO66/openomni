@@ -34,7 +34,7 @@ test("static leg JSON is validated before joining instead of trusting an untyped
 		for (const patch of patches) expect(() => parseStatic({ ...json, ...patch })).toThrow(InventoryError);
 		expect(() => parseStatic(null)).toThrow(InventoryError);
 		expect(() => joinBounds(parseStatic(json), { identity })).toThrow("missing exact statement evidence");
-		writeFileSync(join(root, "ci-plan.json"), "{}");
+		writeFileSync(join(root, "ci-plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"] }));
 		const options = { root, contract: join(root, "contract.json"), directory: join(root, "exact"), plan: join(root, "ci-plan.json"), run: "static-json" };
 		collectExactFixture(options);
 		const coverage = await readExactCoverage(options, identity, document.measured.map((row) => row.analysis.prepared));

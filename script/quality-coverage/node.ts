@@ -48,7 +48,7 @@ const builtins: {
 } = globalThis;
 const moduleLoader: {
   createRequire(path: string): (id: string) => {
-    mock: { module(id: string, factory: () => unknown): void };
+    mock: { module(id: string, factory: () => object): void };
   };
 } = modules;
 

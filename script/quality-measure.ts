@@ -177,7 +177,7 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 }
 // Exit 1 is a measured verdict (uncovered findings); refused measurement exits 2
 // with its whole message, which the runtime's uncaught-error display truncates.
-if (import.meta.main) process.exitCode = await measureMain().catch((error: unknown) => {
+if (import.meta.main) process.exitCode = await measureMain().catch((error: Error) => {
 	if (!(error instanceof InventoryError)) throw error;
 	console.error(`${error.name} ${error.code} ${error.path}: ${error.message}`);
 	return 2;

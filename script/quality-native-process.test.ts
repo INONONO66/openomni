@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nativeFailure, nativeJson } from "./quality-native-process";
@@ -22,17 +23,22 @@ test("native JSON preserves argument boundaries and measured nonzero exits", asy
 test("native JSON streams stderr before child exit and preserves it in the receipt", async () => {
 	const cwd = mkdtempSync(join(tmpdir(), "native-progress-"));
 	try {
+		// The child announces "ready" only after its socket is listening, and
+		// completes on the connection that the stderr chunk triggers: an explicit
+		// handshake, so the assertion never depends on watcher or scheduler timing.
+		const socket = join(cwd, "release.sock");
 		const result = await nativeJson({
 			command: [process.execPath, "-e", `
-				import { watch } from "node:fs";
-				const watcher = watch(".", (event, name) => {
-					if (name === "release") { watcher.close(); console.log('{"complete":true}'); }
+				import { createServer } from "node:net";
+				const server = createServer((connection) => {
+					connection.end();
+					server.close(() => console.log('{"complete":true}'));
 				});
-				setImmediate(() => process.stderr.write("ready"));
+				server.listen(${JSON.stringify(socket)}, () => process.stderr.write("ready"));
 			`],
 			cwd,
 			timeout: 5000,
-			onStderr: () => { writeFileSync(join(cwd, "release"), ""); },
+			onStderr: () => { connect(socket).on("error", (error) => { throw error; }); },
 		});
 		expect(result.stderr).toBe("ready");
 		expect(result.document).toEqual({ complete: true });

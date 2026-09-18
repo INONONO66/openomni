@@ -6,10 +6,14 @@ function invalid(message: string): never { throw new JsonFailure(message); }
 // A strict single-pass decoder: one linear scan of the input and one allocation
 // per value. Receipts reach a hundred megabytes; routing them through a syntax
 // tree and a compiler program peaked above ten gigabytes per decode.
+// Receipts nest a few levels deep; anything deeper is rejected as a typed
+// failure before the recursive descent could exhaust the stack.
+const MAX_DEPTH = 256;
 const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const WHITESPACE = /[ \t\n\r]*/y;
 export function decodeJson(input: string): Json {
   let index = 0;
+  let depth = 0;
   const skip = (): void => { WHITESPACE.lastIndex = index; WHITESPACE.exec(input); index = WHITESPACE.lastIndex; };
   const literal = (token: string, value: Json): Json => { if (!input.startsWith(token, index)) invalid("non-JSON value"); index += token.length; return value; };
   const string = (): string => {
@@ -36,24 +40,27 @@ export function decodeJson(input: string): Json {
     if (!Number.isFinite(value)) invalid("invalid JSON number");
     return value;
   };
+  const enter = (): void => { if (++depth > MAX_DEPTH) invalid("JSON nesting too deep"); };
   const array = (): Json[] => {
     const values: Json[] = [];
+    enter();
     index++;
     skip();
-    if (input[index] === "]") { index++; return values; }
+    if (input[index] === "]") { index++; depth--; return values; }
     for (; ; index++) {
       values.push(value());
       skip();
-      if (input[index] === "]") { index++; return values; }
+      if (input[index] === "]") { index++; depth--; return values; }
       if (input[index] !== ",") invalid("malformed JSON");
     }
   };
   const object = (): Json => {
     const entries: [string, Json][] = [];
     const keys = new Set<string>();
+    enter();
     index++;
     skip();
-    if (input[index] === "}") { index++; return Object.fromEntries(entries); }
+    if (input[index] === "}") { index++; depth--; return Object.fromEntries(entries); }
     for (; ; index++) {
       skip();
       if (input[index] !== '"') invalid("invalid JSON key");
@@ -64,7 +71,7 @@ export function decodeJson(input: string): Json {
       if (input[index++] !== ":") invalid("malformed JSON");
       entries.push([key, value()]);
       skip();
-      if (input[index] === "}") { index++; return Object.fromEntries(entries); }
+      if (input[index] === "}") { index++; depth--; return Object.fromEntries(entries); }
       if (input[index] !== ",") invalid("malformed JSON");
     }
   };

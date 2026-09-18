@@ -16,7 +16,7 @@ const moduleLoader: {
 			Worker: typeof workerThreads.Worker;
 		};
 		(id: "bun:test"): {
-		mock: { module(id: string, factory: () => unknown): void };
+		mock: { module(id: string, factory: () => object): void };
 		};
 	};
 } = modules;

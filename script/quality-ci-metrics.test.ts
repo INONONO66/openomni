@@ -50,7 +50,7 @@ test("static pinned analyzers survive JSON transfer and join conservative bounds
 		expect(document.pythonProcesses).toEqual([]);
 		expect(document.sources).toEqual(identity.inventory.files.map(({ path, sha256 }) => ({ path, sha256 })));
 		expect(() => joinBounds(document, { identity })).toThrow("missing exact statement evidence");
-		writeFileSync(join(root, "ci-plan.json"), "{}");
+		writeFileSync(join(root, "ci-plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"] }));
 		const options = { root, contract: join(root, "contract.json"), directory: join(root, "exact"), plan: join(root, "ci-plan.json"), run: "metrics-run" };
 		collectExactFixture(options, [{ id: "tests", kind: "test", paths: ["script/main.test.ts"], args: [], expectedExitCode: 0 }]);
 		const coverage = await readExactCoverage(options, identity, document.measured.map((row) => row.analysis.prepared));

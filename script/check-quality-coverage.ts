@@ -154,6 +154,9 @@ type ProcessReceipt = {
 	children: string[];
 	loaded: string[];
 	coverage: { [key: string]: FileCoverageData };
+	// JavaScript processes only: the loaded sources that arrived through a
+	// compiled module, each bound to one emission proof.
+	transferred?: string[];
 	emitted?: EmissionProof[];
 };
 declare global {
@@ -1351,8 +1354,16 @@ function pythonTraceArcs(value: Json | undefined, file: Prepared): ObjectValue {
 
 function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	const root = data.selected && object(value).parent === "";
-	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage", ...(root ? ["cwd"] : []), ...(object(value).emitted === undefined ? [] : ["emitted"])]);
+	// Bun and Node processes always carry their emission proofs (possibly none);
+	// Python processes load no compiled JavaScript and carry no such field.
+	const javascript = object(value).runtime !== "python";
+	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage", ...(root ? ["cwd"] : []), ...(javascript ? ["transferred", "emitted"] : [])]);
 	const loaded = array(r.loaded).map(pathValue);
+	const transferred = javascript ? array(r.transferred).map(pathValue) : undefined;
+	if (transferred) {
+		unique(transferred, "transferred source");
+		for (const path of transferred) if (!loaded.includes(path)) fail("identity", path, "transferred source was not loaded");
+	}
 	unique(loaded, "loaded source");
 	if ([...loaded].sort().join("\0") !== Object.keys(object(r.coverage)).sort().join("\0"))
 		fail("incomplete_coverage", text(r.id), "loaded source counter record missing");
@@ -1374,14 +1385,18 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	if ((exitCode === null) === (signal === null)) fail("execution", text(r.id), "invalid native terminal outcome");
 	const trace = r.trace === null ? null : object(r.trace, ["id", "runtime", "python", "coverage", "flushed", "files"]);
 	if (trace) verifyPythonTrace(trace, r, data, lines, coverage, loaded);
-	const emitted = r.emitted === undefined ? undefined : array(r.emitted).map((value) => {
+	const emitted = javascript ? array(r.emitted).map((value) => {
 		const proof = object(value, ["path", "source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]);
 		const verified = receiptEmission(data, pathValue(proof.path));
 		if (!loaded.includes(verified.source) || Object.entries(verified).some(([key, value]) => proof[key] !== value))
 			fail("identity", verified.path, "emitted process/source/map identity differs");
 		return verified;
-	});
+	}) : undefined;
 	if (emitted) unique(emitted.map((proof) => proof.path), "emitted module");
+	// Every source loaded through a compiled module has exactly one emission
+	// proof, and every proof names such a source: provenance cannot be dropped.
+	if (emitted && transferred && [...new Set(emitted.map((proof) => proof.source))].sort().join("\0") !== [...transferred].sort().join("\0"))
+		fail("identity", text(r.id), "emission proofs do not match the transferred sources");
 	return {
 		id: text(r.id),
 		parent: text(r.parent),
@@ -1391,6 +1406,7 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 		entry: pathValue(r.entry), args: array(r.args).map(text), command: text(r.command),
 		...(root ? { cwd: commandDirectory(r.cwd, data.options.root) } : {}),
 		children: array(r.children).map(text),
+		...(transferred ? { transferred } : {}),
 		...(emitted ? { emitted } : {}),
 		loaded,
 		coverage,
@@ -1641,6 +1657,7 @@ function processCounters(directory: string, id: string, files: Prepared[], emitt
 	const fd = isBun ? -1 : openSync(path, "r+");
 	const slotBytes = Buffer.alloc(8);
 	const loaded = new Map<string, FileCoverageData>();
+	const transferred = new Set<string>();
 	const coverage: { [key: string]: FileCoverageData } = {};
 	globalThis.__d945Coverage = coverage;
 	for (const file of files)
@@ -1678,7 +1695,9 @@ function processCounters(directory: string, id: string, files: Prepared[], emitt
 					});
 				}
 				loaded.set(file.entry.path, value);
+				if (transfer) transferred.add(file.entry.path);
 				writeFileSync(join(directory, `${id}.loaded.json`), JSON.stringify([...loaded.keys()]));
+				writeFileSync(join(directory, `${id}.transferred.json`), JSON.stringify([...transferred]));
 			},
 		});
 }
@@ -1729,7 +1748,10 @@ function collectedProcess(directory: string, id: string, data: Inputs): Json {
 		...(data.selected && request.parent === "" ? { cwd: text(start.cwd) } : {}),
 		trace: existsSync(tracePath) ? decode(readFileSync(tracePath, "utf8")) : null,
 		children: decode(readFileSync(join(directory, `${id}.children.json`), "utf8")),
-		...(existsSync(join(directory, `${id}.emitted.json`)) ? { emitted: decode(readFileSync(join(directory, `${id}.emitted.json`), "utf8")) } : {}),
+		...(text(request.runtime) === "python" ? {} : {
+			transferred: decode(readFileSync(join(directory, `${id}.transferred.json`), "utf8")),
+			emitted: decode(readFileSync(join(directory, `${id}.emitted.json`), "utf8")),
+		}),
 		loaded,
 		coverage,
 	};
@@ -1760,7 +1782,8 @@ function sharedEmission(directory: string, data: PreloadInputs, path: string): {
 		};
 	}
 	const emitted = verifiedEmission(data, path);
-	const temporary = `${cachePath}.${process.pid}.tmp`;
+	// Worker threads share the PID, so the temporary name carries the thread too.
+	const temporary = `${cachePath}.${process.pid}.${workerThreads.threadId}.${randomUUID()}.tmp`;
 	writeFileSync(temporary, JSON.stringify(emitted));
 	renameSync(temporary, cachePath);
 	return emitted;
@@ -1782,6 +1805,8 @@ function preload(directory: string): void {
 	writeFileSync(startPath, JSON.stringify({ id, parent, pid: process.pid, runtime, entry: text(request.entry), ...(data.selected && parent === "" ? { cwd } : {}) }), { flag: "wx" });
 	writeFileSync(join(directory, `${id}.children.json`), "[]", { flag: "wx" });
 	writeFileSync(join(directory, `${id}.loaded.json`), "[]", { flag: "wx" });
+	writeFileSync(join(directory, `${id}.emitted.json`), "[]", { flag: "wx" });
+	writeFileSync(join(directory, `${id}.transferred.json`), "[]", { flag: "wx" });
 	const emittedMaps = new Map<string, EmittedTransfer[]>();
 	const emissions = new Map<string, EmissionProof>();
 	processCounters(directory, id, data.files, emittedMaps);

@@ -1,14 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { decodeJson, digest, jsonArray, jsonBoolean, jsonLiteral, jsonObject, jsonString, type Inventory } from "./quality-inventory";
+import { parseArgs } from "node:util";
+import { decodeJson, digest, jsonArray, jsonBoolean, jsonChoice, jsonLiteral, jsonObject, jsonString, type Inventory, type Json } from "./quality-inventory";
 import { fingerprint, recordObject } from "./quality-ci-input";
 import { completeDocument, requireMeasurement, sameMembers } from "./quality-ci-receipt";
 import { nativeJson } from "./quality-native-process";
 import { qualityPlan } from "./quality-plan";
 import { scriptContracts, scriptPartitions, scriptTests, scriptToolingPartitions } from "./scripts-lanes";
-import { TOPOLOGY } from "./topology";
+import { TOPOLOGY, type WorkspaceTopology } from "./topology";
 
-type ExactCommand = { id: string; kind: "test" | "cli"; paths: string[]; args: string[]; cwd: string; runtime: "bun" | "python"; expectedExitCode: number };
 function workspaceTests(root: string, cwd: string, inventory: Inventory): string[] {
 	const config = resolve(root, cwd, "bunfig.toml");
 	const test = existsSync(config) ? jsonObject(jsonObject(decodeJson(JSON.stringify(Bun.TOML.parse(readFileSync(config, "utf8"))))).test ?? {}) : {};
@@ -19,20 +19,17 @@ function workspaceTests(root: string, cwd: string, inventory: Inventory): string
 		!ignored.some((pattern) => pattern.match(relative(cwd, file.path)))).map((file) => file.path).sort();
 }
 
-/** Shared derivation, independently invoked by producer and finish. Selection
- * binds commands, not execution credit: unselected modules can still be loaded. */
-export function exactCiPlan(root: string, contract: string, inventory: Inventory, path: string, run: string) {
-	qualityPlan(root, contract, inventory, path);
-	const selection = recordObject(path);
-	jsonLiteral(selection.version, 2);
-	requireMeasurement(jsonBoolean(selection.verify) && run.length > 0, "exact CI collection requires a verifying run");
-	const tooling = jsonBoolean(selection.toolingTests);
-	const lanes = jsonArray(jsonObject(selection.matrix).include, (value) => {
-		const row = jsonObject(value);
-		return { key: jsonString(row.key), dir: jsonString(row.dir), coverage: jsonBoolean(row.coverage) };
-	});
+export type ExactCommand = { id: string; kind: "test" | "cli"; paths: string[]; args: string[]; cwd: string; runtime: "bun" | "python"; expectedExitCode: number };
+/** Producer derivation: the plan job embeds these commands into the CI
+ * selection (`exact.commands`), whose bytes every exact receipt binds through
+ * `run.selectionHash`. Selection binds commands, not execution credit:
+ * unselected modules can still be loaded. */
+export function exactCiCommands(root: string, inventory: Inventory, selection: {
+	toolingTests: boolean; matrix: { include: readonly { key: string; dir: string; coverage: boolean }[] };
+}, topology: readonly Pick<WorkspaceTopology, "key" | "dir" | "coverageLane">[] = TOPOLOGY): ExactCommand[] {
+	const lanes = selection.matrix.include;
 	sameMembers(lanes.map((lane) => lane.key), [...new Set(lanes.map((lane) => lane.key))]);
-	sameMembers(lanes.filter((lane) => lane.dir === "script").map((lane) => lane.key), tooling ? scriptPartitions.filter((key) => key !== "scripts-contracts") : []);
+	sameMembers(lanes.filter((lane) => lane.dir === "script").map((lane) => lane.key), selection.toolingTests ? scriptPartitions.filter((key) => key !== "scripts-contracts") : []);
 	const contracts = scriptTests("scripts-contracts", inventory.files.filter((file) => file.path.startsWith("script/") && file.path.endsWith(".test.ts")).map((file) => file.path.slice("script/".length)));
 	const commands: ExactCommand[] = [];
 	const add = (id: string, cwd: string, paths: readonly string[], kind: "test" | "cli" = "test", args: readonly string[] = [], runtime: "bun" | "python" = "bun") => {
@@ -46,7 +43,7 @@ export function exactCiPlan(root: string, contract: string, inventory: Inventory
 			requireMeasurement(Boolean(partition), "unknown exact CI script partition");
 			add(lane.key, "script", (partition?.[1] ?? []).map((path) => `script/${path}`));
 		} else {
-			requireMeasurement(TOPOLOGY.some((workspace) => workspace.key === lane.key && workspace.dir === lane.dir && workspace.coverageLane === lane.coverage), "unknown exact CI workspace");
+			requireMeasurement(topology.some((workspace) => workspace.key === lane.key && workspace.dir === lane.dir && workspace.coverageLane === lane.coverage), "unknown exact CI workspace");
 			add(lane.key, lane.dir, workspaceTests(root, lane.dir, inventory));
 		}
 	}
@@ -57,6 +54,54 @@ export function exactCiPlan(root: string, contract: string, inventory: Inventory
 	// the Python runner refuses process creation as unobservable (python.py
 	// PROCESS_EVENTS). Their sources stay in the inventory as uncovered evidence
 	// until the runner observes children the way the Bun collector does.
+	return commands;
+}
+
+function selectionLanes(selection: Record<string, Json>) {
+	const include = jsonArray(jsonObject(selection.matrix).include, (value) => {
+		const row = jsonObject(value);
+		return { key: jsonString(row.key), dir: jsonString(row.dir), coverage: jsonBoolean(row.coverage) };
+	});
+	return { toolingTests: jsonBoolean(selection.toolingTests), matrix: { include } };
+}
+
+/** Plan-job entry: embeds the derived commands into the selection file whose
+ * bytes every exact receipt binds. A selection that already carries commands
+ * is refused rather than overwritten. */
+export function embedExactCommands(root: string, contract: string, path: string): void {
+	const selection = recordObject(path);
+	jsonLiteral(selection.version, 2);
+	requireMeasurement(selection.exact === undefined, "selection already carries exact commands");
+	const commands = jsonBoolean(selection.verify) ? exactCiCommands(root, fingerprint(root, contract).inventory, selectionLanes(selection)) : [];
+	writeFileSync(path, JSON.stringify({ ...selection, exact: { derived: true, commands } }));
+}
+
+/** Consumer side, shared by the shard adapter and finish: the exact plan is
+ * the selection's embedded commands, never a frozen-plan-authored list. Every
+ * command must name inventory paths; there is no version that skips this. */
+export function exactCiPlan(root: string, contract: string, inventory: Inventory, path: string, run: string) {
+	qualityPlan(root, contract, inventory, path);
+	const selection = recordObject(path);
+	jsonLiteral(selection.version, 2);
+	requireMeasurement(jsonBoolean(selection.verify) && run.length > 0, "exact CI collection requires a verifying run");
+	const exact = jsonObject(selection.exact);
+	const commands = jsonArray(exact.commands, (value): ExactCommand => {
+		const row = jsonObject(value);
+		sameMembers(Object.keys(row), ["id", "kind", "paths", "args", "cwd", "runtime", "expectedExitCode"]);
+		const paths = jsonArray(row.paths, jsonString);
+		const id = jsonString(row.id);
+		requireMeasurement(paths.length > 0 && paths.every((path) => inventory.files.some((file) => file.path === path)), `exact CI command outside inventory: ${id}`);
+		jsonLiteral(row.expectedExitCode, 0);
+		return { id, kind: jsonChoice(row.kind, ["test", "cli"]), paths, args: jsonArray(row.args, jsonString), cwd: jsonString(row.cwd), runtime: jsonChoice(row.runtime, ["bun", "python"]), expectedExitCode: 0 };
+	});
+	sameMembers(commands.map((command) => command.id), [...new Set(commands.map((command) => command.id))]);
+	// A selection that declares topology-derived commands is re-derived here
+	// against this checkout, so lane ownership or test discovery drift between
+	// the plan job and the consumer is rejected rather than trusted.
+	if (jsonBoolean(exact.derived)) {
+		const derived = exactCiCommands(root, inventory, selectionLanes(selection));
+		requireMeasurement(JSON.stringify(derived) === JSON.stringify(commands), "exact CI commands differ from this checkout's derivation");
+	}
 	return { version: 3, commands, run: { id: run, selectionHash: digest(readFileSync(path)) } };
 }
 
@@ -128,4 +173,12 @@ export async function collectExactCi(options: { root: string; contract: string; 
 	requireExactCiPlan(recordObject(planPath), options.shard === undefined ? expected : exactCiShardPlan(expected, options.shard));
 	writeFileSync(`${coverage}.sha256`, digest(readFileSync(coverage)), { flag: "wx" });
 	return result.exitCode;
+}
+
+if (import.meta.main) {
+	const { values } = parseArgs({ args: Bun.argv.slice(2), strict: true, options: {
+		root: { type: "string", default: process.cwd() }, contract: { type: "string", default: "script/conformance/quality-contract.json" }, plan: { type: "string" },
+	} });
+	requireMeasurement(Boolean(values.plan), "embedding exact commands requires --plan");
+	embedExactCommands(resolve(values.root), values.contract, resolve(values.root, values.plan ?? ""));
 }

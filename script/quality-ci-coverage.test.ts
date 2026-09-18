@@ -7,7 +7,7 @@ import { decodeJson, digest, jsonArray, jsonObject } from "./quality-inventory";
 import { parseNativeLcov } from "./quality-native-lcov";
 import { collectExactFixture, coverageLaneFixture } from "./quality-coverage-fixture";
 import { fingerprint, recordObject } from "./quality-ci-input";
-import { exactCiPlan, exactCiShards, requireExactCiPlan } from "./quality-ci-exact";
+import { embedExactCommands, exactCiPlan, exactCiShards, requireExactCiPlan } from "./quality-ci-exact";
 import { scriptContracts, scriptPartitions, scriptsLanes } from "./scripts-lanes";
 import { exactShards, planChanges } from "./ci-plan";
 import { prepare } from "./quality-metrics/coverage";
@@ -19,7 +19,7 @@ test("CI consumes run-bound original counters and rejects stale, tampered or mis
 		mkdirSync(join(root, "script"));
 		writeFileSync(join(root, "script/tsconfig.json"), '{"compilerOptions":{"strict":true}}');
 		writeFileSync(join(root, "contract.json"), JSON.stringify({ version: 1, typescript: "5.9.2", roots: ["script"], projects: ["script/tsconfig.json"], topology: false }));
-		writeFileSync(join(root, "ci-plan.json"), JSON.stringify({ matrix: { include: [{ dir: "script", coverage: true }] } }));
+		writeFileSync(join(root, "ci-plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: ["script/child.ts", "script/main.test.ts"], projects: ["script/tsconfig.json"], matrix: { include: [{ dir: "script", coverage: true }] } }));
 		const source = 'function childOnly() {\n  return 42;\n}\nexport function dormant() {\n  return 7;\n}\nconsole.log(childOnly());\n';
 		writeFileSync(join(root, "script/child.ts"), source);
 		writeFileSync(join(root, "script/main.test.ts"), 'import { test, expect } from "bun:test"; test("descendant result", async () => { const child = Bun.spawn([process.execPath, "script/child.ts"], {stdout:"pipe"}); const [code, output] = await Promise.all([child.exited, new Response(child.stdout).text()]); expect(code).toBe(0); expect(output).toBe("42\\n"); });\n');
@@ -90,6 +90,9 @@ function selectedCiFixture() {
 	const selection = { version: 2, class: "desktop", qualityScope: identity.inventory.files.map((file) => file.path), projects: ["script/tsconfig.json"], verify: true, toolingTests: false,
 		matrix: { include: [{ key: "machines", dir: "packages/machines", coverage: true }, { key: "desktopApp", dir: "apps/desktop", coverage: true }] } };
 	put("ci-plan.json", JSON.stringify(selection));
+	// The plan job embeds the derived commands into the selection it uploads.
+	embedExactCommands(root, "contract.json", join(root, "ci-plan.json"));
+	expect(() => embedExactCommands(root, "contract.json", join(root, "ci-plan.json"))).toThrow("already carries exact commands");
 	const options = { root, contract: join(root, "contract.json"), directory: join(root, "coverage"), plan: join(root, "ci-plan.json"), run: "selected-ci" };
 	return { root, put, identity, selection, options, [Symbol.dispose]: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -167,6 +170,7 @@ test("v3 adapter derives the repository matrix and rejects ownership/discovery d
 	const identity = fingerprint(root, contract);
 	using repo = selectedCiFixture();
 	repo.put("full-plan.json", JSON.stringify(planChanges([], true)));
+	embedExactCommands(root, contract, join(repo.root, "full-plan.json"));
 	const plan = exactCiPlan(root, contract, identity.inventory, join(repo.root, "full-plan.json"), "full");
 	expect(plan.commands.filter((command) => command.kind === "test" && command.cwd === "script").map((command) => command.id).sort()).toEqual([...scriptPartitions].sort());
 	// Python tests spawn interpreters, which python.py refuses as unobservable.

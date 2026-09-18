@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { exactCiPlan } from "./quality-ci-exact";
 import { fingerprint, recordObject } from "./quality-ci-input";
 import { digest } from "./quality-inventory";
 import { parseNativeLcov } from "./quality-native-lcov";
@@ -13,7 +14,12 @@ export function collectExactFixture(options: {
   const plan = join(options.directory, "exact.plan.json");
   const coverage = join(options.directory, "exact.coverage.json");
   writeFileSync(inventory, JSON.stringify(identity.inventory));
-  writeFileSync(plan, JSON.stringify({ version: 2, commands, run: { id: options.run, selectionHash: digest(readFileSync(options.plan)) } }));
+  // The selection is the only command authority: embed the fixture's commands
+  // there, as the plan job does, then freeze the plan the consumers derive.
+  const selectionPath = resolve(options.root, options.plan);
+  const selection = recordObject(selectionPath);
+  writeFileSync(selectionPath, JSON.stringify({ ...selection, verify: true, exact: { derived: false, commands: commands.map((command) => ({ cwd: ".", runtime: "bun", ...command })) } }));
+  writeFileSync(plan, JSON.stringify(exactCiPlan(options.root, options.contract, identity.inventory, selectionPath, options.run)));
   const paths = { contract: resolve(options.root, options.contract), inventory, plan };
   const child = Bun.spawnSync([process.execPath, join(import.meta.dir, "check-quality-coverage.ts"), "--root", options.root,
     ...Object.entries(paths).flatMap(([key, path]) => [`--${key}`, path, `--${key}-sha256`, digest(readFileSync(path))]),

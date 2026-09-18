@@ -55,8 +55,8 @@ export async function readExactCoverage(options: {
 	requireMeasurement(inventory.inventoryHash === identity.inventoryHash && inventory.contractHash === identity.contractHash, "stale exact coverage inventory");
 	const frozenPlan = recordObject(fullPlan), run = jsonObject(frozenPlan.run);
 	requireMeasurement(run.id === options.run && run.selectionHash === digest(readFileSync(options.plan)), "stale exact coverage run or selection");
-	const expected = frozenPlan.version === 3 ? exactCiPlan(options.root, options.contract, inventorySchema.parse(recordObject(inventoryPath)), options.plan, options.run) : undefined;
-	if (expected) requireExactCiPlan(frozenPlan, expected);
+	const expected = exactCiPlan(options.root, options.contract, inventorySchema.parse(recordObject(inventoryPath)), options.plan, options.run);
+	requireExactCiPlan(frozenPlan, expected);
 	const scratch = mkdtempSync(join(tmpdir(), "exact-shard-")), preparedPath = join(scratch, "prepared.json");
 	writeFileSync(preparedPath, JSON.stringify(prepared));
 	try {
@@ -66,8 +66,8 @@ export async function readExactCoverage(options: {
 		};
 		// One whole receipt, or exactly the run's shards: every plan command once.
 		const whole = exactArtifactPaths(options.directory);
-		const shards = expected === undefined ? [] : [...exactCiShards(expected).keys()].map((shard) => ({ shard, paths: exactArtifactPaths(options.directory, shard) }));
-		if (expected === undefined || !shards.some(({ paths }) => existsSync(paths.plan) || existsSync(paths.coverage))) return await read(whole, "whole");
+		const shards = [...exactCiShards(expected).keys()].map((shard) => ({ shard, paths: exactArtifactPaths(options.directory, shard) }));
+		if (!shards.some(({ paths }) => existsSync(paths.plan) || existsSync(paths.coverage))) return await read(whole, "whole");
 		requireMeasurement(!existsSync(whole.coverage) && !existsSync(`${whole.coverage}.sha256`), "exact statement evidence is both whole and sharded");
 		for (const { shard, paths } of shards) {
 			requireMeasurement(existsSync(paths.plan), `missing exact statement evidence: ${paths.plan}`);

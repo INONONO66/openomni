@@ -14,6 +14,12 @@ test("shared JSON parser decodes nested receipts to the built-in parser's value"
   expect(decodeJson("-0")).toBe(-0);
 });
 
+test("nesting beyond the receipt depth bound is a typed failure, not a stack overflow", () => {
+  expect(decodeJson("[".repeat(256) + "]".repeat(256))).toEqual(JSON.parse("[".repeat(256) + "]".repeat(256)));
+  expect(() => decodeJson("[".repeat(257) + "]".repeat(257))).toThrow("JSON nesting too deep");
+  expect(() => decodeJson("[".repeat(50_000) + "]".repeat(50_000))).toThrow("JSON nesting too deep");
+  expect(decodeJson('{"a":{"b":{}},"c":[[]]}')).toEqual({ a: { b: {} }, c: [[]] });
+});
 
 test("large escaped native receipt strings are not rejected by a regex backtracking limit", () => {
   const value = "\\n".repeat(1_000_000);
