@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789747916119,
+  "lastUpdate": 1789759759637,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -71731,6 +71731,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 178531,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "17028e6cb844e1eeff8799606e1cf62a2e61bf1e",
+          "message": "quality(exact): complete-receipt exact observer, single Python map owner, sharded join (#1082)\n\nExact collector runs every configured lane to a complete, sealed receipt (flushed receipt = complete evidence; hashed --write-result pointer), script/quality-coverage/python.py is the single Python map owner, quality-ci-shard child verifier bounds the join, linear receipt decoder, and the 45 measured ratchet rows are closed in code. Source-map strip anchored to line start.\n\nPart of #1076.",
+          "timestamp": "2026-09-19T04:26:17+09:00",
+          "tree_id": "7d4273f6e7bbcb309cfdc83826d9cc77375297d8",
+          "url": "https://github.com/INONONO66/openomni/commit/17028e6cb844e1eeff8799606e1cf62a2e61bf1e"
+        },
+        "date": 1789759758574,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 876,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1558,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1199,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1238707,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 313654,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6042322,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 104,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 560,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 93006,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 622074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 406177,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2824,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 80446894,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 7758655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15075,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 139955,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 715239,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 172557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 11848389,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 71,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 127247,
             "unit": "ns/op"
           }
         ]
