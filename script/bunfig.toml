@@ -1,0 +1,5 @@
+# The script lane's native coverage evidence is its own tree. Fixtures that a
+# test imports in-process from a temporary directory are not lane sources, and
+# the sealed receipt refuses any LCOV record that escapes the lane root.
+[test]
+coveragePathIgnorePatterns = ["../**"]
