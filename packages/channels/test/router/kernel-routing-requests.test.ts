@@ -1,5 +1,5 @@
 import { openRequest, requestPort, seededRequests } from "../helpers/requests";
-import { replaceLedger } from "../helpers/ledger";
+import { replaceDecisionFacts } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
 import { Channel, Ingress, type Gateway } from "@openomni/protocol";
 import {
@@ -222,12 +222,15 @@ test("unexpected responder is refused with an authoritative route correction", a
     message: "request reply rejected: rejected",
   });
   expect(SessionHandleStore.requestById("intruder")).toMatchObject({ state: "open", replies: [] });
-  expect(Storage.get().ledger?.headFact(Ingress.routeStreamId(scope("reply")))?.type).toBe(
+  expect(Storage.get().decisionFacts?.head(Ingress.routeStreamId(scope("reply")))?.type).toBe(
     "route.decided",
   );
   expect(
-    Storage.get().ledger?.headFact(Ingress.routeCorrectionStreamId(scope("reply"))),
-  ).toMatchObject({ type: "route.not_delivered", seq: 1 });
+    Storage.get().decisionFacts?.head(Ingress.routeCorrectionStreamId(scope("reply"))),
+  ).toMatchObject({
+    type: "route.not_delivered",
+    key: Ingress.routeCorrectionStreamId(scope("reply")),
+  });
   expect(commits).toEqual([]);
 });
 
@@ -245,19 +248,15 @@ test("same-precedence ambiguity is denied before inbox commit", async () => {
   expect(commits).toEqual([]);
 });
 
-test.each([
-  "throw",
-  "empty_conflict",
-] as const)("route correction %s fails closed", async (fault) => {
+test.each(["throw", "wrong_type"] as const)("route correction %s fails closed", async (fault) => {
   await openRequest("correction", { expectedResponders: ["someone-else"] });
-  replaceLedger((ledger) => ({
-    ...ledger,
-    append: (fact, expected) => {
-      if (fact.type !== Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return ledger.append(fact, expected);
+  replaceDecisionFacts((facts) => ({
+    ...facts,
+    record: (fact) => {
+      if (fact.type !== Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return facts.record(fact);
       if (fault === "throw") throw new Error("correction unavailable");
-      return { kind: "cas_conflict", currentHead: 0 };
+      return { kind: "exists", fact: { ...fact, type: "other.fact", rowHash: "0".repeat(64) } };
     },
-    headFact: (id) => (id.startsWith("route_correction:") ? undefined : ledger.headFact(id)),
   }));
   await expect(kernelRouter().ingest(sender, facts("reply"))).rejects.toMatchObject({
     code: "route_record_failed",
@@ -278,8 +277,11 @@ test("recorded rejection correction is idempotent", async () => {
     });
   }
   expect(
-    Storage.get().ledger?.headFact(Ingress.routeCorrectionStreamId(scope("another-reply"))),
-  ).toMatchObject({ type: "route.not_delivered", seq: 1 });
+    Storage.get().decisionFacts?.head(Ingress.routeCorrectionStreamId(scope("another-reply"))),
+  ).toMatchObject({
+    type: "route.not_delivered",
+    key: Ingress.routeCorrectionStreamId(scope("another-reply")),
+  });
   expect(commits).toHaveLength(1);
 });
 

@@ -8,6 +8,7 @@ import {
   seedRetiredWait,
   snapshotDatabase,
 } from "../packages/ledger/test/helpers/disposition-967";
+import { RETIRED_DECISION_TABLES } from "../packages/ledger/src/storage/decision-fact-migration";
 import {
   archiveAndVerify,
   archiveCli,
@@ -34,8 +35,8 @@ describe("967 archive and guarded disposal", () => {
       "action",
       "inbox",
       "alarm",
-      "ledger_event",
-      "ledger_head",
+      RETIRED_DECISION_TABLES.facts,
+      RETIRED_DECISION_TABLES.heads,
       "event_chain",
     ]) {
       expect(tables).toContain(table);

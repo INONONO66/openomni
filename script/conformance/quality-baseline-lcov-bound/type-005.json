@@ -3897,14 +3897,6 @@
   },
   {
     "path": "packages/channels/test/router/kernel-routing-requests.test.ts",
-    "line": 265,
-    "symbol": "unknown:headFact",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/test/router/kernel-routing-requests.test.ts",
     "line": 318,
     "symbol": "unknown:messaging",
     "gate": "type",

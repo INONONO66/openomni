@@ -13,6 +13,8 @@ import { preflight969 } from "../../src/storage/u969-preflight";
 import { Migration } from "../../src/storage/migration-runner";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
 import { archiveCli, disposeCli } from "../helpers/disposition-967-cli";
+import { computeActionHash, GENESIS_PREV_HASH } from "../../src/storage/l0-hash";
+import { ActionSqlRowSafeIntegers } from "../../src/storage/sqlite-l0-rows";
 
 const migrationDir = join(import.meta.dir, "../../migration");
 
@@ -42,6 +44,19 @@ function upgradeFixture() {
   return fixture;
 }
 
+function hashedHistoricalRows(rows: ReturnType<typeof snapshotDatabase>["tables"][number]["rows"]) {
+  const heads = new Map<string, string>();
+  const hashes = new Map<string, { prev_hash: string; action_hash: string }>();
+  const parsed = ActionSqlRowSafeIntegers.omit({ prev_hash: true, action_hash: true }).array().parse(rows);
+  for (const row of parsed.sort((left, right) => left.ordinal - right.ordinal)) {
+    const prevHash = heads.get(row.session_id) ?? GENESIS_PREV_HASH;
+    const actionHash = computeActionHash({ ...row, prev_hash: prevHash });
+    heads.set(row.session_id, actionHash);
+    hashes.set(row.id, { prev_hash: prevHash, action_hash: actionHash });
+  }
+  return rows.map((row) => ({ ...row, ...hashes.get(String(row.id)) }));
+}
+
 test("0035 upgrade preserves action parents, rowids, policies and native archive bytes", () => {
   using fixture = upgradeFixture();
   const db = fixture.db;
@@ -56,17 +71,11 @@ test("0035 upgrade preserves action parents, rowids, policies and native archive
     1,'refused',10,1,2)`);
   const before = snapshotDatabase(db);
   initializeSqliteDatabase(db);
-  for (const table of [
-    "action",
-    "policy",
-    "session",
-    "inbox",
-    "alarm",
-    "ledger_event",
-    "event_chain",
-  ]) {
+  for (const table of ["action", "policy", "session", "inbox", "alarm", "event_chain"]) {
     const previous = before.tables.find(({ name }) => name === table);
     if (previous === undefined) throw new Error(`missing historical table: ${table}`);
+    const expected =
+      table === "action" ? { name: table, rows: hashedHistoricalRows(previous.rows) } : previous;
     expect(snapshotDatabase(db).tables.find(({ name }) => name === table)).toEqual(
       table === "alarm"
         ? {
@@ -79,9 +88,17 @@ test("0035 upgrade preserves action parents, rowids, policies and native archive
               notifications: 0n,
             })),
           }
-        : previous,
+        : expected,
     );
   }
+  expect(db.query("SELECT key, type, data, time_created FROM decision_fact").all()).toEqual([
+    {
+      key: "route:historical",
+      type: "route.decided",
+      data: '{"ownerKind":"workItem","ownerId":"historical"}',
+      time_created: 1n,
+    },
+  ]);
   const approvals = before.tables.find(({ name }) => name === "approval");
   if (!approvals) throw new Error("historical approval table missing");
   expect(db.query("SELECT rowid,* FROM archive_969_approval").all()).toEqual(approvals.rows);

@@ -28,8 +28,8 @@ export namespace BusEvent {
    * Event-publishing port for driver-band packages (agent, llm). Drivers
    * receive a Sink instead of importing the ledger's Bus directly; the
    * composition root binds it to Bus.publish, tests bind a collector.
-   * This is the one binding P2 swaps when Ledger.append (fail-closed)
-   * splits from lossy Bus.publish (#462 §2, #455).
+   * Durable decisions use separate fail-closed storage ports; observations
+   * published through this sink confer no authority.
    */
   export interface Sink {
     publish<T>(event: Descriptor<T>, data: T): void;

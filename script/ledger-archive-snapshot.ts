@@ -14,6 +14,13 @@ import {
 } from "../packages/ledger/src/storage/u967-preflight";
 import { preflightSqliteDatabase } from "../packages/ledger/src/storage/sqlite-schema-lifecycle";
 import { REQUEST_MIGRATION } from "../packages/ledger/src/storage/u969-preflight";
+import { ACTION_HASH_MIGRATION } from "../packages/ledger/src/storage/l0-hash";
+import { verifyChain } from "../packages/ledger/src/storage/sqlite-l0-actions";
+import {
+  DECISION_FACT_MIGRATION,
+  RETIRED_DECISION_TABLES,
+} from "../packages/ledger/src/storage/decision-fact-migration";
+import { Migration } from "../packages/ledger/src/storage/migration-runner";
 
 export function fileSha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -86,6 +93,12 @@ export function assertArchiveEquality(
     rebuiltTables.add("alarm");
     migrationDelta.push("0037_watch_alarms/migration.sql");
   }
+  if (dispositionDelta && hasActionHashUpgrade(source, restored)) rebuiltTables.add("action");
+  if (dispositionDelta && hasDecisionFactUpgrade(source, restored)) {
+    removedTables.add(RETIRED_DECISION_TABLES.facts);
+    removedTables.add(RETIRED_DECISION_TABLES.heads);
+    addedTables.add("decision_fact");
+  }
   if (requestCutover) {
     preflightSqliteDatabase(source);
     preflightSqliteDatabase(restored);
@@ -138,6 +151,47 @@ function hasWatchUpgrade(source: Database, restored: Database): boolean {
   return false;
 }
 
+function hasActionHashUpgrade(source: Database, restored: Database): boolean {
+  if (
+    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(ACTION_HASH_MIGRATION) === null ||
+    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(ACTION_HASH_MIGRATION) !== null
+  )
+    return false;
+  preflightSqliteDatabase(source);
+  preflightSqliteDatabase(restored);
+  const sessions = source
+    .query<{ session_id: string }, []>("SELECT DISTINCT session_id FROM action")
+    .all();
+  for (const { session_id: sessionId } of sessions) {
+    if (verifyChain(source, sessionId).kind !== "intact")
+      throw new U967Error("stale_archive:action");
+  }
+  return true;
+}
+
+function hasDecisionFactUpgrade(source: Database, restored: Database): boolean {
+  if (
+    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(DECISION_FACT_MIGRATION) ===
+      null ||
+    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(DECISION_FACT_MIGRATION) !== null
+  )
+    return false;
+  preflightSqliteDatabase(source);
+  preflightSqliteDatabase(restored);
+  // Apply the shipped head-only conversion to a disposable native image. This
+  // preserves exact payload bytes and rejects unrecognized historical streams.
+  using converted = Database.deserialize(restored.serialize());
+  Migration.applyOrdered(converted, join(import.meta.dir, "../packages/ledger/migration"), [
+    { name: DECISION_FACT_MIGRATION },
+  ]);
+  const sql =
+    "SELECT key, type, CAST(data AS BLOB) AS data, row_hash, CAST(time_created AS TEXT) AS time_created FROM decision_fact ORDER BY key";
+  if (!isDeepStrictEqual(source.query(sql).all(), converted.query(sql).all())) {
+    throw new U967Error("stale_archive:decision_fact");
+  }
+  return true;
+}
+
 function removedEmptyTables(
   sourceSchema: ReturnType<typeof sqliteSchema>,
   archivedSchema: ReturnType<typeof sqliteSchema>,
@@ -166,6 +220,8 @@ function addedMigrations(source: Database, restored: Database): string[] {
     RETIRED_TABLE_MIGRATION,
     REPLY_GRANT_MIGRATION,
     REQUEST_MIGRATION,
+    ACTION_HASH_MIGRATION,
+    DECISION_FACT_MIGRATION,
   ]) {
     using marker = restored.prepare("SELECT 1 FROM _migrations WHERE name = ?");
     using current = source.prepare("SELECT 1 FROM _migrations WHERE name = ?");

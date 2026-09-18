@@ -1,4 +1,4 @@
-import type { Ledger } from "../ledger/index.js";
+import type { DecisionFact, RouteNotDelivered } from "../ledger/index.js";
 import type { RoutingDecisionPayload } from "../event/ingress.js";
 
 /**
@@ -7,7 +7,7 @@ import type { RoutingDecisionPayload } from "../event/ingress.js";
  * internal product path — may not import each other
  * (openomni↛channels = 0/0), so the PURE parts of their once byte-identical
  * `route.decided` recorders are hoisted here: both arms import these and do
- * their OWN durable append (each through its own scoped `LedgerAppend.port()`
+ * their OWN durable record (each through its own scoped `DecisionFacts.port()`
  * and its own package-local typed error). Precedent: the #707 slice-1 wait
  * physical request matcher in channels.
  */
@@ -42,9 +42,13 @@ export function routeStreamId(scope: RouteStreamScope): string {
   return scopedStreamId("route", scope);
 }
 
-/** The ledger append input for a `route.decided` fact (the fact-payload builder). */
-export function routeDecidedFact(streamId: string, decision: RoutingDecisionPayload): Ledger.Input {
-  return { streamId, type: ROUTE_DECIDED_FACT_TYPE, data: decision };
+/** The record input for a `route.decided` fact. */
+export function routeDecidedFact(
+  key: string,
+  decision: RoutingDecisionPayload,
+  timeCreated: number,
+): DecisionFact.Record {
+  return { key, type: ROUTE_DECIDED_FACT_TYPE, data: decision, timeCreated };
 }
 
 /** The ONE `route.not_delivered` correction fact type string — shared so it cannot drift. */
@@ -57,15 +61,16 @@ export function routeCorrectionStreamId(scope: RouteStreamScope): string {
   return scopedStreamId("route_correction", scope);
 }
 
-/** The ledger append input for a `route.not_delivered` correction fact. */
+/** The record input for a `route.not_delivered` correction fact. */
 export function routeNotDeliveredFact(
-  streamId: string,
-  correction: Ledger.RouteNotDelivered,
-): Ledger.Input {
-  return { streamId, type: ROUTE_NOT_DELIVERED_FACT_TYPE, data: correction };
+  key: string,
+  correction: RouteNotDelivered,
+  timeCreated: number,
+): DecisionFact.Record {
+  return { key, type: ROUTE_NOT_DELIVERED_FACT_TYPE, data: correction, timeCreated };
 }
 
-// Replay equivalence gate (#510 review fix F2): a cas_conflict means this
+// Replay equivalence gate (#510 review fix F2): an existing fact means this
 // inbound was ALREADY decided. The recorded decision and the fresh one must
 // agree on every execution- and authority-shaping field — stage, outcome,
 // target, sessionId, actorId, trustTier, and

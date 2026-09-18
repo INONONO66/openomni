@@ -12,7 +12,7 @@ afterEach(() => {
   Storage.reset();
 });
 
-type KernelSessionStore = ProtocolStorage.SessionLedgerSubAdapter;
+type KernelSessionStore = ProtocolStorage.SessionSubAdapter;
 
 interface KernelAdapter {
   readonly sessions: KernelSessionStore;

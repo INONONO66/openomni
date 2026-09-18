@@ -18,7 +18,12 @@ function harness() {
     ledger: {
       actions: () => actions,
       async commit(action) {
-        const node = LedgerAction.Node.parse({ ...action, ordinal: actions.length + 1 });
+        const node = LedgerAction.Node.parse({
+          ...action,
+          ordinal: actions.length + 1,
+          prevHash: "fixture-prev",
+          actionHash: "fixture-hash",
+        });
         actions.push(node);
         return { action: node, revision: node.ordinal };
       },

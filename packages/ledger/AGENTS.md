@@ -23,7 +23,7 @@ src/
   storage/migration-runner.ts # Ordered transactional migration runner
   storage/migration-statements.ts # Quote/comment-aware statement boundaries
   storage/sqlite-schema-lifecycle.ts # PRAGMAs, migration list, test-only clear
-  ledger-core/              # Hash-chained decision facts and revision CAS
+  storage/sqlite-decision-facts.ts # First-writer-wins decision facts with row hashes
   actor/                    # Identity and endpoint facts
   blacklist/                # Raw blacklist facts
   channel-grant/            # Raw channel grants

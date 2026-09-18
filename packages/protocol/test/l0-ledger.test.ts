@@ -1,6 +1,5 @@
 import { describe, expect, expectTypeOf, test } from "bun:test";
-import { Input, RecordedFact } from "../src/ledger/schema.js";
-import type { Input as InputType, RecordedFact as RecordedFactType } from "../src/ledger/schema.js";
+import { DecisionFact } from "../src/ledger/schema.js";
 import {
   Alarm,
   canonicalDigest,
@@ -16,22 +15,32 @@ const payload = { encodingVersion: 1, value: { text: "hello" } } as const;
 
 describe("L0 ledger protocol", () => {
   test("changed payload fields retain the plain-object contract", () => {
-    expectTypeOf<InputType["data"]>().toEqualTypeOf<PlainObject>();
-    expectTypeOf<RecordedFactType["data"]>().toEqualTypeOf<PlainObject>();
+    expectTypeOf<DecisionFact.Record["data"]>().toEqualTypeOf<PlainObject>();
+    expectTypeOf<DecisionFact.Recorded["data"]>().toEqualTypeOf<PlainObject>();
     expectTypeOf<Tool.Spec["inputSchema"]>().toEqualTypeOf<PlainObject>();
   });
 
-  test("rejects non-plain ledger input data", () => {
+  test("rejects non-plain decision fact data", () => {
     const values = [() => "nope", new Date(), new (class Example {})(), { [Symbol("key")]: 1 }];
     for (const data of values) {
-      expect(Input.safeParse({ streamId: "s", type: "t", data }).success).toBe(false);
+      expect(
+        DecisionFact.Record.safeParse({ key: "s", type: "t", data, timeCreated: 1 }).success,
+      ).toBe(false);
     }
   });
 
   test("rejects non-plain recorded fact data", () => {
     const values = [() => "nope", new Date(), new (class Example {})(), { [Symbol("key")]: 1 }];
     for (const data of values) {
-      expect(RecordedFact.safeParse({ streamId: "s", seq: 1, type: "t", data, timeCreated: 1 }).success).toBe(false);
+      expect(
+        DecisionFact.Recorded.safeParse({
+          key: "s",
+          type: "t",
+          data,
+          timeCreated: 1,
+          rowHash: "0".repeat(64),
+        }).success,
+      ).toBe(false);
     }
   });
 
@@ -64,6 +73,8 @@ describe("L0 ledger protocol", () => {
           irreversible: true,
           ts: 100,
           ordinal: 1,
+          prevHash: "fixture-prev",
+          actionHash: "fixture-hash",
         }).kind,
       ).toBe(kind);
     }
@@ -77,6 +88,8 @@ describe("L0 ledger protocol", () => {
       effect: payload,
       ts: 100,
       ordinal: 1,
+      prevHash: "fixture-prev",
+      actionHash: "fixture-hash",
     } as const;
     expect(LedgerAction.Node.safeParse(base).success).toBe(false);
     expect(

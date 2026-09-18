@@ -21,7 +21,7 @@ export function createSessions(
   db: Database,
   transaction: <T>(operation: () => T) => T,
   observationSink: ObservationSink,
-): ProtocolStorage.SessionLedgerSubAdapter {
+): ProtocolStorage.SessionSubAdapter {
   return {
     create(row) {
       return transaction(() => insertSession(db, LedgerSession.Row.parse(row)));
@@ -79,7 +79,9 @@ export function createSessions(
     },
     openChildCount: (parentId) => openChildCount(db, parentId),
     list() {
-      const rows = db.query<SessionSqlRow, []>(`${sessionSelect} WHERE role IS NOT NULL ORDER BY id`).all();
+      const rows = db
+        .query<SessionSqlRow, []>(`${sessionSelect} WHERE role IS NOT NULL ORDER BY id`)
+        .all();
       return rows.map(decodeSession);
     },
     acquireLease(input) {

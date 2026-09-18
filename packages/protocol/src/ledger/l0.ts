@@ -48,6 +48,8 @@ export namespace LedgerAction {
       effect: EncodedPayload,
       ts: EpochMs,
       ordinal: z.number().int().positive(),
+      prevHash: z.string(),
+      actionHash: z.string(),
     })
     .strict();
 
@@ -61,7 +63,18 @@ export namespace LedgerAction {
   export const Node = z.union([RevertibleNode, IrreversibleNode]);
   export type Node = z.infer<typeof Node>;
 
-  const AppendBase = BaseNode.omit({ ordinal: true });
+  export const ChainVerdict = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("intact"), head: z.string().nullable(), length: z.number() }),
+    z.object({
+      kind: z.literal("broken"),
+      ordinal: z.number(),
+      expected: z.string(),
+      actual: z.string(),
+    }),
+  ]);
+  export type ChainVerdict = z.infer<typeof ChainVerdict>;
+
+  const AppendBase = BaseNode.omit({ ordinal: true, prevHash: true, actionHash: true });
   export const Append = z.union([
     AppendBase.extend({ revert: EncodedPayload }),
     AppendBase.extend({ irreversible: z.literal(true) }),

@@ -37,7 +37,15 @@ function harness(rows: readonly PolicyRow.Row[]) {
     async commit(action) {
       actions.push(action);
       revision += 1;
-      return { action: { ...action, ordinal: revision }, revision };
+      return {
+        action: {
+          ...action,
+          ordinal: revision,
+          prevHash: "fixture-prev",
+          actionHash: "fixture-hash",
+        },
+        revision,
+      };
     },
   };
   const executor = createExecutor({
@@ -103,7 +111,15 @@ describe("the single L2 executor's four-kind verdict model", () => {
         async commit(action) {
           actions.push(action);
           revision += 1;
-          return { action: { ...action, ordinal: revision }, revision };
+          return {
+            action: {
+              ...action,
+              ordinal: revision,
+              prevHash: "fixture-prev",
+              actionHash: "fixture-hash",
+            },
+            revision,
+          };
         },
       },
       observations: { publish: () => undefined },
@@ -154,7 +170,12 @@ describe("the single L2 executor's four-kind verdict model", () => {
           }
           revision += 1;
           const receipt = {
-            action: { ...action, ordinal: revision },
+            action: {
+              ...action,
+              ordinal: revision,
+              prevHash: "fixture-prev",
+              actionHash: "fixture-hash",
+            },
             revision,
           } satisfies LedgerAction.Receipt;
           if (isIntent) committedIntent = receipt;

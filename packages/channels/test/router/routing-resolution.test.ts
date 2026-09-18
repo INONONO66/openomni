@@ -1,9 +1,9 @@
 import { beforeEach, expect, test } from "bun:test";
 import { z } from "zod";
 import { rejected } from "../helpers/rejection";
-import { replaceLedger } from "../helpers/ledger";
+import { replaceDecisionFacts } from "../helpers/ledger";
 import { replyGrantEndpointFacts } from "../../src/router/messaging/reply-grant";
-import { Channel, Ingress, type Gateway, type Inbox, type Ledger } from "@openomni/protocol";
+import { Channel, Ingress, type Gateway, type Inbox, type DecisionFact } from "@openomni/protocol";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import {
   ActorRegistry,
@@ -31,26 +31,26 @@ beforeEach(resetRouterState);
 test("records the channel-scoped decision before inbox commit", async () => {
   registerOwnerDm();
   createMappedOwnerSession();
-  const observed: Array<Ledger.RecordedFact | undefined> = [];
+  const observed: Array<DecisionFact.Recorded | undefined> = [];
   const router = makeRouter({
     inbox: {
       commit: (row) => {
-        observed.push(Storage.get().ledger?.headFact(streamId()));
+        observed.push(Storage.get().decisionFacts?.head(streamId()));
         return { ...row, status: "pending", consumedBy: null, consumedAt: null, ordinal: 1 };
       },
     },
   });
   await router.ingest(ownerSender, ownerFacts);
   expect(observed).toHaveLength(1);
-  expect(observed[0]).toMatchObject({ streamId: streamId(), seq: 1, type: "route.decided" });
+  expect(observed[0]).toMatchObject({ key: streamId(), type: "route.decided" });
 });
 
 test("blocked decisions are durable before returning the receipt", async () => {
   expect(await makeRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
     status: "blocked_pre",
   });
-  expect(Storage.get().ledger?.headFact(streamId())).toMatchObject({
-    seq: 1,
+  expect(Storage.get().decisionFacts?.head(streamId())).toMatchObject({
+    key: streamId(),
     type: "route.decided",
     data: { outcome: "block" },
   });
@@ -62,11 +62,12 @@ test("equivalent redelivery uses one route fact and the same inbox id", async ()
   const router = makeRouter();
   await router.ingest(ownerSender, ownerFacts);
   const before = SessionHandleStore.tree(mapped.id);
+  const recorded = Storage.get().decisionFacts?.head(streamId());
   await router.ingest(ownerSender, ownerFacts);
   expect(commits).toHaveLength(1);
   expect(SessionHandleStore.tree(mapped.id)).toEqual(before);
   expect(SessionHandleStore.inboxRows(mapped.id)).toHaveLength(1);
-  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
 });
 
 test("historical route facts upcast on redelivery without reconstructing another route", async () => {
@@ -74,7 +75,7 @@ test("historical route facts upcast on redelivery without reconstructing another
   const mapped = createMappedOwnerSession();
   await makeRouter().ingest(ownerSender, ownerFacts);
   const modern = Ingress.Events.RoutingDecision.schema.parse(
-    Storage.get().ledger?.headFact(streamId())?.data,
+    Storage.get().decisionFacts?.head(streamId())?.data,
   );
   resetRouterState();
   registerOwnerDm();
@@ -87,19 +88,16 @@ test("historical route facts upcast on redelivery without reconstructing another
     }),
     mapped.id,
   );
-  expect(
-    Storage.get().ledger?.append(
-      {
-        streamId: streamId(),
-        type: "route.decided",
-        data: { ...modern, runId: "legacy", pendingInteractionId: "legacy" },
-      },
-      0,
-    ),
-  ).toMatchObject({ kind: "appended" });
+  const recorded = Storage.get().decisionFacts?.record({
+    key: streamId(),
+    type: "route.decided",
+    data: { ...modern, runId: "legacy", pendingInteractionId: "legacy" },
+    timeCreated: 1,
+  });
+  expect(recorded?.kind).toBe("recorded");
   await makeRouter().ingest(ownerSender, ownerFacts);
   expect(commits).toHaveLength(1);
-  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded?.fact);
 });
 
 test("a changed decision refuses redelivery before committing or observing", async () => {
@@ -108,12 +106,13 @@ test("a changed decision refuses redelivery before committing or observing", asy
   registerOwnerDm();
   createMappedOwnerSession();
   const count = routingDecisions().length;
+  const recorded = Storage.get().decisionFacts?.head(streamId());
   await expect(router.ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
     code: "route_replay_divergent",
   });
   expect(commits).toEqual([]);
   expect(routingDecisions()).toHaveLength(count);
-  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
 });
 
 test.each([
@@ -195,7 +194,7 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
   createMappedOwnerSession();
   const router = makeRouter();
   await router.ingest(ownerSender, ownerFacts);
-  const fact = Storage.get().ledger?.headFact(streamId());
+  const fact = Storage.get().decisionFacts?.head(streamId());
   if (fact === undefined) throw new Error("route fact missing");
   const original = Ingress.Events.RoutingDecision.schema.parse(fact.data);
   const priorEndpoint: readonly string[] = replyGrantEndpointFacts({
@@ -210,9 +209,12 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
     ],
   };
   expect(Ingress.routeDecisionsEquivalent(original, changed)).toBe(true);
-  replaceLedger((ledger) => ({
-    ...ledger,
-    headFact: (id) => (id === streamId() ? { ...fact, data: changed } : ledger.headFact(id)),
+  replaceDecisionFacts((facts) => ({
+    ...facts,
+    record: (input) =>
+      input.key === streamId()
+        ? { kind: "exists", fact: { ...fact, data: changed } }
+        : facts.record(input),
   }));
   await expect(router.ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
     code: "route_replay_divergent",
@@ -223,38 +225,38 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
 
 test("equivalent blocked redelivery returns a refusal without another route fact", async () => {
   const router = makeRouter();
-  for (let repeat = 0; repeat < 2; repeat += 1)
-    expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
-  expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  const recorded = Storage.get().decisionFacts?.head(streamId());
+  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
 });
 
 test.each([
-  "append_failure",
+  "record_failure",
   "absent",
-  "missing_conflict",
-  "corrupt_conflict",
-] as const)("ledger %s refuses before inbox commit or projection", async (fault) => {
+  "wrong_type",
+  "corrupt_fact",
+] as const)("decision facts %s refuses before inbox commit or projection", async (fault) => {
   registerOwnerDm();
   createMappedOwnerSession();
-  replaceLedger((ledger) =>
+  replaceDecisionFacts((facts) =>
     fault === "absent"
       ? undefined
       : {
-          ...ledger,
-          append: () => {
-            if (fault === "append_failure") throw new Error("ledger unavailable");
-            return { kind: "cas_conflict", currentHead: 1 };
+          ...facts,
+          record: () => {
+            if (fault === "record_failure") throw new Error("decision facts unavailable");
+            return {
+              kind: "exists",
+              fact: {
+                key: streamId(),
+                type: fault === "wrong_type" ? "other.fact" : "route.decided",
+                data: { invalid: true },
+                timeCreated: 1,
+                rowHash: "0".repeat(64),
+              },
+            };
           },
-          headFact: () =>
-            fault === "corrupt_conflict"
-              ? {
-                  streamId: streamId(),
-                  seq: 1,
-                  type: "route.decided",
-                  data: { invalid: true },
-                  timeCreated: 1,
-                }
-              : undefined,
         },
   );
   await expect(makeRouter().ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
@@ -293,8 +295,8 @@ test("forged observations cannot choose a session", async () => {
   await makeRouter().ingest(ownerSender, ownerFacts);
   expect(commits).toHaveLength(1);
   expect(commits[0]?.sessionId).toBe(mapped.id);
-  expect(Storage.get().ledger?.headFact(streamId())).toMatchObject({
-    seq: 1,
+  expect(Storage.get().decisionFacts?.head(streamId())).toMatchObject({
+    key: streamId(),
     data: { sessionId: mapped.id },
   });
 });

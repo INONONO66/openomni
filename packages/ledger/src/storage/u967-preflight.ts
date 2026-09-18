@@ -1,6 +1,8 @@
 import { canonicalDigest } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
 import { REQUEST_MIGRATION } from "./u969-preflight";
+import { ACTION_HASH_MIGRATION } from "./l0-hash";
+import { DECISION_FACT_MIGRATION } from "./decision-fact-migration";
 
 export const U967_MIGRATION = "0034_u967_archive_disposition/migration.sql";
 export const RETIRED_TABLE_MIGRATION = "0035_drop_retired_delegation_tables/migration.sql";
@@ -29,6 +31,8 @@ const SCHEMA_0035 = "sha256:7cc06095957973ceb27c8a1cd2eef1cecc01c04f4f8c7e5dca57
 const SCHEMA_0036 = "sha256:89e7677fe96971ec5ff5f8176504f42a478ae4fd8dfa84e4e18560077279e0ff";
 const SCHEMA_0037 = "sha256:f948a47d029d098334c56501460bb69932f48a81a3c7287c24b498c641ecc58e";
 const SCHEMA_0038 = "sha256:33dfeeb7e1085abb62601f1375e865e9c1c47d39ce116cd5f43895b2dcae6bbf";
+const SCHEMA_0039 = "sha256:755ca61bf587c522442b692f0a0102dcefe072dfc8f51b1882c88ca6f678a88a";
+const SCHEMA_0040 = "sha256:fbe9d09fbb6e02a56fcb468bb03281e2e4ab0c5adccc354f4e52cf1090b3481a";
 
 export function preflight967(db: Database, migrations: readonly { readonly name: string }[]) {
   const schema = sqliteSchema(db);
@@ -43,7 +47,9 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
     latest === RETIRED_TABLE_MIGRATION ||
     latest === REPLY_GRANT_MIGRATION ||
     latest === "0037_watch_alarms/migration.sql" ||
-    latest === REQUEST_MIGRATION;
+    latest === REQUEST_MIGRATION ||
+    latest === ACTION_HASH_MIGRATION ||
+    latest === DECISION_FACT_MIGRATION;
   const latestIndex =
     latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
   const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);
@@ -53,6 +59,8 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
     [REPLY_GRANT_MIGRATION]: SCHEMA_0036,
     "0037_watch_alarms/migration.sql": SCHEMA_0037,
     [REQUEST_MIGRATION]: SCHEMA_0038,
+    [ACTION_HASH_MIGRATION]: SCHEMA_0039,
+    [DECISION_FACT_MIGRATION]: SCHEMA_0040,
   };
   const schemaDigest = fingerprints[latest ?? ""] ?? SCHEMA_0033;
   if (

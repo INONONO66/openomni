@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { ActorRegistry } from "../../src/actor/index.js";
-import { LedgerAppend } from "../../src/storage/append-port.js";
+import { DecisionFacts } from "../../src/storage/decision-fact-port.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
 import { bareStorageAdapter } from "../helpers/session.js";
@@ -12,12 +12,12 @@ afterEach(() => {
 test("named storage surfaces report optional adapter availability", () => {
   Storage.configure(bareStorageAdapter());
   expect(ActorRegistry.isConfigured()).toBe(false);
-  expect(LedgerAppend.port()).toBeUndefined();
+  expect(DecisionFacts.port()).toBeUndefined();
 
   Storage.reset();
   Storage.configure(new SqliteStorageAdapter(":memory:"));
   expect(ActorRegistry.isConfigured()).toBe(true);
-  expect(LedgerAppend.port()).toBeDefined();
+  expect(DecisionFacts.port()).toBeDefined();
 });
 
 test("reset closes and clears an isolated adapter scope", () => {

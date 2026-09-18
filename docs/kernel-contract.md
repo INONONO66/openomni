@@ -2,7 +2,7 @@
 
 This document carries the normative contract detail behind [Core Model](core-model.md): the guarantee split, authority evaluation, durable session contract, and Governor operating rules. It absorbs ADR-009 through ADR-013, which are retired; git history preserves the originals. Like all design docs, it describes targets — implementation truth lives in [Implementation Status](implementation-status.md). It does not sequence delivery or report live issue state; [epic #930](https://github.com/INONONO66/openomni/issues/930) is authoritative for that.
 
-Deletion reconciliation: verified against merged `c4fb7748` on 2026-09-06. The retired task-ticket/completion, built-in memory, blob-store, and dialogue-store contracts are withdrawn, not future kernel obligations. Historical text remains in git history; [SLOP receipts](SLOP.md) distinguish deletion evidence from pending campaign gates. Surviving target sections below do not predeclare unmerged I04-I08/I05 behavior.
+Deletion reconciliation: verified against merged `c4fb7748` on 2026-09-06; policy/ledger rows (`Policy.EffectiveDecision`, ledger-core stream tables) re-verified on `kernel/s1-authority-cut-2` (G002), 2026-09-18 — other normative targets were not re-verified there. The retired task-ticket/completion, built-in memory, blob-store, and dialogue-store contracts are withdrawn, not future kernel obligations. Historical text remains in git history; [SLOP receipts](SLOP.md) distinguish deletion evidence from pending campaign gates. Surviving target sections below do not predeclare unmerged I04-I08/I05 behavior.
 
 ## 1. Kernel and Userland
 
@@ -200,7 +200,7 @@ Who owns the action record differs by kind. `llm` and `tool` operations are exec
 
 Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine or callback registration surface. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
 
-The live policy contract is compiled-row evaluation, not general effect composition. PR #1030 removes the unconsumed `composeEffects` subsystem and its 29 tests without a successor. Its deny/pending/allow composition, safe-effect ceiling on deny, conflict fail-closed merging, effect deduplication and retry-ceiling merging are not active kernel capabilities. Rows retain descending-priority evaluation and stop at the first matched deny or approval requirement; captured budget-obligation limits and channel ceilings are separate, unchanged controls. `Policy.EffectiveDecision` remains a protocol schema pending cross-package cleanup, not an implemented composition surface.
+The live policy contract is compiled-row evaluation, not general effect composition. PR #1030 removes the unconsumed `composeEffects` subsystem and its 29 tests without a successor. Its deny/pending/allow composition, safe-effect ceiling on deny, conflict fail-closed merging, effect deduplication and retry-ceiling merging are not active kernel capabilities. Rows retain descending-priority evaluation and stop at the first matched deny or approval requirement; captured budget-obligation limits and channel ceilings are separate, unchanged controls. `Policy.EffectiveDecision` was deleted in G002 (#930); no replacement composition surface was introduced.
 
 ## 3. Machine and codemode contract
 

@@ -1,5 +1,6 @@
 import { createExecutor } from "@openomni/agent";
 import { LedgerAction } from "@openomni/protocol";
+import { fixtureHashes } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../../packages/policy/src";
 
 let ordinal = 0;
@@ -17,7 +18,10 @@ export const executor = createExecutor({
   ledger: {
     async commit(action) {
       ordinal += 1;
-      return { action: LedgerAction.Node.parse({ ...action, ordinal }), revision: ordinal };
+      return {
+        action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
+        revision: ordinal,
+      };
     },
   },
   observations: { publish: () => undefined },

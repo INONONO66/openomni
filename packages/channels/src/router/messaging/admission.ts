@@ -1,5 +1,5 @@
-import { Gateway } from "@openomni/protocol";
-import { EgressBudgetStore, LedgerAppend } from "@openomni/ledger";
+import { Gateway, type DecisionFact } from "@openomni/protocol";
+import { EgressBudgetStore, DecisionFacts } from "@openomni/ledger";
 import { z } from "zod";
 import type { GatewayRouterPorts } from "../message-ports";
 import { evaluateSocialBudget } from "./social-budget";
@@ -45,12 +45,21 @@ function existingAdmission(
   input: Gateway.SendInput,
   target: Gateway.DeliveryTarget,
 ): SendAdmission | SendAdmissionConflict | undefined {
-  const ledger = LedgerAppend.port();
-  if (ledger === undefined)
-    throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
-  const streamId = sendStreamId(input.messageId);
-  const fact = ledger.headFact(streamId);
-  if (fact === undefined) return undefined;
+  const decisionFacts = DecisionFacts.port();
+  if (decisionFacts === undefined)
+    throw new Error(
+      "Storage adapter does not implement decision facts — gateway sends fail closed",
+    );
+  const fact = decisionFacts.head(sendStreamId(input.messageId));
+  return fact === undefined ? undefined : recordedAdmission(fact, input, target);
+}
+
+function recordedAdmission(
+  fact: DecisionFact.Recorded,
+  input: Gateway.SendInput,
+  target: Gateway.DeliveryTarget,
+): SendAdmission | SendAdmissionConflict {
+  const streamId = fact.key;
   if (fact.type !== SEND_ADMITTED_FACT)
     throw new Error(`unexpected fact type on send stream ${streamId}: ${fact.type}`);
   const parsed = SendAdmission.safeParse(fact.data);
@@ -70,17 +79,22 @@ function recordAdmission(
   budgeted: boolean,
   sendClass: Gateway.MessageClass,
 ): SendAdmission {
-  const ledger = LedgerAppend.port();
-  if (ledger === undefined)
-    throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
-  const streamId = sendStreamId(input.messageId);
+  const decisionFacts = DecisionFacts.port();
+  if (decisionFacts === undefined)
+    throw new Error(
+      "Storage adapter does not implement decision facts — gateway sends fail closed",
+    );
+  const key = sendStreamId(input.messageId);
   const admission = { signature: sendSignature(input, target), budgeted, sendClass } as const;
-  const appended = ledger.append({ streamId, type: SEND_ADMITTED_FACT, data: { ...admission } }, 0);
-  if (appended.kind === "appended") return admission;
-  const raced = existingAdmission(input, target);
+  const outcome = decisionFacts.record({
+    key,
+    type: SEND_ADMITTED_FACT,
+    data: { ...admission },
+    timeCreated: input.at,
+  });
+  if (outcome.kind === "recorded") return admission;
+  const raced = recordedAdmission(outcome.fact, input, target);
   if (raced instanceof SendAdmissionConflict) throw raced;
-  if (raced === undefined)
-    throw new Error(`send admission conflicted without a recorded fact on ${streamId}`);
   return raced;
 }
 

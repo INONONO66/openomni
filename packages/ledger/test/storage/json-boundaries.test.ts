@@ -2,22 +2,22 @@ import { expect, test } from "bun:test";
 import { LedgerSession } from "@openomni/protocol";
 import { createSqliteActorRegistryAdapter } from "../../src/storage/sqlite-actor-registry-adapter";
 import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
-import { Ledger } from "../../src/ledger-core";
+import { createSqliteDecisionFacts } from "../../src/storage/sqlite-decision-facts";
 import { openLedgerDatabase } from "../helpers/ledger";
 
 test("raw recorded facts reject malformed JSON and non-finite JSON numbers", () => {
   using db = openLedgerDatabase();
-  Ledger.append(db, { streamId: "boundary", type: "test", data: {}, timeCreated: 1 }, 0);
+  const facts = createSqliteDecisionFacts(db);
+  facts.record({ key: "boundary", type: "test", data: {}, timeCreated: 1 });
   for (const corrupt of ["{", "1e999"]) {
-    db.query("UPDATE ledger_event SET data = ? WHERE stream_id = ?").run(corrupt, "boundary");
-    expect(() => Ledger.headFact(db, "boundary")).toThrow();
-    expect(() => Ledger.factsByType(db, "test")).toThrow();
+    db.query("UPDATE decision_fact SET data = ? WHERE key = ?").run(corrupt, "boundary");
+    expect(() => facts.head("boundary")).toThrow();
+    expect(() =>
+      facts.record({ key: "boundary", type: "test", data: {}, timeCreated: 2 }),
+    ).toThrow();
   }
-  db.query("UPDATE ledger_event SET data = ? WHERE stream_id = ?").run(
-    '{"valid":[1,null]}',
-    "boundary",
-  );
-  expect(Ledger.headFact(db, "boundary")?.data).toEqual({ valid: [1, null] });
+  db.query("UPDATE decision_fact SET data = ? WHERE key = ?").run('{"valid":[1,null]}', "boundary");
+  expect(facts.head("boundary")?.data).toEqual({ valid: [1, null] });
 });
 
 test("actor endpoint filters distinguish no filter from the empty workspace", () => {

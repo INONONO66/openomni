@@ -28,6 +28,8 @@ const original: LedgerAction.Node = {
   kind: "tool",
   ts: 1,
   ordinal: 1,
+  prevHash: "fixture-prev",
+  actionHash: "fixture-hash",
   intent: {
     encodingVersion: 1,
     value: {
@@ -105,7 +107,12 @@ it("records one canonical resolution and deduplicates equivalent input after res
   expect(result.resolution).toBe("resolved");
   expect(result.request?.state).toBe("resolved");
   expect(result.actions.some((action) => action.id === "invocation:resolution")).toBe(true);
-  const persisted = result.actions.map((action, index) => ({ ...action, ordinal: index + 2 }));
+  const persisted = result.actions.map((action, index) => ({
+    ...action,
+    ordinal: index + 2,
+    prevHash: "fixture-prev",
+    actionHash: "fixture-hash",
+  }));
   const repeated = decide(
     { ...payload, answer: { ...payload.answer, receivedAt: 30 } },
     result.request,
@@ -322,7 +329,12 @@ it("proposes observed global approval count only for a new approval open", () =>
       requests: [...requests, { ...pending, requestId: "eighth" }],
     }),
   ).toEqual({ resolution: "rejected", actions: [] });
-  const persisted = opened.actions.map((action, index) => ({ ...action, ordinal: index + 2 }));
+  const persisted = opened.actions.map((action, index) => ({
+    ...action,
+    ordinal: index + 2,
+    prevHash: "fixture-prev",
+    actionHash: "fixture-hash",
+  }));
   expect(
     decideRequestTransition(command, {
       ...snapshot,
@@ -358,7 +370,12 @@ it("pins unknown physical receipts and deduplicates without their local timestam
   expect(recorded.resolution).toBe("delivery_recorded");
   expect(recorded.request?.correlation.replyToMessageId).toBe("physical");
   expect(recorded.request?.bindingDigest).not.toBe(pending.bindingDigest);
-  const persisted = recorded.actions.map((action, index) => ({ ...action, ordinal: index + 2 }));
+  const persisted = recorded.actions.map((action, index) => ({
+    ...action,
+    ordinal: index + 2,
+    prevHash: "fixture-prev",
+    actionHash: "fixture-hash",
+  }));
   const repeated = decide(
     {
       kind: "request.delivery",

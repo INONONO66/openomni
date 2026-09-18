@@ -1,37 +1,37 @@
 import { Ingress } from "@openomni/protocol";
-import { LedgerAppend } from "@openomni/ledger";
+import { DecisionFacts } from "@openomni/ledger";
 import { replyGrantEndpointFromFacts } from "./messaging/reply-grant";
 import { IngressRoutingError } from "./routing-error";
 
-/** Append before projection; a competing fact must preserve both routing and reply authority. */
+/** Record before projection; a competing fact must preserve routing and reply authority. */
 export function recordRouteDecided(
   streamId: string,
   decision: Ingress.RoutingDecisionPayload,
 ): Ingress.RoutingDecisionPayload {
-  const ledger = LedgerAppend.port();
-  if (!ledger) {
+  const decisionFacts = DecisionFacts.port();
+  if (!decisionFacts) {
     throw new IngressRoutingError(
       "route_record_failed",
-      "Storage adapter does not implement ledger append — routing decisions fail closed",
+      "Storage adapter does not implement decision facts — routing decisions fail closed",
       decision,
     );
   }
-  let appended: ReturnType<typeof ledger.append>;
+  let outcome: ReturnType<typeof decisionFacts.record>;
   try {
-    appended = ledger.append(Ingress.routeDecidedFact(streamId, decision), 0);
+    outcome = decisionFacts.record(Ingress.routeDecidedFact(streamId, decision, Date.now()));
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",
-      `routing decision append failed: ${error instanceof Error ? error.message : String(error)}`,
+      `routing decision record failed: ${error instanceof Error ? error.message : String(error)}`,
       decision,
     );
   }
-  if (appended.kind === "appended") return decision;
+  if (outcome.kind === "recorded") return decision;
   let recorded: Ingress.RoutingDecisionPayload;
   try {
-    const fact = ledger.headFact(streamId);
-    if (fact === undefined || fact.type !== Ingress.ROUTE_DECIDED_FACT_TYPE) {
-      throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
+    const fact = outcome.fact;
+    if (fact.type !== Ingress.ROUTE_DECIDED_FACT_TYPE) {
+      throw new Error(`key ${streamId} has a different recorded fact type`);
     }
     // Pre-0025 facts are upcast by the protocol's bounded persisted-wire reader.
     const upcast = Ingress.recordedRoutingDecision(fact.data);

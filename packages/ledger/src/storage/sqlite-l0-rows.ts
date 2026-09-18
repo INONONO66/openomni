@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseStoredJson } from "./sqlite-json-data";
+import { parseStoredJson, SqliteCount, SqliteEpochMs } from "./sqlite-json-data";
 import { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
 
 const actionRowSchema = LedgerAction.Node;
@@ -18,13 +18,32 @@ export const ActionSqlRow = z.object({
   intent: z.string(),
   effect: z.string(),
   revert: z.string().nullable(),
+  // Hot read path (tree/range decode every row): single-layer checks instead
+  // of union + transform + pipe stacks (SqliteCount cost a >20% tree/history
+  // bench regression here). The production adapter never enables safeIntegers,
+  // so these columns arrive as numbers; an unexpected bigint fails closed.
   irreversible: z.union([z.literal(0), z.literal(1)]),
-  encoding_version: z.number(),
-  ts: z.number(),
-  ordinal: z.number(),
+  encoding_version: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  // Mirrors protocol EpochMs: finite, non-negative, fractional allowed.
+  ts: z.number().finite().nonnegative(),
+  ordinal: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  prev_hash: z.string(),
+  action_hash: z.string(),
 });
 
 export type ActionSqlRow = z.infer<typeof ActionSqlRow>;
+
+/**
+ * Cold migration/verification boundary: archive tooling opens databases with
+ * safeIntegers, so INTEGER columns may arrive as bigint and are folded to the
+ * same admitted numbers the hot schema accepts.
+ */
+export const ActionSqlRowSafeIntegers = ActionSqlRow.extend({
+  irreversible: SqliteCount.pipe(z.union([z.literal(0), z.literal(1)])),
+  encoding_version: SqliteCount,
+  ts: SqliteEpochMs,
+  ordinal: SqliteCount,
+});
 
 export const SessionSqlRow = z.object({
   id: z.string(),
@@ -116,6 +135,8 @@ export function decodeAction(row: ActionSqlRow): LedgerAction.Node {
     effect: { encodingVersion: row.encoding_version, value: parseStoredJson(row.effect) },
     ts: row.ts,
     ordinal: row.ordinal,
+    prevHash: row.prev_hash,
+    actionHash: row.action_hash,
   };
   return actionRowSchema.parse(
     row.revert === null

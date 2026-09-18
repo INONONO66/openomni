@@ -138,12 +138,4 @@ export namespace PolicyEffects {
     })
     .strict();
   export type PolicyDecision = z.infer<typeof PolicyDecision>;
-
-  export const EffectiveDecision = z.object({
-    verdict: z.enum(["allow", "deny", "pending"]),
-    mergedEffects: z.array(PolicyEffect),
-    obligations: z.array(PolicyObligation),
-    contributingPolicies: z.array(z.string()),
-  });
-  export type EffectiveDecision = z.infer<typeof EffectiveDecision>;
 }

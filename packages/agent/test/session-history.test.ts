@@ -27,6 +27,8 @@ for (const terminal of [undefined, "interrupted", "error"] as const) {
         effect: { encodingVersion: 1, value: effect },
         ts: actions.length + 1,
         ordinal: actions.length + 1,
+        prevHash: "fixture-prev",
+        actionHash: "fixture-hash",
         irreversible: true,
       });
     }

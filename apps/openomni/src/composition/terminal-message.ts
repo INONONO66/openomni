@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { Bus, createExecutor, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouter } from "@openomni/channels";
-import { SessionTransition, type LedgerAction } from "@openomni/protocol";
+import type { LedgerAction } from "@openomni/protocol";
 
 type OutboundInput = Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0];
 interface OutboundContext {
@@ -12,20 +12,6 @@ interface OutboundContext {
 }
 
 export const outboundMessage = new AsyncLocalStorage<OutboundContext>();
-
-function receivedOutbound(
-  message: SessionTransition.OutboundMessage,
-): LedgerAction.Receipt | undefined {
-  const action = SessionHandleStore.tree(message.destinationSessionId).find((candidate) => {
-    if (candidate.id === message.messageId && candidate.kind === "prompt") return true;
-    if (candidate.kind !== "reply") return false;
-    const effect = candidate.effect.value;
-    if (effect === null || typeof effect !== "object" || Array.isArray(effect)) return false;
-    const answer = SessionTransition.Answer.safeParse(effect.answer);
-    return answer.success && answer.data.outbound?.messageId === message.messageId;
-  });
-  return action === undefined ? undefined : { action, revision: action.ordinal };
-}
 
 /** The gateway admits recorded bytes; the receiver, not this source, owns its inbox. */
 export function dispatchOutboundMessage(
@@ -76,7 +62,9 @@ export function dispatchOutboundMessage(
         },
       );
       if (admitted.status === "blocked_pre") throw new Error("outbound gateway admission refused");
-      const receipt = context.receipt ?? receivedOutbound(message);
+      const receipt =
+        context.receipt ??
+        SessionHandleStore.outboundReceipt(message.destinationSessionId, message.messageId);
       if (receipt === undefined)
         throw new Error("outbound receiving consumer did not commit a receipt");
       return receipt;

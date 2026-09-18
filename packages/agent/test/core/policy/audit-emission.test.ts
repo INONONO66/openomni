@@ -31,7 +31,15 @@ it("awaits policy.decision commit before publishing its observation", async () =
       if (action.kind === "policy.decision") await decisionCommit.promise;
       appended.push(action);
       revision += 1;
-      return { action: { ...action, ordinal: revision }, revision };
+      return {
+        action: {
+          ...action,
+          ordinal: revision,
+          prevHash: "fixture-prev",
+          actionHash: "fixture-hash",
+        },
+        revision,
+      };
     },
   };
   const executor = createExecutor({

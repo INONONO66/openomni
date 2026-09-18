@@ -4841,14 +4841,6 @@
   },
   {
     "path": "packages/protocol/src/policy/effects.ts",
-    "line": 142,
-    "symbol": "implicitAny:EffectiveDecision",
-    "gate": "type",
-    "value": 1,
-    "count": 10
-  },
-  {
-    "path": "packages/protocol/src/policy/effects.ts",
     "line": 10,
     "symbol": "implicitAny:JsonPlainArray",
     "gate": "type",
@@ -5158,14 +5150,6 @@
     "gate": "type",
     "value": 1,
     "count": 2
-  },
-  {
-    "path": "packages/protocol/src/policy/effects.ts",
-    "line": 142,
-    "symbol": "unknown:EffectiveDecision",
-    "gate": "type",
-    "value": 1,
-    "count": 10
   },
   {
     "path": "packages/protocol/src/policy/effects.ts",
@@ -5497,14 +5481,6 @@
   },
   {
     "path": "packages/protocol/src/policy/index.ts",
-    "line": 40,
-    "symbol": "implicitAny:EffectiveDecision",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/protocol/src/policy/index.ts",
     "line": 18,
     "symbol": "implicitAny:EvaluationRequest",
     "gate": "type",
@@ -5694,14 +5670,6 @@
     "gate": "type",
     "value": 1,
     "count": 2
-  },
-  {
-    "path": "packages/protocol/src/policy/index.ts",
-    "line": 40,
-    "symbol": "unknown:EffectiveDecision",
-    "gate": "type",
-    "value": 1,
-    "count": 4
   },
   {
     "path": "packages/protocol/src/policy/index.ts",

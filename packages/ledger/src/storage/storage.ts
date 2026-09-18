@@ -1,6 +1,5 @@
 import type { BusEvent, Storage as ProtocolStorage } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { headFact, factsByType } from "../ledger-core/read";
 
 export const productionStorageAdapterBrand: unique symbol = Symbol("productionStorageAdapter");
 
@@ -23,14 +22,9 @@ export namespace Storage {
     // it as required (SqliteStorageAdapter).
     surfaceKey?: ProtocolStorage.SurfaceKeySubAdapter;
 
-    // #510 phase B: decision-class ledger append on the SAME connection as
-    // the projection sub-adapters, so a decision-class store can commit
-    // append + projection inside one `transaction()` call. Optional for test
-    // fakes only — decision-class writers fail closed without it.
-    ledger?: Omit<ProtocolStorage.LedgerSubAdapter, "headFact" | "factsByType"> & {
-      headFact(streamId: string): ReturnType<typeof headFact>;
-      factsByType(type: string): ReturnType<typeof factsByType>;
-    };
+    // Optional for test fakes; production writers fail closed without this port.
+    // Fact and projection writes share the adapter transaction.
+    decisionFacts?: ProtocolStorage.DecisionFactSubAdapter;
     // Active-egress debit ledger (#219, perimeter domain). Optional for test
     // fakes only — EgressBudgetStore fails closed when it is missing;
     // production adapters wire it as required (SqliteStorageAdapter). Sole
@@ -45,7 +39,7 @@ export namespace Storage {
     // (typed adapter_absent) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
     provisioning?: ProtocolStorage.ProvisioningSubAdapter;
-    sessions?: ProtocolStorage.SessionLedgerSubAdapter;
+    sessions?: ProtocolStorage.SessionSubAdapter;
     actions?: ProtocolStorage.ActionSubAdapter;
     inbox?: ProtocolStorage.InboxSubAdapter;
     alarms?: ProtocolStorage.AlarmSubAdapter;
@@ -64,7 +58,7 @@ export namespace Storage {
   const requiredProductionCapabilities = [
     "surfaceKey",
 
-    "ledger",
+    "decisionFacts",
     "egressBudget",
     "actorRegistry",
     "blacklist",

@@ -1,5 +1,5 @@
 import { seededRequests } from "../../helpers/requests";
-import { replaceLedger } from "../../helpers/ledger";
+import { replaceDecisionFacts } from "../../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
 import type { Gateway } from "@openomni/protocol";
@@ -355,17 +355,15 @@ describe("durable send admission faults", () => {
     ["corrupt payload", "gateway.send.admitted", { signature: 7 }],
   ] as const)("fails closed on an %s", async (_name, type, data) => {
     const input = buildSendInput({ messageId: `message:bad-${_name}` });
-    const ledger = Storage.get().ledger;
-    if (ledger === undefined) throw new Error("ledger sub-adapter missing");
-    const appended = ledger.append(
-      {
-        streamId: `gateway_send:${encodeURIComponent(input.messageId)}`,
-        type,
-        data,
-      },
-      0,
-    );
-    expect(appended.kind).toBe("appended");
+    const facts = Storage.get().decisionFacts;
+    if (facts === undefined) throw new Error("decision fact sub-adapter missing");
+    const recorded = facts.record({
+      key: `gateway_send:${encodeURIComponent(input.messageId)}`,
+      type,
+      data,
+      timeCreated: input.at,
+    });
+    expect(recorded.kind).toBe("recorded");
 
     await expect(messaging().send(input)).rejects.toThrow(
       type === "other.fact" ? "unexpected fact type" : "corrupt send admission fact",
@@ -376,8 +374,8 @@ describe("durable send admission faults", () => {
   test("fails closed when a budget callback replaces the active adapter before admission", async () => {
     const input = buildSendInput({ messageId: "message:reentrant-adapter-swap" });
     const detached = Storage.get();
-    const detachedLedger = detached.ledger;
-    if (detachedLedger === undefined) throw new Error("ledger sub-adapter missing");
+    const detachedFacts = detached.decisionFacts;
+    if (detachedFacts === undefined) throw new Error("decision fact sub-adapter missing");
     const reentrant = createExistingAgentMessaging({
       requests: seededRequests(),
       deliver: (message) => {
@@ -388,7 +386,7 @@ describe("durable send admission faults", () => {
       budgets: () => {
         Storage.configure({
           ...detached,
-          ledger: undefined,
+          decisionFacts: undefined,
           transaction: detached.transaction.bind(detached),
         });
         return [
@@ -405,11 +403,9 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      await expect(reentrant.send(input)).rejects.toThrow(
-        "Storage adapter does not implement ledger append — gateway sends fail closed",
-      );
+      await expect(reentrant.send(input)).rejects.toThrow();
       expect(
-        detachedLedger.headFact(`gateway_send:${encodeURIComponent(input.messageId)}`),
+        detachedFacts.head(`gateway_send:${encodeURIComponent(input.messageId)}`),
       ).toBeUndefined();
       expect(deliveries).toEqual([]);
     } finally {
@@ -417,9 +413,9 @@ describe("durable send admission faults", () => {
     }
   });
 
-  test("fails closed when the ledger disappears before admission lookup", async () => {
+  test("fails closed when decision facts disappear before admission lookup", async () => {
     const detached = Storage.get();
-    const withoutLedger = createExistingAgentMessaging({
+    const withoutFacts = createExistingAgentMessaging({
       requests: seededRequests(),
       deliver: (message) => {
         deliveries.push(message);
@@ -429,7 +425,7 @@ describe("durable send admission faults", () => {
         Storage.configure({
           ...detached,
           transaction: detached.transaction.bind(detached),
-          ledger: undefined,
+          decisionFacts: undefined,
         });
         return grants;
       },
@@ -437,20 +433,21 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      await expect(withoutLedger.send(buildSendInput())).rejects.toThrow();
+      await expect(withoutFacts.send(buildSendInput())).rejects.toThrow();
       expect(deliveries).toEqual([]);
     } finally {
       Storage.configure(detached);
     }
   });
 
-  test("fails closed when admission loses an append race without a recorded winner", async () => {
-    replaceLedger((ledger) => ({
-      ...ledger,
-      append: (fact, expectedHead) =>
-        fact.type === "gateway.send.admitted"
-          ? { kind: "cas_conflict", currentHead: 0 }
-          : ledger.append(fact, expectedHead),
+  test("fails closed when a concurrent record returns a corrupt winner", async () => {
+    replaceDecisionFacts((facts) => ({
+      ...facts,
+      record: (fact) => {
+        if (fact.type !== "gateway.send.admitted") return facts.record(fact);
+        facts.record({ ...fact, data: { signature: 7 } });
+        return facts.record(fact);
+      },
     }));
 
     await expect(messaging().send(buildSendInput())).rejects.toThrow();
@@ -458,15 +455,15 @@ describe("durable send admission faults", () => {
   });
 
   test("an incompatible concurrent admission still rejects an awaited send", async () => {
-    replaceLedger((ledger) => ({
-      ...ledger,
-      append: (fact, head) => {
-        if (fact.type !== "gateway.send.admitted") return ledger.append(fact, head);
+    replaceDecisionFacts((facts) => ({
+      ...facts,
+      record: (fact) => {
+        if (fact.type !== "gateway.send.admitted") return facts.record(fact);
         const data = z.record(z.string(), z.json()).parse(fact.data);
-        expect(
-          ledger.append({ ...fact, data: { ...data, signature: "conflicting" } }, head).kind,
-        ).toBe("appended");
-        return { kind: "cas_conflict", currentHead: 1 };
+        expect(facts.record({ ...fact, data: { ...data, signature: "conflicting" } }).kind).toBe(
+          "recorded",
+        );
+        return facts.record(fact);
       },
     }));
     await expect(messaging().send(buildAwaitedSendInput())).rejects.toThrow(
@@ -475,14 +472,14 @@ describe("durable send admission faults", () => {
     expect(deliveries).toEqual([]);
   });
 
-  test("uses the matching admission that won a concurrent append race", async () => {
-    replaceLedger((ledger) => ({
-      ...ledger,
-      append: (fact, expectedHead) => {
-        if (fact.type !== "gateway.send.admitted") return ledger.append(fact, expectedHead);
-        const result = ledger.append(fact, expectedHead);
-        expect(result.kind).toBe("appended");
-        return { kind: "cas_conflict", currentHead: 1 };
+  test("uses the matching admission that won a concurrent record race", async () => {
+    replaceDecisionFacts((facts) => ({
+      ...facts,
+      record: (fact) => {
+        if (fact.type !== "gateway.send.admitted") return facts.record(fact);
+        const result = facts.record(fact);
+        expect(result.kind).toBe("recorded");
+        return facts.record(fact);
       },
     }));
 

@@ -4213,24 +4213,6 @@
   },
   {
     "gate": "crap",
-    "path": "packages/ledger/src/ledger-core/adopt.ts",
-    "line": 35,
-    "endLine": 70,
-    "symbol": "ArrowFunction:<anonymous@1518>",
-    "value": 90,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/src/ledger-core/append.ts",
-    "line": 31,
-    "endLine": 74,
-    "symbol": "ArrowFunction:<anonymous@1351>",
-    "value": 72,
-    "count": 1
-  },
-  {
-    "gate": "crap",
     "path": "packages/ledger/src/session/kernel.ts",
     "line": 451,
     "endLine": 487,
@@ -4713,15 +4695,6 @@
     "endLine": 17,
     "symbol": "FunctionDeclaration:removeSqliteFiles",
     "value": 42,
-    "count": 1
-  },
-  {
-    "gate": "crap",
-    "path": "packages/ledger/test/ledger-core/append.test.ts",
-    "line": 81,
-    "endLine": 95,
-    "symbol": "ArrowFunction:<anonymous@2714>",
-    "value": 72,
     "count": 1
   },
   {
