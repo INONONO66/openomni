@@ -141,6 +141,14 @@ export class Fixture {
     rmSync(this.root, { recursive: true, force: true });
   }
 }
+
+export function runFixtureProgram(fixture: Fixture, argv: string[], cwd = fixture.root) {
+  return Bun.spawnSync([process.execPath, ...argv], {
+    cwd,
+    timeout: SPAWN_TIMEOUT_MS,
+  });
+}
+
 export const protocol = `export namespace BusEvent {
   export interface Descriptor { name: string; schema: object }
   export function define(name: string, schema: object): Descriptor { return { name, schema }; }
@@ -167,9 +175,7 @@ export function configureElectronFixture(fixture: Fixture, html: string): void {
 }
 
 export function assertPublication(fixture: Fixture, published: boolean): void {
-  const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const actual = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe(published ? '["ready"]' : "[]");
   expect(fixture.run("publisher").code).toBe(published ? 0 : 1);

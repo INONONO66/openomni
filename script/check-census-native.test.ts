@@ -8,6 +8,7 @@ import {
   adapter,
   assertPublication,
   assertStoreWrite,
+  runFixtureProgram,
   SPAWN_TIMEOUT_MS,
 } from "./census-fixture";
 
@@ -150,10 +151,7 @@ test("R3 real observation bus transfers through its scheduled delivery", () => {
       'import {Bus} from "./bus";import {Ready} from "./events";const received:string[]=[];const signal=new Promise<void>(resolve=>{Bus.observe((event)=>{received.push(event.name);resolve()})});Bus.publish(Ready,{});await signal;Bus.reset();console.log(JSON.stringify(received));',
   });
   symlinkSync(resolve(import.meta.dir, "../node_modules"), join(fixture.root, "node_modules"));
-  const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-    cwd: fixture.root,
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const actual = runFixtureProgram(fixture, ["src/main.ts"], fixture.root);
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe('["ready"]');
   expect(fixture.run("publisher").code).toBe(0);
@@ -198,10 +196,7 @@ test("R3 an unthrown catch around a scheduled noop is not publication", () => {
     "src/main.ts":
       'import {Ready} from "./events";const received:string[]=[];function deliver(operation:()=>void,eventName:string){try{operation()}catch{console.warn(eventName)}}const sink={publish(event:{name:string},data:object){queueMicrotask(()=>deliver(()=>{void event.name},event.name))}};sink.publish(Ready,{});await new Promise<void>(resolve=>queueMicrotask(resolve));console.log(JSON.stringify(received));',
   });
-  const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-    cwd: fixture.root,
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const actual = runFixtureProgram(fixture, ["src/main.ts"], fixture.root);
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("[]");
   expect(actual.stderr.toString()).toBe("");
@@ -233,10 +228,7 @@ test("R3 Bun process entry invokes the child publisher rather than only importin
     "src/main.ts":
       'const child=Bun.spawnSync([process.execPath,"src/worker.ts"],{stdout:"inherit",stderr:"inherit"});if(child.exitCode!==0)throw new Error("child failed");',
   });
-  const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-    cwd: fixture.root,
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const actual = runFixtureProgram(fixture, ["src/main.ts"], fixture.root);
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("ready");
   expect(fixture.run("publisher").code).toBe(0);
@@ -318,9 +310,7 @@ test("native exit listeners removed before termination do not publish", () => {
       "src/events.ts": protocol,
       "src/main.ts": `import {Ready} from "./events";const received:string[]=[];const sink={publish(e:{name:string},data:object){received.push(e.name)}};const callback=()=>sink.publish(Ready,{});process.on("exit",callback);${removed ? 'process.off("exit",callback);' : ""}process.on("exit",()=>console.log(JSON.stringify(received)));`,
     });
-    const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-      timeout: SPAWN_TIMEOUT_MS,
-    });
+    const actual = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
     expect(actual.exitCode).toBe(0);
     expect(actual.stderr.toString()).toBe("");
     expect(actual.stdout.toString().trim()).toBe(removed ? "[]" : '["ready"]');
@@ -408,9 +398,7 @@ test("native composed abort signals retain controller provenance without inventi
       "src/events.ts": protocol,
       "src/main.ts": `import {Ready} from "./events";const received:string[]=[];const controller=new AbortController();const signal=AbortSignal.any([controller.signal]);const sink={publish(e:{name:string},data:object){received.push(e.name)}};signal.addEventListener("abort",()=>sink.publish(Ready,{}));${fired ? "controller.abort();" : ""}console.log(JSON.stringify(received));`,
     });
-    const native = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-      timeout: SPAWN_TIMEOUT_MS,
-    });
+    const native = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
     expect(native.exitCode).toBe(0);
     expect(native.stdout.toString().trim()).toBe(fired ? '["ready"]' : "[]");
     const result = fixture.run("publisher");
@@ -434,9 +422,7 @@ test("native module interposition invokes the factory for an already imported mo
     "src/events.ts": protocol,
     "src/main.ts": `import * as modules from "node:module";import * as events from "node:events";import {Ready} from "./events";const moduleLoader:{createRequire(path:string):(id:string)=>{mock:{module(id:string,factory:()=>object):void}}}=modules;const {mock}=moduleLoader.createRequire(import.meta.url)("bun:test");const received:string[]=[];const sink={publish(e:{name:string},data:object){received.push(e.name)}};mock.module("node:events",()=>{sink.publish(Ready,{});return events});console.log(JSON.stringify(received));`,
   });
-  const native = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const native = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
   expect(native.exitCode).toBe(0);
   expect(native.stdout.toString().trim()).toBe('["ready"]');
   expect(fixture.run("publisher").code).toBe(0);
@@ -617,9 +603,7 @@ const options={boundary(){return (body:()=>void)=>body()}};
 function run(boundary=options.boundary()){boundary(()=>sink.publish(Ready))}
 run(undefined);`,
   });
-  const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const actual = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("ready");
   expect(fixture.run("publisher").code).toBe(0);
