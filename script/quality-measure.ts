@@ -1,16 +1,17 @@
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { digest, jsonChoice, jsonNumber, jsonObject } from "./quality-inventory";
+import { digest, InventoryError, jsonChoice, jsonNumber, jsonObject } from "./quality-inventory";
 import { fingerprint, readDocument, recordObject } from "./quality-ci-input";
 import { normalizeTypes, normalizeCensus, mergeMeasurements, requireMeasurement, sameMembers } from "./quality-ci-receipt";
-import { readNativeCoverage } from "./quality-ci-coverage";
+import { readExactCoverage, readNativeCoverage } from "./quality-ci-coverage";
 import { joinBounds, measureStatic } from "./quality-ci-metrics";
 import { parseStatic } from "./quality-ci-legs";
 import { nativeJson } from "./quality-native-process";
 import { qualitySchemas } from "./quality-schema";
 import { baselineAt, carryUnmeasured, changedSources, ratchetMain } from "./quality-ratchet";
 import { qualityPlan } from "./quality-plan";
+import { collectExactCi } from "./quality-ci-exact";
 
 const legs = ["types", "publisher", "export", "store", "metrics"] as const;
 type Leg = typeof legs[number];
@@ -102,32 +103,43 @@ function admitLegs(root: string, contract: string, directory: string, plan: stri
 	return { identity, scope };
 }
 
-export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
-	const { values, positionals } = parseArgs({
+function measurementArguments(argv: string[]) {
+	return parseArgs({
 		args: argv, strict: true, allowPositionals: true, options: {
 			root: { type: "string", default: process.cwd() },
 			contract: { type: "string", default: "script/conformance/quality-contract.json" },
 			leg: { type: "string" }, legs: { type: "string" },
 			baseline: { type: "string" }, base: { type: "string" }, output: { type: "string" },
-			"coverage-directory": { type: "string" }, plan: { type: "string" }, run: { type: "string" },
+			"coverage-directory": { type: "string" }, plan: { type: "string" }, run: { type: "string" }, shard: { type: "string" },
 		}
 	});
+}
+
+async function collectMeasurement(root: string, contract: string, values: ReturnType<typeof measurementArguments>["values"]): Promise<number> {
+	requireMeasurement(Boolean(values.leg && values.output), "collect requires leg and output");
+	if (values.leg === "exact") {
+		requireMeasurement(Boolean(values.plan && values.run), "exact collect requires plan and run");
+		return (await phase("exact", () => collectExactCi({ root, contract, directory: resolve(root, values.output ?? ""), plan: values.plan ?? "", run: values.run ?? "", ...(values.shard === undefined ? {} : { shard: values.shard }) }))).result;
+	}
+	const leg = jsonChoice(values.leg, legs), directory = resolve(root, values.output ?? "");
+	const collected = await phase(leg, async () => {
+		const identity = fingerprint(root, contract);
+		mkdirSync(directory, { recursive: true });
+		const scope = qualityPlan(root, contract, identity.inventory, values.plan);
+		save(directory, leg, await collectLeg(root, contract, directory, leg, identity, scope, values.plan));
+		return { identity, scope };
+	});
+	const { identity, scope } = collected.result;
+	save(directory, `${leg}.identity`, { version: 1, leg, inventoryHash: identity.inventoryHash, contractHash: identity.contractHash, durationMs: collected.durationMs, ...(scope.whole ? {} : { scopeHash: scope.hash }) });
+	return 0;
+}
+
+export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
+	const { values, positionals } = measurementArguments(argv);
 	requireMeasurement(positionals.length === 1 && argv[0] === positionals[0] && (positionals[0] === "collect" || positionals[0] === "finish"), "expected collect or finish");
 	const root = resolve(values.root), contract = resolve(root, values.contract);
-	if (positionals[0] === "collect") {
-		requireMeasurement(Boolean(values.leg && values.output), "collect requires leg and output");
-		const leg = jsonChoice(values.leg, legs), directory = resolve(root, values.output ?? "");
-		const collected = await phase(leg, async () => {
-			const identity = fingerprint(root, contract);
-			mkdirSync(directory, { recursive: true });
-			const scope = qualityPlan(root, contract, identity.inventory, values.plan);
-			save(directory, leg, await collectLeg(root, contract, directory, leg, identity, scope, values.plan));
-			return { identity, scope };
-		});
-		const { identity, scope } = collected.result;
-		save(directory, `${leg}.identity`, { version: 1, leg, inventoryHash: identity.inventoryHash, contractHash: identity.contractHash, durationMs: collected.durationMs, ...(scope.whole ? {} : { scopeHash: scope.hash }) });
-		return 0;
-	}
+	requireMeasurement(values.shard === undefined || (positionals[0] === "collect" && values.leg === "exact"), "shard applies to exact collect only");
+	if (positionals[0] === "collect") return await collectMeasurement(root, contract, values);
 	requireMeasurement(Boolean(values.legs && values.base && values.baseline && values.plan && values.run && values["coverage-directory"]), "finish requires legs, base, baseline, plan, run and fresh coverage directory");
 	const directory = resolve(root, values.output ?? "quality-results"), legDirectory = resolve(root, values.legs ?? "");
 	const { identity, scope } = (await phase("fingerprint", () => admitLegs(root, contract, legDirectory, values.plan ?? ""))).result;
@@ -142,14 +154,21 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 		requireMeasurement(selectedLanes.some((lane) => path.startsWith(`${lane}/`)), `changed source has no selected coverage lane: ${path}`);
 		requireMeasurement(scope.paths.includes(path), `changed source outside quality scope: ${path}`);
 	}
-	const joined = await phase("join", () => {
+	const joined = await phase("join", async () => {
 		const document = parseStatic(readDocument(resolve(legDirectory, "metrics.json")));
 		sameMembers(document.measured.map((row) => row.source.path), [...identity.paths.filter((path) => scope.paths.includes(path)), ...identity.embedded.filter((row) => scope.paths.includes(row.hostPath)).map((row) => row.path)]);
-		const metrics = joinBounds(document, { identity, lines: coverage.lines, selectedLanes });
+		const exact = await readExactCoverage({
+			root, contract, directory: resolve(root, values["coverage-directory"] ?? ""),
+			plan: resolve(root, values.plan ?? ""), run: values.run ?? "",
+		}, identity, document.measured.map((row) => row.analysis.prepared));
+		const metrics = joinBounds(document, { identity, coverage: exact, selectedLanes });
 		mkdirSync(directory);
 		save(directory, "inventory", identity.inventory);
 		save(directory, "metrics", metrics);
-		save(directory, "coverage", { run: values.run, receipts: coverage.receipts });
+		save(directory, "coverage", {
+			run: values.run, receipts: coverage.receipts,
+			exact: { run: exact.run, receiptHash: exact.receiptHash, processes: exact.processes },
+		});
 		const measured = mergeMeasurements(
 			[...identity.paths, ...identity.schemaPaths],
 			[types, ...census, metrics.measurement],
@@ -162,4 +181,13 @@ export async function measureMain(argv = Bun.argv.slice(2)): Promise<number> {
 	return (await phase("ratchet", () => ratchetMain(["--root", root, "--contract", contract, "--base", values.base ?? "",
 		"--baseline", values.baseline ?? "", "--current", joined.result]))).result;
 }
-if (import.meta.main) process.exitCode = await measureMain();
+// Exit 1 is a measured verdict (uncovered findings); refused measurement exits 2
+// with its whole message, which the runtime's uncaught-error display truncates.
+export async function measureCli(argv = Bun.argv.slice(2)): Promise<number> {
+	return await measureMain(argv).catch((error: Error) => {
+		if (!(error instanceof InventoryError)) throw error;
+		console.error(`${error.name} ${error.code} ${error.path}: ${error.message}`);
+		return 2;
+	});
+}
+if (import.meta.main) process.exitCode = await measureCli();

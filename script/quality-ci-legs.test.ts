@@ -6,6 +6,8 @@ import { fingerprint, readDocument } from "./quality-ci-input";
 import { parseStatic } from "./quality-ci-legs";
 import { joinBounds, measureStatic } from "./quality-ci-metrics";
 import { InventoryError, jsonArray, jsonObject, type Json } from "./quality-inventory";
+import { collectExactFixture } from "./quality-coverage-fixture";
+import { readExactCoverage } from "./quality-ci-coverage";
 
 test("static leg JSON is validated before joining instead of trusting an untyped payload", async () => {
 	const root = mkdtempSync(join(tmpdir(), "quality-static-json-"));
@@ -31,8 +33,13 @@ test("static leg JSON is validated before joining instead of trusting an untyped
 		];
 		for (const patch of patches) expect(() => parseStatic({ ...json, ...patch })).toThrow(InventoryError);
 		expect(() => parseStatic(null)).toThrow(InventoryError);
-		const joined = joinBounds(parseStatic(json), { identity, lines: new Map() });
-		expect(joined.measurement.findings.some((row) => row.gate === "coverage")).toBe(true);
+		expect(() => joinBounds(parseStatic(json), { identity })).toThrow("missing exact statement evidence");
+		writeFileSync(join(root, "ci-plan.json"), JSON.stringify({ version: 2, class: "global", qualityScope: identity.inventory.files.map((row) => row.path), projects: ["script/tsconfig.json"] }));
+		const options = { root, contract: join(root, "contract.json"), directory: join(root, "exact"), plan: join(root, "ci-plan.json"), run: "static-json" };
+		collectExactFixture(options);
+		const coverage = await readExactCoverage(options, identity, document.measured.map((row) => row.analysis.prepared));
+		const joined = joinBounds(parseStatic(json), { identity, coverage });
+		expect(joined.measurement.findings.some((row) => row.gate === "coverage")).toBe(false);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

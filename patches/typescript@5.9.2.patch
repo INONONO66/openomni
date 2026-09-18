@@ -1,0 +1,39 @@
+diff --git a/lib/typescript.js b/lib/typescript.js
+index 2643aa12aa6497ca0b90ecd99b202f37ea0e6330..6197ca7d370ff24672607848ff64b71bf4f7ecfc 100644
+--- a/lib/typescript.js
++++ b/lib/typescript.js
+@@ -120846,13 +120846,20 @@ function emitFiles(resolver, host, targetSourceFile, { scriptTransformers, decla
+       inlineSources: compilerOptions.inlineSources,
+       extendedDiagnostics: compilerOptions.extendedDiagnostics
+     };
++    const emitObserver = host.getEmitObserver?.();
+     const printer = createPrinter(printerOptions, {
+       // resolver hooks
+       hasGlobalName: resolver.hasGlobalName,
+       // transform hooks
+       onEmitNode: transform2.emitNodeWithNotification,
+       isEmitNotificationEnabled: transform2.isEmitNotificationEnabled,
+-      substituteNode: transform2.substituteNode
++      substituteNode: transform2.substituteNode,
++      ...(emitObserver ? {
++        onBeforeEmitNode: (node) => emitObserver.onNode(jsFilePath, "before", writer.getTextPos(), node),
++        onAfterEmitNode: (node) => emitObserver.onNode(jsFilePath, "after", writer.getTextPos(), node),
++        onBeforeEmitToken: (node) => emitObserver.onToken(jsFilePath, "before", writer.getTextPos(), node),
++        onAfterEmitToken: (node) => emitObserver.onToken(jsFilePath, "after", writer.getTextPos(), node)
++      } : {})
+     });
+     Debug.assert(transform2.transformed.length === 1, "Should only see one output from the transform");
+     printSourceFileOrBundle(jsFilePath, sourceMapFilePath, transform2, printer, compilerOptions);
+@@ -127798,7 +127805,11 @@ function createProgram(_rootNamesOrOptions, _options, _host, _oldProgram, _confi
+       createHash: maybeBind(host, host.createHash),
+       getModuleResolutionCache: () => program.getModuleResolutionCache(),
+       trace: maybeBind(host, host.trace),
+-      getGlobalTypingsCacheLocation: program.getGlobalTypingsCacheLocation
++      getGlobalTypingsCacheLocation: program.getGlobalTypingsCacheLocation,
++      getEmitObserver: () => {
++        var _a2;
++        return (_a2 = host.getEmitObserver) == null ? void 0 : _a2.call(host);
++      }
+     };
+   }
+   function writeFile2(fileName, text, writeByteOrderMark, onError, sourceFiles, data) {

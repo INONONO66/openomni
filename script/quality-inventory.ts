@@ -210,7 +210,9 @@ function collect(
       collect(root, absolute, inventory);
       continue;
     }
-    if (/^tsconfig.*\.json$/.test(name))
+    // Package manifests decide how bare specifiers resolve inside the owned
+    // tree, so they are frozen with the compiler configurations.
+    if (/^tsconfig.*\.json$/.test(name) || name === "package.json")
       inventory.configurations.push({
         path: relative(root, absolute),
         sha256: digest(readFileSync(absolute)),

@@ -109,6 +109,13 @@ an absent timing input previously fell back to hashing both slowest files into
 shard 2. Contract tests reject unassigned or duplicate files across partitions
 and verify the actual commands select every recursive test exactly once.
 No tests, including the intentional 20-second hang, are removed or skipped.
+`scripts-tooling-1` also runs the Python analyzer self-tests (`pythonSelfTests` in
+`script/scripts-lanes.ts`, an explicit manifest its contract test checks against
+`script/**/{test_*,*.test}.py`) under coverage.py with
+`script/conformance/quality-python-coverage.ini`, from `script/` in coverage.py's
+self-measurement mode so the collector's own child interpreters keep saving; the
+combined LCOV is appended to the partition's `coverage/lcov.info` before the
+receipt is sealed, so touched Python lines carry native line evidence.
 
 Each script partition has a separate run/runtime/inventory-bound receipt.
 `quality-coverage-record.ts merge` requires contracts and tooling shards 1, 2,
@@ -141,7 +148,9 @@ Each selected coverage test lane seals one immutable native receipt. Quality
 waits for tests and all Quality Static legs, downloads their artifacts, checks
 Python, and runs `quality-measure.ts finish`. Finish rejects missing or stale
 leg identities, verifies native coverage, joins coverage-dependent metrics, and
-runs the ratchet. Its `quality-measurements` artifact retains `quality-results/`,
+runs the ratchet. Each exact statement receipt is verified in its own Bun child
+(`script/quality-ci-shard.ts`, at most two at once); the finish process admits
+only the child's digest-checked merge document, never the receipt bytes. Its `quality-measurements` artifact retains `quality-results/`,
 `quality-legs/`, and `ci-plan.json`, including available results on failure.
 Per-leg artifacts and measurements are retained for 14 days.
 
@@ -163,11 +172,12 @@ Script Coverage has five minutes.
 The final CI gate requires Quality Static, Quality Gates, and Quality to succeed
 for executable plans; only planned documentation skips are accepted.
 
-`d945-lcov-crap-upper-bound@1` uses only uniquely mapped, wholly executed source
-lines; ambiguous line hits never become statement hits. These counters are a
-lower bound on proven statement coverage, so the unchanged CRAP formula yields
-an explicitly labeled upper bound. Missing or ambiguous proof remains a finding,
-not fabricated coverage. Metrics measure the plan's source inventory; clones
+`d945-exact-statement-evidence@1` takes its statement counters only from the
+verified exact receipt: original-source statement hits including every
+descendant process. There is no LCOV line inference and no bound; a statement
+without exact evidence is an `unproven-statement` finding, and a source missing
+from the receipt refuses measurement rather than fabricating coverage. CRAP
+uses these exact counters directly. Metrics measure the plan's source inventory; clones
 remain whole-inventory because they cross file boundaries. Type census measures
 only scoped files in the selected projects, retaining complete ownership for
 origin attribution. Publisher/store/export findings are scoped to affected
@@ -367,6 +377,35 @@ b run script/verify-ledger-rename.ts
 b run script/check-ledger-schema-drift.ts
 ```
 
+### Exact statement evidence
+
+The plan job derives the exact commands once (`quality-ci-exact.ts --plan
+ci-plan.json`: lane test discovery, `scripts-contracts`, and the script CLI
+contracts) and embeds them into the uploaded selection as `exact.commands`
+with `exact.derived: true`. Consumers take commands only from the selection
+whose bytes every exact receipt binds through `run.selectionHash`; a frozen
+plan cannot author its own list. Because the selection declares the commands
+derived, every consumer re-derives them against its checkout and rejects lane
+ownership or test discovery drift. Fixtures embed authored commands with
+`derived: false`, which the fixture's own selection hash still binds.
+
+The `quality-exact` job runs the plan's selected test commands under the
+instrumented collector, one matrix shard per selected lane plus the
+`scripts-contracts` shard (the planner emits the list as `exactShards`; it
+equals the collector's `exactCiShards`). Every shard freezes the same
+`exact.inventory.json` and `exact.plan.json` (version 3), runs only its subset plan
+(`exact.<shard>.plan.json`), and seals `exact.<shard>.coverage.json` with its
+verdict and process receipt. `finish` requires every shard of the frozen plan,
+rejects a shard whose plan is not the planner's subset, rejects evidence that is
+both whole and sharded, and merges the shard counters under one run identity
+derived from the shard receipt hashes. Python test files
+(`script/quality-coverage/test_*.py`, `python-engine.test.py`) are not exact
+commands: each spawns interpreters, which the Python runner refuses as
+unobservable, so their sources remain uncovered exact evidence until the runner
+observes children as the Bun collector does; their native line evidence is the
+coverage.py LCOV that `scripts-tooling-1` appends. A whole `exact.coverage.json` from a
+single unsharded collect remains accepted.
+
 For measured quality, use Python 3.12.12 and Node 24.19.0 as in CI. Start from
 fresh lane coverage directories and a new receipt directory: `begin` rejects
 pre-existing LCOV. The following uses `jq` to run every selected lane, wrapping
@@ -405,6 +444,14 @@ else
   b run ci test --lane scripts-contracts
 fi
 b run script/check-quality-python.ts
+# Exact statement evidence: one instrumented shard per selected lane plus the
+# contracts shard, exactly as the `quality-exact` matrix runs them. Exit 1 is
+# measured uncovered evidence, exit 2 a refused measurement with its full
+# message; finish merges the sealed shard receipts.
+for shard in $(jq -r '.lanes[]' ci-plan.json) scripts-contracts; do
+  b run script/quality-measure.ts collect --leg exact --shard "$shard" --plan ci-plan.json \
+    --run "$QUALITY_RUN" --output quality-receipts || [[ $? -eq 1 ]]
+done
 b run script/quality-measure.ts finish --legs quality-legs --base "$QUALITY_BASE" \
   --baseline script/conformance/quality-baseline-lcov-bound.json --plan ci-plan.json \
   --run "$QUALITY_RUN" --coverage-directory quality-receipts --output quality-results

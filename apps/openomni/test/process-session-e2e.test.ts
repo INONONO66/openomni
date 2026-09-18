@@ -114,7 +114,8 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
   const parentReply = Promise.withResolvers<void>();
   const timer = setTimeout(
     () => parentReply.reject(new Error("process reply was not drained")),
-    5000,
+    // Bounded, not timed: the child kernel boots ~10x slower under coverage instrumentation.
+    60_000,
   );
   const received = parentReply.promise.then(
     () => ({ ok: true }),
@@ -193,4 +194,4 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     replyTo: "process-binding",
     terminal: "completed",
   });
-}, 15000);
+}, 60_000);

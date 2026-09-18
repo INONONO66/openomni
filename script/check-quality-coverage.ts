@@ -4,6 +4,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import {
+	copyFileSync,
 	existsSync,
 	openSync,
 	writeSync,
@@ -12,6 +13,7 @@ import {
 	readFileSync,
 	readdirSync,
 	realpathSync,
+	renameSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -19,7 +21,9 @@ import {
 import { tmpdir, constants as osConstants } from "node:os";
 import nativeProcesses from "node:child_process";
 import * as nodeModules from "node:module";
+import * as workerThreads from "node:worker_threads";
 import { installProcessHooks } from "./quality-coverage/node";
+import { installWorkerHooks, workerExecArgv } from "./quality-coverage/worker";
 const analyzerNative: {
 	spawnSync(binary: string, args: string[], options: { input?: string; encoding: "utf8"; timeout: number }): {
 		status: number | null; stdout: string; stderr: string; signal: string | null;
@@ -35,7 +39,7 @@ function analyzerProcess(binary: string, args: string[], input?: string): { stat
 	const result = nativeSpawnSync(binary, args, { input, encoding: "utf8", timeout: 120_000 });
 	return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "", signal: result.signal };
 }
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -77,12 +81,31 @@ type Prepared = {
 	mapHash: string;
 	coverage: FileCoverageData;
 	mapped: FileCoverageData;
+	unmapped?: UnmappedCounter[];
+	transfer?: EmittedTransfer;
 	python?: { source: string; lines: number[]; arcs: Json };
 };
-type Fault = {
-	id: string; command: string; entry: string; args: string[];
-	exitCode: number | null; signal: string | null; occurrences: number;
-	checkpoint: { path: string; statement: string; minimumHits: number };
+type UnmappedCounter = {
+	kind: "statement" | "function" | "branch";
+	id: string;
+	start: Location;
+	end: Location;
+};
+type EmittedTransfer = {
+	signature: string;
+	slots: Record<string, string | null>;
+};
+type EmissionObservation = {
+	path: string; phase: "before" | "after"; kind: number; pos: number; end: number;
+	originalKind: number; originalPos: number; originalEnd: number; offset: number;
+};
+type EmissionHooks = {
+	onNode: (path: string, phase: "before" | "after", offset: number, node: ts.Node) => void;
+	onToken: (path: string, phase: "before" | "after", offset: number, node: ts.Node) => void;
+};
+type EmissionProof = {
+	path: string; source: string; project: string; sha256: string; mapSha256: string;
+	mapHash: string; observationSha256: string; observationCount: number; syntheticCount: number;
 };
 type Command = {
 	id: string;
@@ -91,6 +114,7 @@ type Command = {
 	args: string[];
 	expectedExitCode: number;
 	runtime?: string;
+	cwd?: string;
 };
 type Options = {
 	root: string;
@@ -107,8 +131,13 @@ type Inputs = {
 	files: Prepared[];
 	commands: Command[];
 	roots: string[];
-	faults: Fault[];
+	selected: boolean;
+	projects: string[];
+	configurations: { path: string; sha256: string }[];
 };
+// The instrumented processes only consume the prepared inventory; commands stay
+// with the collector.
+type PreloadInputs = Pick<Inputs, "options" | "entries" | "files" | "roots" | "selected" | "projects" | "configurations">;
 type ProcessReceipt = {
 	id: string;
 	parent: string;
@@ -119,11 +148,16 @@ type ProcessReceipt = {
 	entry: string;
 	args: string[];
 	command: string;
+	cwd?: string;
 	lines: { [key: string]: Counts };
 	trace: ObjectValue | null;
 	children: string[];
 	loaded: string[];
 	coverage: { [key: string]: FileCoverageData };
+	// JavaScript processes only: the loaded sources that arrived through a
+	// compiled module, each bound to one emission proof.
+	transferred?: string[];
+	emitted?: EmissionProof[];
 };
 declare global {
 	var __d945Coverage: { [key: string]: FileCoverageData } | undefined;
@@ -137,9 +171,13 @@ class CoverageError {
 	) { }
 }
 let lastFailure: CoverageError | undefined;
+// Only the instrumented process itself files a failure with its collector. A checker CLI
+// launched under a collection (a test fixture exercising the gate) reports through its own
+// result and must not leave an inherited process identity's failure in the outer directory.
+let instrumented = false;
 function fail(code: string, path: string, message: string): never {
 	lastFailure = new CoverageError(code, path, message);
-	if (process.env.D945_DIRECTORY && process.env.D945_PROCESS)
+	if (instrumented && process.env.D945_DIRECTORY && process.env.D945_PROCESS)
 		writeFileSync(
 			join(process.env.D945_DIRECTORY, `${process.env.D945_PROCESS}.failure.json`),
 			JSON.stringify(lastFailure),
@@ -152,10 +190,15 @@ export function sha256(text: string | Buffer): string {
 
 // Strict JSON at the external boundary: no top-typed JSON.parse payload, duplicate
 // object keys, non-finite numbers, trailing data, or prototype mutation.
+// Sticky scanners keep the pass linear: instrumented children decode the whole
+// prepared inventory at startup, so per-character work is process latency.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: JSON forbids raw U+0000..U+001F inside strings, so a plain run must stop there
+const PLAIN_RUN = /[^"\\\u0000-\u001f]*/y;
+const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 export function decode(text: string): Json {
 	let i = 0;
 	const ws = () => {
-		while (/\s/.test(text[i] ?? "") && i < text.length) i++;
+		for (let c = text.charCodeAt(i); c === 32 || c === 10 || c === 13 || c === 9; c = text.charCodeAt(i)) i++;
 	};
 	function escapedCharacter(): string {
 		const escapeCode = text[i++];
@@ -173,16 +216,18 @@ export function decode(text: string): Json {
 	}
 	function string(): string {
 		if (text[i++] !== '"') fail("schema", "", "expected string");
+		// Runs of plain characters are copied as one slice; only escapes and
+		// control characters are examined individually.
 		let result = "";
 		while (i < text.length) {
+			PLAIN_RUN.lastIndex = i;
+			PLAIN_RUN.test(text);
+			result += text.slice(i, PLAIN_RUN.lastIndex);
+			i = PLAIN_RUN.lastIndex;
 			const c = text[i++];
 			if (c === '"') return result;
-			if (c === "\\") {
-				result += escapedCharacter();
-			} else {
-				if (!c || c.charCodeAt(0) < 32) fail("schema", "", "invalid string");
-				result += c;
-			}
+			if (c !== "\\") fail("schema", "", c === undefined ? "unterminated string" : "invalid string");
+			result += escapedCharacter();
 		}
 		return fail("schema", "", "unterminated string");
 	}
@@ -215,17 +260,11 @@ export function decode(text: string): Json {
 		const c = text[i];
 		if (c === '"') return string();
 		if (c === "[" || c === "{") return container(c);
-		for (const [token, literal] of [
-			["true", true],
-			["false", false],
-			["null", null],
-		] as const) {
-			if (text.startsWith(token, i)) {
-				i += token.length;
-				return literal;
-			}
-		}
-		const number = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(i));
+		if (c === "t" && text.startsWith("true", i)) { i += 4; return true; }
+		if (c === "f" && text.startsWith("false", i)) { i += 5; return false; }
+		if (c === "n" && text.startsWith("null", i)) { i += 4; return null; }
+		NUMBER.lastIndex = i;
+		const number = NUMBER.exec(text);
 		if (!number || !Number.isFinite(Number(number[0])))
 			return fail("schema", "", "invalid JSON value");
 		i += number[0].length;
@@ -335,13 +374,25 @@ function toolchain() {
 	});
 }
 
-function commands(value: Json, entries: Entry[]): Command[] {
+function commandDirectory(value: Json | undefined, root: string): string {
+	const cwd = value === "." ? "." : pathValue(value);
+	const absolute = resolve(root, cwd);
+	if (!existsSync(absolute) || realpathSync(absolute) !== absolute || !lstatSync(absolute).isDirectory())
+		fail("path", cwd, "command cwd must be a canonical repository directory");
+	return cwd;
+}
+function commands(value: Json, entries: Entry[], root: string): Command[] {
 	const plan = object(value);
-	object(value, plan.version === 2 ? ["version", "commands", "faults"] : ["version", "commands"]);
-	if (plan.version !== 1 && plan.version !== 2) fail("schema", "", "unsupported plan version");
+	object(value, ["version", "commands", ...(plan.version === 3 || plan.run !== undefined ? ["run"] : [])]);
+	if (![1, 2, 3].includes(integer(plan.version))) fail("schema", "", "unsupported plan version");
+	if (plan.run !== undefined) {
+		const run = object(plan.run, ["id", "selectionHash"]);
+		if (!text(run.id)) fail("identity", "", "empty coverage run");
+		hash(run.selectionHash);
+	}
 	const result = array(plan.commands).map((item) => {
 		const v = object(item);
-		object(item, ["id", "kind", "paths", "args", "expectedExitCode", ...(v.runtime === undefined ? [] : ["runtime"])]);
+		object(item, ["id", "kind", "paths", "args", "expectedExitCode", ...(v.runtime === undefined ? [] : ["runtime"]), ...(plan.version === 3 ? ["cwd"] : [])]);
 		const command = {
 			id: text(v.id),
 			kind: choice(v.kind, ["test", "cli"]),
@@ -349,6 +400,7 @@ function commands(value: Json, entries: Entry[]): Command[] {
 			args: array(v.args).map(text),
 			expectedExitCode: integer(v.expectedExitCode),
 			runtime: v.runtime === undefined ? "bun" : choice(v.runtime, ["bun", "node", "python"]),
+			...(plan.version === 3 ? { cwd: commandDirectory(v.cwd, root) } : {}),
 		};
 		if (
 			!/^[a-zA-Z0-9_-]+$/.test(command.id) ||
@@ -371,7 +423,7 @@ function commands(value: Json, entries: Entry[]): Command[] {
 	);
 	if (!result.length) fail("plan", "", "empty command selection");
 	for (const e of entries.filter(
-		(e) => e.category === "test" && /\.(test|spec)\.[cm]?[jt]sx?$/.test(e.path),
+		(e) => plan.version !== 3 && e.category === "test" && /\.(test|spec)\.[cm]?[jt]sx?$/.test(e.path),
 	)) {
 		if (!result.some((c) => c.kind === "test" && c.paths.includes(e.path)))
 			fail("plan", e.path, "missing test entry");
@@ -385,61 +437,53 @@ function nullableExit(value: Json | undefined): number | null {
 function nullableSignal(value: Json | undefined): string | null {
 	return value === null ? null : choice(value, Object.keys(osConstants.signals));
 }
-function faultContracts(value: Json, commands: Command[], files: Prepared[]): Fault[] {
-	const plan = object(value);
-	const faults = plan.version === 2 ? array(plan.faults).map((item): Fault => {
-		const f = object(item, ["id", "command", "entry", "args", "exitCode", "signal", "occurrences", "checkpoint"]);
-		const checkpoint = object(f.checkpoint, ["path", "statement", "minimumHits"]);
-		const result = {
-			id: text(f.id), command: text(f.command), entry: pathValue(f.entry), args: array(f.args).map(text),
-			exitCode: nullableExit(f.exitCode), signal: nullableSignal(f.signal), occurrences: integer(f.occurrences),
-			checkpoint: { path: pathValue(checkpoint.path), statement: text(checkpoint.statement), minimumHits: integer(checkpoint.minimumHits) },
-		};
-		if (!commands.some((c) => c.id === result.command) || !files.some((f) => f.entry.path === result.entry) ||
-			result.occurrences < 1 || result.checkpoint.minimumHits < 1 ||
-			(result.exitCode === null) === (result.signal === null) || result.exitCode === 0 ||
-			!files.some((f) => f.entry.path === result.checkpoint.path && Object.hasOwn(f.coverage.s, result.checkpoint.statement)))
-			fail("plan", result.id, "invalid approved fault boundary");
-		return result;
-	}) : [];
-	unique(faults.map((f) => f.id), "fault contract");
-	unique(faults.map((f) => JSON.stringify([f.command, f.entry, f.args, f.exitCode, f.signal])), "fault selector");
-	return faults;
+function importMetaUrl(value: ts.Node | undefined): boolean {
+	return value !== undefined && ts.isPropertyAccessExpression(value) && value.name.text === "url" &&
+		ts.isMetaProperty(value.expression) && value.expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
+		value.expression.name.text === "meta";
 }
-function syntax(source: string, path: string): void {
+function frozenWorkerTarget(node: ts.NewExpression, sf: ts.SourceFile): boolean {
+	const argument = node.arguments?.[0];
+	if (!node.arguments || ![1, 2].includes(node.arguments.length) || !argument ||
+		!ts.isNewExpression(argument) || argument.expression.getText(sf) !== "URL")
+		return false;
+	const args = argument.arguments ?? [];
+	return args.length === 1 ? importMetaUrl(args[0]) :
+		args.length === 2 && args[0] !== undefined && ts.isStringLiteral(args[0]) && importMetaUrl(args[1]);
+}
+// eval, Function and require evaluate source or load modules the collector
+// never prepared unless their argument is a literal; eval and Function never
+// load a frozen file even then.
+function dynamicCode(node: ts.CallExpression, sf: ts.SourceFile, path: string): void {
+	const callee = node.expression.getText(sf);
+	if (
+		["eval", "Function", "require"].includes(callee) &&
+		(!node.arguments[0] || !ts.isStringLiteral(node.arguments[0]))
+	)
+		fail("unsupported_syntax", path, "dynamic code or module loading");
+	if (callee === "eval" || callee === "Function")
+		fail("unsupported_syntax", path, "dynamic executable source");
+	// Dynamic module specifiers are resolved by the actual runtime loader;
+	// its onLoad/registerHooks boundary checks the frozen source identity.
+}
+// A string literal naming a module: the source of an import or export
+// declaration, or the argument of import() or require().
+function moduleSpecifier(node: ts.Node, sf: ts.SourceFile): node is ts.StringLiteral {
+	if (!ts.isStringLiteral(node)) return false;
+	if (ts.isImportDeclaration(node.parent) || ts.isExportDeclaration(node.parent)) return true;
+	return ts.isCallExpression(node.parent) &&
+		(node.parent.expression.kind === ts.SyntaxKind.ImportKeyword || node.parent.expression.getText(sf) === "require");
+}
+export function syntax(source: string, path: string): void {
 	const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
 	function visit(node: ts.Node): void {
-		if (ts.isCallExpression(node)) {
-			const callee = node.expression.getText(sf);
-			if (
-				["eval", "Function", "require"].includes(callee) &&
-				(!node.arguments[0] || !ts.isStringLiteral(node.arguments[0]))
-			)
-				fail("unsupported_syntax", path, "dynamic code or module loading");
-			if (callee === "eval" || callee === "Function")
-				fail("unsupported_syntax", path, "dynamic executable source");
-			// Dynamic module specifiers are resolved by the actual runtime loader;
-			// its onLoad/registerHooks boundary checks the frozen source identity.
-		}
-		if (ts.isNewExpression(node) && ["Function", "Worker"].includes(node.expression.getText(sf)))
-			fail("unsupported_syntax", path, "untracked execution context");
-		const moduleArgument =
-			ts.isStringLiteral(node) &&
-			ts.isCallExpression(node.parent) &&
-			(node.parent.expression.kind === ts.SyntaxKind.ImportKeyword ||
-				node.parent.expression.getText(sf) === "require");
-		if (
-			ts.isStringLiteral(node) &&
-			(ts.isImportDeclaration(node.parent) ||
-				ts.isExportDeclaration(node.parent) ||
-				moduleArgument) &&
-			/^(node:)?(worker_threads|cluster|vm)$/.test(node.text)
-		)
-			fail(
-				"unsupported_process",
-				path,
-				"Node process/context hooks are not supported by the Bun collector",
-			);
+		if (ts.isCallExpression(node)) dynamicCode(node, sf, path);
+		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Function")
+			fail("unsupported_syntax", path, "dynamic executable source");
+		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Worker" && !frozenWorkerTarget(node, sf))
+			fail("unsupported_process", path, "worker target is not a frozen file URL");
+		if (moduleSpecifier(node, sf) && /^(node:)?(cluster|vm)$/.test(node.text))
+			fail("unsupported_process", path, "Node process/context hooks are not supported by the Bun collector");
 		if (ts.isTaggedTemplateExpression(node) && /(?:^|\.)\$$/.test(node.tag.getText(sf)))
 			fail("unsupported_process", path, "shell process graph is not observable through Bun.spawn");
 		ts.forEachChild(node, visit);
@@ -461,6 +505,8 @@ function mapCoverage(
 	sourceMap: string,
 	source: string,
 	path: string,
+	allowUnmapped = false,
+	unmapped: UnmappedCounter[] = [],
 ): FileCoverageData {
 	const map = object(decode(sourceMap));
 	if (
@@ -473,10 +519,11 @@ function mapCoverage(
 	)
 		fail("source_map", path, "original source identity differs");
 	const lines = source.split(/\r?\n/);
-	function position(location: Location): Location {
+	const traceMap = new sourceMapping.TraceMap(sourceMap);
+	function position(location: Location): Location | undefined {
 		if (!Number.isInteger(location.line) || !Number.isInteger(location.column))
-			return fail("source_map", path, "missing executable position");
-		const p = sourceMapping.originalPositionFor(new sourceMapping.TraceMap(sourceMap), location);
+			return allowUnmapped ? undefined : fail("source_map", path, "missing executable position");
+		const p = sourceMapping.originalPositionFor(traceMap, location);
 		if (
 			p.source !== basename(path) ||
 			p.line === null ||
@@ -485,48 +532,57 @@ function mapCoverage(
 			p.line > lines.length ||
 			p.column > (lines[p.line - 1]?.length ?? 0)
 		)
-			return fail("source_map", path, "unmapped executable position");
+			return allowUnmapped ? undefined : fail("source_map", path, "unmapped executable position");
 		return { line: p.line, column: p.column };
 	}
-	function range(r: Range): Range {
+	function range(r: Range): Range | undefined {
 		const start = position(r.start);
 		const end = position(r.end);
+		if (!start || !end) return undefined;
 		if (start.line > end.line || (start.line === end.line && start.column > end.column))
 			fail("source_map", path, "reversed original range");
 		return { start, end };
 	}
 	const statementMap = Object.fromEntries(
-		Object.entries(raw.statementMap).map(([id, r]) => [id, range(r)]),
+		Object.entries(raw.statementMap).flatMap(([id, r]) => {
+			const mapped = range(r);
+			if (!mapped) unmapped.push({ kind: "statement", id, start: r.start, end: r.end });
+			return mapped ? [[id, mapped]] : [];
+		}),
 	);
 	const fnMap = Object.fromEntries(
-		Object.entries(raw.fnMap).map(([id, f]) => [
-			id,
-			{ name: f.name, decl: range(f.decl), loc: range(f.loc), line: position(f.loc.start).line },
-		]),
+		Object.entries(raw.fnMap).flatMap(([id, f]) => {
+			const decl = range(f.decl);
+			const loc = range(f.loc);
+			if (!decl || !loc) {
+				unmapped.push({ kind: "function", id, start: f.loc.start, end: f.loc.end });
+				return [];
+			}
+			return [[id, { name: f.name, decl, loc, line: loc.start.line }]];
+		}),
 	);
 	const branchMap = Object.fromEntries(
-		Object.entries(raw.branchMap).map(([id, b]) => [
-			id,
-			{
-				type: b.type,
-				loc: range(b.loc),
-				// Istanbul 6's implicit else is the one deliberately locationless arm.
-				// It belongs to the enclosing if, whose original range must still map.
-				locations: b.locations.map((r, index) =>
-					range(
-						b.type === "if" &&
-							index === 1 &&
-							r.start.line === undefined &&
-							r.start.column === undefined &&
-							r.end.line === undefined &&
-							r.end.column === undefined
-							? b.loc
-							: r,
-					),
-				),
-				line: position(b.loc.start).line,
-			},
-		]),
+		Object.entries(raw.branchMap).flatMap(([id, b]) => {
+			const loc = range(b.loc);
+			const locations = b.locations.flatMap((r, index) => {
+				const mapped = range(
+					b.type === "if" &&
+						index === 1 &&
+						r.start.line === undefined &&
+						r.start.column === undefined &&
+						r.end.line === undefined &&
+						r.end.column === undefined
+						? b.loc
+						: r,
+				);
+				return mapped ? [mapped] : [];
+			});
+			if (!loc || locations.length !== b.locations.length) {
+				unmapped.push({ kind: "branch", id, start: b.loc.start, end: b.loc.end });
+				return [];
+			}
+			return [[id, { type: b.type, loc, locations, line: loc.start.line }]];
+		}),
 	);
 	return {
 		path,
@@ -566,28 +622,38 @@ function embeddedSource(e: Entry, root: string): string {
 	if (matches.length !== 1) fail("inventory", e.path, "virtual source binding is not unique");
 	return matches[0] ?? fail("inventory", e.path, "missing virtual source");
 }
-function coverageSchema(value: Json): FileCoverageData {
+// Istanbul records the implicit else of an `if` as an empty location. The raw
+// map keeps it, and istanbul's key order, so the runtime signature stays
+// byte-identical; mapped coverage admits neither.
+const implicitLocation: Location = Object.freeze({}) as Location;
+function location(value: Json | undefined, raw = false): Location {
+	const p = object(value);
+	if (raw && Object.keys(p).length === 0) return implicitLocation;
+	object(p, ["line", "column"]);
+	const line = integer(p.line);
+	if (line < 1) fail("source_map", "", "line is not positive");
+	return { line, column: integer(p.column) };
+}
+function range(value: Json | undefined, raw = false): Range {
+	const r = object(value, ["start", "end"]);
+	return { start: location(r.start, raw), end: location(r.end, raw) };
+}
+function coverageSchema(value: Json, raw = false): FileCoverageData {
 	const v = object(value, ["path", "statementMap", "fnMap", "branchMap", "s", "f", "b"]);
-	function location(value: Json | undefined): Location {
-		const p = object(value, ["line", "column"]);
-		const line = integer(p.line);
-		if (line < 1) fail("source_map", "", "line is not positive");
-		return { line, column: integer(p.column) };
-	}
-	function range(value: Json | undefined): Range {
-		const r = object(value, ["start", "end"]);
-		return { start: location(r.start), end: location(r.end) };
-	}
 	return {
 		path: pathValue(v.path),
-		statementMap: Object.fromEntries(Object.entries(object(v.statementMap)).map(([id, r]) => [id, range(r)])),
+		statementMap: Object.fromEntries(Object.entries(object(v.statementMap)).map(([id, r]) => [id, range(r, raw)])),
 		fnMap: Object.fromEntries(Object.entries(object(v.fnMap)).map(([id, item]) => {
 			const f = object(item, ["name", "decl", "loc", "line"]);
-			return [id, { name: text(f.name), decl: range(f.decl), loc: range(f.loc), line: integer(f.line) }];
+			return [id, { name: text(f.name), decl: range(f.decl, raw), loc: range(f.loc, raw), line: integer(f.line) }];
 		})),
 		branchMap: Object.fromEntries(Object.entries(object(v.branchMap)).map(([id, item]) => {
 			const b = object(item, ["type", "loc", "locations", "line"]);
-			return [id, { type: text(b.type), loc: range(b.loc), locations: array(b.locations).map(range), line: integer(b.line) }];
+			const type = text(b.type);
+			const loc = range(b.loc, raw);
+			const locations = array(b.locations).map((item) => range(item, raw));
+			const line = integer(b.line);
+			return [id, raw ? { loc, type, locations, line } : { type, loc, locations, line }];
 		})),
 		s: counter(v.s), f: counter(v.f),
 		b: Object.fromEntries(Object.entries(object(v.b)).map(([id, n]) => [id, array(n).map(integer)])),
@@ -674,7 +740,9 @@ function prepare(e: Entry, root: string, embedded: Entry[]): Prepared {
 		compilerOptions: {
 			target: ts.ScriptTarget.ESNext,
 			module: ts.ModuleKind.ESNext,
-			jsx: ts.JsxEmit.React,
+			// The repository's JSX is the automatic runtime (tsconfig "react-jsx"): no file
+			// imports React, so classic emission would reference an undefined binding.
+			jsx: ts.JsxEmit.ReactJSX,
 			sourceMap: true,
 			inlineSources: true,
 			removeComments: true,
@@ -685,9 +753,22 @@ function prepare(e: Entry, root: string, embedded: Entry[]): Prepared {
 		!output.sourceMapText
 	)
 		fail("unsupported_syntax", e.path, "TypeScript emission failed");
+	return instrumentOutput(e, source, output.outputText, output.sourceMapText);
+}
+
+function instrumentOutput(
+	e: Entry,
+	source: string,
+	javascript: string,
+	sourceMap: string,
+	allowUnmapped = false,
+): Prepared {
 	const instrumenter: {
 		instrumentSync(code: string, path: string): string;
-		lastFileCoverage(): FileCoverageData;
+		lastFileCoverage(): FileCoverageData & {
+			readonly hash?: string;
+			readonly _coverageSchema?: string;
+		};
 	} = instrument.createInstrumenter({
 		coverageVariable: "__d945Coverage",
 		coverageGlobalScope: "globalThis",
@@ -698,11 +779,75 @@ function prepare(e: Entry, root: string, embedded: Entry[]): Prepared {
 		produceSourceMap: false,
 		ignoreClassMethods: [],
 	});
-	const code = instrumenter.instrumentSync(
-		output.outputText.replace(/\/\/# sourceMappingURL=.*$/m, ""),
+	let code = instrumenter.instrumentSync(
+		javascript.replace(/^\/\/# sourceMappingURL=.*$/m, ""),
 		e.path,
 	);
 	const raw = instrumenter.lastFileCoverage();
+	let coverageHash = raw.hash ?? /^\s*var hash = "([0-9a-f]{40})";$/m.exec(code)?.[1];
+	if (allowUnmapped) {
+		// Istanbul guards `coverage[path] = coverageData` with `coverage[path].hash
+		// !== hash`, and that hash covers only the path and maps. An emission whose
+		// maps equal the original's would reuse an already loaded original instance
+		// and never reach the counter setter that records its transfer, so every
+		// emission carries a hash the original can never produce.
+		if (!coverageHash || code.split(`"${coverageHash}"`).length !== 3)
+			return fail("emitted_source", e.path, "Istanbul coverage hash literal is missing");
+		const distinct = sha256(`emission\0${coverageHash}`).slice(0, coverageHash.length);
+		code = code.replaceAll(`"${coverageHash}"`, `"${distinct}"`);
+		coverageHash = distinct;
+	}
+	let injectedId: string | undefined;
+	let coverageFunction: string | undefined;
+	if (allowUnmapped && e.path === "packages/protocol/src/error/index.ts") {
+		// This transfer is a proof for one inspected lowering, not a general
+		// class-field heuristic. A new source or emit needs a new proof.
+		if (sha256(source) !== "c03959dee663c141cf5c5aad8717d0d5d6e3d39f821bd7b102fed89ad2dd0eac" ||
+			sha256(javascript) !== "651f266300f7177f597ba6e245b67ff6cde55479c660e90fe2b4182b08d1602a")
+			fail("source_map", e.path, "NamedError transfer identity differs");
+		const target = /\b[A-Za-z_$][\w$]*\.Schema\s*=\s*schema\b/.exec(code);
+		const originalTarget = /\b[A-Za-z_$][\w$]*\.Schema\s*=\s*schema\b/.exec(javascript);
+		coverageFunction = /function (cov_[A-Za-z0-9_$]+)\(\)/.exec(code)?.[1];
+		if (!target || !originalTarget || !coverageFunction)
+			fail("emitted_source", e.path, "NamedError Schema probe anchor is missing");
+		const id = String(Math.max(-1, ...Object.keys(raw.s).map(Number)) + 1);
+		injectedId = id;
+		code = `${code.slice(0, target.index)}${coverageFunction}().s[${id}]++, ${code.slice(target.index)}`;
+		const before = javascript.slice(0, originalTarget.index);
+		const line = before.split(/\r?\n/).length;
+		const column = before.length - (before.lastIndexOf("\n") + 1);
+		raw.s[id] = 0;
+		raw.statementMap[id] = {
+			start: { line, column },
+			end: { line, column: column + originalTarget[0].length },
+		};
+	}
+	if (coverageFunction && injectedId !== undefined) {
+		const runtimeCoverage = JSON.stringify({
+			path: raw.path,
+			statementMap: raw.statementMap,
+			fnMap: raw.fnMap,
+			branchMap: raw.branchMap,
+			s: raw.s,
+			f: raw.f,
+			b: raw.b,
+			hash: coverageHash,
+			_coverageSchema: raw._coverageSchema,
+		});
+		const sourceFile = ts.createSourceFile("instrumented.js", code, ts.ScriptTarget.Latest, true);
+		let initializer: ts.Expression | undefined;
+		function find(node: ts.Node): void {
+			if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "coverageData") {
+				if (initializer) fail("source_map", e.path, "multiple Istanbul coverageData initializers");
+				initializer = node.initializer;
+			}
+			ts.forEachChild(node, find);
+		}
+		find(sourceFile);
+		if (!initializer) fail("source_map", e.path, "missing Istanbul coverageData initializer");
+		const start = initializer.getStart(sourceFile);
+		code = `${code.slice(0, start)}${runtimeCoverage}${code.slice(initializer.end)}`;
+	}
 	const coverage: FileCoverageData = {
 		path: raw.path,
 		statementMap: raw.statementMap,
@@ -712,13 +857,17 @@ function prepare(e: Entry, root: string, embedded: Entry[]): Prepared {
 		f: raw.f,
 		b: raw.b,
 	};
-	const mapped = mapCoverage(coverage, output.sourceMapText, source, e.path);
+	const unmapped: UnmappedCounter[] = [];
+	const mapped = mapCoverage(coverage, sourceMap, source, e.path, allowUnmapped, unmapped);
+	if (injectedId !== undefined)
+		unmapped.splice(0, unmapped.length, ...unmapped.filter((counter) => counter.id !== injectedId));
 	return {
 		entry: e,
 		code,
-		mapHash: sha256(JSON.stringify({ coverage, mapped, sourceMap: output.sourceMapText, code })),
+		mapHash: sha256(JSON.stringify({ coverage, mapped, sourceMap, code })),
 		coverage,
 		mapped,
+		...(unmapped.length ? { unmapped } : {}),
 	};
 }
 
@@ -745,7 +894,7 @@ function ownershipContract(options: Options) {
 	return { version: 1, typescript: "5.9.2", roots, projects, topology: c.topology };
 }
 
-function inventoryConfigurations(value: Json | undefined, root: string, projects: string[]): void {
+function inventoryConfigurations(value: Json | undefined, root: string, projects: string[]) {
 	const configs = array(value).map((v) => {
 		const o = object(v, ["path", "sha256"]);
 		return { path: pathValue(o.path), sha256: hash(o.sha256) };
@@ -757,6 +906,7 @@ function inventoryConfigurations(value: Json | undefined, root: string, projects
 	for (const project of projects)
 		if (!configs.some((c) => c.path === project))
 			fail("inventory", project, "project absent from inventory");
+	return configs;
 }
 
 function inventorySources(options: Options, normalized: ReturnType<typeof ownershipContract>) {
@@ -785,32 +935,236 @@ function inventorySources(options: Options, normalized: ReturnType<typeof owners
 		if (sha256(bytes) !== e.sha256 || bytes.length !== e.bytes)
 			fail("tamper", e.path, "inventory content drift");
 	}
-	inventoryConfigurations(inventory.configurations, options.root, normalized.projects);
+	const configurations = inventoryConfigurations(inventory.configurations, options.root, normalized.projects);
 	for (const e of embedded)
 		if (e.language !== "python" || !entries.some((host) => e.path.startsWith(`${host.path}#`)))
 			fail("inventory", e.path, "embedded source lacks an inventoried host");
 	const executable = [...entries, ...embedded].filter((e) => e.language !== "sql");
 	if (!executable.length || entries.some((e) => e.language === "sql" && e.category !== "migration"))
 		fail("inventory", "", "nonexecutable scope is not canonical migration evidence");
-	return { entries, embedded, executable };
+	return { entries, embedded, executable, configurations };
 }
 
 function inputs(options: Options): Inputs {
 	toolchain();
 	if (ts.version !== "5.9.2") fail("toolchain", "", "TypeScript must be 5.9.2");
 	const contract = ownershipContract(options);
-	const { entries, embedded, executable } = inventorySources(options, contract);
-	const files = executable.map((e) => prepare(e, options.root, embedded));
+	const { entries, embedded, executable, configurations } = inventorySources(options, contract);
+	const files = executable.map((e, index) => {
+		if (import.meta.main && index % 100 === 0)
+			console.error(`[coverage-prepare] ${index}/${executable.length} ${e.path}`);
+		return prepare(e, options.root, embedded);
+	});
 	const planValue = frozen(options.plan, options.planHash);
-	const plan = commands(planValue, entries);
-	const faults = faultContracts(planValue, plan, files);
+	const plan = commands(planValue, entries, options.root);
+	const selected = object(planValue).version === 3;
 	for (const file of files)
 		if (
-			!file.python && /import\.meta\.main/.test(readFileSync(join(options.root, file.entry.path), "utf8")) &&
+			!selected && !file.python && /import\.meta\.main/.test(readFileSync(join(options.root, file.entry.path), "utf8")) &&
 			!plan.some((c) => c.kind === "cli" && c.paths[0] === file.entry.path)
 		)
 			fail("plan", file.entry.path, "operational CLI entry missing");
-	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, faults };
+	return { options, entries: [...entries, ...embedded], files, commands: plan, roots: contract.roots, selected, projects: contract.projects, configurations };
+}
+// The collector prepares the inventory once and every instrumented process reads
+// the same snapshot: re-instrumenting the repository per spawned child made one
+// workspace suite exceed hosted-runner deadlines. Loaded sources are still hashed
+// against the frozen entries at load time.
+export function preparedFrom(value: Json): Prepared {
+	const v = object(value);
+	const transfer = v.transfer === undefined ? undefined : object(v.transfer, ["signature", "slots"]);
+	const python = v.python === undefined ? undefined : object(v.python, ["source", "lines", "arcs"]);
+	return {
+		entry: entry(object(v.entry)),
+		code: text(v.code),
+		mapHash: hash(v.mapHash),
+		coverage: coverageSchema(object(v.coverage), python === undefined),
+		mapped: coverageSchema(object(v.mapped)),
+		...(v.unmapped === undefined ? {} : {
+			unmapped: array(v.unmapped).map((item) => {
+				const u = object(item, ["kind", "id", "start", "end"]);
+				const kind = text(u.kind);
+				if (kind !== "statement" && kind !== "function" && kind !== "branch") return fail("schema", "", "invalid enum");
+				return { kind, id: text(u.id), start: location(u.start), end: location(u.end) };
+			}),
+		}),
+		...(transfer ? {
+			transfer: {
+				signature: text(transfer.signature),
+				slots: Object.fromEntries(Object.entries(object(transfer.slots)).map(([label, slot]) => [label, slot === null ? null : text(slot)])),
+			},
+		} : {}),
+		...(python ? { python: { source: text(python.source), lines: array(python.lines).map(integer), arcs: python.arcs ?? null } } : {}),
+	};
+}
+function preloadInputsFrom(value: Json): PreloadInputs {
+	const v = object(value, ["options", "entries", "files", "roots", "selected", "projects", "configurations"]);
+	if (typeof v.selected !== "boolean") fail("schema", "", "expected boolean");
+	return {
+		options: optionsFrom(object(v.options)),
+		entries: array(v.entries).map(entry),
+		files: array(v.files).map(preparedFrom),
+		roots: array(v.roots).map(text),
+		selected: v.selected === true,
+		projects: array(v.projects).map(text),
+		configurations: array(v.configurations).map((item) => {
+			const c = object(item, ["path", "sha256"]);
+			return { path: pathValue(c.path), sha256: hash(c.sha256) };
+		}),
+	};
+}
+function preloadInputs(data: Inputs): PreloadInputs {
+	const { options, entries, files, roots, selected, projects, configurations } = data;
+	return { options, entries, files, roots, selected, projects, configurations };
+}
+// Only the declared compiler can prove a generated module. Programs are lazy:
+// unrelated build outputs never enter ownership or change its denominator.
+const emitPrograms = new WeakMap<PreloadInputs, Map<string, {
+	program: ts.Program;
+	identity: string;
+	capture<T>(rows: EmissionObservation[], action: () => T): T;
+}>>();
+function emittedProgram(data: PreloadInputs, project: string, parsed: ts.ParsedCommandLine) {
+	let programs = emitPrograms.get(data);
+	if (!programs) { programs = new Map(); emitPrograms.set(data, programs); }
+	const cached = programs.get(project);
+	if (cached) return cached;
+	let observations: EmissionObservation[] | undefined;
+	const hooks: EmissionHooks = {
+		onNode: (path, phase, offset, node) => {
+			const original = ts.getOriginalNode(node);
+			observations?.push({ path: relative(data.options.root, path), phase, kind: node.kind, pos: node.pos, end: node.end,
+				originalKind: original.kind, originalPos: original.pos, originalEnd: original.end, offset });
+		},
+		onToken: (path, phase, offset, node) => {
+			const original = ts.getOriginalNode(node);
+			observations?.push({ path: relative(data.options.root, path), phase, kind: node.kind, pos: node.pos, end: node.end,
+				originalKind: original.kind, originalPos: original.pos, originalEnd: original.end, offset });
+		},
+	};
+	const host = Object.assign(ts.createCompilerHost(parsed.options), {
+		getEmitObserver: () => hooks,
+	});
+	const program = ts.createProgram(parsed.fileNames, parsed.options, host);
+	const sources = program.getSourceFiles().map((source) => {
+		const path = relative(data.options.root, source.fileName);
+		const entry = data.entries.find((entry) => entry.path === path);
+		if (entry) {
+			if (sha256(source.text) !== entry.sha256) fail("tamper", path, "compiler source differs from inventory");
+		} else if (!source.isDeclarationFile || !source.fileName.split("/").includes("node_modules"))
+			fail("emitted_source", path, "compiler input is not inventoried source or dependency declaration");
+		return { path, sha256: sha256(source.text) };
+	});
+	const result = {
+		program, identity: sha256(JSON.stringify({ project, options: parsed.options, configurations: data.configurations, sources })),
+		capture<T>(rows: EmissionObservation[], action: () => T): T {
+			observations = rows;
+			try { return action(); } finally { observations = undefined; }
+		},
+	};
+	programs.set(project, result);
+	return result;
+}
+// Receipt verification proves each emitted module once per frozen input: the
+// proof depends only on frozen bytes, so every process that reports the same
+// dist file compares against one compiler emission instead of repeating it.
+const receiptEmissions = new WeakMap<PreloadInputs, Map<string, EmissionProof>>();
+function receiptEmission(data: PreloadInputs, path: string): EmissionProof {
+	let proofs = receiptEmissions.get(data);
+	if (!proofs) { proofs = new Map(); receiptEmissions.set(data, proofs); }
+	const cached = proofs.get(path);
+	if (cached) return cached;
+	const { proof } = verifiedEmission(data, path);
+	proofs.set(path, proof);
+	return proof;
+}
+function emittedSource(data: PreloadInputs, path: string) {
+	pathValue(path);
+	if (!/\.[cm]?js$/.test(path) || !existsSync(join(data.options.root, `${path}.map`)))
+		return fail("identity", path, "loaded source absent from frozen inventory and verified compiler output");
+	const javascriptBytes = content(data.options.root, path);
+	const mapBytes = content(data.options.root, `${path}.map`);
+	const javascript = javascriptBytes.toString("utf8");
+	const sourceMap = mapBytes.toString("utf8");
+	if (!javascriptBytes.equals(Buffer.from(javascript)) || !mapBytes.equals(Buffer.from(sourceMap)))
+		fail("tamper", path, "compiler output is not canonical UTF-8");
+	const map = object(decode(sourceMap));
+	if (map.version !== 3 || map.file !== basename(path) || map.sourceRoot !== "" || array(map.sources).length !== 1)
+		fail("source_map", path, "unsupported emitted source map identity");
+	const sourcePath = pathValue(relative(data.options.root, resolve(data.options.root, dirname(path), text(array(map.sources)[0]))));
+	const original = data.files.find((file) => file.entry.path === sourcePath);
+	if (!original || original.python) return fail("source_map", path, "emitted source is absent from frozen inventory");
+	const source = content(data.options.root, sourcePath).toString("utf8");
+	if (sha256(source) !== original.entry.sha256) fail("tamper", sourcePath, "emitted original source changed");
+	if (map.sourcesContent !== undefined && (array(map.sourcesContent).length !== 1 || array(map.sourcesContent)[0] !== source))
+		fail("source_map", path, "emitted source content differs");
+	return { javascript, sourceMap, map, sourcePath, original, source };
+}
+function emissionProject(data: PreloadInputs, project: string, sourcePath: string, path: string): ts.ParsedCommandLine | undefined {
+	const parsed = ts.getParsedCommandLineOfConfigFile(join(data.options.root, project), {}, {
+		...ts.sys,
+		readFile: (absolute) => {
+			const path = relative(data.options.root, absolute);
+			const config = data.configurations.find((config) => config.path === path);
+			if (!config || sha256(content(data.options.root, path)) !== config.sha256)
+				return fail("emitted_config", path, "compiler configuration is not frozen");
+			return content(data.options.root, path).toString("utf8");
+		},
+		onUnRecoverableConfigFileDiagnostic: () => fail("emitted_config", project, "invalid compiler configuration"),
+	});
+	if (!parsed || parsed.errors.length) fail("emitted_config", project, "invalid compiler configuration");
+	if (parsed.options.noEmit || !parsed.options.outDir || !parsed.fileNames.includes(join(data.options.root, sourcePath))) return undefined;
+	if (!ts.getOutputFileNames(parsed, join(data.options.root, sourcePath), false).includes(join(data.options.root, path))) return undefined;
+	if (!parsed.options.sourceMap || parsed.options.inlineSourceMap || parsed.options.outFile || parsed.options.emitDeclarationOnly || parsed.projectReferences?.length || parsed.options.module !== ts.ModuleKind.ESNext)
+		fail("emitted_config", project, "only external-map per-source ES module emission is supported");
+	return parsed;
+}
+function verifiedEmission(data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
+	const { javascript, sourceMap, map, sourcePath, original, source } = emittedSource(data, path);
+	for (const project of data.projects.filter((project) => sourcePath.startsWith(`${dirname(project)}/`)).sort()) {
+		const parsed = emissionProject(data, project, sourcePath, path);
+		if (!parsed) continue;
+		const compiler = emittedProgram(data, project, parsed);
+		const input = compiler.program.getSourceFile(join(data.options.root, sourcePath)) ?? fail("emitted_source", sourcePath, "compiler original is missing");
+		const outputs = new Map<string, string>();
+		const observations: EmissionObservation[] = [];
+		const emitted = compiler.capture(observations, () => compiler.program.emit(input, (absolute, text) => {
+			outputs.set(relative(data.options.root, absolute), text);
+		}));
+		if (emitted.emitSkipped || emitted.diagnostics.length || compiler.program.getSyntacticDiagnostics(input).length)
+			fail("emitted_source", sourcePath, "declared compiler emission failed");
+		if (outputs.get(path) !== javascript || outputs.get(`${path}.map`) !== sourceMap)
+			fail("tamper", path, "JavaScript or source map differs from declared compiler emission");
+		// Map normalization occurs only after byte-for-byte compiler proof. The
+		// original owner still requires a complete, ordered statement/function/
+		// branch bijection; helper-producing lowering is not guessed or dropped.
+		const normalizedMap = JSON.stringify({ ...map, sources: [basename(sourcePath)], sourcesContent: [source] });
+		const file = instrumentOutput(original.entry, source, javascript, normalizedMap, true);
+		const transfer = sourcePath === "packages/protocol/src/error/index.ts"
+			? namedErrorTransfer(original.mapped, file, path, source, javascript, observations.filter((row) => row.path === path))
+			: (() => {
+				if (signature(file.mapped) !== signature(original.mapped))
+					fail("source_map", path, "emitted executable map differs from original owner; unsupported lowering");
+				return identityTransfer(original.coverage, file);
+			})();
+		file.transfer = transfer;
+		const javascriptObservations = observations.filter((row) => row.path === path);
+		if (!javascriptObservations.length || javascriptObservations.some((row) => row.offset < 0))
+			fail("emitted_source", path, "emitter observation lacks final JavaScript offsets");
+		return { file, proof: {
+			path, source: sourcePath, project, sha256: sha256(javascript), mapSha256: sha256(sourceMap),
+			mapHash: sha256(JSON.stringify({
+				compiler: compiler.identity,
+				map: file.mapHash,
+				original: original.mapHash,
+				transfer: file.transfer,
+			})),
+			observationSha256: sha256(JSON.stringify(javascriptObservations)),
+			observationCount: javascriptObservations.length,
+			syntheticCount: javascriptObservations.filter((row) => row.pos < 0).length,
+		} };
+	}
+	return fail("emitted_config", path, "no declared compiler project produces this path");
 }
 
 export function exactMetric(total: number, covered: number): Metric {
@@ -830,6 +1184,89 @@ function signature(data: FileCoverageData): string {
 		fnMap: data.fnMap,
 		branchMap: data.branchMap,
 	});
+}
+function identityTransfer(original: FileCoverageData, emitted: Prepared): EmittedTransfer {
+	return {
+		signature: signature(emitted.coverage),
+		slots: Object.fromEntries(counterSlots(original).map(({ label }) => [label, label])),
+	};
+}
+function namedErrorTransfer(
+	original: FileCoverageData,
+	emitted: Prepared,
+	path: string,
+	source: string,
+	javascript: string,
+	observations: EmissionObservation[],
+): EmittedTransfer {
+	if (
+		Object.keys(original.s).length !== 24 ||
+		Object.keys(original.f).length !== 6 ||
+		Object.keys(original.b).length !== 6 ||
+		Object.keys(emitted.coverage.s).length !== 28 ||
+		Object.keys(emitted.coverage.f).length !== 7 ||
+		Object.keys(emitted.coverage.b).length !== 10
+	)
+		fail("source_map", path, "NamedError counter cardinality differs from pinned transfer");
+	const unmapped = (emitted.unmapped ?? []).map((counter) => `${counter.kind}:${counter.id}`).sort();
+	if (JSON.stringify(unmapped) !== JSON.stringify([
+		"branch:0", "branch:1", "branch:2", "branch:3",
+		"function:0", "statement:0", "statement:1", "statement:2", "statement:3",
+		"statement:8",
+	]))
+		fail("source_map", path, `NamedError helper partition differs from pinned transfer: ${JSON.stringify(unmapped)}`);
+	const statements = [
+		[0, 4], [1, 5], [2, 6], [3, 7], [4, 8], [5, 27], [6, 12],
+		[7, 9], [8, 10], [9, 11], [10, 13], [11, 14], [12, 15], [13, 16],
+		[14, 17], [15, 18], [16, 19], [17, 20], [18, 21], [19, 22], [20, 23],
+		[21, 24], [22, 25], [23, 26],
+	].map(([canonical, emittedId]) => [`s:${emittedId}`, `s:${canonical}`]);
+	const functions = Object.keys(original.f).map((id) => [`f:${Number(id) + 1}`, `f:${id}`]);
+	const branches = Object.entries(original.b).flatMap(([id, counts]) => {
+		const lowered = emitted.coverage.branchMap[String(Number(id) + 4)];
+		if (!lowered || lowered.type !== original.branchMap[id]?.type || lowered.locations.length !== counts.length)
+			fail("source_map", path, `NamedError branch shape differs: ${id}`);
+		return counts.map((_, index) => [`b:${Number(id) + 4}:${index}`, `b:${id}:${index}`]);
+	});
+	const slots: EmittedTransfer["slots"] = Object.fromEntries([...statements, ...functions, ...branches]);
+	for (const { label } of counterSlots(emitted.coverage)) {
+		if (/^(s:[0-3]|f:0|b:[0-3]:\d+)$/.test(label)) {
+			if (Object.hasOwn(slots, label)) fail("source_map", path, "NamedError helper counter received source ownership");
+			slots[label] = null;
+		}
+	}
+	const emittedLabels = counterSlots(emitted.coverage).map(({ label }) => label).sort();
+	const canonicalLabels = counterSlots(original).map(({ label }) => label).sort();
+	if (JSON.stringify(Object.keys(slots).sort()) !== JSON.stringify(emittedLabels) ||
+		JSON.stringify(Object.values(slots).filter((label) => label !== null).sort()) !== JSON.stringify(canonicalLabels))
+		fail("source_map", path, "NamedError transfer is not a complete counter bijection");
+	const canonicalSchema = original.statementMap["5"];
+	if (!canonicalSchema ||
+		JSON.stringify(canonicalSchema) !== JSON.stringify({
+			start: { line: 37, column: 38 },
+			end: { line: 37, column: 44 },
+		}))
+		fail("source_map", path, `NamedError canonical Schema obligation changed: ${JSON.stringify(canonicalSchema)}`);
+	const schemaFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+	let schemaNode: ts.PropertyDeclaration | undefined;
+	function findSchema(node: ts.Node): void {
+		if (ts.isPropertyDeclaration(node) && node.name.getText(schemaFile) === "Schema")
+			schemaNode = schemaNode ? fail("source_map", path, "multiple NamedError Schema declarations") : node;
+		ts.forEachChild(node, findSchema);
+	}
+	findSchema(schemaFile);
+	const generatedSchemaOffset = javascript.indexOf("_a.Schema = schema");
+	const schema = schemaNode ?? fail("source_map", path, "missing NamedError Schema declaration");
+	const schemaAnchors = observations.filter((row) =>
+		row.originalPos === schema.pos &&
+		row.originalEnd === schema.end &&
+		row.kind === ts.SyntaxKind.BinaryExpression);
+	if (schemaAnchors.length !== 2 ||
+		Math.max(...schemaAnchors.map((row) => row.offset)) < generatedSchemaOffset ||
+		Math.min(...schemaAnchors.map((row) => row.offset)) > generatedSchemaOffset ||
+		javascript.slice(Math.min(...schemaAnchors.map((row) => row.offset)), Math.max(...schemaAnchors.map((row) => row.offset))).trim() !== "_a.Schema = schema")
+		fail("emitted_source", path, `NamedError Schema observer anchor is missing or moved: generated=${generatedSchemaOffset} candidates=${JSON.stringify(schemaAnchors.map((row) => ({ kind: row.kind, offset: row.offset })))}`);
+	return { signature: signature(emitted.coverage), slots };
 }
 function checkedCoverage(value: Json, expected: Prepared): FileCoverageData {
 	const v = object(value);
@@ -922,9 +1359,7 @@ function pythonTraceArcs(value: Json | undefined, file: Prepared): ObjectValue {
 	return row;
 }
 
-function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
-	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage"]);
-	const loaded = array(r.loaded).map(pathValue);
+function receiptCounters(r: ObjectValue, data: Inputs, loaded: string[]) {
 	unique(loaded, "loaded source");
 	if ([...loaded].sort().join("\0") !== Object.keys(object(r.coverage)).sort().join("\0"))
 		fail("incomplete_coverage", text(r.id), "loaded source counter record missing");
@@ -941,11 +1376,42 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	for (const path of expectedLines)
 		if (Object.keys(lines[path] ?? {}).join(",") !== data.files.find((f) => f.entry.path === path)?.python?.lines.join(","))
 			fail("incomplete_coverage", path, "Python executable line IDs differ");
+	return { coverage, lines };
+}
+function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
+	const root = data.selected && object(value).parent === "";
+	// Bun and Node processes always carry their emission proofs (possibly none);
+	// Python processes load no compiled JavaScript and carry no such field.
+	const javascript = object(value).runtime !== "python";
+	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage", ...(root ? ["cwd"] : []), ...(javascript ? ["transferred", "emitted"] : [])]);
+	const loaded = array(r.loaded).map(pathValue);
+	const transferred = javascript ? array(r.transferred).map(pathValue) : undefined;
+	if (transferred) {
+		unique(transferred, "transferred source");
+		for (const path of transferred) if (!loaded.includes(path)) fail("identity", path, "transferred source was not loaded");
+	}
+	const { coverage, lines } = receiptCounters(r, data, loaded);
 	const exitCode = nullableExit(r.exitCode);
 	const signal = nullableSignal(r.signal);
 	if ((exitCode === null) === (signal === null)) fail("execution", text(r.id), "invalid native terminal outcome");
 	const trace = r.trace === null ? null : object(r.trace, ["id", "runtime", "python", "coverage", "flushed", "files"]);
 	if (trace) verifyPythonTrace(trace, r, data, lines, coverage, loaded);
+	const emitted = javascript ? array(r.emitted).map((value) => {
+		const proof = object(value, ["path", "source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]);
+		const verified = receiptEmission(data, pathValue(proof.path));
+		if (!loaded.includes(verified.source) || Object.entries(verified).some(([key, value]) => proof[key] !== value))
+			fail("identity", verified.path, "emitted process/source/map identity differs");
+		return verified;
+	}) : undefined;
+	if (emitted) unique(emitted.map((proof) => proof.path), "emitted module");
+	// Every source loaded through a compiled module has exactly one emission
+	// proof, and every proof names such a source: provenance cannot be dropped.
+	if (emitted && transferred && [...new Set(emitted.map((proof) => proof.source))].sort().join("\0") !== [...transferred].sort().join("\0"))
+		fail("identity", text(r.id), "emission proofs do not match the transferred sources");
+	// Both records above are the process's own claims. The frozen tree and the
+	// process's own counters pin which owned compiled modules it must have
+	// loaded, so erasing both records together still cannot hide one.
+	if (emitted) requiredEmissions(data, loaded, emitted, coverage);
 	return {
 		id: text(r.id),
 		parent: text(r.parent),
@@ -953,10 +1419,137 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 		exitCode, signal, lines, trace,
 		runtime: choice(r.runtime, ["bun", "node", "python"]),
 		entry: pathValue(r.entry), args: array(r.args).map(text), command: text(r.command),
+		...(root ? { cwd: commandDirectory(r.cwd, data.options.root) } : {}),
 		children: array(r.children).map(text),
+		...(transferred ? { transferred } : {}),
+		...(emitted ? { emitted } : {}),
 		loaded,
 		coverage,
 	};
+}
+
+type DynamicImport = { specifier: string; line: number; column: number };
+type ModuleSpecifiers = { static: readonly string[]; dynamic: readonly DynamicImport[] };
+
+// The string-literal module specifiers of one module: top-level import and
+// re-export declarations, and `import("...")` calls with their positions.
+function moduleSpecifiers(path: string, code: string, kind: ts.ScriptKind): ModuleSpecifiers {
+	const program = ts.createSourceFile(path, code, ts.ScriptTarget.ESNext, true, kind);
+	const statics: string[] = [];
+	const dynamic: DynamicImport[] = [];
+	for (const statement of program.statements)
+		if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier))
+			statics.push(statement.moduleSpecifier.text);
+	function visit(node: ts.Node): void {
+		if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+			const [argument] = node.arguments;
+			if (argument && ts.isStringLiteralLike(argument)) {
+				const { line, character } = program.getLineAndCharacterOfPosition(node.getStart(program));
+				dynamic.push({ specifier: argument.text, line: line + 1, column: character });
+			}
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(program);
+	return { static: statics, dynamic };
+}
+
+const originalStaticSpecifiers = new WeakMap<Prepared, readonly string[]>();
+const originalDynamicImports = new WeakMap<Prepared, readonly DynamicImport[]>();
+const emittedSpecifiers = new Map<string, ModuleSpecifiers>();
+
+// Static specifiers come from the instrumented JavaScript, where type-only
+// imports are already erased; dynamic import positions come from the frozen
+// original source, where the mapped statement counters locate them.
+function originalImports(data: Inputs, file: Prepared): { static: readonly string[]; dynamic: readonly DynamicImport[] } {
+	let statics = originalStaticSpecifiers.get(file);
+	let dynamic = originalDynamicImports.get(file);
+	if (!statics || !dynamic) {
+		const path = file.entry.path;
+		statics = moduleSpecifiers(path, file.code, ts.ScriptKind.JS).static;
+		dynamic = moduleSpecifiers(path, content(data.options.root, path).toString("utf8"), path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS).dynamic;
+		originalStaticSpecifiers.set(file, statics);
+		originalDynamicImports.set(file, dynamic);
+	}
+	return { static: statics, dynamic };
+}
+
+// A dynamic import the process's own counters prove it evaluated: the
+// innermost mapped statement containing the call has a positive count. A
+// call outside every mapped statement cannot prove it went untaken.
+function executedDynamicSpecifiers(data: Inputs, file: Prepared, hits: FileCoverageData): string[] {
+	const inside = (range: Range, at: DynamicImport) =>
+		(at.line > range.start.line || (at.line === range.start.line && at.column >= range.start.column)) &&
+		(at.line < range.end.line || (at.line === range.end.line && at.column <= range.end.column));
+	const span = (range: Range) => (range.end.line - range.start.line) * 1_000_000 + (range.end.column - range.start.column);
+	return originalImports(data, file).dynamic.filter((at) => {
+		const containing = Object.entries(file.mapped.statementMap).filter(([, range]) => inside(range, at)).sort(([, a], [, b]) => span(a) - span(b));
+		const [innermost] = containing;
+		return innermost === undefined || (hits.s[innermost[0]] ?? 0) > 0;
+	}).map((at) => at.specifier);
+}
+
+// Resolves one specifier exactly as the loader classifies it and returns the
+// owned compiled module it names, or undefined for builtins, dependencies,
+// paths outside the roots, and inventoried originals. A bare specifier that
+// lands in the owned tree also pins the package manifest that routed it.
+function ownedEmissionTarget(data: Inputs, specifier: string, importer: string): string | undefined {
+	if (nodeModules.isBuiltin(specifier) || specifier.startsWith("bun:")) return undefined;
+	let resolved: string;
+	try {
+		resolved = realpathSync(Bun.resolveSync(specifier, join(data.options.root, dirname(importer))));
+	} catch {
+		if (specifier.startsWith(".")) return undefined; // relative imports of originals; the loader binds them by inventory
+		return fail("identity", importer, `import ${JSON.stringify(specifier)} does not resolve in the frozen tree`);
+	}
+	const target = relative(data.options.root, resolved);
+	if (target.startsWith("..") || isAbsolute(target) || target.split("/").includes("node_modules")) return undefined;
+	if (!data.roots.some((r) => target.startsWith(`${r}/`))) return undefined;
+	if (!specifier.startsWith(".") && !isAbsolute(specifier)) {
+		let directory = dirname(target);
+		while (directory !== "." && !existsSync(join(data.options.root, directory, "package.json"))) directory = dirname(directory);
+		const manifest = join(directory, "package.json");
+		if (!data.configurations.some((config) => config.path === manifest))
+			fail("identity", importer, `package manifest ${manifest} routing ${JSON.stringify(specifier)} is not frozen`);
+	}
+	if (!/\.[cm]?[jt]sx?$/.test(target) || data.files.some((f) => f.entry.path === target)) return undefined;
+	return target;
+}
+
+// Every owned compiled module the process must have loaded needs an emission
+// proof: the static imports of each loaded original and of each proved
+// emission (resolved from the emission's own directory, so a compiled barrel
+// pins its compiled dependencies), and every dynamic import the counters show
+// was evaluated. An untaken dynamic import legitimately carries no proof.
+function requiredEmissions(data: Inputs, loaded: readonly string[], emitted: readonly EmissionProof[], coverage: ProcessReceipt["coverage"]): void {
+	const demand = (target: string | undefined, importer: string) => {
+		if (target !== undefined && !emitted.some((proof) => proof.path === target))
+			fail("identity", target, `emitted module imported by ${importer} has no emission proof`);
+	};
+	const executed = new Map<string, string[]>();
+	const evaluated = (file: Prepared) => {
+		const cached = executed.get(file.entry.path);
+		if (cached) return cached;
+		const specifiers = executedDynamicSpecifiers(data, file, coverage[file.entry.path] ?? fail("incomplete_coverage", file.entry.path, "loaded source counter record missing"));
+		executed.set(file.entry.path, specifiers);
+		return specifiers;
+	};
+	for (const path of loaded) {
+		const file = data.files.find((f) => f.entry.path === path);
+		if (!file || file.python) continue;
+		for (const specifier of [...originalImports(data, file).static, ...evaluated(file)]) demand(ownedEmissionTarget(data, specifier, path), path);
+	}
+	for (const proof of emitted) {
+		const key = `${proof.path}\0${proof.sha256}`;
+		let specifiers = emittedSpecifiers.get(key);
+		if (!specifiers) {
+			specifiers = moduleSpecifiers(proof.path, content(data.options.root, proof.path).toString("utf8"), ts.ScriptKind.JS);
+			emittedSpecifiers.set(key, specifiers);
+		}
+		const source = data.files.find((f) => f.entry.path === proof.source) ?? fail("identity", proof.source, "emitted original absent from frozen inventory");
+		const dynamic = specifiers.dynamic.map((at) => at.specifier).filter((specifier) => evaluated(source).includes(specifier));
+		for (const specifier of [...specifiers.static, ...dynamic]) demand(ownedEmissionTarget(data, specifier, proof.path), proof.path);
+	}
 }
 
 function summary(data: Inputs, receipts: ProcessReceipt[]) {
@@ -1047,17 +1640,6 @@ function summary(data: Inputs, receipts: ProcessReceipt[]) {
 	return { complete: true, exitCode: findings.length ? 1 : 0, aggregate, measurements, findings };
 }
 
-function approvedProcessFault(receipt: ProcessReceipt, faults: Fault[], counts: Map<string, number>): boolean {
-	if (!receipt.parent || (receipt.exitCode === 0 && receipt.signal === null)) return false;
-	const fault = faults.find((f) => f.command === receipt.command && f.entry === receipt.entry &&
-		JSON.stringify(f.args) === JSON.stringify(receipt.args) && f.exitCode === receipt.exitCode && f.signal === receipt.signal);
-	if (!fault) fail("execution", receipt.id, "unapproved native process failure");
-	if ((receipt.coverage[fault.checkpoint.path]?.s[fault.checkpoint.statement] ?? 0) < fault.checkpoint.minimumHits)
-		fail("incomplete_coverage", receipt.id, "approved boundary was not independently counted before termination");
-	counts.set(fault.id, (counts.get(fault.id) ?? 0) + 1);
-	return true;
-}
-
 function verifyProcessGraph(receipt: ProcessReceipt, receipts: ProcessReceipt[], roots: Set<string>): void {
 	unique(receipt.children, "child expectation");
 	if (
@@ -1133,21 +1715,22 @@ function verify(value: Json, data: Inputs) {
 				command.id,
 				"entry never loaded or terminal process receipt missing",
 			);
+		if (data.selected && (receipt.cwd !== command.cwd || receipt.entry !== command.paths[0] ||
+			JSON.stringify(receipt.args) !== JSON.stringify(command.kind === "test" ? commandTestPaths(data, command).slice(1) : command.args)))
+			fail("identity", command.id, "root launch differs from selected command");
 		expectedRoots.add(receipt.id);
 	});
-	const faultCounts = new Map<string, number>();
+	// A child's exit code is its parent test's assertion, not the collector's:
+	// refusal-path CLI tests exit nonzero by design. The flushed receipt is the
+	// evidence; only a normally exiting Python child can run its trace flush, so
+	// only a signal-terminated one may lack it.
 	for (const receipt of receipts) {
-		const approvedFault = approvedProcessFault(receipt, data.faults, faultCounts);
-		if (receipt.runtime === "python" && receipt.trace === null && !approvedFault)
+		if (receipt.runtime === "python" && receipt.trace === null && receipt.signal === null)
 			fail("incomplete_coverage", receipt.id, "Python normal-completion trace was not flushed");
 		verifyProcessGraph(receipt, receipts, expectedRoots);
 	}
-	for (const fault of data.faults)
-		if (faultCounts.get(fault.id) !== fault.occurrences)
-			fail("incomplete_coverage", fault.id, "approved fault boundary occurrence count differs");
 	return {
 		...summary(data, receipts),
-		approvedFaults: data.faults.map((f) => ({ id: f.id, observed: faultCounts.get(f.id) ?? 0 })),
 		processOutcomes: receipts.map((r) => ({ id: r.id, parent: r.parent, runtime: r.runtime, entry: r.entry, exitCode: r.exitCode, signal: r.signal })),
 		runtime: v.runtime,
 		authoritative: v.runtime === "1.3.6",
@@ -1181,13 +1764,13 @@ function optionsFrom(value: Json): Options {
 
 function counterSlots(
 	coverage: FileCoverageData,
-): { counts: Counts | number[]; key: string; slot: number }[] {
+): { counts: Counts | number[]; key: string; slot: number; label: string }[] {
 	let slot = 0;
 	return [
-		...Object.keys(coverage.s).map((key) => ({ counts: coverage.s, key, slot: slot++ })),
-		...Object.keys(coverage.f).map((key) => ({ counts: coverage.f, key, slot: slot++ })),
-		...Object.values(coverage.b).flatMap((counts) =>
-			Object.keys(counts).map((key) => ({ counts, key, slot: slot++ })),
+		...Object.keys(coverage.s).map((key) => ({ counts: coverage.s, key, slot: slot++, label: `s:${key}` })),
+		...Object.keys(coverage.f).map((key) => ({ counts: coverage.f, key, slot: slot++, label: `f:${key}` })),
+		...Object.entries(coverage.b).flatMap(([id, counts]) =>
+			Object.keys(counts).map((key) => ({ counts, key, slot: slot++, label: `b:${id}:${key}` })),
 		),
 	];
 }
@@ -1198,7 +1781,7 @@ function observe(directory: string, id: string, exitCode: number | null, signal:
 	});
 }
 
-function processCounters(directory: string, id: string, files: Prepared[]): void {
+function processCounters(directory: string, id: string, files: Prepared[], emittedMaps: Map<string, EmittedTransfer[]>): void {
 	const offsets = new Map<string, number>();
 	let size = 0;
 	for (const file of files) {
@@ -1213,6 +1796,7 @@ function processCounters(directory: string, id: string, files: Prepared[]): void
 	const fd = isBun ? -1 : openSync(path, "r+");
 	const slotBytes = Buffer.alloc(8);
 	const loaded = new Map<string, FileCoverageData>();
+	const transferred = new Set<string>();
 	const coverage: { [key: string]: FileCoverageData } = {};
 	globalThis.__d945Coverage = coverage;
 	for (const file of files)
@@ -1220,26 +1804,39 @@ function processCounters(directory: string, id: string, files: Prepared[]): void
 			enumerable: true,
 			get: () => loaded.get(file.entry.path),
 			set: (value: FileCoverageData) => {
-				if (signature(value) !== signature(file.coverage))
+				const transfer = emittedMaps.get(file.entry.path)?.find((candidate) => candidate.signature === signature(value));
+				if (signature(value) !== signature(file.coverage) && !transfer)
 					fail("source_map", file.entry.path, "instrumented code changed its map");
-				for (const { counts, key, slot } of counterSlots(value)) {
-					const offset = (offsets.get(file.entry.path) ?? 0) + slot;
+				const canonical = new Map(counterSlots(file.coverage).map((slot) => [slot.label, slot.slot]));
+				for (const { counts, key, label } of counterSlots(value)) {
+					const target = transfer ? transfer.slots[label] : label;
+					if (target === undefined) fail("source_map", file.entry.path, `unowned emitted counter: ${label}`);
+					const slot = target === null ? undefined :
+						canonical.get(target) ?? fail("source_map", file.entry.path, `missing canonical counter: ${target}`);
+					let ignored = 0;
+					const position = slot === undefined ? undefined : (offsets.get(file.entry.path) ?? 0) + slot;
 					Object.defineProperty(counts, key, {
 						enumerable: true,
 						configurable: false,
-						get: () => counters[offset],
+						get: () => position === undefined ? ignored : counters[position],
 						set: (n: number) => {
-							counters[offset] = integer(n);
+							if (position === undefined) {
+								ignored = integer(n);
+								return;
+							}
+							counters[position] = integer(n);
 							if (!isBun) {
 								slotBytes.writeDoubleLE(n);
-								if (writeSync(fd, slotBytes, 0, 8, offset * 8) !== 8)
+								if (writeSync(fd, slotBytes, 0, 8, position * 8) !== 8)
 									fail("incomplete_coverage", file.entry.path, "short persistent counter write");
 							}
 						},
 					});
 				}
 				loaded.set(file.entry.path, value);
+				if (transfer) transferred.add(file.entry.path);
 				writeFileSync(join(directory, `${id}.loaded.json`), JSON.stringify([...loaded.keys()]));
+				writeFileSync(join(directory, `${id}.transferred.json`), JSON.stringify([...transferred]));
 			},
 		});
 }
@@ -1287,27 +1884,70 @@ function collectedProcess(directory: string, id: string, data: Inputs): Json {
 		pid: integer(start.pid),
 		exitCode: nullableExit(observed.exitCode), signal: nullableSignal(observed.signal),
 		runtime: text(request.runtime), entry: text(request.entry), args: array(request.args), command: text(request.command), lines,
+		...(data.selected && request.parent === "" ? { cwd: text(start.cwd) } : {}),
 		trace: existsSync(tracePath) ? decode(readFileSync(tracePath, "utf8")) : null,
 		children: decode(readFileSync(join(directory, `${id}.children.json`), "utf8")),
+		...(text(request.runtime) === "python" ? {} : {
+			transferred: decode(readFileSync(join(directory, `${id}.transferred.json`), "utf8")),
+			emitted: decode(readFileSync(join(directory, `${id}.emitted.json`), "utf8")),
+		}),
 		loaded,
 		coverage,
 	};
 }
 
+// Every child that imports a compiled package re-proves the same dist files.
+// The proof is keyed by the exact bytes it proved, so a sibling process reuses
+// it only while the JavaScript and map are unchanged; receipt verification
+// re-runs the compiler once per emitted module for each frozen input.
+function sharedEmission(directory: string, data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
+	if (!existsSync(join(data.options.root, `${path}.map`))) return verifiedEmission(data, path);
+	const javascriptSha256 = sha256(content(data.options.root, path));
+	const mapSha256 = sha256(content(data.options.root, `${path}.map`));
+	const cachePath = join(directory, `emitted-${sha256(`${path}\n${javascriptSha256}\n${mapSha256}`)}.json`);
+	if (existsSync(cachePath)) {
+		const cached = object(decode(readFileSync(cachePath, "utf8")), ["file", "proof"]);
+		if (cached.file === undefined) fail("schema", path, "expected object");
+		const proof = object(cached.proof, ["path", "source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]);
+		const count = (value: Json | undefined): number =>
+			typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fail("schema", path, "expected count");
+		return {
+			file: preparedFrom(cached.file),
+			proof: {
+				path: pathValue(proof.path), source: pathValue(proof.source), project: pathValue(proof.project),
+				sha256: hash(proof.sha256), mapSha256: hash(proof.mapSha256), mapHash: hash(proof.mapHash),
+				observationSha256: hash(proof.observationSha256), observationCount: count(proof.observationCount), syntheticCount: count(proof.syntheticCount),
+			},
+		};
+	}
+	const emitted = verifiedEmission(data, path);
+	// Worker threads share the PID, so the temporary name carries the thread too.
+	const temporary = `${cachePath}.${process.pid}.${workerThreads.threadId}.${randomUUID()}.tmp`;
+	writeFileSync(temporary, JSON.stringify(emitted));
+	renameSync(temporary, cachePath);
+	return emitted;
+}
 // The preload is built outside the owned tree so the gate's actual CLI source
 // remains instrumentable. Bun.spawn is interposed before owned code imports it.
-function preload(directory: string): void {
-	const data = inputs(optionsFrom(decode(readFileSync(join(directory, "options.json"), "utf8"))));
+export function preload(directory: string): void {
+	if (ts.version !== "5.9.2") fail("toolchain", "", "TypeScript must be 5.9.2");
+	const data = preloadInputsFrom(decode(readFileSync(join(directory, "inputs.json"), "utf8")));
 	const id = process.env.D945_PROCESS ?? fail("process", "", "missing process identity");
 	const parent = process.env.D945_PARENT ?? "";
 	const children: string[] = [];
 	const startPath = join(directory, `${id}.start.json`);
 	const request = object(decode(readFileSync(join(directory, `${id}.request.json`), "utf8")));
 	const runtime = typeof Bun === "undefined" ? "node" : "bun";
-	writeFileSync(startPath, JSON.stringify({ id, parent, pid: process.pid, runtime, entry: text(request.entry) }), { flag: "wx" });
+	const cwd = relative(data.options.root, realpathSync(process.cwd())) || ".";
+	if (data.selected && parent === "" && request.cwd !== cwd) fail("identity", id, "root cwd differs from launch request");
+	writeFileSync(startPath, JSON.stringify({ id, parent, pid: process.pid, runtime, entry: text(request.entry), ...(data.selected && parent === "" ? { cwd } : {}) }), { flag: "wx" });
 	writeFileSync(join(directory, `${id}.children.json`), "[]", { flag: "wx" });
 	writeFileSync(join(directory, `${id}.loaded.json`), "[]", { flag: "wx" });
-	processCounters(directory, id, data.files);
+	writeFileSync(join(directory, `${id}.emitted.json`), "[]", { flag: "wx" });
+	writeFileSync(join(directory, `${id}.transferred.json`), "[]", { flag: "wx" });
+	const emittedMaps = new Map<string, EmittedTransfer[]>();
+	const emissions = new Map<string, EmissionProof>();
+	processCounters(directory, id, data.files, emittedMaps);
 	function loadedCode(absolute: string): string | undefined {
 		const path = relative(data.options.root, absolute);
 		const file = data.files.find((f) => f.entry.path === path);
@@ -1316,9 +1956,13 @@ function preload(directory: string): void {
 				fail("tamper", path, "source changed after preparation");
 			return file.code;
 		}
-		if (data.roots.some((r) => path.startsWith(`${r}/`)) && !path.split("/").includes("node_modules"))
-			fail("identity", path, "loaded source absent from frozen inventory");
-		return undefined;
+		if (!data.roots.some((r) => path.startsWith(`${r}/`)) || path.split("/").includes("node_modules")) return undefined;
+		const emitted = sharedEmission(directory, data, path);
+		if (!emitted.file.transfer) fail("source_map", path, "emitted transfer proof is missing");
+		emittedMaps.set(emitted.proof.source, [...(emittedMaps.get(emitted.proof.source) ?? []), emitted.file.transfer]);
+		emissions.set(path, emitted.proof);
+		writeFileSync(join(directory, `${id}.emitted.json`), JSON.stringify([...emissions.values()]));
+		return emitted.file.code;
 	}
 	if (runtime === "node") {
 		if (process.versions.node !== "24.19.0") fail("toolchain", "", "Node must be 24.19.0");
@@ -1362,20 +2006,57 @@ function preload(directory: string): void {
 	function child(command: string[], env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()) {
 		const childId = randomUUID();
 		const launch = launchCommand(data, directory, childId, id, text(request.command), command, env, cwd);
+		if (launch.id === undefined) return launch;
 		children.push(childId);
 		writeFileSync(join(directory, `${id}.children.json`), JSON.stringify(children));
-		return { id: childId, ...launch };
+		return launch;
 	}
 	installProcessHooks(child, (childId, code, signal) => observe(directory, childId, code, signal), fail);
+	installWorkerHooks(
+		(filename, options) => {
+			if (options?.env === workerThreads.SHARE_ENV)
+				fail("unsupported_process", id, "worker SHARE_ENV is not observable");
+			if (options?.eval === true)
+				fail("unsupported_process", id, "worker eval is not observable");
+			const target = typeof filename === "string" ? pathToFileURL(resolve(process.cwd(), filename)) : filename;
+			if (target.protocol !== "file:") fail("unsupported_process", id, "worker target must be a file URL");
+			const targetPath = relative(data.options.root, fileURLToPath(target));
+			const entry = data.files.find((file) => file.entry.path === targetPath) ??
+				fail("unsupported_process", targetPath, "worker target is absent from frozen language inventory");
+			const childId = randomUUID();
+			const runtime = typeof Bun === "undefined" ? "node" : "bun";
+			const version = runtime === "node" ? `v${process.versions.node}` : Bun.version;
+			writeFileSync(join(directory, `${childId}.request.json`), JSON.stringify({
+				parent: id, command: text(request.command), runtime, entry: entry.entry.path, args: [],
+				binary: process.execPath, version, sha256: sha256(readFileSync(process.execPath)),
+			}), { flag: "wx" });
+			children.push(childId);
+			writeFileSync(join(directory, `${id}.children.json`), JSON.stringify(children));
+			const environment = {
+				...(options?.env === undefined ? process.env : options.env),
+				D945_DIRECTORY: directory, D945_PROCESS: childId, D945_PARENT: id,
+				D945_ASSET_DIRECTORY: directory, D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
+			};
+			sourceRoot(data, environment);
+			const baseOptions = options ?? {};
+			if (runtime === "node") return { id: childId, filename: target, options: { ...baseOptions, env: environment, execArgv: workerExecArgv(options?.execArgv ?? process.execArgv, pathToFileURL(join(directory, "preload.mjs")).href) } };
+			const bootstrap = join(directory, `${childId}.worker.mjs`);
+			writeFileSync(bootstrap, `import ${JSON.stringify(pathToFileURL(join(directory, "preload.js")).href)};\nawait import(${JSON.stringify(target.href)});\n`, { flag: "wx" });
+			return { id: childId, filename: bootstrap, options: { ...baseOptions, env: environment } };
+		},
+		(childId, code) => observe(directory, childId, code, null),
+		fail,
+	);
 	if (runtime === "node") return;
 	// Interposition consumes only argv/environment. Native stdio, IPC payloads,
 	// callbacks and return values pass through untouched; they are not analyzer data.
-	type LaunchOptions = { env?: NodeJS.ProcessEnv; cwd?: string };
+	type LaunchOptions = { env?: NodeJS.ProcessEnv; cwd?: string; shell?: boolean | string };
 	const spawn = Bun.spawn;
 	const spawnSync = Bun.spawnSync;
 	function bunLaunch(command: string[] | (LaunchOptions & { cmd: string[] }), options?: LaunchOptions) {
 		const opts = Array.isArray(command) ? options : command;
 		const argv = Array.isArray(command) ? command : command.cmd;
+		if (opts?.shell) fail("unsupported_process", argv[0] ?? "", "shell execution is not observable");
 		if (opts?.env?.D945_PROCESS && opts.env.D945_PROCESS !== id && existsSync(join(directory, `${opts.env.D945_PROCESS}.request.json`)))
 			return { argv, options: opts, id: undefined };
 		const wrapped = child(argv, opts?.env, opts?.cwd);
@@ -1413,35 +2094,99 @@ function signalName(signal: string | number | null | undefined): string | null {
 	if (typeof signal === "string") return nullableSignal(signal);
 	return Object.entries(osConstants.signals).find(([, n]) => n === signal)?.[0] ?? fail("execution", "", "unrecognized native signal");
 }
-function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string {
+// An executable that does not resolve runs nothing, so the operating system's refusal
+// (ENOENT) is the caller's real observation; the collector does not replace it.
+function binaryPath(binary: string, env: NodeJS.ProcessEnv, cwd: string): string | undefined {
 	const path = binary.includes("/") ? resolve(cwd, binary) : (env.PATH ?? "").split(":").map((p) => join(p, binary)).find(existsSync);
-	return path ? resolve(path) : fail("unsupported_process", binary, "executable cannot be resolved");
+	return path === undefined || !existsSync(path) ? undefined : resolve(path);
 }
-function launchEntry(data: Inputs, argv: string[], runtime: string, executable: string, cwd: string) {
-	let entry: Prepared | undefined;
-	let args: string[] = [];
-	if (runtime === "python" && argv.includes("-c")) {
-		const index = argv.indexOf("-c");
-		if (argv.slice(0, index).some((a) => a !== "-u")) fail("unsupported_process", executable, "unrecognized Python interpreter option");
-		const source = argv[index + 1];
-		entry = data.files.find((f) => f.python?.source === source);
-		args = argv.slice(index + 2);
-	} else {
-		let index = 0;
-		if (argv[0] === "test") index++;
-		while (argv[index]?.startsWith("-")) {
-			const flag = argv[index++];
-			if (["--timeout", "--import", "--require", "-r", ...(runtime === "bun" ? ["--preload"] : [])].includes(flag ?? "")) index++;
-			else if (!["-u", "--no-warnings", "--enable-source-maps"].includes(flag ?? ""))
-				fail("unsupported_process", executable, `unregistered interpreter option ${flag}`);
-		}
-		const path = relative(data.options.root, resolve(cwd, argv[index] ?? ""));
-		entry = data.files.find((f) => f.entry.path === path);
-		args = argv.slice(index + 1);
+// Native utilities execute without receipts and never earn coverage credit. A shell may
+// hide an owned runtime from observation, which only loses credit; it can never fabricate it.
+// Matched by basename: Bun's node:child_process re-enters Bun.spawnSync with the already
+// canonical path, so the second interposition must recognize the same utility.
+const OWNED_RUNTIMES = /^(?:bun|node)(?:\.exe)?$|^python(?:3(?:\.\d+)?)?$/;
+// A non-runtime executable outside the frozen root (a system utility, a platform tool such
+// as launchctl, or a fixture stand-in written to a throwaway HOME) runs natively: it earns
+// no credit and leaves no receipt, so it cannot inflate the measurement. Inside the root
+// only owned runtimes on frozen inventory may run.
+function utilityPath(executable: string, binary: string, root: string): string | undefined {
+	if (OWNED_RUNTIMES.test(basename(binary))) return undefined;
+	const canonical = realpathSync(binary);
+	if (!relative(realpathSync(root), canonical).startsWith("..")) fail("unsupported_process", executable, "unregistered native executable");
+	return binary;
+}
+// A selected collection pins the root every top-level Python launch is checked against. An
+// unselected collection (a fixture repository driven by a test that itself runs under a selected
+// outer collector) must not inherit the outer root, or its root cwd check compares against the
+// wrong repository.
+function sourceRoot(data: PreloadInputs, env: Record<string, string | undefined>): void {
+	if (data.selected) env.D945_SOURCE_ROOT = data.options.root;
+	else delete env.D945_SOURCE_ROOT;
+}
+// An owned runtime launched on an entry outside the frozen root (a gate copied into a
+// throwaway fixture repository) runs natively: like a utility it earns no credit and
+// leaves no receipt, whatever interpreter options it carries (the mutation runner's
+// `--smol test --reporter=junit` copies). Entries inside the root must still be frozen
+// inventory launched with recognized options only.
+const VALUE_OPTIONS = ["--timeout", "--import", "--require", "-r"];
+const NEUTRAL_OPTIONS = ["-u", "--no-warnings", "--enable-source-maps"];
+// Python isolated mode changes what the entry sees (no PYTHON* environment, no user site,
+// no script directory on sys.path), so the driver interpreter is launched with it too.
+const FORWARDED_PYTHON_OPTIONS = ["-I"];
+type Launch<E = Prepared> = { entry: E; args: string[]; interpreter: string[] } | { external: string };
+// A launch is resolved against the frozen files alone, relative to the frozen root.
+type LaunchInputs = { options: Pick<Options, "root">; files: Prepared[] };
+// `python -c text`: the text is a frozen Python source or it is not an entry at all.
+// Inline program text that is not a frozen Python source (a test's native control
+// program) has no entry to credit: it runs natively, like an external entry,
+// whatever interpreter options (`-I`) precede it.
+function inlinePythonEntry(data: LaunchInputs, argv: string[], executable: string): Launch<Prepared | undefined> {
+	const index = argv.indexOf("-c");
+	const source = argv[index + 1];
+	const entry = data.files.find((f) => f.python?.source === source);
+	if (entry === undefined) return { external: executable };
+	if (argv.slice(0, index).some((a) => a !== "-u")) fail("unsupported_process", executable, "unrecognized Python interpreter option");
+	return { entry, args: argv.slice(index + 2), interpreter: [] };
+}
+// The interpreter options before the program (`test` opens Bun's subcommand once;
+// a valued option consumes the next argument). Inline program text (`-e`, `-p`) has
+// no frozen entry: the launch runs natively, like an external entry.
+function leadingOptions(argv: string[], runtime: string, valued: string[]): { options: string[]; index: number; inline: boolean } {
+	let index = 0;
+	const options: string[] = [];
+	for (let subcommand = false; argv[index]?.startsWith("-") || (argv[index] === "test" && !subcommand);) {
+		if (argv[index] === "test") { subcommand = true; index++; continue; }
+		const flag = argv[index++] ?? "";
+		if (runtime !== "python" && ["-e", "--eval", "-p", "--print"].includes(flag)) return { options, index, inline: true };
+		options.push(flag);
+		if (valued.includes(flag)) index++;
 	}
+	return { options, index, inline: false };
+}
+// The program named after the interpreter options, as the frozen entry at its path
+// unless it runs natively: an option-only invocation (`python3 --version`, a runtime
+// probe) launches no program at all; a program outside the frozen root or a
+// dependency's own program (knip, a vendored CLI) is never frozen inventory.
+function programEntry(data: LaunchInputs, argv: string[], runtime: string, executable: string, cwd: string): Launch<Prepared | undefined> {
+	const valued = [...VALUE_OPTIONS, ...(runtime === "bun" ? ["--preload"] : [])];
+	const { options, index, inline } = leadingOptions(argv, runtime, valued);
+	const program = argv[index];
+	if (inline || program === undefined) return { external: executable };
+	const absolute = resolve(cwd, program);
+	const path = relative(data.options.root, absolute);
+	if ((path.startsWith("..") || path.split(sep).includes("node_modules")) && existsSync(absolute)) return { external: absolute };
+	const forwarded = runtime === "python" ? FORWARDED_PYTHON_OPTIONS : [];
+	const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag) && !forwarded.includes(flag));
+	if (unregistered !== undefined) fail("unsupported_process", executable, `unregistered interpreter option ${unregistered}`);
+	return { entry: data.files.find((f) => f.entry.path === path), args: argv.slice(index + 1), interpreter: options.filter((flag) => forwarded.includes(flag)) };
+}
+export function launchEntry(data: LaunchInputs, argv: string[], runtime: string, executable: string, cwd: string): Launch {
+	const launch = runtime === "python" && argv.includes("-c") ? inlinePythonEntry(data, argv, executable) : programEntry(data, argv, runtime, executable, cwd);
+	if ("external" in launch) return launch;
+	const { entry, args, interpreter } = launch;
 	if (!entry || (runtime === "python") !== Boolean(entry.python))
 		fail("unsupported_process", executable, "entry/source is absent from frozen language inventory");
-	return { entry, args };
+	return { entry, args, interpreter };
 }
 
 function runtimeVersion(binary: string, runtime: string, executable: string): string {
@@ -1453,89 +2198,138 @@ function runtimeVersion(binary: string, runtime: string, executable: string): st
 	return actual;
 }
 
-function launchCommand(data: Inputs, directory: string, id: string, parent: string, commandId: string,
-	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { command: string[]; env: NodeJS.ProcessEnv } {
+function launchCommand(data: PreloadInputs, directory: string, id: string, parent: string, commandId: string,
+	command: string[], environment: NodeJS.ProcessEnv, cwd: string): { id?: string; command: string[]; env: NodeJS.ProcessEnv } {
 	const executable = command[0] ?? fail("process", "", "empty executable");
 	const binary = binaryPath(executable, environment, cwd);
+	if (binary === undefined) return { command, env: environment };
+	const utility = utilityPath(executable, binary, data.options.root);
+	if (utility !== undefined) return { command: [utility, ...command.slice(1)], env: environment };
 	const name = basename(binary);
-	const runtime = /^bun(?:\.exe)?$/.test(name) ? "bun" : /^node(?:\.exe)?$/.test(name) ? "node" : /^python(?:3(?:\.\d+)?)?$/.test(name) ? "python" :
-		fail("unsupported_process", executable, "unregistered native executable");
+	const runtime = /^bun(?:\.exe)?$/.test(name) ? "bun" : /^node(?:\.exe)?$/.test(name) ? "node" : "python";
 	let argv = command.slice(1);
 	if (runtime === "bun" && argv[0] === "run") argv = argv.slice(1);
-	const { entry, args } = launchEntry(data, argv, runtime, executable, cwd);
+	const launched = launchEntry(data, argv, runtime, executable, cwd);
+	if ("external" in launched) return { command: [binary, ...command.slice(1)], env: environment };
+	const { entry, args, interpreter } = launched;
 	const actual = runtimeVersion(binary, runtime, executable);
-	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent, command: commandId, runtime, entry: entry.entry.path, args, binary, version: actual, sha256: sha256(readFileSync(binary)) }), { flag: "wx" });
+	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent, command: commandId, runtime, entry: entry.entry.path, args, binary, version: actual, sha256: sha256(readFileSync(binary)), ...(data.selected && parent === "" ? { cwd: relative(data.options.root, cwd) || "." } : {}) }), { flag: "wx" });
 	const env = {
 		...environment, D945_DIRECTORY: directory, D945_PROCESS: id, D945_PARENT: parent,
-		D945_ASSET_DIRECTORY: asset(""), D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath
+		D945_ASSET_DIRECTORY: directory, D945_PYTHON: pythonBinary(), D945_BUN: process.env.D945_BUN ?? process.execPath,
 	};
-	if (runtime === "python") return { command: [binary, "-u", asset("python.py"), "run", directory, id, entry.entry.path, ...args], env };
-	if (runtime === "node") return { command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
-	return {
+	sourceRoot(data, env);
+	// The Python runner executes from this copy, like the preload: its own frames run inside every traced region
+	// and must never be credited to the frozen script/quality-coverage/python.py it was copied from.
+	if (runtime === "python") return { id, command: [binary, ...interpreter, "-u", join(directory, "python.py"), "run", directory, id, entry.entry.path, ...args], env };
+	if (runtime === "node") return { id, command: [binary, "--import", pathToFileURL(join(directory, "preload.mjs")).href, ...argv], env };
+	return { id,
 		command: argv[0] === "test" ? [binary, "test", "--preload", join(directory, "preload.js"), ...argv.slice(1)] :
 			[binary, "--preload", join(directory, "preload.js"), ...argv], env
 	};
 }
+function commandTestPaths(data: Inputs, command: Command): string[] {
+	const cwd = resolve(data.options.root, command.cwd ?? ".");
+	return command.paths.map((path) => `./${relative(cwd, resolve(data.options.root, path))}`);
+}
+// The collector's output is the only record of a failed lane, so it keeps the
+// error block above each failing test instead of an arbitrary tail.
+const FAILURE_EXCERPT_LIMIT = 16_000;
+export function failureExcerpt(stderr: string): string {
+	const lines = stderr.split("\n");
+	const blocks: string[] = [];
+	let start = 0;
+	for (const [index, line] of lines.entries()) {
+		if (/^\((pass|skip|todo)\)/.test(line) || /^\S+\.(test|spec)\.[cm]?[jt]sx?:$/.test(line)) start = index + 1;
+		if (line.startsWith("(fail)")) {
+			blocks.push(lines.slice(start, index + 1).join("\n"));
+			start = index + 1;
+		}
+	}
+	const excerpt = blocks.length ? blocks.join("\n\n") : stderr;
+	return excerpt.length > FAILURE_EXCERPT_LIMIT ? excerpt.slice(-FAILURE_EXCERPT_LIMIT) : excerpt;
+}
+// Hang guard for one instrumented command, not a performance budget: instrumented
+// tooling shards exceed ten minutes on hosted runners; the job timeout owns the total.
+const COMMAND_DEADLINE_MS = 1_500_000;
 async function collectCommand(data: Inputs, directory: string, command: Command): Promise<Json> {
 	const id = randomUUID();
+	const cwd = resolve(data.options.root, command.cwd ?? ".");
 	const argv =
 		command.kind === "test"
-			? ["test", "--timeout", "15000", ...command.paths.map((p) => `./${p}`)]
+			? ["test", "--timeout", "15000", ...commandTestPaths(data, command)]
 			: [join(data.options.root, command.paths[0] ?? ""), ...command.args];
 	const runtime = command.runtime ?? "bun";
 	const executable = runtime === "bun" ? process.execPath : runtime === "python" ? pythonBinary() : "node";
-	const launch = launchCommand(data, directory, id, "", command.id, [executable, ...argv], process.env, data.options.root);
+	const launch = launchCommand(data, directory, id, "", command.id, [executable, ...argv], process.env, cwd);
 	const child = Bun.spawn(launch.command, {
-		cwd: data.options.root,
+		cwd,
 		env: launch.env,
 		stdout: "pipe",
 		stderr: "pipe",
 	});
 	const stdout = new Response(child.stdout).text();
 	const stderr = new Response(child.stderr).text();
-	const timeout = setTimeout(() => child.kill("SIGKILL"), 120_000);
+	let deadline = false;
+	const timeout = setTimeout(() => { deadline = true; child.kill("SIGKILL"); }, COMMAND_DEADLINE_MS);
 	const exitCode = await child.exited;
 	clearTimeout(timeout);
 	observe(directory, id, child.signalCode ? null : exitCode, signalName(child.signalCode));
 	const out = await stdout;
 	const err = await stderr;
-	if (child.signalCode || exitCode !== command.expectedExitCode)
+	if (deadline || child.signalCode || exitCode !== command.expectedExitCode) {
+		const outcome = deadline ? `killed at the ${COMMAND_DEADLINE_MS}ms command deadline` : `exit ${exitCode}`;
 		fail(
 			"execution",
 			command.id,
-			`exit ${exitCode}; stdout=${out.slice(-2000)} stderr=${err.slice(-4000)}`,
+			`${outcome}; stdout=${out.slice(-2000)} stderr=${failureExcerpt(err)}`,
 		);
+	}
 	if (command.kind === "test" && !/[1-9]\d* pass/.test(err))
 		fail("execution", command.id, "no successful test selection");
 	return { id: command.id, process: id, exitCode };
+}
+
+// The directory every instrumented process of one collection reads: the prepared
+// inventory, both runtime preloads, the Python runner and the dependency tree.
+async function prepareCollector(data: Inputs, directory: string): Promise<void> {
+	writeFileSync(join(directory, "inputs.json"), JSON.stringify(preloadInputs(data)));
+	const build = await Bun.build({
+		entrypoints: [import.meta.path],
+		outdir: directory,
+		naming: "preload.js",
+		target: "bun",
+		packages: "external",
+	});
+	if (!build.success) fail("toolchain", "", "preload build failed");
+	const nodeBuild = await Bun.build({ entrypoints: [import.meta.path], outdir: directory, naming: "preload.mjs", target: "node", packages: "external" });
+	if (!nodeBuild.success) fail("toolchain", "", "Node preload build failed");
+	copyFileSync(asset("python.py"), join(directory, "python.py"));
+	let slots = 0;
+	const pythonFiles = data.files.flatMap((file) => {
+		const offset = slots;
+		slots += counterSlots(file.coverage).length;
+		const lineOffset = slots;
+		slots += file.python?.lines.length ?? 0;
+		return file.python ? [{ path: file.entry.path, source: file.python.source, coverage: file.coverage, lines: file.python.lines, arcs: file.python.arcs, offset, lineOffset }] : [];
+	});
+	writeFileSync(join(directory, "python-files.json"), JSON.stringify(pythonFiles));
+	writeFileSync(join(directory, "process-size.json"), JSON.stringify({ slots: Math.max(1, slots) }));
+	symlinkSync(resolve(import.meta.dir, "../node_modules"), join(directory, "node_modules"));
+}
+/** A prepared collector directory for `paths`, so a test can run `preload` for
+ * one process identity inside its own runtime; the caller removes the directory. */
+export async function collectorDirectory(paths: FrozenPaths): Promise<string> {
+	const directory = realpathSync(mkdtempSync(join(tmpdir(), "openomni-d945-coverage-")));
+	await prepareCollector(frozenInputs(paths), directory);
+	return directory;
 }
 
 async function collect(data: Inputs): Promise<Json> {
 	if (!["1.3.6", "1.4.1"].includes(Bun.version)) fail("toolchain", "", "unsupported Bun version");
 	const directory = realpathSync(mkdtempSync(join(tmpdir(), "openomni-d945-coverage-")));
 	try {
-		writeFileSync(join(directory, "options.json"), JSON.stringify(data.options));
-		const build = await Bun.build({
-			entrypoints: [import.meta.path],
-			outdir: directory,
-			naming: "preload.js",
-			target: "bun",
-			packages: "external",
-		});
-		if (!build.success) fail("toolchain", "", "preload build failed");
-		const nodeBuild = await Bun.build({ entrypoints: [import.meta.path], outdir: directory, naming: "preload.mjs", target: "node", packages: "external" });
-		if (!nodeBuild.success) fail("toolchain", "", "Node preload build failed");
-		let slots = 0;
-		const pythonFiles = data.files.flatMap((file) => {
-			const offset = slots;
-			slots += counterSlots(file.coverage).length;
-			const lineOffset = slots;
-			slots += file.python?.lines.length ?? 0;
-			return file.python ? [{ path: file.entry.path, source: file.python.source, coverage: file.coverage, lines: file.python.lines, arcs: file.python.arcs, offset, lineOffset }] : [];
-		});
-		writeFileSync(join(directory, "python-files.json"), JSON.stringify(pythonFiles));
-		writeFileSync(join(directory, "process-size.json"), JSON.stringify({ slots: Math.max(1, slots) }));
-		symlinkSync(resolve(import.meta.dir, "../node_modules"), join(directory, "node_modules"));
+		await prepareCollector(data, directory);
 		const observed: Json[] = [];
 		for (const command of data.commands) {
 			observed.push(await collectCommand(data, directory, command));
@@ -1571,6 +2365,7 @@ async function collect(data: Inputs): Promise<Json> {
 		for (const file of readdirSync(directory).filter((p) => p.endsWith(".start.json"))) {
 			if (!existsSync(join(directory, file.replace(".start.json", ".observed.json")))) {
 				const start = object(decode(readFileSync(join(directory, file), "utf8")));
+				if (text(start.parent) !== "") continue;
 				try {
 					process.kill(integer(start.pid), "SIGKILL");
 				} catch {
@@ -1584,19 +2379,32 @@ async function collect(data: Inputs): Promise<Json> {
 	}
 }
 
-export function coverageForMetrics(paths: { root: string; contract: string; inventory: string; plan: string; coverage: string }) {
-	const data = inputs({
+type FrozenPaths = { root: string; contract: string; inventory: string; plan: string };
+function frozenInputs(paths: FrozenPaths): Inputs {
+	return inputs({
 		root: realpathSync(paths.root),
 		contract: resolve(paths.contract), contractHash: sha256(readFileSync(paths.contract)),
 		inventory: resolve(paths.inventory), inventoryHash: sha256(readFileSync(paths.inventory)),
 		plan: resolve(paths.plan), planHash: sha256(readFileSync(paths.plan)),
 	});
+}
+export function coverageForMetrics(paths: FrozenPaths & { coverage: string }) {
+	const data = frozenInputs(paths);
 	const input = decode(readFileSync(paths.coverage, "utf8"));
 	verify(input, data);
 	return {
 		files: data.files.map((file) => ({ path: file.entry.path, sha256: file.entry.sha256, mapped: file.mapped })),
 		processes: array(object(input).processes).map((receipt) => parseReceipt(receipt, data)),
 	};
+}
+
+// A pipe reader may receive a cut multi-megabyte verdict; the file written before
+// the stdout pointer is the complete document, and the pointer names its bytes.
+function writeResult(result: ReturnType<typeof verify>, path: string | undefined) {
+	if (path === undefined) return result;
+	const encoded = JSON.stringify(result);
+	writeFileSync(path, encoded, { flag: "wx" });
+	return { complete: result.complete, exitCode: result.exitCode, aggregate: result.aggregate, result: path, resultSha256: sha256(encoded) };
 }
 
 export async function qualityCoverageMain(args = process.argv.slice(2)): Promise<number> {
@@ -1617,6 +2425,7 @@ export async function qualityCoverageMain(args = process.argv.slice(2)): Promise
 				"coverage-input": { type: "string" },
 				"coverage-sha256": { type: "string" },
 				"write-coverage": { type: "string" },
+				"write-result": { type: "string" },
 			},
 		});
 		const required = (value: string | undefined, name: string) =>
@@ -1644,10 +2453,10 @@ export async function qualityCoverageMain(args = process.argv.slice(2)): Promise
 				required(values["coverage-sha256"], "coverage-sha256"),
 			);
 		// Preserve authentic counter/native-outcome provenance even when verification
-		// rejects an unapproved fault. Writing a receipt does not mark it complete.
+		// rejects the receipt. Writing a receipt does not mark it complete.
 		if (values["write-coverage"]) writeFileSync(values["write-coverage"], JSON.stringify(input));
 		const result = verify(input, data);
-		console.log(JSON.stringify(result));
+		console.log(JSON.stringify(writeResult(result, values["write-result"])));
 		return result.exitCode;
 	} catch {
 		const record = lastFailure ?? {
@@ -1664,5 +2473,6 @@ if (
 	process.env.D945_DIRECTORY &&
 	["preload.js", "preload.mjs"].some((name) => fileURLToPath(import.meta.url) === join(process.env.D945_DIRECTORY ?? "", name))
 ) {
+	instrumented = true;
 	preload(process.env.D945_DIRECTORY);
 } else if (import.meta.main) process.exitCode = await qualityCoverageMain();

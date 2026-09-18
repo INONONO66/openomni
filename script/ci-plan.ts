@@ -158,6 +158,12 @@ function rows(topology: readonly WorkspaceTopology[]) {
   ];
 }
 
+/** Exact statement evidence shards: one per selected lane plus the
+ * always-run contracts shard (`exactCiShards` in quality-ci-exact.ts). */
+export function exactShards(plan: Pick<CiPlan, "lanes">) {
+  return { include: [...plan.lanes, "scripts-contracts"].map((shard) => ({ shard })) };
+}
+
 type Selection = Pick<CiPlan, "full" | "verify" | "dependencyReview" | "matrix" | "reason">;
 function fullPlan(topology: readonly WorkspaceTopology[], reason: string): Selection {
   return {
@@ -236,7 +242,7 @@ function main(): void {
   if (outputPath) {
     appendFileSync(
       outputPath,
-      `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\nclass=${plan.class}\ntoolingTests=${plan.toolingTests}\n`,
+      `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\nclass=${plan.class}\ntoolingTests=${plan.toolingTests}\nexactShards=${JSON.stringify(exactShards(plan))}\n`,
     );
   }
   process.stdout.write(`${JSON.stringify(plan)}\n`);

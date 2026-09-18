@@ -42,14 +42,13 @@ type Native = {
   execFile(command: string, args: string[], options: Options, callback?: Callback | null): Child;
   fork(modulePath: string | URL, args: string[], options?: ForkOptions): Child;
 };
-
 const builtins: {
   Error: new (message: string) => Error;
   process: { readonly _eval?: string; once(event: "exit", listener: () => void): void };
 } = globalThis;
 const moduleLoader: {
   createRequire(path: string): (id: string) => {
-    mock: { module(id: string, factory: () => Native & { default: Native }): void };
+    mock: { module(id: string, factory: () => object): void };
   };
 } = modules;
 
@@ -58,7 +57,7 @@ export function installProcessHooks(
     command: string[],
     env: NodeJS.ProcessEnv | undefined,
     cwd: string | undefined,
-  ) => { id: string; command: string[]; env: NodeJS.ProcessEnv },
+  ) => { id?: string; command: string[]; env: NodeJS.ProcessEnv },
   observe: (id: string, code: number | null, signal: string | null) => void,
   reject: (code: string, path: string, message: string) => never,
 ): void {
@@ -106,7 +105,8 @@ export function installProcessHooks(
     return child;
   }
 
-  function launch(run: () => Child, id: string): Child {
+  function launch(run: () => Child, id?: string): Child {
+    if (id === undefined) return run();
     let returned = false;
     insideNative = true;
     try {
@@ -129,12 +129,14 @@ export function installProcessHooks(
         env: wrapped.env,
       });
       returned = true;
-      observe(wrapped.id, result.status, result.signal);
-      if (result.error) failure(wrapped.id, result.error.message);
+      if (wrapped.id !== undefined) {
+        observe(wrapped.id, result.status, result.signal);
+        if (result.error) failure(wrapped.id, result.error.message);
+      }
       return result;
     } finally {
       insideNative = false;
-      if (!returned) failure(wrapped.id, "native synchronous launch threw");
+      if (!returned && wrapped.id !== undefined) failure(wrapped.id, "native synchronous launch threw");
     }
   }
 
@@ -144,10 +146,13 @@ export function installProcessHooks(
     const opts = (hasArgs ? options : args) ?? options ?? {};
     if (insideNative) return spawn(command, argv, opts);
     const wrapped = prepare([command, ...argv], opts);
-    return launch(
-      () => spawn(wrapped.command[0] ?? reject("process", command, "missing wrapped executable"), wrapped.command.slice(1), { ...opts, env: wrapped.env }),
-      wrapped.id,
-    );
+    return launch(() => {
+      const child = spawn(wrapped.command[0] ?? reject("process", command, "missing wrapped executable"), wrapped.command.slice(1), { ...opts, env: wrapped.env });
+      // The caller observes the command it asked for, not the instrumented launch.
+      Object.defineProperty(child, "spawnfile", { value: command, configurable: true, enumerable: true, writable: true });
+      Object.defineProperty(child, "spawnargs", { value: [command, ...argv], configurable: true, enumerable: true, writable: true });
+      return child;
+    }, wrapped.id);
   }
 
   function hookedSpawnSync(command: string, args?: string[] | Options, options?: Options): SyncResult {

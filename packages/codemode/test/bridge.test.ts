@@ -12,6 +12,19 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+/**
+ * Run one trivial cell so the interpreter is started before the cell under
+ * test: its short deadline must land while its tool calls are in flight, and a
+ * cold start under coverage instrumentation would spend that deadline first.
+ */
+async function warmInterpreter(kernel: PythonKernel): Promise<void> {
+  await expect(
+    kernel.run({ cellId: "warm", code: "1 + 1", timeoutMs: 15_000 }, async () => ({
+      status: "failed",
+      error: "no tools during warmup",
+    })),
+  ).resolves.toMatchObject({ status: "completed", value: "2" });
+}
 describe("interpreter bridge ownership", () => {
   test("a stray callId answer is ignored without disturbing the waiting call", async () => {
     const kernel = new PythonKernel();
@@ -57,6 +70,7 @@ describe("interpreter bridge ownership", () => {
     };
     rejectionEvents.on("unhandledRejection", onUnhandled);
     try {
+      await warmInterpreter(kernel);
       const running = kernel.run(
         {
           cellId: "timeout-in-flight",
@@ -114,12 +128,7 @@ describe("interpreter bridge ownership", () => {
       releaseSlowCall = resolve;
     });
     try {
-      await expect(
-        kernel.run({ cellId: "warm", code: "1 + 1", timeoutMs: 15_000 }, async () => ({
-          status: "failed",
-          error: "no tools during warmup",
-        })),
-      ).resolves.toMatchObject({ status: "completed", value: "2" });
+      await warmInterpreter(kernel);
       const firstPending = kernel.run(
         { cellId: "one", code: "tool.slow()", timeoutMs: 100 },
         async () => {
@@ -142,8 +151,9 @@ describe("interpreter bridge ownership", () => {
 
       // Timeout replaced the interpreter. The successor completes before the
       // old callback is released, so its result cannot depend on scheduler luck.
+      // It also runs on a cold interpreter, so it takes the file's 15 s deadline.
       const second = await kernel.run(
-        { cellId: "two", code: "tool.mine()", timeoutMs: 2000 },
+        { cellId: "two", code: "tool.mine()", timeoutMs: 15_000 },
         async () => ({ status: "completed", value: "mine" }),
       );
       expect(second).toMatchObject({ status: "completed", cellId: "two", value: "'mine'" });

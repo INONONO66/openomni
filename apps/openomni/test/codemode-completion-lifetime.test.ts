@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { createDispatcher, createExecutor, currentExecutor } from "@openomni/agent";
 import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";
 import { composeCodemode } from "../src/composition/codemode";
 import { createTools } from "../src/tools/core/catalog";
 import { cellDaemonOptions } from "./helpers/cell-daemon";
+import { seededPolicy } from "./helpers/executor";
 import { bounded } from "./helpers/protected-dispatch";
 import { residentSuite } from "./helpers/resident-suite";
 import { socketPath } from "./helpers/socket-path";
@@ -27,11 +27,7 @@ for (const stop of [false, true]) {
     const origin = { role: "resident", sessionId: `completion-${stop}` } as const;
     // Only storage IO is replaced: real policy, record construction and settlement execute.
     const executor = createExecutor({
-      policy: compilePolicySnapshot({
-        generation: 1,
-        mandatory: [],
-        rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
-      }),
+      policy: seededPolicy,
       ledger: {
         async commit(append) {
           const action = LedgerAction.Node.parse({ ...append, ordinal: actions.length + 1 });
@@ -57,14 +53,12 @@ for (const stop of [false, true]) {
       events: { publish: () => undefined },
       now: () => 1,
       callTool: async (call) => {
-        try {
-          const result = await cells.callTool(call);
-          completed.resolve({ result });
-          return result;
-        } catch (error) {
+        const result = await cells.callTool(call).catch((error: Error) => {
           completed.resolve({ error: String(error) });
           throw error;
-        }
+        });
+        completed.resolve({ result });
+        return result;
       },
     });
     suite.defer(() => host.close());
@@ -112,7 +106,9 @@ for (const stop of [false, true]) {
       });
 
     try {
-      // The one-second wait is eval's public background-run boundary, not a polling delay.
+      // The one-second wait is eval's public background-run boundary, not a polling delay;
+      // the interpreter is warmed first so a cold start cannot stand in for that boundary.
+      expect((await execute({ op: "run", code: "0", timeout: 15 })).output).toBe("0");
       const running = execute({
         op: "run",
         code: "print('started')\nanswer = completion('hold')\nanswer",

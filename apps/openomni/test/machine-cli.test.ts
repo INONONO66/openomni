@@ -114,7 +114,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       "eval",
       { cells },
       { role: "resident", sessionId: "qa-two" },
-    )({ operation: { op: "run", code: "state", timeout: 1 } });
+    )({ operation: { op: "run", code: "state", timeout: 15 } });
     expect(other).toContain("NameError");
     const write = await host
       .get("B")
@@ -123,7 +123,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
     if (execution.status !== "completed") throw new Error("QA exec did not complete");
     const codeResult = await host
       .get("B")
-      .runCode({ cellId: "qa-code", code: "6 * 7", tenant: "qa-raw", timeoutMs: 1000 });
+      .runCode({ cellId: "qa-code", code: "6 * 7", tenant: "qa-raw", timeoutMs: 15_000 });
     expect(codeResult).toMatchObject({ status: "completed", value: "42" });
     console.log(
       "machines-codemode QA",

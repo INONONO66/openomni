@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { scriptPartitions, scriptTestCommand, scriptTests, scriptToolingPartitions, scriptsLanes } from "./scripts-lanes";
+import { pythonSelfTests, pythonTests, scriptPartitions, scriptTestCommand, scriptTests, scriptToolingPartitions, scriptsLanes } from "./scripts-lanes";
 
 test("every recursive script test belongs to exactly one explicit lane", () => {
   const root = import.meta.dir;
@@ -13,6 +13,14 @@ test("every recursive script test belongs to exactly one explicit lane", () => {
   expect(new Set(partitioned).size).toBe(partitioned.length);
   expect([...partitioned].sort()).toEqual([...scriptsLanes["scripts-tooling"]].sort());
   expect(Object.keys(scriptToolingPartitions)).toEqual(scriptPartitions.filter((key) => key !== "scripts-contracts"));
+});
+
+test("every Python self-test belongs to the explicit manifest the first tooling shard measures", () => {
+  const actual = [...new Bun.Glob("**/{test_*,*.test}.py").scanSync({ cwd: import.meta.dir })].sort();
+  expect(actual).toEqual([...pythonSelfTests].sort());
+  expect(pythonTests(actual)).toEqual(pythonSelfTests);
+  expect(() => pythonTests([...actual, "quality-coverage/test_python_new.py"])).toThrow("quality-coverage/test_python_new.py");
+  expect(() => pythonTests(actual.slice(1))).toThrow(actual[0] ?? "");
 });
 
 test("compiler contracts run separately from mutation campaigns", () => {

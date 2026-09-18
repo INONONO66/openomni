@@ -140,7 +140,7 @@ test("SDK handles and Python globals share raw endpoints across two machines", a
     expect(
       await mode
         .getMachine("B")
-        .eval({ cellId: "direct", code: "40 + 2", tenant: "direct", timeoutMs: 1000 }),
+        .eval({ cellId: "direct", code: "40 + 2", tenant: "direct", timeoutMs: 15_000 }),
     ).toMatchObject({ status: "completed", value: "42" });
     // Handle methods are the tool names; the raw endpoint names are gone (KERNEL 3.5).
     expect(Object.keys(mode.getMachine("B")).sort()).toEqual([

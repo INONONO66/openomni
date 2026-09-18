@@ -60,6 +60,9 @@ describe("session benchmark fixtures", () => {
   });
 });
 
+// The whole benchmark runs in-process with a 10 ms sampling budget per phase; what
+// remains is seeding 10k actions and walking them, which the exact collector's
+// instrumentation runs about five times slower than the plain lane.
 test("benchmark entry point emits the ten existing ledger metrics and four new session metrics", async () => {
   const commit = SessionHandleStore.commit;
   const widths: number[] = [];
@@ -67,9 +70,11 @@ test("benchmark entry point emits the ten existing ledger metrics and four new s
     if (request.sessionId === "commit-session") widths.push(request.actions.length);
     return commit(request);
   });
+  process.env.BENCHMARK_BUDGET_MS = "10";
   try {
     await import("./index");
   } finally {
+    delete process.env.BENCHMARK_BUDGET_MS;
     tracked.mockRestore();
   }
   expect(widths.length).toBeGreaterThan(10);
@@ -91,4 +96,4 @@ test("benchmark entry point emits the ten existing ledger metrics and four new s
     "storage-session-list/100-sessions",
     "storage-session-list/500-sessions",
   ]);
-});
+}, 120_000);

@@ -93,6 +93,8 @@ function fixture(
   }
 }
 
+// Each fixture case spawns several ratchet children; the exact collector runs
+// instrumented children about five times slower than the plain lane.
 test("full check/update fail closed on empty instrumentation without rewriting baseline", () =>
   fixture((root, cli) => {
     const baseline = join(root, "script/conformance/coverage-baseline.json");
@@ -109,7 +111,7 @@ test("full check/update fail closed on empty instrumentation without rewriting b
     expect(cli().exitCode).not.toBe(0);
     expect(cli("--update").exitCode).toBe(0);
     expect(cli().exitCode).toBe(0);
-  }));
+  }), 120_000);
 
 test("selected lane requires exactly its report and ignores unrelated reports", () =>
   fixture((root, cli) => {
@@ -130,7 +132,7 @@ test("selected lane requires exactly its report and ignores unrelated reports", 
       expect(cli(...args).exitCode).not.toBe(0);
     rmSync(join(root, "packages/llm/coverage/lcov.info"));
     expect(cli("--lane", "packages/llm").exitCode).not.toBe(0);
-  }));
+  }), 120_000);
 
 test("real Bun omission is rejected in check and update; type-only files are exempt", () =>
   fixture((root, cli) => {
@@ -176,4 +178,4 @@ test("real Bun omission is rejected in check and update; type-only files are exe
     rmSync(join(lane, "src/unimported.tsx"));
     expect(cli("--update").exitCode).toBe(0);
     expect(cli("--lane", "packages/llm").exitCode).toBe(0);
-  }));
+  }), 120_000);

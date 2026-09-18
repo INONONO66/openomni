@@ -430,6 +430,29 @@ async function startCellHarness(ports: CatalogPorts) {
   };
 }
 
+/**
+ * A harness whose completion callback holds until `release` resolves: `entered`
+ * is the exact signal that the callback reached that boundary and `calls` counts
+ * how often it did. The interpreter is warmed first, so a test's one-second wait
+ * is the background-run boundary under test, not the cold start of a fresh
+ * instrumented interpreter.
+ */
+async function startHeldCompletionHarness() {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  const harness = await startCellHarness({
+    llm: async () => {
+      calls += 1;
+      entered.resolve();
+      await release.promise;
+      return "late";
+    },
+  });
+  expect(await harness.run("0")).toBe("0");
+  return { ...harness, entered, release, calls: () => calls };
+}
+
 test("cells from different sessions never share interpreter state", async () => {
   const { runWith } = await startCellHarness({ llm: async () => "ok" });
   const sessionA: CatalogOrigin = { role: "resident", sessionId: "session-a" };
@@ -451,20 +474,7 @@ test("cells from different sessions never share interpreter state", async () => 
  * so the one-second `timeout` is exactly what makes run answer `running`.
  */
 test("eval run answers running after its wait; peek shows the output so far; stop interrupts once", async () => {
-  const entered = Promise.withResolvers<void>();
-  const arm = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let calls = 0;
-  const { run, execute } = await startCellHarness({
-    llm: async () => {
-      await arm.promise;
-      calls += 1;
-      entered.resolve();
-      await release.promise;
-      return "late";
-    },
-  });
-  arm.resolve();
+  const { run, execute, entered, release, calls } = await startHeldCompletionHarness();
   const started = await run("print('started')\ncompletion('hold')\nprint('never')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
     started,
@@ -473,7 +483,7 @@ test("eval run answers running after its wait; peek shows the output so far; sto
   // The callback reaches its release boundary while run still owns the
   // completion IPC; entered is the exact signal for that boundary.
   await entered.promise;
-  expect(calls).toBe(1);
+  expect(calls()).toBe(1);
   expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toBe(
     `cell ${cellId} is still running; peek or stop it by cell_id\nstarted\n`,
   );
@@ -486,30 +496,17 @@ test("eval run answers running after its wait; peek shows the output so far; sto
   );
   release.resolve();
   expect(await run("6 * 7")).toBe("42");
-  expect(calls).toBe(1);
+  expect(calls()).toBe(1);
 }, 40_000);
 
 test("eval peek and stop racing on one cell: exactly one is answered, the other finds the id spent", async () => {
-  const entered = Promise.withResolvers<void>();
-  const arm = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let calls = 0;
-  const { run, execute } = await startCellHarness({
-    llm: async () => {
-      await arm.promise;
-      calls += 1;
-      entered.resolve();
-      await release.promise;
-      return "late";
-    },
-  });
-  arm.resolve();
+  const { run, execute, entered, release, calls } = await startHeldCompletionHarness();
   const started = await run("completion('hold')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
   // entered fires only after the callback reaches its release boundary.
   await entered.promise;
-  expect(calls).toBe(1);
+  expect(calls()).toBe(1);
   const [peeked, stopped] = await Promise.all([
     execute({ operation: { op: "peek", cell_id: cellId } }),
     execute({ operation: { op: "stop", cell_id: cellId } }),

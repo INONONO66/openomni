@@ -8,8 +8,11 @@ type NativeInput = {
 	receipt?: string;
 	onStderr?: (chunk: Uint8Array) => void;
 };
+/** A child's failure message carries the nested process excerpt (up to 16 KB);
+ * cutting it shorter hides the traceback the excerpt exists to surface. */
+const ERROR_LIMIT = 20_000;
 function formatErrors(errors: Json[]): string {
-	return errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, 400)).join("; ");
+	return errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, ERROR_LIMIT)).join("; ");
 }
 function structuredFailure(stdout: string): string | undefined {
 	try {
@@ -21,7 +24,7 @@ function structuredFailure(stdout: string): string | undefined {
 }
 export function nativeFailure(stdout: string, stderr: string): string {
 	const failure = structuredFailure(stdout) ?? (stderr || stdout);
-	return failure.slice(-2048);
+	return failure.slice(-ERROR_LIMIT);
 }
 /** Exit 1 is a complete measurement with findings, not infrastructure success. */
 export async function nativeJson(input: NativeInput) {
@@ -44,7 +47,7 @@ export async function nativeJson(input: NativeInput) {
 		throw new InventoryError(
 			"native_process",
 			input.command[0] ?? "",
-			`${child.signalCode ? `signal ${child.signalCode}` : `exit ${exitCode}`}: ${nativeFailure(stdout, stderr).slice(0, 4096)}`,
+			`${child.signalCode ? `signal ${child.signalCode}` : `exit ${exitCode}`}: ${nativeFailure(stdout, stderr)}`,
 		);
 	}
 	return {

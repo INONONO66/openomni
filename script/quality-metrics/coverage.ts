@@ -64,7 +64,7 @@ export function prepare(source: Source): Prepared {
     invokeTool({
       operation: "coverage",
       path: source.path,
-      code: emitted.outputText.replace(/\/\/# sourceMappingURL=.*$/m, ""),
+      code: emitted.outputText.replace(/^\/\/# sourceMappingURL=.*$/m, ""),
       sourceMap: emitted.sourceMapText,
     }),
   );
@@ -120,7 +120,7 @@ function counts(
 function unique(values: string[], path: string): void {
   if (new Set(values).size !== values.length) fail("coverage", path, "duplicate identity");
 }
-type CollectorPaths = { root: string; contract: string; inventory: string; plan: string };
+type CollectorPaths = { root: string; contract: string; inventory: string; plan: string; scope?: readonly string[] };
 type ReceiptObject = ReturnType<typeof object>;
 type VerifiedCollector = ReturnType<typeof coverageForMetrics>;
 function joinCollectorFile(file: Prepared, original: VerifiedCollector["files"][number], processes: VerifiedCollector["processes"]): Counters {
@@ -149,7 +149,12 @@ function collectorCoverage(path: string, receipt: ReceiptObject, prepared: Prepa
     const counters = joinCollectorFile(file, original, verified.processes);
     totals.set(file.path, counters);
   }
-  if (totals.size !== verified.files.length) fail("coverage", path, "collector source membership differs");
+  // A scoped metrics leg still verifies the entire frozen collector inventory
+  // and process graph. Only the final metrics projection may select a subset.
+  const selected = collector.scope ?? verified.files.map((file) => file.path);
+  unique([...selected], path);
+  if (totals.size !== selected.length || selected.some((path) => !totals.has(path)))
+    fail("coverage", path, "collector source membership differs");
   return { run: { id: sha(JSON.stringify(receipt)), inventoryHash: hash(receipt.inventoryHash), contractHash: hash(receipt.contractHash), planHash: hash(receipt.planHash) }, totals,
     processes: verified.processes.map((process) => ({ id: process.id, parent: process.parent, children: process.children, exitCode: process.exitCode })),
     receiptHash: sha(JSON.stringify(receipt)) };
@@ -304,6 +309,32 @@ export function loadCoverage(path: string, inventory: Inventory, prepared: Prepa
   };
 }
 export type Coverage = ReturnType<typeof loadCoverage>;
+/** Sum verified shard receipts of one run: identical file sets and inventory,
+ * distinct process graphs. The merged identity is the ordered shard receipts. */
+export function mergeCoverage(parts: Coverage[], planHash: string): Coverage {
+  const first = parts[0];
+  if (!first || !("inventoryHash" in first.run)) fail("coverage", "exact", "sharded coverage requires collector receipts");
+  const totals = new Map<string, Counters>();
+  const processes = parts.flatMap((part) => part.processes);
+  if (new Set(processes.map((process) => process.id)).size !== processes.length)
+    fail("coverage", "exact", "shard process identities overlap");
+  for (const part of parts) {
+    if (!("inventoryHash" in part.run) || part.run.inventoryHash !== first.run.inventoryHash || part.run.contractHash !== first.run.contractHash)
+      fail("identity", "exact", "shard inventory differs");
+    if (part.totals.size !== first.totals.size) fail("coverage", "exact", "shard file membership differs");
+    for (const [path, counters] of part.totals) {
+      const out = totals.get(path) ?? { s: {}, f: {} };
+      for (const key of ["s", "f"] as const) {
+        const expected = Object.keys(first.totals.get(path)?.[key] ?? {}).sort().join("\0");
+        if (Object.keys(counters[key]).sort().join("\0") !== expected) fail("coverage", path, "shard counters differ");
+        for (const [id, n] of Object.entries(counters[key])) out[key][id] = integer((out[key][id] ?? 0) + n);
+      }
+      totals.set(path, out);
+    }
+  }
+  const receiptHash = sha(JSON.stringify(parts.map((part) => part.receiptHash)));
+  return { run: { id: receiptHash, inventoryHash: first.run.inventoryHash, contractHash: first.run.contractHash, planHash }, totals, processes, receiptHash };
+}
 function offset(source: Source, p: Location): number {
   const lines = source.text.split("\n");
   if (

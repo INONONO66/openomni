@@ -15,6 +15,15 @@ type BenchmarkResult = {
 };
 const results: BenchmarkResult[] = [];
 
+// One measurement budget for every suite. The published run measures each task
+// for 100 ms after tinybench's default warm-up; BENCHMARK_BUDGET_MS shrinks both
+// phases to that many milliseconds and one iteration so an emission check of the
+// entry point spends its time seeding, not sampling.
+const budget = Number(process.env.BENCHMARK_BUDGET_MS);
+const measurement = Number.isFinite(budget)
+  ? { time: budget, iterations: 1, warmupTime: budget, warmupIterations: 1 }
+  : { time: 100 };
+
 function recordResults(suite: string, bench: Bench): void {
   console.log(`\n${suite}`);
   console.table(bench.table());
@@ -38,7 +47,7 @@ async function runSessionHydration(): Promise<void> {
       seedTurnHistory(id);
       return id;
     });
-    const bench = new Bench({ time: 100 });
+    const bench = new Bench(measurement);
     let cursor = 0;
     bench.add("get-session", () => {
       SessionHandleStore.row(sessions[cursor++ % sessions.length] ?? "");
@@ -58,7 +67,7 @@ async function runSessionHydration(): Promise<void> {
 
 async function runBusFanout(): Promise<void> {
   for (const count of [10, 50, 100]) {
-    const bench = new Bench({ time: 100 });
+    const bench = new Bench(measurement);
     let handled = 0;
     try {
       for (let index = 0; index < count; index += 1) {
@@ -102,7 +111,7 @@ async function runMessageSerialization(): Promise<void> {
     finish: "stop",
   };
   const payload = JSON.stringify(message);
-  const bench = new Bench({ time: 100 });
+  const bench = new Bench(measurement);
   bench.add("stringify-message", () => {
     JSON.stringify(message);
   });
@@ -119,7 +128,7 @@ async function runStorageSessionList(): Promise<void> {
     Storage.initialize({ dbPath: ":memory:" });
     try {
       for (let index = 0; index < count; index += 1) materializeSession(`list-${count}-${index}`);
-      const bench = new Bench({ time: 100 });
+      const bench = new Bench(measurement);
       bench.add(`${count}-sessions`, () => {
         SessionHandleStore.listRows();
       });
@@ -134,7 +143,7 @@ async function runStorageSessionList(): Promise<void> {
 async function runSessionTree(): Promise<void> {
   Storage.initialize({ dbPath: ":memory:" });
   try {
-    const bench = new Bench({ time: 100, iterations: 5, warmupTime: 100, warmupIterations: 2 });
+    const bench = new Bench({ iterations: 5, warmupTime: 100, warmupIterations: 2, ...measurement });
     for (const count of [1_000, 10_000]) {
       const id = `tree-${count}`;
       seedTurnHistory(id, count / 2);
@@ -144,7 +153,7 @@ async function runSessionTree(): Promise<void> {
     }
     await bench.run();
     recordResults("session-tree", bench);
-    const history = new Bench({ time: 100 });
+    const history = new Bench(measurement);
     history.add("page", () => {
       SessionHandleStore.historyPage("tree-10000", { limit: 50 });
     });
@@ -166,7 +175,7 @@ async function runSessionCommit(): Promise<void> {
     let index = 10;
     let request: LedgerSession.Commit;
     let result: LedgerSession.CommitResult;
-    const bench = new Bench({ time: 100 });
+    const bench = new Bench(measurement);
     bench.add(
       "action",
       () => {

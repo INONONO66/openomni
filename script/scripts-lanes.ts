@@ -61,10 +61,15 @@ export type ScriptsLane = keyof typeof scriptsLanes;
 export const scriptPartitions = ["scripts-contracts", "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3", "scripts-tooling-4"] as const;
 // Run 34675244728: include measured setup (shard 1 owns native Python tests),
 // and separate full-repository compiler suites. Projected wall times: 344-347s.
+// Runs 35292906822 and 35315712046: the exact collector runs shard 1 about
+// five times slower than the plain lane (run-quality-mutations 197s,
+// check-types-census 48s uninstrumented), and shard 1 crossed the 1800s exact
+// timeout twice while shard 3 finished in 817s; check-types-census moves to
+// shard 3 so every exact shard stays under the timeout.
 export const scriptToolingPartitions = {
-  "scripts-tooling-1": ["run-quality-mutations.test.ts", "check-types-census.test.ts", "coverage-source-inventory.test.ts", "quality-schema.test.ts", "quality-mutation-workflow.test.ts", "quality-source.test.ts"],
+  "scripts-tooling-1": ["run-quality-mutations.test.ts", "coverage-source-inventory.test.ts", "quality-schema.test.ts", "quality-mutation-workflow.test.ts", "quality-source.test.ts"],
   "scripts-tooling-2": ["check-census-native.test.ts", "run-quality-mutations-operators.test.ts", "quality-ci-metrics.test.ts", "quality-ci-legs.test.ts", "quality-json.test.ts", "conformance/summarize-benchmark-runs.test.ts", "quality-coverage-record.test.ts", "quality-native-process.test.ts", "quality-ci-coverage.test.ts", "quality-metrics/tool.test.ts", "quality-plan.test.ts", "quality-ci-receipt.test.ts", "quality-inventory.test.ts", "quality-native-mutation.test.ts", "quality-ci-bound.test.ts"],
-  "scripts-tooling-3": ["check-census.test.ts", "quality-metrics/declaration-erasure.test.ts", "quality-measure.test.ts", "census-program.test.ts", "quality-ratchet.test.ts", "check-quality-python.test.ts"],
+  "scripts-tooling-3": ["check-census.test.ts", "check-types-census.test.ts", "quality-metrics/declaration-erasure.test.ts", "quality-measure.test.ts", "census-program.test.ts", "quality-ratchet.test.ts", "check-quality-python.test.ts"],
   "scripts-tooling-4": ["run-quality-mutations-compiler.test.ts", "check-quality-coverage.test.ts", "quality-metrics/type-trivia.test.ts", "check-quality-metrics.test.ts", "coverage-ratchet.test.ts"],
 } as const;
 export type ScriptToolingPartition = keyof typeof scriptToolingPartitions;
@@ -75,6 +80,23 @@ export const scriptContracts = [
   ["verify-ledger-rename.ts"],
   ["check-ledger-schema-drift.ts"],
 ] as const;
+/** Python analyzer self-tests: explicit inventory, run by the first tooling
+ * shard under coverage.py so their native line evidence joins the lane LCOV. */
+export const pythonSelfTests = [
+  "quality-coverage/test_python.py",
+  "quality-coverage/test_python_annotations.py",
+  "quality-coverage/test_python_bool.py",
+  "quality-coverage/test_python_driver.py",
+  "quality-coverage/test_python_runtime.py",
+  "quality-metrics/test_python_metrics.py",
+  "quality-mutation/python-engine.test.py",
+] as const;
+export function pythonTests(actual = [...new Bun.Glob("**/{test_*,*.test}.py").scanSync({ cwd: import.meta.dir })]): readonly string[] {
+  const missing = actual.filter((path) => !pythonSelfTests.some((entry) => entry === path));
+  const absent = pythonSelfTests.filter((path) => !actual.includes(path));
+  if (missing.length || absent.length) throw new Error(`python self-test drift: ${[...missing, ...absent].join(", ")}`);
+  return pythonSelfTests;
+}
 export function scriptTests(lane: ScriptsLane, actual = [...new Bun.Glob("**/*.test.ts").scanSync({ cwd: import.meta.dir })]): readonly string[] {
   const assigned = Object.values(scriptsLanes).flat();
   const missing = actual.filter((path) => !assigned.some((entry) => entry === path));

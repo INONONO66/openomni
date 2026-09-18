@@ -862,3 +862,11 @@ test("native instrumentation receipts larger than Bun's default pipe limit stay 
   expect(Object.keys(result.statementMap)).toHaveLength(3002);
   expect(result.code.length).toBeGreaterThan(524288);
 });
+
+test("a source-map directive inside a string literal survives the emitted-map strip", () => {
+  const text = 'const directive = "//# sourceMappingURL=in-string.js.map";\nconsole.log(directive.length);\n';
+  const result = prepare(source(text, "directive-string.ts"));
+  expect(Object.keys(result.statementMap)).toHaveLength(2);
+  expect(result.code).toContain('"//# sourceMappingURL=in-string.js.map"');
+  expect(result.code).not.toMatch(/^\/\/# sourceMappingURL=/m);
+});

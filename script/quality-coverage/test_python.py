@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import py_compile
 import selectors
 import signal
@@ -336,6 +337,47 @@ def test_live_counts_when_parent_kills_blocked_child() -> None:
         assert not (directory / "child.trace.json").exists()
 
 
+def test_root_cwd_when_launch_request_names_the_selected_root() -> None:
+    # Given a root launch under a selected source root: the collector's request
+    # names the cwd it launched from, relative to that root.
+    root = Path.cwd().resolve().parent
+    cwd = os.path.relpath(Path.cwd().resolve(), root)
+    source = 'print("root")\n'
+    environment = {**os.environ, "D945_SOURCE_ROOT": str(root), "D945_PARENT": ""}
+    with tempfile.TemporaryDirectory() as temporary:
+        directory = Path(temporary)
+        path = str(directory / "target.py")
+        _ = Path(path).write_text(source)
+        row, = manifest(directory, {path: source})
+        _ = (directory / "child.request.json").write_text(json.dumps({"cwd": cwd}))
+        # When the runner starts where the request says it does.
+        result = subprocess.run(command(directory, path), env=environment,
+                                capture_output=True, timeout=15, check=False)
+        # Then it runs the target and its start receipt records that cwd.
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == b"root\n"
+        start = json_object(decode_json((directory / "child.start.json").read_text()))
+        assert start["parent"] == ""
+        assert start["cwd"] == cwd
+        assert counts(directory, row)["s"] == {"0": 1}
+    with tempfile.TemporaryDirectory() as temporary:
+        directory = Path(temporary)
+        path = str(directory / "target.py")
+        _ = Path(path).write_text(source)
+        _ = manifest(directory, {path: source})
+        _ = (directory / "child.request.json").write_text(json.dumps({"cwd": f"{cwd}/elsewhere"}))
+        # When the request names another cwd, the runner refuses before executing.
+        result = subprocess.run(command(directory, path), env=environment,
+                                capture_output=True, timeout=15, check=False)
+        # Then the failure receipt names the identity mismatch and nothing ran.
+        assert result.returncode != 0
+        assert result.stdout == b""
+        failure = json_object(decode_json((directory / "child.failure.json").read_text()))
+        assert failure == {"error": "Root cwd differs from launch request", "type": "AnalyzerError"}
+        assert not (directory / "child.start.json").exists()
+        assert not (directory / "child.trace.json").exists()
+
+
 def test_unobservable_process_when_owned_source_spawns() -> None:
     # Given an owned source launching an unobservable descendant.
     with tempfile.TemporaryDirectory() as temporary:
@@ -361,6 +403,7 @@ if __name__ == "__main__":
         test_imports_when_manifest_contains_package_and_unloaded_source,
         test_native_failure_when_target_raises,
         test_live_counts_when_parent_kills_blocked_child,
+        test_root_cwd_when_launch_request_names_the_selected_root,
         test_unobservable_process_when_owned_source_spawns,
     ]
     for test in tests:

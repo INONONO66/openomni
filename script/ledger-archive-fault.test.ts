@@ -47,7 +47,7 @@ for (const mode of ["throw", "crash"] as const) {
         env: { ...process.env, U967_ARCHIVE_BOUNDARY: boundary, U967_FAULT_MODE: mode },
         stdout: "pipe",
         stderr: "pipe",
-        timeout: 10_000,
+        timeout: 60_000,
       });
       const stdout = result.stdout.toString();
       console.log(
