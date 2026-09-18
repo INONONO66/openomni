@@ -53,8 +53,18 @@ const DEFAULT_GATE_OUTPUT = "bench-results/combined.json";
 const DEFAULT_STATS_OUTPUT = "bench-results/statistics.json";
 const DEFAULT_SUMMARY_OUTPUT = "bench-results/summary.md";
 
-async function main(): Promise<void> {
-  const args = Bun.argv.slice(2);
+export function main(argv = Bun.argv.slice(2)): Promise<number> {
+  return summarize(argv).then(
+    () => 0,
+    (error: Error) => {
+      process.stderr.write(`ERROR: ${error.message}\n`);
+      return 1;
+    },
+  );
+}
+
+async function summarize(argv: readonly string[]): Promise<void> {
+  const args = [...argv];
   const mode = args[0] === "--reference" ? "reference" : "head";
   if (mode === "reference") args.shift();
   const inputDir = args[0] ?? DEFAULT_INPUT_DIR;
@@ -66,7 +76,7 @@ async function main(): Promise<void> {
   if (!/^\d+$/.test(countInput) || !Number.isSafeInteger(expectedRuns) || expectedRuns < 1) {
     throw new Error("BENCHMARK_RUNS must be a positive integer");
   }
-  if (Bun.argv[2] === "--validate-input") return;
+  if (args[0] === "--validate-input") return;
 
   const metrics = validateBenchmarkRuns(await readBenchmarkRuns(inputDir), expectedRuns, mode);
   const stats = summarizeMetrics(metrics);
@@ -212,9 +222,4 @@ function format(value: number): string {
   return Math.round(value).toLocaleString("en-US");
 }
 
-if (import.meta.main) {
-  main().catch((error: Error) => {
-    process.stderr.write(`ERROR: ${error.message}\n`);
-    process.exit(1);
-  });
-}
+if (import.meta.main) process.exitCode = await main();
