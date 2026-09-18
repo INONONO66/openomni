@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789744419856,
+  "lastUpdate": 1789747916119,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -71597,6 +71597,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 166648,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "80670644e45c136a7a92cd2f96639f841644128e",
+          "message": "fix(quality): stop the mutation baseline flaking on fs.watch and name red tests (#1091)\n\nFixture child now waits for SIGUSR2 instead of fs.watch(.) (macOS FSEvents lag under load caused SIGTERM at the 5 s nativeJson timeout). Runner reports every red baseline testcase as [mutation] baseline red: <file> > <name>: <message> through one pure describeRedBaseline(); InventoryError carries the first five identities. Review: pr-1091-code-review.md PASS. Part of #1076 follow-up; git-metadata hypothesis refuted.",
+          "timestamp": "2026-09-19T01:08:43+09:00",
+          "tree_id": "771ce31247937843a8539362fb69348e25c80954",
+          "url": "https://github.com/INONONO66/openomni/commit/80670644e45c136a7a92cd2f96639f841644128e"
+        },
+        "date": 1789747915028,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1083,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1757,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1461,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1627710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 408115,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 7799289,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 166,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 668,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 124499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 844422,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 596183,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 91483416,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9309731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 21331,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 205860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 1078110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 260704,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15926420,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 99,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 178531,
             "unit": "ns/op"
           }
         ]
