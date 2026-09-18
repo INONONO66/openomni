@@ -1449,12 +1449,11 @@ test("metrics consumes the actual verified collector receipt without fabricated 
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("decode rejects invalid escapes and leading zeros while accepting unicode escapes", () => {
+test("decode rejects invalid escapes and leading zeros while accepting unicode escapes", async () => {
 	expect(decode('"a\\u0041b"')).toBe("aAb");
 	expect(decode('[1, -0.5, 2e3, "x\\n"]')).toEqual([1, -0.5, 2000, "x\n"]);
 	for (const text of ['"\\q"', "01", '"\\u12"', '"unterminated', '"raw\ttab"', "[1,]", '{"a":1,}', "1 2"]) {
-		let thrown: Json = null;
-		try { decode(text); } catch (error) { thrown = obj(error as Json); }
+		const thrown = await Promise.resolve(text).then(decode).then((): Json => null, (error: Json) => error);
 		expect(obj(thrown).code, text).toBe("schema");
 	}
 });

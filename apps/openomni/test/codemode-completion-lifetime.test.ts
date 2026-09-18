@@ -57,14 +57,12 @@ for (const stop of [false, true]) {
       events: { publish: () => undefined },
       now: () => 1,
       callTool: async (call) => {
-        try {
-          const result = await cells.callTool(call);
-          completed.resolve({ result });
-          return result;
-        } catch (error) {
+        const result = await cells.callTool(call).catch((error: Error) => {
           completed.resolve({ error: String(error) });
           throw error;
-        }
+        });
+        completed.resolve({ result });
+        return result;
       },
     });
     suite.defer(() => host.close());

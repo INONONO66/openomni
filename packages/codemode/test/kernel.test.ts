@@ -172,7 +172,8 @@ describe("code-mode kernel substrate", () => {
         },
       );
       expect(result).toMatchObject({ status: "raised" });
-      expect(result).toMatchObject({ error: expect.stringContaining("disk on fire") });
+      if (result.status !== "raised") throw new Error("expected raised cell");
+      expect(result.error).toContain("disk on fire");
     } finally {
       await kernel.close();
     }

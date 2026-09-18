@@ -43,7 +43,7 @@ export function installWorkerHooks(
 				terminal = true;
 				observe(this.#id, code);
 			});
-			this.once("error", (error) => {
+			this.once("error", (error: Error) => {
 				if (!terminal) reject("execution", this.#id, error.message);
 			});
 		}
