@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { z } from "zod";
 import { SessionHandleStore, Storage } from "../src/index";
 import { prepareTurnCommit, seedTurnHistory } from "./seed-turn-history";
@@ -61,7 +61,19 @@ describe("session benchmark fixtures", () => {
 });
 
 test("benchmark entry point emits the ten existing ledger metrics and four new session metrics", async () => {
-  await import("./index");
+  const commit = SessionHandleStore.commit;
+  const widths: number[] = [];
+  const tracked = spyOn(SessionHandleStore, "commit").mockImplementation((request) => {
+    if (request.sessionId === "commit-session") widths.push(request.actions.length);
+    return commit(request);
+  });
+  try {
+    await import("./index");
+  } finally {
+    tracked.mockRestore();
+  }
+  expect(widths.length).toBeGreaterThan(10);
+  expect(widths.slice(10).every((width) => width === 1)).toBe(true);
   const metrics = Metric.array().parse(await Bun.file("bench-results/session.json").json());
   expect(metrics.map((metric) => metric.name).sort()).toEqual([
     "bus-fanout/10-subscribers",
