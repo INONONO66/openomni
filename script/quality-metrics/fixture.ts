@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { prepare, type Counters } from "./coverage";
@@ -32,7 +32,12 @@ function runPythonCollector(root: string, source: Source, index: number): { chil
   const env = { ...process.env };
   delete env.D945_SOURCE_ROOT;
   delete env.D945_PARENT;
-  const child = spawn([python, "-u", collector, "run", directory, `process-${index}`, source.path], root, env);
+  // Like production (`launchCommand`), the driver runs from a copy outside the frozen
+  // root: under an outer exact collector it is then an external program, not a nested
+  // Runner competing for the same sys.monitoring tool id.
+  const driver = join(directory, "python.py");
+  copyFileSync(collector, driver);
+  const child = spawn([python, "-u", driver, "run", directory, `process-${index}`, source.path], root, env);
   return { child, counts: () => pythonCounts(join(directory, `process-${index}.counts.bin`), coverage) };
 }
 function spawn(command: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Spawned {
