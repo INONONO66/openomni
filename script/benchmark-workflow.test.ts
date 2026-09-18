@@ -79,7 +79,7 @@ test("all events collect the accepted SHA and head on one runner before the sole
   const steps = workflow.jobs.benchmark.steps;
   const reference = steps.findIndex((step) => step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"));
   const collection = steps.findIndex((step) => step.run?.includes("seq 1"));
-  const summary = steps.findIndex((step) => step.run?.includes("summarize-benchmark-runs.ts bench-results/reference/runs"));
+  const summary = steps.findIndex((step) => step.run?.includes("summarize-benchmark-runs.ts --reference bench-results/reference/runs"));
   const gate = steps.findIndex((step) => step.run?.includes("--prepare-reference"));
   expect(reference).toBeGreaterThanOrEqual(0);
   expect(collection).toBeGreaterThan(reference);
@@ -98,6 +98,9 @@ test("all events collect the accepted SHA and head on one runner before the sole
   expect(steps[collection]?.run).toContain('cp packages/ledger/bench-results/session.json "$output/session.json"');
   expect(steps[collection]?.run).toContain('cp packages/agent/bench-results/agent.json "$output/agent.json"');
   expect(steps[summary]?.run).toContain("bun run script/summarize-benchmark-runs.ts\n");
+  expect(steps[summary]?.run).toContain(
+    "bun run script/summarize-benchmark-runs.ts --reference bench-results/reference/runs bench-results/reference/combined.json bench-results/reference/statistics.json bench-results/reference/summary.md",
+  );
   expect(steps[gate]?.run).toContain('--prepare-reference bench-results/reference/statistics.json bench-results/accepted.js "$(git -C "$REFERENCE_WORKTREE" rev-parse HEAD)" "$(git rev-parse HEAD)"');
   const decision = "bun run script/check-benchmark-regression.ts bench-results/statistics.json bench-results/reference.json";
   expect(steps[gate]?.run).toContain(decision);

@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           bun run script/summarize-benchmark-runs.ts
-          bun run script/summarize-benchmark-runs.ts bench-results/reference/runs bench-results/reference/combined.json bench-results/reference/statistics.json bench-results/reference/summary.md
+          bun run script/summarize-benchmark-runs.ts --reference bench-results/reference/runs bench-results/reference/combined.json bench-results/reference/statistics.json bench-results/reference/summary.md
 
       - name: Publish benchmark summary
         run: cat bench-results/summary.md >> "$GITHUB_STEP_SUMMARY"

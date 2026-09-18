@@ -2,6 +2,8 @@
 
 Single source of truth for current wiring, not a declaration that every target in [Core Model](core-model.md), [Kernel Contract](kernel-contract.md), [Architecture](architecture.md), or [Machines and Delegation](machines-and-delegation.md) has shipped. [Epic #930](https://github.com/INONONO66/openomni/issues/930) supersedes #459 for kernel delivery; #966 and #968-#973 are the subsequent lifecycle campaign.
 
+[Kernel reference pins](kernel-references.md) are owned by `docs/kernel-references.md`.
+
 **#969 cutover (2026-09-07):** waiting and authenticated consent are original-action state. Source-owned outbound obligations feed the receiving kernel and inbox. Migration 0038 removes the independent stores with guarded archival retention. Final HEAD, gate outputs and acceptance receipts are recorded in the PR and local report.
 
 **#971 cutover (2026-09-08):** alarm occurrence identity, deadline and notification budget are decided by the ledger from the committed row and its persisted spec; the evaluator reports a transport `sourceKey` and redelivery commits nothing. No schema change, no migration, no new table.

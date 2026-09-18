@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "crashPoint": "turn_intent_before_llm_entry",
+      "recovery": "resumed_without_reexecution",
+      "note": "The original open turn resumes after lease expiry; the first model body has not run."
+    },
+    {
+      "crashPoint": "llm_body_before_attempt_result_commit",
+      "recovery": "lost",
+      "note": "The provider body returned, but its attempt result did not commit. Recovery records outcome_unknown without replaying the body."
+    },
+    {
+      "crashPoint": "llm_result_committed",
+      "recovery": "resumed_without_reexecution",
+      "note": "Executor recovery preserves the already committed logical model result and does not append or execute it again. This is not a claim about replaying the whole chat loop."
+    },
+    {
+      "crashPoint": "tool_wave_between_result_commits",
+      "recovery": "lost",
+      "note": "Both bodies returned; only the first positional result committed. That result survives, while the second settles outcome_unknown without replay."
+    },
+    {
+      "crashPoint": "retry_backoff_wait",
+      "recovery": "not_durable",
+      "note": "The failed attempt persists, but the retry wait has no durable continuation. Recovery marks the logical model operation failed with absent local completion."
+    },
+    {
+      "crashPoint": "compaction_summary_before_result_commit",
+      "recovery": "not_durable",
+      "note": "The real compactor produced a summary and projection, but its result commit was not entered. Recovery records local absence and retains the original history."
+    },
+    {
+      "crashPoint": "inbox_admitted_before_turn_open",
+      "recovery": "rearmed",
+      "note": "The atomic inbox admission committed, but no turn opened. A new handle consumes that same inbox message once. No partial SQLite transaction is simulated."
+    },
+    {
+      "crashPoint": "outbound_reply_before_delivery_settle",
+      "recovery": "rearmed",
+      "note": "The source turn and reply obligation committed. Recovery dispatches the same pending reply and settles its delivery without executing the source runner again."
+    }
+  ]
+}
