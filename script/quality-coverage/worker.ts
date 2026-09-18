@@ -21,6 +21,19 @@ const moduleLoader: {
 	};
 } = modules;
 
+/** A Node worker's execArgv: the inherited options without the parent's preload
+ * import, then the preload the observed worker imports for its own identity. */
+export function workerExecArgv(inherited: readonly string[], preload: string): string[] {
+	const execArgv: string[] = [];
+	for (let index = 0; index < inherited.length; index++) {
+		const value = inherited[index];
+		if (value === "--import" && inherited[index + 1]?.endsWith("preload.mjs")) { index++; continue; }
+		if (value?.endsWith("preload.mjs")) continue;
+		if (value !== undefined) execArgv.push(value);
+	}
+	return [...execArgv, "--import", preload];
+}
+
 export function installWorkerHooks(
 	prepare: (
 		filename: WorkerFilename,

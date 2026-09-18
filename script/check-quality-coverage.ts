@@ -23,7 +23,7 @@ import nativeProcesses from "node:child_process";
 import * as nodeModules from "node:module";
 import * as workerThreads from "node:worker_threads";
 import { installProcessHooks } from "./quality-coverage/node";
-import { installWorkerHooks } from "./quality-coverage/worker";
+import { installWorkerHooks, workerExecArgv } from "./quality-coverage/worker";
 const analyzerNative: {
 	spawnSync(binary: string, args: string[], options: { input?: string; encoding: "utf8"; timeout: number }): {
 		status: number | null; stdout: string; stderr: string; signal: string | null;
@@ -1932,8 +1932,7 @@ function sharedEmission(directory: string, data: PreloadInputs, path: string): {
 }
 // The preload is built outside the owned tree so the gate's actual CLI source
 // remains instrumentable. Bun.spawn is interposed before owned code imports it.
-function preload(directory: string): void {
-	instrumented = true;
+export function preload(directory: string): void {
 	if (ts.version !== "5.9.2") fail("toolchain", "", "TypeScript must be 5.9.2");
 	const data = preloadInputsFrom(decode(readFileSync(join(directory, "inputs.json"), "utf8")));
 	const id = process.env.D945_PROCESS ?? fail("process", "", "missing process identity");
@@ -1960,15 +1959,13 @@ function preload(directory: string): void {
 				fail("tamper", path, "source changed after preparation");
 			return file.code;
 		}
-		if (data.roots.some((r) => path.startsWith(`${r}/`)) && !path.split("/").includes("node_modules")) {
-			const emitted = sharedEmission(directory, data, path);
-			if (!emitted.file.transfer) fail("source_map", path, "emitted transfer proof is missing");
-			emittedMaps.set(emitted.proof.source, [...(emittedMaps.get(emitted.proof.source) ?? []), emitted.file.transfer]);
-			emissions.set(path, emitted.proof);
-			writeFileSync(join(directory, `${id}.emitted.json`), JSON.stringify([...emissions.values()]));
-			return emitted.file.code;
-		}
-		return undefined;
+		if (!data.roots.some((r) => path.startsWith(`${r}/`)) || path.split("/").includes("node_modules")) return undefined;
+		const emitted = sharedEmission(directory, data, path);
+		if (!emitted.file.transfer) fail("source_map", path, "emitted transfer proof is missing");
+		emittedMaps.set(emitted.proof.source, [...(emittedMaps.get(emitted.proof.source) ?? []), emitted.file.transfer]);
+		emissions.set(path, emitted.proof);
+		writeFileSync(join(directory, `${id}.emitted.json`), JSON.stringify([...emissions.values()]));
+		return emitted.file.code;
 	}
 	if (runtime === "node") {
 		if (process.versions.node !== "24.19.0") fail("toolchain", "", "Node must be 24.19.0");
@@ -2045,25 +2042,7 @@ function preload(directory: string): void {
 			};
 			sourceRoot(data, environment);
 			const baseOptions = options ?? {};
-			if (runtime === "node") {
-				const inherited = options?.execArgv ?? process.execArgv;
-				const execArgv: string[] = [];
-				for (let index = 0; index < inherited.length; index++) {
-					const value = inherited[index];
-					const next = inherited[index + 1];
-					if (value === "--import" && next?.endsWith("preload.mjs")) {
-						index++;
-						continue;
-					}
-					if (value?.endsWith("preload.mjs")) continue;
-					if (value !== undefined) execArgv.push(value);
-				}
-				return {
-					id: childId,
-					filename: target,
-					options: { ...baseOptions, env: environment, execArgv: [...execArgv, "--import", pathToFileURL(join(directory, "preload.mjs")).href] },
-				};
-			}
+			if (runtime === "node") return { id: childId, filename: target, options: { ...baseOptions, env: environment, execArgv: workerExecArgv(options?.execArgv ?? process.execArgv, pathToFileURL(join(directory, "preload.mjs")).href) } };
 			const bootstrap = join(directory, `${childId}.worker.mjs`);
 			writeFileSync(bootstrap, `import ${JSON.stringify(pathToFileURL(join(directory, "preload.js")).href)};\nawait import(${JSON.stringify(target.href)});\n`, { flag: "wx" });
 			return { id: childId, filename: bootstrap, options: { ...baseOptions, env: environment } };
@@ -2287,10 +2266,7 @@ async function collectCommand(data: Inputs, directory: string, command: Command)
 	const stdout = new Response(child.stdout).text();
 	const stderr = new Response(child.stderr).text();
 	let deadline = false;
-	const timeout = setTimeout(() => {
-		deadline = true;
-		child.kill("SIGKILL");
-	}, COMMAND_DEADLINE_MS);
+	const timeout = setTimeout(() => { deadline = true; child.kill("SIGKILL"); }, COMMAND_DEADLINE_MS);
 	const exitCode = await child.exited;
 	clearTimeout(timeout);
 	observe(directory, id, child.signalCode ? null : exitCode, signalName(child.signalCode));
@@ -2309,33 +2285,46 @@ async function collectCommand(data: Inputs, directory: string, command: Command)
 	return { id: command.id, process: id, exitCode };
 }
 
+// The directory every instrumented process of one collection reads: the prepared
+// inventory, both runtime preloads, the Python runner and the dependency tree.
+async function prepareCollector(data: Inputs, directory: string): Promise<void> {
+	writeFileSync(join(directory, "inputs.json"), JSON.stringify(preloadInputs(data)));
+	const build = await Bun.build({
+		entrypoints: [import.meta.path],
+		outdir: directory,
+		naming: "preload.js",
+		target: "bun",
+		packages: "external",
+	});
+	if (!build.success) fail("toolchain", "", "preload build failed");
+	const nodeBuild = await Bun.build({ entrypoints: [import.meta.path], outdir: directory, naming: "preload.mjs", target: "node", packages: "external" });
+	if (!nodeBuild.success) fail("toolchain", "", "Node preload build failed");
+	copyFileSync(asset("python.py"), join(directory, "python.py"));
+	let slots = 0;
+	const pythonFiles = data.files.flatMap((file) => {
+		const offset = slots;
+		slots += counterSlots(file.coverage).length;
+		const lineOffset = slots;
+		slots += file.python?.lines.length ?? 0;
+		return file.python ? [{ path: file.entry.path, source: file.python.source, coverage: file.coverage, lines: file.python.lines, arcs: file.python.arcs, offset, lineOffset }] : [];
+	});
+	writeFileSync(join(directory, "python-files.json"), JSON.stringify(pythonFiles));
+	writeFileSync(join(directory, "process-size.json"), JSON.stringify({ slots: Math.max(1, slots) }));
+	symlinkSync(resolve(import.meta.dir, "../node_modules"), join(directory, "node_modules"));
+}
+/** A prepared collector directory for `paths`, so a test can run `preload` for
+ * one process identity inside its own runtime; the caller removes the directory. */
+export async function collectorDirectory(paths: FrozenPaths): Promise<string> {
+	const directory = realpathSync(mkdtempSync(join(tmpdir(), "openomni-d945-coverage-")));
+	await prepareCollector(frozenInputs(paths), directory);
+	return directory;
+}
+
 async function collect(data: Inputs): Promise<Json> {
 	if (!["1.3.6", "1.4.1"].includes(Bun.version)) fail("toolchain", "", "unsupported Bun version");
 	const directory = realpathSync(mkdtempSync(join(tmpdir(), "openomni-d945-coverage-")));
 	try {
-		writeFileSync(join(directory, "inputs.json"), JSON.stringify(preloadInputs(data)));
-		const build = await Bun.build({
-			entrypoints: [import.meta.path],
-			outdir: directory,
-			naming: "preload.js",
-			target: "bun",
-			packages: "external",
-		});
-		if (!build.success) fail("toolchain", "", "preload build failed");
-		const nodeBuild = await Bun.build({ entrypoints: [import.meta.path], outdir: directory, naming: "preload.mjs", target: "node", packages: "external" });
-		if (!nodeBuild.success) fail("toolchain", "", "Node preload build failed");
-		copyFileSync(asset("python.py"), join(directory, "python.py"));
-		let slots = 0;
-		const pythonFiles = data.files.flatMap((file) => {
-			const offset = slots;
-			slots += counterSlots(file.coverage).length;
-			const lineOffset = slots;
-			slots += file.python?.lines.length ?? 0;
-			return file.python ? [{ path: file.entry.path, source: file.python.source, coverage: file.coverage, lines: file.python.lines, arcs: file.python.arcs, offset, lineOffset }] : [];
-		});
-		writeFileSync(join(directory, "python-files.json"), JSON.stringify(pythonFiles));
-		writeFileSync(join(directory, "process-size.json"), JSON.stringify({ slots: Math.max(1, slots) }));
-		symlinkSync(resolve(import.meta.dir, "../node_modules"), join(directory, "node_modules"));
+		await prepareCollector(data, directory);
 		const observed: Json[] = [];
 		for (const command of data.commands) {
 			observed.push(await collectCommand(data, directory, command));
@@ -2385,13 +2374,17 @@ async function collect(data: Inputs): Promise<Json> {
 	}
 }
 
-export function coverageForMetrics(paths: { root: string; contract: string; inventory: string; plan: string; coverage: string }) {
-	const data = inputs({
+type FrozenPaths = { root: string; contract: string; inventory: string; plan: string };
+function frozenInputs(paths: FrozenPaths): Inputs {
+	return inputs({
 		root: realpathSync(paths.root),
 		contract: resolve(paths.contract), contractHash: sha256(readFileSync(paths.contract)),
 		inventory: resolve(paths.inventory), inventoryHash: sha256(readFileSync(paths.inventory)),
 		plan: resolve(paths.plan), planHash: sha256(readFileSync(paths.plan)),
 	});
+}
+export function coverageForMetrics(paths: FrozenPaths & { coverage: string }) {
+	const data = frozenInputs(paths);
 	const input = decode(readFileSync(paths.coverage, "utf8"));
 	verify(input, data);
 	return {
@@ -2475,5 +2468,6 @@ if (
 	process.env.D945_DIRECTORY &&
 	["preload.js", "preload.mjs"].some((name) => fileURLToPath(import.meta.url) === join(process.env.D945_DIRECTORY ?? "", name))
 ) {
+	instrumented = true;
 	preload(process.env.D945_DIRECTORY);
 } else if (import.meta.main) process.exitCode = await qualityCoverageMain();

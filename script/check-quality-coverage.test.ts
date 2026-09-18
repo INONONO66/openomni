@@ -1,11 +1,18 @@
-import { expect, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
+import childProcess from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import * as modules from "node:module";
+import { syncBuiltinESMExports } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+import * as workerThreads from "node:worker_threads";
 import ts from "typescript";
-import { coverageForMetrics, decode, exactMetric, sha256, failureExcerpt } from "./check-quality-coverage";
+import { z } from "zod";
+import { collectorDirectory, coverageForMetrics, decode, exactMetric, sha256, failureExcerpt, preload, qualityCoverageMain } from "./check-quality-coverage";
 import { run as metrics } from "./check-quality-metrics";
 import { statementCounters } from "./quality-ci-bound";
+import { workerExecArgv } from "./quality-coverage/worker";
 import { loadCoverage, prepare } from "./quality-metrics/coverage";
 import { loadInventory } from "./quality-metrics/input";
 import { parseNativeLcov } from "./quality-native-lcov";
@@ -99,24 +106,174 @@ function fixture(sources: Record<string, string> = fixtures, commands: Command[]
 			sha256(readFileSync(join(root, `${name}.json`))),
 		]),
 	];
-	function run(extra: string[] = [], entry = checker, environment: NodeJS.ProcessEnv = {}) {
-		const child = Bun.spawnSync([process.execPath, entry, ...args, ...extra], {
-			stdout: "pipe",
-			stderr: "pipe",
-			timeout: 120_000,
-			env: { ...process.env, ...environment },
+	// The checker runs in this process so native coverage observes the collector
+	// itself; only its instrumented commands are children. The environment
+	// override reaches those children exactly as a spawned checker's would.
+	function run(extra: string[] = [], environment: NodeJS.ProcessEnv = {}) {
+		return inEnvironment(environment, async () => {
+			let stdout = "";
+			let stderr = "";
+			const log = spyOn(console, "log").mockImplementation((line: string) => { stdout += `${line}\n`; });
+			const errors = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+				stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+				return true;
+			});
+			try {
+				const exit = await qualityCoverageMain([...args, ...extra]);
+				return { exit, result: obj(decode(stdout)), stderr };
+			} finally {
+				log.mockRestore();
+				errors.mockRestore();
+			}
 		});
-		const result = obj(decode(child.stdout.toString()));
-		return { exit: child.exitCode, result, stderr: child.stderr.toString() };
 	}
 	return { root, put, args, run, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
-function collected(sources: Record<string, string> = fixtures, plan = defaultPlan) {
+async function inEnvironment<T>(environment: NodeJS.ProcessEnv, action: () => Promise<T>): Promise<T> {
+	const saved = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
+	Object.assign(process.env, environment);
+	try {
+		return await action();
+	} finally {
+		for (const [key, value] of Object.entries(saved)) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+}
+/** The value a synchronous action throws, or null when it returns. */
+function thrown(action: () => void): Promise<Json> {
+	return Promise.resolve().then(action).then((): Json => null, (error: Json) => error);
+}
+const moduleLoader: {
+	createRequire(path: string): (id: "node:worker_threads") => { Worker: typeof workerThreads.Worker };
+} = modules;
+// Running the preload here hands this process the instrumented child's role. The
+// interposition it installs is undone afterwards so later tests launch natively.
+function interposition(): () => void {
+	const workerModule = moduleLoader.createRequire(import.meta.url)("node:worker_threads");
+	const launches = ["spawn", "spawnSync", "execFile", "execFileSync", "fork", "exec", "execSync"] as const;
+	const saved = {
+		spawn: Bun.spawn,
+		spawnSync: Bun.spawnSync,
+		processes: launches.map((name) => [name, childProcess[name]] as const),
+		Worker: workerModule.Worker,
+		coverage: globalThis.__d945Coverage,
+	};
+	return () => {
+		Object.defineProperty(Bun, "spawn", { value: saved.spawn });
+		Object.defineProperty(Bun, "spawnSync", { value: saved.spawnSync });
+		for (const [name, value] of saved.processes) Object.defineProperty(childProcess, name, { value });
+		mock.module("node:child_process", () => ({ ...childProcess, default: childProcess }));
+		workerModule.Worker = saved.Worker;
+		syncBuiltinESMExports();
+		mock.module("node:worker_threads", () => ({ ...workerThreads, Worker: saved.Worker, default: workerThreads }));
+		globalThis.__d945Coverage = saved.coverage;
+	};
+}
+const FrozenMain = z.object({ pick: z.custom<(taken: boolean) => number>((value: unknown) => typeof value === "function") });
+const EmittedBarrel = z.object({ choose: z.custom<(taken: boolean) => number>((value: unknown) => typeof value === "function") });
+// Bun's declared option types omit `shell`; the interposition still refuses it.
+type LooseSpawnSync = (command: string[], options: { shell?: boolean; stdout?: "pipe" }) => { exitCode: number };
+
+test("a Node worker inherits execArgv without the parent's preload import, then imports its own", () => {
+	expect(workerExecArgv([], "file:///d/preload.mjs")).toEqual(["--import", "file:///d/preload.mjs"]);
+	expect(workerExecArgv(["--import", "file:///p/preload.mjs", "--no-warnings"], "file:///d/preload.mjs")).toEqual(["--no-warnings", "--import", "file:///d/preload.mjs"]);
+	expect(workerExecArgv(["--import=file:///p/preload.mjs", "--import", "data:text/javascript,", "--stack-size=100"], "file:///d/preload.mjs")).toEqual(["--import", "data:text/javascript,", "--stack-size=100", "--import", "file:///d/preload.mjs"]);
+});
+
+test("the preload interposes the runtime that loads it", async () => {
+	const f = emittedWorkspace(undefined, undefined, {
+		"script/main.ts": "export function pick(taken: boolean): number {\n  if (taken) return 1;\n  return 2;\n}\n",
+		"script/child.ts": 'import { value } from "./pkg/dist/value.js";\nif (value !== 42) process.exit(3);\n',
+		"script/worker.ts": 'import { pick } from "./main";\nexport const ready = pick(false);\n',
+	}, [...defaultPlan, ...cli("script/child.ts")]);
+	const directory = await collectorDirectory({ root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
+	const id = "in-process";
+	const record = (name: string): Json => decode(readFileSync(join(directory, `${name}.json`), "utf8"));
+	const children = (): string[] => list(record(`${id}.children`)).map(str);
+	writeFileSync(join(directory, `${id}.request.json`), JSON.stringify({ parent: "outer", command: "cli", runtime: "bun", entry: "script/main.ts", args: [], binary: process.execPath, version: Bun.version, sha256: sha256(readFileSync(process.execPath)) }));
+	const restore = interposition();
+	try {
+		await inEnvironment({ D945_PROCESS: id, D945_PARENT: "outer" }, async () => {
+			preload(directory);
+			expect(record(`${id}.start`)).toEqual({ id, parent: "outer", pid: process.pid, runtime: "bun", entry: "script/main.ts" });
+			expect(children()).toEqual([]);
+
+			// A launch of frozen inventory is wrapped, registered and observed; the child's
+			// emission proof for value.js is then shared with this process.
+			const child = Bun.spawnSync([process.execPath, "script/child.ts"], { cwd: f.root, stdout: "pipe", stderr: "pipe" });
+			if (child.exitCode !== 0) throw new FixtureError(child.stderr.toString());
+			const childId = children()[0] ?? "";
+			expect(childId).not.toBe("");
+			expect(obj(record(`${childId}.request`)).parent).toBe(id);
+			expect(record(`${childId}.observed`)).toEqual({ exitCode: 0, signal: null });
+			expect(list(record(`${childId}.emitted`))).toHaveLength(1);
+
+			// An external program runs natively without a request; a shell cannot hide one;
+			// a launch already registered here passes through untouched.
+			expect(Bun.spawnSync([process.execPath, "--version"], { stdout: "pipe" }).exitCode).toBe(0);
+			const interposedSpawnSync: LooseSpawnSync = Bun.spawnSync;
+			expect(await thrown(() => interposedSpawnSync(["git", "--version"], { shell: true }))).toEqual({ code: "unsupported_process", path: "git", message: "shell execution is not observable" });
+			const passthrough = Bun.spawn({ cmd: [process.execPath, "--version"], env: { ...process.env, D945_PROCESS: childId }, stdout: "pipe" });
+			expect(await passthrough.exited).toBe(0);
+			expect(children()).toEqual([childId]);
+
+			// node:child_process launches are the same wrapped launches, reported as asked.
+			const sync = childProcess.spawnSync(process.execPath, ["script/child.ts"], { cwd: f.root, stdio: "pipe" });
+			expect(sync.status).toBe(0);
+			const spawned = childProcess.spawn(process.execPath, ["script/child.ts"], { cwd: f.root, stdio: "pipe" });
+			expect(spawned.spawnfile).toBe(process.execPath);
+			expect(spawned.spawnargs).toEqual([process.execPath, "script/child.ts"]);
+			const exit = new Promise<number | null>((resolve) => spawned.once("exit", resolve));
+			expect(await exit).toBe(0);
+			expect(childProcess.spawnSync(process.execPath, ["--version"], { stdio: "pipe" }).status).toBe(0);
+			expect(children()).toHaveLength(3);
+			for (const launched of children()) expect(record(`${launched}.observed`)).toEqual({ exitCode: 0, signal: null });
+
+			// Frozen source loads as its prepared instrumentation whose counters persist here;
+			// a compiled module is proved (index.js) or served from the shared proof (value.js).
+			const main = await import(pathToFileURL(join(f.root, "script/main.ts")).href).then(FrozenMain.parse);
+			expect(main.pick(true)).toBe(1);
+			expect(record(`${id}.loaded`)).toEqual(["script/main.ts"]);
+			const counts = readFileSync(join(directory, `${id}.counts.bin`));
+			expect(Array.from(new Float64Array(counts.buffer, counts.byteOffset, counts.length / 8)).some((n) => n > 0)).toBe(true);
+			const barrel = await import(pathToFileURL(join(f.root, "script/pkg/dist/index.js")).href).then(EmittedBarrel.parse);
+			expect(barrel.choose(true)).toBe(42);
+			const proofs = list(record(`${id}.emitted`)).map(obj);
+			expect(proofs.map((proof) => proof.path)).toEqual(["script/pkg/dist/index.js", "script/pkg/dist/value.js"]);
+			expect(proofs[1]).toEqual(obj(list(record(`${childId}.emitted`))[0]));
+			// Sources transfer in module evaluation order: the dependency before its barrel.
+			expect(record(`${id}.transferred`)).toEqual(["script/pkg/src/value.ts", "script/pkg/src/index.ts"]);
+			const registry = globalThis.__d945Coverage ?? {};
+			expect(await thrown(() => { registry["script/worker.ts"] = { path: "script/worker.ts", statementMap: {}, fnMap: {}, branchMap: {}, s: {}, f: {}, b: {} }; })).toEqual({ code: "source_map", path: "script/worker.ts", message: "instrumented code changed its map" });
+
+			// A worker is a child execution context with its own identity, bootstrapped
+			// through the preload; unref would let it escape observation.
+			const worker = new workerThreads.Worker(pathToFileURL(join(f.root, "script/worker.ts")));
+			expect(await thrown(() => worker.unref())).toEqual({ code: "unsupported_process", path: children()[3] ?? "", message: "worker unref is not observable" });
+			const code = await new Promise<number>((resolve) => worker.once("exit", resolve));
+			expect(code).toBe(0);
+			const workerId = children()[3] ?? "";
+			expect(record(`${workerId}.observed`)).toEqual({ exitCode: 0, signal: null });
+			expect(record(`${workerId}.loaded`)).toEqual(["script/main.ts", "script/worker.ts"]);
+			expect(readFileSync(join(directory, `${workerId}.worker.mjs`), "utf8")).toContain("preload.js");
+			worker.emit("error", new Error("late"));
+			expect(await thrown(() => new workerThreads.Worker(new URL("data:text/javascript,")))).toEqual({ code: "unsupported_process", path: id, message: "worker target must be a file URL" });
+			expect(await thrown(() => new workerThreads.Worker(pathToFileURL(join(f.root, "script/absent.ts"))))).toEqual({ code: "unsupported_process", path: "script/absent.ts", message: "worker target is absent from frozen language inventory" });
+		});
+	} finally {
+		restore();
+		rmSync(directory, { recursive: true, force: true });
+		f.cleanup();
+	}
+}, 120_000);
+async function collected(sources: Record<string, string> = fixtures, plan = defaultPlan) {
 	const f = fixture(sources, plan);
-	const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+	const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 	return { ...f, ...run };
 }
-test("exact collector observes an inventoried worker as a child execution context", () => {
+test("exact collector observes an inventoried worker as a child execution context", async () => {
 	const f = fixture({
 		"script/shared.ts": "export const shared = 1;\n",
 		"script/worker.ts": 'import { shared } from "./shared"; export const ready = shared;\n',
@@ -124,7 +281,7 @@ test("exact collector observes an inventoried worker as a child execution contex
 		"script/subject.test.ts": 'import { test } from "bun:test"; import "./subject"; test("worker", () => {});\n',
 	}, [{ id: "tests", kind: "test", paths: ["script/subject.test.ts"], args: [], expectedExitCode: 0 }]);
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
 		expect(run.exit).toBe(0);
 		const processes = list(receipt.processes).map(obj);
@@ -138,14 +295,14 @@ test("exact collector observes an inventoried worker as a child execution contex
 		expect(list(root.loaded).map(str)).toContain("script/shared.ts");
 	} finally { f.cleanup(); }
 }, 120_000);
-test("exact collector observes a Node worker with inherited preload identity", () => {
+test("exact collector observes a Node worker with inherited preload identity", async () => {
 	const f = fixture({
 		"script/shared.ts": "export const shared = 1;\n",
 		"script/worker.ts": 'import { shared } from "./shared"; export const ready = shared;\n',
 		"script/subject.ts": 'import { shared } from "./shared"; import { Worker } from "node:worker_threads"; void shared; const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("exit", () => resolve()));\n',
 	}, cli("script/subject.ts", "node"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		expect(run.exit).toBe(0);
 		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
 		const processes = list(receipt.processes).map(obj);
@@ -159,13 +316,13 @@ test("exact collector observes a Node worker with inherited preload identity", (
 		expect(list(worker.loaded).map(str)).toContain("script/worker.ts");
 	} finally { f.cleanup(); }
 }, 120_000);
-test("exact collector rejects a worker with an unapproved nonzero exit", () => {
+test("exact collector rejects a worker with an unapproved nonzero exit", async () => {
 	const f = fixture({
 		"script/worker.ts": 'throw new Error("worker failure");\n',
 		"script/subject.ts": 'import { Worker } from "node:worker_threads"; const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("error", () => resolve()));\n',
 	}, cli("script/subject.ts", "node"));
 	try {
-		const run = f.run(["--collect"]);
+		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("worker failure");
 	} finally { f.cleanup(); }
@@ -174,7 +331,7 @@ function findings(result: { [key: string]: Json }): { [key: string]: Json }[] {
 	return list(result.findings).map(obj);
 }
 
-test.each(["original", "changed-source", "changed-emit"] as const)("NamedError exact transfer preserves Schema independence or refuses changed identity: %s", (mode) => {
+test.each(["original", "changed-source", "changed-emit"] as const)("NamedError exact transfer preserves Schema independence or refuses changed identity: %s", async (mode) => {
 	const sourcePath = "packages/protocol/src/error/index.ts";
 	const original = readFileSync(join(import.meta.dir, "..", sourcePath), "utf8");
 	const source = mode === "changed-source" ? original.replace('this.name = "NamedError";', 'this.name = "ChangedErr";') : original;
@@ -218,7 +375,7 @@ finally { Object.defineProperty = nativeDefine; }
 		inventory.contractHash = sha256(JSON.stringify(contract));
 		inventory.configurations = contract.projects.map((path) => ({ path, sha256: sha256(readFileSync(join(f.root, path))) }));
 		refreeze(f, "inventory", inventory);
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		if (mode !== "original") {
 			expect(run.exit).toBe(2);
 			expect(run.result.complete).toBe(false);
@@ -239,7 +396,7 @@ finally { Object.defineProperty = nativeDefine; }
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector permits only canonical git and kill utilities without process receipts", () => {
+test("exact collector permits only canonical git and kill utilities without process receipts", async () => {
 	const source = `import { spawnSync } from "node:child_process";
 const git = Bun.spawnSync(["git", "--version"], { stdout: "pipe", stderr: "pipe" });
 const kill = spawnSync("/bin/kill", ["-0", String(process.pid)], { stdio: "ignore" });
@@ -247,14 +404,14 @@ if (git.exitCode !== 0 || kill.status !== 0) process.exit(7);
 `;
 	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector permits canonical system shells and POSIX utilities without receipts", () => {
+test("exact collector permits canonical system shells and POSIX utilities without receipts", async () => {
 	const source = `import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -268,14 +425,14 @@ if (sh.stdout.toString() !== "ok" || bash.exitCode !== 0 || fifo.status !== 0 ||
 `;
 	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector runs an owned runtime entry outside the frozen root or an unfrozen inline program or a runtime probe natively, without credit or receipt", () => {
+test("exact collector runs an owned runtime entry outside the frozen root or an unfrozen inline program or a runtime probe natively, without credit or receipt", async () => {
 	const source = `import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -297,70 +454,70 @@ if (process.argv[2] === "inside") {
 `;
 	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
 	} finally { f.cleanup(); }
 	const inside = fixture({ "script/utility.ts": source }, [{ id: "cli", kind: "cli", paths: ["script/utility.ts"], args: ["inside"], expectedExitCode: 0, runtime: "bun" }]);
 	try {
-		const run = inside.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		const run = await inside.run(["--collect"], { PATH: "/usr/bin:/bin" });
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("entry/source is absent from frozen language inventory");
 	} finally { inside.cleanup(); }
 	const options = fixture({ "script/utility.ts": source }, [{ id: "cli", kind: "cli", paths: ["script/utility.ts"], args: ["options"], expectedExitCode: 0, runtime: "bun" }]);
 	try {
-		const run = options.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		const run = await options.run(["--collect"], { PATH: "/usr/bin:/bin" });
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("unregistered interpreter option --smol");
 	} finally { options.cleanup(); }
 }, 180_000);
 
-test("exact collector rejects a utility executable planted inside the frozen root", () => {
+test("exact collector rejects a utility executable planted inside the frozen root", async () => {
 	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["tar", "--version"]);\n' }, cli("script/utility.ts"));
 	try {
 		const fake = join(f.root, "fake-bin", "tar");
 		mkdirSync(dirname(fake), { recursive: true });
 		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
 		chmodSync(fake, 0o755);
-		const run = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		const run = await f.run(["--collect"], { PATH: `${dirname(fake)}:/usr/bin:/bin` });
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector permits bunx only when it is the pinned Bun binary", () => {
+test("exact collector permits bunx only when it is the pinned Bun binary", async () => {
 	const f = fixture({ "script/utility.ts": 'if (Bun.spawnSync(["bunx", "--version"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(7);\n' }, cli("script/utility.ts"));
 	try {
-		const run = f.run(["--collect"], checker, { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` });
+		const run = await f.run(["--collect"], { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` });
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		const fake = join(f.root, "fake-bin", "bunx");
 		mkdirSync(dirname(fake), { recursive: true });
 		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
 		chmodSync(fake, 0o755);
-		const rejected = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		const rejected = await f.run(["--collect"], { PATH: `${dirname(fake)}:/usr/bin:/bin` });
 		expect(rejected.exit).toBe(2);
 		expect(JSON.stringify(rejected.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector rejects a git executable planted inside the frozen root", () => {
+test("exact collector rejects a git executable planted inside the frozen root", async () => {
 	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["git", "--version"]);\n' }, cli("script/utility.ts"));
 	try {
 		const fake = join(f.root, "fake-bin", "git");
 		mkdirSync(dirname(fake), { recursive: true });
 		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
 		chmodSync(fake, 0o755);
-		const run = f.run(["--collect"], checker, { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		const run = await f.run(["--collect"], { PATH: `${dirname(fake)}:/usr/bin:/bin` });
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector does not turn a utility into a shell escape", () => {
+test("exact collector does not turn a utility into a shell escape", async () => {
 	const f = fixture({ "script/utility.ts": 'Bun.spawn(["git", "--version"], { shell: true });\n' }, cli("script/utility.ts"));
 	try {
-		const run = f.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		const run = await f.run(["--collect"], { PATH: "/usr/bin:/bin" });
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("shell execution is not observable");
 	} finally { f.cleanup(); }
@@ -419,7 +576,7 @@ export function multiline() {
 		const lines = new Map(lcov.find((file) => file.path.endsWith("subject.ts"))?.lines.map((row) => [row.line, row.hits]));
 		expect(lines.get(21)).toBeGreaterThan(0);
 		expect(lines.get(25)).toBeGreaterThan(0);
-		const collected = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const collected = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		expect(collected.exit).toBe(1);
 		expect(collected.result.complete).toBe(true);
 		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
@@ -461,6 +618,8 @@ export function multiline() {
 function emittedWorkspace(
 	valueSource = "export const value = 42;\n",
 	testSource = 'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; test("emitted entry", () => { expect(choose(true)).toBe(42); });\n',
+	sources: Record<string, string> = {},
+	commands: Command[] = defaultPlan,
 ) {
 	const source = `import { value } from "./value.js";
 export function choose(taken: boolean) {
@@ -475,7 +634,8 @@ export function dormant() {
 		"script/pkg/src/index.ts": source,
 		"script/pkg/src/value.ts": valueSource,
 		"script/subject.test.ts": testSource,
-	});
+		...sources,
+	}, commands);
 	f.put("script/pkg/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./dist/index.js"}');
 	f.put("tsconfig.base.json", '{"compilerOptions":{"strict":true,"target":"ES2020","module":"ESNext"}}');
 	f.put("script/tsconfig.json", '{"extends":"../tsconfig.base.json","compilerOptions":{"sourceMap":true,"rootDir":"pkg/src","outDir":"pkg/dist"},"include":["pkg/src"]}');
@@ -507,11 +667,11 @@ for (const [mode, testSource, message] of [
 	["original-before-dynamic", originalBeforeDynamicTest, "emitted module imported by script/subject.test.ts has no emission proof"],
 	["barrel-child", undefined, "emitted module imported by script/pkg/dist/index.js has no emission proof"],
 	["manifest-retarget", undefined, "configuration drift"],
-] as const) test(`erased emission provenance cannot credit a changed artifact (${mode})`, () => {
+] as const) test(`erased emission provenance cannot credit a changed artifact (${mode})`, async () => {
 	const f = emittedWorkspace("export const value = 42;\n", testSource);
 	try {
 		const path = join(f.root, "coverage.json");
-		const collected = f.run(["--collect", "--write-coverage", path]);
+		const collected = await f.run(["--collect", "--write-coverage", path]);
 		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
 		const receipt = obj(decode(readFileSync(path, "utf8")));
 		for (const process of list(receipt.processes).map(obj)) {
@@ -525,42 +685,42 @@ for (const [mode, testSource, message] of [
 		const valuePath = "script/pkg/dist/value.js";
 		f.put(valuePath, readFileSync(join(f.root, valuePath), "utf8").replace("42", "43"));
 		if (mode === "manifest-retarget") f.put("script/pkg/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./src/index.ts"}');
-		const verified = f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+		const verified = await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
 		expect(verified.exit).toBe(2);
 		expect(verified.result.complete).toBe(false);
 		expect(str(obj(list(verified.result.errors)[0]).message)).toContain(message);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("a bare specifier routed by an unfrozen package manifest cannot anchor an emission", () => {
+test("a bare specifier routed by an unfrozen package manifest cannot anchor an emission", async () => {
 	const f = emittedWorkspace();
 	try {
 		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
 		inventory.configurations = list(inventory.configurations).filter((row) => obj(row).path !== "script/pkg/package.json");
 		f.put("inventory.json", JSON.stringify(inventory));
 		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
-		const run = f.run(["--collect"]);
+		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package manifest script/pkg/package.json routing "@fixture/emitted" is not frozen');
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("an untaken dynamic import legitimately carries no emission proof", () => {
+test("an untaken dynamic import legitimately carries no emission proof", async () => {
 	const f = emittedWorkspace("export const value = 42;\n", 'import { test, expect } from "bun:test"; if (process.argv.includes("--load-emitted")) await import("@fixture/emitted"); test("untaken", () => { expect(1).toBe(1); });\n');
 	try {
 		const path = join(f.root, "coverage.json");
-		const collected = f.run(["--collect", "--write-coverage", path]);
+		const collected = await f.run(["--collect", "--write-coverage", path]);
 		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
 		expect(collected.result.complete).toBe(true);
 		for (const process of list(obj(decode(readFileSync(path, "utf8"))).processes).map(obj)) expect(process.emitted).toEqual([]);
-		expect(f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]).exit).toBe(1);
+		expect((await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))])).exit).toBe(1);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("verified workspace emit preserves package resolution and exact original counters", () => {
+test("verified workspace emit preserves package resolution and exact original counters", async () => {
 	const f = emittedWorkspace();
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		expect(run.result.errors).toBeUndefined();
 		expect(run.exit).toBe(1);
 		expect(run.result.complete).toBe(true);
@@ -580,7 +740,7 @@ test("verified workspace emit preserves package resolution and exact original co
 }, 120_000);
 
 for (const defect of ["stale-source", "stale-build", "javascript", "map", "escaping-map", "map-file", "map-source", "configuration", "unmapped-generated"]) {
-	test(`workspace emit rejects ${defect} without generated ownership`, () => {
+	test(`workspace emit rejects ${defect} without generated ownership`, async () => {
 		const f = emittedWorkspace();
 		try {
 			const js = "script/pkg/dist/index.js", mapPath = `${js}.map`, sourcePath = "script/pkg/src/index.ts";
@@ -606,7 +766,7 @@ for (const defect of ["stale-source", "stale-build", "javascript", "map", "escap
 				if (defect === "map-source") map.sources = ["../src/value.ts"];
 				f.put(mapPath, JSON.stringify(map));
 			}
-			const run = f.run(["--collect"]);
+			const run = await f.run(["--collect"]);
 			expect(run.exit).toBe(2);
 			expect(run.result.complete).toBe(false);
 			expect(list(run.result.errors)).toHaveLength(1);
@@ -614,7 +774,7 @@ for (const defect of ["stale-source", "stale-build", "javascript", "map", "escap
 	}, 120_000);
 }
 
-test("workspace emit cannot silently ignore declared project references", () => {
+test("workspace emit cannot silently ignore declared project references", async () => {
 	const f = emittedWorkspace();
 	try {
 		const configPath = "script/tsconfig.json";
@@ -627,14 +787,14 @@ test("workspace emit cannot silently ignore declared project references", () => 
 		configuration.sha256 = sha256(readFileSync(join(f.root, configPath)));
 		f.put("inventory.json", JSON.stringify(inventory));
 		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
-		const run = f.run(["--collect"]);
+		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(run.result.complete).toBe(false);
 		expect(str(obj(list(run.result.errors)[0]).message)).toContain("emitted_config");
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("workspace emit rejects bytes that only decode to the compiler output", () => {
+test("workspace emit rejects bytes that only decode to the compiler output", async () => {
 	const replacement = String.fromCodePoint(0xfffd);
 	const f = emittedWorkspace(`export const value = 42; // ${replacement}\n`);
 	try {
@@ -645,7 +805,7 @@ test("workspace emit rejects bytes that only decode to the compiler output", () 
 		const corrupted = Buffer.concat([bytes.subarray(0, offset), Buffer.from([255]), bytes.subarray(offset + 3)]);
 		expect(corrupted.toString("utf8")).toBe(bytes.toString("utf8"));
 		writeFileSync(path, corrupted);
-		const run = f.run(["--collect"]);
+		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(run.result.complete).toBe(false);
 		expect(str(obj(list(run.result.errors)[0]).message)).toContain("tamper");
@@ -655,24 +815,24 @@ test("workspace emit rejects bytes that only decode to the compiler output", () 
 for (const [name, source] of [
 	["const enum", "const enum Answer { Value = 42 }\nexport const value = Answer.Value;\n"],
 	["downlevel class fields", "class Answer { value = 42; }\nexport const value = new Answer().value;\n"],
-]) test(`workspace emit fails closed for unsupported ${name} maps`, () => {
+]) test(`workspace emit fails closed for unsupported ${name} maps`, async () => {
 	if (!source) throw new Error("missing lowering fixture");
 	const f = emittedWorkspace(source);
 	try {
 		const native = Bun.spawnSync([process.execPath, "test", "./script/subject.test.ts"], { cwd: f.root, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
 		expect(native.exitCode).toBe(0);
-		const run = f.run(["--collect"]);
+		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(run.result.complete).toBe(false);
 		expect(str(obj(list(run.result.errors)[0]).message)).toContain("source_map");
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("write-result stores the complete verdict and prints a hashed pointer", () => {
+test("write-result stores the complete verdict and prints a hashed pointer", async () => {
 	const f = fixture();
 	try {
 		const coverage = join(f.root, "coverage.json"), verdict = join(f.root, "result.json");
-		const run = f.run(["--collect", "--write-coverage", coverage, "--write-result", verdict]);
+		const run = await f.run(["--collect", "--write-coverage", coverage, "--write-result", verdict]);
 		const stored = obj(decode(readFileSync(verdict, "utf8")));
 		expect(stored.exitCode).toBe(run.exit);
 		expect(Object.keys(run.result).sort()).toEqual(["aggregate", "complete", "exitCode", "result", "resultSha256"]);
@@ -681,15 +841,15 @@ test("write-result stores the complete verdict and prints a hashed pointer", () 
 		expect(run.result.complete).toBe(true);
 		expect(run.result.aggregate).toEqual(stored.aggregate);
 		expect(list(stored.measurements).length).toBeGreaterThan(0);
-		expect(f.run(["--collect", "--write-coverage", join(f.root, "again.json"), "--write-result", verdict]).exit).toBe(2);
+		expect((await f.run(["--collect", "--write-coverage", join(f.root, "again.json"), "--write-result", verdict])).exit).toBe(2);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("workspace emit receipt binds compiler, artifact, original and map identities", () => {
+test("workspace emit receipt binds compiler, artifact, original and map identities", async () => {
 	const f = emittedWorkspace();
 	try {
 		const path = join(f.root, "coverage.json");
-		expect(f.run(["--collect", "--write-coverage", path]).exit).toBe(1);
+		expect((await f.run(["--collect", "--write-coverage", path])).exit).toBe(1);
 		const original = obj(decode(readFileSync(path, "utf8")));
 		for (const field of ["source", "project", "sha256", "mapSha256", "mapHash", "observationSha256", "observationCount", "syntheticCount"]) {
 			const receipt = structuredClone(original);
@@ -698,7 +858,7 @@ test("workspace emit receipt binds compiler, artifact, original and map identiti
 			const proof = obj(list(process.emitted)[0]);
 			proof[field] = field.endsWith("256") || field === "mapHash" ? "0".repeat(64) : "script/wrong.ts";
 			f.put("coverage.json", JSON.stringify(receipt));
-			const verified = f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+			const verified = await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
 			expect(verified.exit).toBe(2);
 			expect(obj(list(verified.result.errors)[0]).code).toBe("identity");
 		}
@@ -716,13 +876,13 @@ test("workspace emit receipt binds compiler, artifact, original and map identiti
 			if (!process) throw new Error("missing emitted provenance");
 			tampered(process);
 			f.put("coverage.json", JSON.stringify(receipt));
-			const verified = f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+			const verified = await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
 			expect(verified.exit).toBe(2);
 			expect(str(obj(list(verified.result.errors)[0]).message)).toContain(message);
 		}
 		f.put("coverage.json", JSON.stringify(original));
 		f.put("script/pkg/dist/value.js", readFileSync(join(f.root, "script/pkg/dist/value.js"), "utf8").replace("42", "43"));
-		expect(f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]).exit).toBe(2);
+		expect((await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))])).exit).toBe(2);
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -746,8 +906,8 @@ test("strict input decoding rejects ambiguous payloads without interpreting fixt
 	});
 });
 
-test("real Bun tests fully cover every dimension, including test callbacks, and old owner consumes the receipt", () => {
-	const f = collected();
+test("real Bun tests fully cover every dimension, including test callbacks, and old owner consumes the receipt", async () => {
+	const f = await collected();
 	try {
 		expect(f.exit).toBe(0);
 		const metrics = obj(f.result.aggregate);
@@ -757,19 +917,19 @@ test("real Bun tests fully cover every dimension, including test callbacks, and 
 		}
 		expect(list(f.result.measurements).some((m) => obj(m).category === "test")).toBe(true);
 		const path = join(f.root, "coverage.json");
-		const verified = f.run(
-			["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))],
-			owner,
+		const child = Bun.spawnSync(
+			[process.execPath, owner, ...f.args, "--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))],
+			{ stdout: "pipe", stderr: "pipe", timeout: 120_000 },
 		);
-		expect(verified.exit).toBe(0);
-		expect(verified.result.aggregate).toEqual(f.result.aggregate);
+		expect(child.exitCode).toBe(0);
+		expect(obj(decode(child.stdout.toString())).aggregate).toEqual(f.result.aggregate);
 	} finally {
 		f.cleanup();
 	}
 }, 120_000);
 
-test("actual uncovered statement, branch, function and line remain separate findings", () => {
-	const f = collected({
+test("actual uncovered statement, branch, function and line remain separate findings", async () => {
+	const f = await collected({
 		...fixtures,
 		"script/subject.ts": `${fixtures["script/subject.ts"]}export function neverCalled() { return 7; }\n`,
 		"script/subject.test.ts": fixtures["script/subject.test.ts"].replace(
@@ -787,8 +947,8 @@ test("actual uncovered statement, branch, function and line remain separate find
 	}
 }, 120_000);
 
-test("unimported nested tooling receives regenerated zero counters, never an empty-report exemption", () => {
-	const f = collected({
+test("unimported nested tooling receives regenerated zero counters, never an empty-report exemption", async () => {
+	const f = await collected({
 		...fixtures,
 		"script/nested/unimported.ts": "export const unseen = () => 7;\n",
 	});
@@ -804,7 +964,7 @@ test("unimported nested tooling receives regenerated zero counters, never an emp
 	}
 }, 120_000);
 
-test("TSX executable maps retain original identity under the automatic JSX runtime", () => {
+test("TSX executable maps retain original identity under the automatic JSX runtime", async () => {
 	// Like packages/ui, the view imports no React binding: JSX resolves through
 	// react/jsx-runtime, which the fixture supplies outside the inventory.
 	const f = fixture({
@@ -817,7 +977,7 @@ test("TSX executable maps retain original identity under the automatic JSX runti
 		mkdirSync(join(f.root, "node_modules/react"), { recursive: true });
 		writeFileSync(join(f.root, "node_modules/react/package.json"), '{"name":"react","exports":{"./jsx-runtime":"./jsx-runtime.js"}}');
 		writeFileSync(join(f.root, "node_modules/react/jsx-runtime.js"), "export function jsx(tag, props) { return { tag, props }; }\nexport const jsxs = jsx;\n");
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		if (run.exit !== 0) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(list(run.result.measurements).some((m) => obj(m).path === "script/view.tsx")).toBe(true);
 	} finally {
@@ -825,13 +985,13 @@ test("TSX executable maps retain original identity under the automatic JSX runti
 	}
 }, 120_000);
 
-test("Bun synchronous and asynchronous child receipts supply genuine coverage", () => {
+test("Bun synchronous and asynchronous child receipts supply genuine coverage", async () => {
 	const sources = {
 		"script/child.ts": "console.log(41 + 1);\n",
 		"script/parent.ts":
 			'const sync = Bun.spawnSync([process.execPath, "script/child.ts"], {stdout:"pipe"}); console.log(sync.stdout.toString()); const asyncChild = Bun.spawn([process.execPath, "script/child.ts"], {stdout:"ignore"}); await asyncChild.exited;\n',
 	};
-	const f = collected(sources, [
+	const f = await collected(sources, [
 		{ id: "parent", kind: "cli", paths: ["script/parent.ts"], args: [], expectedExitCode: 0 },
 	]);
 	try {
@@ -843,7 +1003,7 @@ test("Bun synchronous and asynchronous child receipts supply genuine coverage", 
 	}
 }, 120_000);
 
-test("missing input, stale source, altered inventory, incomplete inventory and unsupported syntax fail closed", () => {
+test("missing input, stale source, altered inventory, incomplete inventory and unsupported syntax fail closed", async () => {
 	const absent = Bun.spawnSync([process.execPath, checker], { stdout: "pipe" });
 	expect(absent.exitCode).toBe(2);
 	expect(obj(list(obj(decode(absent.stdout.toString())).errors)[0]).code).toBe("missing_input");
@@ -879,7 +1039,7 @@ test("missing input, stale source, altered inventory, incomplete inventory and u
 					readFileSync(join(f.root, "inventory.json")),
 				);
 			}
-			const result = f.run(["--collect"]);
+			const result = await f.run(["--collect"]);
 			expect(result.exit).toBe(2);
 			expect(result.result.complete).toBe(false);
 		} finally {
@@ -908,8 +1068,8 @@ function tamperReceipt(receipt: { [key: string]: Json }, defect: string): void {
 	}
 }
 
-test("real receipts reject tampered maps, missing counters/files/processes and noninteger counts", () => {
-	const f = collected();
+test("real receipts reject tampered maps, missing counters/files/processes and noninteger counts", async () => {
+	const f = await collected();
 	try {
 		expect(f.exit).toBe(0);
 		const original = readFileSync(join(f.root, "coverage.json"), "utf8");
@@ -926,7 +1086,7 @@ test("real receipts reject tampered maps, missing counters/files/processes and n
 			const receipt = obj(decode(original));
 			tamperReceipt(receipt, defect);
 			f.put("bad.json", JSON.stringify(receipt));
-			const result = f.run([
+			const result = await f.run([
 				"--coverage-input",
 				join(f.root, "bad.json"),
 				"--coverage-sha256",
@@ -939,8 +1099,8 @@ test("real receipts reject tampered maps, missing counters/files/processes and n
 	}
 }, 120_000);
 
-test("lost real child receipt cannot be credited as covered", () => {
-	const f = collected(
+test("lost real child receipt cannot be credited as covered", async () => {
+	const f = await collected(
 		{
 			"script/child.ts": "console.log(1);",
 			"script/parent.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);',
@@ -952,7 +1112,7 @@ test("lost real child receipt cannot be credited as covered", () => {
 		const r = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
 		r.processes = list(r.processes).filter((p) => obj(p).parent === "");
 		f.put("lost.json", JSON.stringify(r));
-		const result = f.run([
+		const result = await f.run([
 			"--coverage-input",
 			join(f.root, "lost.json"),
 			"--coverage-sha256",
@@ -965,8 +1125,8 @@ test("lost real child receipt cannot be credited as covered", () => {
 	}
 }, 120_000);
 
-test("real 99 of 100 statements fails without percentage rounding", () => {
-	const f = collected(
+test("real 99 of 100 statements fails without percentage rounding", async () => {
+	const f = await collected(
 		{
 			"script/hundred.ts": `let n = 0;\n${"n++;\n".repeat(98)}export function missing() { return n; }\n`,
 		},
@@ -984,7 +1144,7 @@ test("real 99 of 100 statements fails without percentage rounding", () => {
 	}
 }, 120_000);
 
-test("caught unsupported subprocess cannot become clean coverage", () => {
+test("caught unsupported subprocess cannot become clean coverage", async () => {
 	const f = fixture(
 		{
 			"script/child.ts": 'try { Bun.spawnSync([new URL("../fake-bin/tool", import.meta.url).pathname]); } catch {}',
@@ -996,7 +1156,7 @@ test("caught unsupported subprocess cannot become clean coverage", () => {
 		mkdirSync(join(f.root, "fake-bin"));
 		writeFileSync(join(f.root, "fake-bin/tool"), "#!/bin/sh\nexit 0\n");
 		chmodSync(join(f.root, "fake-bin/tool"), 0o755);
-		const run = f.run(["--collect"]);
+		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(run.result.complete).toBe(false);
 		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
@@ -1005,8 +1165,8 @@ test("caught unsupported subprocess cannot become clean coverage", () => {
 	}
 }, 120_000);
 
-test("type-only declarations are syntax-proven not-applicable, not missing-file credit", () => {
-	const f = collected({
+test("type-only declarations are syntax-proven not-applicable, not missing-file credit", async () => {
+	const f = await collected({
 		...fixtures,
 		"script/types.d.ts": "export interface Example { readonly value: string; }",
 	});
@@ -1037,8 +1197,8 @@ function verifyChanged(f: ReturnType<typeof fixture>, receipt: Json) {
 	return f.run(["--coverage-input", join(f.root, "changed.json"), "--coverage-sha256", sha256(readFileSync(join(f.root, "changed.json")))]);
 }
 
-function collectReceipt(f: ReturnType<typeof fixture>): { [key: string]: Json } {
-	const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+async function collectReceipt(f: ReturnType<typeof fixture>): Promise<{ [key: string]: Json }> {
+	const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 	expect(run.exit).toBe(0);
 	return obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
 }
@@ -1047,8 +1207,8 @@ function pythonProcess(receipt: { [key: string]: Json }): { [key: string]: Json 
 	return obj(list(receipt.processes).map(obj).find((p) => p.runtime === "python"));
 }
 
-test("native Node entry and Bun-to-Node processes preserve effects and original TS counters", () => {
-	const f = collected({
+test("native Node entry and Bun-to-Node processes preserve effects and original TS counters", async () => {
+	const f = await collected({
 		"script/child.ts": 'import {appendFileSync} from "node:fs"; appendFileSync("effect.txt","N"); console.log(42);',
 		"script/parent.ts": 'import {spawnSync,spawn} from "node:child_process"; import assert from "node:assert/strict"; const sync=spawnSync("node",["script/child.ts"],{encoding:"utf8"}); assert.equal(sync.status,0); assert.equal(sync.stdout.trim(),"42"); const child=spawn("node",["script/child.ts"]); await new Promise<void>((resolve,reject)=>{child.once("error",reject);child.once("exit",(code,signal)=>{assert.equal(code,0);assert.equal(signal,null);resolve();});});',
 	}, cli("script/parent.ts"));
@@ -1058,13 +1218,13 @@ test("native Node entry and Bun-to-Node processes preserve effects and original 
 		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
 		expect(list(receipt.processes).filter((r) => obj(r).runtime === "node")).toHaveLength(2);
 	} finally { f.cleanup(); }
-	const direct = collected({ "script/main.ts": "const value: number=42; console.log(value);" }, cli("script/main.ts", "node"));
+	const direct = await collected({ "script/main.ts": "const value: number=42; console.log(value);" }, cli("script/main.ts", "node"));
 	try { expect(direct.exit).toBe(0); } finally { direct.cleanup(); }
 }, 120_000);
 
-test("Python statements, functions, static arcs, short circuits and lines are real independent counters", () => {
+test("Python statements, functions, static arcs, short circuits and lines are real independent counters", async () => {
 	const source = 'def select(value):\n    if value:\n        return 1\n    return 0\nassert select(True) == 1\nassert select(False) == 0\ndef choose(value):\n    return value and 7\nx = choose(True)\ny = choose(False)\nassert x == 7\nassert y is False\nopen("effect.txt", "w").write("PY")\n';
-	const f = collected({ "script/main.py": source }, cli("script/main.py", "python"));
+	const f = await collected({ "script/main.py": source }, cli("script/main.py", "python"));
 	try {
 		expect(f.exit).toBe(0);
 		expect(readFileSync(join(f.root, "effect.txt"), "utf8")).toBe("PY");
@@ -1077,7 +1237,7 @@ test("Python statements, functions, static arcs, short circuits and lines are re
 			if (defect === "map") changed.maps = [];
 			if (defect === "process") changed.processes = [];
 			if (defect === "line") obj(list(changed.processes)[0]).lines = {};
-			expect(verifyChanged(f, changed).exit).toBe(2);
+			expect((await verifyChanged(f, changed)).exit).toBe(2);
 		}
 	} finally { f.cleanup(); }
 }, 120_000);
@@ -1086,7 +1246,7 @@ test("the Python collector map joins the metrics analyzer map for methods, neste
 	// The docstring, __future__ import, type alias and global declaration are the
 	// statement classes where a second map owner previously disagreed with the collector.
 	const source = '"""module docs"""\nfrom __future__ import annotations\ntype Scale = int\nTOTAL = 0\nclass Box:\n    def __init__(self, value):\n        self.value = value\n\n    def scale(self, factor):\n        global TOTAL\n        def inner(v):\n            return v * factor\n        TOTAL += 1\n        return inner(self.value)\n\n\ndouble = lambda v: v * 2\nassert Box(3).scale(2) == 6\nassert double(4) == 8\n';
-	const f = collected({ "script/main.py": source }, cli("script/main.py", "python"));
+	const f = await collected({ "script/main.py": source }, cli("script/main.py", "python"));
 	try {
 		expect(f.exit).toBe(0);
 		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
@@ -1104,8 +1264,8 @@ test("the Python collector map joins the metrics analyzer map for methods, neste
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("unexecuted Python is uncovered, not unsupported and not credited by a host string", () => {
-	const f = collected({ "script/main.ts": "console.log(42);", "script/unloaded.py": "def missing():\n    return 1\n" }, cli("script/main.ts"));
+test("unexecuted Python is uncovered, not unsupported and not credited by a host string", async () => {
+	const f = await collected({ "script/main.ts": "console.log(42);", "script/unloaded.py": "def missing():\n    return 1\n" }, cli("script/main.ts"));
 	try { expect(f.exit).toBe(1); expect(findings(f.result).some((v) => v.path === "script/unloaded.py" && v.class === "functions")).toBe(true); }
 	finally { f.cleanup(); }
 }, 120_000);
@@ -1113,8 +1273,8 @@ test("unexecuted Python is uncovered, not unsupported and not credited by a host
 test.each([
 	["refusing", 'console.error("refused"); process.exit(1);', 1, null],
 	["killed", 'process.kill(process.pid,"SIGKILL");', null, "SIGKILL"],
-])("a %s child's flushed receipt is complete evidence; a missing child receipt is not", (_, body, exitCode, signal) => {
-	const f = collected({ "script/main.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);', "script/child.ts": body }, cli("script/main.ts"));
+])("a %s child's flushed receipt is complete evidence; a missing child receipt is not", async (_, body, exitCode, signal) => {
+	const f = await collected({ "script/main.ts": 'Bun.spawnSync([process.execPath,"script/child.ts"]);', "script/child.ts": body }, cli("script/main.ts"));
 	try {
 		expect(f.exit).toBe(0);
 		const original = readFileSync(join(f.root, "coverage.json"), "utf8");
@@ -1124,14 +1284,14 @@ test.each([
 		expect(child.exitCode).toBe(exitCode);
 		expect(child.signal).toBe(signal);
 		expect(Object.values(obj(obj(obj(child.coverage)["script/child.ts"]).s))).toEqual(body.split(";").filter(Boolean).map(() => 1));
-		expect(verifyChanged(f, receipt).exit).toBe(0);
+		expect((await verifyChanged(f, receipt)).exit).toBe(0);
 		const partial = obj(decode(original));
 		partial.processes = list(partial.processes).filter((p) => obj(p).parent === "");
-		expect(verifyChanged(f, partial).exit).toBe(2);
+		expect((await verifyChanged(f, partial)).exit).toBe(2);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("nonowned ESM and CommonJS dependencies execute natively without coverage credit", () => {
+test("nonowned ESM and CommonJS dependencies execute natively without coverage credit", async () => {
 	const f = fixture({ "script/main.ts": 'import assert from "node:assert/strict"; import {value} from "review-dependency"; import common from "review-common"; assert.equal(value + common,42);' }, cli("script/main.ts"));
 	try {
 		f.put("node_modules/review-dependency/package.json", '{"type":"module","exports":"./index.js"}');
@@ -1140,20 +1300,20 @@ test("nonowned ESM and CommonJS dependencies execute natively without coverage c
 		f.put("node_modules/review-common/index.cjs", 'module.exports=22;');
 		const native = Bun.spawnSync([process.execPath, "script/main.ts"], { cwd: f.root });
 		expect(native.exitCode).toBe(0);
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		expect(run.exit).toBe(0);
 		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
 		expect(obj(list(receipt.processes)[0]).loaded).toEqual(["script/main.ts"]);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("missing owned imports still fail at the loader boundary", () => {
+test("missing owned imports still fail at the loader boundary", async () => {
 	const f = fixture({ "script/main.ts": 'import {writeFileSync} from "node:fs"; writeFileSync("script/late.ts","export const value=42;"); await import("./late.ts");' }, cli("script/main.ts"));
-	try { expect(f.run(["--collect"]).exit).toBe(2); }
+	try { expect((await f.run(["--collect"])).exit).toBe(2); }
 	finally { f.cleanup(); }
 }, 120_000);
 
-test("Bun child preloads retain native import order and instrument the child context", () => {
+test("Bun child preloads retain native import order and instrument the child context", async () => {
 	const f = fixture({
 		"script/main.ts": 'import assert from "node:assert/strict"; const child=Bun.spawnSync([process.execPath,"--preload","./script/preload.ts","./script/child.ts"],{stdout:"pipe"}); assert.equal(child.exitCode,0); assert.equal(child.stdout.toString(),"IMPORT\\nPRELOAD\\nCHILD\\n");',
 		"script/preload.ts": 'import "./imported"; console.log("PRELOAD");',
@@ -1162,7 +1322,7 @@ test("Bun child preloads retain native import order and instrument the child con
 	}, cli("script/main.ts"));
 	try {
 		expect(Bun.spawnSync([process.execPath, "script/main.ts"], { cwd: f.root }).exitCode).toBe(0);
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		expect(run.exit).toBe(0);
 		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
 		const child = list(receipt.processes).map(obj).find((p) => p.parent !== "");
@@ -1171,14 +1331,14 @@ test("Bun child preloads retain native import order and instrument the child con
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("Python abrupt zero exit cannot substitute persistent counters for normal flush", () => {
-	const f = collected({ "script/main.py": "import os\nos._exit(0)\n" }, cli("script/main.py", "python"));
+test("Python abrupt zero exit cannot substitute persistent counters for normal flush", async () => {
+	const f = await collected({ "script/main.py": "import os\nos._exit(0)\n" }, cli("script/main.py", "python"));
 	try { expect(f.exit).toBe(2); expect(f.result.complete).toBe(false); }
 	finally { f.cleanup(); }
 }, 120_000);
 
-test("normal Python flush provenance survives collection and rejects receipt corruption", () => {
-	const f = collected({ "script/main.py": "print(42)\n" }, cli("script/main.py", "python"));
+test("normal Python flush provenance survives collection and rejects receipt corruption", async () => {
+	const f = await collected({ "script/main.py": "print(42)\n" }, cli("script/main.py", "python"));
 	try {
 		expect(f.exit).toBe(0);
 		const original = readFileSync(join(f.root, "coverage.json"), "utf8");
@@ -1194,13 +1354,13 @@ test("normal Python flush provenance survives collection and rejects receipt cor
 			if (defect === "flushed") trace.flushed = false;
 			if (defect === "files") trace.files = {};
 			if (defect === "arc") obj(obj(trace.files)["script/main.py"]).arcs = [[1, 0.5]];
-			expect(verifyChanged(f, changed).exit).toBe(2);
+			expect((await verifyChanged(f, changed)).exit).toBe(2);
 		}
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test.each(["empty-arcs", "empty-translated", "both-empty", "impossible", "entry-removed", "added-impossible", "line-counter"])("real Python trace rejects semantic mutation %s after outer rehash", (defect) => {
-	const f = collected({ "script/main.py": "print(42)\n" }, cli("script/main.py", "python"));
+test.each(["empty-arcs", "empty-translated", "both-empty", "impossible", "entry-removed", "added-impossible", "line-counter"])("real Python trace rejects semantic mutation %s after outer rehash", async (defect) => {
+	const f = await collected({ "script/main.py": "print(42)\n" }, cli("script/main.py", "python"));
 	try {
 		expect(f.exit).toBe(0);
 		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
@@ -1213,14 +1373,14 @@ test.each(["empty-arcs", "empty-translated", "both-empty", "impossible", "entry-
 		if (defect === "entry-removed") { row.arcs = [[1, -1]]; row.translatedArcs = [[1, -1]]; }
 		if (defect === "added-impossible") { list(row.arcs).push([1, 1]); list(row.translatedArcs).push([1, 1]); }
 		if (defect === "line-counter") obj(obj(process.lines)["script/main.py"])["1"] = 0;
-		const verified = verifyChanged(f, receipt);
+		const verified = await verifyChanged(f, receipt);
 		expect(verified.exit).toBe(2);
 		expect(verified.result.complete).toBe(false);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("unexecuted Python files retain legitimate empty traces and uncovered counters", () => {
-	const f = collected({ "script/main.py": "print(42)\n", "script/unexecuted.py": "print(7)\n" }, cli("script/main.py", "python"));
+test("unexecuted Python files retain legitimate empty traces and uncovered counters", async () => {
+	const f = await collected({ "script/main.py": "print(42)\n", "script/unexecuted.py": "print(7)\n" }, cli("script/main.py", "python"));
 	try {
 		expect(f.exit).toBe(1);
 		expect(f.result.complete).toBe(true);
@@ -1228,15 +1388,15 @@ test("unexecuted Python files retain legitimate empty traces and uncovered count
 		const process = obj(list(receipt.processes)[0]);
 		expect(obj(obj(process.trace).files)["script/unexecuted.py"]).toEqual({ arcs: [], translatedArcs: [] });
 		expect(process.loaded).toEqual(["script/main.py"]);
-		expect(verifyChanged(f, receipt).exit).toBe(1);
+		expect((await verifyChanged(f, receipt)).exit).toBe(1);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("the frozen Python runner source is never credited with its own driver frames", () => {
+test("the frozen Python runner source is never credited with its own driver frames", async () => {
 	const driver = readFileSync(join(import.meta.dir, "quality-coverage/python.py"), "utf8");
 	const f = fixture({ "script/main.py": "print(42)\n", "script/quality-coverage/python.py": driver }, cli("script/main.py", "python"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], undefined, { D945_ASSET_DIRECTORY: join(f.root, "script/quality-coverage") });
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { D945_ASSET_DIRECTORY: join(f.root, "script/quality-coverage") });
 		expect(run.exit).toBe(1);
 		expect(run.result.complete).toBe(true);
 		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
@@ -1246,39 +1406,39 @@ test("the frozen Python runner source is never credited with its own driver fram
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("a dependency program under node_modules runs natively instead of needing a frozen entry", () => {
+test("a dependency program under node_modules runs natively instead of needing a frozen entry", async () => {
 	const f = fixture({
 		"script/main.ts": 'import assert from "node:assert/strict"; const child = Bun.spawnSync([process.execPath, "node_modules/dep/bin/cli.js"], { stdout: "pipe" }); assert.equal(child.exitCode, 0); assert.equal(child.stdout.toString(), "dep\\n");',
 	}, cli("script/main.ts"));
 	f.put("node_modules/dep/bin/cli.js", 'console.log("dep");\n');
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		expect(run.exit).toBe(0);
 		expect(run.result.complete).toBe(true);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("a failing checker CLI under an outer collection leaves no failure file for the inherited process identity", () => {
+test("a failing checker CLI under an outer collection leaves no failure file for the inherited process identity", async () => {
 	const f = fixture();
 	const outer = realpathSync(mkdtempSync(join(tmpdir(), "d945-outer-")));
 	try {
-		const run = f.run(["--plan-sha256", "0".repeat(64)], undefined, { D945_DIRECTORY: outer, D945_PROCESS: "outer-1" });
+		const run = await f.run(["--plan-sha256", "0".repeat(64)], { D945_DIRECTORY: outer, D945_PROCESS: "outer-1" });
 		expect(run.exit).toBe(2);
 		expect(existsSync(join(outer, "outer-1.failure.json"))).toBe(false);
 	} finally { f.cleanup(); rmSync(outer, { recursive: true, force: true }); }
 }, 120_000);
 
-test("an unselected collection ignores an inherited outer D945_SOURCE_ROOT for its Python launches", () => {
+test("an unselected collection ignores an inherited outer D945_SOURCE_ROOT for its Python launches", async () => {
 	const f = fixture({ "script/main.py": "print(42)\n" }, cli("script/main.py", "python"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], undefined, { D945_SOURCE_ROOT: join(f.root, "elsewhere") });
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { D945_SOURCE_ROOT: join(f.root, "elsewhere") });
 		expect(run.exit).toBe(0);
 		expect(run.result.complete).toBe(true);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("Python static branch counters must agree with the flushed raw arc set", () => {
-	const f = collected({ "script/main.py": "def choose(x):\n    if x:\n        return 1\n    return 0\nchoose(True)\nchoose(False)\n" }, cli("script/main.py", "python"));
+test("Python static branch counters must agree with the flushed raw arc set", async () => {
+	const f = await collected({ "script/main.py": "def choose(x):\n    if x:\n        return 1\n    return 0\nchoose(True)\nchoose(False)\n" }, cli("script/main.py", "python"));
 	try {
 		expect(f.exit).toBe(0);
 		const original = readFileSync(join(f.root, "coverage.json"), "utf8");
@@ -1291,58 +1451,58 @@ test("Python static branch counters must agree with the flushed raw arc set", ()
 			// this cannot be rejected just by comparing covered line sets.
 			if (defect === "arcs") for (const key of ["arcs", "translatedArcs"])
 				row[key] = list(row[key]).map((arc) => list(arc)[0] === 2 && list(arc)[1] === 3 ? [-1, 3] : arc);
-			expect(verifyChanged(f, receipt).exit).toBe(2);
+			expect((await verifyChanged(f, receipt)).exit).toBe(2);
 		}
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("only a signal-terminated Python child may omit its normal trace", () => {
+test("only a signal-terminated Python child may omit its normal trace", async () => {
 	const f = fixture({ "script/main.ts": 'Bun.spawnSync([process.env.D945_PYTHON,"script/child.py"]);', "script/child.py": 'import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n' }, cli("script/main.ts"));
 	try {
-		const receipt = collectReceipt(f);
+		const receipt = await collectReceipt(f);
 		const child = pythonProcess(receipt);
 		expect(child.trace).toBe(null);
 		expect(child.signal).toBe("SIGKILL");
-		expect(verifyChanged(f, receipt).exit).toBe(0);
+		expect((await verifyChanged(f, receipt)).exit).toBe(0);
 		for (const exitCode of [0, 1]) {
 			const normal = obj(decode(JSON.stringify(receipt)));
 			const process = pythonProcess(normal);
 			process.signal = null; process.exitCode = exitCode;
-			expect(verifyChanged(f, normal).exit).toBe(2);
+			expect((await verifyChanged(f, normal)).exit).toBe(2);
 		}
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("a frozen Python entry launched in isolated mode is credited and stays isolated", () => {
+test("a frozen Python entry launched in isolated mode is credited and stays isolated", async () => {
 	const f = fixture({ "script/main.ts": 'import assert from "node:assert/strict"; const child=Bun.spawnSync([process.env.D945_PYTHON,"-I","script/child.py"],{stdout:"pipe",stderr:"pipe"}); assert.equal(child.exitCode,0,child.stderr.toString()); assert.equal(child.stdout.toString(),"1\\n");', "script/child.py": 'import sys\nprint(sys.flags.isolated)\n' }, cli("script/main.ts"));
 	try {
-		const child = pythonProcess(collectReceipt(f));
+		const child = pythonProcess(await collectReceipt(f));
 		expect(child.entry).toBe("script/child.py");
 		expect(child.exitCode).toBe(0);
 		expect(obj(child.trace).flushed).toBe(true);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("embedded Python raw Unicode retains exact source identity through Bun loading", () => {
+test("embedded Python raw Unicode retains exact source identity through Bun loading", async () => {
 	const source = "# \u2014\nprint(42)\n";
 	const f = fixture({ "script/main.ts": `import assert from "node:assert/strict"; const PYTHON_DRIVER=String.raw\`${source}\`; const child=Bun.spawnSync([process.env.D945_PYTHON,"-u","-c",PYTHON_DRIVER],{stdout:"pipe"}); assert.equal(child.exitCode,0); assert.equal(child.stdout.toString(),"42\\n");` }, cli("script/main.ts"));
 	try {
 		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
 		inventory.embedded = [{ path: "script/main.ts#PYTHON_DRIVER", sha256: sha256(source), bytes: Buffer.byteLength(source), category: "production", language: "python" }];
 		refreeze(f, "inventory", inventory);
-		const child = pythonProcess(collectReceipt(f));
+		const child = pythonProcess(await collectReceipt(f));
 		expect(child.entry).toBe("script/main.ts#PYTHON_DRIVER");
 		expect(obj(child.trace).flushed).toBe(true);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test.each([1, 2])("v%i retains all-test and operational CLI omission rejection", (version) => {
+test.each([1, 2])("v%i retains all-test and operational CLI omission rejection", async (version) => {
 	for (const omitted of ["test", "cli"]) {
 		const f = fixture({ ...fixtures, "script/entry.ts": "if (import.meta.main) console.log(1);\n" });
 		try {
 			const commands = omitted === "test" ? cli("script/entry.ts") : defaultPlan;
 			refreeze(f, "plan", { version, commands: decode(JSON.stringify(commands)) });
-			const result = f.run(["--collect"]);
+			const result = await f.run(["--collect"]);
 			expect(result.exit).toBe(2);
 			expect(result.result.complete).toBe(false);
 			expect(obj(list(result.result.errors)[0]).code).toBe("plan");
@@ -1351,7 +1511,7 @@ test.each([1, 2])("v%i retains all-test and operational CLI omission rejection",
 	}
 });
 
-test("v3 executes selected roots in two workspaces and retains exact uncovered inventory", () => {
+test("v3 executes selected roots in two workspaces and retains exact uncovered inventory", async () => {
 	const sources = {
 		"script/one/main.test.ts": 'import {test,expect} from "bun:test"; import {answer} from "../shared"; test("one",async ()=>{ expect(process.cwd().endsWith("/script/one")).toBe(true); expect(answer()).toBe(42); const child=Bun.spawnSync([process.execPath,"../child.ts"],{stdout:"pipe"}); expect(child.exitCode).toBe(0); expect(child.stdout.toString()).toBe("child\\n"); await Bun.write("effect.txt","one"); });\n',
 		"script/two/main.test.ts": 'import {test,expect} from "bun:test"; import {readFileSync,writeFileSync} from "node:fs"; test("two",()=>{ expect(process.cwd().endsWith("/script/two")).toBe(true); expect(readFileSync("../one/effect.txt","utf8")).toBe("one"); writeFileSync("effect.txt","two"); });\n',
@@ -1364,7 +1524,7 @@ test("v3 executes selected roots in two workspaces and retains exact uncovered i
 	const plan = { version: 3, commands: ["one", "two"].map((name) => ({ id: name, kind: "test", paths: [`script/${name}/main.test.ts`], args: [], cwd: `script/${name}`, runtime: "bun", expectedExitCode: 0 })), run: { id: "selected-run", selectionHash: sha256("selection") } };
 	try {
 		refreeze(f, "plan", plan);
-		const result = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const result = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		expect(result.exit).toBe(1);
 		expect(result.result.complete).toBe(true);
 		expect(readFileSync(join(f.root, "script/two/effect.txt"), "utf8")).toBe("two");
@@ -1387,29 +1547,29 @@ test("v3 executes selected roots in two workspaces and retains exact uncovered i
 			if (defect === "command") changed.commands = list(changed.commands).slice(1);
 			if (defect === "cwd") obj(processes.find((p) => p.command === "one" && p.parent === "")).cwd = "script/two";
 			if (defect === "map") obj(list(changed.maps)[0]).mapHash = "0".repeat(64);
-			expect(verifyChanged(f, changed).exit).toBe(2);
+			expect((await verifyChanged(f, changed)).exit).toBe(2);
 		}
 		symlinkSync(join(f.root, "script/one"), join(f.root, "alias"));
 		for (const cwd of ["../outside", "/tmp", "script/one/..", "script//one", "script/missing", "script/shared.ts", "alias", "script/two"]) {
 			refreeze(f, "plan", { ...plan, commands: plan.commands.map((command, index) => index === 0 ? { ...command, cwd } : command) });
-			expect(f.run(["--collect"]).exit).toBe(2);
+			expect((await f.run(["--collect"])).exit).toBe(2);
 		}
 		for (const run of [null, { id: "", selectionHash: sha256("selection") }, { id: "run", selectionHash: "bad" }]) {
 			refreeze(f, "plan", { ...plan, run });
-			expect(f.run(["--collect"]).exit).toBe(2);
+			expect((await f.run(["--collect"])).exit).toBe(2);
 		}
 		refreeze(f, "plan", { ...plan, run: { ...plan.run, id: "stale" } });
-		expect(verifyChanged(f, receipt).exit).toBe(2);
+		expect((await verifyChanged(f, receipt)).exit).toBe(2);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("a missing test entry and update mode are analysis errors", () => {
+test("a missing test entry and update mode are analysis errors", async () => {
 	const f = fixture(fixtures, [
 		{ id: "only-cli", kind: "cli", paths: ["script/subject.ts"], args: [], expectedExitCode: 0 },
 	]);
 	try {
-		expect(f.run(["--collect"]).exit).toBe(2);
-		expect(f.run(["--update"]).exit).toBe(2);
+		expect((await f.run(["--collect"])).exit).toBe(2);
+		expect((await f.run(["--update"])).exit).toBe(2);
 	} finally {
 		f.cleanup();
 	}
@@ -1417,7 +1577,7 @@ test("a missing test entry and update mode are analysis errors", () => {
 
 
 test("metrics consumes the actual verified collector receipt without fabricated coverage", async () => {
-	const f = collected();
+	const f = await collected();
 	try {
 		expect(f.exit).toBe(0);
 		const argv = [process.execPath, join(import.meta.dir, "check-quality-metrics.ts"),
@@ -1458,7 +1618,7 @@ test("decode rejects invalid escapes and leading zeros while accepting unicode e
 	}
 });
 
-test("shared emission cache serves a second process the same verified identity", () => {
+test("shared emission cache serves a second process the same verified identity", async () => {
 	const f = emittedWorkspace(
 		"export const value = 42;\n",
 		'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; import { Worker } from "node:worker_threads"; test("emitted entry", async () => { expect(choose(true)).toBe(42); const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("exit", () => resolve())); });\n',
@@ -1470,7 +1630,7 @@ test("shared emission cache serves a second process the same verified identity",
 		list(inventory.files).sort((a, b) => str(obj(a).path).localeCompare(str(obj(b).path)));
 		f.put("inventory.json", JSON.stringify(inventory));
 		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		const processes = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
@@ -1479,7 +1639,7 @@ test("shared emission cache serves a second process the same verified identity",
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("concurrent cold workers each receive the shared emission without corrupting the cache", () => {
+test("concurrent cold workers each receive the shared emission without corrupting the cache", async () => {
 	// The cache write is `<cache>.<pid>.<thread>.<uuid>.tmp` then rename: sibling
 	// workers share one pid, so a pid-only temporary produced ENOENT at rename
 	// when two cold loads overlapped. Four cold workers exercise that path; the
@@ -1495,7 +1655,7 @@ test("concurrent cold workers each receive the shared emission without corruptin
 		list(inventory.files).sort((a, b) => str(obj(a).path).localeCompare(str(obj(b).path)));
 		f.put("inventory.json", JSON.stringify(inventory));
 		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		const processes = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
@@ -1504,7 +1664,7 @@ test("concurrent cold workers each receive the shared emission without corruptin
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("an emission identical to the original transpilation still transfers after the original loaded", () => {
+test("an emission identical to the original transpilation still transfers after the original loaded", async () => {
 	// The 8b545e3b identity law failed on CI for protocol barrels: the original
 	// evaluated first, then a later dynamic import loaded the tsc emission, whose
 	// instrumented hash equals the original's, so Istanbul's `coverage[path].hash
@@ -1515,7 +1675,7 @@ test("an emission identical to the original transpilation still transfers after 
 		'import { test, expect } from "bun:test"; import { choose as original } from "./pkg/src/index.ts"; const { choose } = await import("@fixture/emitted"); test("both instances", () => { expect(original(true)).toBe(42); expect(choose(false)).toBe(99); });\n',
 	);
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		const [process] = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
@@ -1535,17 +1695,17 @@ test("an emission identical to the original transpilation still transfers after 
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector runs an inline runtime evaluation as an external utility", () => {
+test("exact collector runs an inline runtime evaluation as an external utility", async () => {
 	const f = fixture({ "script/utility.ts": 'const run = Bun.spawnSync([process.execPath, "-e", "process.stdout.write(\'ok\')"], { stdout: "pipe", stderr: "pipe" }); if (run.stdout.toString() !== "ok") process.exit(7);\n' }, cli("script/utility.ts"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("exact collector admits a receipt-less executable outside the frozen root and refuses one inside", () => {
+test("exact collector admits a receipt-less executable outside the frozen root and refuses one inside", async () => {
 	const source = 'const run = Bun.spawnSync(["fixture-tool", "print"], { stdout: "pipe", stderr: "pipe" }); if (run.stdout.toString().trim() !== "fixture-tool print") process.exit(7);\n';
 	const outside = realpathSync(mkdtempSync(join(tmpdir(), "d945-outside-")));
 	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
@@ -1555,24 +1715,24 @@ test("exact collector admits a receipt-less executable outside the frozen root a
 			writeFileSync(join(directory, "fixture-tool"), '#!/bin/sh\necho "fixture-tool $@"\n');
 			chmodSync(join(directory, "fixture-tool"), 0o755);
 		}
-		const admitted = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: `${outside}:/usr/bin:/bin` });
+		const admitted = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: `${outside}:/usr/bin:/bin` });
 		if (admitted.exit !== 1) throw new Error(JSON.stringify({ exit: admitted.exit, result: admitted.result, stderr: admitted.stderr }));
 		expect(admitted.result.complete).toBe(true);
-		const refused = f.run(["--collect"], checker, { PATH: `${join(f.root, "fake-bin")}:/usr/bin:/bin` });
+		const refused = await f.run(["--collect"], { PATH: `${join(f.root, "fake-bin")}:/usr/bin:/bin` });
 		expect(refused.exit).toBe(2);
 		expect(JSON.stringify(refused.result)).toContain("unregistered native executable");
 		// A name that resolves nowhere is the operating system's refusal, observed by the caller.
-		const missing = f.run(["--collect"], checker, { PATH: "/usr/bin:/bin" });
+		const missing = await f.run(["--collect"], { PATH: "/usr/bin:/bin" });
 		expect(missing.exit).toBe(2);
 		expect(JSON.stringify(missing.result)).toContain("ENOENT");
 		expect(JSON.stringify(missing.result)).not.toContain("cannot be resolved");
 	} finally { f.cleanup(); rmSync(outside, { recursive: true, force: true }); }
 }, 120_000);
 
-test("instrumented child processes report the command the caller asked for", () => {
+test("instrumented child processes report the command the caller asked for", async () => {
 	const f = fixture({ "script/utility.ts": 'import { spawn } from "node:child_process"; const child = spawn("tail", ["-n", "1", "/dev/null"]); if (child.spawnfile !== "tail" || JSON.stringify(child.spawnargs) !== JSON.stringify(["tail", "-n", "1", "/dev/null"])) process.exit(7); await new Promise((resolve) => child.once("exit", resolve));\n' }, cli("script/utility.ts"));
 	try {
-		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], checker, { PATH: "/usr/bin:/bin" });
+		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
 		expect(run.result.complete).toBe(true);
 	} finally { f.cleanup(); }
