@@ -302,9 +302,8 @@ async function admissionPoint(point: CrashPoint, bodies: string[], dbPath: strin
       },
     })
     .catch((error: Error) => {
-      if (point !== "outbound_flood_deadline_before_timer_rearm" || error.message !== "flood") {
-        throw error;
-      }
+      if (point !== "outbound_flood_deadline_before_timer_rearm") throw error;
+      if (z.instanceof(Error).parse(error).message !== "flood") throw error;
       return stop(point, bodies);
     });
 }
