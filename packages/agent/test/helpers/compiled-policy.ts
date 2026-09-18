@@ -64,6 +64,11 @@ export function opPhaseOf(action: LedgerAction.Append): string {
   return "unmatched";
 }
 
+/** Fixture chain links: tests here assert executor behaviour, not the ledger's hash owner. */
+export function fixtureHashes(ordinal: number) {
+  return { prevHash: `fixture-hash-${ordinal - 1}`, actionHash: `fixture-hash-${ordinal}` };
+}
+
 /** An in-memory ExecutionLedger that records every append and mints ordinals. */
 export function recordingLedger(committed: LedgerAction.Append[] = []) {
   let ordinal = 0;
@@ -74,7 +79,10 @@ export function recordingLedger(committed: LedgerAction.Append[] = []) {
       async commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt> {
         committed.push(action);
         ordinal += 1;
-        return { action: LedgerAction.Node.parse({ ...action, ordinal }), revision: ordinal };
+        return {
+          action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
+          revision: ordinal,
+        };
       },
     },
   };
@@ -120,7 +128,10 @@ export function recordingExecutor(options: RecordingExecutorOptions = {}): {
         committed.push(action);
         await options.onCommit?.(action);
         ordinal += 1;
-        return { action: LedgerAction.Node.parse({ ...action, ordinal }), revision: ordinal };
+        return {
+          action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
+          revision: ordinal,
+        };
       },
     },
     observations: { publish: (event) => options.onObservation?.(event.name) },

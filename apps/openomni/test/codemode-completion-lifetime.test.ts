@@ -7,7 +7,7 @@ import { z } from "zod";
 import { composeCodemode } from "../src/composition/codemode";
 import { createTools } from "../src/tools/core/catalog";
 import { cellDaemonOptions } from "./helpers/cell-daemon";
-import { seededPolicy } from "./helpers/executor";
+import { fixtureHashes, seededPolicy } from "./helpers/executor";
 import { bounded } from "./helpers/protected-dispatch";
 import { residentSuite } from "./helpers/resident-suite";
 import { socketPath } from "./helpers/socket-path";
@@ -30,7 +30,8 @@ for (const stop of [false, true]) {
       policy: seededPolicy,
       ledger: {
         async commit(append) {
-          const action = LedgerAction.Node.parse({ ...append, ordinal: actions.length + 1 });
+          const ordinal = actions.length + 1;
+          const action = LedgerAction.Node.parse({ ...append, ordinal, ...fixtureHashes(ordinal) });
           actions.push(action);
           return { action, revision: action.ordinal };
         },

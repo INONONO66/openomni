@@ -11,13 +11,21 @@ export const seededPolicy = compilePolicySnapshot({
   rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
 });
 
+/** Fixture chain links: tests here assert executor behaviour, not the ledger's hash owner. */
+export function fixtureHashes(ordinal: number) {
+  return { prevHash: `fixture-hash-${ordinal - 1}`, actionHash: `fixture-hash-${ordinal}` };
+}
+
 /** Production executor composition with deterministic in-memory receipts. */
 export const executor = createExecutor({
   policy: seededPolicy,
   ledger: {
     async commit(action) {
       ordinal += 1;
-      return { action: LedgerAction.Node.parse({ ...action, ordinal }), revision: ordinal };
+      return {
+        action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
+        revision: ordinal,
+      };
     },
   },
   observations: { publish: () => undefined },
