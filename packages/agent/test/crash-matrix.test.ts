@@ -221,9 +221,13 @@ async function recoverCommittedCompaction(witness: Witness) {
       projection: z.array(Message.WithParts),
     })
     .parse(effectOf(result).result);
+  const originalAnswer = z
+    .array(Message.WithParts)
+    .parse(results("message").map((action) => effectOf(action).result))
+    .find((message) => message.info.id === "answer");
   const history = foldSessionHistory(sessionId, before);
   expect(history).toEqual(committed.projection);
-  expectCompactedProjection(history);
+  expectCompactedProjection(history, originalAnswer);
   if (witness.crashPoint === "compaction_concurrent_tail_committed_before_owner_crash") {
     expect(inbox.map((item) => item.id)).toEqual(["tail"]);
     expect(SessionHandleStore.inboxRows(sessionId).map((item) => item.id)).toEqual(["tail"]);
@@ -234,7 +238,7 @@ async function recoverCommittedCompaction(witness: Witness) {
   expect(actions()).toEqual(before);
   const recovered = foldSessionHistory(sessionId, actions());
   expect(recovered).toEqual(history);
-  expectCompactedProjection(recovered);
+  expectCompactedProjection(recovered, originalAnswer);
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual(inbox);
   await executor.recover();
   expect(actions()).toEqual(before);
@@ -242,8 +246,11 @@ async function recoverCommittedCompaction(witness: Witness) {
   return terminalClass(result);
 }
 
-/** Independent of the stored projection: the summary replaced `earlier`, the protected answer survived. */
-function expectCompactedProjection(projection: Message.WithParts[]) {
+/** Independent of the stored projection: the summary replaced `earlier`, the protected answer survived verbatim. */
+function expectCompactedProjection(
+  projection: Message.WithParts[],
+  originalAnswer: Message.WithParts | undefined,
+) {
   const texts = projection.map((message) =>
     message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),
   );
@@ -255,7 +262,8 @@ function expectCompactedProjection(projection: Message.WithParts[]) {
   expect(texts).toHaveLength(2);
   expect(texts[0]).toContain("checkpoint");
   expect(texts[0]).not.toContain("earlier evidence");
-  expect(projection[1]?.info.id).toBe("answer");
+  expect(originalAnswer?.info.id).toBe("answer");
+  expect(projection[1]).toEqual(originalAnswer);
   expect(texts[1]).toBe("answer");
 }
 
