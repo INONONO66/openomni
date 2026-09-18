@@ -780,7 +780,7 @@ function instrumentOutput(
 		ignoreClassMethods: [],
 	});
 	let code = instrumenter.instrumentSync(
-		javascript.replace(/\/\/# sourceMappingURL=.*$/m, ""),
+		javascript.replace(/^\/\/# sourceMappingURL=.*$/m, ""),
 		e.path,
 	);
 	const raw = instrumenter.lastFileCoverage();

@@ -64,7 +64,7 @@ export function prepare(source: Source): Prepared {
     invokeTool({
       operation: "coverage",
       path: source.path,
-      code: emitted.outputText.replace(/\/\/# sourceMappingURL=.*$/m, ""),
+      code: emitted.outputText.replace(/^\/\/# sourceMappingURL=.*$/m, ""),
       sourceMap: emitted.sourceMapText,
     }),
   );
