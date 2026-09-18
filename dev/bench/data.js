@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789583517434,
+  "lastUpdate": 1789716975978,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -71195,6 +71195,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 631883,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d17713c6ec3f28e77d5f216f607f5ea3e66f4798",
+          "message": "kernel(s0): evidence gate — source pins, crash matrix, baseline bench (#1088)\n\nKernel campaign slice 0: evidence gate (final design §9 row 0, §10, §12).\n\n- docs/kernel-references.md pins Codex ee6814bf / OpenCode v2 7c5a4d01 / OmO 1d22bc26 with a per-decision file:line reference table (all pins verified 200 via gh api).\n- packages/agent/test/crash-matrix.test.ts: 8 crash points over file-backed SQLite reopened in a fresh process, gated by script/conformance/crash-matrix.json (whole-table equality; a mutated cell fails naming the cell).\n- packages/ledger + packages/agent bench: session-tree/session-commit/session-history and turn/* metrics.\n- summarize-benchmark-runs / check-benchmark-regression: head-only metrics admitted against an older reference; fresh reference metrics must match accepted history; CLI entry covered in-process and at the OS exit-code boundary.\n\nUltrabrain line reviews R1 (FAIL, fixed), R2 PASS, R3 (exit-code mutant survived, fixed). Part of #930.",
+          "timestamp": "2026-09-18T16:33:40+09:00",
+          "tree_id": "489c0037886234403813bfbc3c05199893e204d2",
+          "url": "https://github.com/INONONO66/openomni/commit/d17713c6ec3f28e77d5f216f607f5ea3e66f4798"
+        },
+        "date": 1789716974567,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1020,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1380,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1351190,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 365835,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6633927,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 128,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1108,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 674,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 143413,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 728139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 544278,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3683,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 89646884,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 8781968,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 180951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 935288,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 234329,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14342054,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 93,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 163821,
             "unit": "ns/op"
           }
         ]
