@@ -143,12 +143,40 @@ async function recoverExecutor(witness: Witness) {
   }
 }
 
+function countingRunner(
+  runtime: SessionRuntime,
+  calls: { model: number },
+  onModel = () => undefined,
+) {
+  return dispatchingRunner(
+    [],
+    () => runtime,
+    async (input, sink) => {
+      onModel();
+      calls.model += 1;
+      return completeModel(input, sink);
+    },
+  );
+}
+
+/** Wakes the recovered session once and returns the turn terminals; the pre-crash prefix must be untouched. */
+async function wakeAfterCrash(
+  witness: Witness,
+  runner: ReturnType<typeof countingRunner>,
+  runtime: SessionRuntime,
+  before: LedgerAction.Node[],
+) {
+  await bounded(wakeSession(sessionId, runner, runtime), witness.crashPoint);
+  expect(actions().slice(0, before.length)).toEqual(before);
+  return actions().filter((action) => SessionHandleStore.turnTerminal(action) !== undefined);
+}
+
 async function recoverAdmission(witness: Witness) {
   const before = actions();
   const originalTurns = SessionHandleStore.openTurns(before);
   const originalInbox = SessionHandleStore.pendingInbox(sessionId);
   const originalOutbound = SessionHandleStore.outboundRows(sessionId);
-  let modelCalls = 0;
+  const calls = { model: 0 };
   let deliveries = 0;
   const runtime: SessionRuntime = {
     observations,
@@ -159,27 +187,16 @@ async function recoverAdmission(witness: Witness) {
       return receiveOutbound(message, 100_000).receipt;
     },
   };
-  const runner = dispatchingRunner(
-    [],
-    () => runtime,
-    async (input, sink) => {
-      modelCalls += 1;
-      return completeModel(input, sink);
-    },
-  );
+  const runner = countingRunner(runtime, calls);
   try {
-    await bounded(wakeSession(sessionId, runner, runtime), witness.crashPoint);
-    expect(actions().slice(0, before.length)).toEqual(before);
-    const terminals = actions().filter(
-      (action) => SessionHandleStore.turnTerminal(action) !== undefined,
-    );
+    const terminals = await wakeAfterCrash(witness, runner, runtime, before);
     expect(terminals).toHaveLength(1);
     if (witness.crashPoint === "outbound_reply_before_delivery_settle") {
       expect(witness.bodies).toEqual(["reply"]);
       expect(originalOutbound).toMatchObject([
         { state: "pending", message: { content: "durable reply" } },
       ]);
-      expect(modelCalls).toBe(0);
+      expect(calls.model).toBe(0);
       expect(deliveries).toBe(1);
       expect(SessionHandleStore.outboundRows(sessionId)).toMatchObject([{ state: "delivered" }]);
       const revision = SessionHandleStore.row(sessionId).revision;
@@ -189,7 +206,7 @@ async function recoverAdmission(witness: Witness) {
       return "rearmed";
     }
     expect(witness.bodies).toEqual([]);
-    expect(modelCalls).toBe(1);
+    expect(calls.model).toBe(1);
     const terminal = SessionHandleStore.turnTerminal(nth(terminals, 0));
     if (witness.crashPoint === "turn_intent_before_llm_entry") {
       expect(originalTurns).toHaveLength(1);
@@ -268,11 +285,21 @@ function expectCompactedProjection(
   expect(texts).toHaveLength(2);
   expect(projection[0]?.info.role).toBe("user");
   expect(texts[0]).toBe(renderAnchorText("checkpoint", false));
-  expect(Message.TextPart.parse(projection[0]?.parts[0]).metadata).toEqual({
-    compactionAnchor: true,
-    anchorBody: "checkpoint",
-    keptWindow: [{ role: "assistant", text: "answer", time: originalAnswer?.info.time.created }],
-  });
+  const anchor = nth(projection, 0);
+  expect(anchor.parts).toEqual([
+    {
+      id: nth(anchor.parts, 0).id,
+      sessionID: sessionId,
+      messageID: nth(ids, 0),
+      type: "text",
+      text: renderAnchorText("checkpoint", false),
+      metadata: {
+        compactionAnchor: true,
+        anchorBody: "checkpoint",
+        keptWindow: [{ role: "assistant", text: "answer", time: originalAnswer?.info.time.created }],
+      },
+    },
+  ]);
   expect(originalAnswer?.info.id).toBe("answer");
   expect(projection[1]).toEqual(originalAnswer);
   expect(texts[1]).toBe("answer");
@@ -282,23 +309,11 @@ async function recoverTurn(witness: Witness, resumeCount: number, onModel = () =
   const before = actions();
   const original = crashWitness.shape.openTurns.element.parse(witness.openTurns[0]);
   expect(witness.openTurns).toHaveLength(1);
-  let modelCalls = 0;
+  const calls = { model: 0 };
   const runtime: SessionRuntime = { observations, clock: () => 200_000 };
-  const runner = dispatchingRunner(
-    [],
-    () => runtime,
-    async (input, sink) => {
-      onModel();
-      modelCalls += 1;
-      return completeModel(input, sink);
-    },
-  );
+  const runner = countingRunner(runtime, calls, onModel);
   try {
-    await bounded(wakeSession(sessionId, runner, runtime), witness.crashPoint);
-    expect(actions().slice(0, before.length)).toEqual(before);
-    const terminals = actions().filter(
-      (action) => SessionHandleStore.turnTerminal(action) !== undefined,
-    );
+    const terminals = await wakeAfterCrash(witness, runner, runtime, before);
     expect(terminals.map((action) => action.id)).toEqual([original.resultId]);
     expect(SessionHandleStore.turnTerminal(nth(terminals, 0))).toMatchObject({
       turnId: original.turnId,
@@ -306,13 +321,13 @@ async function recoverTurn(witness: Witness, resumeCount: number, onModel = () =
       kind: "result",
     });
     expect(SessionHandleStore.openTurns(actions())).toEqual([]);
-    expect(modelCalls).toBe(1);
+    expect(calls.model).toBe(1);
     const recovered = actions();
     const revision = SessionHandleStore.row(sessionId).revision;
     await bounded(wakeSession(sessionId, runner, runtime), "settled turn wake");
     expect(actions()).toEqual(recovered);
     expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
-    expect(modelCalls).toBe(1);
+    expect(calls.model).toBe(1);
     return "resumed_without_reexecution";
   } finally {
     await closeSessions(runtime);
@@ -438,7 +453,7 @@ async function recoverOutbound(witness: Witness, dbPath: string) {
   const platformPath = `${dbPath}.platform`;
   if (external) expect(readFileSync(platformPath, "utf8")).toBe(`${item.message.messageId}\n`);
   let deliveries = 0;
-  let modelCalls = 0;
+  const calls = { model: 0 };
   const runtime: SessionRuntime = {
     observations,
     clock: () => 200_000,
@@ -449,18 +464,10 @@ async function recoverOutbound(witness: Witness, dbPath: string) {
       return receiveOutbound(message, 200_000).receipt;
     },
   };
-  const runner = dispatchingRunner(
-    [],
-    () => runtime,
-    async (input, sink) => {
-      modelCalls += 1;
-      return completeModel(input, sink);
-    },
-  );
+  const runner = countingRunner(runtime, calls);
   try {
-    await bounded(wakeSession(sessionId, runner, runtime), witness.crashPoint);
-    expect(actions().slice(0, before.length)).toEqual(before);
-    expect(modelCalls).toBe(0);
+    await wakeAfterCrash(witness, runner, runtime, before);
+    expect(calls.model).toBe(0);
     expect(deliveries).toBe(acked ? 0 : 1);
     expect(SessionHandleStore.outboundRows(sessionId)).toMatchObject([
       { state: "delivered", message: item.message },
@@ -481,7 +488,7 @@ async function recoverOutbound(witness: Witness, dbPath: string) {
     expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
     expect(actions()).toEqual(recovered);
     expect(deliveries).toBe(acked ? 0 : 1);
-    expect(modelCalls).toBe(0);
+    expect(calls.model).toBe(0);
     if (external)
       expect(readFileSync(platformPath, "utf8")).toBe(
         `${item.message.messageId}\n${item.message.messageId}\n`,

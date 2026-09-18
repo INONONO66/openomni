@@ -291,8 +291,8 @@ async function admissionPoint(point: CrashPoint, bodies: string[], dbPath: strin
     parentActionId: null,
   });
   const child = session({ id: sessionId, parentId: "parent", role: "worker", runner }, runtime);
-  try {
-    return await child.prompt("work", {
+  return child
+    .prompt("work", {
       encodingVersion: 1,
       value: {
         kind: "message",
@@ -300,12 +300,13 @@ async function admissionPoint(point: CrashPoint, bodies: string[], dbPath: strin
         senderSessionId: "parent",
         sourceActionId: commission.receipt.action.id,
       },
+    })
+    .catch((error: Error) => {
+      if (point !== "outbound_flood_deadline_before_timer_rearm" || error.message !== "flood") {
+        throw error;
+      }
+      return stop(point, bodies);
     });
-  } catch (error) {
-    if (point !== "outbound_flood_deadline_before_timer_rearm") throw error;
-    if (z.instanceof(Error).parse(error).message !== "flood") throw error;
-    return stop(point, bodies);
-  }
 }
 
 if (import.meta.main) {
