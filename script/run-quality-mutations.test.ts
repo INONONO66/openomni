@@ -688,7 +688,7 @@ test("red baseline report names nested failures, explains unexplained exits and 
 		"process exit=null signal=SIGKILL timedOut=true overflow=false junit=invalid: hang",
 	]);
 	const many = describeRedBaseline([{
-		junit: junit(Array.from({ length: 7 }, (_, index) => testcase(`case ${index}`, '<failure type="Error" message="boom" />')).join("")),
+		junit: junit([1, 2, 3, 4, 5, 6, 7].map((index) => testcase(`case ${index}`, '<failure type="Error" message="boom" />')).join("")),
 		failures: 7,
 		valid: true,
 		process: { ...exited, exitCode: 1 },
