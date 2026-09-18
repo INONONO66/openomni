@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "rows": [
     {
       "crashPoint": "turn_intent_before_llm_entry",
@@ -40,6 +40,51 @@
       "crashPoint": "outbound_reply_before_delivery_settle",
       "recovery": "rearmed",
       "note": "The source turn and reply obligation committed. Recovery dispatches the same pending reply and settles its delivery without executing the source runner again."
+    },
+    {
+      "crashPoint": "recovery_dispatch_identity_committed_before_rpc",
+      "recovery": "resumed_without_reexecution",
+      "note": "Two processes stop before the model: the first leaves the original turn open, the second commits a resume and stops at runner entry. Final wake preserves turnId, records resumeCount 2, executes one model call and settles once. Unlike the rearmed target, there is no separately durable recovery-dispatch/RPC identity; the current mechanism resumes the same turn."
+    },
+    {
+      "crashPoint": "compaction_boundary_committed_before_publication",
+      "recovery": "resumed_without_reexecution",
+      "note": "Cut after the compaction result commit and before caller/event publication. Executor recovery appends nothing and history folds to the committed summary projection without resummarizing. This nearest current cut does not claim atomic successor, parent closure, accounting or handoff publication."
+    },
+    {
+      "crashPoint": "delivery_ack_committed_before_owner_cleanup",
+      "recovery": "resumed_without_reexecution",
+      "note": "Cut at the empty release-lease commit after the ack succeeds. Wake dispatches zero deliveries and preserves delivered state; the expired lease is reacquirable and explicit cleanup releases it, with revision stable on another wake. Idle wake does not itself clean up the old lease."
+    },
+    {
+      "crashPoint": "platform_send_committed_before_local_ack_reconciled_sent",
+      "recovery": "replayed",
+      "note": "Cut after receiveOutbound commits destination admission but before returning its receipt. Recovery invokes the dispatcher once more; the destination inbox still has one identical row because inbox dedupe masks the duplicate external send. The target requires adapter receipt reconciliation, which is absent."
+    },
+    {
+      "crashPoint": "platform_attempt_marker_before_send_reconciled_not_sent",
+      "recovery": "rearmed",
+      "note": "Nearest cut is after the outbound open row, at dispatcher entry and before any platform-side effect; no durable send-attempt marker exists, and no action of any kind follows open before recovery. Wake sends the same obligation once and records delivered; there is no not_sent reconciliation."
+    },
+    {
+      "crashPoint": "platform_send_ambiguous_without_reconciliation",
+      "recovery": "replayed",
+      "note": "External stand-in appends messageId to a non-deduplicating side file, then crashes before returning a receipt. Recovery blindly sends again; the file contains exactly the same messageId twice. The lost target requires uncertain-delivery terminalization and reconciliation rather than blind resend, neither of which exists."
+    },
+    {
+      "crashPoint": "compaction_concurrent_tail_committed_before_owner_crash",
+      "recovery": "resumed_without_reexecution",
+      "note": "The summarizer admits a foreign tail prompt before returning; cut follows the compaction result commit. Recovery preserves the summary projection unchanged and exactly one pending tail inbox row. This current cut demonstrates inbox preservation, not a durable watermark/ceiling or successor handoff."
+    },
+    {
+      "crashPoint": "outbound_flood_deadline_before_timer_rearm",
+      "recovery": "rearmed",
+      "note": "Cut after the dispatcher throws flood and the refusal propagates; no persisted flood deadline; retried immediately on wake. Recovery makes one successful delivery and records delivered, without a retry timer or remaining-delay reconstruction."
+    },
+    {
+      "crashPoint": "owner_reclaimed_before_stale_transcript_flush",
+      "recovery": "lost",
+      "note": "Cut at the model attempt result commit after its body returns while owner A holds the lease, retaining the exact uncommitted action. After expiry, wake acquires owner B; replaying A's witnessed result with its old owner/fence is refused as stale without changing the tree. B settles the original turn once; A's effect row never appears."
     }
   ]
 }

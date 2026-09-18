@@ -1,9 +1,11 @@
+import { appendFileSync, writeSync } from "node:fs";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { PlainObjectSchema, PlainValueSchema, type LedgerAction } from "@openomni/protocol";
+import { LedgerAction, PlainObjectSchema, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 import { createExecutor, type ExecutionLedger } from "../../src/executor";
 import { executeCompaction } from "../../src/compaction/execute-cut";
-import { session, type SessionRuntime } from "../../src/session-handle";
+import { session, wakeSession, type SessionRuntime } from "../../src/session-handle";
+import { receiveOutbound } from "./receive-outbound";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
 import { requestLedger } from "./request-ledger";
 import { compiledPolicy } from "./compiled-policy";
@@ -22,6 +24,15 @@ export const crashPoint = z.enum([
   "compaction_summary_before_result_commit",
   "inbox_admitted_before_turn_open",
   "outbound_reply_before_delivery_settle",
+  "recovery_dispatch_identity_committed_before_rpc",
+  "compaction_boundary_committed_before_publication",
+  "delivery_ack_committed_before_owner_cleanup",
+  "platform_send_committed_before_local_ack_reconciled_sent",
+  "platform_attempt_marker_before_send_reconciled_not_sent",
+  "platform_send_ambiguous_without_reconciliation",
+  "compaction_concurrent_tail_committed_before_owner_crash",
+  "outbound_flood_deadline_before_timer_rearm",
+  "owner_reclaimed_before_stale_transcript_flush",
 ]);
 export const recovery = z.enum([
   "resumed_without_reexecution",
@@ -32,8 +43,8 @@ export const recovery = z.enum([
 ]);
 export const matrixSchema = z
   .object({
-    version: z.literal(1),
-    rows: z.array(z.object({ crashPoint, recovery, note: z.string().min(1) }).strict()).min(7),
+    version: z.literal(2),
+    rows: z.array(z.object({ crashPoint, recovery, note: z.string().min(1) }).strict()).min(17),
   })
   .strict();
 export const crashWitness = z
@@ -41,6 +52,15 @@ export const crashWitness = z
     crashPoint,
     bodies: z.array(z.string()),
     pending: z.object({ kind: z.string(), effect: PlainObjectSchema }).optional(),
+    staleAction: LedgerAction.Append.optional(),
+    lease: z.object({
+      owner: z.string().nullable(),
+      fence: z.number(),
+      expiresAt: z.number().nullable(),
+    }),
+    openTurns: z.array(
+      z.object({ turnId: z.string(), resultId: z.string(), resumeCount: z.number() }),
+    ),
   })
   .strict();
 export type CrashPoint = z.infer<typeof crashPoint>;
@@ -51,18 +71,49 @@ export const effectOf = (action: LedgerAction.Append) =>
 export const intentOf = (action: LedgerAction.Append) =>
   PlainObjectSchema.parse(action.intent.value);
 
-// The worker exits without unwinding the executor or returning from the intercepted port.
-function stop(point: CrashPoint, bodies: string[], pending?: LedgerAction.Append): Promise<never> {
+export const outboundPoints = new Set<CrashPoint>([
+  "outbound_reply_before_delivery_settle",
+  "delivery_ack_committed_before_owner_cleanup",
+  "platform_send_committed_before_local_ack_reconciled_sent",
+  "platform_attempt_marker_before_send_reconciled_not_sent",
+  "platform_send_ambiguous_without_reconciliation",
+  "outbound_flood_deadline_before_timer_rearm",
+]);
+export const committedCompactionPoints = new Set<CrashPoint>([
+  "compaction_boundary_committed_before_publication",
+  "compaction_concurrent_tail_committed_before_owner_crash",
+]);
+
+// Synchronous witness output also permits cuts inside the synchronous store commit port.
+function stop(point: CrashPoint, bodies: string[], pending?: LedgerAction.Append): never {
+  const row = SessionHandleStore.row(sessionId);
   const witness = crashWitness.parse({
     crashPoint: point,
     bodies,
+    lease: { owner: row.leaseOwner, fence: row.leaseFence, expiresAt: row.leaseExpiresAt },
+    openTurns: SessionHandleStore.openTurns(SessionHandleStore.tree(sessionId)),
     ...(pending === undefined
       ? {}
       : { pending: { kind: pending.kind, effect: pending.effect.value } }),
+    ...(point === "owner_reclaimed_before_stale_transcript_flush" ? { staleAction: pending } : {}),
   });
-  return new Promise(() => {
-    process.stdout.write(`${JSON.stringify(witness)}\n`, () => process.exit(0));
-  });
+  writeSync(1, `${JSON.stringify(witness)}\n`);
+  process.exit(0);
+}
+
+function beforeResult(point: CrashPoint, action: LedgerAction.Append, toolResults: number) {
+  if (effectOf(action).phase !== "result") return false;
+  switch (point) {
+    case "llm_body_before_attempt_result_commit":
+    case "owner_reclaimed_before_stale_transcript_flush":
+      return action.kind === "attempt";
+    case "tool_wave_between_result_commits":
+      return action.kind === "tool" && toolResults === 2;
+    case "compaction_summary_before_result_commit":
+      return action.kind === "compaction";
+    default:
+      return false;
+  }
 }
 
 function intercept(ledger: ExecutionLedger, point: CrashPoint, bodies: string[]): ExecutionLedger {
@@ -72,21 +123,12 @@ function intercept(ledger: ExecutionLedger, point: CrashPoint, bodies: string[])
     async commit(action) {
       const result = effectOf(action).phase === "result";
       if (action.kind === "tool" && result) toolResults += 1;
-      const before =
-        (point === "llm_body_before_attempt_result_commit" &&
-          action.kind === "attempt" &&
-          result) ||
-        (point === "tool_wave_between_result_commits" &&
-          action.kind === "tool" &&
-          toolResults === 2 &&
-          result) ||
-        (point === "compaction_summary_before_result_commit" &&
-          action.kind === "compaction" &&
-          result);
-      if (before) return stop(point, bodies, action);
+      if (beforeResult(point, action, toolResults)) return stop(point, bodies, action);
       const receipt = await ledger.commit(action);
-      if (point === "llm_result_committed" && action.kind === "llm" && result)
-        return stop(point, bodies, action);
+      const after =
+        (point === "llm_result_committed" && action.kind === "llm") ||
+        (committedCompactionPoints.has(point) && action.kind === "compaction");
+      if (after && result) return stop(point, bodies, action);
       return receipt;
     },
   };
@@ -94,7 +136,11 @@ function intercept(ledger: ExecutionLedger, point: CrashPoint, bodies: string[])
 
 async function executePoint(point: CrashPoint, bodies: string[]) {
   const recording = requestLedger({ id: sessionId });
-  if (point === "turn_intent_before_llm_entry") return stop(point, bodies);
+  if (
+    point === "turn_intent_before_llm_entry" ||
+    point === "recovery_dispatch_identity_committed_before_rpc"
+  )
+    return stop(point, bodies);
   const ledger = intercept(recording.ledger, point, bodies);
   const executor = createExecutor({
     ...recording,
@@ -128,7 +174,7 @@ async function executePoint(point: CrashPoint, bodies: string[]) {
       },
     );
   }
-  if (point === "compaction_summary_before_result_commit") {
+  if (point === "compaction_summary_before_result_commit" || committedCompactionPoints.has(point)) {
     const history = [
       textMessage("assistant", "earlier evidence ".repeat(200), sessionId, "earlier"),
       textMessage("assistant", "answer", sessionId, "answer"),
@@ -147,6 +193,17 @@ async function executePoint(point: CrashPoint, bodies: string[]) {
         protectRecentMessages: 1,
         onSummarize: async () => {
           bodies.push("summary");
+          if (point === "compaction_concurrent_tail_committed_before_owner_crash") {
+            SessionHandleStore.commitReceivedMessage({
+              id: "tail",
+              sessionId,
+              kind: "prompt",
+              content: "concurrent tail",
+              createdAt: 100,
+              origin: { encodingVersion: 1, value: {} },
+              parentActionId: null,
+            });
+          }
           return "checkpoint";
         },
       },
@@ -161,11 +218,50 @@ async function executePoint(point: CrashPoint, bodies: string[]) {
   });
 }
 
-async function admissionPoint(point: CrashPoint, bodies: string[]) {
+function workerClock(point: CrashPoint, bodies: string[]) {
+  // dispatchSessionOutbound reads the clock for commit([], true) after committing the ACK.
+  if (
+    point === "delivery_ack_committed_before_owner_cleanup" &&
+    bodies.includes("accepted") &&
+    SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "delivered")
+  )
+    stop(point, bodies);
+  return 100;
+}
+
+function outboundPort(
+  point: CrashPoint,
+  bodies: string[],
+  dbPath: string,
+): SessionRuntime["dispatchOutbound"] {
+  return async ({ message }) => {
+    if (point === "outbound_flood_deadline_before_timer_rearm") {
+      bodies.push("flood");
+      throw new Error("flood");
+    }
+    if (point === "platform_send_ambiguous_without_reconciliation") {
+      appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
+      bodies.push("accepted");
+      return stop(point, bodies);
+    }
+    if (
+      point === "delivery_ack_committed_before_owner_cleanup" ||
+      point === "platform_send_committed_before_local_ack_reconciled_sent"
+    ) {
+      const { receipt } = receiveOutbound(message, 100);
+      bodies.push("accepted");
+      if (point === "platform_send_committed_before_local_ack_reconciled_sent") stop(point, bodies);
+      return receipt;
+    }
+    return stop(point, bodies);
+  };
+}
+
+async function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
   const runtime: SessionRuntime = {
     observations,
-    clock: () => 100,
-    dispatchOutbound: () => stop(point, bodies),
+    clock: () => workerClock(point, bodies),
+    dispatchOutbound: outboundPort(point, bodies, dbPath),
   };
   const runner = async () => {
     bodies.push("reply");
@@ -195,26 +291,36 @@ async function admissionPoint(point: CrashPoint, bodies: string[]) {
     parentActionId: null,
   });
   const child = session({ id: sessionId, parentId: "parent", role: "worker", runner }, runtime);
-  return child.prompt("work", {
-    encodingVersion: 1,
-    value: {
-      kind: "message",
-      messageId: "commission",
-      senderSessionId: "parent",
-      sourceActionId: commission.receipt.action.id,
-    },
-  });
+  return child
+    .prompt("work", {
+      encodingVersion: 1,
+      value: {
+        kind: "message",
+        messageId: "commission",
+        senderSessionId: "parent",
+        sourceActionId: commission.receipt.action.id,
+      },
+    })
+    .catch((error: Error) => {
+      if (point !== "outbound_flood_deadline_before_timer_rearm") throw error;
+      if (z.instanceof(Error).parse(error).message !== "flood") throw error;
+      return stop(point, bodies);
+    });
 }
 
 if (import.meta.main) {
-  const [point, dbPath] = z.tuple([crashPoint, z.string().min(1)]).parse(process.argv.slice(2));
+  const [point, dbPath, stage] = z
+    .tuple([crashPoint, z.string().min(1), z.enum(["initial", "resume"])])
+    .parse(process.argv.slice(2));
   Storage.initialize({ dbPath });
   seedPolicy();
   const bodies: string[] = [];
-  if (
-    point === "inbox_admitted_before_turn_open" ||
-    point === "outbound_reply_before_delivery_settle"
-  )
-    await admissionPoint(point, bodies);
-  else await executePoint(point, bodies);
+  if (stage === "resume") {
+    await wakeSession(sessionId, async () => stop(point, bodies), {
+      observations,
+      clock: () => 100_000,
+    });
+  } else if (point === "inbox_admitted_before_turn_open" || outboundPoints.has(point)) {
+    await admissionPoint(point, bodies, dbPath);
+  } else await executePoint(point, bodies);
 }
