@@ -1410,6 +1410,14 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	// proof, and every proof names such a source: provenance cannot be dropped.
 	if (emitted && transferred && [...new Set(emitted.map((proof) => proof.source))].sort().join("\0") !== [...transferred].sort().join("\0"))
 		fail("identity", text(r.id), "emission proofs do not match the transferred sources");
+	// Both records above are the process's own claims. The frozen tree pins what
+	// a loaded original statically imports, so erasing both records together
+	// still cannot hide an owned compiled module the process must have loaded.
+	if (emitted)
+		for (const path of loaded)
+			for (const target of staticEmissionImports(data, path))
+				if (!emitted.some((proof) => proof.path === target))
+					fail("identity", target, `emitted module statically imported by ${path} has no emission proof`);
 	return {
 		id: text(r.id),
 		parent: text(r.parent),
@@ -1424,6 +1432,41 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 		loaded,
 		coverage,
 	};
+}
+
+const staticImportTargets = new WeakMap<Prepared, readonly string[]>();
+
+// Owned compiled modules that evaluating this original must load: the static
+// import and re-export specifiers of its instrumented JavaScript (type-only
+// imports are already erased), resolved in the frozen tree exactly as the
+// loader classifies them. Dynamic imports are conditional and never required.
+function staticEmissionImports(data: Inputs, path: string): readonly string[] {
+	const file = data.files.find((f) => f.entry.path === path);
+	if (!file || file.python) return [];
+	const cached = staticImportTargets.get(file);
+	if (cached) return cached;
+	const program = ts.createSourceFile(path, file.code, ts.ScriptTarget.ESNext, false, ts.ScriptKind.JS);
+	const targets = new Set<string>();
+	for (const statement of program.statements) {
+		const specifier = (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+			? statement.moduleSpecifier.text : undefined;
+		if (specifier === undefined || nodeModules.isBuiltin(specifier) || specifier.startsWith("bun:")) continue;
+		let resolved: string;
+		try {
+			resolved = realpathSync(Bun.resolveSync(specifier, join(data.options.root, dirname(path))));
+		} catch (error) {
+			if (specifier.startsWith(".")) continue; // relative imports of originals; the loader binds them by inventory
+			return fail("identity", path, `static import ${JSON.stringify(specifier)} does not resolve in the frozen tree: ${error instanceof Error ? error.message : String(error)}`);
+		}
+		const target = relative(data.options.root, resolved);
+		if (target.startsWith("..") || isAbsolute(target) || target.split("/").includes("node_modules")) continue;
+		if (!data.roots.some((r) => target.startsWith(`${r}/`)) || !/\.[cm]?[jt]sx?$/.test(target)) continue;
+		if (data.files.some((f) => f.entry.path === target)) continue;
+		targets.add(target);
+	}
+	const result = [...targets].sort();
+	staticImportTargets.set(file, result);
+	return result;
 }
 
 function summary(data: Inputs, receipts: ProcessReceipt[]) {

@@ -641,10 +641,13 @@ test("workspace emit receipt binds compiler, artifact, original and map identiti
 		}
 		// Emission provenance is mandatory for every JavaScript process: deleting
 		// the proofs (with a fresh digest) is rejected, not read as direct source loads.
-		for (const tampered of [
-			(process: ReturnType<typeof obj>) => { delete process.emitted; },
-			(process: ReturnType<typeof obj>) => { process.emitted = []; },
-		]) {
+		// Erasing the transfer record together with the proofs is caught by the
+		// frozen tree: the loaded test statically imports the compiled package.
+		for (const [tampered, message] of [
+			[(process: ReturnType<typeof obj>) => { delete process.emitted; }, "object keys differ"],
+			[(process: ReturnType<typeof obj>) => { process.emitted = []; }, "emission proofs do not match the transferred sources"],
+			[(process: ReturnType<typeof obj>) => { process.emitted = []; process.transferred = []; }, "emitted module statically imported by script/subject.test.ts has no emission proof"],
+		] as const) {
 			const receipt = structuredClone(original);
 			const process = list(receipt.processes).map(obj).find((process) => list(process.emitted ?? []).length > 0);
 			if (!process) throw new Error("missing emitted provenance");
@@ -652,6 +655,7 @@ test("workspace emit receipt binds compiler, artifact, original and map identiti
 			f.put("coverage.json", JSON.stringify(receipt));
 			const verified = f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
 			expect(verified.exit).toBe(2);
+			expect(str(obj(list(verified.result.errors)[0]).message)).toContain(message);
 		}
 		f.put("coverage.json", JSON.stringify(original));
 		f.put("script/pkg/dist/value.js", readFileSync(join(f.root, "script/pkg/dist/value.js"), "utf8").replace("42", "43"));
@@ -1410,6 +1414,31 @@ test("shared emission cache serves a second process the same verified identity",
 		const processes = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
 		expect(processes).toHaveLength(2);
 		for (const process of processes) expect(list(process.loaded).map(str)).toContain("script/pkg/src/index.ts");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("concurrent cold workers each receive the shared emission without corrupting the cache", () => {
+	// The cache write is `<cache>.<pid>.<thread>.<uuid>.tmp` then rename: sibling
+	// workers share one pid, so a pid-only temporary produced ENOENT at rename
+	// when two cold loads overlapped. Four cold workers exercise that path; the
+	// overlap itself is not forced, so this is execution coverage, not a race oracle.
+	const f = emittedWorkspace(
+		"export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { Worker } from "node:worker_threads"; test("cold workers", async () => { const workers = Array.from({ length: 4 }, () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })); const codes = await Promise.all(workers.map((worker) => new Promise<number>((resolve) => worker.once("exit", resolve)))); expect(codes).toEqual([0, 0, 0, 0]); const { choose } = await import("@fixture/emitted"); expect(choose(true)).toBe(42); });\n',
+	);
+	try {
+		f.put("script/worker.ts", 'import { choose } from "@fixture/emitted"; export const ready = choose(false);\n');
+		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+		list(inventory.files).push({ path: "script/worker.ts", sha256: sha256(readFileSync(join(f.root, "script/worker.ts"))), bytes: readFileSync(join(f.root, "script/worker.ts")).byteLength, category: "tooling", language: "typescript" });
+		list(inventory.files).sort((a, b) => str(obj(a).path).localeCompare(str(obj(b).path)));
+		f.put("inventory.json", JSON.stringify(inventory));
+		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(run.result.complete).toBe(true);
+		const processes = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
+		expect(processes).toHaveLength(5);
+		for (const process of processes) expect(list(process.emitted).map((row) => str(obj(row).path)).sort()).toEqual(["script/pkg/dist/index.js", "script/pkg/dist/value.js"]);
 	} finally { f.cleanup(); }
 }, 120_000);
 
