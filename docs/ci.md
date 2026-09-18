@@ -438,9 +438,12 @@ accepted 40-character commit SHA, not cross-runner comparison timings. A detache
 reference worktree uses the same head-pinned Bun toolchain and its own frozen
 lockfile dependencies; protocol declarations are built in both worktrees.
 Each repeat measures reference/head serially, reversing order on even repeats.
-Both sets of all 14 metrics use the canonical summarizer. Missing history,
-invalid commit IDs, and incomplete, unexpected or duplicate metrics fail closed;
-there is no bootstrap or historical-timing fallback.
+Both sets use the canonical summarizer: head requires all 22 metrics, while
+`--reference` accepts a nonempty subset of the head contract that must be identical
+across reference runs, without foreign or duplicate metrics. Only shared metrics
+are gated; head-only metrics are reported as `new (no reference)`, and reference-only
+metrics remain errors. Missing history and invalid commit IDs fail closed; there
+is no bootstrap or historical-timing fallback.
 
 `check-benchmark-regression.ts --accepted-commit <accepted.js>` validates and
 prints the accepted SHA. `--prepare-reference <reference-statistics.json>
@@ -449,7 +452,7 @@ writes `bench-results/reference.json`: exactly one freshly measured reference,
 using unrounded p50 values. The normal comparison command receives head
 statistics and that file. The workflow fixes the limit at 20%, with zero
 historical noise band because there is only one reference. A slowdown strictly
-above 20% in even one metric fails. This is stricter than both the former PR
+above 20% in even one shared metric fails. This is stricter than both the former PR
 20%-plus-historical-two-sigma gate and the main publisher's 50% alert.
 
 Only successful paired comparisons permit main push/dispatch history storage;

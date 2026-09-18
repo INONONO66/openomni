@@ -2,11 +2,11 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Bench } from "tinybench";
-import { L0Observation, type Message } from "@openomni/protocol";
+import { L0Observation, type LedgerSession, type Message } from "@openomni/protocol";
 import { Bus } from "../test/helpers/observation";
 import { materializeSession } from "../test/helpers/session";
 import { SessionHandleStore, Storage } from "../src/index";
-import { seedTurnHistory } from "./seed-turn-history";
+import { prepareTurnCommit, seedTurnHistory } from "./seed-turn-history";
 
 type BenchmarkResult = {
   readonly name: string;
@@ -131,11 +131,72 @@ async function runStorageSessionList(): Promise<void> {
   }
 }
 
+async function runSessionTree(): Promise<void> {
+  Storage.initialize({ dbPath: ":memory:" });
+  try {
+    const bench = new Bench({ time: 100, iterations: 5, warmupTime: 100, warmupIterations: 2 });
+    for (const count of [1_000, 10_000]) {
+      const id = `tree-${count}`;
+      seedTurnHistory(id, count / 2);
+      bench.add(`${count / 1_000}k-actions`, () => {
+        SessionHandleStore.tree(id);
+      });
+    }
+    await bench.run();
+    recordResults("session-tree", bench);
+    const history = new Bench({ time: 100 });
+    history.add("page", () => {
+      SessionHandleStore.historyPage("tree-10000", { limit: 50 });
+    });
+    await history.run();
+    recordResults("session-history", history);
+  } finally {
+    Storage.reset();
+  }
+}
+
+async function runSessionCommit(): Promise<void> {
+  Storage.initialize({ dbPath: ":memory:" });
+  try {
+    const id = "commit-session";
+    seedTurnHistory(id);
+    const tree = SessionHandleStore.tree(id);
+    const generation = SessionHandleStore.latestGeneration(tree);
+    let parentId = tree.at(-1)?.id ?? null;
+    let index = 10;
+    let request: LedgerSession.Commit;
+    let result: LedgerSession.CommitResult;
+    const bench = new Bench({ time: 100 });
+    bench.add(
+      "action",
+      () => {
+        result = SessionHandleStore.commit(request);
+      },
+      {
+        beforeEach() {
+          request = prepareTurnCommit(id, index++, parentId, generation);
+          request.actions = request.actions.slice(0, 1);
+        },
+        afterEach() {
+          if (!result.ok) throw new Error("benchmark action commit refused", { cause: result });
+          parentId = request.actions[0]?.id ?? null;
+        },
+      },
+    );
+    await bench.run();
+    recordResults("session-commit", bench);
+  } finally {
+    Storage.reset();
+  }
+}
+
 try {
   await runSessionHydration();
   await runBusFanout();
   await runMessageSerialization();
   await runStorageSessionList();
+  await runSessionTree();
+  await runSessionCommit();
   mkdirSync("bench-results", { recursive: true });
   await Bun.write(join("bench-results", "session.json"), `${JSON.stringify(results, null, 2)}\n`);
 } finally {

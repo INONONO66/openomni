@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compareBenchmarks, main, readBenchmarkHistory, regressionThreshold } from "./check-benchmark-regression";
 import { EXPECTED_BENCHMARK_NAMES } from "./summarize-benchmark-runs";
+import { z } from "zod";
 import { decodeJson } from "./quality-json";
 
 const metrics = (value: number) => EXPECTED_BENCHMARK_NAMES.map((name: string) => ({ name, unit: "ns/op", value, p50: value, runs: 5 }));
@@ -50,7 +51,7 @@ test.each([Number.NaN, Number.POSITIVE_INFINITY, -1])("invalid metric value %s f
   expect(() => compareBenchmarks(metrics(value), history(100))).toThrow();
 });
 
-test("invalid input and incomplete references fail closed", () => {
+test("invalid input and malformed references fail closed", () => {
   for (const input of ["", "0", "-1", "NaN", "Infinity", "20%"])
     expect(() => regressionThreshold(input)).toThrow();
   expect(regressionThreshold()).toBe(20);
@@ -58,9 +59,7 @@ test("invalid input and incomplete references fail closed", () => {
   expect(() => compareBenchmarks([], history(100))).toThrow();
   expect(() => compareBenchmarks([...metrics(100), ...metrics(100)], history(100))).toThrow();
   expect(() => compareBenchmarks(metrics(100), history())).toThrow();
-  const missing = history(100);
-  missing.entries["OpenOmni Benchmarks"][0]?.benches.pop();
-  expect(() => compareBenchmarks(metrics(100), missing)).toThrow();
+
   const duplicate = history(100);
   duplicate.entries["OpenOmni Benchmarks"][0]?.benches.push(...metrics(100));
   expect(() => compareBenchmarks(metrics(100), duplicate)).toThrow();
@@ -81,18 +80,45 @@ test("accepted history rejects unexpected metrics and malformed commit identitie
   }
 });
 
+test("head-only metrics are reported without gating while shared regressions fail", () => {
+  const reference = history(100);
+  reference.entries["OpenOmni Benchmarks"].forEach((entry) => { entry.benches = entry.benches.slice(0, 14); });
+  const current = metrics(100).map((metric, index) => index < 14 ? metric : { ...metric, p50: 1_000_000 });
+  const result = compareBenchmarks(current, reference);
+  expect(result.failed).toBe(false);
+  expect(result.comparisons).toHaveLength(22);
+  expect(result.comparisons.slice(14)).toEqual(current.slice(14).map((metric) => ({
+    name: metric.name, median: metric.p50, reference: null, noiseBand: null,
+    limit: null, regressed: false, status: "new (no reference)",
+  })));
+  const regressed = current.map((metric, index) => index === 0 ? { ...metric, p50: 121 } : metric);
+  expect(compareBenchmarks(regressed, reference).comparisons.filter((metric) => metric.regressed)).toHaveLength(1);
+  expect(compareBenchmarks(regressed, reference).failed).toBe(true);
+});
+
+test("reference-only metrics fail structurally even when the reference name is in the head contract", () => {
+  expect(() => compareBenchmarks(metrics(100).slice(1), history(100))).toThrow(z.ZodError);
+  const reference = history(100);
+  reference.entries["OpenOmni Benchmarks"].forEach((entry) => {
+    entry.benches.push({ name: "reference-only", unit: "ns/op", value: 100, p50: 100, runs: 5 });
+  });
+  expect(() => compareBenchmarks(metrics(100), reference)).toThrow(z.ZodError);
+});
+
 test("paired CLI admits host-speed shifts but rejects real regressions and invalid references", async () => {
   const root = mkdtempSync(join(tmpdir(), "benchmark-paired-"));
   const cwd = process.cwd(), env = { ...process.env };
   try {
     process.chdir(root);
     process.env.BENCHMARK_REGRESSION_PERCENT = "20";
-    delete process.env.GITHUB_STEP_SUMMARY;
+    process.env.GITHUB_STEP_SUMMARY = "bench-results/summary.md";
     const acceptedHistory = history(50, 150, 100);
+    acceptedHistory.entries["OpenOmni Benchmarks"].forEach((entry) => { entry.benches = entry.benches.slice(0, 14); });
     // Retired older metric sets do not replace or invalidate the latest reference.
     acceptedHistory.entries["OpenOmni Benchmarks"][0]?.benches.pop();
     const accepted = `window.BENCHMARK_DATA = ${JSON.stringify(acceptedHistory)};\n`;
-    const fresh = JSON.stringify(metrics(180).map((metric) => ({ ...metric, value: 999 })));
+    const referenceMetrics = metrics(180).slice(0, 14);
+    const fresh = JSON.stringify(referenceMetrics.map((metric) => ({ ...metric, value: 999 })));
     await Bun.write("bench-results/accepted.js", accepted);
     await Bun.write("bench-results/reference/statistics.json", fresh);
     const prepare = ["--prepare-reference", "bench-results/reference/statistics.json", "bench-results/accepted.js", commit(2), commit(3)];
@@ -101,7 +127,7 @@ test("paired CLI admits host-speed shifts but rejects real regressions and inval
     const reference = decodeJson(referenceSource);
     const hash = (source: string) => createHash("sha256").update(source).digest("hex");
     expect(reference).toMatchObject({
-      entries: { "OpenOmni Benchmarks": [{ commit: { id: commit(2) }, benches: metrics(180).map(({ name, unit, p50 }) => ({ name, unit, value: p50 })) }] },
+      entries: { "OpenOmni Benchmarks": [{ commit: { id: commit(2) }, benches: referenceMetrics.map(({ name, unit, p50 }) => ({ name, unit, value: p50 })) }] },
       paired: { headCommit: commit(3), referenceCommit: commit(2), acceptedHistorySha256: hash(accepted), referenceStatisticsSha256: hash(fresh) },
     });
     expect(compareBenchmarks(metrics(180), history(100)).failed).toBe(true);
@@ -111,7 +137,13 @@ test("paired CLI admits host-speed shifts but rejects real regressions and inval
       expect(await main(["bench-results/statistics.json", "bench-results/reference.json"])).toBe(exit);
       const result = decodeJson(await Bun.file("bench-results/regression.json").text());
       expect(result).toMatchObject({ failed: exit === 1, referenceCommit: commit(2), threshold: 20, statisticsSha256: hash(current), historySha256: hash(referenceSource) });
-      expect(compareBenchmarks(metrics(value), reference).comparisons.every((metric) => metric.noiseBand === 0)).toBe(true);
+      const comparisons = compareBenchmarks(metrics(value), reference).comparisons;
+      expect(comparisons.slice(0, 14).every((metric) => metric.noiseBand === 0)).toBe(true);
+      expect(comparisons.slice(14).every((metric) => metric.status === "new (no reference)")).toBe(true);
+      const summary = await Bun.file("bench-results/summary.md").text();
+      for (const metric of comparisons.slice(14)) {
+        expect(summary).toContain(`| ${metric.name} | ${metric.median} | - | - | ${metric.status} |`);
+      }
     }
     expect(await main(["--accepted-commit", "bench-results/accepted.js"])).toBe(0);
     const child = Bun.spawn([process.execPath, join(import.meta.dir, "check-benchmark-regression.ts"), "--accepted-commit", "bench-results/accepted.js"], { cwd: root, stdout: "pipe", stderr: "pipe" });
@@ -119,11 +151,13 @@ test("paired CLI admits host-speed shifts but rejects real regressions and inval
     expect({ code, stdout, stderr }).toEqual({ code: 0, stdout: `${commit(2)}\n`, stderr: "" });
     await expect(main(["--prepare-reference", "bench-results/reference/statistics.json", "bench-results/accepted.js", commit(1), commit(3)])).rejects.toThrow("Measured reference commit does not match accepted history");
     await expect(main([...prepare.slice(0, 4), "main"])).rejects.toThrow();
-    for (const invalid of [[], metrics(180).slice(1), [...metrics(180), ...metrics(180)], [...metrics(180), { name: "unexpected", unit: "ns/op", value: 180, p50: 180, runs: 5 }]]) {
+    for (const invalid of [[], [...metrics(180), ...metrics(180)], [...metrics(180), { name: "unexpected", unit: "ns/op", value: 180, p50: 180, runs: 5 }]]) {
       await Bun.write("bench-results/reference/statistics.json", JSON.stringify(invalid));
       await expect(main(prepare)).rejects.toThrow();
     }
-    for (const benches of [metrics(100).slice(1), [...metrics(100), ...metrics(100)]]) {
+    await Bun.write("bench-results/reference/statistics.json", JSON.stringify(metrics(180).slice(1, 14)));
+    await expect(main(prepare)).rejects.toThrow("Measured reference metrics do not match accepted history");
+    for (const benches of [[], [...metrics(100), ...metrics(100)]]) {
       const invalid = history(100, 100);
       const latest = invalid.entries["OpenOmni Benchmarks"].at(-1);
       if (!latest) throw new Error("Missing test reference");
