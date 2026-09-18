@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789716975978,
+  "lastUpdate": 1789739431419,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -71329,6 +71329,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 163821,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b3a27ef9eae5aac3bcaae7e0f94f5ca82a45e9e",
+          "message": "fix(quality): make census fs.watch fixture robust to missed first write (#1089)\n\n* fix(quality): make census fs.watch fixture robust to missed first write\n\nThe native mutation baseline was not green because the fs.watch fixture could wait indefinitely after macOS missed the first write issued immediately after watch() returned.\n\nRetry writes until the native event arrives and align fixture spawn bounds at 30 seconds so output and exit assertions remain robust under campaign load.\n\n* test(quality): deduplicate census native fixture spawn blocks\n\n* test(quality): share native census fixture skeleton",
+          "timestamp": "2026-09-18T22:46:54+09:00",
+          "tree_id": "63544d4192f44e5d0f3bba0033efe56846480215",
+          "url": "https://github.com/INONONO66/openomni/commit/8b3a27ef9eae5aac3bcaae7e0f94f5ca82a45e9e"
+        },
+        "date": 1789739430195,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1135,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1416,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1638048,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 404344,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 7813781,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 159,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 656,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 126368,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 833718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 614712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3915,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 92991743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9263898,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 21629,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 208825,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 1083664,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 246735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15834567,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 102,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 170753,
             "unit": "ns/op"
           }
         ]
