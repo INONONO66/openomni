@@ -27,7 +27,7 @@ const runtime: SessionRuntime = {
   entropy: () => `inspect-id-${++nextId}`,
   processId: "inspection-test",
   scheduleHeartbeat: () => () => undefined,
-  waitRetry: async () => undefined,
+  retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
   authorizeApproval: async () => ({ kind: "owner", principalId: "owner", evidenceId: "auth-1" }),
   async dispatchOutbound({ message }) {
     const received = SessionHandleStore.commitReceivedMessage({

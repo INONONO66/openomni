@@ -3,6 +3,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { LedgerAction, PlainObjectSchema, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 import { createExecutor, type ExecutionLedger } from "../../src/executor";
+import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
 import { executeCompaction } from "../../src/compaction/execute-cut";
 import { session, wakeSession, type SessionRuntime } from "../../src/session-handle";
 import { receiveOutbound } from "./receive-outbound";
@@ -39,6 +40,7 @@ export const recovery = z.enum([
   "replayed",
   "rearmed",
   "not_durable",
+  "rejected",
   "lost",
 ]);
 export const matrixSchema = z
@@ -147,7 +149,11 @@ async function executePoint(point: CrashPoint, bodies: string[]) {
     ledger,
     policy: compiledPolicy(),
     observations,
-    waitRetry: () => stop(point, bodies),
+    // The durable arm commits before the cut: only the wait itself is lost.
+    retryAlarm: {
+      ...createRetryAlarmPort(sessionId, recording.clock),
+      wait: () => stop(point, bodies),
+    },
   });
   if (point === "tool_wave_between_result_commits") {
     const tools = ["first", "second"].map((name) =>

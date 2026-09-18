@@ -23,8 +23,8 @@
     },
     {
       "crashPoint": "retry_backoff_wait",
-      "recovery": "not_durable",
-      "note": "The failed attempt persists, but the retry wait has no durable continuation. Recovery marks the logical model operation failed with absent local completion."
+      "recovery": "rearmed",
+      "note": "A committed retry.scheduled alarm (kind at) survives the crash; boot recovery re-arms the schedule via the single alarm owner and the resumed turn completes the attempt exactly once."
     },
     {
       "crashPoint": "compaction_summary_before_result_commit",

@@ -8,6 +8,7 @@ import type {
   Tool,
 } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput } from "@openomni/policy";
+import type { RetryAlarmPort } from "./executor-retry-alarm";
 import type { WaveControl } from "./core/execution/tool-wave";
 
 interface ExecutionKindRegistration {
@@ -208,7 +209,8 @@ export interface DurableExecutor extends Executor {
 }
 
 export interface ExecutorOptions {
-  readonly waitRetry?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+  /** Durable retry schedule port; the default commits through the single alarm owner. */
+  readonly retryAlarm?: RetryAlarmPort;
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly approvalTimeoutMs?: number;

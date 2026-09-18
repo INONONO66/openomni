@@ -29,6 +29,8 @@ export function createTestAgent(config: ChatAgentConfig) {
         signal: config.signal,
         clock: () => Date.now(),
         entropy: recording.entropy,
+        // In-memory ledger: durable scheduling is covered by retry-rearm/llm-attempts tests.
+        retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
         identity: {
           sessionId: input.traceContext?.sessionId ?? "session",
           role: "resident",

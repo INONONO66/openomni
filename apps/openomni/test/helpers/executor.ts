@@ -27,5 +27,7 @@ export const executor = createExecutor({
   observations: { publish: () => undefined },
   identity: { sessionId: "test", role: "resident", parentActionId: null },
   clock: () => 1,
+  // In-memory ledger: durable retry scheduling is covered by the agent package tests.
+  retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
   entropy: () => `test-action-${ordinal + 1}`,
 });

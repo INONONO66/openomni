@@ -123,6 +123,8 @@ export function recordingExecutor(options: RecordingExecutorOptions = {}): {
   let ordinal = 0;
   const executor = createExecutor({
     policy: options.policy ?? allowAllPolicy,
+    // In-memory ledger: durable scheduling is covered by retry-rearm/llm-attempts tests.
+    retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
     ledger: {
       async commit(action) {
         committed.push(action);

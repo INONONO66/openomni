@@ -57,7 +57,7 @@ import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
 interface StartOptions {
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    "clock" | "approvalTimeoutMs" | "waitRetry" | "openIntent" | "onHibernate"
+    "clock" | "approvalTimeoutMs" | "retryAlarm" | "openIntent" | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];

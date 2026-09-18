@@ -13,7 +13,11 @@ afterEach(async () => {
 export function residentRunner(
   options: Omit<ResidentOptions, "sessionRuntime"> & { sessionRuntime?: SessionRuntime },
 ) {
-  const runtime = options.sessionRuntime ?? { observations: Bus, waitRetry: async () => undefined };
+  const runtime = options.sessionRuntime ?? {
+    observations: Bus,
+    // Resolve on state, never a sleep: these tests exercise retries, not schedules.
+    retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
+  };
   runtimes.push(runtime);
   seedKernelPolicyRows();
   const resident = createResident({ ...options, sessionRuntime: runtime });

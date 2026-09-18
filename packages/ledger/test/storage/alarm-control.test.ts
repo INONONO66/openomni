@@ -42,17 +42,18 @@ function openOwner(db: Database) {
   return { adapter, observations };
 }
 
-/** Deadline cancellation and pause are not admitted transitions, even during setup. */
+/** A one-shot pause is not an admitted transition, even during setup. */
 function setupAdmitted(kind: Kind, status: Status): boolean {
-  return !(kind === "at" && (status === "cancelled" || status === "paused"));
+  return !(kind === "at" && status === "paused");
 }
 
-/** Only the calling session's armed/paused watches admit cancel and rearm. */
-function controlAdmitted(kind: Kind, status: Status, sessionId: string): boolean {
-  return kind === "watch" && sessionId === "owner" && (status === "armed" || status === "paused");
+/** The caller's armed/paused alarms admit cancel; rearm additionally requires a watch. */
+function controlAdmitted(kind: Kind, status: Status, sessionId: string, op: Control): boolean {
+  if (sessionId !== "owner" || (status !== "armed" && status !== "paused")) return false;
+  return kind === "watch" || op === "cancel";
 }
 
-/** The full kind x status x caller matrix, each cell carrying its expected admission. */
+/** The full kind x status x caller matrix. */
 const cases = Alarm.Kind.options.flatMap((kind) =>
   Alarm.Status.options
     .filter((status) => setupAdmitted(kind, status))
@@ -62,7 +63,6 @@ const cases = Alarm.Kind.options.flatMap((kind) =>
         kind,
         status,
         sessionId,
-        admitted: controlAdmitted(kind, status, sessionId),
       })),
     ),
 );
@@ -126,16 +126,16 @@ function snapshot(
 }
 
 for (const op of ["cancel", "rearm"] as const) {
-  test(`SQLite alarm ${op} admits only the calling session's armed/paused watches`, () => {
+  test(`SQLite alarm ${op} admits only the calling session's armed/paused alarms`, () => {
     using db = new Database(":memory:");
     initializeSqliteDatabase(db);
     const { adapter, observations } = openOwner(db);
     expect(adapter.alarms[op]("missing", "owner", 100)).toBeUndefined();
-    for (const { id, kind, status, sessionId, admitted } of cases) {
+    for (const { id, kind, status, sessionId } of cases) {
       seedAlarm(adapter, id, kind, status);
       const before = snapshot(adapter, observations, id);
       const result = adapter.alarms[op](id, sessionId, 102);
-      if (admitted) {
+      if (controlAdmitted(kind, status, sessionId, op)) {
         expectTransition(op, before.fence, result);
       } else {
         expect(result).toBeUndefined();
