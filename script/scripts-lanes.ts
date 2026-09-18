@@ -80,6 +80,23 @@ export const scriptContracts = [
   ["verify-ledger-rename.ts"],
   ["check-ledger-schema-drift.ts"],
 ] as const;
+/** Python analyzer self-tests: explicit inventory, run by the first tooling
+ * shard under coverage.py so their native line evidence joins the lane LCOV. */
+export const pythonSelfTests = [
+  "quality-coverage/test_python.py",
+  "quality-coverage/test_python_annotations.py",
+  "quality-coverage/test_python_bool.py",
+  "quality-coverage/test_python_driver.py",
+  "quality-coverage/test_python_runtime.py",
+  "quality-metrics/test_python_metrics.py",
+  "quality-mutation/python-engine.test.py",
+] as const;
+export function pythonTests(actual = [...new Bun.Glob("**/{test_*,*.test}.py").scanSync({ cwd: import.meta.dir })]): readonly string[] {
+  const missing = actual.filter((path) => !pythonSelfTests.some((entry) => entry === path));
+  const absent = pythonSelfTests.filter((path) => !actual.includes(path));
+  if (missing.length || absent.length) throw new Error(`python self-test drift: ${[...missing, ...absent].join(", ")}`);
+  return pythonSelfTests;
+}
 export function scriptTests(lane: ScriptsLane, actual = [...new Bun.Glob("**/*.test.ts").scanSync({ cwd: import.meta.dir })]): readonly string[] {
   const assigned = Object.values(scriptsLanes).flat();
   const missing = actual.filter((path) => !assigned.some((entry) => entry === path));

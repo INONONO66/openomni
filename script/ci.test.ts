@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { planChanges } from "./ci-plan";
 import { ciMain, gate } from "./ci";
-import { scriptContracts, scriptTestCommand } from "./scripts-lanes";
+import { pythonSelfTests, scriptContracts, scriptTestCommand } from "./scripts-lanes";
 import { TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
@@ -159,10 +159,12 @@ test("final gate rejects absent planner output", () => {
   expect(result.exitCode).not.toBe(0);
 });
 
+type SpawnOptions = { cwd?: string; env?: Record<string, string | undefined> };
+const runner: { spawnSync(args: string[], options?: SpawnOptions): { exitCode: number } } = Bun;
+
 test("test entry dispatches workspace and script lanes through their canonical commands", () => {
   const commands: string[][] = [];
   const native = Bun.spawnSync;
-  const runner: { spawnSync(args: string[]): { exitCode: number } } = Bun;
   const spawn = spyOn(runner, "spawnSync").mockImplementation((args: string[]) => {
     commands.push(args);
     return native(["/usr/bin/true"]);
@@ -182,6 +184,43 @@ test("test entry dispatches workspace and script lanes through their canonical c
       ...scriptContracts.map(([entry, ...args]) => [process.execPath, "run", `script/${entry}`, ...args]),
     ]);
     expect(() => ciMain(["test", "--lane", "absent"])).toThrow("unknown lane");
+  } finally { spawn.mockRestore(); }
+});
+
+test("tooling shard one measures the Python self-tests and appends their LCOV to the shard report", () => {
+  // Given a shard whose Bun tests already wrote the lane report.
+  using fixture = { dir: mkdtempSync(join(tmpdir(), "openomni-ci-")), [Symbol.dispose]() { rmSync(this.dir, { recursive: true, force: true }); } };
+  const script = join(fixture.dir, "script");
+  const bunLcov = "SF:ci.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\n";
+  const pythonLcov = "SF:quality-coverage/python.py\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n";
+  mkdirSync(join(script, "coverage"), { recursive: true });
+  writeFileSync(join(script, "coverage/lcov.info"), bunLcov);
+  const calls: { args: string[]; options?: SpawnOptions }[] = [];
+  const native = Bun.spawnSync;
+  const spawn = spyOn(runner, "spawnSync").mockImplementation((args: string[], options?: SpawnOptions) => {
+    calls.push({ args, options });
+    return native(args.at(-1) === "-" ? ["/usr/bin/printf", "%s", pythonLcov] : ["/usr/bin/true"]);
+  });
+  try {
+    // When the shard runs through the canonical entry.
+    ciMain(["test", "--lane", "scripts-tooling-1", "--root", fixture.dir]);
+    // Then every self-test runs under the pinned coverage.py configuration from script/,
+    // in coverage.py's self-measurement mode with the decision contract located for it.
+    const coverage = [process.env.D945_PYTHON ?? "python3", "-m", "coverage"];
+    const rcfile = "--rcfile=conformance/quality-python-coverage.ini";
+    expect(calls.map((call) => call.args)).toEqual([
+      [process.execPath, ...scriptTestCommand("scripts-tooling-1").slice(1)],
+      ...pythonSelfTests.map((test) => [...coverage, "run", rcfile, test]),
+      [...coverage, "combine", "--quiet", rcfile],
+      [...coverage, "lcov", rcfile, "-o", "-"],
+    ]);
+    expect(calls.map((call) => call.options?.cwd)).toEqual(calls.map(() => script));
+    for (const call of calls.slice(1, 1 + pythonSelfTests.length)) {
+      expect(call.options?.env?.COVERAGE_COVERAGE).toBe("1");
+      expect(call.options?.env?.QUALITY_MUTATION_DECISION).toBe(join(script, "conformance/quality-mutation-contract.json"));
+    }
+    // And the combined Python records follow Bun's in the same report.
+    expect(readFileSync(join(script, "coverage/lcov.info"), "utf8")).toBe(bunLcov + pythonLcov);
   } finally { spawn.mockRestore(); }
 });
 

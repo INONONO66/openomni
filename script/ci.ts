@@ -1,9 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { TOPOLOGY } from "./topology";
-import { scriptContracts, scriptPartitions, scriptTestCommand } from "./scripts-lanes";
+import { pythonTests, scriptContracts, scriptPartitions, scriptTestCommand } from "./scripts-lanes";
 import { changeClasses } from "./ci-plan";
 
 const ROOT = join(import.meta.dir, "..");
@@ -59,15 +59,41 @@ class CiError extends Error {
   }
 }
 
-function run(command: readonly string[], cwd = ROOT): void {
-  const args =
-    command[0] === "bunx"
-      ? [process.execPath, "x", ...command.slice(1)]
-      : command[0] === "bun"
-        ? [process.execPath, ...command.slice(1)]
-        : [...command];
-  const child = Bun.spawnSync(args, { cwd, stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+function argv(command: readonly string[]): string[] {
+  return command[0] === "bunx"
+    ? [process.execPath, "x", ...command.slice(1)]
+    : command[0] === "bun"
+      ? [process.execPath, ...command.slice(1)]
+      : [...command];
+}
+function run(command: readonly string[], cwd = ROOT, env: Record<string, string> = {}): void {
+  const child = Bun.spawnSync(argv(command), { cwd, env: { ...process.env, ...env }, stdin: "ignore", stdout: "inherit", stderr: "inherit" });
   if (child.exitCode !== 0) throw new CiError(command.join(" "));
+}
+function capture(command: readonly string[], cwd: string): string {
+  const child = Bun.spawnSync(argv(command), { cwd, stdin: "ignore", stdout: "pipe", stderr: "inherit" });
+  if (child.exitCode !== 0) throw new CiError(command.join(" "));
+  return child.stdout.toString();
+}
+
+/** The Python analyzers' self-tests run under coverage.py, whose subprocess
+ * patch follows every interpreter they spawn; the combined LCOV is appended to
+ * the shard's Bun report so the sealed receipt carries both runtimes. Measuring
+ * a coverage collector needs coverage.py's own self-measurement mode, or an
+ * explicit Coverage in a child silences the automatic one. */
+function pythonSelfTests(root: string): void {
+  const cwd = join(root, "script");
+  const coverage = [process.env.D945_PYTHON ?? "python3", "-m", "coverage"];
+  const rcfile = "--rcfile=conformance/quality-python-coverage.ini";
+  const env = {
+    COVERAGE_COVERAGE: "1",
+    QUALITY_MUTATION_DECISION: join(cwd, "conformance/quality-mutation-contract.json"),
+  };
+  for (const test of pythonTests()) run([...coverage, "run", rcfile, test], cwd, env);
+  // Identical child interpreters write identical data files; combine skips the
+  // duplicates and would report each one.
+  run([...coverage, "combine", "--quiet", rcfile], cwd);
+  appendFileSync(join(cwd, "coverage/lcov.info"), capture([...coverage, "lcov", rcfile, "-o", "-"], cwd));
 }
 
 function readPlan(path?: string) {
@@ -134,10 +160,11 @@ function artifacts(mode: "pack" | "restore", root: string): void {
   if (mode === "pack") run(["tar", "-cf", archive, ...dirs], root);
 }
 
-function testLane(key: string | undefined): void {
+function testLane(key: string | undefined, root: string): void {
   if (key && scriptPartitions.some((partition) => partition === key)) {
-    run(scriptTestCommand(key), join(ROOT, "script"));
-    if (key === "scripts-contracts") for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)]);
+    run(scriptTestCommand(key), join(root, "script"));
+    if (key === "scripts-contracts") for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)], root);
+    if (key === "scripts-tooling-1") pythonSelfTests(root);
     return;
   }
   const lane = LANES.find((candidate) => candidate.key === key);
@@ -147,8 +174,8 @@ function testLane(key: string | undefined): void {
   run(override ? override.split(" ") : [
     "bun", "test", "--timeout", "15000",
     ...(lane.coverage ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"] : []),
-  ], join(ROOT, lane.dir));
-  if (lane.coverage) run(["bun", "run", "script/check-coverage-ratchet.ts", "--lane", lane.dir]);
+  ], join(root, lane.dir));
+  if (lane.coverage) run(["bun", "run", "script/check-coverage-ratchet.ts", "--lane", lane.dir], root);
 }
 
 export function ciMain(argv = Bun.argv.slice(2)): void {
@@ -185,7 +212,7 @@ export function ciMain(argv = Bun.argv.slice(2)): void {
       return;
     }
     case "test":
-      testLane(values.lane);
+      testLane(values.lane, values.root ?? ROOT);
       return;
     default:
       throw new CiError(

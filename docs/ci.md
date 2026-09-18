@@ -109,6 +109,13 @@ an absent timing input previously fell back to hashing both slowest files into
 shard 2. Contract tests reject unassigned or duplicate files across partitions
 and verify the actual commands select every recursive test exactly once.
 No tests, including the intentional 20-second hang, are removed or skipped.
+`scripts-tooling-1` also runs the Python analyzer self-tests (`pythonSelfTests` in
+`script/scripts-lanes.ts`, an explicit manifest its contract test checks against
+`script/**/{test_*,*.test}.py`) under coverage.py with
+`script/conformance/quality-python-coverage.ini`, from `script/` in coverage.py's
+self-measurement mode so the collector's own child interpreters keep saving; the
+combined LCOV is appended to the partition's `coverage/lcov.info` before the
+receipt is sealed, so touched Python lines carry native line evidence.
 
 Each script partition has a separate run/runtime/inventory-bound receipt.
 `quality-coverage-record.ts merge` requires contracts and tooling shards 1, 2,
@@ -394,8 +401,9 @@ both whole and sharded, and merges the shard counters under one run identity
 derived from the shard receipt hashes. Python test files
 (`script/quality-coverage/test_*.py`, `python-engine.test.py`) are not exact
 commands: each spawns interpreters, which the Python runner refuses as
-unobservable, so their sources remain uncovered evidence until the runner
-observes children as the Bun collector does. A whole `exact.coverage.json` from a
+unobservable, so their sources remain uncovered exact evidence until the runner
+observes children as the Bun collector does; their native line evidence is the
+coverage.py LCOV that `scripts-tooling-1` appends. A whole `exact.coverage.json` from a
 single unsharded collect remains accepted.
 
 For measured quality, use Python 3.12.12 and Node 24.19.0 as in CI. Start from
