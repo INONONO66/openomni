@@ -64,6 +64,12 @@ export interface ExecutionRequest {
   readonly revert?: () => void | Promise<void>;
   /** Result-dependent evidence for a reversible durable projection. */
   readonly revertData?: () => PlainValue | undefined;
+  /**
+   * Commit the settled value as a durable boundary child action (one ledger
+   * transaction) before the result commit and any publication: a crash after
+   * the boundary recovers the executed value without re-running the body.
+   */
+  readonly boundary?: boolean;
   readonly toolObservation?: ToolObservationIdentity;
   /** Model-facing settlement, committed atomically with the tool's effect evidence. */
   readonly toolResult?: (outcome: ExecutionBatchResult) => Tool.Result;

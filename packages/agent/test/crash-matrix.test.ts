@@ -109,21 +109,45 @@ async function recoverExecutor(witness: Witness) {
         { terminal: "outcome_unknown", callId: "second", toolResult: { settlement: "unknown" } },
       ]);
       return terminalClass(nth(results("tool"), 1));
-    case "compaction_summary_before_result_commit":
+    case "compaction_summary_before_result_commit": {
       expect(witness.bodies).toEqual(["summary"]);
       expect(witness.pending).toMatchObject({
         kind: "compaction",
         effect: { result: { summary: "checkpoint" } },
       });
+      // The boundary transaction landed before the crash; only the result echo was lost,
+      // so the pre-recovery fold still reads the original two-message history.
       expect(history).toHaveLength(2);
-      expect(foldSessionHistory(sessionId, recovered)).toEqual(history);
-      expect(results("compaction").map(effectOf)).toMatchObject([
+      const boundary = before.find(
+        (action) => action.kind === "compaction" && effectOf(action).phase === "boundary",
+      );
+      if (boundary === undefined) throw new Error("missing durable compaction boundary");
+      expect(effectOf(boundary)).toMatchObject({ result: { summary: "checkpoint" } });
+      const settledResults = results("compaction").map(effectOf);
+      expect(settledResults).toMatchObject([
         {
-          terminal: "failed",
-          recovery: { proof: "absent", classification: "local_transactional" },
+          terminal: "executed",
+          recovery: {
+            proof: "applied",
+            classification: "local_transactional",
+            site: "crash",
+            proofReceipt: { id: boundary.id },
+          },
         },
       ]);
+      const committed = z
+        .object({ summary: z.literal("checkpoint"), projection: z.array(Message.WithParts) })
+        .loose()
+        .parse(nth(settledResults, 0).result);
+      const originalAnswer = z
+        .array(Message.WithParts)
+        .parse(results("message").map((action) => effectOf(action).result))
+        .find((message) => message.info.id === "answer");
+      const recoveredHistory = foldSessionHistory(sessionId, recovered);
+      expect(recoveredHistory).toEqual(committed.projection);
+      expectCompactedProjection(recoveredHistory, originalAnswer);
       return terminalClass(nth(results("compaction"), 0));
+    }
   }
 }
 
