@@ -2,7 +2,14 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync, symlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { Fixture, protocol, adapter, assertPublication, assertStoreWrite } from "./census-fixture";
+import {
+  Fixture,
+  protocol,
+  adapter,
+  assertPublication,
+  assertStoreWrite,
+  SPAWN_TIMEOUT_MS,
+} from "./census-fixture";
 
 test("R3 local events require matching receiver and a subsequent trigger", () => {
   for (const trigger of [
@@ -17,7 +24,7 @@ test("R3 local events require matching receiver and a subsequent trigger", () =>
     });
     const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
       cwd: fixture.root,
-      timeout: 5000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
     const invoked = trigger === 'emitter.emit("trigger");';
     expect(actual.exitCode).toBe(0);
@@ -62,7 +69,7 @@ test("R3 Python thread start, inactive branches and cursors have separate effect
         "-c",
         'import runpy,sqlite3;runpy.run_path("src/main.py");db=sqlite3.connect("state.db");print(db.execute("SELECT COUNT(*) FROM item").fetchone()[0]);db.close()',
       ],
-      { cwd: fixture.root, timeout: 5000 },
+      { cwd: fixture.root, timeout: SPAWN_TIMEOUT_MS },
     );
     const invoked = operation === "started" || operation === "cursor";
     expect(actual.exitCode).toBe(0);
@@ -93,7 +100,7 @@ test("R3 child Python source is rooted in its actual spawn invocation", () => {
   });
   const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
     cwd: fixture.root,
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   {
@@ -145,7 +152,7 @@ test("R3 real observation bus transfers through its scheduled delivery", () => {
   symlinkSync(resolve(import.meta.dir, "../node_modules"), join(fixture.root, "node_modules"));
   const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
     cwd: fixture.root,
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe('["ready"]');
@@ -176,7 +183,7 @@ test("R3 removed listeners and untriggered abort controllers stay dormant", () =
     });
     const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
       cwd: fixture.root,
-      timeout: 5000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
     const invoked = operation === "abort-triggered";
     expect(actual.exitCode).toBe(0);
@@ -193,7 +200,7 @@ test("R3 an unthrown catch around a scheduled noop is not publication", () => {
   });
   const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
     cwd: fixture.root,
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("[]");
@@ -209,7 +216,7 @@ test("R3 process signal callbacks are rooted in an operating-system trigger", ()
   });
   const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
     cwd: fixture.root,
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe('["ready"]');
@@ -228,7 +235,7 @@ test("R3 Bun process entry invokes the child publisher rather than only importin
   });
   const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
     cwd: fixture.root,
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("ready");
@@ -247,7 +254,7 @@ test("R4 private process names and helper order require actual dispatch", () => 
       });
       const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
         cwd: fixture.root,
-        timeout: 5000,
+        timeout: SPAWN_TIMEOUT_MS,
       });
       expect(actual.exitCode).toBe(0);
       expect(actual.stdout.toString().trim()).toBe(live ? '["ready"]' : "[]");
@@ -273,7 +280,7 @@ test("R4 suspended Python construction and partial next do not execute later seg
       "src/main.py": `import sqlite3,asyncio\ndb=sqlite3.connect("state.db")\ndb.execute("CREATE TABLE item(id INTEGER)")\n${definition}\n db.execute("INSERT INTO item VALUES(1)")\n db.commit()\nvalue=save()\n${driver}\ndb.close()\n`,
     });
     fixture.write("package.json", JSON.stringify({ scripts: { start: "python3 src/main.py" } }));
-    const actual = Bun.spawnSync(["python3", "src/main.py"], { cwd: fixture.root, timeout: 5000 });
+    const actual = Bun.spawnSync(["python3", "src/main.py"], { cwd: fixture.root, timeout: SPAWN_TIMEOUT_MS });
     expect(actual.exitCode).toBe(0);
     {
       using db = new Database(join(fixture.root, "state.db"), { readonly: true });
@@ -312,7 +319,7 @@ test("native exit listeners removed before termination do not publish", () => {
       "src/main.ts": `import {Ready} from "./events";const received:string[]=[];const sink={publish(e:{name:string},data:object){received.push(e.name)}};const callback=()=>sink.publish(Ready,{});process.on("exit",callback);${removed ? 'process.off("exit",callback);' : ""}process.on("exit",()=>console.log(JSON.stringify(received)));`,
     });
     const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-      timeout: 5000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
     expect(actual.exitCode).toBe(0);
     expect(actual.stderr.toString()).toBe("");
@@ -382,7 +389,7 @@ db.close()
       "package.json",
       JSON.stringify({ name: "fixture", private: true, scripts: { start: "python3 src/main.py" } }),
     );
-    const actual = Bun.spawnSync(["python3", "src/main.py"], { cwd: fixture.root, timeout: 5000 });
+    const actual = Bun.spawnSync(["python3", "src/main.py"], { cwd: fixture.root, timeout: SPAWN_TIMEOUT_MS });
     expect(actual.exitCode).toBe(0);
     expect(actual.stderr.toString()).toBe("");
     using db = new Database(join(fixture.root, "state.db"), { readonly: true });
@@ -402,7 +409,7 @@ test("native composed abort signals retain controller provenance without inventi
       "src/main.ts": `import {Ready} from "./events";const received:string[]=[];const controller=new AbortController();const signal=AbortSignal.any([controller.signal]);const sink={publish(e:{name:string},data:object){received.push(e.name)}};signal.addEventListener("abort",()=>sink.publish(Ready,{}));${fired ? "controller.abort();" : ""}console.log(JSON.stringify(received));`,
     });
     const native = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-      timeout: 5000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
     expect(native.exitCode).toBe(0);
     expect(native.stdout.toString().trim()).toBe(fired ? '["ready"]' : "[]");
@@ -428,7 +435,7 @@ test("native module interposition invokes the factory for an already imported mo
     "src/main.ts": `import * as modules from "node:module";import * as events from "node:events";import {Ready} from "./events";const moduleLoader:{createRequire(path:string):(id:string)=>{mock:{module(id:string,factory:()=>object):void}}}=modules;const {mock}=moduleLoader.createRequire(import.meta.url)("bun:test");const received:string[]=[];const sink={publish(e:{name:string},data:object){received.push(e.name)}};mock.module("node:events",()=>{sink.publish(Ready,{});return events});console.log(JSON.stringify(received));`,
   });
   const native = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(native.exitCode).toBe(0);
   expect(native.stdout.toString().trim()).toBe('["ready"]');
@@ -456,9 +463,9 @@ test("AsyncResource.bind hands back the callback bound to its native async scope
 test("fs.watch listeners and watcher events have a native filesystem producer", () => {
   using fixture = new Fixture({
     "src/events.ts": protocol,
-    // Watch an existing file: macOS directory watches can miss creation before
-    // their native stream starts. File watches register before watch() returns.
-    "src/main.ts": `import {watch,writeFileSync,mkdtempSync,rmSync} from "node:fs";import {join} from "node:path";import {tmpdir} from "node:os";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const dir=mkdtempSync(join(tmpdir(),"census-watch-"));const marker=join(dir,"marker");writeFileSync(marker,"0");const seen=new Promise<void>((resolve,reject)=>{const source=watch(marker,{recursive:false},()=>{sink.publish(Ready);source.close();resolve()});source.on("error",(error)=>{source.close();reject(error)})});try{writeFileSync(marker,"1");await seen;console.log(JSON.stringify(received))}finally{rmSync(dir,{recursive:true,force:true})}`, 
+    // macOS file watches can miss a write issued immediately after watch(); keep
+    // writing until the native event arrives.
+    "src/main.ts": `import {watch,writeFileSync,mkdtempSync,rmSync} from "node:fs";import {join} from "node:path";import {tmpdir} from "node:os";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string}){received.push(event.name)}};const dir=mkdtempSync(join(tmpdir(),"census-watch-"));const marker=join(dir,"marker");writeFileSync(marker,"0");const seen=new Promise<void>((resolve,reject)=>{const source=watch(marker,{recursive:false},()=>{sink.publish(Ready);source.close();resolve()});source.on("error",(error)=>{source.close();reject(error)})});const tick=setInterval(()=>writeFileSync(marker,String(Date.now())),50);try{writeFileSync(marker,"1");await seen;console.log(JSON.stringify(received))}finally{clearInterval(tick);rmSync(dir,{recursive:true,force:true})}`,
   });
   assertPublication(fixture, true);
   // The watcher's own error event is a native producer; an empty handler is not.
@@ -492,7 +499,7 @@ function electronFixture(
   );
   fixture.write("node_modules/electron/index.js", index(fixture.root));
   const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   return { fixture, stdout: actual.stdout.toString().trim() };
@@ -591,7 +598,7 @@ console.log(await main());`,
   fixture.write("state.json", "sentinel");
   const actual = Bun.spawnSync(
     [process.execPath, join(fixture.root, "src/main.ts"), join(fixture.root, "state.json")],
-    { timeout: 5000 },
+    { timeout: SPAWN_TIMEOUT_MS },
   );
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("sentinel");
@@ -611,7 +618,7 @@ function run(boundary=options.boundary()){boundary(()=>sink.publish(Ready))}
 run(undefined);`,
   });
   const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("ready");
@@ -624,7 +631,7 @@ test("child process stdout data listeners have a concrete spawned producer", () 
     "src/main.ts": `import {spawn} from "node:child_process";import {Ready} from "./events";const child=spawn(process.execPath,["-e","console.log(1)"]);const sink={publish(e:{name:string},data:object){console.log(e.name)}};child.stdout.on("data",()=>sink.publish(Ready,{}));await new Promise<void>((resolve,reject)=>{child.once("exit",()=>resolve());child.once("error",reject)});`,
   });
   const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe("ready");

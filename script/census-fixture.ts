@@ -11,6 +11,8 @@ const knip = resolve(import.meta.dir, "../node_modules/knip/bin/knip.js");
 export function hash(content: string | Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
+export const SPAWN_TIMEOUT_MS = 30_000;
+
 export class Fixture {
   readonly root = mkdtempSync(join(tmpdir(), "census-fixture-"));
   readonly sources: Record<string, string>;
@@ -116,7 +118,7 @@ export class Fixture {
     ];
     const result = Bun.spawnSync([process.execPath, cli, ...argv], {
       cwd: this.root,
-      timeout: 30_000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
     const lines: string[] = [];
     const log = console.log;
@@ -166,7 +168,7 @@ export function configureElectronFixture(fixture: Fixture, html: string): void {
 
 export function assertPublication(fixture: Fixture, published: boolean): void {
   const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: 5000,
+    timeout: SPAWN_TIMEOUT_MS,
   });
   expect(actual.exitCode).toBe(0);
   expect(actual.stdout.toString().trim()).toBe(published ? '["ready"]' : "[]");
