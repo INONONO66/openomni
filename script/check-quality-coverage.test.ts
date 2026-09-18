@@ -1,5 +1,6 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import childProcess from "node:child_process";
+import { EventEmitter } from "node:events";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import * as modules from "node:module";
 import { syncBuiltinESMExports } from "node:module";
@@ -148,8 +149,19 @@ function thrown(action: () => void): Promise<Json> {
 const moduleLoader: {
 	createRequire(path: string): (id: "node:worker_threads") => { Worker: typeof workerThreads.Worker };
 } = modules;
+const WorkerClass = z.custom<typeof workerThreads.Worker>((value: unknown) => typeof value === "function");
+// The runtime's own Worker class: an observing collector installs a subclass of
+// it, so the native class is the one that extends EventEmitter directly.
+function nativeWorker(Worker: typeof workerThreads.Worker): typeof workerThreads.Worker {
+	const parent: unknown = Object.getPrototypeOf(Worker);
+	return parent === EventEmitter ? Worker : nativeWorker(WorkerClass.parse(parent));
+}
 // Running the preload here hands this process the instrumented child's role. The
 // interposition it installs is undone afterwards so later tests launch natively.
+// Under the exact lane this process is itself observed, and the observer's Worker
+// judges every target against an inventory that cannot hold the fixture. The
+// preload under test interposes the runtime that loads it, so it installs over the
+// native class; the observer's class returns with the rest.
 function interposition(): () => void {
 	const workerModule = moduleLoader.createRequire(import.meta.url)("node:worker_threads");
 	const launches = ["spawn", "spawnSync", "execFile", "execFileSync", "fork", "exec", "execSync"] as const;
@@ -160,14 +172,18 @@ function interposition(): () => void {
 		Worker: workerModule.Worker,
 		coverage: globalThis.__d945Coverage,
 	};
+	const installWorker = (Worker: typeof workerThreads.Worker) => {
+		workerModule.Worker = Worker;
+		syncBuiltinESMExports();
+		mock.module("node:worker_threads", () => ({ ...workerThreads, Worker, default: workerThreads }));
+	};
+	installWorker(nativeWorker(saved.Worker));
 	return () => {
 		Object.defineProperty(Bun, "spawn", { value: saved.spawn });
 		Object.defineProperty(Bun, "spawnSync", { value: saved.spawnSync });
 		for (const [name, value] of saved.processes) Object.defineProperty(childProcess, name, { value });
 		mock.module("node:child_process", () => ({ ...childProcess, default: childProcess }));
-		workerModule.Worker = saved.Worker;
-		syncBuiltinESMExports();
-		mock.module("node:worker_threads", () => ({ ...workerThreads, Worker: saved.Worker, default: workerThreads }));
+		installWorker(saved.Worker);
 		globalThis.__d945Coverage = saved.coverage;
 	};
 }
