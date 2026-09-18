@@ -1,11 +1,13 @@
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 
-type BenchmarkMetric = {
-  readonly name: string;
-  readonly unit: "ns/op";
-  readonly value: number;
-};
+const BenchmarkMetric = z.object({
+  name: z.string(),
+  unit: z.literal("ns/op"),
+  value: z.number().finite(),
+});
+type BenchmarkMetric = z.infer<typeof BenchmarkMetric>;
 
 type BenchmarkRun = {
   readonly name: string;
@@ -36,6 +38,14 @@ export const EXPECTED_BENCHMARK_NAMES = [
   "storage-session-list/10-sessions",
   "storage-session-list/100-sessions",
   "storage-session-list/500-sessions",
+  "session-tree/1k-actions",
+  "session-tree/10k-actions",
+  "session-commit/action",
+  "session-history/page",
+  "turn/first-delta",
+  "turn/tool-dispatch",
+  "turn/round-trip",
+  "turn/token-accounting",
 ] as const;
 
 const DEFAULT_INPUT_DIR = "bench-results/runs";
@@ -44,10 +54,13 @@ const DEFAULT_STATS_OUTPUT = "bench-results/statistics.json";
 const DEFAULT_SUMMARY_OUTPUT = "bench-results/summary.md";
 
 async function main(): Promise<void> {
-  const inputDir = Bun.argv[2] ?? DEFAULT_INPUT_DIR;
-  const gateOutputPath = Bun.argv[3] ?? DEFAULT_GATE_OUTPUT;
-  const statsOutputPath = Bun.argv[4] ?? DEFAULT_STATS_OUTPUT;
-  const summaryOutputPath = Bun.argv[5] ?? DEFAULT_SUMMARY_OUTPUT;
+  const args = Bun.argv.slice(2);
+  const mode = args[0] === "--reference" ? "reference" : "head";
+  if (mode === "reference") args.shift();
+  const inputDir = args[0] ?? DEFAULT_INPUT_DIR;
+  const gateOutputPath = args[1] ?? DEFAULT_GATE_OUTPUT;
+  const statsOutputPath = args[2] ?? DEFAULT_STATS_OUTPUT;
+  const summaryOutputPath = args[3] ?? DEFAULT_SUMMARY_OUTPUT;
   const countInput = process.env.BENCHMARK_RUNS ?? "";
   const expectedRuns = Number(countInput);
   if (!/^\d+$/.test(countInput) || !Number.isSafeInteger(expectedRuns) || expectedRuns < 1) {
@@ -55,7 +68,7 @@ async function main(): Promise<void> {
   }
   if (Bun.argv[2] === "--validate-input") return;
 
-  const metrics = validateBenchmarkRuns(await readBenchmarkRuns(inputDir), expectedRuns);
+  const metrics = validateBenchmarkRuns(await readBenchmarkRuns(inputDir), expectedRuns, mode);
   const stats = summarizeMetrics(metrics);
   writeJson(gateOutputPath, toGateMetrics(stats));
   writeJson(statsOutputPath, stats);
@@ -75,16 +88,7 @@ async function readBenchmarkRuns(root: string): Promise<BenchmarkRun[]> {
     const runRoot = join(root, entry.name);
     const metrics: BenchmarkMetric[] = [];
     for (const path of collectJsonFiles(runRoot)) {
-      const parsed: unknown = JSON.parse(await Bun.file(path).text());
-      if (!Array.isArray(parsed)) {
-        throw new Error(`Benchmark file must contain an array: ${path}`);
-      }
-      for (const item of parsed) {
-        if (!isBenchmarkMetric(item)) {
-          throw new Error(`Invalid benchmark metric in ${path}`);
-        }
-        metrics.push(item);
-      }
+      metrics.push(...z.array(BenchmarkMetric).parse(JSON.parse(await Bun.file(path).text())));
     }
     runs.push({ name: entry.name, metrics });
   }
@@ -95,19 +99,22 @@ async function readBenchmarkRuns(root: string): Promise<BenchmarkRun[]> {
 export function validateBenchmarkRuns(
   runs: readonly BenchmarkRun[],
   expectedRunCount: number,
+  mode: "head" | "reference" = "head",
 ): BenchmarkMetric[] {
   if (runs.length !== expectedRunCount) {
     throw new Error(`Expected ${expectedRunCount} benchmark runs, found ${runs.length}`);
   }
 
-  const expected = [...EXPECTED_BENCHMARK_NAMES].sort();
-  const expectedSet = new Set<string>(expected);
+  const expected = mode === "head"
+    ? [...EXPECTED_BENCHMARK_NAMES].sort()
+    : [...new Set(runs[0]?.metrics.map((metric) => metric.name))].sort();
+  const expectedSet = new Set<string>(EXPECTED_BENCHMARK_NAMES);
   const metrics: BenchmarkMetric[] = [];
   for (const run of runs) {
     const actual = run.metrics.map((metric) => metric.name).sort();
-    if (actual.join("\n") !== expected.join("\n")) {
+    const unexpected = actual.filter((name) => !expectedSet.has(name));
+    if (expected.length === 0 || unexpected.length > 0 || actual.join("\n") !== expected.join("\n")) {
       const missing = expected.filter((name) => !actual.includes(name));
-      const unexpected = actual.filter((name) => !expectedSet.has(name));
       throw new Error(
         `Benchmark run ${run.name} has an incomplete metric set; missing [${missing.join(", ")}], unexpected [${unexpected.join(", ")}]`,
       );
@@ -128,20 +135,6 @@ function collectJsonFiles(root: string): string[] {
     }
   }
   return files.sort();
-}
-
-function isBenchmarkMetric(value: unknown): value is BenchmarkMetric {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "name" in value &&
-    "unit" in value &&
-    "value" in value &&
-    typeof value.name === "string" &&
-    value.unit === "ns/op" &&
-    typeof value.value === "number" &&
-    Number.isFinite(value.value)
-  );
 }
 
 function summarizeMetrics(metrics: readonly BenchmarkMetric[]): BenchmarkStats[] {
@@ -193,7 +186,7 @@ function mean(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
-function writeJson(path: string, value: unknown): void {
+function writeJson(path: string, value: readonly BenchmarkMetric[]): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
@@ -220,9 +213,8 @@ function format(value: number): string {
 }
 
 if (import.meta.main) {
-  main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`ERROR: ${message}\n`);
+  main().catch((error: Error) => {
+    process.stderr.write(`ERROR: ${error.message}\n`);
     process.exit(1);
   });
 }

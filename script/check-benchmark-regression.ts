@@ -11,9 +11,16 @@ function completeMetricSet(metrics: readonly { name: string }[]): boolean {
   const expected = [...EXPECTED_BENCHMARK_NAMES].sort();
   return names.length === expected.length && names.every((name, index) => name === expected[index]);
 }
-const Statistics = z.array(Metric.extend({ p50: z.number().nonnegative(), runs: z.number().int().positive() }))
+function referenceMetricSet(metrics: readonly { name: string }[]): boolean {
+  const expected = new Set<string>(EXPECTED_BENCHMARK_NAMES);
+  const names = metrics.map((metric) => metric.name);
+  return names.length > 0 && new Set(names).size === names.length && names.every((name) => expected.has(name));
+}
+const Statistic = Metric.extend({ p50: z.number().nonnegative(), runs: z.number().int().positive() });
+const Statistics = z.array(Statistic)
   .refine(completeMetricSet, "Current benchmark metric set is incomplete, unexpected or duplicated");
-const ReferenceMetrics = z.array(Metric).refine(completeMetricSet, "Reference benchmark metric set is incomplete, unexpected or duplicated");
+const ReferenceStatistics = z.array(Statistic).refine(referenceMetricSet, "Reference benchmark metric set is empty, unexpected or duplicated");
+const ReferenceMetrics = z.array(Metric).refine(referenceMetricSet, "Reference benchmark metric set is empty, unexpected or duplicated");
 const History = z.object({ entries: z.object({ "OpenOmni Benchmarks": z.array(z.object({
   commit: z.object({ id: Commit }),
   tool: z.literal("customSmallerIsBetter"),
@@ -35,6 +42,21 @@ function standardDeviation(values: readonly number[]): number {
   return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1));
 }
 
+function compareMetric(metric: z.infer<typeof Statistic>, reference: z.infer<typeof Metric> | undefined, values: readonly number[], percent: number) {
+  if (!reference) return {
+    name: metric.name, median: metric.p50, reference: null, noiseBand: null,
+    limit: null, regressed: false, status: "new (no reference)",
+  };
+  const noiseBand = 2 * standardDeviation(values);
+  const delta = metric.p50 - reference.value;
+  const regressed = delta > reference.value * percent / 100 && delta > noiseBand;
+  return {
+    name: metric.name, median: metric.p50, reference: reference.value, noiseBand,
+    limit: Math.max(reference.value * (1 + percent / 100), reference.value + noiseBand),
+    regressed, status: regressed ? "FAIL" : "PASS",
+  };
+}
+
 export function compareBenchmarks(statistics: Json, history: Json, threshold = 20) {
   const percent = regressionThreshold(String(threshold));
   const current = Statistics.parse(statistics);
@@ -43,17 +65,9 @@ export function compareBenchmarks(statistics: Json, history: Json, threshold = 2
   if (!latest) throw new Error("Missing accepted main benchmark reference");
   ReferenceMetrics.parse(latest.benches);
   const comparisons = current.map((metric) => {
-    const references = latest.benches.filter((entry) => entry.name === metric.name);
-    const reference = references[0];
-    if (references.length !== 1 || !reference) throw new Error(`Missing or duplicate reference: ${metric.name}`);
+    const reference = latest.benches.find((entry) => entry.name === metric.name);
     const values = accepted.flatMap((entry) => entry.benches.filter((bench) => bench.name === metric.name).map((bench) => bench.value));
-    const noiseBand = 2 * standardDeviation(values);
-    const delta = metric.p50 - reference.value;
-    return {
-      name: metric.name, median: metric.p50, reference: reference.value, noiseBand,
-      limit: Math.max(reference.value * (1 + percent / 100), reference.value + noiseBand),
-      regressed: delta > reference.value * percent / 100 && delta > noiseBand,
-    };
+    return compareMetric(metric, reference, values, percent);
   });
   return { referenceCommit: latest.commit.id, threshold: percent, comparisons, failed: comparisons.some((metric) => metric.regressed) };
 }
@@ -66,7 +80,7 @@ async function prepareReference(args: string[]): Promise<void> {
   const [, statisticsPath, historyPath, measuredCommit, headCommit] = z.tuple([z.literal("--prepare-reference"), z.string(), z.string(), Commit, Commit]).parse(args);
   const statisticsSource = await Bun.file(statisticsPath).text();
   const historySource = await Bun.file(historyPath).text();
-  const statistics = Statistics.parse(decodeJson(statisticsSource));
+  const statistics = ReferenceStatistics.parse(decodeJson(statisticsSource));
   const referenceCommit = acceptedCommit(readBenchmarkHistory(historySource));
   if (measuredCommit !== referenceCommit) throw new Error("Measured reference commit does not match accepted history");
   const reference = {
@@ -109,7 +123,7 @@ export async function main(args = Bun.argv.slice(2)): Promise<number> {
     `Accepted main reference: ${result.referenceCommit}. Fail above both ${threshold}% and two sample standard deviations of the latest 20 accepted medians (zero band with fewer than two samples).`, "",
     "| Benchmark | Head p50 ns/op | Reference ns/op | Limit ns/op | Result |",
     "| --- | ---: | ---: | ---: | --- |",
-    ...result.comparisons.map((metric) => `| ${metric.name} | ${metric.median} | ${metric.reference} | ${metric.limit} | ${metric.regressed ? "FAIL" : "PASS"} |`), "",
+    ...result.comparisons.map((metric) => `| ${metric.name} | ${metric.median} | ${metric.reference ?? "-"} | ${metric.limit ?? "-"} | ${metric.status} |`), "",
   ].join("\n");
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
