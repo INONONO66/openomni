@@ -1001,8 +1001,10 @@ test("Python statements, functions, static arcs, short circuits and lines are re
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("the Python collector map joins the metrics analyzer map for methods, nested defs and lambdas", async () => {
-	const source = 'class Box:\n    def __init__(self, value):\n        self.value = value\n\n    def scale(self, factor):\n        def inner(v):\n            return v * factor\n        return inner(self.value)\n\n\ndouble = lambda v: v * 2\nassert Box(3).scale(2) == 6\nassert double(4) == 8\n';
+test("the Python collector map joins the metrics analyzer map for methods, nested defs, lambdas and non-executable statements", async () => {
+	// The docstring, __future__ import, type alias and global declaration are the
+	// statement classes where a second map owner previously disagreed with the collector.
+	const source = '"""module docs"""\nfrom __future__ import annotations\ntype Scale = int\nTOTAL = 0\nclass Box:\n    def __init__(self, value):\n        self.value = value\n\n    def scale(self, factor):\n        global TOTAL\n        def inner(v):\n            return v * factor\n        TOTAL += 1\n        return inner(self.value)\n\n\ndouble = lambda v: v * 2\nassert Box(3).scale(2) == 6\nassert double(4) == 8\n';
 	const f = collected({ "script/main.py": source }, cli("script/main.py", "python"));
 	try {
 		expect(f.exit).toBe(0);

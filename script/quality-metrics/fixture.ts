@@ -3,7 +3,51 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { prepare, type Counters } from "./coverage";
 import { analyzePython } from "./python";
-import { sha, decode, object, integer, fail, type Source } from "./input";
+import { sha, decode, object, array, integer, fail, type Json, type Source } from "./input";
+
+const collector = join(import.meta.dir, "../quality-coverage/python.py");
+type Spawned = { exitCode: number; pid: number; stdout: Buffer; stderr: Buffer };
+/** Python counters come from the exact collector's own `run` mode, so the
+ * fixture exercises the single map owner instead of a second instrumenter. */
+function runPythonCollector(root: string, source: Source, index: number): { child: Spawned; counts: () => Counters } {
+  const python = Bun.env.D945_PYTHON ?? "python3";
+  const prepared = Bun.spawnSync([python, collector, "prepare"], {
+    cwd: root, stdin: Buffer.from(JSON.stringify({ path: source.path, source: source.text })),
+    stdout: "pipe", stderr: "pipe", timeout: 30_000,
+  });
+  if (prepared.exitCode !== 0)
+    fail("fixture", source.path, `collector prepare failed: ${String(prepared.stderr)}`);
+  const model = object(decode(prepared.stdout.toString()));
+  const coverage = object(model.coverage);
+  const branchSlots = Object.values(object(coverage.b)).map((zeros) => array(zeros).length);
+  const lineOffset = Object.keys(object(coverage.s)).length + Object.keys(object(coverage.f)).length
+    + branchSlots.reduce((sum: number, n) => sum + n, 0);
+  const slots = lineOffset + array(model.lines).length;
+  const directory = join(root, `collector-${index}`);
+  mkdirSync(directory);
+  writeFileSync(join(directory, "python-files.json"), JSON.stringify([{
+    path: source.path, source: source.text, coverage, lines: model.lines, arcs: model.arcs, offset: 0, lineOffset,
+  }]));
+  writeFileSync(join(directory, "process-size.json"), JSON.stringify({ slots }));
+  const env = { ...process.env };
+  delete env.D945_SOURCE_ROOT;
+  delete env.D945_PARENT;
+  const child = spawn([python, "-u", collector, "run", directory, `process-${index}`, source.path], root, env);
+  return { child, counts: () => pythonCounts(join(directory, `process-${index}.counts.bin`), coverage) };
+}
+function spawn(command: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Spawned {
+  const child = Bun.spawnSync(command, { cwd, env, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
+  return { exitCode: child.exitCode, pid: child.pid, stdout: Buffer.from(child.stdout ?? ""), stderr: Buffer.from(child.stderr ?? "") };
+}
+/** counts.bin is one little-endian double per slot: statements, then functions, then branches and lines. */
+function pythonCounts(path: string, coverage: { [key: string]: Json }): Counters {
+  const counts = readFileSync(path);
+  let slot = 0;
+  const next = () => integer(counts.readDoubleLE(8 * slot++));
+  const s = Object.fromEntries(Object.keys(object(coverage.s)).map((id) => [id, next()]));
+  const f = Object.fromEntries(Object.keys(object(coverage.f)).map((id) => [id, next()]));
+  return { s, f };
+}
 
 export type FixtureSource = { path: string; text: string; category?: string; language?: string };
 export function makeFixture(inputs: FixtureSource[], engine: "bun" | "node" = "bun") {
@@ -68,30 +112,29 @@ export function makeFixture(inputs: FixtureSource[], engine: "bun" | "node" = "b
       if (!source) fail("fixture", "", "fixture source absent");
       const python = source.language === "python";
       const output = join(root, `counters-${index}.json`);
-      const entry = join(root, `instrumented-${index}.${python ? "py" : "mjs"}`);
-      const code = python
-        ? p.code
-        : `${p.code}\nimport {writeFileSync as __d945write} from "node:fs";\n__d945write(${JSON.stringify(output)},JSON.stringify({s:globalThis.__d945Coverage[${JSON.stringify(p.path)}].s,f:globalThis.__d945Coverage[${JSON.stringify(p.path)}].f}));\n`;
-      writeFileSync(entry, code);
+      const entry = join(root, `instrumented-${index}.mjs`);
       const executable = python
         ? (Bun.env.D945_PYTHON ?? "python3")
         : engine === "node"
           ? "node"
           : process.execPath;
-      const child = Bun.spawnSync([executable, entry], {
-        cwd: root,
-        env: { ...process.env, D945_PY_COUNTERS: output },
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 30_000,
-      });
+      let child: Spawned;
+      let collected: (() => Counters) | undefined;
+      if (python) {
+        ({ child, counts: collected } = runPythonCollector(root, source, index));
+      } else {
+        writeFileSync(entry, `${p.code}\nimport {writeFileSync as __d945write} from "node:fs";\n__d945write(${JSON.stringify(output)},JSON.stringify({s:globalThis.__d945Coverage[${JSON.stringify(p.path)}].s,f:globalThis.__d945Coverage[${JSON.stringify(p.path)}].f}));\n`);
+        child = spawn([executable, entry], root);
+      }
       if (child.exitCode !== 0)
-        fail("fixture", entry, `fixture process failed: ${child.stderr.toString()}`);
-      const raw = object(decode(readFileSync(output, "utf8")));
-      const counts = {
-        s: Object.fromEntries(Object.entries(object(raw.s)).map(([id, n]) => [id, integer(n)])),
-        f: Object.fromEntries(Object.entries(object(raw.f)).map(([id, n]) => [id, integer(n)])),
-      };
+        fail("fixture", source.path, `fixture process failed: ${child.stderr.toString()}`);
+      const counts = collected ? collected() : (() => {
+        const raw = object(decode(readFileSync(output, "utf8")));
+        return {
+          s: Object.fromEntries(Object.entries(object(raw.s)).map(([id, n]) => [id, integer(n)])),
+          f: Object.fromEntries(Object.entries(object(raw.f)).map(([id, n]) => [id, integer(n)])),
+        };
+      })();
       receipts.push({
         id: `process-${index}`,
         parent: "",
