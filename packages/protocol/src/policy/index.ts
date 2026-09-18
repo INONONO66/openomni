@@ -37,8 +37,6 @@ export namespace Policy {
   export type PolicyObligation = z.infer<typeof PolicyObligation>;
   export const PolicyDecision = PolicyEffects.PolicyDecision;
   export type PolicyDecision = z.infer<typeof PolicyDecision>;
-  export const EffectiveDecision = PolicyEffects.EffectiveDecision;
-  export type EffectiveDecision = z.infer<typeof EffectiveDecision>;
 
   export const PolicyPoint = PolicyPointModule.PolicyPoint;
   export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint>;

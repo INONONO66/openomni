@@ -116,6 +116,33 @@ export function tree(sessionId: string): LedgerAction.Node[] {
   return requiredActions().tree(sessionId);
 }
 
+export function actionById(id: string): LedgerAction.Node | undefined {
+  return requiredActions().actionById(id);
+}
+
+export function latestGenerationFor(sessionId: string): SessionGeneration.Snapshot {
+  return latestGeneration(requiredActions().configurationActions(sessionId));
+}
+
+/** inputHash is an exact persisted key, not a policy evaluation or JSON-path query API. */
+export function policyDecisionRuleIds(sessionId: string, inputHash: string): string[] | undefined {
+  return requiredActions().policyDecisionRuleIds(sessionId, inputHash);
+}
+
+export function messageActionByPlatformId(
+  sessionId: string,
+  messageId: string,
+): LedgerAction.Node | undefined {
+  return requiredActions().messageActionByPlatformId(sessionId, messageId);
+}
+
+export function outboundReceipt(
+  destinationSessionId: string,
+  messageId: string,
+): LedgerAction.Receipt | undefined {
+  return requiredActions().outboundReceipt(destinationSessionId, messageId);
+}
+
 export function verifyChain(sessionId: string): LedgerAction.ChainVerdict {
   return requiredActions().verifyChain(sessionId);
 }

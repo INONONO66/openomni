@@ -78,10 +78,7 @@ export const monitorTool = defineTool({
     }
     const { kind, ...fields } = args.source;
     const watch = Alarm.Watch.parse({ ...fields, description: args.description });
-    const actions = SessionHandleStore.tree(context.sessionId);
-    const turn = SessionHandleStore.turnIntent(
-      actions.find((action) => action.id === context.turnId),
-    );
+    const turn = SessionHandleStore.turnIntent(SessionHandleStore.actionById(context.turnId));
     if (turn === undefined) throw new ToolRefused("monitor", "no captured turn");
     const policy = compilePolicySnapshot({
       generation: turn.policyGeneration,

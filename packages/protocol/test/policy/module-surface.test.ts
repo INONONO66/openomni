@@ -25,7 +25,6 @@ const expectedPolicyKeys = [
   "PolicyEffect",
   "PolicyObligation",
   "PolicyDecision",
-  "EffectiveDecision",
   "PolicyPoint",
   "Resource",
   "PolicyPlan",

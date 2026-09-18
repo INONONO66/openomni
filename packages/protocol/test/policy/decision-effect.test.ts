@@ -89,16 +89,4 @@ describe("Policy decision and effect schemas", () => {
       ).toMatchObject({ type });
     }
   });
-
-  it("parses EffectiveDecision with merged effects and contributing policies", () => {
-    const result = Policy.EffectiveDecision.parse({
-      verdict: "allow",
-      mergedEffects: [effects[10], effects[13]],
-      obligations: [],
-      contributingPolicies: ["policy.audit", "policy.workspace-lock"],
-    });
-
-    expect(result.mergedEffects.length).toBe(2);
-    expect(result.contributingPolicies).toEqual(["policy.audit", "policy.workspace-lock"]);
-  });
 });

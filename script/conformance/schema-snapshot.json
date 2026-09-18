@@ -929,12 +929,6 @@
   "Message.WithParts": ["info", "parts"],
   "Model.Ref": ["id", "provider"],
   "Policy.Definition": ["failPolicy", "name", "priority", "scope"],
-  "Policy.EffectiveDecision": [
-    "contributingPolicies",
-    "mergedEffects",
-    "obligations",
-    "verdict"
-  ],
   "Policy.EvaluationRequest": [
     "action",
     "actor",

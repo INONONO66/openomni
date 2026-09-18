@@ -10,6 +10,16 @@
 
 Verified on 2026-09-06 against source HEAD `c4fb774869fb060859bbdc2f58ce37ee3a3072c9`, tree `0d6318c742a1ca0eeaa5ddf30003108ba8a53487`; a fresh `git fetch origin main` resolved to the same commit. This docs-only patch preserves that production tree. Final documentation commit/tree and PR URL are recorded in the local `REPORT.md` and PR body.
 
+## G002 authority-cut receipt (#930)
+
+Updated on `kernel/s1-authority-cut-2`, 2026-09-18. These closure rows are new here; no prior G002 in-progress rows existed in this file.
+
+| Surface | Status | Receipt |
+| --- | --- | --- |
+| `ledger-core` | ✅ G002 (#930) | Separate event/head store deleted; `decision_fact` records first-writer-wins keyed facts. The action hash chain and `verifyChain` remain the session history integrity owner. |
+| `Policy.EffectiveDecision` | ✅ G002 (#930) | Schema/type, re-exports, deleted-surface tests and snapshot entry removed; consumed effect/obligation/decision contracts remain. |
+| App `SessionHandleStore.tree()` consumers | ✅ G002 (#930) | Five consumers use exact-key SQL-backed read ports; configuration folding is reused and outbound answers are schema-decoded. `packages/ledger/test/session/read-ports.test.ts` covers each port. Agent tree consumers are unchanged. |
+
 ## Receipt location and scope
 
 This is the tracked successor for the #948 rows formerly recorded in `.omo/reports/operation-architecture-20260902/SLOP.md`. PRs #981/#982 removed tracked agent artifacts; no `.omo/` file is recreated. Historical ledger/design text remains in git history, not an active contract. This file synchronizes the I09 rows and #811 disposition only; it does not mark unrelated historical SLOP rows closed.

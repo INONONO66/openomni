@@ -110,23 +110,7 @@ export function prepareMessage(
       const exists = SessionHandleStore.listRows().some((row) => row.id === target);
       const source =
         exists && send.replyTo !== undefined
-          ? SessionHandleStore.tree(target).find((action) => {
-              const intent = action.intent.value;
-              if (
-                action.kind !== "message" ||
-                intent === null ||
-                typeof intent !== "object" ||
-                Array.isArray(intent)
-              )
-                return false;
-              const value = intent.value;
-              return (
-                value !== null &&
-                typeof value === "object" &&
-                !Array.isArray(value) &&
-                value.messageId === send.replyTo
-              );
-            })
+          ? SessionHandleStore.messageActionByPlatformId(target, send.replyTo)
           : undefined;
       return {
         target,

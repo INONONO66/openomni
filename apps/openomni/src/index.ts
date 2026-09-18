@@ -326,9 +326,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     await composer.mount("session.processes", (ctx) => ctx.effect(() => processSessions.close()));
     const wake = (id: string) => {
       const row = SessionHandleStore.row(id);
-      const runner = SessionHandleStore.latestGeneration(
-        SessionHandleStore.tree(id),
-      ).systemBlocks.find(
+      const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
         (block) => block.id === "runner" && block.source === "app:runner",
       )?.content;
       return runner === "process"

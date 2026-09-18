@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { z } from "zod";
 import {
   LedgerAction,
+  SessionTransition,
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
@@ -21,6 +22,76 @@ export function createActions(
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
       if (receipt !== undefined) publishCommitted(db, observationSink, receipt);
       return receipt;
+    },
+    actionById(id) {
+      const row = ActionSqlRow.nullable().parse(
+        db.query("SELECT * FROM action WHERE id = ?").get(id),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    configurationActions(sessionId) {
+      const rows = ActionSqlRow.array().parse(
+        db
+          .query(
+            "SELECT * FROM action WHERE session_id = ? AND kind IN ('session.configure') ORDER BY ordinal",
+          )
+          .all(sessionId),
+      );
+      return rows.map(decodeAction);
+    },
+    policyDecisionRuleIds(sessionId, inputHash) {
+      const row = z
+        .object({ intent: z.string() })
+        .nullable()
+        .parse(
+          db
+            .query(
+              `SELECT intent FROM action WHERE session_id = ? AND kind = 'policy.decision'
+           AND json_extract(intent, '$.inputHash') = ? ORDER BY ordinal DESC LIMIT 1`,
+            )
+            .get(sessionId, inputHash),
+        );
+      if (row === null) return undefined;
+      const parsed = z
+        .object({ matchedRuleIds: z.array(z.string()) })
+        .safeParse(JSON.parse(row.intent));
+      if (!parsed.success)
+        throw new Error("invalid message decision rule identity", { cause: parsed.error });
+      return parsed.data.matchedRuleIds;
+    },
+    messageActionByPlatformId(sessionId, messageId) {
+      const row = ActionSqlRow.nullable().parse(
+        db
+          .query(
+            `SELECT * FROM action WHERE session_id = ? AND kind = 'message'
+           AND json_extract(intent, '$.value.messageId') = ? ORDER BY ordinal LIMIT 1`,
+          )
+          .get(sessionId, messageId),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    outboundReceipt(destinationSessionId, messageId) {
+      const rows = ActionSqlRow.array().parse(
+        db
+          .query(
+            `SELECT * FROM action WHERE session_id = ? AND kind = 'prompt' AND id = ?
+           UNION ALL
+           SELECT * FROM action WHERE session_id = ? AND kind = 'reply'
+           AND json_extract(effect, '$.answer.outbound.messageId') = ? ORDER BY ordinal`,
+          )
+          .all(destinationSessionId, messageId, destinationSessionId, messageId),
+      );
+      for (const row of rows) {
+        const action = decodeAction(row);
+        if (action.kind === "reply") {
+          const effect = action.effect.value;
+          if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
+          const answer = SessionTransition.Answer.safeParse(effect.answer);
+          if (!answer.success) continue;
+        }
+        return { action, revision: action.ordinal };
+      }
+      return undefined;
     },
     verifyChain(sessionId) {
       return verifyChain(db, sessionId);
@@ -78,7 +149,12 @@ export function verifyChain(db: Database, sessionId: string): LedgerAction.Chain
     }
     const expected = computeActionHash({ ...row, prev_hash: prevHash });
     if (row.action_hash !== expected) {
-      return { kind: "broken", ordinal: row.ordinal, expected, actual: describeHashCell(row.action_hash) };
+      return {
+        kind: "broken",
+        ordinal: row.ordinal,
+        expected,
+        actual: describeHashCell(row.action_hash),
+      };
     }
     prevHash = expected;
   }
