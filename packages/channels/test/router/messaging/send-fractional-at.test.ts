@@ -1,14 +1,21 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";
 import { ActorRegistry, Storage } from "@openomni/ledger";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { seededRequests } from "../../helpers/requests";
 
+// Storage.initialize no-ops when an earlier test file left an initialized
+// ":memory:" adapter behind, which would resurrect its registered actors —
+// reset first so each test registers the fixture exactly once on a fresh db.
+beforeEach(() => {
+  Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+});
+
 afterEach(() => Storage.reset());
 
 for (const at of [1, 1.5]) {
   test(`send admits a valid Gateway.SendInput whose instant is at=${at}`, async () => {
-    Storage.initialize({ dbPath: ":memory:" });
     for (const id of ["sender", "target"]) {
       ActorRegistry.registerIdentity({
         id,
