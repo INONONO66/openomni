@@ -205,10 +205,15 @@ async function recoverAdmission(witness: Witness) {
   }
 }
 
-test("SQLite crash recovery matches every authoritative matrix cell", async () => {
+test("the authoritative crash matrix names every crash point once", () => {
+  expect(matrix.version).toBe(1);
   expect(matrix.rows.map((row) => row.crashPoint).sort()).toEqual([...crashPoint.options].sort());
-  const observed: z.infer<typeof matrixSchema> = { version: 1, rows: [] };
-  for (const row of matrix.rows) {
+});
+
+// One test per cell: each cell spawns a child kernel, and under the exact
+// coverage collector the eight children together exceed the 15s test budget.
+for (const row of matrix.rows) {
+  test(`SQLite crash recovery matches the authoritative matrix cell ${row.crashPoint}`, async () => {
     const directory = mkdtempSync(join(tmpdir(), "crash-matrix-"));
     try {
       const result = await Storage.withIsolation(async () => {
@@ -229,10 +234,9 @@ test("SQLite crash recovery matches every authoritative matrix cell", async () =
           Storage.reset();
         }
       });
-      observed.rows.push({ ...row, recovery: recovery.parse(result) });
+      expect(recovery.parse(result)).toBe(row.recovery);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  }
-  expect(observed).toEqual(matrix);
-});
+  });
+}
