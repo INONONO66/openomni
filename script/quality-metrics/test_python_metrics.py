@@ -5,28 +5,31 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Protocol
+from types import ModuleType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .python import COLLECTOR, JsonValue, collector_module
+else:
+    from python import COLLECTOR, JsonValue, collector_module
 
 ADAPTER = Path(__file__).with_name("python.py")
-COLLECTOR = ADAPTER.parent.parent / "quality-coverage" / "python.py"
 SOURCE = "def add(a, b):\n    return a + b\n\n\nprint(add(1, 2))\n"
 
-type JsonValue = None | bool | int | float | str | Sequence[JsonValue] | Mapping[str, JsonValue]
+
+# The collector owns the JSON helpers its documents are decoded with; the
+# adapter loads it from its file and reads its Model the same way.
+def collector_helpers(
+    decoder: Callable[[ModuleType, str], Callable[[str], JsonValue]] = getattr,
+    objector: Callable[[ModuleType, str], Callable[[JsonValue], Mapping[str, JsonValue]]] = getattr,
+) -> tuple[Callable[[str], JsonValue], Callable[[JsonValue], Mapping[str, JsonValue]]]:
+    collector = collector_module()
+    return decoder(collector, "decode_json"), objector(collector, "json_object")
 
 
-class JsonDecoder(Protocol):
-    def loads(self, text: str, /) -> JsonValue: ...
-
-
-def decode_json(text: str, decoder: JsonDecoder = json) -> JsonValue:
-    return decoder.loads(text)
-
-
-def json_object(value: JsonValue) -> Mapping[str, JsonValue]:
-    assert isinstance(value, Mapping), value
-    return value
+decode_json, json_object = collector_helpers()
 
 
 def adapter(request: str) -> subprocess.CompletedProcess[str]:
@@ -72,10 +75,23 @@ def test_request_when_shape_is_not_an_object_of_strings() -> None:
         assert message in result.stderr, result.stderr
 
 
+def test_collector_when_its_location_has_no_module_loader() -> None:
+    # Given a collector location whose suffix no import loader claims, the
+    # adapter names the location instead of failing on an absent module.
+    location = ADAPTER.with_name("collector.txt")
+    try:
+        _ = collector_module(location)
+    except ValueError as error:
+        assert str(error) == f"cannot load coverage collector from {location}", error
+    else:
+        raise AssertionError("an unloadable collector location was accepted")
+
+
 if __name__ == "__main__":
     tests = [
         test_maps_when_adapter_answers_with_the_collectors_prepared_maps,
         test_request_when_shape_is_not_an_object_of_strings,
+        test_collector_when_its_location_has_no_module_loader,
     ]
     for test in tests:
         test()

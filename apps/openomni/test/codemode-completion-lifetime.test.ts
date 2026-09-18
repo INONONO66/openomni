@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { createDispatcher, createExecutor, currentExecutor } from "@openomni/agent";
 import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";
 import { composeCodemode } from "../src/composition/codemode";
 import { createTools } from "../src/tools/core/catalog";
 import { cellDaemonOptions } from "./helpers/cell-daemon";
+import { seededPolicy } from "./helpers/executor";
 import { bounded } from "./helpers/protected-dispatch";
 import { residentSuite } from "./helpers/resident-suite";
 import { socketPath } from "./helpers/socket-path";
@@ -27,11 +27,7 @@ for (const stop of [false, true]) {
     const origin = { role: "resident", sessionId: `completion-${stop}` } as const;
     // Only storage IO is replaced: real policy, record construction and settlement execute.
     const executor = createExecutor({
-      policy: compilePolicySnapshot({
-        generation: 1,
-        mandatory: [],
-        rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
-      }),
+      policy: seededPolicy,
       ledger: {
         async commit(append) {
           const action = LedgerAction.Node.parse({ ...append, ordinal: actions.length + 1 });

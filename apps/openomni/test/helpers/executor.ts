@@ -4,13 +4,16 @@ import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../../packages/
 
 let ordinal = 0;
 
+/** The seeded policy rows compiled at generation 1: the real snapshot test executors enforce. */
+export const seededPolicy = compilePolicySnapshot({
+  generation: 1,
+  mandatory: [],
+  rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
+});
+
 /** Production executor composition with deterministic in-memory receipts. */
 export const executor = createExecutor({
-  policy: compilePolicySnapshot({
-    generation: 1,
-    mandatory: [],
-    rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
-  }),
+  policy: seededPolicy,
   ledger: {
     async commit(action) {
       ordinal += 1;

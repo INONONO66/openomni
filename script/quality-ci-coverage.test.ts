@@ -92,6 +92,27 @@ test("CI consumes run-bound original counters and rejects stale, tampered or mis
 	} finally { rmSync(root, { recursive: true, force: true }); }
 }, 120_000);
 
+test("shard merge documents round-trip a head/tree run identity and the shard entry reports only InventoryError as exit 2", async () => {
+	const legacy = {
+		run: { id: "legacy-run", head: "a".repeat(40), tree: "b".repeat(40) },
+		totals: new Map([["script/child.ts", { s: { "0": 1, "1": 0 }, f: { "0": 1 } }]]),
+		processes: [{ id: "root", parent: "", children: ["child"], exitCode: 0 }, { id: "child", parent: "root", children: [], exitCode: 1 }],
+		receiptHash: "c".repeat(64),
+	};
+	expect(decodeCoverage(encodeCoverage(legacy))).toEqual(legacy);
+	expect(() => decodeCoverage(JSON.stringify({ ...legacy, totals: [], processes: [], run: { ...legacy.run, planHash: "d".repeat(64) } }))).toThrow("unexpected object key");
+	let stderr = "";
+	const capture = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+		stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+		return true;
+	});
+	try {
+		expect(await shardMain([])).toBe(2);
+		await expect(shardMain(["--unknown"])).rejects.toThrow("Unknown option '--unknown'");
+	} finally { capture.mockRestore(); }
+	expect(stderr).toBe("InventoryError measurement : --root required\n");
+});
+
 function selectedCiFixture() {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "quality-exact-selected-")));
 	const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };

@@ -451,42 +451,39 @@ function frozenWorkerTarget(node: ts.NewExpression, sf: ts.SourceFile): boolean 
 	return args.length === 1 ? importMetaUrl(args[0]) :
 		args.length === 2 && args[0] !== undefined && ts.isStringLiteral(args[0]) && importMetaUrl(args[1]);
 }
-function syntax(source: string, path: string): void {
+// eval, Function and require evaluate source or load modules the collector
+// never prepared unless their argument is a literal; eval and Function never
+// load a frozen file even then.
+function dynamicCode(node: ts.CallExpression, sf: ts.SourceFile, path: string): void {
+	const callee = node.expression.getText(sf);
+	if (
+		["eval", "Function", "require"].includes(callee) &&
+		(!node.arguments[0] || !ts.isStringLiteral(node.arguments[0]))
+	)
+		fail("unsupported_syntax", path, "dynamic code or module loading");
+	if (callee === "eval" || callee === "Function")
+		fail("unsupported_syntax", path, "dynamic executable source");
+	// Dynamic module specifiers are resolved by the actual runtime loader;
+	// its onLoad/registerHooks boundary checks the frozen source identity.
+}
+// A string literal naming a module: the source of an import or export
+// declaration, or the argument of import() or require().
+function moduleSpecifier(node: ts.Node, sf: ts.SourceFile): node is ts.StringLiteral {
+	if (!ts.isStringLiteral(node)) return false;
+	if (ts.isImportDeclaration(node.parent) || ts.isExportDeclaration(node.parent)) return true;
+	return ts.isCallExpression(node.parent) &&
+		(node.parent.expression.kind === ts.SyntaxKind.ImportKeyword || node.parent.expression.getText(sf) === "require");
+}
+export function syntax(source: string, path: string): void {
 	const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
 	function visit(node: ts.Node): void {
-		if (ts.isCallExpression(node)) {
-			const callee = node.expression.getText(sf);
-			if (
-				["eval", "Function", "require"].includes(callee) &&
-				(!node.arguments[0] || !ts.isStringLiteral(node.arguments[0]))
-			)
-				fail("unsupported_syntax", path, "dynamic code or module loading");
-			if (callee === "eval" || callee === "Function")
-				fail("unsupported_syntax", path, "dynamic executable source");
-			// Dynamic module specifiers are resolved by the actual runtime loader;
-			// its onLoad/registerHooks boundary checks the frozen source identity.
-		}
+		if (ts.isCallExpression(node)) dynamicCode(node, sf, path);
 		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Function")
 			fail("unsupported_syntax", path, "dynamic executable source");
 		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Worker" && !frozenWorkerTarget(node, sf))
 			fail("unsupported_process", path, "worker target is not a frozen file URL");
-		const moduleArgument =
-			ts.isStringLiteral(node) &&
-			ts.isCallExpression(node.parent) &&
-			(node.parent.expression.kind === ts.SyntaxKind.ImportKeyword ||
-				node.parent.expression.getText(sf) === "require");
-		if (
-			ts.isStringLiteral(node) &&
-			(ts.isImportDeclaration(node.parent) ||
-				ts.isExportDeclaration(node.parent) ||
-				moduleArgument) &&
-			/^(node:)?(cluster|vm)$/.test(node.text)
-		)
-			fail(
-				"unsupported_process",
-				path,
-				"Node process/context hooks are not supported by the Bun collector",
-			);
+		if (moduleSpecifier(node, sf) && /^(node:)?(cluster|vm)$/.test(node.text))
+			fail("unsupported_process", path, "Node process/context hooks are not supported by the Bun collector");
 		if (ts.isTaggedTemplateExpression(node) && /(?:^|\.)\$$/.test(node.tag.getText(sf)))
 			fail("unsupported_process", path, "shell process graph is not observable through Bun.spawn");
 		ts.forEachChild(node, visit);
@@ -973,7 +970,7 @@ function inputs(options: Options): Inputs {
 // the same snapshot: re-instrumenting the repository per spawned child made one
 // workspace suite exceed hosted-runner deadlines. Loaded sources are still hashed
 // against the frozen entries at load time.
-function preparedFrom(value: Json): Prepared {
+export function preparedFrom(value: Json): Prepared {
 	const v = object(value);
 	const transfer = v.transfer === undefined ? undefined : object(v.transfer, ["signature", "slots"]);
 	const python = v.python === undefined ? undefined : object(v.python, ["source", "lines", "arcs"]);
@@ -2136,49 +2133,57 @@ const NEUTRAL_OPTIONS = ["-u", "--no-warnings", "--enable-source-maps"];
 // Python isolated mode changes what the entry sees (no PYTHON* environment, no user site,
 // no script directory on sys.path), so the driver interpreter is launched with it too.
 const FORWARDED_PYTHON_OPTIONS = ["-I"];
-function launchEntry(data: PreloadInputs, argv: string[], runtime: string, executable: string, cwd: string): { entry: Prepared; args: string[]; interpreter: string[] } | { external: string } {
-	let entry: Prepared | undefined;
-	let args: string[] = [];
-	let interpreter: string[] = [];
-	if (runtime === "python" && argv.includes("-c")) {
-		const index = argv.indexOf("-c");
-		const source = argv[index + 1];
-		entry = data.files.find((f) => f.python?.source === source);
-		// Inline program text that is not a frozen Python source (a test's native control
-		// program) has no entry to credit: it runs natively, like an external entry,
-		// whatever interpreter options (`-I`) precede it.
-		if (entry === undefined) return { external: executable };
-		if (argv.slice(0, index).some((a) => a !== "-u")) fail("unsupported_process", executable, "unrecognized Python interpreter option");
-		args = argv.slice(index + 2);
-	} else {
-		let index = 0;
-		const options: string[] = [];
-		const valued = [...VALUE_OPTIONS, ...(runtime === "bun" ? ["--preload"] : [])];
-		for (let subcommand = false; argv[index]?.startsWith("-") || (argv[index] === "test" && !subcommand);) {
-			if (argv[index] === "test") { subcommand = true; index++; continue; }
-			const flag = argv[index++] ?? "";
-			// Inline program text has no frozen entry: it runs natively, like an external entry.
-			if (runtime !== "python" && ["-e", "--eval", "-p", "--print"].includes(flag)) return { external: executable };
-			options.push(flag);
-			if (valued.includes(flag)) index++;
-		}
-		// An option-only invocation (`python3 --version`, a runtime probe) launches no
-		// program at all: nothing to credit, so it runs natively.
-		const program = argv[index];
-		if (program === undefined) return { external: executable };
-		const absolute = resolve(cwd, program);
-		const path = relative(data.options.root, absolute);
-		if (path.startsWith("..") && existsSync(absolute)) return { external: absolute };
-		// A dependency's own program (knip, a vendored CLI) is third-party code: never a frozen
-		// entry, so it runs natively like an out-of-root program.
-		if (path.split(sep).includes("node_modules") && existsSync(absolute)) return { external: absolute };
-		const forwarded = runtime === "python" ? FORWARDED_PYTHON_OPTIONS : [];
-		const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag) && !forwarded.includes(flag));
-		if (unregistered !== undefined) fail("unsupported_process", executable, `unregistered interpreter option ${unregistered}`);
-		interpreter = options.filter((flag) => forwarded.includes(flag));
-		entry = data.files.find((f) => f.entry.path === path);
-		args = argv.slice(index + 1);
+type Launch<E = Prepared> = { entry: E; args: string[]; interpreter: string[] } | { external: string };
+// A launch is resolved against the frozen files alone, relative to the frozen root.
+type LaunchInputs = { options: Pick<Options, "root">; files: Prepared[] };
+// `python -c text`: the text is a frozen Python source or it is not an entry at all.
+// Inline program text that is not a frozen Python source (a test's native control
+// program) has no entry to credit: it runs natively, like an external entry,
+// whatever interpreter options (`-I`) precede it.
+function inlinePythonEntry(data: LaunchInputs, argv: string[], executable: string): Launch<Prepared | undefined> {
+	const index = argv.indexOf("-c");
+	const source = argv[index + 1];
+	const entry = data.files.find((f) => f.python?.source === source);
+	if (entry === undefined) return { external: executable };
+	if (argv.slice(0, index).some((a) => a !== "-u")) fail("unsupported_process", executable, "unrecognized Python interpreter option");
+	return { entry, args: argv.slice(index + 2), interpreter: [] };
+}
+// The interpreter options before the program (`test` opens Bun's subcommand once;
+// a valued option consumes the next argument). Inline program text (`-e`, `-p`) has
+// no frozen entry: the launch runs natively, like an external entry.
+function leadingOptions(argv: string[], runtime: string, valued: string[]): { options: string[]; index: number; inline: boolean } {
+	let index = 0;
+	const options: string[] = [];
+	for (let subcommand = false; argv[index]?.startsWith("-") || (argv[index] === "test" && !subcommand);) {
+		if (argv[index] === "test") { subcommand = true; index++; continue; }
+		const flag = argv[index++] ?? "";
+		if (runtime !== "python" && ["-e", "--eval", "-p", "--print"].includes(flag)) return { options, index, inline: true };
+		options.push(flag);
+		if (valued.includes(flag)) index++;
 	}
+	return { options, index, inline: false };
+}
+// The program named after the interpreter options, as the frozen entry at its path
+// unless it runs natively: an option-only invocation (`python3 --version`, a runtime
+// probe) launches no program at all; a program outside the frozen root or a
+// dependency's own program (knip, a vendored CLI) is never frozen inventory.
+function programEntry(data: LaunchInputs, argv: string[], runtime: string, executable: string, cwd: string): Launch<Prepared | undefined> {
+	const valued = [...VALUE_OPTIONS, ...(runtime === "bun" ? ["--preload"] : [])];
+	const { options, index, inline } = leadingOptions(argv, runtime, valued);
+	const program = argv[index];
+	if (inline || program === undefined) return { external: executable };
+	const absolute = resolve(cwd, program);
+	const path = relative(data.options.root, absolute);
+	if ((path.startsWith("..") || path.split(sep).includes("node_modules")) && existsSync(absolute)) return { external: absolute };
+	const forwarded = runtime === "python" ? FORWARDED_PYTHON_OPTIONS : [];
+	const unregistered = options.find((flag) => !valued.includes(flag) && !NEUTRAL_OPTIONS.includes(flag) && !forwarded.includes(flag));
+	if (unregistered !== undefined) fail("unsupported_process", executable, `unregistered interpreter option ${unregistered}`);
+	return { entry: data.files.find((f) => f.entry.path === path), args: argv.slice(index + 1), interpreter: options.filter((flag) => forwarded.includes(flag)) };
+}
+export function launchEntry(data: LaunchInputs, argv: string[], runtime: string, executable: string, cwd: string): Launch {
+	const launch = runtime === "python" && argv.includes("-c") ? inlinePythonEntry(data, argv, executable) : programEntry(data, argv, runtime, executable, cwd);
+	if ("external" in launch) return launch;
+	const { entry, args, interpreter } = launch;
 	if (!entry || (runtime === "python") !== Boolean(entry.python))
 		fail("unsupported_process", executable, "entry/source is absent from frozen language inventory");
 	return { entry, args, interpreter };

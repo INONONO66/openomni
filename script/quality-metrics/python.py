@@ -237,19 +237,26 @@ def check_versions() -> dict[str, str]:
     return versions
 
 
-def coverage_maps(path: str, source: str) -> Mapping[str, JsonValue]:
-    # The coverage map has exactly one owner: the exact collector in
-    # script/quality-coverage/python.py. The ratchet join matches original and
-    # collector {statementMap, fnMap} byte for byte, so this adapter loads the
-    # collector module and asks it for the same Prepared document it emits.
-    location = Path(__file__).resolve().parent.parent / "quality-coverage" / "python.py"
+COLLECTOR = Path(__file__).resolve().parent.parent / "quality-coverage" / "python.py"
+
+
+def collector_module(location: Path = COLLECTOR) -> ModuleType:
+    """The exact collector, executed from its own file; its tests import it the same way."""
     spec = importlib.util.spec_from_file_location("d945_coverage", location)
     if spec is None or spec.loader is None:
         raise ValueError(f"cannot load coverage collector from {location}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module  # dataclasses resolve annotations through sys.modules
     spec.loader.exec_module(module)
-    prepared = getattr(module, "Model")(path, source).prepared
+    return module
+
+
+def coverage_maps(path: str, source: str) -> Mapping[str, JsonValue]:
+    # The coverage map has exactly one owner: the exact collector in
+    # script/quality-coverage/python.py. The ratchet join matches original and
+    # collector {statementMap, fnMap} byte for byte, so this adapter loads the
+    # collector module and asks it for the same Prepared document it emits.
+    prepared = getattr(collector_module(), "Model")(path, source).prepared
     coverage = prepared["coverage"]
     return {"statementMap": coverage["statementMap"],
             "fnMap": {key: {"name": f["name"], "decl": f["decl"], "loc": f["loc"]}

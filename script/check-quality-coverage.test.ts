@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import * as workerThreads from "node:worker_threads";
 import ts from "typescript";
 import { z } from "zod";
-import { collectorDirectory, coverageForMetrics, decode, exactMetric, sha256, failureExcerpt, preload, qualityCoverageMain } from "./check-quality-coverage";
+import { collectorDirectory, coverageForMetrics, decode, exactMetric, sha256, failureExcerpt, launchEntry, preload, preparedFrom, qualityCoverageMain, syntax } from "./check-quality-coverage";
 import { run as metrics } from "./check-quality-metrics";
 import { statementCounters } from "./quality-ci-bound";
 import { workerExecArgv } from "./quality-coverage/worker";
@@ -149,12 +149,13 @@ function thrown(action: () => void): Promise<Json> {
 const moduleLoader: {
 	createRequire(path: string): (id: "node:worker_threads") => { Worker: typeof workerThreads.Worker };
 } = modules;
-const WorkerClass = z.custom<typeof workerThreads.Worker>((value: unknown) => typeof value === "function");
 // The runtime's own Worker class: an observing collector installs a subclass of
 // it, so the native class is the one that extends EventEmitter directly.
 function nativeWorker(Worker: typeof workerThreads.Worker): typeof workerThreads.Worker {
-	const parent: unknown = Object.getPrototypeOf(Worker);
-	return parent === EventEmitter ? Worker : nativeWorker(WorkerClass.parse(parent));
+	if (Object.getPrototypeOf(Worker) === EventEmitter) return Worker;
+	// Not the native class, so the class it extends is a Worker class as well.
+	const parent: typeof workerThreads.Worker = Object.getPrototypeOf(Worker);
+	return nativeWorker(parent);
 }
 // Running the preload here hands this process the instrumented child's role. The
 // interposition it installs is undone afterwards so later tests launch natively.
@@ -187,8 +188,9 @@ function interposition(): () => void {
 		globalThis.__d945Coverage = saved.coverage;
 	};
 }
-const FrozenMain = z.object({ pick: z.custom<(taken: boolean) => number>((value: unknown) => typeof value === "function") });
-const EmittedBarrel = z.object({ choose: z.custom<(taken: boolean) => number>((value: unknown) => typeof value === "function") });
+const Chooser = z.function({ input: [z.boolean()], output: z.number() });
+const FrozenMain = z.object({ pick: Chooser });
+const EmittedBarrel = z.object({ choose: Chooser });
 // Bun's declared option types omit `shell`; the interposition still refuses it.
 type LooseSpawnSync = (command: string[], options: { shell?: boolean; stdout?: "pipe" }) => { exitCode: number };
 
@@ -297,15 +299,7 @@ test("exact collector observes an inventoried worker as a child execution contex
 		"script/subject.test.ts": 'import { test } from "bun:test"; import "./subject"; test("worker", () => {});\n',
 	}, [{ id: "tests", kind: "test", paths: ["script/subject.test.ts"], args: [], expectedExitCode: 0 }]);
 	try {
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
-		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
-		expect(run.exit).toBe(0);
-		const processes = list(receipt.processes).map(obj);
-		expect(processes).toHaveLength(2);
-		const root = processes.find((process) => str(process.parent) === "");
-		const worker = processes.find((process) => str(process.parent) !== "");
-		if (!root || !worker) throw new FixtureError("missing worker receipt");
-		expect(str(worker.parent)).toBe(str(root.id));
+		const [root, worker] = rootAndWorker(await collectReceipt(f), "missing worker receipt");
 		expect(worker.pid).toBe(root.pid);
 		expect(list(worker.loaded).map(str)).toContain("script/shared.ts");
 		expect(list(root.loaded).map(str)).toContain("script/shared.ts");
@@ -318,15 +312,7 @@ test("exact collector observes a Node worker with inherited preload identity", a
 		"script/subject.ts": 'import { shared } from "./shared"; import { Worker } from "node:worker_threads"; void shared; const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("exit", () => resolve()));\n',
 	}, cli("script/subject.ts", "node"));
 	try {
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
-		expect(run.exit).toBe(0);
-		const receipt = obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
-		const processes = list(receipt.processes).map(obj);
-		expect(processes).toHaveLength(2);
-		const root = processes.find((process) => str(process.parent) === "");
-		const worker = processes.find((process) => str(process.parent) !== "");
-		if (!root || !worker) throw new FixtureError("missing Node worker receipt");
-		expect(str(worker.parent)).toBe(str(root.id));
+		const [root, worker] = rootAndWorker(await collectReceipt(f), "missing Node worker receipt");
 		expect(worker.runtime).toBe("node");
 		expect(worker.pid).toBe(root.pid);
 		expect(list(worker.loaded).map(str)).toContain("script/worker.ts");
@@ -418,13 +404,7 @@ const git = Bun.spawnSync(["git", "--version"], { stdout: "pipe", stderr: "pipe"
 const kill = spawnSync("/bin/kill", ["-0", String(process.pid)], { stdio: "ignore" });
 if (git.exitCode !== 0 || kill.status !== 0) process.exit(7);
 `;
-	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
-	try {
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
-		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		expect(run.result.complete).toBe(true);
-		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
-	} finally { f.cleanup(); }
+	await collectUtility(source);
 }, 120_000);
 
 test("exact collector permits canonical system shells and POSIX utilities without receipts", async () => {
@@ -439,13 +419,7 @@ const ps = Bun.spawnSync(["ps", "-p", String(process.pid), "-o", "stat="], { std
 const tar = Bun.spawnSync(["tar", "--version"], { stdout: "pipe", stderr: "pipe" });
 if (sh.stdout.toString() !== "ok" || bash.exitCode !== 0 || fifo.status !== 0 || ps.exitCode !== 0 || tar.exitCode !== 0) process.exit(7);
 `;
-	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
-	try {
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
-		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		expect(run.result.complete).toBe(true);
-		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
-	} finally { f.cleanup(); }
+	await collectUtility(source);
 }, 120_000);
 
 test("exact collector runs an owned runtime entry outside the frozen root or an unfrozen inline program or a runtime probe natively, without credit or receipt", async () => {
@@ -468,13 +442,7 @@ if (process.argv[2] === "inside") {
 	if (Bun.spawnSync([process.execPath, "script/unlisted.ts"], { stdout: "pipe", stderr: "pipe" }).exitCode !== 0) process.exit(8);
 }
 `;
-	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
-	try {
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
-		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		expect(run.result.complete).toBe(true);
-		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
-	} finally { f.cleanup(); }
+	await collectUtility(source);
 	const inside = fixture({ "script/utility.ts": source }, [{ id: "cli", kind: "cli", paths: ["script/utility.ts"], args: ["inside"], expectedExitCode: 0, runtime: "bun" }]);
 	try {
 		const run = await inside.run(["--collect"], { PATH: "/usr/bin:/bin" });
@@ -489,14 +457,12 @@ if (process.argv[2] === "inside") {
 	} finally { options.cleanup(); }
 }, 180_000);
 
-test("exact collector rejects a utility executable planted inside the frozen root", async () => {
-	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["tar", "--version"]);\n' }, cli("script/utility.ts"));
+// git is a permitted canonical utility and tar a permitted POSIX one; neither
+// permission follows a copy planted inside the frozen root.
+test.each(["tar", "git"])("exact collector rejects a %s executable planted inside the frozen root", async (utility) => {
+	const f = fixture({ "script/utility.ts": `Bun.spawnSync(["${utility}", "--version"]);\n` }, cli("script/utility.ts"));
 	try {
-		const fake = join(f.root, "fake-bin", "tar");
-		mkdirSync(dirname(fake), { recursive: true });
-		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
-		chmodSync(fake, 0o755);
-		const run = await f.run(["--collect"], { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		const run = await f.run(["--collect"], { PATH: plantedPath(f, utility) });
 		expect(run.exit).toBe(2);
 		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
@@ -507,26 +473,9 @@ test("exact collector permits bunx only when it is the pinned Bun binary", async
 	try {
 		const run = await f.run(["--collect"], { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` });
 		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		const fake = join(f.root, "fake-bin", "bunx");
-		mkdirSync(dirname(fake), { recursive: true });
-		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
-		chmodSync(fake, 0o755);
-		const rejected = await f.run(["--collect"], { PATH: `${dirname(fake)}:/usr/bin:/bin` });
+		const rejected = await f.run(["--collect"], { PATH: plantedPath(f, "bunx") });
 		expect(rejected.exit).toBe(2);
 		expect(JSON.stringify(rejected.result)).toContain("unregistered native executable");
-	} finally { f.cleanup(); }
-}, 120_000);
-
-test("exact collector rejects a git executable planted inside the frozen root", async () => {
-	const f = fixture({ "script/utility.ts": 'Bun.spawnSync(["git", "--version"]);\n' }, cli("script/utility.ts"));
-	try {
-		const fake = join(f.root, "fake-bin", "git");
-		mkdirSync(dirname(fake), { recursive: true });
-		writeFileSync(fake, "#!/bin/sh\nexit 0\n");
-		chmodSync(fake, 0o755);
-		const run = await f.run(["--collect"], { PATH: `${dirname(fake)}:/usr/bin:/bin` });
-		expect(run.exit).toBe(2);
-		expect(JSON.stringify(run.result)).toContain("unregistered native executable");
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -713,8 +662,7 @@ test("a bare specifier routed by an unfrozen package manifest cannot anchor an e
 	try {
 		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
 		inventory.configurations = list(inventory.configurations).filter((row) => obj(row).path !== "script/pkg/package.json");
-		f.put("inventory.json", JSON.stringify(inventory));
-		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+		refreeze(f, "inventory", inventory);
 		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package manifest script/pkg/package.json routing "@fixture/emitted" is not frozen');
@@ -740,13 +688,7 @@ test("verified workspace emit preserves package resolution and exact original co
 		expect(run.result.errors).toBeUndefined();
 		expect(run.exit).toBe(1);
 		expect(run.result.complete).toBe(true);
-		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
-		const prepared = inventory.files.map(prepare);
-		const exact = loadCoverage(join(f.root, "coverage.json"), inventory, prepared, { root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
-		const file = prepared.find((file) => file.path === "script/pkg/src/index.ts");
-		if (!file) throw new Error("missing original map");
-		const counts = statementCounters(file, exact);
-		const hits = (line: number) => Object.entries(file.statementMap).filter(([, range]) => range.start.line === line).map(([id]) => counts.s[id]);
+		const { exact, file, counts, hits } = originalCounters(f);
 		expect(hits(3)).toEqual([1, 1]);
 		expect(hits(4)).toEqual([0]);
 		expect(hits(7)).toEqual([0]);
@@ -768,8 +710,7 @@ for (const defect of ["stale-source", "stale-build", "javascript", "map", "escap
 					const entry = list(inventory.files).map(obj).find((entry) => entry.path === sourcePath);
 					if (!entry) throw new Error("missing source");
 					entry.sha256 = sha256(source);
-					f.put("inventory.json", JSON.stringify(inventory));
-					f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+					refreeze(f, "inventory", inventory);
 				}
 			} else if (defect === "javascript") f.put(js, readFileSync(join(f.root, js), "utf8").replace("return 99", "return 98"));
 			else if (defect === "configuration") f.put("tsconfig.base.json", '{"compilerOptions":{"target":"ESNext","module":"ESNext"}}');
@@ -801,8 +742,7 @@ test("workspace emit cannot silently ignore declared project references", async 
 		const configuration = list(inventory.configurations).map(obj).find((entry) => entry.path === configPath);
 		if (!configuration) throw new Error("missing configuration");
 		configuration.sha256 = sha256(readFileSync(join(f.root, configPath)));
-		f.put("inventory.json", JSON.stringify(inventory));
-		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
+		refreeze(f, "inventory", inventory);
 		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
 		expect(run.result.complete).toBe(false);
@@ -1217,6 +1157,61 @@ async function collectReceipt(f: ReturnType<typeof fixture>): Promise<{ [key: st
 	const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
 	expect(run.exit).toBe(0);
 	return obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8")));
+}
+/** The root receipt and the worker receipt it parents, from a collection that observed exactly those two processes. */
+function rootAndWorker(receipt: { [key: string]: Json }, missing: string): [{ [key: string]: Json }, { [key: string]: Json }] {
+	const processes = list(receipt.processes).map(obj);
+	expect(processes).toHaveLength(2);
+	const root = processes.find((process) => str(process.parent) === "");
+	const worker = processes.find((process) => str(process.parent) !== "");
+	if (!root || !worker) throw new FixtureError(missing);
+	expect(str(worker.parent)).toBe(str(root.id));
+	return [root, worker];
+}
+/** Collect a fixture whose complete measurement still leaves statements
+ * uncovered (exit 1), returning the process receipts it wrote. */
+async function collectProcesses(f: ReturnType<typeof fixture>, environment: NodeJS.ProcessEnv = {}): Promise<{ [key: string]: Json }[]> {
+	const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], environment);
+	if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+	expect(run.result.complete).toBe(true);
+	return list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
+}
+/** Collect an entry that launches utilities found on the canonical system
+ * PATH: they run natively, so the entry's own process is the only receipt. */
+async function collectUtility(source: string): Promise<void> {
+	const f = fixture({ "script/utility.ts": source }, cli("script/utility.ts"));
+	try {
+		expect(await collectProcesses(f, { PATH: "/usr/bin:/bin" })).toHaveLength(1);
+	} finally { f.cleanup(); }
+}
+/** Plant an always-succeeding executable inside the frozen root; the returned PATH searches its directory first. */
+function plantedPath(f: ReturnType<typeof fixture>, name: string): string {
+	const fake = join(f.root, "fake-bin", name);
+	mkdirSync(dirname(fake), { recursive: true });
+	writeFileSync(fake, "#!/bin/sh\nexit 0\n");
+	chmodSync(fake, 0o755);
+	return `${dirname(fake)}:/usr/bin:/bin`;
+}
+/** Freeze a worker module that loads the shared emission into an emitted workspace's inventory. */
+function freezeWorker(f: ReturnType<typeof fixture>): void {
+	const path = "script/worker.ts";
+	f.put(path, 'import { choose } from "@fixture/emitted"; export const ready = choose(false);\n');
+	const bytes = readFileSync(join(f.root, path));
+	const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+	list(inventory.files).push({ path, sha256: sha256(bytes), bytes: bytes.byteLength, category: "tooling", language: "typescript" });
+	list(inventory.files).sort((a, b) => str(obj(a).path).localeCompare(str(obj(b).path)));
+	refreeze(f, "inventory", inventory);
+}
+/** The exact counters of the emitted workspace's original barrel, with its statement hits by source line. */
+function originalCounters(f: ReturnType<typeof fixture>) {
+	const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
+	const prepared = inventory.files.map(prepare);
+	const exact = loadCoverage(join(f.root, "coverage.json"), inventory, prepared, { root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
+	const file = prepared.find((file) => file.path === "script/pkg/src/index.ts");
+	if (!file) throw new Error("missing original map");
+	const counts = statementCounters(file, exact);
+	const hits = (line: number) => Object.entries(file.statementMap).filter(([, range]) => range.start.line === line).map(([id]) => counts.s[id]);
+	return { exact, file, counts, hits };
 }
 
 function pythonProcess(receipt: { [key: string]: Json }): { [key: string]: Json } {
@@ -1634,22 +1629,86 @@ test("decode rejects invalid escapes and leading zeros while accepting unicode e
 	}
 });
 
+test("frozen source screening rejects dynamic code, unfrozen worker targets, Node process hooks and shell templates", async () => {
+	const path = "script/screened.ts";
+	const rejected = async (source: string) => obj(await thrown(() => syntax(source, path)));
+	const unsupported = (code: string, message: string) => ({ code, path, message });
+	syntax('import { readFileSync } from "node:fs"; const fs = require("node:fs"); new Worker(new URL("./w.ts", import.meta.url)); await import("./x"); export const n = [readFileSync, fs].length;', path);
+	for (const source of ["eval(code);", "Function(body);", "require(name);"])
+		expect(await rejected(source), source).toEqual(unsupported("unsupported_syntax", "dynamic code or module loading"));
+	for (const source of ['eval("1");', 'Function("return 1");', 'new Function("return 1");'])
+		expect(await rejected(source), source).toEqual(unsupported("unsupported_syntax", "dynamic executable source"));
+	expect(await rejected('new Worker("./w.ts");')).toEqual(unsupported("unsupported_process", "worker target is not a frozen file URL"));
+	for (const source of ['import vm from "node:vm";', 'export * from "cluster";', 'await import("node:cluster");', 'require("vm");'])
+		expect(await rejected(source), source).toEqual(unsupported("unsupported_process", "Node process/context hooks are not supported by the Bun collector"));
+	for (const source of ["await $`ls`;", "await Bun.$`ls`;"])
+		expect(await rejected(source), source).toEqual(unsupported("unsupported_process", "shell process graph is not observable through Bun.spawn"));
+	expect(await rejected("//# sourceMappingURL=screened.js.map\n")).toEqual(unsupported("unsupported_syntax", "coverage directives and preexisting maps are forbidden"));
+});
+
+/** A prepared snapshot of an empty file at `path`, as the collector's inventory records it. */
+function preparedSnapshot(path: string, language = "typescript"): { [key: string]: Json } {
+	const counters = { path, statementMap: {}, fnMap: {}, branchMap: {}, s: {}, f: {}, b: {} };
+	return {
+		entry: { path, sha256: sha256(""), bytes: 0, category: "tooling", language },
+		code: "",
+		mapHash: sha256("map"),
+		coverage: counters,
+		mapped: counters,
+		...(language === "python" ? { python: { source: `# ${path}\n`, lines: [], arcs: null } } : {}),
+	};
+}
+
+test("a launch names its frozen entry after recognized interpreter options or runs natively", async () => {
+	const root = realpathSync(mkdtempSync(join(tmpdir(), "d945-launch-")));
+	try {
+		const a = preparedFrom(preparedSnapshot("script/a.ts")), b = preparedFrom(preparedSnapshot("script/b.py", "python"));
+		const data = { options: { root }, files: [a, b] };
+		const launch = (argv: string[], runtime = "bun", cwd = root) => launchEntry(data, argv, runtime, `${runtime}-binary`, cwd);
+		const refused = async (argv: string[], runtime = "bun") => obj(await thrown(() => launch(argv, runtime)));
+		// A frozen program, with its options and Bun's test subcommand recognized once.
+		expect(launch(["script/a.ts", "x"])).toEqual({ entry: a, args: ["x"], interpreter: [] });
+		expect(launch(["--no-warnings", "test", "--timeout", "5000", "./script/a.ts"])).toEqual({ entry: a, args: [], interpreter: [] });
+		expect(launch(["-I", "script/b.py", "y"], "python")).toEqual({ entry: b, args: ["y"], interpreter: ["-I"] });
+		expect(launch(["-u", "-c", `# script/b.py\n`, "z"], "python")).toEqual({ entry: b, args: ["z"], interpreter: [] });
+		// Nothing to credit: an option-only probe, inline text that is not a frozen source,
+		// a program outside the root and a dependency's own program all run natively.
+		expect(launch(["--version"])).toEqual({ external: "bun-binary" });
+		expect(launch(["-e", "1"])).toEqual({ external: "bun-binary" });
+		expect(launch(["-I", "-c", "print(7)"], "python")).toEqual({ external: "python-binary" });
+		expect(launch([import.meta.path])).toEqual({ external: import.meta.path });
+		mkdirSync(join(root, "node_modules/dep"), { recursive: true });
+		writeFileSync(join(root, "node_modules/dep/cli.js"), "");
+		expect(launch(["node_modules/dep/cli.js"])).toEqual({ external: join(root, "node_modules/dep/cli.js") });
+		// Inside the root only frozen inventory launches, in its own language, with registered options.
+		expect(await refused(["script/missing.ts"])).toEqual({ code: "unsupported_process", path: "bun-binary", message: "entry/source is absent from frozen language inventory" });
+		expect(await refused(["script/b.py"])).toEqual({ code: "unsupported_process", path: "bun-binary", message: "entry/source is absent from frozen language inventory" });
+		expect(await refused(["--smol", "script/a.ts"])).toEqual({ code: "unsupported_process", path: "bun-binary", message: "unregistered interpreter option --smol" });
+		expect(await refused(["-I", "-c", `# script/b.py\n`], "python")).toEqual({ code: "unsupported_process", path: "python-binary", message: "unrecognized Python interpreter option" });
+	} finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a prepared snapshot decodes its unmapped counters by kind and rejects any other kind", async () => {
+	const snapshot = preparedSnapshot("script/a.ts");
+	const counter = (kind: string) => ({ kind, id: "3", start: { line: 1, column: 0 }, end: { line: 1, column: 4 } });
+	expect(preparedFrom(snapshot).unmapped).toBeUndefined();
+	expect(preparedFrom({ ...snapshot, unmapped: ["statement", "function", "branch"].map(counter) }).unmapped).toEqual([
+		{ kind: "statement", id: "3", start: { line: 1, column: 0 }, end: { line: 1, column: 4 } },
+		{ kind: "function", id: "3", start: { line: 1, column: 0 }, end: { line: 1, column: 4 } },
+		{ kind: "branch", id: "3", start: { line: 1, column: 0 }, end: { line: 1, column: 4 } },
+	]);
+	expect(await thrown(() => preparedFrom({ ...snapshot, unmapped: [counter("line")] }))).toEqual({ code: "schema", path: "", message: "invalid enum" });
+	expect(await thrown(() => preparedFrom({ ...snapshot, unmapped: [{ ...counter("branch"), line: 1 }] }))).toEqual({ code: "schema", path: "", message: "object keys differ" });
+});
+
 test("shared emission cache serves a second process the same verified identity", async () => {
 	const f = emittedWorkspace(
 		"export const value = 42;\n",
 		'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; import { Worker } from "node:worker_threads"; test("emitted entry", async () => { expect(choose(true)).toBe(42); const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }); await new Promise<void>((resolve) => worker.once("exit", () => resolve())); });\n',
 	);
 	try {
-		f.put("script/worker.ts", 'import { choose } from "@fixture/emitted"; export const ready = choose(false);\n');
-		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
-		list(inventory.files).push({ path: "script/worker.ts", sha256: sha256(readFileSync(join(f.root, "script/worker.ts"))), bytes: readFileSync(join(f.root, "script/worker.ts")).byteLength, category: "tooling", language: "typescript" });
-		list(inventory.files).sort((a, b) => str(obj(a).path).localeCompare(str(obj(b).path)));
-		f.put("inventory.json", JSON.stringify(inventory));
-		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
-		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		expect(run.result.complete).toBe(true);
-		const processes = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
+		freezeWorker(f);
+		const processes = await collectProcesses(f);
 		expect(processes).toHaveLength(2);
 		for (const process of processes) expect(list(process.loaded).map(str)).toContain("script/pkg/src/index.ts");
 	} finally { f.cleanup(); }
@@ -1665,16 +1724,8 @@ test("concurrent cold workers each receive the shared emission without corruptin
 		'import { test, expect } from "bun:test"; import { Worker } from "node:worker_threads"; test("cold workers", async () => { const workers = Array.from({ length: 4 }, () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })); const codes = await Promise.all(workers.map((worker) => new Promise<number>((resolve) => worker.once("exit", resolve)))); expect(codes).toEqual([0, 0, 0, 0]); const { choose } = await import("@fixture/emitted"); expect(choose(true)).toBe(42); });\n',
 	);
 	try {
-		f.put("script/worker.ts", 'import { choose } from "@fixture/emitted"; export const ready = choose(false);\n');
-		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
-		list(inventory.files).push({ path: "script/worker.ts", sha256: sha256(readFileSync(join(f.root, "script/worker.ts"))), bytes: readFileSync(join(f.root, "script/worker.ts")).byteLength, category: "tooling", language: "typescript" });
-		list(inventory.files).sort((a, b) => str(obj(a).path).localeCompare(str(obj(b).path)));
-		f.put("inventory.json", JSON.stringify(inventory));
-		f.args[f.args.indexOf("--inventory-sha256") + 1] = sha256(readFileSync(join(f.root, "inventory.json")));
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
-		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		expect(run.result.complete).toBe(true);
-		const processes = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
+		freezeWorker(f);
+		const processes = await collectProcesses(f);
 		expect(processes).toHaveLength(5);
 		for (const process of processes) expect(list(process.emitted).map((row) => str(obj(row).path)).sort()).toEqual(["script/pkg/dist/index.js", "script/pkg/dist/value.js"]);
 	} finally { f.cleanup(); }
@@ -1691,34 +1742,19 @@ test("an emission identical to the original transpilation still transfers after 
 		'import { test, expect } from "bun:test"; import { choose as original } from "./pkg/src/index.ts"; const { choose } = await import("@fixture/emitted"); test("both instances", () => { expect(original(true)).toBe(42); expect(choose(false)).toBe(99); });\n',
 	);
 	try {
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
-		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		expect(run.result.complete).toBe(true);
-		const [process] = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
+		const [process] = await collectProcesses(f);
 		if (!process) throw new Error("missing process receipt");
 		const emitted = list(process.emitted).map((row) => str(obj(row).source));
 		expect(emitted).toEqual(["script/pkg/src/index.ts", "script/pkg/src/value.ts"]);
 		expect(list(process.transferred).map(str).sort()).toEqual(emitted);
-		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
-		const prepared = inventory.files.map(prepare);
-		const exact = loadCoverage(join(f.root, "coverage.json"), inventory, prepared, { root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
-		const file = prepared.find((file) => file.path === "script/pkg/src/index.ts");
-		if (!file) throw new Error("missing original map");
-		const counts = statementCounters(file, exact);
-		const hits = (line: number) => Object.entries(file.statementMap).filter(([, range]) => range.start.line === line).map(([id]) => counts.s[id]);
+		const { hits } = originalCounters(f);
 		expect(hits(3)).toEqual([2, 1]);
 		expect(hits(4)).toEqual([1]);
 	} finally { f.cleanup(); }
 }, 120_000);
 
 test("exact collector runs an inline runtime evaluation as an external utility", async () => {
-	const f = fixture({ "script/utility.ts": 'const run = Bun.spawnSync([process.execPath, "-e", "process.stdout.write(\'ok\')"], { stdout: "pipe", stderr: "pipe" }); if (run.stdout.toString() !== "ok") process.exit(7);\n' }, cli("script/utility.ts"));
-	try {
-		const run = await f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")], { PATH: "/usr/bin:/bin" });
-		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
-		expect(run.result.complete).toBe(true);
-		expect(list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes)).toHaveLength(1);
-	} finally { f.cleanup(); }
+	await collectUtility('const run = Bun.spawnSync([process.execPath, "-e", "process.stdout.write(\'ok\')"], { stdout: "pipe", stderr: "pipe" }); if (run.stdout.toString() !== "ok") process.exit(7);\n');
 }, 120_000);
 
 test("exact collector admits a receipt-less executable outside the frozen root and refuses one inside", async () => {
