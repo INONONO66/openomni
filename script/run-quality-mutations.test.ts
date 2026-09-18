@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { copyExecution, removeExecution, decode, execute, executionTreeHash, instrument, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
+import { copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -656,14 +656,75 @@ test("uninvoked function is noCoverage, not survived", async () => {
 	expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe(source);
 }, 90000);
 
+test("red baseline report names nested failures, explains unexplained exits and bounds its summary", () => {
+	const exited = { exitCode: 0, signal: null, timedOut: false, overflow: false, stderr: "" };
+	const testcase = (name: string, body = "", classname = "") =>
+		`<testcase name="${name}" classname="${classname}" time="0.1" file="./src/a.test.ts" line="1" assertions="1"${body ? `>${body}</testcase>` : " />"}`;
+	const junit = (cases: string) => `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="bun test" tests="1" failures="1">\n<testsuite name="src/a.test.ts" file="src/a.test.ts">${cases}</testsuite>\n</testsuites>`;
+	const explained = describeRedBaseline([{
+		junit: junit([
+			testcase("first passing"),
+			testcase("pending", "<skipped />"),
+			testcase("behavior", '<failure type="AssertionError" message="expect(received).toBe(expected)&#10;&#10;Expected: &quot;yes&quot;&#10;Received: &quot;no&quot;">detail</failure>', "outer &gt; inner"),
+			testcase("crashes", `<error type="Error" message="${"x".repeat(400)}" />`),
+		].join("")),
+		failures: 2,
+		valid: true,
+		process: { ...exited, exitCode: 1 },
+	}]);
+	expect(explained.lines).toEqual([
+		'src/a.test.ts > outer > inner > behavior: expect(received).toBe(expected)  Expected: "yes" Received: "no"',
+		`src/a.test.ts > crashes: ${"x".repeat(300)}`,
+	]);
+	expect(explained.summary).toBe(`baseline test selection is not green: ${explained.lines.join("; ")}`);
+	const unexplained = describeRedBaseline([
+		{ junit: "", failures: 0, valid: false, process: { ...exited, exitCode: 1, stderr: "src/a.test.ts:\n\n# Unhandled error between tests\nerror: boom at load\n\n 0 pass\n 1 fail\n" } },
+		{ junit: junit(testcase("first passing")), failures: 0, valid: true, process: { ...exited, exitCode: 1 } },
+		{ junit: "", failures: 0, valid: false, process: { ...exited, exitCode: null, signal: "SIGKILL", timedOut: true, stderr: "hang" } },
+	]);
+	expect(unexplained.lines).toEqual([
+		"process exit=1 signal=null timedOut=false overflow=false junit=invalid: src/a.test.ts: |  | # Unhandled error between tests | error: boom at load |  |  0 pass |  1 fail",
+		"process exit=1 signal=null timedOut=false overflow=false junit=valid: ",
+		"process exit=null signal=SIGKILL timedOut=true overflow=false junit=invalid: hang",
+	]);
+	const many = describeRedBaseline([{
+		junit: junit(Array.from({ length: 7 }, (_, index) => testcase(`case ${index}`, '<failure type="Error" message="boom" />')).join("")),
+		failures: 7,
+		valid: true,
+		process: { ...exited, exitCode: 1 },
+	}]);
+	expect(many.lines).toHaveLength(7);
+	expect(many.summary).toBe(`baseline test selection is not green: ${many.lines.slice(0, 5).join("; ")} (+2 more)`);
+	expect(describeRedBaseline([])).toEqual({ lines: [], summary: "baseline test selection is not green" });
+});
+
 test("red baseline names its failing testcases and unexplained process exits", async () => {
 	const failing = await fixture("export const run = () => true;", "expect(run()).toBe(false);");
 	const assertion = await invoke(failing, "red-baseline-assertion", select("boolean-literal"));
 	expect(assertion.code).toBe(2);
 	expect(assertion.report.complete).toBe(false);
 	expect(assertion.selected.every((row) => row.outcome === "uncompleted")).toBe(true);
-	expect(rows(assertion.report.errors)).toEqual([
-		expect.stringMatching(/^baseline test selection is not green: src\/a\.test\.ts > behavior: expect\(received\)\.toBe\(expected\) /),
+	const identity = /^baseline test selection is not green: src\/a\.test\.ts > behavior: expect\(received\)\.toBe\(expected\) /;
+	expect(rows(assertion.report.errors)).toEqual([expect.stringMatching(identity)]);
+	// The same campaign in process: the red branch of campaign() logs every identity natively.
+	const argv = rows(evidence.at(-1)?.argv).map(String).slice(2);
+	const output: string[] = [];
+	const log: (value: string) => void = console.log;
+	console.log = (value: string) => { output.push(value); };
+	const written = spyOn(process.stderr, "write");
+	let red: string[] = [];
+	try {
+		expect(await main(argv)).toBe(2);
+		red = written.mock.calls.map((call) => String(call[0])).filter((chunk) => chunk.startsWith("[mutation] baseline red: "));
+	} finally {
+		console.log = log;
+		written.mockRestore();
+	}
+	const report = record(decode(output.join("")));
+	expect(report.complete).toBe(false);
+	expect(rows(report.errors)).toEqual([expect.stringMatching(identity)]);
+	expect(red).toEqual([
+		`[mutation] baseline red: ${String(rows(report.errors)[0]).slice("baseline test selection is not green: ".length)}\n`,
 	]);
 	const loading = await fixture("export const run = () => true;", "", {
 		"src/a.test.ts": 'import {test,expect} from "bun:test"; import {run} from "./a"; if (run()) throw new Error("boom at load"); test("behavior", () => { expect(run()).toBe(true); });',
