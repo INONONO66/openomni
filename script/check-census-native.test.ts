@@ -7,10 +7,16 @@ import {
   protocol,
   adapter,
   assertPublication,
+  assertFixtureProgramOutput,
+  assertFixturePublisherOutput,
   assertStoreWrite,
   runFixtureProgram,
   SPAWN_TIMEOUT_MS,
 } from "./census-fixture";
+
+function nativeFixture(main: string, extraFiles: Record<string, string> = {}): Fixture {
+  return new Fixture({ "src/events.ts": protocol, ...extraFiles, "src/main.ts": main });
+}
 
 test("R3 local events require matching receiver and a subsequent trigger", () => {
   for (const trigger of [
@@ -23,13 +29,8 @@ test("R3 local events require matching receiver and a subsequent trigger", () =>
       "src/events.ts": protocol,
       "src/main.ts": `import {EventEmitter} from "node:events";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};const emitter=new EventEmitter(),other=new EventEmitter();emitter.on("trigger",()=>sink.publish(Ready,{}));${trigger}console.log(JSON.stringify(received));`,
     });
-    const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-      cwd: fixture.root,
-      timeout: SPAWN_TIMEOUT_MS,
-    });
     const invoked = trigger === 'emitter.emit("trigger");';
-    expect(actual.exitCode).toBe(0);
-    expect(actual.stdout.toString().trim()).toBe(invoked ? '["ready"]' : "[]");
+    assertFixtureProgramOutput(fixture, ["src/main.ts"], invoked ? '["ready"]' : "[]");
     expect(fixture.run("publisher").code).toBe(invoked ? 0 : 1);
   }
 }, 180_000);
@@ -99,10 +100,7 @@ test("R3 child Python source is rooted in its actual spawn invocation", () => {
     "src/worker.py":
       'import sqlite3\ndb=sqlite3.connect("state.db")\ndb.execute("CREATE TABLE item(id INTEGER)")\ndb.cursor().execute("INSERT INTO item VALUES(1)")\ndb.commit()\ndb.close()\n',
   });
-  const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-    cwd: fixture.root,
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const actual = runFixtureProgram(fixture, ["src/main.ts"]);
   expect(actual.exitCode).toBe(0);
   {
     using db = new Database(join(fixture.root, "state.db"), { readonly: true });
@@ -151,18 +149,14 @@ test("R3 real observation bus transfers through its scheduled delivery", () => {
       'import {Bus} from "./bus";import {Ready} from "./events";const received:string[]=[];const signal=new Promise<void>(resolve=>{Bus.observe((event)=>{received.push(event.name);resolve()})});Bus.publish(Ready,{});await signal;Bus.reset();console.log(JSON.stringify(received));',
   });
   symlinkSync(resolve(import.meta.dir, "../node_modules"), join(fixture.root, "node_modules"));
-  const actual = runFixtureProgram(fixture, ["src/main.ts"], fixture.root);
-  expect(actual.exitCode).toBe(0);
-  expect(actual.stdout.toString().trim()).toBe('["ready"]');
-  expect(fixture.run("publisher").code).toBe(0);
+  assertFixturePublisherOutput(fixture, ["src/main.ts"], '["ready"]');
 }, 180_000);
 
 test("optional-chained AbortSignal parameters resolve without inventing an abort", () => {
   for (const receiver of ["signal?", "signal!", "signal"]) {
-    using fixture = new Fixture({
-      "src/events.ts": protocol,
-      "src/main.ts": `import {Ready} from "./events";const sink={publish(event:{name:string},data:object){console.log(event.name)}};function attach(signal${receiver === "signal" ? "" : "?"}:AbortSignal){${receiver}.addEventListener("abort",()=>sink.publish(Ready,{}),{once:true})}attach();`,
-    });
+    using fixture = nativeFixture(
+      `import {Ready} from "./events";const sink={publish(event:{name:string},data:object){console.log(event.name)}};function attach(signal${receiver === "signal" ? "" : "?"}:AbortSignal){${receiver}.addEventListener("abort",()=>sink.publish(Ready,{}),{once:true})}attach();`,
+    );
     const result = fixture.run("publisher");
     expect(result.output).toContain('"complete":true');
     expect(result.code).toBe(1);
@@ -179,13 +173,8 @@ test("R3 removed listeners and untriggered abort controllers stay dormant", () =
       "src/events.ts": protocol,
       "src/main.ts": `import {EventEmitter} from "node:events";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};${trigger}console.log(JSON.stringify(received));`,
     });
-    const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-      cwd: fixture.root,
-      timeout: SPAWN_TIMEOUT_MS,
-    });
     const invoked = operation === "abort-triggered";
-    expect(actual.exitCode).toBe(0);
-    expect(actual.stdout.toString().trim()).toBe(invoked ? '["ready"]' : "[]");
+    assertFixtureProgramOutput(fixture, ["src/main.ts"], invoked ? '["ready"]' : "[]");
     expect(fixture.run("publisher").code).toBe(invoked ? 0 : 1);
   }
 }, 180_000);
@@ -196,10 +185,7 @@ test("R3 an unthrown catch around a scheduled noop is not publication", () => {
     "src/main.ts":
       'import {Ready} from "./events";const received:string[]=[];function deliver(operation:()=>void,eventName:string){try{operation()}catch{console.warn(eventName)}}const sink={publish(event:{name:string},data:object){queueMicrotask(()=>deliver(()=>{void event.name},event.name))}};sink.publish(Ready,{});await new Promise<void>(resolve=>queueMicrotask(resolve));console.log(JSON.stringify(received));',
   });
-  const actual = runFixtureProgram(fixture, ["src/main.ts"], fixture.root);
-  expect(actual.exitCode).toBe(0);
-  expect(actual.stdout.toString().trim()).toBe("[]");
-  expect(actual.stderr.toString()).toBe("");
+  assertFixtureProgramOutput(fixture, ["src/main.ts"], "[]", fixture.root, "");
   expect(fixture.run("publisher").code).toBe(1);
 }, 180_000);
 
@@ -209,29 +195,21 @@ test("R3 process signal callbacks are rooted in an operating-system trigger", ()
     "src/main.ts":
       'import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};const signal=new Promise<void>(resolve=>process.once("SIGUSR2",()=>{sink.publish(Ready,{});resolve()}));process.kill(process.pid,"SIGUSR2");await signal;console.log(JSON.stringify(received));',
   });
-  const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-    cwd: fixture.root,
-    timeout: SPAWN_TIMEOUT_MS,
-  });
-  expect(actual.exitCode).toBe(0);
-  expect(actual.stdout.toString().trim()).toBe('["ready"]');
+  assertFixtureProgramOutput(fixture, ["src/main.ts"], '["ready"]');
   const result = fixture.run("publisher");
   expect(result.code).toBe(0);
   expect(result.output).toContain('"events":["SIGUSR2"]');
 }, 180_000);
 
 test("R3 Bun process entry invokes the child publisher rather than only importing it", () => {
-  using fixture = new Fixture({
-    "src/events.ts": protocol,
-    "src/worker.ts":
-      'import {Ready} from "./events";const sink={publish(event:{name:string},data:object){console.log(event.name)}};if(import.meta.main)sink.publish(Ready,{});',
-    "src/main.ts":
-      'const child=Bun.spawnSync([process.execPath,"src/worker.ts"],{stdout:"inherit",stderr:"inherit"});if(child.exitCode!==0)throw new Error("child failed");',
-  });
-  const actual = runFixtureProgram(fixture, ["src/main.ts"], fixture.root);
-  expect(actual.exitCode).toBe(0);
-  expect(actual.stdout.toString().trim()).toBe("ready");
-  expect(fixture.run("publisher").code).toBe(0);
+  using fixture = nativeFixture(
+    'const child=Bun.spawnSync([process.execPath,"src/worker.ts"],{stdout:"inherit",stderr:"inherit"});if(child.exitCode!==0)throw new Error("child failed");',
+    {
+      "src/worker.ts":
+        'import {Ready} from "./events";const sink={publish(event:{name:string},data:object){console.log(event.name)}};if(import.meta.main)sink.publish(Ready,{});',
+    },
+  );
+  assertFixturePublisherOutput(fixture, ["src/main.ts"], "ready");
 }, 180_000);
 
 test("R4 private process names and helper order require actual dispatch", () => {
@@ -240,16 +218,10 @@ test("R4 private process names and helper order require actual dispatch", () => 
       const body = native
         ? `process.on("private-trigger",()=>sink.publish(Ready,{}));${live ? 'process.emit("private-trigger");' : ""}`
         : `const emitter=new EventEmitter();function attach(){emitter.on("trigger",()=>sink.publish(Ready,{}))}function register(){attach()}function fire(){emitter.emit("trigger")}${live ? "register();fire();" : "fire();register();"}`;
-      using fixture = new Fixture({
-        "src/events.ts": protocol,
-        "src/main.ts": `import {EventEmitter} from "node:events";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};${body}console.log(JSON.stringify(received));`,
-      });
-      const actual = Bun.spawnSync([process.execPath, "src/main.ts"], {
-        cwd: fixture.root,
-        timeout: SPAWN_TIMEOUT_MS,
-      });
-      expect(actual.exitCode).toBe(0);
-      expect(actual.stdout.toString().trim()).toBe(live ? '["ready"]' : "[]");
+      using fixture = nativeFixture(
+        `import {EventEmitter} from "node:events";import {Ready} from "./events";const received:string[]=[];const sink={publish(event:{name:string},data:object){received.push(event.name)}};${body}console.log(JSON.stringify(received));`,
+      );
+      assertFixtureProgramOutput(fixture, ["src/main.ts"], live ? '["ready"]' : "[]");
       const result = fixture.run("publisher");
       expect(result.code).toBe(live ? 0 : 1);
       expect(result.output).toContain('"externalEvents":[]');
@@ -484,9 +456,7 @@ function electronFixture(
     readFileSync(join(electron, "electron.d.ts"), "utf8"),
   );
   fixture.write("node_modules/electron/index.js", index(fixture.root));
-  const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: SPAWN_TIMEOUT_MS,
-  });
+  const actual = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
   expect(actual.exitCode).toBe(0);
   return { fixture, stdout: actual.stdout.toString().trim() };
 }
@@ -595,29 +565,17 @@ console.log(await main());`,
 }, 180_000);
 
 test("an explicitly undefined callback argument invokes its default implementation", () => {
-  using fixture = new Fixture({
-    "src/events.ts": protocol,
-    "src/main.ts": `import {Ready} from "./events";
+  using fixture = nativeFixture(`import {Ready} from "./events";
 const sink={publish(event:{name:string}){console.log(event.name)}};
 const options={boundary(){return (body:()=>void)=>body()}};
 function run(boundary=options.boundary()){boundary(()=>sink.publish(Ready))}
-run(undefined);`,
-  });
-  const actual = runFixtureProgram(fixture, [join(fixture.root, "src/main.ts")]);
-  expect(actual.exitCode).toBe(0);
-  expect(actual.stdout.toString().trim()).toBe("ready");
-  expect(fixture.run("publisher").code).toBe(0);
+run(undefined);`);
+  assertFixturePublisherOutput(fixture, [join(fixture.root, "src/main.ts")], "ready");
 }, 180_000);
 
 test("child process stdout data listeners have a concrete spawned producer", () => {
-  using fixture = new Fixture({
-    "src/events.ts": protocol,
-    "src/main.ts": `import {spawn} from "node:child_process";import {Ready} from "./events";const child=spawn(process.execPath,["-e","console.log(1)"]);const sink={publish(e:{name:string},data:object){console.log(e.name)}};child.stdout.on("data",()=>sink.publish(Ready,{}));await new Promise<void>((resolve,reject)=>{child.once("exit",()=>resolve());child.once("error",reject)});`,
-  });
-  const actual = Bun.spawnSync([process.execPath, join(fixture.root, "src/main.ts")], {
-    timeout: SPAWN_TIMEOUT_MS,
-  });
-  expect(actual.exitCode).toBe(0);
-  expect(actual.stdout.toString().trim()).toBe("ready");
-  expect(fixture.run("publisher").code).toBe(0);
+  using fixture = nativeFixture(
+    `import {spawn} from "node:child_process";import {Ready} from "./events";const child=spawn(process.execPath,["-e","console.log(1)"]);const sink={publish(e:{name:string},data:object){console.log(e.name)}};child.stdout.on("data",()=>sink.publish(Ready,{}));await new Promise<void>((resolve,reject)=>{child.once("exit",()=>resolve());child.once("error",reject)});`,
+  );
+  assertFixturePublisherOutput(fixture, [join(fixture.root, "src/main.ts")], "ready");
 }, 180_000);

@@ -149,6 +149,29 @@ export function runFixtureProgram(fixture: Fixture, argv: string[], cwd = fixtur
   });
 }
 
+export function assertFixtureProgramOutput(
+  fixture: Fixture,
+  argv: string[],
+  output: string,
+  cwd = fixture.root,
+  stderr?: string,
+): void {
+  const actual = runFixtureProgram(fixture, argv, cwd);
+  expect(actual.exitCode).toBe(0);
+  expect(actual.stdout.toString().trim()).toBe(output);
+  if (stderr !== undefined) expect(actual.stderr.toString()).toBe(stderr);
+}
+
+export function assertFixturePublisherOutput(
+  fixture: Fixture,
+  argv: string[],
+  output: string,
+  cwd = fixture.root,
+): void {
+  assertFixtureProgramOutput(fixture, argv, output, cwd);
+  expect(fixture.run("publisher").code).toBe(0);
+}
+
 export const protocol = `export namespace BusEvent {
   export interface Descriptor { name: string; schema: object }
   export function define(name: string, schema: object): Descriptor { return { name, schema }; }
