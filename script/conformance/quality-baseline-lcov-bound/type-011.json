@@ -953,14 +953,6 @@
   },
   {
     "path": "packages/protocol/src/storage/index.ts",
-    "line": 145,
-    "symbol": "unknown:adoptStream",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/storage/index.ts",
     "line": 135,
     "symbol": "unknown:append",
     "gate": "type",
@@ -982,14 +974,6 @@
     "gate": "type",
     "value": 1,
     "count": 2
-  },
-  {
-    "path": "packages/protocol/src/storage/index.ts",
-    "line": 158,
-    "symbol": "unknown:factsByType",
-    "gate": "type",
-    "value": 1,
-    "count": 1
   },
   {
     "path": "packages/protocol/src/storage/index.ts",
@@ -1019,14 +1003,6 @@
     "path": "packages/protocol/src/storage/index.ts",
     "line": 58,
     "symbol": "unknown:getIdentity",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/protocol/src/storage/index.ts",
-    "line": 151,
-    "symbol": "unknown:headFact",
     "gate": "type",
     "value": 1,
     "count": 1

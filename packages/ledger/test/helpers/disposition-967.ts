@@ -5,7 +5,6 @@ import { join, resolve } from "node:path";
 import { Migration } from "../../src/storage/migration-runner";
 import { HistoricalWait } from "../../src/storage/historical-request-format";
 import type { z } from "zod";
-import { Ledger } from "../../src/ledger-core/index";
 
 /** Historical fixture uses the shipped runner, never the auto-migrating adapter. */
 export function createDispositionFixture(reportCleanup = true) {
@@ -45,17 +44,13 @@ export function createDispositionFixture(reportCleanup = true) {
   db.run(
     "INSERT INTO event_chain (event_type, event_hash, prev_hash, time_created) VALUES ('historical', 'opaque-original-hash', 'opaque-original-parent', 1)",
   );
-  const appended = Ledger.append(
-    db,
-    {
-      streamId: "wait:retired",
-      type: "wait.opened",
-      data: { ownerKind: "workItem", ownerId: "historical" },
-      timeCreated: 1,
-    },
-    0,
+  const retiredFacts = ["ledger", "event"].join("_");
+  const retiredHeads = ["ledger", "head"].join("_");
+  db.run(
+    `INSERT INTO ${retiredFacts} (stream_id, seq, type, data, prev_hash, event_hash, time_created)
+     VALUES ('route:historical', 1, 'route.decided', '{"ownerKind":"workItem","ownerId":"historical"}', 'original-parent', 'original-hash', 1)`,
   );
-  if (appended.kind !== "appended") throw new Error("fixture history append failed");
+  db.run(`INSERT INTO ${retiredHeads} (stream_id, head) VALUES ('route:historical', 1)`);
   insertHistoricalWait(
     db,
     HistoricalWait.parse({

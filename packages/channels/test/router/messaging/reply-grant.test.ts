@@ -175,19 +175,17 @@ describe("reply-grant instance materialization", () => {
     expect(scopes.sort()).toEqual(["telegram:chat-1", "telegram:chat-9"]);
   });
 
-  test("construction never reads ledger history and every list reads the current projection", () => {
+  test("construction never reads decision facts and every list reads the current projection", () => {
     const adapter = Storage.get();
-    const history = {
-      ...adapter.ledger,
-      factsByType: () => {
-        throw new Error("history forbidden");
-      },
-    };
     Storage.configure({
       transaction: adapter.transaction.bind(adapter),
       replyGrant: adapter.replyGrant,
     });
-    Object.defineProperty(Storage.get(), "ledger", { get: () => history });
+    Object.defineProperty(Storage.get(), "decisionFacts", {
+      get: () => {
+        throw new Error("decision replay forbidden");
+      },
+    });
     const first = harness([rule()]);
     const second = harness([rule()]);
     first.instances.admit(admission({ sourceId: "committed:1" }));

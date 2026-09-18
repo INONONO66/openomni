@@ -244,8 +244,8 @@ const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledg
 /**
  * The perimeter store surfaces the gateway router may name from
  * @openomni/ledger (docs/gateway-design.md §4/§6): actors, blacklist,
- * channel grants, the surface↔session map, and the SCOPED append
- * port (append + headFact — never the master
+ * channel grants, the surface↔session map, and the scoped decision-fact
+ * port (record + head — never the master
  * `Storage` entry, whose adapter reaches every brain surface). Brain
  * surfaces (Session, transcript, artifact, worker-run/grant,
  * effect, …) are NOT reachable from the router — the gateway selects
@@ -258,7 +258,7 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "ChannelGrantStore",
   "ReplyGrantStore",
   "SurfaceKey",
-  "LedgerAppend",
+  "DecisionFacts",
   // #219 active-egress debit ledger — a perimeter surface written ONLY by the
   // router's send kernel (brain never reaches the perimeter debit store).
   "EgressBudgetStore",
@@ -770,10 +770,10 @@ function selfTest(): void {
       ).length === 1,
     ],
     [
-      "S8: the scoped append port is the legal decision-record road",
+      "S8: the scoped decision-fact port is the legal decision-record road",
       channelsRouterLedgerViolations(
         "packages/channels/src/router/routing-resolution.ts",
-        'import { LedgerAppend } from "@openomni/ledger";',
+        'import { DecisionFacts } from "@openomni/ledger";',
       ).length === 0,
     ],
   ];

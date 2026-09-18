@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { replaceLedger } from "../../helpers/ledger";
+import { replaceDecisionFacts } from "../../helpers/ledger";
 import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
 import type { ChannelDeliveryRoute } from "../../../src/router";
@@ -117,10 +117,11 @@ test("a granted endpoint without a channel delivery owner fails closed", async (
 
 test("restart reads the durable live-grant projection, never route history", async () => {
   await makeRouter().ingest(sender, facts);
-  replaceLedger((ledger) => ({
-    ...ledger,
-    factsByType: () => {
-      throw new Error("route history replay is forbidden");
+  replaceDecisionFacts((facts) => ({
+    ...facts,
+    head: (key) => {
+      if (key.startsWith("route:")) throw new Error("route replay is forbidden");
+      return facts.head(key);
     },
   }));
   const restarted = makeRouter();
@@ -131,14 +132,12 @@ test("restart reads the durable live-grant projection, never route history", asy
 });
 
 test("historical route facts cannot reconstruct authority on restart", async () => {
-  Storage.get().ledger?.append(
-    {
-      streamId: "route:forged",
-      type: "route.decided",
-      data: { outcome: "route", actorId: "actor-buyer" },
-    },
-    0,
-  );
+  Storage.get().decisionFacts?.record({
+    key: "route:forged",
+    type: "route.decided",
+    data: { outcome: "route", actorId: "actor-buyer" },
+    timeCreated: 1,
+  });
   expect(await makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply)).toMatchObject({
     status: "blocked_pre",
   });

@@ -7,7 +7,7 @@ import { createAlarms } from "./sqlite-l0-alarms.js";
 import { createPolicies } from "./sqlite-l0-policies.js";
 
 interface SqliteL0Adapters {
-  sessions: ProtocolStorage.SessionLedgerSubAdapter;
+  sessions: ProtocolStorage.SessionSubAdapter;
   actions: ProtocolStorage.ActionSubAdapter;
   inbox: ProtocolStorage.InboxSubAdapter;
   alarms: ProtocolStorage.AlarmSubAdapter;

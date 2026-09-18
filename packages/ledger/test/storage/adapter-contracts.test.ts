@@ -21,7 +21,7 @@ let inspection: Database;
 
 interface L0Adapter {
   transaction<T>(operation: () => T): T;
-  sessions: ProtocolStorage.SessionLedgerSubAdapter;
+  sessions: ProtocolStorage.SessionSubAdapter;
   actions: ProtocolStorage.ActionSubAdapter;
   inbox: ProtocolStorage.InboxSubAdapter;
   alarms: ProtocolStorage.AlarmSubAdapter;

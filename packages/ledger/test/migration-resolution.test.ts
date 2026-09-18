@@ -79,12 +79,12 @@ describe("moved migration resolution (#502)", () => {
 
       expect(applied.sort()).toEqual(shipped);
 
-      // Schema actually materialized — the append core's table exists.
+      // Schema actually materialized — the decision-fact table exists.
       const tables = db
         .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'")
         .all()
         .map((row) => row.name);
-      expect(tables).toContain("ledger_event");
+      expect(tables).toContain("decision_fact");
       expect(tables).toContain("session");
       expect(tables).not.toContain("work_item");
 

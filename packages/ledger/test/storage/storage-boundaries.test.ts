@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { Gateway, LedgerSession, PlainValueSchema } from "@openomni/protocol";
 import {
   ActorRegistry,
-  LedgerAppend,
+  DecisionFacts,
   SessionHandleStore,
   Storage,
   type SqliteStorageAdapter,
@@ -16,21 +16,22 @@ import { inspect967Projections } from "../../src/storage/u967-projection";
 
 afterEach(() => Storage.reset());
 
-test("append port transaction rolls back an adopted stream and commits a subsequent adoption", () => {
+test("decision fact port shares rollback and subsequent commit boundaries", () => {
   Storage.initialize({ dbPath: ":memory:" });
-  const ledger = Storage.get().ledger;
-  if (ledger === undefined) throw new Error("ledger missing");
+  const facts = Storage.get().decisionFacts;
+  if (facts === undefined) throw new Error("decision facts missing");
+  const input = { key: "route:boundary", type: "route.decided", data: {}, timeCreated: 1 };
+  const failure = new Error("rollback fact");
   expect(() =>
-    LedgerAppend.transaction(() => {
-      ledger.adoptStream("adopted", 3, { type: "genesis", data: {}, timeCreated: 1 });
-      throw new Error("rollback adoption");
+    DecisionFacts.transaction(() => {
+      facts.record(input);
+      throw failure;
     }),
-  ).toThrow("rollback adoption");
-  expect(ledger.headFact("adopted")).toBeUndefined();
-  LedgerAppend.transaction(() =>
-    ledger.adoptStream("adopted", 3, { type: "genesis", data: {}, timeCreated: 1 }),
-  );
-  expect(ledger.headFact("adopted")?.seq).toBe(3);
+  ).toThrow(failure);
+  expect(facts.head(input.key)).toBeUndefined();
+  const outcome = DecisionFacts.transaction(() => facts.record(input));
+  expect(outcome.kind).toBe("recorded");
+  expect(facts.head(input.key)).toEqual(outcome.fact);
 });
 
 test("removing an endpoint preserves its identity and removes address lookup", () => {

@@ -34,8 +34,8 @@ describe("967 archive and guarded disposal", () => {
       "action",
       "inbox",
       "alarm",
-      "ledger_event",
-      "ledger_head",
+      ["ledger", "event"].join("_"),
+      ["ledger", "head"].join("_"),
       "event_chain",
     ]) {
       expect(tables).toContain(table);

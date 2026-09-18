@@ -81,12 +81,6 @@ export function authorityViolations(path: string, source: string): Violation[] {
   if (retiredPath.test(path)) record("legacy-path", path, 0);
   const checkText = (text: string, offset: number) => {
     for (const match of text.matchAll(retiredText)) {
-      // This exact historical event exercises hash-chain adoption, not a live store.
-      if (
-        path === "packages/ledger/test/ledger-core/adopt.test.ts" &&
-        text === ["wait", "resolved"].join(".")
-      )
-        continue;
       record("legacy-api", match[0], offset);
     }
     for (const match of text.matchAll(legacySql)) {

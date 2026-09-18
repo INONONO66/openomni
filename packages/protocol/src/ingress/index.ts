@@ -244,7 +244,7 @@ export namespace Ingress {
    * Shared `route.decided` recorder core (batch ② commit 1) — the PURE parts
    * both ingress arms (external gateway router / internal brain path) import
    * so the two once byte-identical recorders can no longer drift. Each arm
-   * still owns its append (its own scoped `LedgerAppend.port()` + typed error).
+   * still owns its record (its own scoped `DecisionFacts.port()` + typed error).
    */
   export type RouteStreamScope = RouteRecord.RouteStreamScope;
   export const ROUTE_DECIDED_FACT_TYPE = RouteRecord.ROUTE_DECIDED_FACT_TYPE;

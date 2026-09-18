@@ -26,6 +26,17 @@ export function computeActionHash(input: Omit<ActionSqlRow, "action_hash">): str
     .digest("hex");
 }
 
+export function computeDecisionFactHash(input: {
+  key: string;
+  type: string;
+  data: string;
+  timeCreated: number;
+}): string {
+  return createHash("sha256")
+    .update(JSON.stringify([input.key, input.type, input.data, input.timeCreated]))
+    .digest("hex");
+}
+
 export class ActionChainMigrationError extends Error {
   readonly reason = "non_contiguous_ordinal";
 

@@ -6,7 +6,7 @@ import {
   type BusEvent,
   type SessionTransition,
 } from "@openomni/protocol";
-import { LedgerAppend } from "@openomni/ledger";
+import { DecisionFacts } from "@openomni/ledger";
 import type { GatewayRouterPorts } from "../message-ports.js";
 import type { DeliveryReceipt } from "../../support/deliver";
 import { authorizeSend } from "./authorize";
@@ -181,7 +181,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     const authorization = { input, target: checked.target, grant: checked.grant };
     const { target } = authorization;
     // No promise may escape the admission/debit/request write unit.
-    const opened = LedgerAppend.transaction(() => {
+    const opened = DecisionFacts.transaction(() => {
       const admission = admitSend(authorization, ports, deny);
       if ("kind" in admission) return { denied: admission };
       return { request: openSendRequest(input, target, ports) };

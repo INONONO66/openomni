@@ -102,7 +102,7 @@ for (const refuse of [false, true]) {
             expect(
               independent
                 .query<{ n: number }, []>(
-                  "SELECT COUNT(*) AS n FROM ledger_event WHERE stream_id LIKE 'gateway_send:%'",
+                  "SELECT COUNT(*) AS n FROM decision_fact WHERE key LIKE 'gateway_send:%'",
                 )
                 .get()?.n,
             ).toBe(1);
@@ -141,7 +141,7 @@ for (const refuse of [false, true]) {
     expect(
       db
         .query<{ n: number }, []>(
-          "SELECT COUNT(*) AS n FROM ledger_event WHERE stream_id LIKE 'gateway_send:%'",
+          "SELECT COUNT(*) AS n FROM decision_fact WHERE key LIKE 'gateway_send:%'",
         )
         .get()?.n,
     ).toBe(refuse ? 0 : 1);

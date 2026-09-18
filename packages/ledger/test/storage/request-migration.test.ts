@@ -71,15 +71,7 @@ test("0035 upgrade preserves action parents, rowids, policies and native archive
     1,'refused',10,1,2)`);
   const before = snapshotDatabase(db);
   initializeSqliteDatabase(db);
-  for (const table of [
-    "action",
-    "policy",
-    "session",
-    "inbox",
-    "alarm",
-    "ledger_event",
-    "event_chain",
-  ]) {
+  for (const table of ["action", "policy", "session", "inbox", "alarm", "event_chain"]) {
     const previous = before.tables.find(({ name }) => name === table);
     if (previous === undefined) throw new Error(`missing historical table: ${table}`);
     const expected =
@@ -99,6 +91,14 @@ test("0035 upgrade preserves action parents, rowids, policies and native archive
         : expected,
     );
   }
+  expect(db.query("SELECT key, type, data, time_created FROM decision_fact").all()).toEqual([
+    {
+      key: "route:historical",
+      type: "route.decided",
+      data: '{"ownerKind":"workItem","ownerId":"historical"}',
+      time_created: 1n,
+    },
+  ]);
   const approvals = before.tables.find(({ name }) => name === "approval");
   if (!approvals) throw new Error("historical approval table missing");
   expect(db.query("SELECT rowid,* FROM archive_969_approval").all()).toEqual(approvals.rows);

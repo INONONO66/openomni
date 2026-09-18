@@ -1592,22 +1592,6 @@
     "count": 1
   },
   {
-    "path": "packages/ledger/src/ledger-core/schema.ts",
-    "line": 17,
-    "symbol": "ledgerEvent",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ledger/src/ledger-core/schema.ts",
-    "line": 33,
-    "symbol": "ledgerHead",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/ledger/src/provisioning/vault.ts",
     "line": 78,
     "symbol": "Revealed",

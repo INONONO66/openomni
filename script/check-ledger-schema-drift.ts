@@ -1,6 +1,6 @@
 /**
- * Ledger DDL drift gate (#552 item 4). packages/ledger/src/ledger-core/
- * schema.ts is the DDL source of truth and the hand-written migration SQL is
+ * Ledger DDL drift gate (#552 item 4). The decision-fact schema
+ * is the DDL source of truth and the hand-written migration SQL is
  * the applied truth (blueprint "Storage decisions", drizzle.config.ts); this
  * check fails when the two would produce different SQLite schemas for the
  * tables drizzle defines.
@@ -17,6 +17,7 @@
  */
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
+import * as schema from "../packages/ledger/src/storage/decision-fact-schema";
 
 const root = join(import.meta.dir, "..");
 const ledgerDir = join(root, "packages", "ledger");
@@ -79,16 +80,12 @@ async function main(): Promise<void> {
   // linker it is only resolvable from that package, not from root scripts.
   const drizzleKitApi = (await import(Bun.resolveSync("drizzle-kit/api", ledgerDir))) as {
     generateSQLiteDrizzleJson: (
-      imports: Record<string, unknown>,
+      imports: Partial<typeof schema>,
       prevId?: string,
       casing?: "snake_case" | "camelCase",
     ) => Promise<{ id: string }>;
     generateSQLiteMigration: (prev: { id: string }, cur: { id: string }) => Promise<string[]>;
   };
-  const schema = (await import(join(ledgerDir, "src", "ledger-core", "schema.ts"))) as Record<
-    string,
-    unknown
-  >;
   const { initializeSqliteDatabase } = (await import(
     join(ledgerDir, "src", "storage", "sqlite-schema-lifecycle.ts")
   )) as { initializeSqliteDatabase: (db: Database) => void };

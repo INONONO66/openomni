@@ -1,48 +1,40 @@
-import { Ingress, type SessionTransition, type Gateway, type Ledger } from "@openomni/protocol";
-import { LedgerAppend } from "@openomni/ledger";
+import {
+  Ingress,
+  type SessionTransition,
+  type Gateway,
+  type RouteNotDelivered,
+} from "@openomni/protocol";
+import { DecisionFacts } from "@openomni/ledger";
 import { targetsOfRequest, responderCandidates, ingressEvidence } from "./request/matcher.js";
 import type { GatewayRouterPorts } from "./message-ports.js";
 import type { resolveAndRecordRoute } from "./routing-resolution.js";
 import { IngressRoutingError } from "./routing-error";
 
-// route_correction producer (batch ② commit 4): a routed request-correlated
-// delivery whose reply is rejected fail-closed by kernel request admission leaves a
-// route.decided fact claiming outcome:route for a delivery that never
-// happened. This appends a correcting route.not_delivered fact on the
-// separate route_correction:<scope>:<id> stream so the ledger reflects
-// reality — the route stream's single-fact route.decided replay gate is left
-// untouched. This module is the class's sole producer (ledger-producer
-// manifest). Idempotent under channel redelivery: the correction is a
-// single-fact stream, so a redelivered rejection sees cas_conflict and the
-// recorded correction stands.
+// A rejected request-correlated delivery records a correction without changing
+// the original route decision. Redelivery preserves the first correction fact.
 function recordRouteNotDelivered(
   event: Gateway.DeliveredEvent,
   decision: Ingress.RoutingDecisionPayload,
   reason: string,
 ): void {
-  // resolveAndRecordRoute has just appended through this same synchronous
-  // adapter; no user code or await can replace it before correction.
-  const ledger = LedgerAppend.port() as LedgerAppend.Port;
+  // The route was just recorded through this synchronous adapter.
+  const decisionFacts = DecisionFacts.port() as DecisionFacts.Port;
   const streamId = Ingress.routeCorrectionStreamId(event);
-  const correction: Ledger.RouteNotDelivered = { inboundId: event.id, reason };
-  let appended: ReturnType<typeof ledger.append>;
+  const correction: RouteNotDelivered = { inboundId: event.id, reason };
+  let outcome: ReturnType<typeof decisionFacts.record>;
   try {
-    appended = ledger.append(Ingress.routeNotDeliveredFact(streamId, correction), 0);
+    outcome = decisionFacts.record(Ingress.routeNotDeliveredFact(streamId, correction, Date.now()));
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",
-      `route not-delivered correction append failed: ${error instanceof Error ? error.message : String(error)}`,
+      `route not-delivered correction record failed: ${error instanceof Error ? error.message : String(error)}`,
       decision,
     );
   }
-  if (appended.kind === "appended") return;
-  // cas_conflict — the correction already sits at seq 1 (idempotent redelivery
-  // of the same rejected reply). Confirm the recorded fact and return.
-  const fact = ledger.headFact(streamId);
-  if (fact !== undefined && fact.type === Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return;
+  if (outcome.fact.type === Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) return;
   throw new IngressRoutingError(
     "route_record_failed",
-    `route not-delivered correction conflicted without a recorded correction fact on ${streamId}`,
+    `route not-delivered correction has a different recorded fact type on ${streamId}`,
     decision,
   );
 }

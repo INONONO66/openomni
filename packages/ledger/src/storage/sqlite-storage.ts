@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { Ledger } from "../ledger-core/index";
+import { createSqliteDecisionFacts } from "./sqlite-decision-facts";
 import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapter";
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
@@ -19,7 +19,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   private closed = false;
 
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
-  readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
+  readonly decisionFacts: NonNullable<Storage.Adapter["decisionFacts"]>;
   readonly egressBudget: NonNullable<Storage.Adapter["egressBudget"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
   readonly blacklist: NonNullable<Storage.Adapter["blacklist"]>;
@@ -44,16 +44,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     }
 
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
-    // Decision-class append rides the adapter's own connection so append +
-    // projection share one transaction (#510 phase B). The append core keeps
-    // owning the SQL (raw prepared statements) — this is wiring only.
-    this.ledger = {
-      append: (event, expectedHead) => Ledger.append(this.db, event, expectedHead),
-      adoptStream: (streamId, headRevision, genesis) =>
-        Ledger.adoptStream(this.db, streamId, headRevision, genesis),
-      headFact: (streamId) => Ledger.headFact(this.db, streamId),
-      factsByType: (type) => Ledger.factsByType(this.db, type),
-    };
+    // Facts and projections share this connection and its transaction boundary.
+    this.decisionFacts = createSqliteDecisionFacts(this.db);
     this.egressBudget = createSqliteEgressBudgetAdapter(this.db);
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);
     this.blacklist = createSqliteBlacklistAdapter(this.db);
@@ -84,9 +76,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   transaction<T>(fn: () => T): T {
     // BEGIN IMMEDIATE: every Adapter.transaction caller is a write unit
     // (#510 decision-class discipline) — take the write lock up front
-    // instead of upgrading mid-transaction. Nested writers (e.g. the ledger
-    // append core's own transaction) degrade to savepoints on this one
-    // connection, so append + projection commit as a single fsync unit.
+    // instead of upgrading mid-transaction. Nested fact writers use savepoints
+    // on this connection, so facts and projections commit as one fsync unit.
     return this.db.transaction(fn).immediate();
   }
 

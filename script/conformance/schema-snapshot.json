@@ -188,6 +188,10 @@
     "traceId",
     "turnId"
   ],
+  "DecisionFact.Outcome#exists": ["fact", "kind"],
+  "DecisionFact.Outcome#recorded": ["fact", "kind"],
+  "DecisionFact.Record": ["data", "key", "timeCreated", "type"],
+  "DecisionFact.Recorded": ["data", "key", "rowHash", "timeCreated", "type"],
   "Gateway.ActorContext": [
     "actorId",
     "inboundTreatment",
@@ -603,20 +607,6 @@
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
   "L0Observation.ActionCommitted": ["id", "kind", "revision", "sessionId"],
-  "Ledger.AdoptGenesis": ["data", "timeCreated", "type"],
-  "Ledger.ChainBreak": [
-    "actual",
-    "code",
-    "detectedAt",
-    "expected",
-    "seq",
-    "streamId"
-  ],
-  "Ledger.Input": ["data", "streamId", "timeCreated", "type"],
-  "Ledger.Outcome#appended": ["eventHash", "kind", "seq"],
-  "Ledger.Outcome#cas_conflict": ["currentHead", "kind"],
-  "Ledger.RecordedFact": ["data", "seq", "streamId", "timeCreated", "type"],
-  "Ledger.RouteNotDelivered": ["inboundId", "reason"],
   "LedgerAction.Append#0": [
     "effect",
     "id",

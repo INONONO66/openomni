@@ -2143,24 +2143,6 @@
   },
   {
     "gate": "testClones",
-    "path": "packages/ledger/test/ledger-core/adopt.test.ts",
-    "line": 6,
-    "endLine": 25,
-    "symbol": "0c65970db89bda624b0dbbf71c3d2081b6743d44a778ea1158fa241d57a097fa",
-    "value": 83,
-    "count": 1
-  },
-  {
-    "gate": "testClones",
-    "path": "packages/ledger/test/ledger-core/append.test.ts",
-    "line": 12,
-    "endLine": 31,
-    "symbol": "0c65970db89bda624b0dbbf71c3d2081b6743d44a778ea1158fa241d57a097fa",
-    "value": 83,
-    "count": 1
-  },
-  {
-    "gate": "testClones",
     "path": "packages/ledger/test/provisioning/provisioning.test.ts",
     "line": 51,
     "endLine": 62,

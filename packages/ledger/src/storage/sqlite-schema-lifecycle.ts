@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { Migration } from "./migration-runner";
 import { ACTION_HASH_MIGRATION } from "./l0-hash";
+import { DECISION_FACT_MIGRATION } from "./decision-fact-migration";
 import { preflight967, U967Error, U967_MIGRATION, REPLY_GRANT_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
@@ -50,6 +51,7 @@ export const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0037_watch_alarms/migration.sql" },
   { name: REQUEST_MIGRATION },
   { name: ACTION_HASH_MIGRATION },
+  { name: DECISION_FACT_MIGRATION },
 ];
 
 export function preflightSqliteDatabase(db: Database) {
@@ -58,7 +60,9 @@ export function preflightSqliteDatabase(db: Database) {
   const latest = db
     .query<{ name: string }, []>("SELECT name FROM _migrations ORDER BY rowid DESC LIMIT 1")
     .get();
-  return latest?.name === REQUEST_MIGRATION ? "pending" : state;
+  return latest?.name === REQUEST_MIGRATION || latest?.name === ACTION_HASH_MIGRATION
+    ? "pending"
+    : state;
 }
 
 export function initializeSqliteDatabase(

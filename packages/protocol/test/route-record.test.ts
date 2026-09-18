@@ -43,22 +43,27 @@ describe("Ingress.routeStreamId", () => {
 });
 
 describe("Ingress.routeDecidedFact / routeNotDeliveredFact", () => {
-  test("builds the route.decided append input verbatim", () => {
+  test("builds the route.decided record input verbatim", () => {
     const d = decision();
-    const fact = Ingress.routeDecidedFact("route:telegram:::in-1", d);
+    const fact = Ingress.routeDecidedFact("route:telegram:::in-1", d, 1);
     expect(fact).toEqual({
-      streamId: "route:telegram:::in-1",
+      key: "route:telegram:::in-1",
       type: Ingress.ROUTE_DECIDED_FACT_TYPE,
       data: d,
+      timeCreated: 1,
     });
     expect(Ingress.ROUTE_DECIDED_FACT_TYPE).toBe("route.decided");
   });
 
   test("builds the route.not_delivered correction input", () => {
-    const fact = Ingress.routeNotDeliveredFact("route_correction:telegram:::in-1", {
-      inboundId: "in-1",
-      reason: "non-responder reply rejected",
-    });
+    const fact = Ingress.routeNotDeliveredFact(
+      "route_correction:telegram:::in-1",
+      {
+        inboundId: "in-1",
+        reason: "non-responder reply rejected",
+      },
+      1,
+    );
     expect(fact.type).toBe(Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE);
     expect(Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE).toBe("route.not_delivered");
   });
