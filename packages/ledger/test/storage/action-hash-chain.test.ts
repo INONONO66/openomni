@@ -59,9 +59,9 @@ function fresh() {
   return adapter;
 }
 
-function stored(db: Database, ordinal: number) {
+function stored(db: Database, ordinal: number, sessionId = "chain") {
   return ActionSqlRow.parse(
-    db.query("SELECT * FROM action WHERE session_id = 'chain' AND ordinal = ?").get(ordinal),
+    db.query("SELECT * FROM action WHERE session_id = ? AND ordinal = ?").get(sessionId, ordinal),
   );
 }
 
@@ -153,7 +153,44 @@ for (const column of ["prev_hash", "action_hash"] as const) {
     db.run(`UPDATE action SET ${column} = NULL WHERE ordinal = 2`);
     expect(broken(2).actual).toBe("null");
   });
+
+  test(`blob-typed ${column} fails verification without throwing`, () => {
+    const db = fresh().testDatabase();
+    db.run(`UPDATE action SET ${column} = X'303132' WHERE ordinal = 2`);
+    expect(broken(2).actual).toBe("blob:303132");
+    expect(db.query(`SELECT typeof(${column}) AS t FROM action WHERE ordinal = 2`).get()).toEqual({
+      t: "blob",
+    });
+  });
 }
+
+for (const ts of [10.5, 9007199254740992]) {
+  test(`epoch instant ${ts} round-trips through append, tree and verification`, () => {
+    const adapter = fresh();
+    const receipt = adapter.actions.append({ ...append("t"), ts }, 3);
+    expect(receipt?.action.ts).toBe(ts);
+    expect(adapter.actions.tree("chain").at(-1)?.ts).toBe(ts);
+    expect(SessionHandleStore.verifyChain("chain")).toEqual({
+      kind: "intact",
+      length: 4,
+      head: computeActionHash(stored(adapter.testDatabase(), 4)),
+    });
+  });
+}
+
+test("0039 backfills a historical row with a fractional epoch instant", () => {
+  using db = historical();
+  legacyAction(db, "one", 1);
+  db.run("UPDATE action SET ts = 10.5 WHERE id = 'one:1'");
+  Migration.applyOrdered(db, migrationDir, ORDERED_MIGRATIONS);
+  const actions = createActions(db, (operation) => operation(), { publish: () => undefined });
+  expect(actions.tree("one")[0]?.ts).toBe(10.5);
+  expect(actions.verifyChain("one")).toEqual({
+    kind: "intact",
+    length: 1,
+    head: computeActionHash(stored(db, 1, "one")),
+  });
+});
 
 test("append uses the actual head hash rather than revision minus one", () => {
   const adapter = fresh();

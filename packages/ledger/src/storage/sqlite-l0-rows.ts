@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseStoredJson, SqliteCount } from "./sqlite-json-data";
+import { parseStoredJson, SqliteCount, SqliteEpochMs } from "./sqlite-json-data";
 import { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
 
 const actionRowSchema = LedgerAction.Node;
@@ -20,7 +20,7 @@ export const ActionSqlRow = z.object({
   revert: z.string().nullable(),
   irreversible: SqliteCount.pipe(z.union([z.literal(0), z.literal(1)])),
   encoding_version: SqliteCount,
-  ts: SqliteCount,
+  ts: SqliteEpochMs,
   ordinal: SqliteCount,
   prev_hash: z.string(),
   action_hash: z.string(),

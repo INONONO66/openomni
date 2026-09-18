@@ -15,3 +15,9 @@ export const SqliteCount = z
   .transform(Number)
   .pipe(z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER));
 export const SqliteCountRow = z.object({ count: SqliteCount });
+
+// Wall-clock instants mirror protocol EpochMs: finite, non-negative, fractional allowed.
+export const SqliteEpochMs = z
+  .union([z.number(), z.bigint()])
+  .transform(Number)
+  .pipe(z.number().finite().nonnegative());
