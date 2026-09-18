@@ -248,6 +248,10 @@ function expectCompactedProjection(projection: Message.WithParts[]) {
     message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),
   );
   expect(projection.map((message) => message.info.id)).not.toContain("earlier");
+  expect(projection.map((message) => message.parts.map((part) => part.type))).toEqual([
+    ["text"],
+    ["text"],
+  ]);
   expect(texts).toHaveLength(2);
   expect(texts[0]).toContain("checkpoint");
   expect(texts[0]).not.toContain("earlier evidence");
