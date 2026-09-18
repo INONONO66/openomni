@@ -799,6 +799,19 @@ function instrumentOutput(
 		e.path,
 	);
 	const raw = instrumenter.lastFileCoverage();
+	let coverageHash = raw.hash ?? /^\s*var hash = "([0-9a-f]{40})";$/m.exec(code)?.[1];
+	if (allowUnmapped) {
+		// Istanbul guards `coverage[path] = coverageData` with `coverage[path].hash
+		// !== hash`, and that hash covers only the path and maps. An emission whose
+		// maps equal the original's would reuse an already loaded original instance
+		// and never reach the counter setter that records its transfer, so every
+		// emission carries a hash the original can never produce.
+		if (!coverageHash || code.split(`"${coverageHash}"`).length !== 3)
+			return fail("emitted_source", e.path, "Istanbul coverage hash literal is missing");
+		const distinct = sha256(`emission\0${coverageHash}`).slice(0, coverageHash.length);
+		code = code.replaceAll(`"${coverageHash}"`, `"${distinct}"`);
+		coverageHash = distinct;
+	}
 	let injectedId: string | undefined;
 	let coverageFunction: string | undefined;
 	if (allowUnmapped && e.path === "packages/protocol/src/error/index.ts") {
@@ -833,7 +846,7 @@ function instrumentOutput(
 			s: raw.s,
 			f: raw.f,
 			b: raw.b,
-			hash: raw.hash,
+			hash: coverageHash,
 			_coverageSchema: raw._coverageSchema,
 		});
 		const sourceFile = ts.createSourceFile("instrumented.js", code, ts.ScriptTarget.Latest, true);

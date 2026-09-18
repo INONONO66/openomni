@@ -1413,6 +1413,37 @@ test("shared emission cache serves a second process the same verified identity",
 	} finally { f.cleanup(); }
 }, 120_000);
 
+test("an emission identical to the original transpilation still transfers after the original loaded", () => {
+	// The 8b545e3b identity law failed on CI for protocol barrels: the original
+	// evaluated first, then a later dynamic import loaded the tsc emission, whose
+	// instrumented hash equals the original's, so Istanbul's `coverage[path].hash
+	// !== hash` guard kept the original instance and the emitted counters never
+	// reached the setter that records the transfer.
+	const f = emittedWorkspace(
+		"export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose as original } from "./pkg/src/index.ts"; const { choose } = await import("@fixture/emitted"); test("both instances", () => { expect(original(true)).toBe(42); expect(choose(false)).toBe(99); });\n',
+	);
+	try {
+		const run = f.run(["--collect", "--write-coverage", join(f.root, "coverage.json")]);
+		if (run.exit !== 1) throw new Error(JSON.stringify({ exit: run.exit, result: run.result, stderr: run.stderr }));
+		expect(run.result.complete).toBe(true);
+		const [process] = list(obj(decode(readFileSync(join(f.root, "coverage.json"), "utf8"))).processes).map(obj);
+		if (!process) throw new Error("missing process receipt");
+		const emitted = list(process.emitted).map((row) => str(obj(row).source));
+		expect(emitted).toEqual(["script/pkg/src/index.ts", "script/pkg/src/value.ts"]);
+		expect(list(process.transferred).map(str).sort()).toEqual(emitted);
+		const inventory = loadInventory(f.root, join(f.root, "inventory.json"));
+		const prepared = inventory.files.map(prepare);
+		const exact = loadCoverage(join(f.root, "coverage.json"), inventory, prepared, { root: f.root, contract: join(f.root, "contract.json"), inventory: join(f.root, "inventory.json"), plan: join(f.root, "plan.json") });
+		const file = prepared.find((file) => file.path === "script/pkg/src/index.ts");
+		if (!file) throw new Error("missing original map");
+		const counts = statementCounters(file, exact);
+		const hits = (line: number) => Object.entries(file.statementMap).filter(([, range]) => range.start.line === line).map(([id]) => counts.s[id]);
+		expect(hits(3)).toEqual([2, 1]);
+		expect(hits(4)).toEqual([1]);
+	} finally { f.cleanup(); }
+}, 120_000);
+
 test("exact collector runs an inline runtime evaluation as an external utility", () => {
 	const f = fixture({ "script/utility.ts": 'const run = Bun.spawnSync([process.execPath, "-e", "process.stdout.write(\'ok\')"], { stdout: "pipe", stderr: "pipe" }); if (run.stdout.toString() !== "ok") process.exit(7);\n' }, cli("script/utility.ts"));
 	try {
