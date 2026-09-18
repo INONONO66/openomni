@@ -116,6 +116,10 @@ export function tree(sessionId: string): LedgerAction.Node[] {
   return requiredActions().tree(sessionId);
 }
 
+export function verifyChain(sessionId: string): LedgerAction.ChainVerdict {
+  return requiredActions().verifyChain(sessionId);
+}
+
 /**
  * Authoritative, bounded read of committed history after `afterRevision`. The
  * row revision and the slice come from one transaction, so a watcher that saw a

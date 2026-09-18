@@ -10,6 +10,7 @@ export namespace Storage {
   export interface ActionSubAdapter {
     append(input: LedgerAction.Append, expectedRevision: number): LedgerAction.Receipt | undefined;
     tree(sessionId: string): LedgerAction.Node[];
+    verifyChain(sessionId: string): LedgerAction.ChainVerdict;
     /** Revision-ordered actions with `ordinal > afterRevision`, at most `limit` of them. */
     range(sessionId: string, afterRevision: number, limit: number): LedgerAction.Node[];
   }

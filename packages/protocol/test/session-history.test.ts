@@ -14,6 +14,8 @@ function action(id: string, ordinal: number) {
     irreversible: true,
     ts: 100,
     ordinal,
+    prevHash: "fixture-prev",
+    actionHash: "fixture-hash",
   } as const;
 }
 
@@ -105,16 +107,19 @@ describe("SessionHistory projections", () => {
     ];
     for (const cause of causes)
       expect(SessionHistory.Transition.parse({ ...transition, cause }).cause).toEqual(cause);
-    for (const cause of [{ kind: "inbox", inboxIds: [] }, { kind: "root", actionId: "a" }])
+    for (const cause of [
+      { kind: "inbox", inboxIds: [] },
+      { kind: "root", actionId: "a" },
+    ])
       expect(SessionHistory.Transition.safeParse({ ...transition, cause }).success).toBe(false);
   });
 
   test("outcome_unknown is a distinct outcome and payload fields are refused", () => {
     expect(SessionHistory.Outcome.parse("outcome_unknown")).toBe("outcome_unknown");
     expect(SessionHistory.Outcome.safeParse("unknown").success).toBe(false);
-    expect(
-      SessionHistory.Transition.safeParse({ ...transition, intent: payload }).success,
-    ).toBe(false);
+    expect(SessionHistory.Transition.safeParse({ ...transition, intent: payload }).success).toBe(
+      false,
+    );
   });
 
   test("an inspection nests child inspections to any depth", () => {

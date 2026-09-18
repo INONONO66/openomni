@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { Migration } from "./migration-runner";
+import { ACTION_HASH_MIGRATION } from "./l0-hash";
 import { preflight967, U967Error, U967_MIGRATION, REPLY_GRANT_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
@@ -8,7 +9,7 @@ import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
 const retiredDomain = ["work", "item"].join("_");
 
-const ORDERED_MIGRATIONS: Migration.Definition[] = [
+export const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0001_initial/migration.sql" },
   { name: "0002_communication_state/migration.sql" },
   { name: "0003_communication_state_constraints/migration.sql" },
@@ -48,10 +49,16 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0036_reply_grant_projection/migration.sql" },
   { name: "0037_watch_alarms/migration.sql" },
   { name: REQUEST_MIGRATION },
+  { name: ACTION_HASH_MIGRATION },
 ];
 
 export function preflightSqliteDatabase(db: Database) {
-  return preflight967(db, ORDERED_MIGRATIONS);
+  const state = preflight967(db, ORDERED_MIGRATIONS);
+  if (state !== "applied") return state;
+  const latest = db
+    .query<{ name: string }, []>("SELECT name FROM _migrations ORDER BY rowid DESC LIMIT 1")
+    .get();
+  return latest?.name === REQUEST_MIGRATION ? "pending" : state;
 }
 
 export function initializeSqliteDatabase(
@@ -59,7 +66,8 @@ export function initializeSqliteDatabase(
   prepare967?: Migration.Preparation967,
   target: "current" | "archive967" = "current",
 ): void {
-  const state = preflightSqliteDatabase(db);
+  // Archive approval depends on 0034, not a pending additive 0039 upgrade.
+  const state = preflight967(db, ORDERED_MIGRATIONS);
   if (state === "pending" && prepare967 === undefined) {
     const projection = inspect967Projections(db, Date.now());
     if (

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseStoredJson } from "./sqlite-json-data";
+import { parseStoredJson, SqliteCount } from "./sqlite-json-data";
 import { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
 
 const actionRowSchema = LedgerAction.Node;
@@ -18,10 +18,12 @@ export const ActionSqlRow = z.object({
   intent: z.string(),
   effect: z.string(),
   revert: z.string().nullable(),
-  irreversible: z.union([z.literal(0), z.literal(1)]),
-  encoding_version: z.number(),
-  ts: z.number(),
-  ordinal: z.number(),
+  irreversible: SqliteCount.pipe(z.union([z.literal(0), z.literal(1)])),
+  encoding_version: SqliteCount,
+  ts: SqliteCount,
+  ordinal: SqliteCount,
+  prev_hash: z.string(),
+  action_hash: z.string(),
 });
 
 export type ActionSqlRow = z.infer<typeof ActionSqlRow>;
@@ -116,6 +118,8 @@ export function decodeAction(row: ActionSqlRow): LedgerAction.Node {
     effect: { encodingVersion: row.encoding_version, value: parseStoredJson(row.effect) },
     ts: row.ts,
     ordinal: row.ordinal,
+    prevHash: row.prev_hash,
+    actionHash: row.action_hash,
   };
   return actionRowSchema.parse(
     row.revert === null

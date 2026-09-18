@@ -15,6 +15,8 @@ function action(
     kind,
     ts: 1,
     ordinal: 1,
+    prevHash: "fixture-prev",
+    actionHash: "fixture-hash",
     intent: { encodingVersion: 1, value: intent },
     effect: { encodingVersion: 1, value: { phase: "pending" } },
     irreversible: true,

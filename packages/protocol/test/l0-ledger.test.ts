@@ -31,7 +31,9 @@ describe("L0 ledger protocol", () => {
   test("rejects non-plain recorded fact data", () => {
     const values = [() => "nope", new Date(), new (class Example {})(), { [Symbol("key")]: 1 }];
     for (const data of values) {
-      expect(RecordedFact.safeParse({ streamId: "s", seq: 1, type: "t", data, timeCreated: 1 }).success).toBe(false);
+      expect(
+        RecordedFact.safeParse({ streamId: "s", seq: 1, type: "t", data, timeCreated: 1 }).success,
+      ).toBe(false);
     }
   });
 
@@ -64,6 +66,8 @@ describe("L0 ledger protocol", () => {
           irreversible: true,
           ts: 100,
           ordinal: 1,
+          prevHash: "fixture-prev",
+          actionHash: "fixture-hash",
         }).kind,
       ).toBe(kind);
     }
@@ -77,6 +81,8 @@ describe("L0 ledger protocol", () => {
       effect: payload,
       ts: 100,
       ordinal: 1,
+      prevHash: "fixture-prev",
+      actionHash: "fixture-hash",
     } as const;
     expect(LedgerAction.Node.safeParse(base).success).toBe(false);
     expect(

@@ -7,6 +7,7 @@ import {
   type LedgerSession,
   SessionTransition,
 } from "@openomni/protocol";
+import { computeActionHash, GENESIS_PREV_HASH } from "./l0-hash";
 import { inboxAppend } from "./l0-action-builders.js";
 import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
 
@@ -68,26 +69,49 @@ export function appendAction(
     .run(revision, action.sessionId, expectedRevision);
   if (updated.changes !== 1) return undefined;
   const revert = "revert" in action ? action.revert : undefined;
+  const head = db
+    .query<{ action_hash: string }, [string]>(
+      "SELECT action_hash FROM action WHERE session_id = ? ORDER BY ordinal DESC LIMIT 1",
+    )
+    .get(action.sessionId);
+  const prevHash = head === null ? GENESIS_PREV_HASH : z.string().parse(head.action_hash);
+  const stored = {
+    prev_hash: prevHash,
+    id: action.id,
+    parent_id: action.parentId,
+    session_id: action.sessionId,
+    kind: action.kind,
+    intent: JSON.stringify(action.intent.value),
+    effect: JSON.stringify(action.effect.value),
+    revert: revert === undefined ? null : JSON.stringify(revert.value),
+    irreversible: "irreversible" in action ? (1 as const) : (0 as const),
+    encoding_version: action.intent.encodingVersion,
+    ts: action.ts,
+    ordinal: revision,
+  };
+  const actionHash = computeActionHash(stored);
   db.query(
     `INSERT INTO action (
          id, parent_id, session_id, kind, intent, effect, revert, irreversible,
-         encoding_version, ts, ordinal
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         encoding_version, ts, ordinal, prev_hash, action_hash
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    action.id,
-    action.parentId,
-    action.sessionId,
-    action.kind,
-    JSON.stringify(action.intent.value),
-    JSON.stringify(action.effect.value),
-    revert === undefined ? null : JSON.stringify(revert.value),
-    "irreversible" in action ? 1 : 0,
-    action.intent.encodingVersion,
-    action.ts,
-    revision,
+    stored.id,
+    stored.parent_id,
+    stored.session_id,
+    stored.kind,
+    stored.intent,
+    stored.effect,
+    stored.revert,
+    stored.irreversible,
+    stored.encoding_version,
+    stored.ts,
+    stored.ordinal,
+    prevHash,
+    actionHash,
   );
   projectRequestDeadline(db, action);
-  const node = LedgerAction.Node.parse({ ...action, ordinal: revision });
+  const node = LedgerAction.Node.parse({ ...action, ordinal: revision, prevHash, actionHash });
   return { action: node, revision };
 }
 

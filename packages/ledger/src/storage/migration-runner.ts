@@ -6,6 +6,7 @@ import { z } from "zod";
 import { U967Error, U967_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
+import { ACTION_HASH_MIGRATION, backfillActionHashes } from "./l0-hash";
 import { migrationStatements } from "./migration-statements";
 import { parseStoredJson } from "./sqlite-json-data";
 
@@ -93,6 +94,7 @@ function applyMigration(
       for (const statement of migrationStatements(sql)) {
         db.run(statement);
       }
+      if (migration.name === ACTION_HASH_MIGRATION) backfillActionHashes(db);
       if (rebuild && db.query("PRAGMA foreign_key_check").all().length > 0) {
         throw new Error("request_migration_foreign_key_violation");
       }
