@@ -1064,6 +1064,23 @@ function green(receipt: TestSelectionReceipt): boolean {
 		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
+/** One line per failing testcase, plus each process whose JUnit does not explain its red exit. */
+function redTestcases(receipt: TestSelectionReceipt): string[] {
+	const lines: string[] = [];
+	for (const batch of receipt.batches) {
+		for (const testcase of batch.junit.matchAll(/<testcase\b([^>]+)(?<!\/)>([\s\S]*?)<\/testcase>/g)) {
+			const failure = (testcase[2] ?? "").match(/<(?:failure|error)\b([^>]*)/);
+			if (!failure) continue;
+			const attributes = testcase[1] ?? "";
+			const group = attribute(attributes, "classname");
+			const message = attribute(failure[1] ?? "", "message").replaceAll("&#10;", " ").trim().slice(0, 300);
+			lines.push(`${attribute(attributes, "file").replace(/^\.\//, "")} > ${group ? `${group} > ` : ""}${attribute(attributes, "name")}: ${message}`);
+		}
+		if (!batch.valid || (batch.process.exitCode !== 0 && batch.failures === 0))
+			lines.push(`process exit=${batch.process.exitCode} signal=${batch.process.signal} timedOut=${batch.process.timedOut} overflow=${batch.process.overflow} junit=${batch.valid ? "valid" : "invalid"}: ${batch.process.stderr.trimEnd().split("\n").slice(-20).join(" | ").slice(-1000)}`);
+	}
+	return lines;
+}
 function siteOwners(candidates: Candidate[]): Map<string, string> {
 	const owners = new Map<string, string>();
 	for (const candidate of candidates) owners.set(`${candidate.path}\u0000${JSON.stringify(candidate.site)}`, candidate.id);
@@ -1854,7 +1871,12 @@ async function campaign(options: Options): Promise<number> {
 		const baseline = errors.length
 			? null
 			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
-		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
+		if (baseline && !green(baseline)) {
+			const red = redTestcases(baseline);
+			for (const line of red) console.error(`[mutation] baseline red: ${line}`);
+			const summary = red.slice(0, 5).join("; ") + (red.length > 5 ? ` (+${red.length - 5} more)` : "");
+			errors.push(red.length ? `baseline test selection is not green: ${summary}` : "baseline test selection is not green");
+		}
 		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const selected = selectedCandidates(options, enumerated.candidates);
 		const reachCandidates = selected.filter((candidate) => !candidate.operator.startsWith("py-"));

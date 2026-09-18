@@ -656,6 +656,25 @@ test("uninvoked function is noCoverage, not survived", async () => {
 	expect(readFileSync(join(input.root, "src/a.ts"), "utf8")).toBe(source);
 }, 90000);
 
+test("red baseline names its failing testcases and unexplained process exits", async () => {
+	const failing = await fixture("export const run = () => true;", "expect(run()).toBe(false);");
+	const assertion = await invoke(failing, "red-baseline-assertion", select("boolean-literal"));
+	expect(assertion.code).toBe(2);
+	expect(assertion.report.complete).toBe(false);
+	expect(assertion.selected.every((row) => row.outcome === "uncompleted")).toBe(true);
+	expect(rows(assertion.report.errors)).toEqual([
+		expect.stringMatching(/^baseline test selection is not green: src\/a\.test\.ts > behavior: expect\(received\)\.toBe\(expected\) /),
+	]);
+	const loading = await fixture("export const run = () => true;", "", {
+		"src/a.test.ts": 'import {test,expect} from "bun:test"; import {run} from "./a"; if (run()) throw new Error("boom at load"); test("behavior", () => { expect(run()).toBe(true); });',
+	});
+	const crash = await invoke(loading, "red-baseline-load", select("boolean-literal"));
+	expect(crash.code).toBe(2);
+	expect(rows(crash.report.errors)).toEqual([
+		expect.stringMatching(/^baseline test selection is not green: process exit=1 signal=null timedOut=false overflow=false junit=invalid: .*error: boom at load/),
+	]);
+}, 90000);
+
 test("compiler rejection stays invalid and cannot make an all-invalid run green", async () => {
 	const input = await fixture("export const run = ():true => true;", "expect(run()).toBe(true);");
 	const result = await invoke(input, "invalid", select("boolean-literal"));
