@@ -1064,6 +1064,28 @@ function green(receipt: TestSelectionReceipt): boolean {
 		receipt.valid && receipt.tests > 0 && receipt.failures === 0 && receipt.exitCode === 0
 	);
 }
+type RedBatch = Pick<TestsReceipt, "junit" | "failures" | "valid"> & {
+	process: Pick<ProcessReceipt, "exitCode" | "signal" | "timedOut" | "overflow" | "stderr">;
+};
+/** Red test selection report: one line per failing testcase and per process whose JUnit
+ * does not explain its exit, plus the campaign error naming the first five of them. */
+export function describeRedBaseline(batches: readonly RedBatch[]): { lines: string[]; summary: string } {
+	const lines: string[] = [];
+	for (const batch of batches) {
+		for (const [, attributes = "", body = ""] of batch.junit.matchAll(/<testcase\b([^>]+)(?<!\/)>([\s\S]*?)<\/testcase>/g)) {
+			const failure = body.match(/<(?:failure|error)\b([^>]*)/);
+			if (!failure) continue;
+			const group = attribute(attributes, "classname");
+			const message = attribute(failure[1] ?? "", "message").replaceAll("&#10;", " ").trim().slice(0, 300);
+			lines.push(`${attribute(attributes, "file").replace(/^\.\//, "")} > ${group ? `${group} > ` : ""}${attribute(attributes, "name")}: ${message}`);
+		}
+		const { exitCode, signal, timedOut, overflow, stderr } = batch.process;
+		if (!batch.valid || (exitCode !== 0 && batch.failures === 0))
+			lines.push(`process exit=${exitCode} signal=${signal} timedOut=${timedOut} overflow=${overflow} junit=${batch.valid ? "valid" : "invalid"}: ${stderr.trimEnd().split("\n").slice(-20).join(" | ").slice(-1000)}`);
+	}
+	const named = lines.slice(0, 5).join("; ") + (lines.length > 5 ? ` (+${lines.length - 5} more)` : "");
+	return { lines, summary: `baseline test selection is not green${lines.length ? `: ${named}` : ""}` };
+}
 function siteOwners(candidates: Candidate[]): Map<string, string> {
 	const owners = new Map<string, string>();
 	for (const candidate of candidates) owners.set(`${candidate.path}\u0000${JSON.stringify(candidate.site)}`, candidate.id);
@@ -1854,21 +1876,12 @@ async function campaign(options: Options): Promise<number> {
 		const baseline = errors.length
 			? null
 			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
-		if (baseline && !green(baseline)) errors.push("baseline test selection is not green");
-		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? {
-			tests: baseline.tests,
-			failures: baseline.failures,
-			exitCode: baseline.exitCode,
-			processes: baseline.batches.map((batch) => ({
-				exitCode: batch.process.exitCode,
-				signal: batch.process.signal,
-				timedOut: batch.process.timedOut,
-				failureIdentities: batch.assertions,
-				stdoutTail: batch.failures || batch.process.exitCode !== 0 ? batch.process.stdout.slice(-8192) : "",
-				stderrTail: batch.failures || batch.process.exitCode !== 0 ? batch.process.stderr.slice(-8192) : "",
-				junitSha256: sha256(batch.junit),
-			})),
-		} : { errors })}`);
+		if (baseline && !green(baseline)) {
+			const red = describeRedBaseline(baseline.batches);
+			process.stderr.write(red.lines.map((line) => `[mutation] baseline red: ${line}\n`).join(""));
+			errors.push(red.summary);
+		}
+		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const selected = selectedCandidates(options, enumerated.candidates);
 		const reachCandidates = selected.filter((candidate) => !candidate.operator.startsWith("py-"));
 		const reach = errors.length || !baseline ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, baseline.files, executionTreeSha256);
