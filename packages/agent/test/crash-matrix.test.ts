@@ -260,6 +260,7 @@ function expectCompactedProjection(
     ["text"],
   ]);
   expect(texts).toHaveLength(2);
+  expect(projection[0]?.info.role).toBe("user");
   expect(texts[0]).toContain("checkpoint");
   expect(texts[0]).not.toContain("earlier evidence");
   expect(originalAnswer?.info.id).toBe("answer");
