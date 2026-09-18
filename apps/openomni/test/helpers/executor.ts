@@ -1,5 +1,6 @@
 import { createExecutor } from "@openomni/agent";
 import { LedgerAction } from "@openomni/protocol";
+import { fixtureHashes } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../../packages/policy/src";
 
 let ordinal = 0;
@@ -10,11 +11,6 @@ export const seededPolicy = compilePolicySnapshot({
   mandatory: [],
   rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
 });
-
-/** Fixture chain links: tests here assert executor behaviour, not the ledger's hash owner. */
-export function fixtureHashes(ordinal: number) {
-  return { prevHash: `fixture-hash-${ordinal - 1}`, actionHash: `fixture-hash-${ordinal}` };
-}
 
 /** Production executor composition with deterministic in-memory receipts. */
 export const executor = createExecutor({

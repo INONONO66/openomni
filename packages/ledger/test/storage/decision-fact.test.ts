@@ -8,6 +8,7 @@ import { computeDecisionFactHash } from "../../src/storage/l0-hash";
 import {
   DecisionFactMigrationError,
   DECISION_FACT_MIGRATION,
+  RETIRED_DECISION_TABLES,
 } from "../../src/storage/decision-fact-migration";
 import { Migration } from "../../src/storage/migration-runner";
 import {
@@ -19,8 +20,8 @@ import { U967Error } from "../../src/storage/u967-preflight";
 import { assertArchiveEquality } from "../../../../script/ledger-archive-snapshot";
 
 const migrationDir = join(import.meta.dir, "../../migration");
-const retiredFacts = ["ledger", "event"].join("_");
-const retiredHeads = ["ledger", "head"].join("_");
+const retiredFacts = RETIRED_DECISION_TABLES.facts;
+const retiredHeads = RETIRED_DECISION_TABLES.heads;
 const input = {
   key: "route:first",
   type: "route.decided",
@@ -205,4 +206,26 @@ test.each([
     refused = true;
   }
   expect(refused).toBe(true);
+});
+
+test("0040 post-step is a no-op when the retired stream tables were never created", () => {
+  using db = new Database(":memory:");
+  Migration.applyOrdered(db, migrationDir, [{ name: DECISION_FACT_MIGRATION }]);
+  expect(db.query("SELECT COUNT(*) AS count FROM decision_fact").get()).toEqual({ count: 0 });
+  expect(
+    db
+      .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)")
+      .all(retiredFacts, retiredHeads),
+  ).toEqual([]);
+  Migration.applyOrdered(db, migrationDir, [{ name: DECISION_FACT_MIGRATION }]);
+});
+
+test("decision facts keep fractional epoch instants without rounding", () => {
+  Storage.initialize({ dbPath: ":memory:" });
+  const facts = DecisionFacts.port();
+  if (facts === undefined) throw new Error("decision facts port missing");
+  const outcome = facts.record({ ...input, key: "route:fractional", timeCreated: 1.5 });
+  expect(outcome.kind).toBe("recorded");
+  expect(outcome.fact.timeCreated).toBe(1.5);
+  expect(facts.head("route:fractional")?.timeCreated).toBe(1.5);
 });

@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { RETIRED_DECISION_TABLES } from "../../src/storage/decision-fact-migration";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -44,13 +45,11 @@ export function createDispositionFixture(reportCleanup = true) {
   db.run(
     "INSERT INTO event_chain (event_type, event_hash, prev_hash, time_created) VALUES ('historical', 'opaque-original-hash', 'opaque-original-parent', 1)",
   );
-  const retiredFacts = ["ledger", "event"].join("_");
-  const retiredHeads = ["ledger", "head"].join("_");
   db.run(
-    `INSERT INTO ${retiredFacts} (stream_id, seq, type, data, prev_hash, event_hash, time_created)
+    `INSERT INTO ${RETIRED_DECISION_TABLES.facts} (stream_id, seq, type, data, prev_hash, event_hash, time_created)
      VALUES ('route:historical', 1, 'route.decided', '{"ownerKind":"workItem","ownerId":"historical"}', 'original-parent', 'original-hash', 1)`,
   );
-  db.run(`INSERT INTO ${retiredHeads} (stream_id, head) VALUES ('route:historical', 1)`);
+  db.run(`INSERT INTO ${RETIRED_DECISION_TABLES.heads} (stream_id, head) VALUES ('route:historical', 1)`);
   insertHistoricalWait(
     db,
     HistoricalWait.parse({

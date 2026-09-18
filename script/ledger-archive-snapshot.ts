@@ -16,7 +16,10 @@ import { preflightSqliteDatabase } from "../packages/ledger/src/storage/sqlite-s
 import { REQUEST_MIGRATION } from "../packages/ledger/src/storage/u969-preflight";
 import { ACTION_HASH_MIGRATION } from "../packages/ledger/src/storage/l0-hash";
 import { verifyChain } from "../packages/ledger/src/storage/sqlite-l0-actions";
-import { DECISION_FACT_MIGRATION } from "../packages/ledger/src/storage/decision-fact-migration";
+import {
+  DECISION_FACT_MIGRATION,
+  RETIRED_DECISION_TABLES,
+} from "../packages/ledger/src/storage/decision-fact-migration";
 import { Migration } from "../packages/ledger/src/storage/migration-runner";
 
 export function fileSha256(path: string): string {
@@ -92,8 +95,8 @@ export function assertArchiveEquality(
   }
   if (dispositionDelta && hasActionHashUpgrade(source, restored)) rebuiltTables.add("action");
   if (dispositionDelta && hasDecisionFactUpgrade(source, restored)) {
-    removedTables.add(["ledger", "event"].join("_"));
-    removedTables.add(["ledger", "head"].join("_"));
+    removedTables.add(RETIRED_DECISION_TABLES.facts);
+    removedTables.add(RETIRED_DECISION_TABLES.heads);
     addedTables.add("decision_fact");
   }
   if (requestCutover) {
