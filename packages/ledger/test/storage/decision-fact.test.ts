@@ -229,3 +229,28 @@ test("decision facts keep fractional epoch instants without rounding", () => {
   expect(outcome.fact.timeCreated).toBe(1.5);
   expect(facts.head("route:fractional")?.timeCreated).toBe(1.5);
 });
+
+test.each([
+  { dropped: retiredHeads, survivor: retiredFacts },
+  { dropped: retiredFacts, survivor: retiredHeads },
+])("migration refuses a partial retired schema missing $dropped and writes no marker", ({ dropped, survivor }) => {
+  using db = historicalDatabase();
+  seed(db, "route:valid", 1);
+  seed(db, "other:unknown", 1);
+  db.run(`DROP TABLE ${dropped}`);
+  let refused = false;
+  try {
+    Migration.applyOrdered(db, migrationDir, [{ name: DECISION_FACT_MIGRATION }]);
+  } catch (error) {
+    expect(error).toBeInstanceOf(DecisionFactMigrationError);
+    if (!(error instanceof DecisionFactMigrationError)) throw error;
+    expect(error.reason).toBe("partial_retired_schema");
+    refused = true;
+  }
+  expect(refused).toBe(true);
+  expect(db.query(`SELECT COUNT(*) AS count FROM ${survivor}`).get()).toEqual({ count: 2 });
+  expect(db.query("SELECT name FROM sqlite_schema WHERE name = 'decision_fact'").all()).toEqual([]);
+  expect(
+    db.query("SELECT name FROM _migrations WHERE name = ?").all(DECISION_FACT_MIGRATION),
+  ).toEqual([]);
+});

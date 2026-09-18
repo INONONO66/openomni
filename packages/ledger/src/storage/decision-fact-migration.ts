@@ -8,7 +8,8 @@ export const DECISION_FACT_MIGRATION = "0040_decision_fact/migration.sql";
 /** The retired stream tables are named only here; every other module imports this owner. */
 export const RETIRED_DECISION_TABLES = { facts: "ledger_event", heads: "ledger_head" } as const;
 
-function retiredTablesPresent(db: Database): boolean {
+/** "absent" = nothing to retire; "present" = both tables; one table alone is a broken schema. */
+function retiredSchemaState(db: Database): "absent" | "present" | "partial" {
   const present = z
     .object({ name: z.string() })
     .array()
@@ -17,15 +18,17 @@ function retiredTablesPresent(db: Database): boolean {
         .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)")
         .all(RETIRED_DECISION_TABLES.facts, RETIRED_DECISION_TABLES.heads),
     );
-  return present.length === 2;
+  if (present.length === 0) return "absent";
+  return present.length === 2 ? "present" : "partial";
 }
 
 export class DecisionFactMigrationError extends Error {
-  readonly reason = "unknown_stream_class";
+  readonly reason: "unknown_stream_class" | "partial_retired_schema";
 
-  constructor(readonly streamId: string) {
+  constructor(readonly streamId: string, reason: "unknown_stream_class" | "partial_retired_schema" = "unknown_stream_class") {
     super(`decision fact migration refused: ${streamId}`);
     this.name = "DecisionFactMigrationError";
+    this.reason = reason;
   }
 }
 
@@ -37,7 +40,9 @@ const HistoricalHead = z.object({
 });
 
 export function migrateDecisionFacts(db: Database): void {
-  if (!retiredTablesPresent(db)) return;
+  const schema = retiredSchemaState(db);
+  if (schema === "absent") return;
+  if (schema === "partial") throw new DecisionFactMigrationError("retired_schema", "partial_retired_schema");
   const streams = z
     .object({ stream_id: z.string() })
     .array()
