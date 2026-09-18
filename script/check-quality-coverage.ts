@@ -437,6 +437,20 @@ function nullableExit(value: Json | undefined): number | null {
 function nullableSignal(value: Json | undefined): string | null {
 	return value === null ? null : choice(value, Object.keys(osConstants.signals));
 }
+function importMetaUrl(value: ts.Node | undefined): boolean {
+	return value !== undefined && ts.isPropertyAccessExpression(value) && value.name.text === "url" &&
+		ts.isMetaProperty(value.expression) && value.expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
+		value.expression.name.text === "meta";
+}
+function frozenWorkerTarget(node: ts.NewExpression, sf: ts.SourceFile): boolean {
+	const argument = node.arguments?.[0];
+	if (!node.arguments || ![1, 2].includes(node.arguments.length) || !argument ||
+		!ts.isNewExpression(argument) || argument.expression.getText(sf) !== "URL")
+		return false;
+	const args = argument.arguments ?? [];
+	return args.length === 1 ? importMetaUrl(args[0]) :
+		args.length === 2 && args[0] !== undefined && ts.isStringLiteral(args[0]) && importMetaUrl(args[1]);
+}
 function syntax(source: string, path: string): void {
 	const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
 	function visit(node: ts.Node): void {
@@ -454,34 +468,8 @@ function syntax(source: string, path: string): void {
 		}
 		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Function")
 			fail("unsupported_syntax", path, "dynamic executable source");
-		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Worker") {
-			const argument = node.arguments?.[0];
-			const urlArguments = argument && ts.isNewExpression(argument) ? argument.arguments ?? [] : [];
-			const importMetaUrl = (value: ts.Node | undefined): boolean =>
-				value !== undefined &&
-				ts.isPropertyAccessExpression(value) &&
-				value.name.text === "url" &&
-				ts.isMetaProperty(value.expression) &&
-				value.expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
-				value.expression.name.text === "meta";
-			const firstTarget = urlArguments[0];
-			const baseTarget = urlArguments[1];
-			const validTarget = urlArguments.length === 1
-				? importMetaUrl(firstTarget)
-				: urlArguments.length === 2 &&
-					firstTarget !== undefined &&
-					ts.isStringLiteral(firstTarget) &&
-					importMetaUrl(baseTarget);
-			if (
-				!node.arguments ||
-				(node.arguments.length !== 1 && node.arguments.length !== 2) ||
-				!argument ||
-				!ts.isNewExpression(argument) ||
-				argument.expression.getText(sf) !== "URL" ||
-				!validTarget
-			)
-				fail("unsupported_process", path, "worker target is not a frozen file URL");
-		}
+		if (ts.isNewExpression(node) && node.expression.getText(sf) === "Worker" && !frozenWorkerTarget(node, sf))
+			fail("unsupported_process", path, "worker target is not a frozen file URL");
 		const moduleArgument =
 			ts.isStringLiteral(node) &&
 			ts.isCallExpression(node.parent) &&
@@ -1093,7 +1081,7 @@ function receiptEmission(data: PreloadInputs, path: string): EmissionProof {
 	proofs.set(path, proof);
 	return proof;
 }
-function verifiedEmission(data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
+function emittedSource(data: PreloadInputs, path: string) {
 	pathValue(path);
 	if (!/\.[cm]?js$/.test(path) || !existsSync(join(data.options.root, `${path}.map`)))
 		return fail("identity", path, "loaded source absent from frozen inventory and verified compiler output");
@@ -1113,23 +1101,32 @@ function verifiedEmission(data: PreloadInputs, path: string): { file: Prepared; 
 	if (sha256(source) !== original.entry.sha256) fail("tamper", sourcePath, "emitted original source changed");
 	if (map.sourcesContent !== undefined && (array(map.sourcesContent).length !== 1 || array(map.sourcesContent)[0] !== source))
 		fail("source_map", path, "emitted source content differs");
+	return { javascript, sourceMap, map, sourcePath, original, source };
+}
+function emissionProject(data: PreloadInputs, project: string, sourcePath: string, path: string): ts.ParsedCommandLine | undefined {
+	const parsed = ts.getParsedCommandLineOfConfigFile(join(data.options.root, project), {}, {
+		...ts.sys,
+		readFile: (absolute) => {
+			const path = relative(data.options.root, absolute);
+			const config = data.configurations.find((config) => config.path === path);
+			if (!config || sha256(content(data.options.root, path)) !== config.sha256)
+				return fail("emitted_config", path, "compiler configuration is not frozen");
+			return content(data.options.root, path).toString("utf8");
+		},
+		onUnRecoverableConfigFileDiagnostic: () => fail("emitted_config", project, "invalid compiler configuration"),
+	});
+	if (!parsed || parsed.errors.length) fail("emitted_config", project, "invalid compiler configuration");
+	if (parsed.options.noEmit || !parsed.options.outDir || !parsed.fileNames.includes(join(data.options.root, sourcePath))) return undefined;
+	if (!ts.getOutputFileNames(parsed, join(data.options.root, sourcePath), false).includes(join(data.options.root, path))) return undefined;
+	if (!parsed.options.sourceMap || parsed.options.inlineSourceMap || parsed.options.outFile || parsed.options.emitDeclarationOnly || parsed.projectReferences?.length || parsed.options.module !== ts.ModuleKind.ESNext)
+		fail("emitted_config", project, "only external-map per-source ES module emission is supported");
+	return parsed;
+}
+function verifiedEmission(data: PreloadInputs, path: string): { file: Prepared; proof: EmissionProof } {
+	const { javascript, sourceMap, map, sourcePath, original, source } = emittedSource(data, path);
 	for (const project of data.projects.filter((project) => sourcePath.startsWith(`${dirname(project)}/`)).sort()) {
-		const parsed = ts.getParsedCommandLineOfConfigFile(join(data.options.root, project), {}, {
-			...ts.sys,
-			readFile: (absolute) => {
-				const path = relative(data.options.root, absolute);
-				const config = data.configurations.find((config) => config.path === path);
-				if (!config || sha256(content(data.options.root, path)) !== config.sha256)
-					return fail("emitted_config", path, "compiler configuration is not frozen");
-				return content(data.options.root, path).toString("utf8");
-			},
-			onUnRecoverableConfigFileDiagnostic: () => fail("emitted_config", project, "invalid compiler configuration"),
-		});
-		if (!parsed || parsed.errors.length) fail("emitted_config", project, "invalid compiler configuration");
-		if (parsed.options.noEmit || !parsed.options.outDir || !parsed.fileNames.includes(join(data.options.root, sourcePath))) continue;
-		if (!ts.getOutputFileNames(parsed, join(data.options.root, sourcePath), false).includes(join(data.options.root, path))) continue;
-		if (!parsed.options.sourceMap || parsed.options.inlineSourceMap || parsed.options.outFile || parsed.options.emitDeclarationOnly || parsed.projectReferences?.length || parsed.options.module !== ts.ModuleKind.ESNext)
-			fail("emitted_config", project, "only external-map per-source ES module emission is supported");
+		const parsed = emissionProject(data, project, sourcePath, path);
+		if (!parsed) continue;
 		const compiler = emittedProgram(data, project, parsed);
 		const input = compiler.program.getSourceFile(join(data.options.root, sourcePath)) ?? fail("emitted_source", sourcePath, "compiler original is missing");
 		const outputs = new Map<string, string>();
@@ -1365,18 +1362,7 @@ function pythonTraceArcs(value: Json | undefined, file: Prepared): ObjectValue {
 	return row;
 }
 
-function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
-	const root = data.selected && object(value).parent === "";
-	// Bun and Node processes always carry their emission proofs (possibly none);
-	// Python processes load no compiled JavaScript and carry no such field.
-	const javascript = object(value).runtime !== "python";
-	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage", ...(root ? ["cwd"] : []), ...(javascript ? ["transferred", "emitted"] : [])]);
-	const loaded = array(r.loaded).map(pathValue);
-	const transferred = javascript ? array(r.transferred).map(pathValue) : undefined;
-	if (transferred) {
-		unique(transferred, "transferred source");
-		for (const path of transferred) if (!loaded.includes(path)) fail("identity", path, "transferred source was not loaded");
-	}
+function receiptCounters(r: ObjectValue, data: Inputs, loaded: string[]) {
 	unique(loaded, "loaded source");
 	if ([...loaded].sort().join("\0") !== Object.keys(object(r.coverage)).sort().join("\0"))
 		fail("incomplete_coverage", text(r.id), "loaded source counter record missing");
@@ -1393,6 +1379,21 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	for (const path of expectedLines)
 		if (Object.keys(lines[path] ?? {}).join(",") !== data.files.find((f) => f.entry.path === path)?.python?.lines.join(","))
 			fail("incomplete_coverage", path, "Python executable line IDs differ");
+	return { coverage, lines };
+}
+function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
+	const root = data.selected && object(value).parent === "";
+	// Bun and Node processes always carry their emission proofs (possibly none);
+	// Python processes load no compiled JavaScript and carry no such field.
+	const javascript = object(value).runtime !== "python";
+	const r = object(value, ["id", "parent", "pid", "exitCode", "signal", "runtime", "entry", "args", "command", "lines", "trace", "children", "loaded", "coverage", ...(root ? ["cwd"] : []), ...(javascript ? ["transferred", "emitted"] : [])]);
+	const loaded = array(r.loaded).map(pathValue);
+	const transferred = javascript ? array(r.transferred).map(pathValue) : undefined;
+	if (transferred) {
+		unique(transferred, "transferred source");
+		for (const path of transferred) if (!loaded.includes(path)) fail("identity", path, "transferred source was not loaded");
+	}
+	const { coverage, lines } = receiptCounters(r, data, loaded);
 	const exitCode = nullableExit(r.exitCode);
 	const signal = nullableSignal(r.signal);
 	if ((exitCode === null) === (signal === null)) fail("execution", text(r.id), "invalid native terminal outcome");
