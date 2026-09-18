@@ -254,7 +254,12 @@ function expectCompactedProjection(
   const texts = projection.map((message) =>
     message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),
   );
-  expect(projection.map((message) => message.info.id)).not.toContain("earlier");
+  const ids = projection.map((message) => message.info.id);
+  expect(ids).not.toContain("earlier");
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const message of projection) {
+    expect(message.parts.map((part) => part.messageID)).toEqual([message.info.id]);
+  }
   expect(projection.map((message) => message.parts.map((part) => part.type))).toEqual([
     ["text"],
     ["text"],
