@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, pythonWorker, sha256 } from "./run-quality-mutations";
+import { copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -19,7 +19,7 @@ test("switch case reach instrumentation inserts a probe after the label", () => 
 			id: "case", path: "a.ts", sourceSha256: sha256(source),
 			site: { start, end, mode: "case" }, tests: [],
 		}], directory);
-		expect(transformed).toContain('case 1:require("node:fs").writeFileSync');
+		expect(transformed).toContain(`case 1:${probeText(join(directory, "case"))};`);
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -54,6 +54,30 @@ test("statement-entry probes remain outside overlapping expression probes", asyn
 		expect(result.stdout.trim()).toBe("1");
 		expect(readFileSync(join(directory, "entry"), "utf8")).toBe("1");
 		expect(readFileSync(join(directory, "value"), "utf8")).toBe("1");
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("reach probes write each marker once per process", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-probe-once-"));
+	try {
+		const marker = join(directory, "site");
+		const source = `let total = 0;\nfor (let i = 0; i < 3; i++) { total += i; if (i === 0) require("node:fs").rmSync(${JSON.stringify(marker)}); }\nconsole.log(total);`;
+		const start = source.indexOf("i;"), end = start + 1;
+		const transformed = instrument(source, [
+			{ id: "site", path: "a.ts", sourceSha256: sha256(source), site: { start, end, mode: "expression" }, tests: [] },
+			{ id: "total", path: "a.ts", sourceSha256: sha256(source), site: { start: source.indexOf("console.log(total)"), end: source.indexOf("console.log(total)"), mode: "statement" }, tests: [] },
+			{ id: "loop", path: "a.ts", sourceSha256: sha256(source), site: { start: source.indexOf("for"), end: source.indexOf("\nconsole"), mode: "statement" }, tests: [] },
+		], directory);
+		expect(transformed).toContain(probeText(marker));
+		const path = join(directory, "a.ts");
+		writeFileSync(path, transformed);
+		const result = await execute([process.execPath, path], directory, 5000);
+		expect(result.stderr).toBe("");
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout.trim()).toBe("3");
+		expect(existsSync(marker)).toBe(false);
+		expect(readFileSync(join(directory, "total"), "utf8")).toBe("1");
+		expect(readFileSync(join(directory, "loop"), "utf8")).toBe("1");
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
