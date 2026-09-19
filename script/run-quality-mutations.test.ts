@@ -375,6 +375,27 @@ test("sequential compiler analysis preserves first-owner candidates and complete
 	expect(actual.enumerated.candidates.length).toBeGreaterThan(0);
 }, 90000);
 
+test("reach probes on assignment targets wrap the consuming assignment", async () => {
+	const source = 'export function run() { let a = 0; let rest: number[] = []; const pair = { a: 1, b: [2, 3] }; ({ a, b: [...rest] } = pair); a.valueOf(); [a] = [a + 1]; return { a, rest, sum: [a, ...rest].length }; }';
+	const input = await fixture(source, "expect(run().sum).toBe(3);");
+	const contract = readContract(join(input.root, "contract.json"));
+	const operators = ["object-literal", "array-literal", "arithmetic"]
+		.map((id) => ({ id, replacements: new Map([["+", ["-"]]]) }));
+	const candidates = analyze(input.root, contract, buildInventory(input.root, contract), operators)
+		.enumerated.candidates.filter((candidate) => candidate.path === "src/a.ts" && candidate.site.mode === "expression");
+	const targets = ['{ a, b: [...rest] }', '[...rest]', '[a]'].map((text) => source.indexOf(text));
+	for (const offset of targets) expect(candidates.some((candidate) => candidate.startOffset === offset)).toBe(true);
+	for (const candidate of candidates.filter((candidate) => targets.includes(candidate.startOffset)))
+		expect(source.slice(candidate.site.start, candidate.site.end)).toMatch(/^[[{(].* = .*[\])]$/);
+	const directory = mkdtempSync(join(tmpdir(), "mutation-assignment-probe-"));
+	try {
+		const transformed = instrument(source, candidates.map((candidate, index) => ({
+			id: `site-${index}`, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests: [],
+		})), directory);
+		expect(new Bun.Transpiler({ loader: "ts" }).transformSync(transformed)).toContain("writeFileSync");
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+}, 90000);
+
 test("enumeration preserves directive prologues and mutates regex quantifiers and anchors", async () => {
 	const source = '"use strict"; "custom directive"; export function run() { "use strict"; const pattern = /^a+b*c?$/; "ordinary"; if (true) "branch string"; return pattern.test("ab"); }';
 	const input = await fixture(source, "expect(run()).toBe(true);");

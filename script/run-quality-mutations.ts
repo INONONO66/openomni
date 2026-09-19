@@ -783,9 +783,32 @@ export function analyze(directory: string, contract: Contract, inventory: Invent
 	return { enumerated: result, sourceDiagnostics };
 }
 
+// An assignment target (`{ a } = x`, `[a] = x`, `a.b += 1`) is not a value:
+// wrapping it in a probe yields an invalid assignment target, so the probe
+// moves to the assignment expression that consumes it.
+function assignmentConsumer(node: ts.Node): ts.Node | undefined {
+	const parent = node.parent;
+	if (ts.isBinaryExpression(parent) && parent.left === node)
+		return parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+			parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+			? parent
+			: undefined;
+	if (
+		ts.isArrayLiteralExpression(parent) ||
+		ts.isSpreadElement(parent) ||
+		ts.isSpreadAssignment(parent) ||
+		(ts.isPropertyAssignment(parent) && parent.initializer === node)
+	)
+		return assignmentConsumer(parent);
+	if (ts.isObjectLiteralExpression(parent) && ts.isPropertyAssignment(node)) return assignmentConsumer(parent);
+	return undefined;
+}
+
 // Probe a value-producing boundary, never sever a Reference used as a callee,
 // delete operand, or continuing optional chain. Arguments/keys stay lazy.
 function valueBoundary(node: ts.Node): ts.Node {
+	const consumer = assignmentConsumer(node);
+	if (consumer) return valueBoundary(consumer);
 	const parent = node.parent;
 	if (
 		((ts.isPropertyAccessExpression(parent) ||
