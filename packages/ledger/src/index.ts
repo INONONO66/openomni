@@ -1,7 +1,6 @@
 export { initialize, replaceFileAtomically, SqliteStorageAdapter, Storage } from "./storage";
 export { DecisionFacts } from "./storage/decision-fact-port";
 export * as SessionHandleStore from "./session/kernel.js";
-export { armAlarm, cancelAlarm } from "./session/kernel.js";
 export { SurfaceKey } from "./surface-key";
 export { ActorRegistry } from "./actor/index.js";
 export { BlacklistStore } from "./blacklist/index.js";

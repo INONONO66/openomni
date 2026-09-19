@@ -1,5 +1,4 @@
 import {
-  type Alarm,
   canonicalDigest,
   type Inbox,
   type LedgerAction,
@@ -103,18 +102,6 @@ export function commitReceivedMessage(input: Inbox.Commit): {
   const received = requiredInbox().receive(input);
   if (received === undefined) throw new Error(`inbox receive refused: ${input.id}`);
   return received;
-}
-
-/** Commit the `alarm.arm` action and alarm row in one transaction; refusal fails closed. */
-export function armAlarm(input: Alarm.Arm): Alarm.Row {
-  const row = requiredAlarms().arm(input);
-  if (row === undefined) throw new Error(`alarm arm refused: ${input.id}`);
-  return row;
-}
-
-/** Fenced consume of one alarm; undefined means another owner already consumed it. */
-export function cancelAlarm(id: string, sessionId: string, at: number): Alarm.Row | undefined {
-  return requiredAlarms().cancel(id, sessionId, at);
 }
 
 export function pendingInbox(sessionId: string): Inbox.Row[] {
@@ -595,11 +582,5 @@ function requiredActions() {
 function requiredInbox() {
   const adapter = Storage.get().inbox;
   if (adapter === undefined) throw new Error("L0 storage capability is unavailable: inbox");
-  return adapter;
-}
-
-function requiredAlarms() {
-  const adapter = Storage.get().alarms;
-  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: alarms");
   return adapter;
 }

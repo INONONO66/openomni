@@ -707,37 +707,3 @@ describe("session kernel folds", () => {
     ).toThrow("requires a subscribable observation sink");
   });
 });
-
-describe("alarm arm fail-closed", () => {
-  test("a refused alarm.arm throws instead of silently no-op arming, and no row is written", () => {
-    expect(() =>
-      SessionHandleStore.armAlarm({
-        id: "retry-arm-refused",
-        sessionId: "missing-session",
-        kind: "at",
-        fireAt: 1,
-        spec: {
-          encodingVersion: 1,
-          value: { kind: "retry.scheduled", attempt: 1, reason: "transient_error", notBefore: 1 },
-        },
-      }),
-    ).toThrow("alarm arm refused: retry-arm-refused");
-    expect(Storage.get().alarms?.get("retry-arm-refused")).toBeUndefined();
-  });
-
-  test("an admitted alarm.arm returns the armed row", () => {
-    materialize("arm-session");
-    expect(
-      SessionHandleStore.armAlarm({
-        id: "retry-arm-admitted",
-        sessionId: "arm-session",
-        kind: "at",
-        fireAt: 5,
-        spec: {
-          encodingVersion: 1,
-          value: { kind: "retry.scheduled", attempt: 1, reason: "transient_error", notBefore: 5 },
-        },
-      }),
-    ).toMatchObject({ id: "retry-arm-admitted", kind: "at", status: "armed", fence: 0 });
-  });
-});

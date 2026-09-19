@@ -62,10 +62,11 @@ test("killing the kernel during the retry wait leaves a durable schedule that bo
         });
 
         // Boot alarm owner: fenced consume-once, then wake the session.
-        expect(
-          SessionHandleStore.cancelAlarm(alarmId, rearmSessionId, 100_000),
-        ).toMatchObject({ status: "cancelled" });
-        expect(SessionHandleStore.cancelAlarm(alarmId, rearmSessionId, 100_000)).toBeUndefined();
+        const alarms = Storage.get().alarms;
+        expect(alarms?.cancel(alarmId, rearmSessionId, 100_000)).toMatchObject({
+          status: "cancelled",
+        });
+        expect(alarms?.cancel(alarmId, rearmSessionId, 100_000)).toBeUndefined();
 
         const calls = { model: 0 };
         const runtime: SessionRuntime = {

@@ -1,7 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { createExecutor } from "../../../src/index";
-import { runTestOperation } from "../../helpers/compiled-policy";
-import type { ExecutionLedger } from "../../../src/executor";
+import { recordingLedger, runTestOperation } from "../../helpers/compiled-policy";
 import { compilePolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 
@@ -31,23 +30,7 @@ const mandatory: PolicyRow.Row = {
 };
 
 function harness(rows: readonly PolicyRow.Row[]) {
-  const actions: LedgerAction.Append[] = [];
-  let revision = 0;
-  const ledger: ExecutionLedger = {
-    async commit(action) {
-      actions.push(action);
-      revision += 1;
-      return {
-        action: {
-          ...action,
-          ordinal: revision,
-          prevHash: "fixture-prev",
-          actionHash: "fixture-hash",
-        },
-        revision,
-      };
-    },
-  };
+  const { committed: actions, ledger } = recordingLedger();
   const executor = createExecutor({
     policy: compilePolicySnapshot({
       generation: 1,
@@ -351,15 +334,12 @@ describe("the durable boundary child action commits only for executed outcomes",
     expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
     const children = boundaryChildren(actions);
     expect(children).toHaveLength(1);
-    const intent = actions.find((action) => `${action.id}:boundary` === children[0]?.id);
-    expect(children[0]).toMatchObject({
-      parentId: intent?.id,
-      kind: "tool",
-      irreversible: true,
-      effect: expect.objectContaining({
-        value: expect.objectContaining({ phase: "boundary", result: { ok: true } }),
-      }),
-    });
+    const child = children[0];
+    const intent = actions.find((action) => `${action.id}:boundary` === child?.id);
+    expect(child?.parentId).toBe(intent?.id);
+    expect(child?.kind).toBe("tool");
+    expect(child !== undefined && "irreversible" in child && child.irreversible).toBe(true);
+    expect(child?.effect?.value).toMatchObject({ phase: "boundary", result: { ok: true } });
   });
 
   it("a post-denied boundary request commits NO boundary child: recovery must never resurrect a reverted outcome as executed", async () => {

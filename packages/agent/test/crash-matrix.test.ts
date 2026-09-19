@@ -354,9 +354,10 @@ async function recoverRetryAlarm(witness: Witness) {
   ).toBe("transient_error");
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
   // Boot alarm owner: fenced consume-once, then wake. A second consume finds nothing.
-  const consumed = SessionHandleStore.cancelAlarm(alarmId, sessionId, 100_000);
+  const alarms = Storage.get().alarms;
+  const consumed = alarms?.cancel(alarmId, sessionId, 100_000);
   expect(consumed).toMatchObject({ id: alarmId, kind: "at", status: "cancelled" });
-  expect(SessionHandleStore.cancelAlarm(alarmId, sessionId, 100_000)).toBeUndefined();
+  expect(alarms?.cancel(alarmId, sessionId, 100_000)).toBeUndefined();
   expect(await recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);

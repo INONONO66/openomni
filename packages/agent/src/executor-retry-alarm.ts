@@ -1,4 +1,4 @@
-import { armAlarm, cancelAlarm } from "@openomni/ledger";
+import { Storage } from "@openomni/ledger";
 import { Retry } from "@openomni/llm";
 
 /**
@@ -21,10 +21,15 @@ export interface RetryAlarmPort {
 }
 
 /** Production port over the single alarm owner: alarm row + `alarm.arm` action in one transaction. */
-export function createRetryAlarmPort(sessionId: string, clock: () => number) {
+export function createRetryAlarmPort(sessionId: string, clock: () => number): RetryAlarmPort {
+  const alarms = () => {
+    const adapter = Storage.get().alarms;
+    if (adapter === undefined) throw new Error("L0 storage capability is unavailable: alarms");
+    return adapter;
+  };
   return {
-    arm(input) {
-      armAlarm({
+    arm: (input) => {
+      const row = alarms().arm({
         id: input.id,
         sessionId,
         kind: "at",
@@ -39,10 +44,11 @@ export function createRetryAlarmPort(sessionId: string, clock: () => number) {
           },
         },
       });
+      if (row === undefined) throw new Error(`alarm arm refused: ${input.id}`);
     },
     wait: (fireAt, signal) => Retry.sleep(Math.max(0, fireAt - clock()), signal),
-    settle(id) {
-      cancelAlarm(id, sessionId, clock());
+    settle: (id) => {
+      alarms().cancel(id, sessionId, clock());
     },
-  } satisfies RetryAlarmPort;
+  };
 }
