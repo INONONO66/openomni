@@ -1,22 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { Storage } from "@openomni/ledger";
 import { createRetryAlarmPort } from "../src/executor-retry-alarm";
+import { requestLedger } from "./helpers/request-ledger";
 
 const clock = () => 100;
 const schedule = { id: "retry-1", attempt: 1, reason: "transient_error", fireAt: 150 };
 
-function materialize(id: string) {
-  return SessionHandleStore.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 0,
-    actionId: `${id}:configure`,
-    at: 1,
-  });
-}
+const materialize = (id: string) => requestLedger({ id, clock });
 
 describe("retry alarm port over the single alarm owner", () => {
   beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
