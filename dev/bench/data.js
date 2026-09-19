@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789779864915,
+  "lastUpdate": 1789800402046,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -71999,6 +71999,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 169971,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6c3f64af5de5f694e65b1b7316e48b152f14232a",
+          "message": "quality(mutation): write each reach marker once per process (#1099)\n\nReach probes wrote the marker file on every evaluation of a site; hot paths tripped their own timeouts in the reach phase (CI campaign run 35420905787, boot-wiring.test.ts). probeText(marker) now writes each marker once per process behind a globalThis guard; RED/GREEN test added. Review: APPROVE, 0 blockers.",
+          "timestamp": "2026-09-19T15:42:50+09:00",
+          "tree_id": "c57cea9856c0224ecc8a055af18a1907e7a0f3af",
+          "url": "https://github.com/INONONO66/openomni/commit/6c3f64af5de5f694e65b1b7316e48b152f14232a"
+        },
+        "date": 1789800401569,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1054,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1786,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1463,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1430452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 400059,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6998601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 158,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1114,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 681,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 165655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 813425,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 673677,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3481,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 99180839,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9724367,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 189534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 937767,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 240175,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 16014732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 93,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 173057,
             "unit": "ns/op"
           }
         ]
