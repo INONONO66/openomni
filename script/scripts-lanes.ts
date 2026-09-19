@@ -45,6 +45,7 @@ export const scriptsLanes = {
     "quality-metrics/declaration-erasure.test.ts",
     "quality-metrics/tool.test.ts",
     "quality-metrics/type-trivia.test.ts",
+    "quality-mutation-reach-overlay.test.ts",
     "quality-mutation-workflow.test.ts",
     "quality-native-mutation.test.ts",
     "quality-native-process.test.ts",
@@ -70,7 +71,7 @@ export const scriptToolingPartitions = {
   "scripts-tooling-1": ["run-quality-mutations.test.ts", "coverage-source-inventory.test.ts", "quality-schema.test.ts", "quality-mutation-workflow.test.ts", "quality-source.test.ts"],
   "scripts-tooling-2": ["check-census-native.test.ts", "run-quality-mutations-operators.test.ts", "quality-ci-metrics.test.ts", "quality-ci-legs.test.ts", "quality-json.test.ts", "conformance/summarize-benchmark-runs.test.ts", "quality-coverage-record.test.ts", "quality-native-process.test.ts", "quality-ci-coverage.test.ts", "quality-metrics/tool.test.ts", "quality-plan.test.ts", "quality-ci-receipt.test.ts", "quality-inventory.test.ts", "quality-native-mutation.test.ts", "quality-ci-bound.test.ts"],
   "scripts-tooling-3": ["check-census.test.ts", "check-types-census.test.ts", "quality-metrics/declaration-erasure.test.ts", "quality-measure.test.ts", "census-program.test.ts", "quality-ratchet.test.ts", "check-quality-python.test.ts"],
-  "scripts-tooling-4": ["run-quality-mutations-compiler.test.ts", "check-quality-coverage.test.ts", "quality-metrics/type-trivia.test.ts", "check-quality-metrics.test.ts", "coverage-ratchet.test.ts"],
+  "scripts-tooling-4": ["run-quality-mutations-compiler.test.ts", "check-quality-coverage.test.ts", "quality-metrics/type-trivia.test.ts", "check-quality-metrics.test.ts", "coverage-ratchet.test.ts", "quality-mutation-reach-overlay.test.ts"],
 } as const;
 export type ScriptToolingPartition = keyof typeof scriptToolingPartitions;
 export const scriptContracts = [
