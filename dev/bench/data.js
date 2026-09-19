@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789817136654,
+  "lastUpdate": 1789826897433,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -72535,6 +72535,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 89082,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f5ea0e326553c99c878ef58d4aee6f223f2f41d7",
+          "message": "fix(quality): keep reach probes narrowing-transparent and any-free (#1102)\n\nPart of #1049. Reach probes relocate to narrowing-transparent boundaries (logical leftmost leaf, whole comparison for literal operands incl. parenthesized, literal switch discriminant -> statement marker); typed probe text with no any.",
+          "timestamp": "2026-09-19T14:04:05Z",
+          "tree_id": "849e4573bb6ff9e9823031f98ed66e2fc85e6c57",
+          "url": "https://github.com/INONONO66/openomni/commit/f5ea0e326553c99c878ef58d4aee6f223f2f41d7"
+        },
+        "date": 1789826896828,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1014,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1808,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1427,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1376212,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 374027,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6809303,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1124,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 673,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 158750,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 774126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 549561,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3924,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 95684092,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9195277,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 182769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 904190,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 232925,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15441598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 164682,
             "unit": "ns/op"
           }
         ]
