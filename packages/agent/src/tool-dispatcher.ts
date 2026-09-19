@@ -465,7 +465,7 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
 
 /** The runtime clock/entropy/observation sink shared across a session's turns. */
 interface TurnDispatchRuntime {
-  readonly waitRetry?: ExecutorOptions["waitRetry"];
+  readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly observations: ObservationSink | BusEvent.Sink;
   readonly clock?: () => number;
@@ -493,7 +493,7 @@ export function createTurnDispatcher(
     }
   }
   const executor = createExecutor({
-    waitRetry: runtime.waitRetry,
+    retryAlarm: runtime.retryAlarm,
     signal: input.signal,
     retainEffect: input.retainEffect,
     policy: input.policy,

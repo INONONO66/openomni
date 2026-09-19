@@ -167,6 +167,47 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
     });
   }
 
+  /** The committed boundary child, when the body's transaction landed before the crash. */
+  function boundaryEvidence(
+    all: readonly LedgerAction.Node[],
+    intentId: string,
+  ): LedgerAction.Node | undefined {
+    return all.find(
+      (action) =>
+        action.id === `${intentId}:boundary` && object(action.effect.value).phase === "boundary",
+    );
+  }
+
+  /** Settle the open intent as executed from its durable boundary, never re-running the body. */
+  async function settleFromBoundary(
+    action: LedgerAction.Node,
+    boundary: LedgerAction.Node,
+  ): Promise<void> {
+    const intent = object(action.intent.value);
+    const result = object(boundary.effect.value).result ?? null;
+    const revert = object(result).revert;
+    await record.appendResult(
+      { kind: action.kind, op: String(intent.op) },
+      action.id,
+      {
+        phase: "result",
+        terminal: "executed",
+        effect: intent.effect ?? {},
+        resultHash: canonicalDigest(result),
+        result,
+        recovery: {
+          site: "crash",
+          classification: "local_transactional",
+          proof: "applied",
+          proofReceipt: { id: boundary.id, digest: canonicalDigest(boundary.effect.value) },
+          revertReceipt: null,
+          rawSettled: true,
+        },
+      },
+      revert,
+    );
+  }
+
   function openIntents(all: readonly LedgerAction.Node[]): LedgerAction.Node[] {
     const turnId = options.identity.turnId ?? options.identity.parentActionId;
     const parents = new Set<string | null>([turnId]);
@@ -194,7 +235,9 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
     const all = actions();
     for (const action of openIntents(all)) {
       if (action.kind !== "llm") {
-        await settleCrash(action, crashVerdict(action));
+        const boundary = boundaryEvidence(all, action.id);
+        if (boundary === undefined) await settleCrash(action, crashVerdict(action));
+        else await settleFromBoundary(action, boundary);
         continue;
       }
       // Provider attempts carry the external effect; an open one makes the

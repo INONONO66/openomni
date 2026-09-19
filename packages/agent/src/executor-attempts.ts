@@ -2,6 +2,7 @@ import { Retry, Run } from "@openomni/llm";
 import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation } from "@openomni/policy";
 import type { AttemptRequest, ExecutorOptions, LlmAttempts } from "./executor-contract";
+import { createRetryAlarmPort } from "./executor-retry-alarm";
 import type { createExecutionRecord } from "./executor-record";
 
 type RecordPort = ReturnType<typeof createExecutionRecord>;
@@ -51,8 +52,14 @@ export function createAttemptRunner(
       ...(evidence === undefined ? {} : { evidence }),
     });
   }
-  async function waitForRetry<T extends PlainValue>(
+  const retryAlarm =
+    options.retryAlarm ?? createRetryAlarmPort(options.identity.sessionId, options.clock);
+  // The schedule is durable before the wait: an `alarm.arm` action carrying the
+  // retry.scheduled spec commits first, so a crash mid-wait leaves a boot-visible
+  // alarm that the single alarm owner consumes exactly once (fenced cancel CAS).
+  async function scheduleRetry<T extends PlainValue>(
     attempts: LlmAttempts<T>,
+    intentId: string,
     retry: {
       readonly attempt: number;
       readonly delayMs: number;
@@ -62,7 +69,11 @@ export function createAttemptRunner(
     },
   ): Promise<void> {
     attempts.onRetry?.({ ...retry, maxAttempts: Retry.MAX_ATTEMPTS });
-    await (options.waitRetry ?? Retry.sleep)(retry.delayMs, options.signal);
+    const id = `${intentId}:retry:${retry.attempt}`;
+    const fireAt = options.clock() + retry.delayMs;
+    await retryAlarm.arm({ id, attempt: retry.attempt, reason: retry.reason, fireAt });
+    await retryAlarm.wait(fireAt, options.signal);
+    await retryAlarm.settle(id);
   }
   async function requireApproval(
     request: AttemptRequest,
@@ -145,7 +156,13 @@ export function createAttemptRunner(
       const recover = overflow && (await attempts.recoverOverflow?.(outcome.error)) === true;
       const { delayMs, reason } = retryContinuation(outcome.error, decision, recover);
       failures.push(reason);
-      await waitForRetry(attempts, { attempt, delayMs, decision, error: outcome.error, reason });
+      await scheduleRetry(attempts, intent.action.id, {
+        attempt,
+        delayMs,
+        decision,
+        error: outcome.error,
+        reason,
+      });
     }
   };
 }

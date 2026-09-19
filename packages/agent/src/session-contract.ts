@@ -125,7 +125,7 @@ export interface SessionRuntime {
     turnId: string;
     revision: number;
   }) => Promise<readonly { actionId: string; kind: "message" | "approval" }[]>;
-  readonly waitRetry?: ExecutorOptions["waitRetry"];
+  readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly clock?: () => number;
   readonly entropy?: () => string;

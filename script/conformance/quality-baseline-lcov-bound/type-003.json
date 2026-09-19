@@ -897,14 +897,6 @@
   },
   {
     "path": "packages/agent/src/session-turn.ts",
-    "line": 117,
-    "symbol": "implicitAny:waitRetry",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/src/session-turn.ts",
     "line": 221,
     "symbol": "unknown:Error",
     "gate": "type",
@@ -1630,14 +1622,6 @@
     "gate": "type",
     "value": 1,
     "count": 2
-  },
-  {
-    "path": "packages/agent/src/tool-dispatcher.ts",
-    "line": 461,
-    "symbol": "implicitAny:waitRetry",
-    "gate": "type",
-    "value": 1,
-    "count": 4
   },
   {
     "path": "packages/agent/src/tool-dispatcher.ts",
@@ -4646,14 +4630,6 @@
     "gate": "type",
     "value": 1,
     "count": 2
-  },
-  {
-    "path": "packages/agent/test/core/execution/llm-attempts.test.ts",
-    "line": 204,
-    "symbol": "implicitAny:waitRetry",
-    "gate": "type",
-    "value": 1,
-    "count": 1
   },
   {
     "path": "packages/agent/test/core/execution/llm-attempts.test.ts",

@@ -8,6 +8,7 @@ export function runTestOperation(executor: DurableExecutor, kind: LedgerAction.K
 import { createExecutor, type Executor } from "../../src/index";
 import type { ExecutorOptions } from "../../src/executor-contract";
 import { collector } from "./observation-collector";
+import { nullRetryAlarm } from "./retry-alarm";
 
 const mandatoryPolicyRow: PolicyRow.Row = {
   name: "compaction",
@@ -123,6 +124,7 @@ export function recordingExecutor(options: RecordingExecutorOptions = {}): {
   let ordinal = 0;
   const executor = createExecutor({
     policy: options.policy ?? allowAllPolicy,
+    retryAlarm: nullRetryAlarm,
     ledger: {
       async commit(action) {
         committed.push(action);

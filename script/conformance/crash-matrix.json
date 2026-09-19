@@ -23,13 +23,13 @@
     },
     {
       "crashPoint": "retry_backoff_wait",
-      "recovery": "not_durable",
-      "note": "The failed attempt persists, but the retry wait has no durable continuation. Recovery marks the logical model operation failed with absent local completion."
+      "recovery": "rearmed",
+      "note": "A committed retry.scheduled alarm (kind at) survives the crash; boot recovery consumes (cancels) the schedule via the single alarm owner and wakes the session, and the resumed turn completes the attempt exactly once."
     },
     {
       "crashPoint": "compaction_summary_before_result_commit",
-      "recovery": "not_durable",
-      "note": "The real compactor produced a summary and projection, but its result commit was not entered. Recovery records local absence and retains the original history."
+      "recovery": "resumed_without_reexecution",
+      "note": "The summary, successor projection and accounting committed in one ledger transaction before any publication. Recovery folds to the committed boundary without resummarizing."
     },
     {
       "crashPoint": "inbox_admitted_before_turn_open",
@@ -83,8 +83,8 @@
     },
     {
       "crashPoint": "owner_reclaimed_before_stale_transcript_flush",
-      "recovery": "lost",
-      "note": "Cut at the model attempt result commit after its body returns while owner A holds the lease, retaining the exact uncommitted action. After expiry, wake acquires owner B; replaying A's witnessed result with its old owner/fence is refused as stale without changing the tree. B settles the original turn once; A's effect row never appears."
+      "recovery": "rejected",
+      "note": "Cut at the model attempt result commit after its body returns while owner A holds the lease. After expiry a successor acquires a higher fence; A's commit with its old fence is rejected as a typed stale outcome at commit time, atomically, leaving no partial row. B settles the original turn once."
     }
   ]
 }

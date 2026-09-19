@@ -3,6 +3,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "../../src";
+import "../../src/storage/initialize";
+
+/** Reset and reinitialize the shared in-memory SQLite storage around each test. */
+export function useMemoryStorage() {
+  beforeEach(() => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+  afterEach(() => {
+    Storage.reset();
+  });
+}
 
 /** Own one real SQLite connection and its directory for each test. */
 export function useSqliteStorage(label: string) {

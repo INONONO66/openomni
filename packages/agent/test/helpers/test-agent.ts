@@ -3,6 +3,7 @@ import type { ChatAgentConfig, ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "@openomni/llm";
 import { createExecutor } from "../../src/executor";
 import { recordingLedger } from "./compiled-policy";
+import { nullRetryAlarm } from "./retry-alarm";
 import { runInput } from "./run-input";
 
 export function runUserMessage(config: ChatAgentConfig, content: string) {
@@ -29,6 +30,7 @@ export function createTestAgent(config: ChatAgentConfig) {
         signal: config.signal,
         clock: () => Date.now(),
         entropy: recording.entropy,
+        retryAlarm: nullRetryAlarm,
         identity: {
           sessionId: input.traceContext?.sessionId ?? "session",
           role: "resident",
