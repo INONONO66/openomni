@@ -53,8 +53,13 @@ export function reachPlugin(overlay: ReachOverlay): BunPlugin {
 	};
 }
 
-const overlayPath = process.env[OVERLAY_ENVIRONMENT];
-if (overlayPath) {
+/** Registers the overlay named by the environment; returns the overlaid paths (none when absent or empty). */
+export function installOverlay(environment: Record<string, string | undefined>, register: (plugin: BunPlugin) => void): string[] {
+	const overlayPath = environment[OVERLAY_ENVIRONMENT];
+	if (!overlayPath) return [];
 	const overlay = decodeOverlay(readFileSync(overlayPath, "utf8"));
-	if (overlay.paths.length > 0) Bun.plugin(reachPlugin(overlay));
+	if (overlay.paths.length > 0) register(reachPlugin(overlay));
+	return overlay.paths;
 }
+
+installOverlay(process.env, (plugin) => Bun.plugin(plugin));
