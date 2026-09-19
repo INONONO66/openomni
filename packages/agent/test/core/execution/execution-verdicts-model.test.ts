@@ -66,6 +66,21 @@ function harness(rows: readonly PolicyRow.Row[]) {
   return { actions, executor };
 }
 
+type Executor = ReturnType<typeof harness>["executor"];
+type RunRequest = Parameters<Executor["run"]>[0];
+
+/** One "test" operation whose handler reports success; extras add revert/boundary. */
+function runTestSuccess(
+  executor: Executor,
+  kind: (typeof kinds)[number],
+  extras: Partial<RunRequest> = {},
+) {
+  return executor.run(
+    { kind, op: "test", intent: { requested: true }, effect: { completed: true }, ...extras },
+    async () => ({ ok: true }),
+  );
+}
+
 function resultEffects(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kind) {
   return actions
     .filter((action) => action.kind === kind)
@@ -284,16 +299,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       ]);
       const revert = mock(async () => undefined);
 
-      const result = await executor.run(
-        {
-          kind,
-          op: "test",
-          intent: { requested: true },
-          effect: { completed: true },
-          revert,
-        },
-        async () => ({ ok: true }),
-      );
+      const result = await runTestSuccess(executor, kind, { revert });
 
       expect(result).toMatchObject({
         terminal: "blocked_post",
@@ -315,10 +321,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
         row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
       ]);
 
-      const result = await executor.run(
-        { kind, op: "test", intent: { requested: true }, effect: { completed: true } },
-        async () => ({ ok: true }),
-      );
+      const result = await runTestSuccess(executor, kind);
 
       expect(result).toMatchObject({
         terminal: "blocked_post",
@@ -343,16 +346,7 @@ describe("the durable boundary child action commits only for executed outcomes",
   it("an executed boundary request commits exactly one boundary child under its intent", async () => {
     const { actions, executor } = harness([]);
 
-    const result = await executor.run(
-      {
-        kind: "tool",
-        op: "test",
-        intent: { requested: true },
-        effect: { completed: true },
-        boundary: true,
-      },
-      async () => ({ ok: true }),
-    );
+    const result = await runTestSuccess(executor, "tool", { boundary: true });
 
     expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
     const children = boundaryChildren(actions);
@@ -374,17 +368,7 @@ describe("the durable boundary child action commits only for executed outcomes",
     ]);
     const revert = mock(async () => undefined);
 
-    const result = await executor.run(
-      {
-        kind: "tool",
-        op: "test",
-        intent: { requested: true },
-        effect: { completed: true },
-        boundary: true,
-        revert,
-      },
-      async () => ({ ok: true }),
-    );
+    const result = await runTestSuccess(executor, "tool", { boundary: true, revert });
 
     expect(result).toMatchObject({
       terminal: "blocked_post",

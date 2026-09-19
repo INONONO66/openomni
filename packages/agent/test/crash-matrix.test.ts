@@ -3,7 +3,7 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { Alarm, LedgerAction, Message, SessionTransition } from "@openomni/protocol";
+import { Alarm, LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
 import { createExecutor } from "../src/executor";
@@ -16,6 +16,7 @@ import { nth } from "./helpers/nth";
 import { receiveOutbound } from "./helpers/receive-outbound";
 import { requestLedger } from "./helpers/request-ledger";
 import {
+  checkpointEvidence,
   committedCompactionPoints,
   crashPoint,
   crashWitness,
@@ -135,14 +136,10 @@ async function recoverExecutor(witness: Witness) {
           },
         },
       ]);
-      const committed = z
-        .object({ summary: z.literal("checkpoint"), projection: z.array(Message.WithParts) })
-        .loose()
-        .parse(nth(settledResults, 0).result);
-      const originalAnswer = z
-        .array(Message.WithParts)
-        .parse(results("message").map((action) => effectOf(action).result))
-        .find((message) => message.info.id === "answer");
+      const { committed, originalAnswer } = checkpointEvidence(
+        nth(settledResults, 0).result,
+        results("message"),
+      );
       const recoveredHistory = foldSessionHistory(sessionId, recovered);
       expect(recoveredHistory).toEqual(committed.projection);
       expectCompactedProjection(recoveredHistory, originalAnswer);
@@ -225,16 +222,10 @@ async function recoverCommittedCompaction(witness: Witness) {
   expect(results("compaction")).toHaveLength(1);
   const result = nth(results("compaction"), 0);
   expect(effectOf(result).terminal).toBe("executed");
-  const committed = z
-    .object({
-      summary: z.literal("checkpoint"),
-      projection: z.array(Message.WithParts),
-    })
-    .parse(effectOf(result).result);
-  const originalAnswer = z
-    .array(Message.WithParts)
-    .parse(results("message").map((action) => effectOf(action).result))
-    .find((message) => message.info.id === "answer");
+  const { committed, originalAnswer } = checkpointEvidence(
+    effectOf(result).result,
+    results("message"),
+  );
   const history = foldSessionHistory(sessionId, before);
   expect(history).toEqual(committed.projection);
   expectCompactedProjection(history, originalAnswer);

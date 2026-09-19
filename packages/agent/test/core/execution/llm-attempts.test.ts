@@ -6,7 +6,7 @@ import { Run } from "@openomni/llm";
 import { createExecutor, type ExecutorOptions } from "../../../src/executor";
 import { runChatAttempts } from "../../helpers/chat-attempts";
 import { compiledPolicy, turnExecutor } from "../../helpers/compiled-policy";
-import { Alarm, type LedgerAction, type PlainObject } from "@openomni/protocol";
+import { Alarm, LedgerAction, type PlainObject } from "@openomni/protocol";
 afterEach(() => Storage.reset());
 
 const usage = {
@@ -342,8 +342,7 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
   const attemptIntents = intents(actions, "attempt");
   expect(attemptIntents).toHaveLength(2);
   const alarmId = `${attemptIntents[0]?.id}:retry:1`;
-  const armed = actions.find((action) => action.id === alarmId);
-  if (armed === undefined || !("ordinal" in armed)) throw new Error("missing durable retry arm");
+  const armed = LedgerAction.Node.parse(actions.find((action) => action.id === alarmId));
   expect(armed.kind).toBe("alarm.arm");
   expect(Alarm.RetrySchedule.parse(effectRecord(armed).spec)).toEqual({
     kind: "retry.scheduled",
@@ -351,18 +350,17 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
     reason: "transient_error",
     notBefore: 100,
   });
-  const settled = actions.find(
-    (action) =>
-      action.kind === "alarm.arm" &&
-      action.parentId === alarmId &&
-      effectRecord(action).status === "cancelled",
+  const settled = LedgerAction.Node.parse(
+    actions.find(
+      (action) =>
+        action.kind === "alarm.arm" &&
+        action.parentId === alarmId &&
+        effectRecord(action).status === "cancelled",
+    ),
   );
-  if (settled === undefined || !("ordinal" in settled)) throw new Error("missing settle CAS");
-  const secondIntent = attemptIntents[1];
-  if (secondIntent === undefined || !("ordinal" in secondIntent))
-    throw new Error("missing second attempt intent");
+  const secondIntent = LedgerAction.Node.parse(attemptIntents[1]);
   // Record before act: arm precedes the consumed schedule, which precedes the re-attempt.
-  expect(armed.ordinal).toBeLessThan(Number(settled.ordinal));
-  expect(Number(settled.ordinal)).toBeLessThan(Number(secondIntent.ordinal));
+  expect(armed.ordinal).toBeLessThan(settled.ordinal);
+  expect(settled.ordinal).toBeLessThan(secondIntent.ordinal);
   expect(Storage.get().alarms?.get(alarmId)).toMatchObject({ status: "cancelled", kind: "at" });
 });

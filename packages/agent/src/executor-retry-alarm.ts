@@ -1,4 +1,4 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import { armAlarm, cancelAlarm } from "@openomni/ledger";
 import { Retry } from "@openomni/llm";
 
 /**
@@ -21,10 +21,10 @@ export interface RetryAlarmPort {
 }
 
 /** Production port over the single alarm owner: alarm row + `alarm.arm` action in one transaction. */
-export function createRetryAlarmPort(sessionId: string, clock: () => number): RetryAlarmPort {
+export function createRetryAlarmPort(sessionId: string, clock: () => number) {
   return {
     arm(input) {
-      SessionHandleStore.armAlarm({
+      armAlarm({
         id: input.id,
         sessionId,
         kind: "at",
@@ -42,7 +42,7 @@ export function createRetryAlarmPort(sessionId: string, clock: () => number): Re
     },
     wait: (fireAt, signal) => Retry.sleep(Math.max(0, fireAt - clock()), signal),
     settle(id) {
-      SessionHandleStore.cancelAlarm(id, sessionId, clock());
+      cancelAlarm(id, sessionId, clock());
     },
-  };
+  } satisfies RetryAlarmPort;
 }

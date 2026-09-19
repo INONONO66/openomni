@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Alarm, LedgerSession, L0Observation } from "@openomni/protocol";
-import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
+import { Alarm, LedgerSession, type L0Observation } from "@openomni/protocol";
+import type { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
+import { observedL0Adapters } from "../helpers/ledger";
 
 const watchSpec = {
   encodingVersion: 1 as const,
@@ -20,13 +21,7 @@ type Status = Alarm.Status;
 
 /** One backend with an owner session and a capture of every committed action. */
 function openOwner(db: Database) {
-  const observations: L0Observation.ActionCommitted[] = [];
-  const adapter = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
-    publish(event, payload) {
-      if (event.name === L0Observation.ActionCommittedEvent.name)
-        observations.push(L0Observation.ActionCommitted.parse(payload));
-    },
-  });
+  const { adapter, observations } = observedL0Adapters(db);
   adapter.sessions.create(
     LedgerSession.Row.parse({
       id: "owner",

@@ -1,16 +1,9 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
-import "../../src/storage/initialize";
+import { useMemoryStorage } from "../helpers/storage";
 
-beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-});
-
-afterEach(() => {
-  Storage.reset();
-});
+useMemoryStorage();
 
 const sessionId = "commit-fencing";
 

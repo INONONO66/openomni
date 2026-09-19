@@ -1,6 +1,6 @@
 import { appendFileSync, writeSync } from "node:fs";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { LedgerAction, PlainObjectSchema, PlainValueSchema } from "@openomni/protocol";
+import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { createExecutor, type ExecutionLedger } from "../../src/executor";
 import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
@@ -72,6 +72,21 @@ export const effectOf = (action: LedgerAction.Append) =>
   PlainObjectSchema.parse(action.effect.value);
 export const intentOf = (action: LedgerAction.Append) =>
   PlainObjectSchema.parse(action.intent.value);
+
+/** The committed checkpoint payload and the protected original answer, schema-typed. */
+export function checkpointEvidence(
+  result: PlainValue | undefined,
+  messageResults: readonly LedgerAction.Append[],
+) {
+  const committed = z
+    .object({ summary: z.literal("checkpoint"), projection: z.array(Message.WithParts) })
+    .parse(result);
+  const originalAnswer = z
+    .array(Message.WithParts)
+    .parse(messageResults.map((action) => effectOf(action).result))
+    .find((message) => message.info.id === "answer");
+  return { committed, originalAnswer };
+}
 
 export const outboundPoints = new Set<CrashPoint>([
   "outbound_reply_before_delivery_settle",

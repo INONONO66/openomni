@@ -105,19 +105,23 @@ export function createAlarmWorker(options: {
     }
   }
 
+  // A due retry schedule is consumed exactly once by the fenced cancel CAS and
+  // only wakes the session: the open turn re-runs the model attempt itself, so
+  // no inbox prompt is injected into the resumed model input.
+  function consumeRetrySchedule(row: Alarm.Row) {
+    const consumed = options.alarms.cancel(row.id, row.sessionId, now());
+    if (consumed === undefined) return;
+    void options.wake(row.sessionId).catch((error: Error) => options.failure(error));
+  }
+
   function start(row: Alarm.Row) {
     const deadline = Alarm.RequestDeadline.safeParse(row.spec?.value);
     if (row.kind === "at" && deadline.success) {
       options.requestTimeout(deadline.data.requestId, now());
       return;
     }
-    // A due retry schedule is consumed exactly once by the fenced cancel CAS and
-    // only wakes the session: the open turn re-runs the model attempt itself, so
-    // no inbox prompt is injected into the resumed model input.
     if (row.kind === "at" && Alarm.RetrySchedule.safeParse(row.spec?.value).success) {
-      const consumed = options.alarms.cancel(row.id, row.sessionId, now());
-      if (consumed === undefined) return;
-      void options.wake(row.sessionId).catch((error: Error) => options.failure(error));
+      consumeRetrySchedule(row);
       return;
     }
     const owned = options.alarms.acquire(row.id, row.fence);
