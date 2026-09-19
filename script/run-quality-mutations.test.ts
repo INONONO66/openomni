@@ -82,6 +82,29 @@ test("reach probes write each marker once per process", async () => {
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+// packages/codemode/src/kernel.ts declares `const process = spawn(...)`; a probe
+// naming bare `process` there called ChildProcess.getBuiltinModule and threw,
+// which killed the interpreter start under reach instrumentation (run 35447636805).
+test("reach probes resolve their globals through globalThis inside shadowing scopes", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-probe-shadow-"));
+	try {
+		const marker = join(directory, "site");
+		const source = `function start(process: { pid: number }, Reflect: string): number {\n  return process.pid + Reflect.length;\n}\nconsole.log(start({ pid: 40 }, "ab"));`;
+		const start = source.indexOf("process.pid"), end = source.indexOf(";\n}");
+		const transformed = instrument(source, [
+			{ id: "site", path: "a.ts", sourceSha256: sha256(source), site: { start, end, mode: "expression" }, tests: [] },
+		], directory);
+		expect(transformed).toContain(probeText(marker));
+		const path = join(directory, "a.ts");
+		writeFileSync(path, transformed);
+		const result = await execute([process.execPath, path], directory, 5000);
+		expect(result.stderr).toBe("");
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout.trim()).toBe("42");
+		expect(readFileSync(marker, "utf8")).toBe("1");
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 function strictProgram(directory: string, path: string): ts.Program {
 	const base = JSON.parse(readFileSync(resolve(import.meta.dir, "../tsconfig.base.json"), "utf8")) as { compilerOptions: Record<string, string | boolean | string[]> };
 	const parsed = ts.parseJsonConfigFileContent({ compilerOptions: { ...base.compilerOptions, noEmit: true }, files: [path] }, ts.sys, directory);
