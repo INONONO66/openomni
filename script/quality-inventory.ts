@@ -239,7 +239,7 @@ export function buildInventory(root: string, contract: Contract): Inventory {
     collect(root, resolve(root, directory), { files, configurations });
   // The root manifest is the package scope of every owned file without a
   // nearer one: its `imports` map and self-reference route bare specifiers.
-  if (existsSync(join(root, "package.json")))
+  if (existsSync(join(root, "package.json")) && !configurations.some((c) => c.path === "package.json"))
     configurations.push({
       path: "package.json",
       sha256: digest(readFileSync(join(root, "package.json"))),

@@ -627,6 +627,15 @@ const relativeEmittedTest = 'import { test, expect } from "bun:test"; import { c
 const aliasEmittedTest = 'import { test, expect } from "bun:test"; import { choose } from "@fixture/alias"; test("alias entry", () => { expect(choose(true)).toBe(42); });\n';
 
 // Replaces the emitted workspace's package manifest and refreezes its digest.
+// Points the `@fixture/emitted` link at a decoy package of the same name
+// outside the owned roots.
+function retargetPackageLinkToDecoy(f: ReturnType<typeof emittedWorkspace>): void {
+	rmSync(join(f.root, "node_modules/@fixture/emitted"));
+	f.put("node_modules/decoy/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./index.js"}');
+	f.put("node_modules/decoy/index.js", "export function choose(taken) { return taken ? 42 : 99; }\n");
+	symlinkSync(join(f.root, "node_modules/decoy"), join(f.root, "node_modules/@fixture/emitted"));
+}
+
 function replaceManifest(f: ReturnType<typeof emittedWorkspace>, manifest: string): void {
 	f.put("script/pkg/package.json", manifest);
 	const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
@@ -700,12 +709,7 @@ for (const [mode, testSource, message] of [
 			rmSync(join(f.root, "script/pkg/dist/index.js"));
 			symlinkSync("../src/index.ts", join(f.root, "script/pkg/dist/index.js"));
 		}
-		if (mode === "package-symlink-retarget") {
-			rmSync(join(f.root, "node_modules/@fixture/emitted"));
-			f.put("node_modules/decoy/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./index.js"}');
-			f.put("node_modules/decoy/index.js", "export function choose(taken) { return taken ? 42 : 99; }\n");
-			symlinkSync(join(f.root, "node_modules/decoy"), join(f.root, "node_modules/@fixture/emitted"));
-		}
+		if (mode === "package-symlink-retarget") retargetPackageLinkToDecoy(f);
 		const verified = await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
 		expect(verified.exit).toBe(2);
 		expect(verified.result.complete).toBe(false);
@@ -734,7 +738,7 @@ test("a bare specifier routed by an unfrozen package manifest cannot anchor an e
 		refreeze(f, "inventory", inventory);
 		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
-		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package manifest script/pkg/package.json routing "@fixture/emitted" is not frozen');
+		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package link node_modules/@fixture/emitted for "@fixture/emitted" lands in the owned tree without a frozen package of that name');
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -905,6 +909,53 @@ for (const [mode, manifest, text] of [
 	const f = emittedWorkspace();
 	try {
 		expect(await verifiedAfterErasure(f, () => f.put(manifest, text))).toContain(`package scope manifest ${manifest} routing "@fixture/emitted" is not frozen`);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A frozen `#` entry mapping to a bare package binds that package's link, so
+// retargeting the link at verification is refused exactly as the direct bare
+// form is; a conditional entry cannot be pinned to one package.
+for (const [mode, entry, message] of [
+	["bare-target-link-retarget", '"@fixture/emitted"', 'import "@fixture/emitted" resolves outside frozen package script/pkg/package.json'],
+	["conditional-entry", '{"default":"./script/pkg/dist/index.js"}', 'imports map entry "#emitted" in package.json is not one literal target'],
+] as const) test(`a frozen imports map entry is pinned through its routed target (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "#emitted"; test("imports map", () => { expect(choose(true)).toBe(42); });\n');
+	try {
+		f.put("package.json", `{"name":"fixture-root","type":"module","imports":{"#emitted":${entry}}}`);
+		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+		inventory.configurations = [...list(inventory.configurations), { path: "package.json", sha256: sha256(readFileSync(join(f.root, "package.json"))) }];
+		refreeze(f, "inventory", inventory);
+		if (mode === "conditional-entry") await collectRefused(f, "script/subject.test.ts", message);
+		else expect(await verifiedAfterErasure(f, () => retargetPackageLinkToDecoy(f))).toContain(message);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A bare specifier's link may land in the owned tree only on the frozen
+// manifest directory of that name: a link onto a bare subdirectory of an owned
+// package would let the same specifier name a decoy at verification.
+test("a package link landing below a frozen package directory fails identity", async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "shim"; test("subdirectory link", () => { expect(choose(true)).toBe(42); });\n');
+	try {
+		symlinkSync(join(f.root, "script/pkg/dist"), join(f.root, "node_modules/shim"));
+		await collectRefused(f, "script/subject.test.ts", 'package link node_modules/shim for "shim" lands in the owned tree without a frozen package of that name');
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A relative specifier is pinned by the frozen owned tree only when its
+// lexical directory is where the loader lands; a symlink outside the roots or
+// under node_modules on the way there is refused.
+for (const [mode, link, specifier] of [
+	["outside-root", "outside", "../outside/value.js"],
+	["node_modules", "script/node_modules/shim", "./node_modules/shim/value.js"],
+] as const) test(`a relative specifier traversing a symlink fails identity (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		`import { test, expect } from "bun:test"; import { value } from "${specifier}"; test("linked path", () => { expect(value).toBe(42); });\n`);
+	try {
+		mkdirSync(dirname(join(f.root, link)), { recursive: true });
+		symlinkSync(join(f.root, "script/pkg/dist"), join(f.root, link));
+		await collectRefused(f, "script/subject.test.ts", `import "${specifier}" traverses a symlink at ${link}`);
 	} finally { f.cleanup(); }
 }, 120_000);
 
