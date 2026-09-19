@@ -1,5 +1,5 @@
-import { readFileSync, realpathSync } from "node:fs";
-import { extname, join, relative } from "node:path";
+import { copyFileSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, extname, join, relative } from "node:path";
 import type { BunPlugin, Loader } from "bun";
 
 /**
@@ -7,7 +7,10 @@ import type { BunPlugin, Loader } from "bun";
  * Tests that read their own source as text (`Bun.file(join(SRC, "x.tsx"))`)
  * then keep matching the frozen bytes while imported modules carry the probes.
  * `BUN_OPTIONS=--preload` also carries the overlay into Bun children a test
- * spawns with an inherited environment.
+ * spawns with an inherited environment. The preload is staged below a
+ * `node_modules` directory: Bun's coverage reporters skip that tree, so a
+ * child measuring its own fixture never records the overlay as a source that
+ * escapes the fixture root.
  */
 export type ReachOverlay = {
 	/** Reach copy root; only files below it are overlaid. */
@@ -51,6 +54,14 @@ export function reachPlugin(overlay: ReachOverlay): BunPlugin {
 			}));
 		},
 	};
+}
+
+/** Copies this module below `node_modules` under `directory` and returns the staged preload path. */
+export function stagePreload(directory: string): string {
+	const staged = join(directory, "node_modules", ".quality-mutation-reach", "overlay.ts");
+	mkdirSync(dirname(staged), { recursive: true });
+	copyFileSync(import.meta.path, staged);
+	return staged;
 }
 
 /** Registers the overlay named by the environment; returns the overlaid paths (none when absent or empty). */

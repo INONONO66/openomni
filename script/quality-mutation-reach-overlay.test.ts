@@ -1,8 +1,33 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeOverlay, encodeOverlay, installOverlay, OVERLAY_ENVIRONMENT, reachPlugin, type ReachOverlay } from "./quality-mutation-reach-overlay";
+import { decodeOverlay, encodeOverlay, installOverlay, OVERLAY_ENVIRONMENT, reachPlugin, type ReachOverlay, stagePreload } from "./quality-mutation-reach-overlay";
+
+const OVERLAY_MODULE = join(import.meta.dir, "quality-mutation-reach-overlay.ts");
+
+function coverageSources(root: string, preload: string): string[] {
+	const run = Bun.spawnSync([process.execPath, "test", "./script/s.test.ts", "--coverage", "--coverage-reporter=lcov", "--coverage-dir=native"], {
+		cwd: root, timeout: 30_000, env: { ...process.env, BUN_OPTIONS: `--preload=${preload}` }, stdout: "pipe", stderr: "pipe",
+	});
+	if (run.exitCode !== 0) throw new Error(run.stderr.toString());
+	return readFileSync(join(root, "native/lcov.info"), "utf8").split("\n").filter((line) => line.startsWith("SF:")).map((line) => line.slice(3)).sort();
+}
+
+test("a fixture child measuring its own coverage never records the staged reach preload", () => {
+	const temporary = mkdtempSync(join(tmpdir(), "omo-reach-preload-"));
+	const root = join(temporary, "fixture");
+	mkdirSync(join(root, "script"), { recursive: true });
+	writeFileSync(join(root, "script/s.ts"), "export const f = () => 1;\n");
+	writeFileSync(join(root, "script/s.test.ts"), 'import { expect, test } from "bun:test"; import { f } from "./s"; test("f", () => expect(f()).toBe(1));\n');
+	const staged = stagePreload(temporary);
+	expect(staged).toBe(join(temporary, "node_modules", ".quality-mutation-reach", "overlay.ts"));
+	expect(readFileSync(staged, "utf8")).toBe(readFileSync(OVERLAY_MODULE, "utf8"));
+	const unstaged = coverageSources(root, OVERLAY_MODULE);
+	expect(unstaged).toContain("script/s.ts");
+	expect(unstaged.some((path) => path.startsWith("../"))).toBe(true);
+	expect(coverageSources(root, staged)).toEqual(["script/s.ts"]);
+});
 
 type Load = (args: { path: string }) => { contents: string; loader: string };
 
