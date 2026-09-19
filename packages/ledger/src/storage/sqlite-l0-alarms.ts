@@ -160,10 +160,12 @@ function controlAlarm(
   op: "cancel" | "rearm",
 ) {
   const current = selectAlarm(db, id);
+  // A one-shot `at` alarm may be cancelled (consumed exactly once by the live
+  // waiter or the boot alarm owner via this fenced CAS); rearm stays watch-only.
   if (
     current === undefined ||
     current.sessionId !== sessionId ||
-    current.kind !== "watch" ||
+    (current.kind !== "watch" && op !== "cancel") ||
     (current.status !== "armed" && current.status !== "paused")
   )
     return undefined;

@@ -8,6 +8,7 @@ import type {
   Tool,
 } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput } from "@openomni/policy";
+import type { RetryAlarmPort } from "./executor-retry-alarm";
 import type { WaveControl } from "./core/execution/tool-wave";
 
 interface ExecutionKindRegistration {
@@ -63,6 +64,12 @@ export interface ExecutionRequest {
   readonly revert?: () => void | Promise<void>;
   /** Result-dependent evidence for a reversible durable projection. */
   readonly revertData?: () => PlainValue | undefined;
+  /**
+   * Commit the settled value as a durable boundary child action (one ledger
+   * transaction) before the result commit and any publication: a crash after
+   * the boundary recovers the executed value without re-running the body.
+   */
+  readonly boundary?: boolean;
   readonly toolObservation?: ToolObservationIdentity;
   /** Model-facing settlement, committed atomically with the tool's effect evidence. */
   readonly toolResult?: (outcome: ExecutionBatchResult) => Tool.Result;
@@ -208,7 +215,8 @@ export interface DurableExecutor extends Executor {
 }
 
 export interface ExecutorOptions {
-  readonly waitRetry?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+  /** Durable retry schedule port; the default commits through the single alarm owner. */
+  readonly retryAlarm?: RetryAlarmPort;
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly approvalTimeoutMs?: number;

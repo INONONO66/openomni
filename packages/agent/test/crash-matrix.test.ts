@@ -3,7 +3,7 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { LedgerAction, Message, SessionTransition } from "@openomni/protocol";
+import { Alarm, LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
 import { createExecutor } from "../src/executor";
@@ -11,12 +11,12 @@ import { closeSessions, wakeSession, type SessionRuntime } from "../src/session-
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { bounded } from "./helpers/bounded";
 import { compiledPolicy } from "./helpers/compiled-policy";
-import { dispatchingRunner } from "./helpers/dispatching-runner";
-import { completeModel } from "./helpers/mock-llm";
+import { countingRunner } from "./helpers/counting-runner";
 import { nth } from "./helpers/nth";
 import { receiveOutbound } from "./helpers/receive-outbound";
 import { requestLedger } from "./helpers/request-ledger";
 import {
+  checkpointEvidence,
   committedCompactionPoints,
   crashPoint,
   crashWitness,
@@ -110,53 +110,42 @@ async function recoverExecutor(witness: Witness) {
         { terminal: "outcome_unknown", callId: "second", toolResult: { settlement: "unknown" } },
       ]);
       return terminalClass(nth(results("tool"), 1));
-    case "retry_backoff_wait":
-      expect(witness.bodies).toEqual(["llm"]);
-      expect(before.filter((action) => action.kind === "attempt").map(intentOf)).toMatchObject([
-        { phase: "intent", attempt: 1 },
-        { phase: "result" },
-      ]);
-      expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
-      expect(SessionHandleStore.requestRows()).toEqual([]);
-      expect(results("llm").map(effectOf)).toMatchObject([
-        { terminal: "failed", recovery: { proof: "absent", site: "crash" } },
-      ]);
-      expect(results("attempt")).toEqual(
-        before.filter((action) => action.kind === "attempt" && effectOf(action).phase === "result"),
-      );
-      return terminalClass(nth(results("llm"), 0));
-    case "compaction_summary_before_result_commit":
+    case "compaction_summary_before_result_commit": {
       expect(witness.bodies).toEqual(["summary"]);
       expect(witness.pending).toMatchObject({
         kind: "compaction",
         effect: { result: { summary: "checkpoint" } },
       });
+      // The boundary transaction landed before the crash; only the result echo was lost,
+      // so the pre-recovery fold still reads the original two-message history.
       expect(history).toHaveLength(2);
-      expect(foldSessionHistory(sessionId, recovered)).toEqual(history);
-      expect(results("compaction").map(effectOf)).toMatchObject([
+      const boundary = before.find(
+        (action) => action.kind === "compaction" && effectOf(action).phase === "boundary",
+      );
+      if (boundary === undefined) throw new Error("missing durable compaction boundary");
+      expect(effectOf(boundary)).toMatchObject({ result: { summary: "checkpoint" } });
+      const settledResults = results("compaction").map(effectOf);
+      expect(settledResults).toMatchObject([
         {
-          terminal: "failed",
-          recovery: { proof: "absent", classification: "local_transactional" },
+          terminal: "executed",
+          recovery: {
+            proof: "applied",
+            classification: "local_transactional",
+            site: "crash",
+            proofReceipt: { id: boundary.id },
+          },
         },
       ]);
+      const { committed, originalAnswer } = checkpointEvidence(
+        nth(settledResults, 0).result,
+        results("message"),
+      );
+      const recoveredHistory = foldSessionHistory(sessionId, recovered);
+      expect(recoveredHistory).toEqual(committed.projection);
+      expectCompactedProjection(recoveredHistory, originalAnswer);
       return terminalClass(nth(results("compaction"), 0));
+    }
   }
-}
-
-function countingRunner(
-  runtime: SessionRuntime,
-  calls: { model: number },
-  onModel = () => undefined,
-) {
-  return dispatchingRunner(
-    [],
-    () => runtime,
-    async (input, sink) => {
-      onModel();
-      calls.model += 1;
-      return completeModel(input, sink);
-    },
-  );
 }
 
 /** Wakes the recovered session once and returns the turn terminals; the pre-crash prefix must be untouched. */
@@ -233,16 +222,10 @@ async function recoverCommittedCompaction(witness: Witness) {
   expect(results("compaction")).toHaveLength(1);
   const result = nth(results("compaction"), 0);
   expect(effectOf(result).terminal).toBe("executed");
-  const committed = z
-    .object({
-      summary: z.literal("checkpoint"),
-      projection: z.array(Message.WithParts),
-    })
-    .parse(effectOf(result).result);
-  const originalAnswer = z
-    .array(Message.WithParts)
-    .parse(results("message").map((action) => effectOf(action).result))
-    .find((message) => message.info.id === "answer");
+  const { committed, originalAnswer } = checkpointEvidence(
+    effectOf(result).result,
+    results("message"),
+  );
   const history = foldSessionHistory(sessionId, before);
   expect(history).toEqual(committed.projection);
   expectCompactedProjection(history, originalAnswer);
@@ -349,6 +332,41 @@ async function recoverContinuation(witness: Witness) {
   return result;
 }
 
+/**
+ * The committed retry.scheduled alarm survives the crash; the boot alarm owner
+ * consumes it exactly once (fenced cancel CAS) and wakes the session, whose open
+ * turn re-runs the model attempt exactly once.
+ */
+async function recoverRetryAlarm(witness: Witness) {
+  expect(witness.bodies).toEqual(["llm"]);
+  const attempts = actions().filter((action) => action.kind === "attempt");
+  expect(attempts.map(intentOf)).toMatchObject([{ phase: "intent", attempt: 1 }, { phase: "result" }]);
+  const alarmId = `${nth(attempts, 0).id}:retry:1`;
+  const armed = actions().find((action) => action.id === alarmId);
+  expect(armed).toMatchObject({
+    kind: "alarm.arm",
+    effect: {
+      value: { status: "armed", spec: { kind: "retry.scheduled", attempt: 1, notBefore: 100 } },
+    },
+  });
+  expect(
+    Alarm.RetrySchedule.parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason,
+  ).toBe("transient_error");
+  expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
+  // Boot alarm owner: fenced consume-once, then wake. A second consume finds nothing.
+  const alarms = Storage.get().alarms;
+  const consumed = alarms?.cancel(alarmId, sessionId, 100_000);
+  expect(consumed).toMatchObject({ id: alarmId, kind: "at", status: "cancelled" });
+  expect(alarms?.cancel(alarmId, sessionId, 100_000)).toBeUndefined();
+  expect(await recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
+  // The wake injected no prompt and the completed attempt armed nothing new.
+  expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
+  expect(
+    actions().filter((action) => action.kind === "alarm.arm" && action.id.includes(":retry:")),
+  ).toHaveLength(1);
+  return "rearmed";
+}
+
 async function recoverStaleOwner(witness: Witness) {
   expect(witness.bodies).toEqual(["llm"]);
   const staleAction = LedgerAction.Append.parse(witness.staleAction);
@@ -382,8 +400,9 @@ async function recoverStaleOwner(witness: Witness) {
     return undefined;
   });
   expect(refusals).toBe(1);
+  // The typed rejection is atomic: the stale writer's effect row never appears.
   expect(actions().some((action) => action.id === staleAction.id)).toBe(false);
-  return "lost";
+  return "rejected";
 }
 
 function assertOutboundCut(witness: Witness) {
@@ -508,6 +527,8 @@ async function recoverCell(witness: Witness, dbPath: string) {
   switch (witness.crashPoint) {
     case "recovery_dispatch_identity_committed_before_rpc":
       return recoverContinuation(witness);
+    case "retry_backoff_wait":
+      return recoverRetryAlarm(witness);
     case "owner_reclaimed_before_stale_transcript_flush":
       return recoverStaleOwner(witness);
     case "turn_intent_before_llm_entry":

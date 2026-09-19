@@ -1,7 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { createExecutor } from "../../../src/index";
-import { runTestOperation } from "../../helpers/compiled-policy";
-import type { ExecutionLedger } from "../../../src/executor";
+import { recordingLedger, runTestOperation } from "../../helpers/compiled-policy";
 import { compilePolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 
@@ -31,23 +30,7 @@ const mandatory: PolicyRow.Row = {
 };
 
 function harness(rows: readonly PolicyRow.Row[]) {
-  const actions: LedgerAction.Append[] = [];
-  let revision = 0;
-  const ledger: ExecutionLedger = {
-    async commit(action) {
-      actions.push(action);
-      revision += 1;
-      return {
-        action: {
-          ...action,
-          ordinal: revision,
-          prevHash: "fixture-prev",
-          actionHash: "fixture-hash",
-        },
-        revision,
-      };
-    },
-  };
+  const { committed: actions, ledger } = recordingLedger();
   const executor = createExecutor({
     policy: compilePolicySnapshot({
       generation: 1,
@@ -64,6 +47,21 @@ function harness(rows: readonly PolicyRow.Row[]) {
     })(),
   });
   return { actions, executor };
+}
+
+type Executor = ReturnType<typeof harness>["executor"];
+type RunRequest = Parameters<Executor["run"]>[0];
+
+/** One "test" operation whose handler reports success; extras add revert/boundary. */
+function runTestSuccess(
+  executor: Executor,
+  kind: (typeof kinds)[number],
+  extras: Partial<RunRequest> = {},
+) {
+  return executor.run(
+    { kind, op: "test", intent: { requested: true }, effect: { completed: true }, ...extras },
+    async () => ({ ok: true }),
+  );
 }
 
 function resultEffects(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kind) {
@@ -284,16 +282,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       ]);
       const revert = mock(async () => undefined);
 
-      const result = await executor.run(
-        {
-          kind,
-          op: "test",
-          intent: { requested: true },
-          effect: { completed: true },
-          revert,
-        },
-        async () => ({ ok: true }),
-      );
+      const result = await runTestSuccess(executor, kind, { revert });
 
       expect(result).toMatchObject({
         terminal: "blocked_post",
@@ -315,10 +304,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
         row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
       ]);
 
-      const result = await executor.run(
-        { kind, op: "test", intent: { requested: true }, effect: { completed: true } },
-        async () => ({ ok: true }),
-      );
+      const result = await runTestSuccess(executor, kind);
 
       expect(result).toMatchObject({
         terminal: "blocked_post",
@@ -334,4 +320,45 @@ describe("the single L2 executor's four-kind verdict model", () => {
       ]);
     });
   }
+});
+
+describe("the durable boundary child action commits only for executed outcomes", () => {
+  const boundaryChildren = (actions: readonly LedgerAction.Append[]) =>
+    actions.filter((action) => action.id.endsWith(":boundary"));
+
+  it("an executed boundary request commits exactly one boundary child under its intent", async () => {
+    const { actions, executor } = harness([]);
+
+    const result = await runTestSuccess(executor, "tool", { boundary: true });
+
+    expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
+    const children = boundaryChildren(actions);
+    expect(children).toHaveLength(1);
+    const child = children[0];
+    const intent = actions.find((action) => `${action.id}:boundary` === child?.id);
+    expect(child?.parentId).toBe(intent?.id);
+    expect(child?.kind).toBe("tool");
+    expect(child !== undefined && "irreversible" in child && child.irreversible).toBe(true);
+    expect(child?.effect?.value).toMatchObject({ phase: "boundary", result: { ok: true } });
+  });
+
+  it("a post-denied boundary request commits NO boundary child: recovery must never resurrect a reverted outcome as executed", async () => {
+    const { actions, executor } = harness([
+      row("deny-boundary-post", "tool", "post", { type: "deny", reason: "post blocked" }),
+    ]);
+    const revert = mock(async () => undefined);
+
+    const result = await runTestSuccess(executor, "tool", { boundary: true, revert });
+
+    expect(result).toMatchObject({
+      terminal: "blocked_post",
+      disposition: "reverted",
+      reason: "post blocked",
+    });
+    expect(revert).toHaveBeenCalledTimes(1);
+    expect(boundaryChildren(actions)).toEqual([]);
+    expect(resultEffects(actions, "tool")).toEqual([
+      expect.objectContaining({ phase: "result", terminal: "blocked_post" }),
+    ]);
+  });
 });

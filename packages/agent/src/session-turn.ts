@@ -111,7 +111,7 @@ export function createSessionTurn(
     const policy = pinPolicy(input.generation.policyGeneration);
     const ledger = createExecutionLedger(input.turnId);
     const execution = createExecutor({
-      waitRetry: runtime.waitRetry,
+      retryAlarm: runtime.retryAlarm,
       signal: turnController.signal,
       retainEffect,
       policy,

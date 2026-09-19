@@ -40,7 +40,6 @@ function stream(text: string, fail: boolean, tool: boolean): Response {
 for (const visible of ["none", "text", "tool"] as const) {
   test(`real SSE ${visible} visibility has exact provider invocation and durable child topology`, async () => {
     let requests = 0;
-    const waits: number[] = [];
     const provider = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -65,14 +64,7 @@ for (const visible of ["none", "text", "tool"] as const) {
         baseUrl: `http://127.0.0.1:${provider.port}/v1`,
       },
     });
-    const app = await suite.boot({
-      config,
-      sessionRuntime: {
-        waitRetry: async (delay) => {
-          waits.push(delay);
-        },
-      },
-    });
+    const app = await suite.boot({ config });
     const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
     const reply = nextMessage(socket);
     socket.send(JSON.stringify({ type: "message", text: "attempt" }));
@@ -102,7 +94,16 @@ for (const visible of ["none", "text", "tool"] as const) {
         })),
       );
       expect(requests).toBe(visible === "none" ? 3 : 1);
-      expect(waits).toEqual(visible === "none" ? [0, 0] : []);
+      // Durable retry schedule: each backoff committed an `at` alarm carrying
+      // retry.scheduled, and the live waiter consumed (cancelled) it exactly once.
+      const retryAlarms = db
+        .query(
+          "SELECT status FROM alarm WHERE kind='at' AND json_extract(spec,'$.kind')='retry.scheduled' ORDER BY id",
+        )
+        .all();
+      expect(retryAlarms).toEqual(
+        visible === "none" ? [{ status: "cancelled" }, { status: "cancelled" }] : [],
+      );
       expect(
         db
           .query(
@@ -114,7 +115,7 @@ for (const visible of ["none", "text", "tool"] as const) {
         expect(SessionHandleStore.getSnapshot(sessionId).turns[0]?.terminal?.kind).toBe("error");
       console.log(
         "937 SSE attempt",
-        JSON.stringify({ visible, requests, waits, parents, attempts }),
+        JSON.stringify({ visible, requests, retryAlarms, parents, attempts }),
       );
     } finally {
       db.close();
@@ -207,7 +208,7 @@ test("real cross-provider fallback sends only the fallback's stored credential",
     else process.env.OPENOMNI_AUTH_FILE = old;
   });
   await Auth.set("openai", { type: "api", key: "fallback-key" });
-  const app = await suite.boot({ config, sessionRuntime: { waitRetry: async () => undefined } });
+  const app = await suite.boot({ config });
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
   const reply = nextMessage(socket);
   socket.send(JSON.stringify({ type: "message", text: "fallback" }));

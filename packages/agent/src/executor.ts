@@ -493,6 +493,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       site = "reverter";
       const settled = await settlePost(stage.request, post, value);
       site = "result_commit";
+      await commitBoundary(stage.request, stage.kind, intent.action.id, settled);
       return finishRun(stage.request, stage.kind, intent.action.id, startedAt, value, settled);
     };
     return complete().catch(async (error: Error) => {
@@ -505,6 +506,33 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       );
       publishToolTerminal(stage.request, startedAt, "error");
       return recovered;
+    });
+  }
+
+  /**
+   * The durable boundary: summary, successor projection and accounting land in
+   * ONE ledger transaction before any publication or result commit, so a crash
+   * between them recovers the executed value from this child action.
+   */
+  async function commitBoundary(
+    request: ExecutionRequest,
+    kind: LedgerAction.Kind,
+    intentId: string,
+    outcome: PostOutcome,
+  ): Promise<void> {
+    if (request.boundary !== true || outcome.terminal !== "executed") return;
+    await commit({
+      id: `${intentId}:boundary`,
+      parentId: intentId,
+      sessionId: options.identity.sessionId,
+      kind,
+      intent: { encodingVersion: 1, value: { phase: "boundary", op: request.op } },
+      effect: {
+        encodingVersion: 1,
+        value: { phase: "boundary", result: outcome.value, resultHash: canonicalDigest(outcome.value) },
+      },
+      ts: options.clock(),
+      irreversible: true,
     });
   }
 

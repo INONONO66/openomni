@@ -1,20 +1,11 @@
 import { expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { Alarm, LedgerSession, L0Observation, type LedgerAction } from "@openomni/protocol";
-import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
-import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
+import { Alarm, LedgerSession, type LedgerAction } from "@openomni/protocol";
+import type { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
+import { observedL0Adapters, openLedgerDatabase } from "../helpers/ledger";
 
 function sqlite() {
-  const db = new Database(":memory:");
-  initializeSqliteDatabase(db);
-  const observations: L0Observation.ActionCommitted[] = [];
-  const adapter = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
-    publish(event, payload) {
-      if (event.name === L0Observation.ActionCommittedEvent.name)
-        observations.push(L0Observation.ActionCommitted.parse(payload));
-    },
-  });
-  return { adapter, db, observations };
+  const db = openLedgerDatabase();
+  return { db, ...observedL0Adapters(db) };
 }
 
 function row() {

@@ -3,10 +3,10 @@ import { Storage } from "@openomni/ledger";
 import { requestLedger } from "../../helpers/request-ledger";
 import { bounded } from "../../helpers/bounded";
 import { Run } from "@openomni/llm";
-import type { ExecutorOptions } from "../../../src/executor";
+import { createExecutor, type ExecutorOptions } from "../../../src/executor";
 import { runChatAttempts } from "../../helpers/chat-attempts";
 import { compiledPolicy, turnExecutor } from "../../helpers/compiled-policy";
-import type { LedgerAction, PlainObject } from "@openomni/protocol";
+import { Alarm, LedgerAction, type PlainObject } from "@openomni/protocol";
 afterEach(() => Storage.reset());
 
 const usage = {
@@ -39,8 +39,13 @@ function harness(overrides: Partial<ExecutorOptions> = {}) {
   const waits: number[] = [];
   return {
     ...turnExecutor(compiledPolicy(), undefined, {
-      waitRetry: async (delay) => {
-        waits.push(delay);
+      retryAlarm: {
+        arm: () => undefined,
+        // turnExecutor pins clock() === 1, so fireAt - 1 is the scheduled delay.
+        wait: async (fireAt) => {
+          waits.push(fireAt - 1);
+        },
+        settle: () => undefined,
       },
       ...overrides,
     }),
@@ -211,18 +216,22 @@ test("interrupt cancels an exactly registered backoff without another provider a
   let cancelled = false;
   const { executor, committed } = harness({
     signal: controller.signal,
-    waitRetry: (_delay, signal) =>
-      new Promise<void>((_resolve, reject) => {
-        signal?.addEventListener(
-          "abort",
-          () => {
-            cancelled = true;
-            reject(new DOMException("aborted", "AbortError"));
-          },
-          { once: true },
-        );
-        registered.resolve();
-      }),
+    retryAlarm: {
+      arm: () => undefined,
+      settle: () => undefined,
+      wait: (_fireAt, signal) =>
+        new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              cancelled = true;
+              reject(new DOMException("aborted", "AbortError"));
+            },
+            { once: true },
+          );
+          registered.resolve();
+        }),
+    },
   });
   const running = runChatAttempts(executor, async () => {
     throw providerFailure();
@@ -310,4 +319,48 @@ test.each([
   expect(calls).toBe(decision === "approve" ? 2 : 1);
   expect(prepared).toBe(2);
   expect(intents(recording.ledger.actions?.() ?? [], "llm")).toHaveLength(1);
+});
+
+test("the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once", async () => {
+  Storage.initialize({ dbPath: ":memory:" });
+  const recording = requestLedger();
+  const executor = createExecutor({
+    ...recording,
+    policy: compiledPolicy(),
+    observations: { publish: () => undefined },
+  });
+  let calls = 0;
+  await bounded(
+    runChatAttempts(executor, async () => {
+      calls += 1;
+      if (calls === 1) throw providerFailure();
+      return { type: "stop" };
+    }),
+  );
+  expect(calls).toBe(2);
+  const actions = recording.ledger.actions?.() ?? [];
+  const attemptIntents = intents(actions, "attempt");
+  expect(attemptIntents).toHaveLength(2);
+  const alarmId = `${attemptIntents[0]?.id}:retry:1`;
+  const armed = LedgerAction.Node.parse(actions.find((action) => action.id === alarmId));
+  expect(armed.kind).toBe("alarm.arm");
+  expect(Alarm.RetrySchedule.parse(effectRecord(armed).spec)).toEqual({
+    kind: "retry.scheduled",
+    attempt: 1,
+    reason: "transient_error",
+    notBefore: 100,
+  });
+  const settled = LedgerAction.Node.parse(
+    actions.find(
+      (action) =>
+        action.kind === "alarm.arm" &&
+        action.parentId === alarmId &&
+        effectRecord(action).status === "cancelled",
+    ),
+  );
+  const secondIntent = LedgerAction.Node.parse(attemptIntents[1]);
+  // Record before act: arm precedes the consumed schedule, which precedes the re-attempt.
+  expect(armed.ordinal).toBeLessThan(settled.ordinal);
+  expect(settled.ordinal).toBeLessThan(secondIntent.ordinal);
+  expect(Storage.get().alarms?.get(alarmId)).toMatchObject({ status: "cancelled", kind: "at" });
 });

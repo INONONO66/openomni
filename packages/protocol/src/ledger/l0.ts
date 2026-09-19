@@ -650,6 +650,22 @@ export namespace Alarm {
     .strict();
   export type RequestDeadline = z.infer<typeof RequestDeadline>;
 
+  /**
+   * Durable retry schedule carried by a kind `at` alarm. The `alarm.arm`
+   * action committing this spec IS the retry.scheduled fact: boot recovery
+   * consumes it exactly once (fenced cancel CAS) and wakes the session so the
+   * open turn re-runs the model attempt.
+   */
+  export const RetrySchedule = z
+    .object({
+      kind: z.literal("retry.scheduled"),
+      attempt: z.number().int().positive(),
+      reason: z.string().min(1),
+      notBefore: EpochMs,
+    })
+    .strict();
+  export type RetrySchedule = z.infer<typeof RetrySchedule>;
+
   export const Kind = z.enum(["at", "watch"]);
   export type Kind = z.infer<typeof Kind>;
 

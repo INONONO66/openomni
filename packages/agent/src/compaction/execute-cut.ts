@@ -54,6 +54,7 @@ export async function executeCompaction(input: CompactionExecution): Promise<Com
         op: "compact",
         intent: { trigger: input.dispatch.trigger },
         effect: {},
+        boundary: true,
         revertData: () =>
           result?.record === undefined ? undefined : PlainValueSchema.parse(result.record.revert),
       },

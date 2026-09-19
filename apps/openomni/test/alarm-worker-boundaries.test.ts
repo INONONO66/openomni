@@ -95,3 +95,50 @@ test("a non-persistent watch found running at restart settles as restart instead
       rmSync(directory, { recursive: true, force: true });
     }
   }));
+
+test("a due retry.scheduled alarm is consumed once: one wake, no inbox prompt, cancelled row, no-op rescan", () =>
+  Storage.withIsolation(async () => {
+    const fixture = alarmFixture();
+    try {
+      expect(fixture.armRetry("retry-due")).toMatchObject({
+        id: "retry-due",
+        kind: "at",
+        status: "armed",
+      });
+      fixture.worker.tick();
+      expect(fixture.wakes).toEqual(["monitor-session"]);
+      expect(fixture.rows()).toEqual([]);
+      expect(fixture.storage.alarms.get("retry-due")).toMatchObject({
+        id: "retry-due",
+        status: "cancelled",
+      });
+      // Second scan is a no-op: the fenced cancel CAS already consumed the schedule.
+      fixture.worker.tick();
+      expect(fixture.wakes).toEqual(["monitor-session"]);
+      expect(fixture.rows()).toEqual([]);
+      expect(fixture.errors).toEqual([]);
+    } finally {
+      await fixture.close();
+    }
+  }));
+
+test("a retry schedule consumed by another owner mid-scan wakes nothing: losing the cancel CAS is silent", () =>
+  Storage.withIsolation(async () => {
+    // The first wake models the live waiter winning the fenced cancel CAS for the
+    // second due schedule between the scan snapshot and its consumption.
+    const fixture = alarmFixture(":memory:", undefined, () =>
+      fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000),
+    );
+    try {
+      fixture.armRetry("retry-early");
+      fixture.armRetry("retry-late");
+      fixture.worker.tick();
+      expect(fixture.wakes).toEqual(["monitor-session"]);
+      expect(fixture.rows()).toEqual([]);
+      expect(fixture.storage.alarms.get("retry-early")?.status).toBe("cancelled");
+      expect(fixture.storage.alarms.get("retry-late")?.status).toBe("cancelled");
+      expect(fixture.errors).toEqual([]);
+    } finally {
+      await fixture.close();
+    }
+  }));
