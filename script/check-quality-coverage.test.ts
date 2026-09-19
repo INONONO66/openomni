@@ -946,15 +946,16 @@ test("a package link landing below a frozen package directory fails identity", a
 // A relative specifier is pinned by the frozen owned tree only when its
 // lexical directory is where the loader lands; a symlink outside the roots or
 // under node_modules on the way there is refused.
-for (const [mode, link, specifier] of [
-	["outside-root", "outside", "../outside/value.js"],
-	["node_modules", "script/node_modules/shim", "./node_modules/shim/value.js"],
+for (const [mode, link, target, specifier] of [
+	["outside-root", "outside", "script/pkg/dist", "../outside/value.js"],
+	["node_modules", "script/node_modules/shim", "script/pkg/dist", "./node_modules/shim/value.js"],
+	["outside-file", "outside/value.js", "script/pkg/dist/value.js", "../outside/value.js"],
 ] as const) test(`a relative specifier traversing a symlink fails identity (${mode})`, async () => {
 	const f = emittedWorkspace("export const value = 42;\n",
 		`import { test, expect } from "bun:test"; import { value } from "${specifier}"; test("linked path", () => { expect(value).toBe(42); });\n`);
 	try {
 		mkdirSync(dirname(join(f.root, link)), { recursive: true });
-		symlinkSync(join(f.root, "script/pkg/dist"), join(f.root, link));
+		symlinkSync(join(f.root, target), join(f.root, link));
 		await collectRefused(f, "script/subject.test.ts", `import "${specifier}" traverses a symlink at ${link}`);
 	} finally { f.cleanup(); }
 }, 120_000);

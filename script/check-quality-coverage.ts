@@ -1685,12 +1685,15 @@ function importsMapTarget(data: Inputs, scope: string, specifier: string, import
 }
 
 // A relative or absolute specifier is pinned by the frozen owned tree only when
-// its lexical directory is where the loader really lands: a symlink outside
-// the roots or under `node_modules` would let the same specifier name another
-// module at verification.
-function pathSpecifierWithoutLinks(root: string, specifier: string, from: string, importer: string): void {
-	const lexical = resolve(from, dirname(specifier));
-	if (realpathSync(lexical) !== lexical)
+// the file it lexically names is where the loader really lands: a directory or
+// file symlink outside the roots or under `node_modules` would let the same
+// specifier name another module at verification. The loader may swap the
+// module extension between a JavaScript form and its TypeScript original, add
+// one, or index a directory the lexical path names; it never leaves that path.
+function pathSpecifierWithoutLinks(root: string, specifier: string, from: string, importer: string, resolved: string): void {
+	const lexical = resolve(from, specifier);
+	const stem = (path: string) => path.replace(/\.[cm]?[jt]sx?$/, "");
+	if (stem(resolved) !== stem(lexical) && !resolved.startsWith(`${lexical}${sep}`))
 		fail("identity", importer, `import ${JSON.stringify(specifier)} traverses a symlink at ${relative(root, lexical)}`);
 }
 
@@ -1722,9 +1725,9 @@ function ownedEmissionTarget(data: Inputs, specifier: string, importer: string, 
 		if (existsSync(join(data.options.root, scope)) && !frozen(scope))
 			fail("identity", importer, `package scope manifest ${scope} routing ${JSON.stringify(specifier)} is not frozen`);
 		const routed = specifier.startsWith("#") ? importsMapTarget(data, scope, specifier, importer) : specifier;
-		if (routed.startsWith(".")) pathSpecifierWithoutLinks(data.options.root, routed, join(data.options.root, dirname(scope)), importer);
+		if (routed.startsWith(".")) pathSpecifierWithoutLinks(data.options.root, routed, join(data.options.root, dirname(scope)), importer, resolved);
 		else ownedPackageBinding(data, routed, importer, target);
-	} else pathSpecifierWithoutLinks(data.options.root, specifier, from, importer);
+	} else pathSpecifierWithoutLinks(data.options.root, specifier, from, importer, resolved);
 	if (target.startsWith("..") || isAbsolute(target) || target.split("/").includes("node_modules")) return undefined;
 	if (!data.roots.some((r) => target.startsWith(`${r}/`))) return undefined;
 	if (bare && !frozen(nearestManifest(data.options.root, target)))
