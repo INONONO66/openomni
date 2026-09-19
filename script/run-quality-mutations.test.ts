@@ -482,6 +482,21 @@ test("reach discovery follows baseline execution across package ignore rules", a
 	expect(readFileSync(join(input.root, "src/a.ts"), "utf8") === input.files["src/a.ts"]).toBe(true);
 }, 90000);
 
+test("reach probes are served at module load so tests reading their own source as text stay green", async () => {
+	const source = "export const run = () => true;";
+	const input = await fixture(
+		source,
+		`expect(run()).toBe(true); expect(await Bun.file(new URL("./a.ts", import.meta.url)).text()).toBe(${JSON.stringify(source)});`,
+	);
+	const result = await invoke(input, "reach-text-read", select("boolean-literal"));
+	assertBehavioralKill(result);
+	const report = await runMain(input, process.env.D945_PYTHON ?? "python3", select("boolean-literal"), 0);
+	expect(reportResults(report)[0]?.outcome).toBe("killed");
+	expect(rows(record(report.reachMap).runs).map(record).map((run) => run.test)).toEqual(["src/a.test.ts"]);
+	expect(rows(record(report.reachMap).sites).map(record).every((site) => rows(site.tests).length === 1)).toBe(true);
+	expect(readFileSync(join(input.root, "src/a.ts"), "utf8") === source).toBe(true);
+}, 90000);
+
 test("failed reach probes retain their test process and JUnit instead of object stringification", async () => {
 	const input = await fixture(
 		'globalThis.Reflect.has = () => { throw new Error("probe-receiver-failure"); }; export const run = () => true;',
