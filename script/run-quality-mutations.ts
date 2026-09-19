@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { COMPILER_BATCH_SIZE, compilerProofMatches, MutationCompilerWorker, type CompilerProof } from "./quality-mutation-compiler";
+import { encodeOverlay, OVERLAY_ENVIRONMENT, type ReachOverlay } from "./quality-mutation-reach-overlay";
 
 // The inventory producer is a supplied, hash-pinned CLI, not an imported copy of
 // another lane. Only that producer decides membership, categories and topology.
@@ -1033,12 +1034,12 @@ function testGroups(root: string, tests: string[]): Map<string, string[]> {
 	}
 	return groups;
 }
-async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number): Promise<TestSelectionReceipt> {
+async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number, environment: Record<string, string> = {}): Promise<TestSelectionReceipt> {
 	const batches: TestsReceipt[] = [];
 	const files: string[] = [];
 	for (const [cwd, selected] of testGroups(root, tests)) {
 		console.error(`[mutation] test package ${relative(root, cwd) || "."} (${selected.length} files)`);
-		const batch = await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout);
+		const batch = await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout, environment);
 		batches.push(batch);
 		for (const suite of batch.junit.matchAll(/<testsuite\b([^>]*)>/g)) {
 			const file = attribute(suite[1] ?? "", "file").replace(/^\.\//, "");
@@ -1062,6 +1063,7 @@ async function runTestBatch(
 	directory: string,
 	python: string,
 	suiteTimeout: number,
+	environment: Record<string, string>,
 ): Promise<TestsReceipt> {
 	const report = join(directory, "tests.xml");
 	rmSync(report, { force: true });
@@ -1078,11 +1080,14 @@ async function runTestBatch(
 		],
 		root,
 		Math.max(suiteTimeout, timeout * tests.length),
-		python ? {
-			PATH: `${dirname(python)}:${process.env.PATH ?? ""}`,
-			D945_PYTHON: python,
-			QUALITY_MUTATION_PYTHON: python,
-		} : {},
+		{
+			...(python ? {
+				PATH: `${dirname(python)}:${process.env.PATH ?? ""}`,
+				D945_PYTHON: python,
+				QUALITY_MUTATION_PYTHON: python,
+			} : {}),
+			...environment,
+		},
 	);
 	const xml = existsSync(report) ? readFileSync(report, "utf8") : "";
 	const header = xml.match(/<testsuites\b[^>]*\btests="(\d+)"[^>]*\bfailures="(\d+)"/);
@@ -1209,11 +1214,23 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 	const byPath = new Map<string, Candidate[]>();
 	for (const candidate of candidates)
 		if (!candidate.operator.startsWith("py-")) byPath.set(candidate.path, [...(byPath.get(candidate.path) ?? []), candidate]);
+	// Probes are served by a module-load overlay, so the reach copy keeps the
+	// frozen bytes for tests that read their own sources as text.
+	const overlay: ReachOverlay = { root: directory, instrumented: join(temporary, "reach-instrumented"), paths: [] };
 	for (const [candidatePath, rows] of byPath) {
 		const source = mutationSource(directory, candidatePath);
 		const unique = [...new Map(rows.map((row) => [`${row.site.start}:${row.site.end}:${row.site.mode}`, row])).values()];
-		writeMutation(source, instrument(source.source, unique.map((row) => ({ ...row, tests })), markers));
+		const target = join(overlay.instrumented, relative(directory, source.path));
+		mkdirSync(dirname(target), { recursive: true });
+		writeFileSync(target, hostWith(source, instrument(source.source, unique.map((row) => ({ ...row, tests })), markers)));
+		overlay.paths.push(relative(directory, source.path));
 	}
+	const overlayFile = join(temporary, "reach-overlay.txt");
+	writeFileSync(overlayFile, encodeOverlay(overlay));
+	const environment = {
+		[OVERLAY_ENVIRONMENT]: overlayFile,
+		BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ""} --preload=${join(import.meta.dir, "quality-mutation-reach-overlay.ts")}`.trim(),
+	};
 	const map = new Map<string, ProbeEvidence>();
 	for (const candidate of candidates) map.set(candidate.id, { reached: false, markerSha256: sha256(""), tests: [] });
 	const runs: { test: string; receipt: TestSelectionReceipt }[] = [];
@@ -1222,7 +1239,7 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		if (readFileSync(join(directory, test), "utf8").trim() === "") continue;
 		rmSync(markers, { recursive: true, force: true });
 		mkdirSync(markers);
-		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout);
+		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout, environment);
 		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0) {
 			const assertions = receipt.assertions.length ? receipt.assertions.join(", ") : "<none>";
 			const stderr = receipt.batches.map((batch) => batch.process.stderr).join("\n").slice(-2048);
@@ -1293,13 +1310,13 @@ export function mutationSource(
 		return fail("schema", "Virtual source is not a unique raw template");
 	return { path, source: init.template.rawText, host, start: init.getStart(source), end: init.end };
 }
+function hostWith(source: ReturnType<typeof mutationSource>, content: string): string {
+	return source.start === 0 && source.end === source.host.length
+		? content
+		: replace(source.host, source.start, source.end, JSON.stringify(content));
+}
 function writeMutation(source: ReturnType<typeof mutationSource>, content: string): void {
-	writeFileSync(
-		source.path,
-		source.start === 0 && source.end === source.host.length
-			? content
-			: replace(source.host, source.start, source.end, JSON.stringify(content)),
-	);
+	writeFileSync(source.path, hostWith(source, content));
 }
 export async function pythonWorker(
 	options: Pick<Options, "python" | "decision" | "timeout">,
