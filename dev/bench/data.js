@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789850552470,
+  "lastUpdate": 1789858065612,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -73071,6 +73071,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 115126,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "84704df299194e313371d4806b959cd9f68b079d",
+          "message": "fix(mutation): claim reach guard before the marker write (#1107)\n\nProbed test helpers such as disposition-967-archive-fault.ts wrap\nfs.writeFileSync on the builtin module object. A reach probe spliced\ninside that wrapper wrote its marker through the wrapper before setting\nits once-guard and recursed until the stack overflowed, which killed\nscript/ledger-archive-fault.test.ts in campaign run 35468117173.\n\nThe probe now claims its Reflect guard first, so re-entry through a\nwrapped write short-circuits. RED/GREEN test reproduces the wrapper.\n\nPart of #1049",
+          "timestamp": "2026-09-19T22:44:28Z",
+          "tree_id": "95d835562d3aa78f5cefcea60e55f0beaa36fceb",
+          "url": "https://github.com/INONONO66/openomni/commit/84704df299194e313371d4806b959cd9f68b079d"
+        },
+        "date": 1789858064851,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1038,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1394,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1384868,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 367329,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6773810,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1109,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 165587,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 797701,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 634190,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3443,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 98254866,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9150419,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19367,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 183536,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 912376,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 241711,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15836508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 92,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 172036,
             "unit": "ns/op"
           }
         ]
