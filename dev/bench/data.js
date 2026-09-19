@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789800402046,
+  "lastUpdate": 1789806357121,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -72133,6 +72133,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 173057,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7e8e84cb0a7bf27a7e59ac0514024b4625775ed9",
+          "message": "quality(mutation): make reach probes type-clean under strict compiler options (#1100)\n\nProbed TypeScript is type-checked by tests compiling source under strict options (packages/ipc typed-facade fixture); the globalThis once-guard was TS7053 and turned the reach phase red (CI campaign run 35427365423). Guard now uses Reflect.get/Reflect.set; RED/GREEN test type-checks instrumented source. Review: APPROVE, 0 blockers.",
+          "timestamp": "2026-09-19T17:22:43+09:00",
+          "tree_id": "af1c6631c1630800a828969542426cba31b63ed2",
+          "url": "https://github.com/INONONO66/openomni/commit/7e8e84cb0a7bf27a7e59ac0514024b4625775ed9"
+        },
+        "date": 1789806356443,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1026,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1760,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1403,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1405591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 373226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6582223,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 158,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1106,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 667,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 159722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 767860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 546732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3781,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 95106770,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9157193,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 181983,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 905904,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 231585,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15287740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 92,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 162336,
             "unit": "ns/op"
           }
         ]
