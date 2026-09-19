@@ -830,6 +830,7 @@ const comparisonOperators = new Set<ts.SyntaxKind>([
 	ts.SyntaxKind.InKeyword,
 ]);
 function isLiteralOperand(node: ts.Node): boolean {
+	if (ts.isParenthesizedExpression(node)) return isLiteralOperand(node.expression);
 	return (
 		ts.isStringLiteralLike(node) ||
 		ts.isNumericLiteral(node) ||

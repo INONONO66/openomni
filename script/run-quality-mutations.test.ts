@@ -144,7 +144,7 @@ test("reach sites on logical conditions and comparison literals preserve narrowi
 	const source = [
 		'export function run(d: { value?: unknown } | undefined, chunk: string | Uint8Array, e: unknown): number {',
 		'  if (!d || !("value" in d)) return 0;',
-		'  const text = typeof chunk === "string" ? chunk : chunk.length;',
+		'  const text = typeof chunk === ("string") ? chunk : chunk.length;',
 		'  if (!(e instanceof Error && "code" in e && e.code === "ENOENT")) return 1;',
 		'  switch (true) { case typeof text === "number": return text; }',
 		'  return text ? 2 : 3;',
@@ -165,7 +165,7 @@ test("reach sites on logical conditions and comparison literals preserve narrowi
 	expect(siteText("||")).toEqual(["d"]);
 	expect(siteText("&&")).toEqual(["e instanceof Error"]);
 	expect(siteText("&&", source.lastIndexOf("&&"))).toEqual(["e instanceof Error"]);
-	expect(siteText('"string"')).toEqual(['typeof chunk === "string"']);
+	expect(siteText('"string"')).toEqual(['typeof chunk === ("string")']);
 	expect(siteText('"ENOENT"')).toEqual(['e.code === "ENOENT"']);
 	const literalSwitch = all.find((candidate) => candidate.startOffset === source.indexOf("true"));
 	expect(literalSwitch?.site.mode).toBe("statement");
