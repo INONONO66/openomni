@@ -146,6 +146,7 @@ test("reach sites on logical conditions and comparison literals preserve narrowi
 		'  if (!d || !("value" in d)) return 0;',
 		'  const text = typeof chunk === "string" ? chunk : chunk.length;',
 		'  if (!(e instanceof Error && "code" in e && e.code === "ENOENT")) return 1;',
+		'  switch (true) { case typeof text === "number": return text; }',
 		'  return text ? 2 : 3;',
 		'}',
 	].join("\n");
@@ -153,10 +154,11 @@ test("reach sites on logical conditions and comparison literals preserve narrowi
 	const contract = readContract(join(input.root, "contract.json"));
 	const operators = ["logical", "equality", "string-literal", "boolean-literal"].map((id) => ({
 		id,
-		replacements: new Map([["||", ["&&"]], ["&&", ["||"]], ["===", ["!=="]]]),
+		replacements: new Map([["||", ["&&"]], ["&&", ["||"]], ["===", ["!=="]], ["true", ["false"]]]),
 	}));
-	const candidates = analyze(input.root, contract, buildInventory(input.root, contract), operators)
-		.enumerated.candidates.filter((candidate) => candidate.path === "src/a.ts" && candidate.site.mode === "expression");
+	const all = analyze(input.root, contract, buildInventory(input.root, contract), operators)
+		.enumerated.candidates.filter((candidate) => candidate.path === "src/a.ts");
+	const candidates = all.filter((candidate) => candidate.site.mode === "expression");
 	const siteText = (text: string, offset = source.indexOf(text)): string[] => candidates
 		.filter((candidate) => candidate.startOffset === offset)
 		.map((candidate) => source.slice(candidate.site.start, candidate.site.end));
@@ -165,6 +167,9 @@ test("reach sites on logical conditions and comparison literals preserve narrowi
 	expect(siteText("&&", source.lastIndexOf("&&"))).toEqual(["e instanceof Error"]);
 	expect(siteText('"string"')).toEqual(['typeof chunk === "string"']);
 	expect(siteText('"ENOENT"')).toEqual(['e.code === "ENOENT"']);
+	const literalSwitch = all.find((candidate) => candidate.startOffset === source.indexOf("true"));
+	expect(literalSwitch?.site.mode).toBe("statement");
+	expect(source.slice(literalSwitch?.site.start, literalSwitch?.site.end)).toBe("");
 	const directory = mkdtempSync(join(tmpdir(), "mutation-narrowing-probe-"));
 	try {
 		const path = join(directory, "a.ts");

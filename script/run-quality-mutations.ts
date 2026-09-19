@@ -542,11 +542,16 @@ export function enumerate(
 					const id = sha256(`${file.path}\0${startOffset}\0${endOffset}\0${replacementSha256}`);
 					if (seen.has(id)) return;
 					seen.add(id);
-					const boundary = mode === "expression" ? valueBoundary(siteNode) : siteNode;
+					const value = mode === "expression" ? valueBoundary(siteNode) : siteNode;
+					// `switch (true)` narrows by its literal discriminant; a probe there
+					// becomes an entry marker on the statement, which has the same reach.
+					const literalSwitch = isSwitchDiscriminantLiteral(value);
+					const boundary = literalSwitch ? value.parent : value;
+					const siteMode = literalSwitch ? "statement" : mode;
 					const start = boundary.getStart(source);
 					// Keep block-owned statements at their original lexical level.
 					// Wrapping super() changes Bun's parameter-property initialization.
-					const end = mode === "statement" && ts.isBlock(boundary.parent) ? start : boundary.end;
+					const end = siteMode === "statement" && ts.isBlock(boundary.parent) ? start : boundary.end;
 					candidates.push({
 						id,
 						path: file.path,
@@ -556,7 +561,7 @@ export function enumerate(
 						operator: op,
 						replacement,
 						replacementSha256,
-						site: { start, end, mode },
+						site: { start, end, mode: siteMode },
 					});
 				}
 				function addScalarMutations(node: ts.Node, raw: string): void {
@@ -832,6 +837,13 @@ function isLiteralOperand(node: ts.Node): boolean {
 		node.kind === ts.SyntaxKind.TrueKeyword ||
 		node.kind === ts.SyntaxKind.FalseKeyword ||
 		node.kind === ts.SyntaxKind.NullKeyword
+	);
+}
+function isSwitchDiscriminantLiteral(node: ts.Node): boolean {
+	return (
+		(node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) &&
+		ts.isSwitchStatement(node.parent) &&
+		node.parent.expression === node
 	);
 }
 function narrowingBoundary(node: ts.Node): ts.Node {
