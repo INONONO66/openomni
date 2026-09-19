@@ -484,7 +484,7 @@ test("reach discovery follows baseline execution across package ignore rules", a
 
 test("failed reach probes retain their test process and JUnit instead of object stringification", async () => {
 	const input = await fixture(
-		'const process = { getBuiltinModule: () => { throw new Error("probe-receiver-failure"); } }; export const run = () => true;',
+		'globalThis.Reflect.has = () => { throw new Error("probe-receiver-failure"); }; export const run = () => true;',
 		"expect(run()).toBe(true);",
 	);
 	fixtureGit(input.root, "init", "-q");
