@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, lstatSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, lstatSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import ts from "typescript";
@@ -237,6 +237,13 @@ export function buildInventory(root: string, contract: Contract): Inventory {
   const embedded: Inventory["embedded"] = [];
   for (const directory of contract.roots)
     collect(root, resolve(root, directory), { files, configurations });
+  // The root manifest is the package scope of every owned file without a
+  // nearer one: its `imports` map and self-reference route bare specifiers.
+  if (existsSync(join(root, "package.json")))
+    configurations.push({
+      path: "package.json",
+      sha256: digest(readFileSync(join(root, "package.json"))),
+    });
   if (contract.topology) {
     configurations.push({
       path: "tsconfig.base.json",
