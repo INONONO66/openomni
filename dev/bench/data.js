@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789826897433,
+  "lastUpdate": 1789835432760,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -72669,6 +72669,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 164682,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "97ec5b077a7ed5a8e8162c1eb8ebb45f1491b346",
+          "message": "fix(quality): resolve reach-probe globals through globalThis (#1103)\n\n* fix(quality): resolve reach-probe globals through globalThis\n\nReach probes are spliced into arbitrary scopes. packages/codemode/src/kernel.ts\ndeclares `const process = spawn(...)` inside start(), so a probe naming bare\n`process` called ChildProcess.getBuiltinModule and threw, killing every\ninterpreter start under instrumentation: campaign run 35447636805 failed the\nreach map on apps/openomni/test/code-mode-e2e.test.ts (12 tests \"still\nrunning\" / IpcTimeoutError machine.run_code) after a green 4757/0 baseline.\n\nThe probe's only free identifier is now `globalThis`. RED/GREEN: a test\nevaluates a probe inside a function whose parameters shadow process and\nReflect (TypeError before, marker written and value intact after).\n\nPart of #1049.\n\n* test(quality): break the reach-diagnostics probe through globalThis\n\nThe fixture shadowed process locally, which the probe no longer reads; it now overrides globalThis.Reflect.has so the probe still fails at the receiver.\n\n* test(quality): share the probed-run helper between reach probe tests",
+          "timestamp": "2026-09-19T16:27:14Z",
+          "tree_id": "931fc6cc4b25391a2b8ebe33898236e6788f2d83",
+          "url": "https://github.com/INONONO66/openomni/commit/97ec5b077a7ed5a8e8162c1eb8ebb45f1491b346"
+        },
+        "date": 1789835431993,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1380,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1357408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 365482,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6594087,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 158,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 654,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 162949,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 783337,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 562298,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3672,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 96653896,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9245961,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19288,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 182670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 914145,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 244179,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15430619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 90,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 169999,
             "unit": "ns/op"
           }
         ]
