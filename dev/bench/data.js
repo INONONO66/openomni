@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789806357121,
+  "lastUpdate": 1789813729954,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -72267,6 +72267,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 162336,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3e29a4189bb217c6192aed4ded3728756addd209",
+          "message": "fix(quality): fail emitted-module import identity gaps (#1093) (#1095)\n\n* fix(quality): fail emitted-module import identity gaps\n\nCloses the three findings of the #1082 round-3 review (#1093):\n\n- moduleSpecifiers unwraps parenthesized literals, records require(\"...\")\n  with import(\"...\"), and reports computed specifiers; an owned emission\n  that loads a computed specifier fails identity because its dependency\n  cannot be pinned. Computed specifiers in originals stay collectable.\n- ownedEmissionTarget binds to the frozen tree: an unresolved specifier\n  fails identity, a relative specifier may not reach an owned file through\n  a symlink, and a bare specifier named by a frozen owned package manifest\n  must land in that package through the link the loader follows.\n- executedDynamicSpecifiers requires the innermost mapped branch arm to be\n  positive as well as the innermost statement, so an untaken ternary or\n  short-circuit arm carries no emission obligation.\n\nFixture tests mirror the reviewer's probe matrix.\n\n* fix(quality): pin emitted-module loader reach and link routing\n\nReview of #1095 (P1-1..P1-4, P2-6, P2-7) showed emitted modules could reach\nthe loader outside literal import/require calls, TS wrappers split the\ndynamic-site join, bare specifiers skipped tree identity, and links were\nbound only by manifest name.\n\n- refuse emissions holding any loader reach (require value, node:module,\n  import.meta.require/resolve, getBuiltinModule)\n- join emitted and original load sites by source order and literal\n- refuse symlinks anywhere in the owned roots; require names in frozen\n  owned manifests; refuse links aliasing an owned package\n- resolve require sites under require conditions\n- refuse dynamic imports no counter can decide (logical assignment)\n\n* fix(quality): split specifier visitor and dedupe emission test prologues\n\nThe module-specifier visitor exceeded the cyclomatic (32) and cognitive (25)\nbounds; loadCall and loaderReach now own the literal-call and loader-reach\ndecisions. Four emission tests shared the collect/refuse prologue verbatim,\nwhich the test-clone analyzer reported; collectedReceipt, collectRefused,\ncollectedEmissions and replaceManifest own those steps once.\n\n* fix(quality): pin importer package scope and computed emission loads\n\nFreeze the root package.json in the inventory and refuse a bare specifier\nwhose importer-side package scope is not frozen, so an unfrozen root or\nplanted manifest cannot self-reference or #import-map a bare specifier\nonto an original after collection. Refuse at collection any emission\nproof no frozen load site demands: an emission loaded only through a\ncomputed specifier in an original could otherwise have its proof erased\nand still verify. Recognise import.meta.resolve(literal),\nnew URL(literal, import.meta.url)[.href] and createRequire(import.meta.url)\nas literal load sites, and let the default-parameter branch counter decide\nits site instead of refusing it.\n\n* fix(quality): bind imports-map targets and refuse linked path routing\n\nA frozen # entry mapping to a bare package now binds that package's link,\na conditional entry fails identity, a bare specifier's link may land in\nthe owned tree only on the frozen manifest directory of its name, and a\nrelative or absolute specifier whose lexical directory is a symlink is\nrefused. The inventory freezes the root manifest once when a root is\nthe repository itself.\n\n* fix(quality): pin a path specifier to the file it lexically names\n\nThe loader must land on the lexical path itself, modulo the module\nextension swap between an emission and its original, an added extension\nor a directory index; a file-level symlink as the final component is\nrefused like a directory link.",
+          "timestamp": "2026-09-19T19:25:07+09:00",
+          "tree_id": "d8e85a664cac5522105a4843685a2af589a480f5",
+          "url": "https://github.com/INONONO66/openomni/commit/3e29a4189bb217c6192aed4ded3728756addd209"
+        },
+        "date": 1789813728788,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1013,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1900,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1329520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 349124,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6623045,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 674,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 124479,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 765643,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 506755,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3587,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 96241657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 8867226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 17987,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 173173,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 858971,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 217472,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14269251,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 89,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 142078,
             "unit": "ns/op"
           }
         ]
