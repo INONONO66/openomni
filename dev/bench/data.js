@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789835432760,
+  "lastUpdate": 1789844584380,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -72803,6 +72803,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 169999,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "174e453f5a0fac1760947c8afd9244a122dd53fb",
+          "message": "fix(quality): serve mutation reach probes via module-load overlay (#1105)\n\n* fix(quality): serve mutation reach probes via module-load overlay\n\nReach instrumentation rewrote the execution copy's source files, so tests that\nread their own source as text saw probe code and turned red (run 35455021958\non packages/ui strip-geometry). A Bun preload plugin now serves instrumented\ntwins at module load while the copy keeps the frozen bytes.\n\n* ci: assign quality-mutation-reach-overlay.test.ts to scripts-tooling-4\n\n* test(quality): exercise overlay installation in-process\n\n---------\n\nCo-authored-by: ino <ino@users.noreply.github.com>",
+          "timestamp": "2026-09-19T18:59:12Z",
+          "tree_id": "9d1c0e5633026546677ea70bb1673733d5e6ef44",
+          "url": "https://github.com/INONONO66/openomni/commit/174e453f5a0fac1760947c8afd9244a122dd53fb"
+        },
+        "date": 1789844583034,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1026,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1359,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1345054,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 362834,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6601148,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 132,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1106,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 658,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 158873,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 770972,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 553169,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3926,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 95558985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 8786895,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18955,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 182481,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 907532,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 236762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15156452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 91,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 168675,
             "unit": "ns/op"
           }
         ]
