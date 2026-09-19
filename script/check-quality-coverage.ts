@@ -1428,116 +1428,356 @@ function parseReceipt(value: Json, data: Inputs): ProcessReceipt {
 	};
 }
 
-type DynamicImport = { specifier: string; line: number; column: number };
-type ModuleSpecifiers = { static: readonly string[]; dynamic: readonly DynamicImport[] };
+type Site = { line: number; column: number };
+// One `import(...)` / `require(...)` call: its literal specifier, or none when
+// the argument is computed. A site is unproved when the counters cannot
+// distinguish an evaluated call from a skipped one (a logical-assignment
+// operand or an optional-chain call argument; a default parameter initializer
+// has its own branch counter).
+type LoadSite = Site & { specifier?: string; kind: "import" | "require"; unproved: boolean };
+type ModuleSpecifiers = { static: readonly string[]; sites: readonly LoadSite[]; loader: readonly Site[] };
 
-// The string-literal module specifiers of one module: top-level import and
-// re-export declarations, and `import("...")` calls with their positions.
+// The module specifiers of one module: top-level import and re-export
+// declarations, every `import(...)` / `require(...)` call in source order with
+// its position, and every reference through which module code could reach the
+// loader outside those calls (a `require` value, `import.meta` beyond its
+// path fields, `node:module`, `process.getBuiltinModule`). A literal wrapped
+// in parentheses or a type-only operator is still a literal.
 function moduleSpecifiers(path: string, code: string, kind: ts.ScriptKind): ModuleSpecifiers {
 	const program = ts.createSourceFile(path, code, ts.ScriptTarget.ESNext, true, kind);
 	const statics: string[] = [];
-	const dynamic: DynamicImport[] = [];
+	const sites: LoadSite[] = [];
+	const loader: Site[] = [];
+	const at = (node: ts.Node): Site => {
+		const { line, character } = program.getLineAndCharacterOfPosition(node.getStart(program));
+		return { line: line + 1, column: character };
+	};
 	for (const statement of program.statements)
-		if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier))
+		if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
 			statics.push(statement.moduleSpecifier.text);
-	function visit(node: ts.Node): void {
-		if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-			const [argument] = node.arguments;
-			if (argument && ts.isStringLiteralLike(argument)) {
-				const { line, character } = program.getLineAndCharacterOfPosition(node.getStart(program));
-				dynamic.push({ specifier: argument.text, line: line + 1, column: character });
-			}
+			if (["module", "node:module"].includes(statement.moduleSpecifier.text)) loader.push(at(statement));
 		}
+	const logical = [ts.SyntaxKind.BarBarEqualsToken, ts.SyntaxKind.AmpersandAmpersandEqualsToken, ts.SyntaxKind.QuestionQuestionEqualsToken];
+	const unproved = (node: ts.Node): boolean => {
+		for (let child = node, parent = node.parent; parent && !ts.isBlock(parent) && !ts.isSourceFile(parent) && !ts.isFunctionLike(parent); child = parent, parent = parent.parent) {
+			if (ts.isBinaryExpression(parent) && parent.right === child && logical.includes(parent.operatorToken.kind)) return true;
+			if (ts.isCallExpression(parent) && ts.isOptionalChain(parent) && parent.arguments.some((a) => a === child)) return true;
+		}
+		return false;
+	};
+	function visit(node: ts.Node): void {
+		const call = loadCall(node);
+		if (call) {
+			sites.push({ ...at(node), ...call, unproved: unproved(node) });
+			if (call.specifier !== undefined && ["module", "node:module"].includes(call.specifier)) loader.push(at(node));
+		} else if (loaderReach(node)) loader.push(at(node));
 		ts.forEachChild(node, visit);
 	}
 	visit(program);
-	return { static: statics, dynamic };
+	return { static: statics, sites, loader };
+}
+
+// An `import(...)`, `require(...)` or `createRequire(import.meta.url)(...)`
+// call with its literal argument, or none when computed. The literal may sit
+// under parentheses and type-only wrappers, in `import.meta.resolve(...)`, or
+// in `new URL(..., import.meta.url)` (optionally `.href`), whose query and
+// fragment the loader ignores: each names the same module the literal alone
+// would.
+function loadCall(node: ts.Node): Pick<LoadSite, "kind" | "specifier"> | undefined {
+	if (!ts.isCallExpression(node)) return undefined;
+	const callee = node.expression;
+	const dynamic = callee.kind === ts.SyntaxKind.ImportKeyword;
+	const requires = (ts.isIdentifier(callee) && callee.text === "require") || (ts.isCallExpression(callee) && calleeName(callee.expression) === "createRequire" && isImportMetaField(callee.arguments[0], "url"));
+	if (!dynamic && !requires) return undefined;
+	const specifier = literalSpecifier(node.arguments[0]);
+	return { kind: dynamic ? "import" : "require", ...(specifier === undefined ? {} : { specifier }) };
+}
+
+const calleeName = (node: ts.Expression) => (ts.isIdentifier(node) ? node.text : ts.isPropertyAccessExpression(node) ? node.name.text : undefined);
+const isImportMetaField = (node: ts.Node | undefined, field: string) =>
+	node !== undefined && ts.isPropertyAccessExpression(node) && ts.isMetaProperty(node.expression) && node.expression.keywordToken === ts.SyntaxKind.ImportKeyword && node.name.text === field;
+
+function literalSpecifier(node: ts.Expression | undefined): string | undefined {
+	let argument = node;
+	while (argument && (ts.isParenthesizedExpression(argument) || ts.isAsExpression(argument) || ts.isSatisfiesExpression(argument) || ts.isNonNullExpression(argument) || ts.isTypeAssertionExpression(argument)))
+		argument = argument.expression;
+	if (argument === undefined) return undefined;
+	if (ts.isStringLiteralLike(argument)) return argument.text;
+	if (ts.isCallExpression(argument) && isImportMetaField(argument.expression, "resolve")) return literalSpecifier(argument.arguments[0]);
+	const url = ts.isPropertyAccessExpression(argument) && argument.name.text === "href" ? argument.expression : argument;
+	if (ts.isNewExpression(url) && ts.isIdentifier(url.expression) && url.expression.text === "URL" && isImportMetaField(url.arguments?.[1], "url")) {
+		const relative = literalSpecifier(url.arguments?.[0]);
+		return relative?.replace(/[?#].*$/, "");
+	}
+	return undefined;
+}
+
+// Whether a node reaches the module loader outside a literal load call: the
+// `require` value itself, `import.meta` beyond its path fields, or
+// `getBuiltinModule`. A property named `require` is not the loader.
+function loaderReach(node: ts.Node): boolean {
+	if (ts.isIdentifier(node) && node.text === "require") {
+		const { parent } = node;
+		if (ts.isCallExpression(parent) && parent.expression === node) return false;
+		const named = ts.isPropertyAccessExpression(parent) || ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent);
+		return !(named && parent.name === node);
+	}
+	if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword)
+		return !(ts.isPropertyAccessExpression(node.parent) && ["url", "dir", "dirname", "file", "filename", "path", "main", "env", "hot"].includes(node.parent.name.text));
+	return ts.isPropertyAccessExpression(node) && node.name.text === "getBuiltinModule";
 }
 
 const originalStaticSpecifiers = new WeakMap<Prepared, readonly string[]>();
-const originalDynamicImports = new WeakMap<Prepared, readonly DynamicImport[]>();
+const originalSites = new WeakMap<Prepared, readonly LoadSite[]>();
 const emittedSpecifiers = new Map<string, ModuleSpecifiers>();
 
 // Static specifiers come from the instrumented JavaScript, where type-only
-// imports are already erased; dynamic import positions come from the frozen
-// original source, where the mapped statement counters locate them.
-function originalImports(data: Inputs, file: Prepared): { static: readonly string[]; dynamic: readonly DynamicImport[] } {
+// imports are already erased; load sites come from the frozen original source,
+// where the mapped statement counters locate them.
+function originalImports(data: Inputs, file: Prepared): { static: readonly string[]; sites: readonly LoadSite[] } {
 	let statics = originalStaticSpecifiers.get(file);
-	let dynamic = originalDynamicImports.get(file);
-	if (!statics || !dynamic) {
+	let sites = originalSites.get(file);
+	if (!statics || !sites) {
 		const path = file.entry.path;
 		statics = moduleSpecifiers(path, file.code, ts.ScriptKind.JS).static;
-		dynamic = moduleSpecifiers(path, content(data.options.root, path).toString("utf8"), path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS).dynamic;
+		sites = moduleSpecifiers(path, content(data.options.root, path).toString("utf8"), path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS).sites;
 		originalStaticSpecifiers.set(file, statics);
-		originalDynamicImports.set(file, dynamic);
+		originalSites.set(file, sites);
 	}
-	return { static: statics, dynamic };
+	return { static: statics, sites };
 }
 
-// A dynamic import the process's own counters prove it evaluated: the
-// innermost mapped statement containing the call has a positive count. A
-// call outside every mapped statement cannot prove it went untaken.
-function executedDynamicSpecifiers(data: Inputs, file: Prepared, hits: FileCoverageData): string[] {
-	const inside = (range: Range, at: DynamicImport) =>
+// Whether the process's own counters prove each load site evaluated: the
+// innermost mapped statement containing the call has a positive count, and so
+// does the innermost mapped branch arm containing it, so an untaken ternary or
+// short-circuit arm carries no obligation. `if` arms share the statement's own
+// range and are located by the statements they contain instead. A call outside
+// every mapped statement cannot prove it went untaken. A site the counters
+// cannot decide at all fails identity rather than being credited either way.
+function executedSites(data: Inputs, file: Prepared, hits: FileCoverageData): boolean[] {
+	const inside = (range: Range, at: Site) =>
 		(at.line > range.start.line || (at.line === range.start.line && at.column >= range.start.column)) &&
 		(at.line < range.end.line || (at.line === range.end.line && at.column <= range.end.column));
 	const span = (range: Range) => (range.end.line - range.start.line) * 1_000_000 + (range.end.column - range.start.column);
-	return originalImports(data, file).dynamic.filter((at) => {
-		const containing = Object.entries(file.mapped.statementMap).filter(([, range]) => inside(range, at)).sort(([, a], [, b]) => span(a) - span(b));
-		const [innermost] = containing;
-		return innermost === undefined || (hits.s[innermost[0]] ?? 0) > 0;
-	}).map((at) => at.specifier);
+	const innermost = <T>(rows: readonly (readonly [T, Range])[], at: Site): T | undefined =>
+		rows.filter(([, range]) => inside(range, at)).sort(([, a], [, b]) => span(a) - span(b))[0]?.[0];
+	const statements = Object.entries(file.mapped.statementMap);
+	const arms = Object.entries(file.mapped.branchMap).flatMap(([key, branch]) =>
+		branch.type === "if" ? [] : branch.locations.map((range, index) => [[key, index] as const, range] as const));
+	return originalImports(data, file).sites.map((site) => {
+		if (site.unproved && site.specifier !== undefined)
+			fail("identity", file.entry.path, `dynamic import at ${site.line}:${site.column} has no counter that proves it evaluated or skipped`);
+		const statement = innermost(statements, site);
+		const arm = innermost(arms, site);
+		return (statement === undefined || (hits.s[statement] ?? 0) > 0) && (arm === undefined || (hits.b[arm[0]]?.[arm[1]] ?? 0) > 0);
+	});
 }
 
-// Resolves one specifier exactly as the loader classifies it and returns the
-// owned compiled module it names, or undefined for builtins, dependencies,
-// paths outside the roots, and inventoried originals. A bare specifier that
-// lands in the owned tree also pins the package manifest that routed it.
-function ownedEmissionTarget(data: Inputs, specifier: string, importer: string): string | undefined {
+const lexicalExists = (path: string) => {
+	try {
+		lstatSync(path);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+const linkFreeRoots = new WeakSet<Inputs>();
+// The inventory refuses symlinks inside the owned roots; the same tree is
+// walked again at verification, so no compiled module or original can have
+// been retargeted by a link between inventory and this process's loads.
+function ownedTreeWithoutLinks(data: Inputs): void {
+	if (linkFreeRoots.has(data)) return;
+	const walk = (directory: string): void => {
+		for (const name of readdirSync(directory)) {
+			if (name === "node_modules") continue;
+			const absolute = join(directory, name);
+			const stat = lstatSync(absolute);
+			if (stat.isSymbolicLink()) fail("tamper", relative(data.options.root, absolute), "owned tree holds a symlink");
+			if (stat.isDirectory()) walk(absolute);
+		}
+	};
+	for (const root of data.roots) walk(join(data.options.root, root));
+	linkFreeRoots.add(data);
+}
+
+const ownedManifestNames = new WeakMap<Inputs, readonly { path: string; name: string }[]>();
+// The frozen package manifests inside the owned roots, with the package names
+// they declare; an owned package without a name binds no bare specifier and is
+// refused. The manifest bytes are re-read under their frozen digest.
+function ownedManifests(data: Inputs): readonly { path: string; name: string }[] {
+	let cached = ownedManifestNames.get(data);
+	if (!cached) {
+		cached = data.configurations
+			.filter((config) => basename(config.path) === "package.json" && !config.path.split("/").includes("node_modules") && data.roots.some((r) => config.path.startsWith(`${r}/`)))
+			.map((config) => {
+				const bytes = content(data.options.root, config.path);
+				if (sha256(bytes) !== config.sha256) fail("tamper", config.path, "frozen package manifest differs");
+				const name = object(decode(bytes.toString("utf8"))).name;
+				if (typeof name !== "string") fail("identity", config.path, "frozen owned package manifest declares no name");
+				return { path: config.path, name };
+			});
+		ownedManifestNames.set(data, cached);
+	}
+	return cached;
+}
+
+// The nearest `node_modules` entry for a package name above the importer,
+// located with plain file-system calls rather than the resolver's cache.
+function packageLink(root: string, importer: string, name: string): string | undefined {
+	for (let directory = join(root, dirname(importer)); ; directory = dirname(directory)) {
+		const link = join(directory, "node_modules", name);
+		if (lexicalExists(link)) return link;
+		if (directory === root) return undefined;
+	}
+}
+
+// The link the loader follows for a bare specifier may only land where the
+// frozen tree says: a link into the owned roots must land exactly on the
+// frozen manifest directory of that very name, while a dependency link stays
+// outside the owned roots. A frozen owned name additionally pins the resolved
+// target inside its package, whatever the dependency tree links now.
+function ownedPackageBinding(data: Inputs, specifier: string, importer: string, target: string): void {
+	const name = specifier.split("/").slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+	const link = packageLink(data.options.root, importer, name);
+	let landing: string | undefined;
+	if (link !== undefined) {
+		try {
+			landing = relative(data.options.root, realpathSync(link));
+		} catch {
+			fail("identity", importer, `package link ${relative(data.options.root, link)} for ${JSON.stringify(specifier)} is broken`);
+		}
+		if (lstatSync(link).isSymbolicLink()) {
+			const owned = ownedManifests(data).find((manifest) => dirname(manifest.path) === landing);
+			if (owned && owned.name !== name)
+				fail("identity", importer, `package link ${relative(data.options.root, link)} for ${JSON.stringify(specifier)} aliases frozen package ${owned.path}`);
+			if (!owned && data.roots.some((r) => landing === r || landing?.startsWith(`${r}/`)))
+				fail("identity", importer, `package link ${relative(data.options.root, link)} for ${JSON.stringify(specifier)} lands in the owned tree without a frozen package of that name`);
+		}
+	}
+	for (const manifest of ownedManifests(data)) {
+		if (manifest.name !== name) continue;
+		const owner = dirname(manifest.path);
+		if (!target.startsWith(`${owner}/`) || (landing !== undefined && landing !== owner))
+			fail("identity", importer, `import ${JSON.stringify(specifier)} resolves outside frozen package ${manifest.path}`);
+	}
+}
+
+// The package manifest nearest above a path: the scope the loader consults
+// for a bare specifier's `imports` map or self-reference at the importer, and
+// the manifest whose `exports` routed a bare specifier at the target. A path
+// with no manifest above it belongs to the root's.
+function nearestManifest(root: string, path: string): string {
+	let directory = dirname(path);
+	while (directory !== "." && !existsSync(join(root, directory, "package.json"))) directory = dirname(directory);
+	return join(directory, "package.json");
+}
+
+// A `#` specifier is routed by the frozen scope manifest's `imports` map; the
+// bare package it maps to is what the link pin must bind. A conditional or
+// pattern entry cannot be pinned to one package and fails identity.
+function importsMapTarget(data: Inputs, scope: string, specifier: string, importer: string): string {
+	const imports = object(object(decode(content(data.options.root, scope).toString("utf8"))).imports ?? {});
+	const mapped = imports[specifier];
+	if (typeof mapped !== "string")
+		return fail("identity", importer, `imports map entry ${JSON.stringify(specifier)} in ${scope} is not one literal target`);
+	return mapped;
+}
+
+// A relative or absolute specifier is pinned by the frozen owned tree only when
+// the file it lexically names is where the loader really lands: a directory or
+// file symlink outside the roots or under `node_modules` would let the same
+// specifier name another module at verification. The loader may swap the
+// module extension between a JavaScript form and its TypeScript original, add
+// one, or index a directory the lexical path names; it never leaves that path.
+function pathSpecifierWithoutLinks(root: string, specifier: string, from: string, importer: string, resolved: string): void {
+	const lexical = resolve(from, specifier);
+	const stem = (path: string) => path.replace(/\.[cm]?[jt]sx?$/, "");
+	if (stem(resolved) !== stem(lexical) && !resolved.startsWith(`${lexical}${sep}`))
+		fail("identity", importer, `import ${JSON.stringify(specifier)} traverses a symlink at ${relative(root, lexical)}`);
+}
+
+// Resolves one specifier exactly as the loader classifies it (`require` sites
+// under the require conditions, everything else under the import conditions)
+// and returns the owned compiled module it names, or undefined for builtins,
+// dependencies, paths outside the roots, and inventoried originals. The
+// binding is checked against the frozen tree rather than the current one: a
+// specifier that no longer resolves fails identity, the owned tree holds no
+// symlinks, a bare specifier's importer-side package scope, when one exists,
+// must be frozen, its link must land where the frozen tree says, and a bare
+// specifier that lands in the owned tree also pins the package manifest that
+// routed it.
+function ownedEmissionTarget(data: Inputs, specifier: string, importer: string, kind: "import" | "require" = "import"): string | undefined {
 	if (nodeModules.isBuiltin(specifier) || specifier.startsWith("bun:")) return undefined;
+	ownedTreeWithoutLinks(data);
+	const bare = !specifier.startsWith(".") && !isAbsolute(specifier);
+	const from = join(data.options.root, dirname(importer));
 	let resolved: string;
 	try {
-		resolved = realpathSync(Bun.resolveSync(specifier, join(data.options.root, dirname(importer))));
+		resolved = realpathSync(kind === "require" ? nodeModules.createRequire(join(from, "resolve.cjs")).resolve(specifier) : Bun.resolveSync(specifier, from));
 	} catch {
-		if (specifier.startsWith(".")) return undefined; // relative imports of originals; the loader binds them by inventory
 		return fail("identity", importer, `import ${JSON.stringify(specifier)} does not resolve in the frozen tree`);
 	}
 	const target = relative(data.options.root, resolved);
+	const frozen = (manifest: string) => data.configurations.some((config) => config.path === manifest);
+	if (bare) {
+		const scope = nearestManifest(data.options.root, importer);
+		if (existsSync(join(data.options.root, scope)) && !frozen(scope))
+			fail("identity", importer, `package scope manifest ${scope} routing ${JSON.stringify(specifier)} is not frozen`);
+		const routed = specifier.startsWith("#") ? importsMapTarget(data, scope, specifier, importer) : specifier;
+		if (routed.startsWith(".")) pathSpecifierWithoutLinks(data.options.root, routed, join(data.options.root, dirname(scope)), importer, resolved);
+		else ownedPackageBinding(data, routed, importer, target);
+	} else pathSpecifierWithoutLinks(data.options.root, specifier, from, importer, resolved);
 	if (target.startsWith("..") || isAbsolute(target) || target.split("/").includes("node_modules")) return undefined;
 	if (!data.roots.some((r) => target.startsWith(`${r}/`))) return undefined;
-	if (!specifier.startsWith(".") && !isAbsolute(specifier)) {
-		let directory = dirname(target);
-		while (directory !== "." && !existsSync(join(data.options.root, directory, "package.json"))) directory = dirname(directory);
-		const manifest = join(directory, "package.json");
-		if (!data.configurations.some((config) => config.path === manifest))
-			fail("identity", importer, `package manifest ${manifest} routing ${JSON.stringify(specifier)} is not frozen`);
-	}
+	if (bare && !frozen(nearestManifest(data.options.root, target)))
+		fail("identity", importer, `package manifest ${nearestManifest(data.options.root, target)} routing ${JSON.stringify(specifier)} is not frozen`);
 	if (!/\.[cm]?[jt]sx?$/.test(target) || data.files.some((f) => f.entry.path === target)) return undefined;
 	return target;
 }
+
+// TypeScript may rewrite a relative `.ts` specifier to its emitted extension;
+// nothing else about a literal changes between an original and its emission.
+const emittedForm = (specifier: string) => specifier.replace(/\.([cm]?)tsx?$/, ".$1js");
 
 // Every owned compiled module the process must have loaded needs an emission
 // proof: the static imports of each loaded original and of each proved
 // emission (resolved from the emission's own directory, so a compiled barrel
 // pins its compiled dependencies), and every dynamic import the counters show
-// was evaluated. An untaken dynamic import legitimately carries no proof.
+// was evaluated. An untaken dynamic import legitimately carries no proof. An
+// emission's load sites are joined to its original's in source order: each
+// must be the same literal at the same kind of call, so the original's
+// counters decide the emission's obligations. A computed specifier or any
+// other reach to the loader inside an owned emission cannot be pinned at all
+// and fails identity. The converse holds as well: a proof no frozen site
+// demands was loaded through a computed specifier in an original, and a
+// receipt without the proof would still verify, so the process is refused at
+// collection rather than left to the loader.
 function requiredEmissions(data: Inputs, loaded: readonly string[], emitted: readonly EmissionProof[], coverage: ProcessReceipt["coverage"]): void {
+	const demanded = new Set<string>();
 	const demand = (target: string | undefined, importer: string) => {
-		if (target !== undefined && !emitted.some((proof) => proof.path === target))
+		if (target === undefined) return;
+		if (!emitted.some((proof) => proof.path === target))
 			fail("identity", target, `emitted module imported by ${importer} has no emission proof`);
+		demanded.add(target);
 	};
-	const executed = new Map<string, string[]>();
+	const executed = new Map<string, boolean[]>();
 	const evaluated = (file: Prepared) => {
 		const cached = executed.get(file.entry.path);
 		if (cached) return cached;
-		const specifiers = executedDynamicSpecifiers(data, file, coverage[file.entry.path] ?? fail("incomplete_coverage", file.entry.path, "loaded source counter record missing"));
-		executed.set(file.entry.path, specifiers);
-		return specifiers;
+		const flags = executedSites(data, file, coverage[file.entry.path] ?? fail("incomplete_coverage", file.entry.path, "loaded source counter record missing"));
+		executed.set(file.entry.path, flags);
+		return flags;
 	};
 	for (const path of loaded) {
 		const file = data.files.find((f) => f.entry.path === path);
 		if (!file || file.python) continue;
-		for (const specifier of [...originalImports(data, file).static, ...evaluated(file)]) demand(ownedEmissionTarget(data, specifier, path), path);
+		const { static: statics, sites } = originalImports(data, file);
+		for (const specifier of statics) demand(ownedEmissionTarget(data, specifier, path), path);
+		const flags = evaluated(file);
+		sites.forEach((site, index) => {
+			if (site.specifier !== undefined && flags[index]) demand(ownedEmissionTarget(data, site.specifier, path, site.kind), path);
+		});
 	}
 	for (const proof of emitted) {
 		const key = `${proof.path}\0${proof.sha256}`;
@@ -1546,10 +1786,26 @@ function requiredEmissions(data: Inputs, loaded: readonly string[], emitted: rea
 			specifiers = moduleSpecifiers(proof.path, content(data.options.root, proof.path).toString("utf8"), ts.ScriptKind.JS);
 			emittedSpecifiers.set(key, specifiers);
 		}
+		const [computed] = specifiers.sites.filter((site) => site.specifier === undefined);
+		if (computed) fail("identity", proof.path, `emitted module loads a computed specifier at ${computed.line}:${computed.column}; its dependencies cannot be pinned`);
+		const [reach] = specifiers.loader;
+		if (reach) fail("identity", proof.path, `emitted module reaches the module loader at ${reach.line}:${reach.column}; its dependencies cannot be pinned`);
 		const source = data.files.find((f) => f.entry.path === proof.source) ?? fail("identity", proof.source, "emitted original absent from frozen inventory");
-		const dynamic = specifiers.dynamic.map((at) => at.specifier).filter((specifier) => evaluated(source).includes(specifier));
-		for (const specifier of [...specifiers.static, ...dynamic]) demand(ownedEmissionTarget(data, specifier, proof.path), proof.path);
+		const original = originalImports(data, source).sites;
+		if (original.length !== specifiers.sites.length)
+			fail("identity", proof.path, `emitted module has ${specifiers.sites.length} dynamic import sites where its original has ${original.length}`);
+		const flags = evaluated(source);
+		specifiers.sites.forEach((site, index) => {
+			const counterpart = original[index] ?? fail("identity", proof.path, "emitted load site has no original");
+			if (counterpart.kind !== site.kind || counterpart.specifier === undefined || (counterpart.specifier !== site.specifier && emittedForm(counterpart.specifier) !== site.specifier))
+				fail("identity", proof.path, `dynamic import at ${site.line}:${site.column} differs from its original at ${counterpart.line}:${counterpart.column}`);
+			if (flags[index]) demand(ownedEmissionTarget(data, site.specifier ?? "", proof.path, site.kind), proof.path);
+		});
+		for (const specifier of specifiers.static) demand(ownedEmissionTarget(data, specifier, proof.path), proof.path);
 	}
+	for (const proof of emitted)
+		if (!demanded.has(proof.path))
+			fail("identity", proof.path, "emitted module was loaded through a computed specifier; no frozen load site pins it");
 }
 
 function summary(data: Inputs, receipts: ProcessReceipt[]) {

@@ -621,24 +621,78 @@ export function dormant() {
 
 const dynamicEmittedTest = 'import { test, expect } from "bun:test"; const { choose } = await import("@fixture/emitted"); test("dynamic emitted entry", () => { expect(choose(true)).toBe(42); });\n';
 const originalBeforeDynamicTest = 'import { test, expect } from "bun:test"; import { choose as original } from "./pkg/src/index.ts"; const { choose } = await import("@fixture/emitted"); test("both instances", () => { expect(original(true)).toBe(42); expect(choose(false)).toBe(99); });\n';
+const parenthesizedEmittedTest = 'import { test, expect } from "bun:test"; const { choose } = await import(("@fixture/emitted")); test("parenthesized", () => { expect(choose(true)).toBe(42); });\n';
+const requireEmittedTest = 'import { test, expect } from "bun:test"; const { choose } = require("@fixture/emitted"); test("require", () => { expect(choose(true)).toBe(42); });\n';
+const relativeEmittedTest = 'import { test, expect } from "bun:test"; import { choose } from "./pkg/dist/index.js"; test("relative entry", () => { expect(choose(true)).toBe(42); });\n';
+const aliasEmittedTest = 'import { test, expect } from "bun:test"; import { choose } from "@fixture/alias"; test("alias entry", () => { expect(choose(true)).toBe(42); });\n';
+
+// Replaces the emitted workspace's package manifest and refreezes its digest.
+// Points the `@fixture/emitted` link at a decoy package of the same name
+// outside the owned roots.
+function retargetPackageLinkToDecoy(f: ReturnType<typeof emittedWorkspace>): void {
+	rmSync(join(f.root, "node_modules/@fixture/emitted"));
+	f.put("node_modules/decoy/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./index.js"}');
+	f.put("node_modules/decoy/index.js", "export function choose(taken) { return taken ? 42 : 99; }\n");
+	symlinkSync(join(f.root, "node_modules/decoy"), join(f.root, "node_modules/@fixture/emitted"));
+}
+
+function replaceManifest(f: ReturnType<typeof emittedWorkspace>, manifest: string): void {
+	f.put("script/pkg/package.json", manifest);
+	const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+	inventory.configurations = list(inventory.configurations).map((row) => obj(row).path === "script/pkg/package.json" ? { path: "script/pkg/package.json", sha256: sha256(readFileSync(join(f.root, "script/pkg/package.json"))) } : row);
+	refreeze(f, "inventory", inventory);
+}
+
+// Collects a complete receipt into `path` and returns its decoded object.
+async function collectedReceipt(f: ReturnType<typeof emittedWorkspace>, path: string): Promise<Record<string, Json>> {
+	const collected = await f.run(["--collect", "--write-coverage", path]);
+	if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
+	return obj(decode(readFileSync(path, "utf8")));
+}
+
+// Collects and asserts the run is refused with an identity error at `path`.
+async function collectRefused(f: ReturnType<typeof emittedWorkspace>, path: string, message: string): Promise<void> {
+	const run = await f.run(["--collect"]);
+	expect(run.exit).toBe(2);
+	expect(run.result.complete).toBe(false);
+	const error = obj(list(run.result.errors)[0]);
+	expect(str(error.path)).toBe(path);
+	expect(str(error.message)).toContain(message);
+}
+
+// Collects a complete receipt, asserts every process carries exactly the
+// expected emission proofs, and returns the exit of verifying that receipt.
+async function collectedEmissions(f: ReturnType<typeof emittedWorkspace>, emitted: readonly string[]): Promise<number> {
+	const path = join(f.root, "coverage.json");
+	const receipt = await collectedReceipt(f, path);
+	for (const process of list(receipt.processes).map(obj)) expect(list(process.emitted).map((row) => str(obj(row).path)).sort()).toEqual([...emitted].sort());
+	return (await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))])).exit;
+}
 
 // Erased provenance can never keep credit from a changed compiled artifact:
 // the frozen tree (static imports of the loaded test and of the compiled
 // barrel) and the process's own counters (an evaluated dynamic import) pin
-// the proofs a process must carry, whichever records it drops.
+// the proofs a process must carry, whichever records it drops. The binding is
+// to the frozen tree, so a specifier that stops resolving, a compiled entry
+// retargeted through a symlink, and a package link redirected into the
+// dependency tree all fail identity instead of dropping the obligation.
 for (const [mode, testSource, message] of [
 	["static", undefined, "emitted module imported by script/subject.test.ts has no emission proof"],
 	["dynamic", dynamicEmittedTest, "emitted module imported by script/subject.test.ts has no emission proof"],
 	["original-before-dynamic", originalBeforeDynamicTest, "emitted module imported by script/subject.test.ts has no emission proof"],
+	["parenthesized-literal", parenthesizedEmittedTest, "emitted module imported by script/subject.test.ts has no emission proof"],
+	["require", requireEmittedTest, "emitted module imported by script/subject.test.ts has no emission proof"],
 	["barrel-child", undefined, "emitted module imported by script/pkg/dist/index.js has no emission proof"],
 	["manifest-retarget", undefined, "configuration drift"],
+	["relative-deleted-entry", relativeEmittedTest, 'import "./pkg/dist/index.js" does not resolve in the frozen tree'],
+	["relative-entry-retarget-original", relativeEmittedTest, "owned tree holds a symlink"],
+	["bare-entry-retarget-original", undefined, "owned tree holds a symlink"],
+	["package-symlink-retarget", undefined, 'import "@fixture/emitted" resolves outside frozen package script/pkg/package.json'],
 ] as const) test(`erased emission provenance cannot credit a changed artifact (${mode})`, async () => {
 	const f = emittedWorkspace("export const value = 42;\n", testSource);
 	try {
 		const path = join(f.root, "coverage.json");
-		const collected = await f.run(["--collect", "--write-coverage", path]);
-		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
-		const receipt = obj(decode(readFileSync(path, "utf8")));
+		const receipt = await collectedReceipt(f, path);
 		for (const process of list(receipt.processes).map(obj)) {
 			expect(list(process.emitted)).toHaveLength(2);
 			// barrel-child keeps the barrel's proof and drops only value.js's.
@@ -650,10 +704,29 @@ for (const [mode, testSource, message] of [
 		const valuePath = "script/pkg/dist/value.js";
 		f.put(valuePath, readFileSync(join(f.root, valuePath), "utf8").replace("42", "43"));
 		if (mode === "manifest-retarget") f.put("script/pkg/package.json", '{"name":"@fixture/emitted","type":"module","exports":"./src/index.ts"}');
+		if (mode === "relative-deleted-entry") rmSync(join(f.root, "script/pkg/dist/index.js"));
+		if (mode === "relative-entry-retarget-original" || mode === "bare-entry-retarget-original") {
+			rmSync(join(f.root, "script/pkg/dist/index.js"));
+			symlinkSync("../src/index.ts", join(f.root, "script/pkg/dist/index.js"));
+		}
+		if (mode === "package-symlink-retarget") retargetPackageLinkToDecoy(f);
 		const verified = await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
 		expect(verified.exit).toBe(2);
 		expect(verified.result.complete).toBe(false);
 		expect(str(obj(list(verified.result.errors)[0]).message)).toContain(message);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A link that reaches an owned package under a name its frozen manifest does
+// not declare is not the frozen tree's routing, so it can never be retargeted
+// unnoticed: it is refused before any emission proof is weighed.
+test("a package link aliasing an owned package under another name fails identity", async () => {
+	const f = emittedWorkspace("export const value = 42;\n", aliasEmittedTest);
+	try {
+		symlinkSync(join(f.root, "script/pkg"), join(f.root, "node_modules/@fixture/alias"));
+		const run = await f.run(["--collect"]);
+		expect(run.exit).toBe(2);
+		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package link node_modules/@fixture/alias for "@fixture/alias" aliases frozen package script/pkg/package.json');
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -665,19 +738,242 @@ test("a bare specifier routed by an unfrozen package manifest cannot anchor an e
 		refreeze(f, "inventory", inventory);
 		const run = await f.run(["--collect"]);
 		expect(run.exit).toBe(2);
-		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package manifest script/pkg/package.json routing "@fixture/emitted" is not frozen');
+		expect(str(obj(list(run.result.errors)[0]).message)).toContain('package link node_modules/@fixture/emitted for "@fixture/emitted" lands in the owned tree without a frozen package of that name');
 	} finally { f.cleanup(); }
 }, 120_000);
 
-test("an untaken dynamic import legitimately carries no emission proof", async () => {
-	const f = emittedWorkspace("export const value = 42;\n", 'import { test, expect } from "bun:test"; if (process.argv.includes("--load-emitted")) await import("@fixture/emitted"); test("untaken", () => { expect(1).toBe(1); });\n');
+// Only the counters of the import site itself impose the obligation: an
+// untaken `if`, an untaken ternary arm and an untaken short-circuit operand
+// all carry no proof, while the arm that ran still pins its emission.
+for (const [mode, testSource, emitted] of [
+	["if", 'import { test, expect } from "bun:test"; if (process.argv.includes("--load-emitted")) await import("@fixture/emitted"); test("untaken", () => { expect(1).toBe(1); });\n', []],
+	["ternary-arm", 'import { test, expect } from "bun:test"; const mod = process.argv.includes("--other") ? await import("./pkg/dist/other.js") : await import("./pkg/dist/value.js"); test("one arm", () => { expect(mod.value).toBe(42); });\n', ["script/pkg/dist/value.js"]],
+	["short-circuit", 'import { test, expect } from "bun:test"; const ignored = process.argv.includes("--load-emitted") && await import("@fixture/emitted"); test("short circuit", () => { expect(ignored).toBe(false); });\n', []],
+] as const) test(`an untaken dynamic import legitimately carries no emission proof (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n", testSource, { "script/pkg/src/other.ts": "export const value = 99;\n" });
+	try {
+		expect(await collectedEmissions(f, emitted)).toBe(1);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// An owned emission whose dependency is named by a computed specifier cannot
+// have that dependency pinned, so the emission itself is refused; computed
+// specifiers in originals stay the loader's concern.
+test("a computed specifier inside an owned emission fails identity", async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; test("computed child", async () => { expect(await choose()).toBe(42); });\n',
+		{ "script/pkg/src/index.ts": 'export async function choose() { const target = "./value.js"; return (await import(target)).value; }\n' });
+	try {
+		await collectRefused(f, "script/pkg/dist/index.js", "emitted module loads a computed specifier at 1:");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// Any reach to the module loader inside an owned emission other than a literal
+// `import(...)`/`require(...)` call can load a module the frozen tree does not
+// pin, so the emission is refused at collection.
+for (const [mode, index, message] of [
+	["aliased-require", 'const r = require; export function choose(taken: boolean) { return taken ? r("./value.js").value : 99; }\n', "emitted module reaches the module loader at 1:10"],
+	["createRequire", 'import { createRequire } from "node:module"; export function choose(taken: boolean) { return taken ? createRequire(import.meta.url)("./value.js").value : 99; }\n', "emitted module reaches the module loader at 1:0"],
+	["import.meta.require", 'export function choose(taken: boolean) { return taken ? import.meta.require("./value.js").value : 99; }\n', "emitted module reaches the module loader at 1:"],
+] as const) test(`an owned emission reaching the module loader fails identity (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n", undefined, { "script/pkg/src/index.ts": index });
+	try {
+		await collectRefused(f, "script/pkg/dist/index.js", message);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// The emission's load sites are joined to the original's by position, so a
+// type-only wrapper or a rewritten `.ts` extension in the original still
+// demands the emitted child the loader actually fetched.
+for (const [mode, index] of [
+	["as-string", 'export async function choose(taken: boolean) { return taken ? (await import("./value.js" as string)).value : 99; }\n'],
+	["non-null", 'export async function choose(taken: boolean) { return taken ? (await import("./value.js"!)).value : 99; }\n'],
+] as const) test(`a wrapped literal dynamic import inside an emission still pins its child (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; test("wrapped child", async () => { expect(await choose(true)).toBe(42); });\n',
+		{ "script/pkg/src/index.ts": index });
 	try {
 		const path = join(f.root, "coverage.json");
-		const collected = await f.run(["--collect", "--write-coverage", path]);
-		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
-		expect(collected.result.complete).toBe(true);
-		for (const process of list(obj(decode(readFileSync(path, "utf8"))).processes).map(obj)) expect(process.emitted).toEqual([]);
-		expect((await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))])).exit).toBe(1);
+		const receipt = await collectedReceipt(f, path);
+		for (const process of list(receipt.processes).map(obj)) {
+			process.emitted = list(process.emitted).filter((row) => !/\/value\.js$/.test(str(obj(row).path)));
+			process.transferred = list(process.transferred).filter((row) => !/\/value\.ts$/.test(str(row)));
+		}
+		f.put("coverage.json", JSON.stringify(receipt));
+		const verified = await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+		expect(verified.exit).toBe(2);
+		expect(str(obj(list(verified.result.errors)[0]).message)).toContain("emitted module imported by script/pkg/dist/index.js has no emission proof");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+test("a frozen owned package manifest without a name binds no bare specifier", async () => {
+	const f = emittedWorkspace();
+	try {
+		replaceManifest(f, '{"type":"module","exports":"./dist/index.js"}');
+		await collectRefused(f, "script/pkg/package.json", "frozen owned package manifest declares no name");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A `require` site resolves under the require conditions, so the emission it
+// demands is the one the loader fetched rather than the import entry.
+test("a require site demands the emission the require condition selects", async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; const { choose } = require("@fixture/emitted"); test("require condition", () => { expect(choose(true)).toBe(42); });\n',
+		{ "script/pkg/src/alt.ts": 'import { value } from "./value.js";\nexport function choose(taken: boolean) { return taken ? value : 99; }\n' });
+	try {
+		replaceManifest(f, '{"name":"@fixture/emitted","type":"module","exports":{".":{"require":"./dist/alt.js","import":"./dist/index.js"}}}');
+		expect(await collectedEmissions(f, ["script/pkg/dist/alt.js", "script/pkg/dist/value.js"])).toBe(1);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A dynamic import the counters cannot decide is refused rather than credited
+// as taken or untaken: logical assignment leaves no branch arm behind.
+test("a dynamic import without a deciding counter fails identity", async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; let m: { choose(taken: boolean): number } = { choose: () => 42 }; m ||= await import("@fixture/emitted"); test("logical assignment", () => { expect(m.choose(true)).toBe(42); });\n');
+	try {
+		await collectRefused(f, "script/subject.test.ts", "has no counter that proves it evaluated or skipped");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// Erases every emission proof and transferred source from a collected
+// receipt, changes the compiled value module, and returns the verification.
+async function verifiedAfterErasure(f: ReturnType<typeof emittedWorkspace>, mutate: () => void = () => undefined) {
+	const path = join(f.root, "coverage.json");
+	const receipt = await collectedReceipt(f, path);
+	for (const process of list(receipt.processes).map(obj)) {
+		process.emitted = [];
+		process.transferred = [];
+	}
+	f.put("coverage.json", JSON.stringify(receipt));
+	const valuePath = "script/pkg/dist/value.js";
+	f.put(valuePath, readFileSync(join(f.root, valuePath), "utf8").replace("42", "43"));
+	mutate();
+	const verified = await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))]);
+	expect(verified.exit).toBe(2);
+	expect(verified.result.complete).toBe(false);
+	return str(obj(list(verified.result.errors)[0]).message);
+}
+
+// A default parameter initializer has its own branch counter, so the site is
+// decided: evaluated when the default was taken, skipped when an argument was
+// passed.
+for (const [mode, call, emitted] of [
+	["taken", "pick()", ["script/pkg/dist/index.js", "script/pkg/dist/value.js"]],
+	["untaken", "pick({ choose: () => 42 })", []],
+] as const) test(`a default parameter initializer is decided by its branch counter (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		`import { test, expect } from "bun:test"; function pick(mod: { choose(taken: boolean): number } = require("@fixture/emitted")) { return mod.choose(true); } test("default parameter", () => { expect(${call}).toBe(42); });\n`);
+	try {
+		expect(await collectedEmissions(f, emitted)).toBe(1);
+		if (mode === "taken") expect(await verifiedAfterErasure(f)).toContain("emitted module imported by script/subject.test.ts has no emission proof");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A literal reaching the loader through `import.meta.resolve`, a
+// `new URL(..., import.meta.url)` (with or without `.href`, query ignored) or
+// `createRequire(import.meta.url)` names the same module the literal alone
+// would, so the site is demanded like a plain literal call.
+for (const [mode, load] of [
+	["url-href-query", 'await import(new URL("./pkg/dist/value.js?first", import.meta.url).href)'],
+	["url-object", 'await import(new URL("./pkg/dist/value.js", import.meta.url))'],
+	["import.meta.resolve", 'await import(import.meta.resolve("./pkg/dist/value.js"))'],
+	["createRequire", 'createRequire(import.meta.url)("./pkg/dist/value.js")'],
+] as const) test(`a decidable loader form in an original demands its emission (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		`import { test, expect } from "bun:test"; import { createRequire } from "node:module"; const { value } = ${load}; test("decidable form", () => { expect(value).toBe(42); });\n`);
+	try {
+		expect(await collectedEmissions(f, ["script/pkg/dist/value.js"])).toBe(1);
+		expect(await verifiedAfterErasure(f)).toContain("emitted module imported by script/subject.test.ts has no emission proof");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// An emission that only a computed specifier in an original loaded is pinned
+// by no frozen site, so a receipt without its proof would verify; the process
+// is refused at collection instead.
+test("an emission loaded through a computed specifier in an original fails identity", async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; const target = "./pkg/dist/value.js"; const { value } = await import(target); test("computed", () => { expect(value).toBe(42); });\n');
+	try {
+		await collectRefused(f, "script/pkg/dist/value.js", "emitted module was loaded through a computed specifier; no frozen load site pins it");
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// The package scope of the importer routes a bare specifier's self-reference,
+// so a manifest planted there after collection cannot retarget the specifier
+// onto an original and dissolve the emission's obligation.
+for (const [mode, manifest, text] of [
+	["root", "package.json", '{"name":"@fixture/emitted","type":"module","exports":{".":"./script/pkg/src/index.ts"}}'],
+	["owned", "script/package.json", '{"name":"@fixture/emitted","type":"module","exports":{".":"./pkg/src/index.ts"}}'],
+] as const) test(`an unfrozen importer-side package scope cannot retarget a bare specifier (${mode})`, async () => {
+	const f = emittedWorkspace();
+	try {
+		expect(await verifiedAfterErasure(f, () => f.put(manifest, text))).toContain(`package scope manifest ${manifest} routing "@fixture/emitted" is not frozen`);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A frozen `#` entry mapping to a bare package binds that package's link, so
+// retargeting the link at verification is refused exactly as the direct bare
+// form is; a conditional entry cannot be pinned to one package.
+for (const [mode, entry, message] of [
+	["bare-target-link-retarget", '"@fixture/emitted"', 'import "@fixture/emitted" resolves outside frozen package script/pkg/package.json'],
+	["conditional-entry", '{"default":"./script/pkg/dist/index.js"}', 'imports map entry "#emitted" in package.json is not one literal target'],
+] as const) test(`a frozen imports map entry is pinned through its routed target (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "#emitted"; test("imports map", () => { expect(choose(true)).toBe(42); });\n');
+	try {
+		f.put("package.json", `{"name":"fixture-root","type":"module","imports":{"#emitted":${entry}}}`);
+		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+		inventory.configurations = [...list(inventory.configurations), { path: "package.json", sha256: sha256(readFileSync(join(f.root, "package.json"))) }];
+		refreeze(f, "inventory", inventory);
+		if (mode === "conditional-entry") await collectRefused(f, "script/subject.test.ts", message);
+		else expect(await verifiedAfterErasure(f, () => retargetPackageLinkToDecoy(f))).toContain(message);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A bare specifier's link may land in the owned tree only on the frozen
+// manifest directory of that name: a link onto a bare subdirectory of an owned
+// package would let the same specifier name a decoy at verification.
+test("a package link landing below a frozen package directory fails identity", async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "shim"; test("subdirectory link", () => { expect(choose(true)).toBe(42); });\n');
+	try {
+		symlinkSync(join(f.root, "script/pkg/dist"), join(f.root, "node_modules/shim"));
+		await collectRefused(f, "script/subject.test.ts", 'package link node_modules/shim for "shim" lands in the owned tree without a frozen package of that name');
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A relative specifier is pinned by the frozen owned tree only when its
+// lexical directory is where the loader lands; a symlink outside the roots or
+// under node_modules on the way there is refused.
+for (const [mode, link, target, specifier] of [
+	["outside-root", "outside", "script/pkg/dist", "../outside/value.js"],
+	["node_modules", "script/node_modules/shim", "script/pkg/dist", "./node_modules/shim/value.js"],
+	["outside-file", "outside/value.js", "script/pkg/dist/value.js", "../outside/value.js"],
+] as const) test(`a relative specifier traversing a symlink fails identity (${mode})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		`import { test, expect } from "bun:test"; import { value } from "${specifier}"; test("linked path", () => { expect(value).toBe(42); });\n`);
+	try {
+		mkdirSync(dirname(join(f.root, link)), { recursive: true });
+		symlinkSync(join(f.root, target), join(f.root, link));
+		await collectRefused(f, "script/subject.test.ts", `import "${specifier}" traverses a symlink at ${link}`);
+	} finally { f.cleanup(); }
+}, 120_000);
+
+// A root manifest's `imports` map routes `#` specifiers; frozen, it pins the
+// emission it names, and unfrozen it is refused before any proof is weighed.
+for (const frozen of [true, false]) test(`a root imports map routes a # specifier only when frozen (${frozen})`, async () => {
+	const f = emittedWorkspace("export const value = 42;\n",
+		'import { test, expect } from "bun:test"; import { choose } from "#emitted"; test("imports map", () => { expect(choose(true)).toBe(42); });\n');
+	try {
+		f.put("package.json", '{"name":"fixture-root","type":"module","imports":{"#emitted":"./script/pkg/dist/index.js"}}');
+		if (frozen) {
+			const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+			inventory.configurations = [...list(inventory.configurations), { path: "package.json", sha256: sha256(readFileSync(join(f.root, "package.json"))) }];
+			refreeze(f, "inventory", inventory);
+			expect(await collectedEmissions(f, ["script/pkg/dist/index.js", "script/pkg/dist/value.js"])).toBe(1);
+			expect(await verifiedAfterErasure(f)).toContain("emitted module imported by script/subject.test.ts has no emission proof");
+		} else await collectRefused(f, "script/subject.test.ts", 'package scope manifest package.json routing "#emitted" is not frozen');
 	} finally { f.cleanup(); }
 }, 120_000);
 
