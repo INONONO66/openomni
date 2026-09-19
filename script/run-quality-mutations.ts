@@ -851,11 +851,14 @@ function caseInsertion(source: string, site: Site): number {
 /**
  * Marker probe text. The write happens once per process per marker: a hot
  * path evaluated millions of times during one test must not pay a synchronous
- * file write on each evaluation, or the test trips its own time bounds.
+ * file write on each evaluation, or the test trips its own time bounds. The
+ * once-guard goes through `Reflect` because probed TypeScript is still
+ * type-checked by tests that compile source under strict options, and
+ * `typeof globalThis` has no index signature.
  */
 export function probeText(marker: string): string {
 	const path = JSON.stringify(marker);
-	return `(globalThis.__omoReach??={})[${path}]??=(require("node:fs").writeFileSync(${path},"1"),1)`;
+	return `(Reflect.get(globalThis,${path})??(require("node:fs").writeFileSync(${path},"1"),Reflect.set(globalThis,${path},1)))`;
 }
 function instrumentSingle(source: string, site: Site, marker: string): string {
 	const probe = probeText(marker);
