@@ -626,6 +626,40 @@ const requireEmittedTest = 'import { test, expect } from "bun:test"; const { cho
 const relativeEmittedTest = 'import { test, expect } from "bun:test"; import { choose } from "./pkg/dist/index.js"; test("relative entry", () => { expect(choose(true)).toBe(42); });\n';
 const aliasEmittedTest = 'import { test, expect } from "bun:test"; import { choose } from "@fixture/alias"; test("alias entry", () => { expect(choose(true)).toBe(42); });\n';
 
+// Replaces the emitted workspace's package manifest and refreezes its digest.
+function replaceManifest(f: ReturnType<typeof emittedWorkspace>, manifest: string): void {
+	f.put("script/pkg/package.json", manifest);
+	const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
+	inventory.configurations = list(inventory.configurations).map((row) => obj(row).path === "script/pkg/package.json" ? { path: "script/pkg/package.json", sha256: sha256(readFileSync(join(f.root, "script/pkg/package.json"))) } : row);
+	refreeze(f, "inventory", inventory);
+}
+
+// Collects a complete receipt into `path` and returns its decoded object.
+async function collectedReceipt(f: ReturnType<typeof emittedWorkspace>, path: string): Promise<Record<string, Json>> {
+	const collected = await f.run(["--collect", "--write-coverage", path]);
+	if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
+	return obj(decode(readFileSync(path, "utf8")));
+}
+
+// Collects and asserts the run is refused with an identity error at `path`.
+async function collectRefused(f: ReturnType<typeof emittedWorkspace>, path: string, message: string): Promise<void> {
+	const run = await f.run(["--collect"]);
+	expect(run.exit).toBe(2);
+	expect(run.result.complete).toBe(false);
+	const error = obj(list(run.result.errors)[0]);
+	expect(str(error.path)).toBe(path);
+	expect(str(error.message)).toContain(message);
+}
+
+// Collects a complete receipt, asserts every process carries exactly the
+// expected emission proofs, and returns the exit of verifying that receipt.
+async function collectedEmissions(f: ReturnType<typeof emittedWorkspace>, emitted: readonly string[]): Promise<number> {
+	const path = join(f.root, "coverage.json");
+	const receipt = await collectedReceipt(f, path);
+	for (const process of list(receipt.processes).map(obj)) expect(list(process.emitted).map((row) => str(obj(row).path)).sort()).toEqual([...emitted].sort());
+	return (await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))])).exit;
+}
+
 // Erased provenance can never keep credit from a changed compiled artifact:
 // the frozen tree (static imports of the loaded test and of the compiled
 // barrel) and the process's own counters (an evaluated dynamic import) pin
@@ -649,9 +683,7 @@ for (const [mode, testSource, message] of [
 	const f = emittedWorkspace("export const value = 42;\n", testSource);
 	try {
 		const path = join(f.root, "coverage.json");
-		const collected = await f.run(["--collect", "--write-coverage", path]);
-		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
-		const receipt = obj(decode(readFileSync(path, "utf8")));
+		const receipt = await collectedReceipt(f, path);
 		for (const process of list(receipt.processes).map(obj)) {
 			expect(list(process.emitted)).toHaveLength(2);
 			// barrel-child keeps the barrel's proof and drops only value.js's.
@@ -716,12 +748,7 @@ for (const [mode, testSource, emitted] of [
 ] as const) test(`an untaken dynamic import legitimately carries no emission proof (${mode})`, async () => {
 	const f = emittedWorkspace("export const value = 42;\n", testSource, { "script/pkg/src/other.ts": "export const value = 99;\n" });
 	try {
-		const path = join(f.root, "coverage.json");
-		const collected = await f.run(["--collect", "--write-coverage", path]);
-		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
-		expect(collected.result.complete).toBe(true);
-		for (const process of list(obj(decode(readFileSync(path, "utf8"))).processes).map(obj)) expect(list(process.emitted).map((row) => str(obj(row).path))).toEqual([...emitted]);
-		expect((await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))])).exit).toBe(1);
+		expect(await collectedEmissions(f, emitted)).toBe(1);
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -733,12 +760,7 @@ test("a computed specifier inside an owned emission fails identity", async () =>
 		'import { test, expect } from "bun:test"; import { choose } from "@fixture/emitted"; test("computed child", async () => { expect(await choose()).toBe(42); });\n',
 		{ "script/pkg/src/index.ts": 'export async function choose() { const target = "./value.js"; return (await import(target)).value; }\n' });
 	try {
-		const run = await f.run(["--collect"]);
-		expect(run.exit).toBe(2);
-		expect(run.result.complete).toBe(false);
-		const error = obj(list(run.result.errors)[0]);
-		expect(str(error.path)).toBe("script/pkg/dist/index.js");
-		expect(str(error.message)).toContain("emitted module loads a computed specifier at 1:");
+		await collectRefused(f, "script/pkg/dist/index.js", "emitted module loads a computed specifier at 1:");
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -752,11 +774,7 @@ for (const [mode, index, message] of [
 ] as const) test(`an owned emission reaching the module loader fails identity (${mode})`, async () => {
 	const f = emittedWorkspace("export const value = 42;\n", undefined, { "script/pkg/src/index.ts": index });
 	try {
-		const run = await f.run(["--collect"]);
-		expect(run.exit).toBe(2);
-		const error = obj(list(run.result.errors)[0]);
-		expect(str(error.path)).toBe("script/pkg/dist/index.js");
-		expect(str(error.message)).toContain(message);
+		await collectRefused(f, "script/pkg/dist/index.js", message);
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -772,9 +790,7 @@ for (const [mode, index] of [
 		{ "script/pkg/src/index.ts": index });
 	try {
 		const path = join(f.root, "coverage.json");
-		const collected = await f.run(["--collect", "--write-coverage", path]);
-		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
-		const receipt = obj(decode(readFileSync(path, "utf8")));
+		const receipt = await collectedReceipt(f, path);
 		for (const process of list(receipt.processes).map(obj)) {
 			process.emitted = list(process.emitted).filter((row) => !/\/value\.js$/.test(str(obj(row).path)));
 			process.transferred = list(process.transferred).filter((row) => !/\/value\.ts$/.test(str(row)));
@@ -789,15 +805,8 @@ for (const [mode, index] of [
 test("a frozen owned package manifest without a name binds no bare specifier", async () => {
 	const f = emittedWorkspace();
 	try {
-		f.put("script/pkg/package.json", '{"type":"module","exports":"./dist/index.js"}');
-		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
-		inventory.configurations = list(inventory.configurations).map((row) => obj(row).path === "script/pkg/package.json" ? { path: "script/pkg/package.json", sha256: sha256(readFileSync(join(f.root, "script/pkg/package.json"))) } : row);
-		refreeze(f, "inventory", inventory);
-		const run = await f.run(["--collect"]);
-		expect(run.exit).toBe(2);
-		const error = obj(list(run.result.errors)[0]);
-		expect(str(error.path)).toBe("script/pkg/package.json");
-		expect(str(error.message)).toContain("frozen owned package manifest declares no name");
+		replaceManifest(f, '{"type":"module","exports":"./dist/index.js"}');
+		await collectRefused(f, "script/pkg/package.json", "frozen owned package manifest declares no name");
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -808,16 +817,8 @@ test("a require site demands the emission the require condition selects", async 
 		'import { test, expect } from "bun:test"; const { choose } = require("@fixture/emitted"); test("require condition", () => { expect(choose(true)).toBe(42); });\n',
 		{ "script/pkg/src/alt.ts": 'import { value } from "./value.js";\nexport function choose(taken: boolean) { return taken ? value : 99; }\n' });
 	try {
-		f.put("script/pkg/package.json", '{"name":"@fixture/emitted","type":"module","exports":{".":{"require":"./dist/alt.js","import":"./dist/index.js"}}}');
-		const inventory = obj(decode(readFileSync(join(f.root, "inventory.json"), "utf8")));
-		inventory.configurations = list(inventory.configurations).map((row) => obj(row).path === "script/pkg/package.json" ? { path: "script/pkg/package.json", sha256: sha256(readFileSync(join(f.root, "script/pkg/package.json"))) } : row);
-		refreeze(f, "inventory", inventory);
-		const path = join(f.root, "coverage.json");
-		const collected = await f.run(["--collect", "--write-coverage", path]);
-		if (collected.exit !== 1) throw new Error(JSON.stringify({ exit: collected.exit, result: collected.result, stderr: collected.stderr }));
-		expect(collected.result.complete).toBe(true);
-		for (const process of list(obj(decode(readFileSync(path, "utf8"))).processes).map(obj)) expect(list(process.emitted).map((row) => str(obj(row).path)).sort()).toEqual(["script/pkg/dist/alt.js", "script/pkg/dist/value.js"]);
-		expect((await f.run(["--coverage-input", path, "--coverage-sha256", sha256(readFileSync(path))])).exit).toBe(1);
+		replaceManifest(f, '{"name":"@fixture/emitted","type":"module","exports":{".":{"require":"./dist/alt.js","import":"./dist/index.js"}}}');
+		expect(await collectedEmissions(f, ["script/pkg/dist/alt.js", "script/pkg/dist/value.js"])).toBe(1);
 	} finally { f.cleanup(); }
 }, 120_000);
 
@@ -827,11 +828,7 @@ test("a dynamic import without a deciding counter fails identity", async () => {
 	const f = emittedWorkspace("export const value = 42;\n",
 		'import { test, expect } from "bun:test"; let m: { choose(taken: boolean): number } = { choose: () => 42 }; m ||= await import("@fixture/emitted"); test("logical assignment", () => { expect(m.choose(true)).toBe(42); });\n');
 	try {
-		const run = await f.run(["--collect"]);
-		expect(run.exit).toBe(2);
-		const error = obj(list(run.result.errors)[0]);
-		expect(str(error.path)).toBe("script/subject.test.ts");
-		expect(str(error.message)).toContain("has no counter that proves it evaluated or skipped");
+		await collectRefused(f, "script/subject.test.ts", "has no counter that proves it evaluated or skipped");
 	} finally { f.cleanup(); }
 }, 120_000);
 

@@ -1466,25 +1466,43 @@ function moduleSpecifiers(path: string, code: string, kind: ts.ScriptKind): Modu
 		return false;
 	};
 	function visit(node: ts.Node): void {
-		if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === "require"))) {
-			let [argument] = node.arguments;
-			while (argument && (ts.isParenthesizedExpression(argument) || ts.isAsExpression(argument) || ts.isSatisfiesExpression(argument) || ts.isNonNullExpression(argument) || ts.isTypeAssertionExpression(argument)))
-				argument = argument.expression;
-			const kind = node.expression.kind === ts.SyntaxKind.ImportKeyword ? "import" : "require";
-			const specifier = argument && ts.isStringLiteralLike(argument) ? argument.text : undefined;
-			sites.push({ ...at(node), kind, unproved: unproved(node), ...(specifier === undefined ? {} : { specifier }) });
-			if (specifier !== undefined && ["module", "node:module"].includes(specifier)) loader.push(at(node));
-		} else if (ts.isIdentifier(node) && node.text === "require" && !(ts.isCallExpression(node.parent) && node.parent.expression === node) &&
-			!((ts.isPropertyAccessExpression(node.parent) || ts.isPropertyAssignment(node.parent) || ts.isMethodDeclaration(node.parent) || ts.isPropertyDeclaration(node.parent)) && node.parent.name === node))
-			loader.push(at(node));
-		else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword &&
-			!(ts.isPropertyAccessExpression(node.parent) && ["url", "dir", "dirname", "file", "filename", "path", "main", "env", "hot"].includes(node.parent.name.text)))
-			loader.push(at(node));
-		else if (ts.isPropertyAccessExpression(node) && node.name.text === "getBuiltinModule") loader.push(at(node));
+		const call = loadCall(node);
+		if (call) {
+			sites.push({ ...at(node), ...call, unproved: unproved(node) });
+			if (call.specifier !== undefined && ["module", "node:module"].includes(call.specifier)) loader.push(at(node));
+		} else if (loaderReach(node)) loader.push(at(node));
 		ts.forEachChild(node, visit);
 	}
 	visit(program);
 	return { static: statics, sites, loader };
+}
+
+// An `import(...)` or `require(...)` call with its literal argument after
+// parentheses and type-only wrappers are stripped, or none when computed.
+function loadCall(node: ts.Node): Pick<LoadSite, "kind" | "specifier"> | undefined {
+	if (!ts.isCallExpression(node)) return undefined;
+	const dynamic = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+	if (!dynamic && !(ts.isIdentifier(node.expression) && node.expression.text === "require")) return undefined;
+	let [argument] = node.arguments;
+	while (argument && (ts.isParenthesizedExpression(argument) || ts.isAsExpression(argument) || ts.isSatisfiesExpression(argument) || ts.isNonNullExpression(argument) || ts.isTypeAssertionExpression(argument)))
+		argument = argument.expression;
+	const specifier = argument && ts.isStringLiteralLike(argument) ? argument.text : undefined;
+	return { kind: dynamic ? "import" : "require", ...(specifier === undefined ? {} : { specifier }) };
+}
+
+// Whether a node reaches the module loader outside a literal load call: the
+// `require` value itself, `import.meta` beyond its path fields, or
+// `getBuiltinModule`. A property named `require` is not the loader.
+function loaderReach(node: ts.Node): boolean {
+	if (ts.isIdentifier(node) && node.text === "require") {
+		const { parent } = node;
+		if (ts.isCallExpression(parent) && parent.expression === node) return false;
+		const named = ts.isPropertyAccessExpression(parent) || ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent);
+		return !(named && parent.name === node);
+	}
+	if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword)
+		return !(ts.isPropertyAccessExpression(node.parent) && ["url", "dir", "dirname", "file", "filename", "path", "main", "env", "hot"].includes(node.parent.name.text));
+	return ts.isPropertyAccessExpression(node) && node.name.text === "getBuiltinModule";
 }
 
 const originalStaticSpecifiers = new WeakMap<Prepared, readonly string[]>();
