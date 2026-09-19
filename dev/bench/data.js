@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789759759637,
+  "lastUpdate": 1789779864915,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -71865,6 +71865,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 127247,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "512ed2d3ca66a8f7948040f0b18f04cac64e52c2",
+          "message": "quality(mutation): probe assignment targets at the consuming assignment (#1094)\n\n* quality(mutation): probe assignment targets at the consuming assignment\n\nObject/array literals on the left of an assignment (destructuring\npatterns, compound targets) are not values; wrapping them in a reach\nprobe made the reach copy unparseable and failed the campaign after a\ngreen baseline. Move such probes to the assignment expression.\n\n* quality(mutation): drop the parenthesized-pattern arm proven equivalent in review",
+          "timestamp": "2026-09-19T01:00:42Z",
+          "tree_id": "ea47b35dce74a80231fd76e7f7479eebf91f8321",
+          "url": "https://github.com/INONONO66/openomni/commit/512ed2d3ca66a8f7948040f0b18f04cac64e52c2"
+        },
+        "date": 1789779863763,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1021,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1797,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1428,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1386859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 373345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6745268,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 161,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 676,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 165493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 816132,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 641889,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3564,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 98022642,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9649391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 185589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 909689,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 228037,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15676864,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 169971,
             "unit": "ns/op"
           }
         ]
