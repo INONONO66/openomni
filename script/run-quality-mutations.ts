@@ -922,10 +922,13 @@ function caseInsertion(source: string, site: Site): number {
  */
 // The probe is spliced into arbitrary scopes, so its only free identifier is
 // `globalThis`: bare `process`/`Reflect` are shadowed by locals in source such
-// as codemode's `const process = spawn(...)`.
+// as codemode's `const process = spawn(...)`. The guard is set before the
+// write: probed test fixtures wrap `fs.writeFileSync` on the builtin module
+// object, so a probe inside such a wrapper re-enters it through the write and
+// must find its marker already claimed instead of recursing.
 export function probeText(marker: string): string {
 	const path = JSON.stringify(marker);
-	return `(globalThis.Reflect.has(globalThis,${path})||(globalThis.process.getBuiltinModule("node:fs").writeFileSync(${path},"1"),globalThis.Reflect.set(globalThis,${path},1)))`;
+	return `(globalThis.Reflect.has(globalThis,${path})||(globalThis.Reflect.set(globalThis,${path},1),globalThis.process.getBuiltinModule("node:fs").writeFileSync(${path},"1")))`;
 }
 function instrumentSingle(source: string, site: Site, marker: string): string {
 	const probe = probeText(marker);
