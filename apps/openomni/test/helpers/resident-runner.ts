@@ -1,6 +1,7 @@
 import { afterEach } from "bun:test";
 import { Bus, closeSessions, wakeSession, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
+import { nullRetryAlarm } from "../../../../packages/agent/test/helpers/retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";
 import { commitMessageInbox } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
@@ -16,7 +17,7 @@ export function residentRunner(
   const runtime = options.sessionRuntime ?? {
     observations: Bus,
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
-    retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
+    retryAlarm: nullRetryAlarm,
   };
   runtimes.push(runtime);
   seedKernelPolicyRows();

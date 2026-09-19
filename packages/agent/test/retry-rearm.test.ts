@@ -22,7 +22,7 @@ async function stdoutSignal(stream: ReadableStream<Uint8Array>, signal: string):
   throw new Error(`child exited before signalling ${signal}: ${seen}`);
 }
 
-test("killing the kernel during the retry wait leaves a re-armable schedule that completes the attempt exactly once", async () => {
+test("killing the kernel during the retry wait leaves a durable schedule that boot recovery consumes and the attempt completes exactly once", async () => {
   const directory = mkdtempSync(join(tmpdir(), "retry-rearm-"));
   try {
     await Storage.withIsolation(async () => {

@@ -1,6 +1,7 @@
 import { createExecutor } from "@openomni/agent";
 import { LedgerAction } from "@openomni/protocol";
 import { fixtureHashes } from "../../../../packages/agent/test/helpers/compiled-policy";
+import { nullRetryAlarm } from "../../../../packages/agent/test/helpers/retry-alarm";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../../packages/policy/src";
 
 let ordinal = 0;
@@ -28,6 +29,6 @@ export const executor = createExecutor({
   identity: { sessionId: "test", role: "resident", parentActionId: null },
   clock: () => 1,
   // In-memory ledger: durable retry scheduling is covered by the agent package tests.
-  retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
+  retryAlarm: nullRetryAlarm,
   entropy: () => `test-action-${ordinal + 1}`,
 });

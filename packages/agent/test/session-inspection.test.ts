@@ -17,6 +17,7 @@ import {
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { session, type SessionHandle } from "../src/session-handle";
 import { bounded } from "./helpers/bounded";
+import { nullRetryAlarm } from "./helpers/retry-alarm";
 
 const SECRET = "sk-live-credential-never-shown";
 let nextId = 0;
@@ -27,7 +28,7 @@ const runtime: SessionRuntime = {
   entropy: () => `inspect-id-${++nextId}`,
   processId: "inspection-test",
   scheduleHeartbeat: () => () => undefined,
-  retryAlarm: { arm: () => undefined, wait: async () => undefined, settle: () => undefined },
+  retryAlarm: nullRetryAlarm,
   authorizeApproval: async () => ({ kind: "owner", principalId: "owner", evidenceId: "auth-1" }),
   async dispatchOutbound({ message }) {
     const received = SessionHandleStore.commitReceivedMessage({

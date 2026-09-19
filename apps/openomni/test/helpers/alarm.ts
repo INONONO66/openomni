@@ -3,7 +3,11 @@ import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/led
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
 import { createAlarmWorker } from "../../src/composition/alarm-worker";
 
-export function alarmFixture(path = ":memory:", onFailure?: (error: Error) => void) {
+export function alarmFixture(
+  path = ":memory:",
+  onFailure?: (error: Error) => void,
+  onWake?: (id: string) => void,
+) {
   const events = createObservationBus();
   const storage = new SqliteStorageAdapter(path, events);
   Storage.configure(storage);
@@ -35,9 +39,25 @@ export function alarmFixture(path = ":memory:", onFailure?: (error: Error) => vo
     },
     wake: (id) => {
       wakes.push(id);
+      onWake?.(id);
       return Promise.resolve();
     },
   });
+  /** A committed one-shot retry.scheduled alarm, due at the fixture clock. */
+  function armRetry(id: string) {
+    const row = storage.alarms.arm({
+      id,
+      sessionId: "monitor-session",
+      kind: "at",
+      fireAt: at,
+      spec: {
+        encodingVersion: 1,
+        value: { kind: "retry.scheduled", attempt: 1, reason: "transient_error", notBefore: at },
+      },
+    });
+    if (row === undefined) throw new Error("fixture retry arm refused");
+    return row;
+  }
   function arm(id: string, watch: Alarm.Watch, limit = 8) {
     const row = storage.alarms.arm({
       id,
@@ -79,6 +99,7 @@ export function alarmFixture(path = ":memory:", onFailure?: (error: Error) => vo
     events,
     worker,
     arm,
+    armRetry,
     next,
     errors,
     wakes,

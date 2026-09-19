@@ -335,3 +335,66 @@ describe("the single L2 executor's four-kind verdict model", () => {
     });
   }
 });
+
+describe("the durable boundary child action commits only for executed outcomes", () => {
+  const boundaryChildren = (actions: readonly LedgerAction.Append[]) =>
+    actions.filter((action) => action.id.endsWith(":boundary"));
+
+  it("an executed boundary request commits exactly one boundary child under its intent", async () => {
+    const { actions, executor } = harness([]);
+
+    const result = await executor.run(
+      {
+        kind: "tool",
+        op: "test",
+        intent: { requested: true },
+        effect: { completed: true },
+        boundary: true,
+      },
+      async () => ({ ok: true }),
+    );
+
+    expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
+    const children = boundaryChildren(actions);
+    expect(children).toHaveLength(1);
+    const intent = actions.find((action) => `${action.id}:boundary` === children[0]?.id);
+    expect(children[0]).toMatchObject({
+      parentId: intent?.id,
+      kind: "tool",
+      irreversible: true,
+      effect: expect.objectContaining({
+        value: expect.objectContaining({ phase: "boundary", result: { ok: true } }),
+      }),
+    });
+  });
+
+  it("a post-denied boundary request commits NO boundary child: recovery must never resurrect a reverted outcome as executed", async () => {
+    const { actions, executor } = harness([
+      row("deny-boundary-post", "tool", "post", { type: "deny", reason: "post blocked" }),
+    ]);
+    const revert = mock(async () => undefined);
+
+    const result = await executor.run(
+      {
+        kind: "tool",
+        op: "test",
+        intent: { requested: true },
+        effect: { completed: true },
+        boundary: true,
+        revert,
+      },
+      async () => ({ ok: true }),
+    );
+
+    expect(result).toMatchObject({
+      terminal: "blocked_post",
+      disposition: "reverted",
+      reason: "post blocked",
+    });
+    expect(revert).toHaveBeenCalledTimes(1);
+    expect(boundaryChildren(actions)).toEqual([]);
+    expect(resultEffects(actions, "tool")).toEqual([
+      expect.objectContaining({ phase: "result", terminal: "blocked_post" }),
+    ]);
+  });
+});

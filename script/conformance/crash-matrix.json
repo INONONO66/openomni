@@ -24,7 +24,7 @@
     {
       "crashPoint": "retry_backoff_wait",
       "recovery": "rearmed",
-      "note": "A committed retry.scheduled alarm (kind at) survives the crash; boot recovery re-arms the schedule via the single alarm owner and the resumed turn completes the attempt exactly once."
+      "note": "A committed retry.scheduled alarm (kind at) survives the crash; boot recovery consumes (cancels) the schedule via the single alarm owner and wakes the session, and the resumed turn completes the attempt exactly once."
     },
     {
       "crashPoint": "compaction_summary_before_result_commit",
