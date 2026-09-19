@@ -8,6 +8,8 @@ Single source of truth for current wiring, not a declaration that every target i
 
 [Kernel reference pins](kernel-references.md) are owned by `docs/kernel-references.md`.
 
+**#945 absolute census (2026-09-19, main `f5ea0e32`):** the Quality ratchet is green as a no-growth gate; the admitted baseline still holds 60,509 rows (99,601 multiplicity) across coverage, type, CRAP, clone, export, publisher, complexity and store gates. #945's literal-zero definition of done is not met; the per-gate table and the full-mutation campaign outcome are in [SLOP](SLOP.md#945-absolute-census-receipt-2026-09-19-main-f5ea0e32).
+
 **#969 cutover (2026-09-07):** waiting and authenticated consent are original-action state. Source-owned outbound obligations feed the receiving kernel and inbox. Migration 0038 removes the independent stores with guarded archival retention. Final HEAD, gate outputs and acceptance receipts are recorded in the PR and local report.
 
 **#971 cutover (2026-09-08):** alarm occurrence identity, deadline and notification budget are decided by the ledger from the committed row and its persisted spec; the evaluator reports a transport `sourceKey` and redelivery commits nothing. No schema change, no migration, no new table.

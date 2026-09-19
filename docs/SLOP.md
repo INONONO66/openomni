@@ -348,3 +348,31 @@ The contract's `move` rows for `session-admission.ts`/`session-turn.ts` into `se
 | Deletion | `packages/agent/src/session-history.ts` removed with its five importers rewired in the same commit; no schema, table or migration touched (`message`/`part` bytes refused per contract) | `rg -n "session-history\"|\bsessionHistory\b" apps packages -g '*.ts'` = 0 (the unrelated ledger benchmark seeder of the same name became `seedTurnHistory`) |
 
 `LedgerAction.Kind` is unchanged: no new action kind was needed, so no forward CHECK migration ships. The #971 occurrence kinds will project through the generic `record` phase when they land.
+
+## #945 absolute census receipt (2026-09-19, main `f5ea0e32`)
+
+The #945 amendment demands literal zero on every gate. The ratchet on main is green because it forbids growth against the admitted baseline, not because the baseline is empty. This section records the absolute distance so no closure claim can rest on a green ratchet alone.
+
+Measurement (fragments under `script/conformance/quality-baseline-lcov-bound/` at `f5ea0e32`; each row is one measured finding, `count` its multiplicity):
+
+| gate | rows | count | files |
+| --- | ---: | ---: | ---: |
+| coverage (unexecuted lines) | 45,981 | 54,150 | 864 |
+| type (any/unknown census) | 12,410 | 43,144 | 683 |
+| crap | 1,268 | 1,270 | 393 |
+| testClones | 375 | 558 | 162 |
+| export | 334 | 334 | 173 |
+| productionClones | 70 | 74 | 38 |
+| publisher | 39 | 39 | 12 |
+| cyclomatic | 16 | 16 | 14 |
+| cognitive | 11 | 11 | 11 |
+| store | 5 | 5 | 2 |
+| **total** | **60,509** | **99,601** | |
+
+Reproduce: concatenate the fragment files and sum `gate`, `count`, distinct `path` per row (`git ls-tree --name-only origin/main script/conformance/quality-baseline-lcov-bound/ | xargs -I{} git show origin/main:{}`). Halstead has no baseline rows (the gate passes absolutely).
+
+Main-push evidence at `f5ea0e32`: CI run 35447606308 completed success (49 jobs success, 1 skipped) — exact lanes and the Quality join both complete on merged main, which closes the #1087 class.
+
+Full mutation: campaign run 35447662597 dispatched on `f5ea0e32` (`quality-mutation.yml`, `pilot_limit=0`) reached compiler analysis (182,119 candidates, 0 diagnostics) and a green baseline (4,757 tests, 0 failures, exit 0), then exited 1 in the reach phase on `apps/openomni/test/code-mode-e2e.test.ts` (12/14 tests failing: `IpcTimeoutError: request timeout: machine.run_code`, cells "still running"). Cause: reach probes named bare `process`, and `packages/codemode/src/kernel.ts` declares a local `const process = spawn(...)` in `start()`, so the probe called `ChildProcess.getBuiltinModule` and killed every interpreter start. Fixed by #1103 (`97ec5b07`, probes reach globals only through `globalThis`); run 35455021958 re-dispatched on `97ec5b07`. No surviving-mutant count exists yet: no campaign has reached the execution phase.
+
+Disposition: #945's literal-zero definition of done is **not met** at this HEAD. The gates, receipts and campaign infrastructure are wired and fail-closed (#1082, #1088–#1102); the remaining work is reduction of the baseline above, which is measured work with no ambiguity, not tooling. No baseline row was lowered by exemption in this campaign.
