@@ -545,8 +545,8 @@ export function enumerate(
 					const value = mode === "expression" ? valueBoundary(siteNode) : siteNode;
 					// `switch (true)` narrows by its literal discriminant; a probe there
 					// becomes an entry marker on the statement, which has the same reach.
-					const literalSwitch = isSwitchDiscriminantLiteral(value);
-					const boundary = literalSwitch ? value.parent : value;
+					const literalSwitch = literalDiscriminantSwitch(value);
+					const boundary = literalSwitch ?? value;
 					const siteMode = literalSwitch ? "statement" : mode;
 					const start = boundary.getStart(source);
 					// Keep block-owned statements at their original lexical level.
@@ -840,12 +840,11 @@ function isLiteralOperand(node: ts.Node): boolean {
 		node.kind === ts.SyntaxKind.NullKeyword
 	);
 }
-function isSwitchDiscriminantLiteral(node: ts.Node): boolean {
-	return (
-		(node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) &&
-		ts.isSwitchStatement(node.parent) &&
-		node.parent.expression === node
-	);
+function literalDiscriminantSwitch(node: ts.Node): ts.SwitchStatement | undefined {
+	let inner = node;
+	while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+	if (inner.kind !== ts.SyntaxKind.TrueKeyword && inner.kind !== ts.SyntaxKind.FalseKeyword) return undefined;
+	return ts.isSwitchStatement(node.parent) && node.parent.expression === node ? node.parent : undefined;
 }
 function narrowingBoundary(node: ts.Node): ts.Node {
 	const parent = node.parent;
