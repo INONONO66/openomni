@@ -919,9 +919,12 @@ function caseInsertion(source: string, site: Site): number {
  * `any`: `require` is untyped in an ES module, `process.getBuiltinModule` is
  * typed, and every subexpression here is a boolean.
  */
+// The probe is spliced into arbitrary scopes, so its only free identifier is
+// `globalThis`: bare `process`/`Reflect` are shadowed by locals in source such
+// as codemode's `const process = spawn(...)`.
 export function probeText(marker: string): string {
 	const path = JSON.stringify(marker);
-	return `(Reflect.has(globalThis,${path})||(process.getBuiltinModule("node:fs").writeFileSync(${path},"1"),Reflect.set(globalThis,${path},1)))`;
+	return `(globalThis.Reflect.has(globalThis,${path})||(globalThis.process.getBuiltinModule("node:fs").writeFileSync(${path},"1"),globalThis.Reflect.set(globalThis,${path},1)))`;
 }
 function instrumentSingle(source: string, site: Site, marker: string): string {
 	const probe = probeText(marker);
