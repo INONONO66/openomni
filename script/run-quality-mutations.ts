@@ -804,6 +804,55 @@ function assignmentConsumer(node: ts.Node): ts.Node | undefined {
 	return undefined;
 }
 
+// A probe is `(marker, (expression))`. The checker narrows through a comma
+// only when its right side is itself a narrowing expression, and `&&`, `||`,
+// `??` and `!(...)` are not: the binder splits them into branches instead.
+// Wrapping such a condition removes every narrowing it provided, so the
+// probe descends to the leftmost operand, whose reach equals the whole
+// condition's. Literal operands of comparisons move to the comparison: a
+// `typeof x === "string"` guard is recognized syntactically and a wrapped
+// literal is no longer a literal. Reach is identical either way.
+const logicalOperators = new Set<ts.SyntaxKind>([
+	ts.SyntaxKind.AmpersandAmpersandToken,
+	ts.SyntaxKind.BarBarToken,
+	ts.SyntaxKind.QuestionQuestionToken,
+]);
+const comparisonOperators = new Set<ts.SyntaxKind>([
+	ts.SyntaxKind.EqualsEqualsToken,
+	ts.SyntaxKind.ExclamationEqualsToken,
+	ts.SyntaxKind.EqualsEqualsEqualsToken,
+	ts.SyntaxKind.ExclamationEqualsEqualsToken,
+	ts.SyntaxKind.InKeyword,
+]);
+function isLiteralOperand(node: ts.Node): boolean {
+	return (
+		ts.isStringLiteralLike(node) ||
+		ts.isNumericLiteral(node) ||
+		ts.isBigIntLiteral(node) ||
+		node.kind === ts.SyntaxKind.TrueKeyword ||
+		node.kind === ts.SyntaxKind.FalseKeyword ||
+		node.kind === ts.SyntaxKind.NullKeyword
+	);
+}
+function narrowingBoundary(node: ts.Node): ts.Node {
+	const parent = node.parent;
+	if (
+		isLiteralOperand(node) &&
+		ts.isBinaryExpression(parent) &&
+		comparisonOperators.has(parent.operatorToken.kind)
+	)
+		return parent;
+	let leaf = node;
+	for (;;) {
+		let inner = leaf;
+		while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+		if (ts.isPrefixUnaryExpression(inner) && inner.operator === ts.SyntaxKind.ExclamationToken)
+			leaf = inner.operand;
+		else if (ts.isBinaryExpression(inner) && logicalOperators.has(inner.operatorToken.kind)) leaf = inner.left;
+		else return leaf;
+	}
+}
+
 // Probe a value-producing boundary, never sever a Reference used as a callee,
 // delete operand, or continuing optional chain. Arguments/keys stay lazy.
 function valueBoundary(node: ts.Node): ts.Node {
@@ -823,7 +872,7 @@ function valueBoundary(node: ts.Node): ts.Node {
 		(ts.isTaggedTemplateExpression(parent) && parent.tag === node)
 	)
 		return valueBoundary(parent);
-	return node;
+	return narrowingBoundary(node);
 }
 function compare(a: string, b: string): number {
 	return Buffer.compare(Buffer.from(a), Buffer.from(b));
@@ -854,11 +903,13 @@ function caseInsertion(source: string, site: Site): number {
  * file write on each evaluation, or the test trips its own time bounds. The
  * once-guard goes through `Reflect` because probed TypeScript is still
  * type-checked by tests that compile source under strict options, and
- * `typeof globalThis` has no index signature.
+ * `typeof globalThis` has no index signature. The same tests reject compiler
+ * `any`: `require` is untyped in an ES module, `process.getBuiltinModule` is
+ * typed, and every subexpression here is a boolean.
  */
 export function probeText(marker: string): string {
 	const path = JSON.stringify(marker);
-	return `(Reflect.get(globalThis,${path})??(require("node:fs").writeFileSync(${path},"1"),Reflect.set(globalThis,${path},1)))`;
+	return `(Reflect.has(globalThis,${path})||(process.getBuiltinModule("node:fs").writeFileSync(${path},"1"),Reflect.set(globalThis,${path},1)))`;
 }
 function instrumentSingle(source: string, site: Site, marker: string): string {
 	const probe = probeText(marker);

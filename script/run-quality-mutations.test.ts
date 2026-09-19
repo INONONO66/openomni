@@ -82,6 +82,15 @@ test("reach probes write each marker once per process", async () => {
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+function strictProgram(directory: string, path: string): ts.Program {
+	const base = JSON.parse(readFileSync(resolve(import.meta.dir, "../tsconfig.base.json"), "utf8")) as { compilerOptions: Record<string, string | boolean | string[]> };
+	const parsed = ts.parseJsonConfigFileContent({ compilerOptions: { ...base.compilerOptions, noEmit: true }, files: [path] }, ts.sys, directory);
+	return ts.createProgram(parsed.fileNames, parsed.options);
+}
+function strictDiagnostics(program: ts.Program): string[] {
+	return ts.getPreEmitDiagnostics(program).map((entry) => ts.flattenDiagnosticMessageText(entry.messageText, "\n"));
+}
+
 test("reach probes type-check under the repository's strict compiler options", () => {
 	const directory = mkdtempSync(join(tmpdir(), "mutation-probe-types-"));
 	try {
@@ -93,13 +102,78 @@ test("reach probes type-check under the repository's strict compiler options", (
 		], directory);
 		const path = join(directory, "a.ts");
 		writeFileSync(path, transformed);
-		const base = JSON.parse(readFileSync(resolve(import.meta.dir, "../tsconfig.base.json"), "utf8")) as { compilerOptions: Record<string, string | boolean | string[]> };
-		const parsed = ts.parseJsonConfigFileContent({ compilerOptions: { ...base.compilerOptions, noEmit: true }, files: [path] }, ts.sys, directory);
-		const program = ts.createProgram(parsed.fileNames, parsed.options);
-		const diagnostics = ts.getPreEmitDiagnostics(program).map((entry) => ts.flattenDiagnosticMessageText(entry.messageText, "\n"));
-		expect(diagnostics).toEqual([]);
+		expect(strictDiagnostics(strictProgram(directory, path))).toEqual([]);
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+// script/alarm-type-contract.test.ts compiles kernel source and fails on any
+// call or binding whose compiler type is any/unknown; a reach copy of that
+// source must pass it too.
+test("reach probes introduce no compiler-inferred any or unknown", () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-probe-any-"));
+	try {
+		const source = "export const value: number = 1 + 1;\n";
+		const start = source.indexOf("1 + 1");
+		const path = join(directory, "a.ts");
+		writeFileSync(path, instrument(source, [
+			{ id: "site", path: "a.ts", sourceSha256: sha256(source), site: { start, end: start + "1 + 1".length, mode: "expression" }, tests: [] },
+		], directory));
+		const program = strictProgram(directory, path);
+		const checker = program.getTypeChecker();
+		const file = program.getSourceFile(path);
+		if (!file) throw new Error("missing instrumented source");
+		const loose: string[] = [];
+		const visit = (node: ts.Node): void => {
+			if (ts.isCallExpression(node) || ts.isVariableDeclaration(node)) {
+				const type = checker.getTypeAtLocation(ts.isVariableDeclaration(node) ? node.name : node);
+				if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) loose.push(node.getText());
+			}
+			ts.forEachChild(node, visit);
+		};
+		visit(file);
+		expect(strictDiagnostics(program)).toEqual([]);
+		expect(loose).toEqual([]);
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+// `(marker, (a || b))` narrows nothing: the checker only narrows through a
+// comma whose right side is itself a narrowing expression, and logical
+// operators are split by the binder instead. Sites on logical conditions and
+// comparison literals therefore relocate to a narrowing-transparent operand.
+test("reach sites on logical conditions and comparison literals preserve narrowing", async () => {
+	const source = [
+		'export function run(d: { value?: unknown } | undefined, chunk: string | Uint8Array, e: unknown): number {',
+		'  if (!d || !("value" in d)) return 0;',
+		'  const text = typeof chunk === "string" ? chunk : chunk.length;',
+		'  if (!(e instanceof Error && "code" in e && e.code === "ENOENT")) return 1;',
+		'  return text ? 2 : 3;',
+		'}',
+	].join("\n");
+	const input = await fixture(source, 'expect(run({ value: 1 }, "x", Object.assign(new Error("e"), { code: "ENOENT" }))).toBe(2);');
+	const contract = readContract(join(input.root, "contract.json"));
+	const operators = ["logical", "equality", "string-literal", "boolean-literal"].map((id) => ({
+		id,
+		replacements: new Map([["||", ["&&"]], ["&&", ["||"]], ["===", ["!=="]]]),
+	}));
+	const candidates = analyze(input.root, contract, buildInventory(input.root, contract), operators)
+		.enumerated.candidates.filter((candidate) => candidate.path === "src/a.ts" && candidate.site.mode === "expression");
+	const siteText = (text: string, offset = source.indexOf(text)): string[] => candidates
+		.filter((candidate) => candidate.startOffset === offset)
+		.map((candidate) => source.slice(candidate.site.start, candidate.site.end));
+	expect(siteText("||")).toEqual(["d"]);
+	expect(siteText("&&")).toEqual(["e instanceof Error"]);
+	expect(siteText("&&", source.lastIndexOf("&&"))).toEqual(["e instanceof Error"]);
+	expect(siteText('"string"')).toEqual(['typeof chunk === "string"']);
+	expect(siteText('"ENOENT"')).toEqual(['e.code === "ENOENT"']);
+	const directory = mkdtempSync(join(tmpdir(), "mutation-narrowing-probe-"));
+	try {
+		const path = join(directory, "a.ts");
+		writeFileSync(path, instrument(source, candidates.map((candidate, index) => ({
+			id: `site-${index}`, path: candidate.path, sourceSha256: candidate.sourceSha256, site: candidate.site, tests: [],
+		})), directory));
+		expect(strictDiagnostics(strictProgram(directory, path))).toEqual([]);
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+}, 90000);
 
 test("Python probe worker instruments a site with a marker", async () => {
 	const directory = mkdtempSync(join(tmpdir(), "mutation-python-probe-"));
@@ -377,7 +451,7 @@ test("reach discovery follows baseline execution across package ignore rules", a
 
 test("failed reach probes retain their test process and JUnit instead of object stringification", async () => {
 	const input = await fixture(
-		'const require = () => { throw new Error("probe-receiver-failure"); }; export const run = () => true;',
+		'const process = { getBuiltinModule: () => { throw new Error("probe-receiver-failure"); } }; export const run = () => true;',
 		"expect(run()).toBe(true);",
 	);
 	fixtureGit(input.root, "init", "-q");

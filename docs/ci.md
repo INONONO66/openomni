@@ -236,8 +236,14 @@ receipt, and cleanup removes the reach worktree's Git registration. The map bind
 the execution tree, candidates, test list, source hashes and site identities.
 Block-owned statement probes use entry points before the original statement,
 not a wrapper around it. This preserves Bun's derived-constructor initialization;
-the marker also records entry when `super()` throws. Mutation replacements and
-candidate identity are unchanged.
+the marker also records entry when `super()` throws. Instrumented sources stay
+strict-compilable and free of compiler `any`: the probe loads `node:fs`
+through the typed `process.getBuiltinModule`, and expression sites on `&&`,
+`||`, `??` or `!(...)` conditions descend to the leftmost operand while literal
+comparison operands move to their comparison, because a comma probe around a
+logical condition would erase every type narrowing it provided (the failure
+behind the red `typed-facade-types` reach test in #1049). Mutation
+replacements and candidate identity are unchanged.
 An unreached candidate is `noCoverage`, not killed: it produces no candidate
 test or JUnit receipts. Python retains its per-candidate probe. Source restoration,
 cleanup and complete campaign receipts remain required. Passing the runner's
