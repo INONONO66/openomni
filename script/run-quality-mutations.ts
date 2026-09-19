@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { COMPILER_BATCH_SIZE, compilerProofMatches, MutationCompilerWorker, type CompilerProof } from "./quality-mutation-compiler";
-import { encodeOverlay, OVERLAY_ENVIRONMENT, type ReachOverlay } from "./quality-mutation-reach-overlay";
+import { encodeOverlay, OVERLAY_ENVIRONMENT, type ReachOverlay, stagePreload } from "./quality-mutation-reach-overlay";
 
 // The inventory producer is a supplied, hash-pinned CLI, not an imported copy of
 // another lane. Only that producer decides membership, categories and topology.
@@ -1229,7 +1229,7 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 	writeFileSync(overlayFile, encodeOverlay(overlay));
 	const environment = {
 		[OVERLAY_ENVIRONMENT]: overlayFile,
-		BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ""} --preload=${join(import.meta.dir, "quality-mutation-reach-overlay.ts")}`.trim(),
+		BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ""} --preload=${stagePreload(temporary)}`.trim(),
 	};
 	const map = new Map<string, ProbeEvidence>();
 	for (const candidate of candidates) map.set(candidate.id, { reached: false, markerSha256: sha256(""), tests: [] });
