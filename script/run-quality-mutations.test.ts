@@ -105,6 +105,30 @@ test("reach probes resolve their globals through globalThis inside shadowing sco
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+// packages/ledger/test/helpers/disposition-967-archive-fault.ts wraps
+// `fs.writeFileSync` on the builtin module object; a probe inside that wrapper
+// wrote its marker through the wrapper before claiming the guard and recursed
+// until the stack overflowed (run 35468117173).
+test("reach probes inside an fs.writeFileSync wrapper do not recurse through their own write", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-probe-fswrap-"));
+	try {
+		const marker = join(directory, "site");
+		const output = join(directory, "out");
+		const source = `import fs from "node:fs";
+const writeFile = fs.writeFileSync;
+Object.defineProperty(fs, "writeFileSync", { value: (...args: Parameters<typeof fs.writeFileSync>) => { writeFile(...args); } });
+fs.writeFileSync(${JSON.stringify(output)}, "ok");
+console.log("done");`;
+		const start = source.indexOf("writeFile(...args)"), end = start + "writeFile(...args)".length;
+		const stdout = await runProbed(directory, source, [
+			{ id: "site", path: "a.ts", sourceSha256: sha256(source), site: { start, end, mode: "expression" }, tests: [] },
+		], marker);
+		expect(stdout).toBe("done");
+		expect(readFileSync(marker, "utf8")).toBe("1");
+		expect(readFileSync(output, "utf8")).toBe("ok");
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 function strictProgram(directory: string, path: string): ts.Program {
 	const base = JSON.parse(readFileSync(resolve(import.meta.dir, "../tsconfig.base.json"), "utf8")) as { compilerOptions: Record<string, string | boolean | string[]> };
 	const parsed = ts.parseJsonConfigFileContent({ compilerOptions: { ...base.compilerOptions, noEmit: true }, files: [path] }, ts.sys, directory);
