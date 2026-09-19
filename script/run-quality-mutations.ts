@@ -848,8 +848,17 @@ function caseInsertion(source: string, site: Site): number {
 	if (!first || !ts.isCaseClause(first)) return fail("instrumentation", "Missing case site");
 	return site.start + original.indexOf(":", first.expression.end - "switch(0){".length) + 1;
 }
+/**
+ * Marker probe text. The write happens once per process per marker: a hot
+ * path evaluated millions of times during one test must not pay a synchronous
+ * file write on each evaluation, or the test trips its own time bounds.
+ */
+export function probeText(marker: string): string {
+	const path = JSON.stringify(marker);
+	return `(globalThis.__omoReach??={})[${path}]??=(require("node:fs").writeFileSync(${path},"1"),1)`;
+}
 function instrumentSingle(source: string, site: Site, marker: string): string {
-	const probe = `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1")`;
+	const probe = probeText(marker);
 	const original = source.slice(site.start, site.end);
 	if (site.mode === "statement") return replace(source, site.start, site.end, `{${probe};${original}}`);
 	if (site.mode === "case") return replace(source, caseInsertion(source, site), caseInsertion(source, site), `${probe};`);
@@ -862,7 +871,7 @@ function reachInsertions(source: string, row: ReachSite, directory: string, inde
 	const marker = join(directory, row.id);
 	if (site.mode === "case") {
 		const offset = caseInsertion(source, site);
-		return [{ offset, order: index, text: `require("node:fs").writeFileSync(${JSON.stringify(marker)},"1");` }];
+		return [{ offset, order: index, text: `${probeText(marker)};` }];
 	}
 	// Use exactly the single-site wrapper, but retain original offsets when
 	// nesting wrappers. Replacing an outer span would truncate inner probes.
