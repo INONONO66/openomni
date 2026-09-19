@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+import ts from "typescript";
 import { copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256 } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
@@ -78,6 +79,25 @@ test("reach probes write each marker once per process", async () => {
 		expect(existsSync(marker)).toBe(false);
 		expect(readFileSync(join(directory, "total"), "utf8")).toBe("1");
 		expect(readFileSync(join(directory, "loop"), "utf8")).toBe("1");
+	} finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("reach probes type-check under the repository's strict compiler options", () => {
+	const directory = mkdtempSync(join(tmpdir(), "mutation-probe-types-"));
+	try {
+		const source = `export function sum(values: number[]): number {\n\tlet total = 0;\n\tfor (const value of values) total += value;\n\treturn total;\n}\n`;
+		const start = source.indexOf("total += value"), end = start + "total += value".length;
+		const transformed = instrument(source, [
+			{ id: "site", path: "a.ts", sourceSha256: sha256(source), site: { start, end, mode: "expression" }, tests: [] },
+			{ id: "entry", path: "a.ts", sourceSha256: sha256(source), site: { start: source.indexOf("let total"), end: source.indexOf("let total"), mode: "statement" }, tests: [] },
+		], directory);
+		const path = join(directory, "a.ts");
+		writeFileSync(path, transformed);
+		const base = JSON.parse(readFileSync(resolve(import.meta.dir, "../tsconfig.base.json"), "utf8")) as { compilerOptions: Record<string, string | boolean | string[]> };
+		const parsed = ts.parseJsonConfigFileContent({ compilerOptions: { ...base.compilerOptions, noEmit: true }, files: [path] }, ts.sys, directory);
+		const program = ts.createProgram(parsed.fileNames, parsed.options);
+		const diagnostics = ts.getPreEmitDiagnostics(program).map((entry) => ts.flattenDiagnosticMessageText(entry.messageText, "\n"));
+		expect(diagnostics).toEqual([]);
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
