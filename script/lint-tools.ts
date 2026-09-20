@@ -614,23 +614,18 @@ const badTool: ToolSurface = {
 
 function definitionSelfTest(failures: string[]): void {
   const exemplar = TOOL_DEFINITIONS[0];
-  if (exemplar === undefined) {
-    failures.push("definition invariant self-test has no exemplar");
-    return;
-  }
+  if (exemplar === undefined) failures.push("definition invariant self-test has no exemplar");
+  if (exemplar === undefined) return;
   const unsafeQuery = {
     ...exemplar,
     name: "unsafe_query",
     category: "query",
   } as AnyToolDefinition;
-  if (
-    !definitionInvariantViolations(
-      [],
-      [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/query/unsafe.ts" }],
-    ).some(({ check }) => check === "earned-check")
-  ) {
-    failures.push("earned-check did not flag an exported definition absent from the catalog");
-  }
+  const earnedFlagged = definitionInvariantViolations(
+    [],
+    [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/query/unsafe.ts" }],
+  ).some(({ check }) => check === "earned-check");
+  if (!earnedFlagged) failures.push("earned-check did not flag an uncatalogued definition");
   const fileNameChecks = [
     ["send_message", "apps/openomni/src/tools/send-message.ts", 0],
     ["send_message", "apps/openomni/src/tools/send_message.ts", 1],
@@ -639,10 +634,9 @@ function definitionSelfTest(failures: string[]): void {
   ] as const;
   for (const [name, filePath, expected] of fileNameChecks) {
     const definition = { ...exemplar, name } as AnyToolDefinition;
-    const flagged = definitionInvariantViolations(
-      [definition],
-      [{ definition, filePath }],
-    ).filter(({ message }) => message.startsWith("[tool-file-name]")).length;
+    const flagged = definitionInvariantViolations([definition], [{ definition, filePath }]).filter(
+      ({ message }) => message.startsWith("[tool-file-name]"),
+    ).length;
     if (flagged !== expected) failures.push(`tool-file-name misjudged ${filePath} for ${name}`);
   }
 }
