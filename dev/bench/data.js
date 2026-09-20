@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789913121100,
+  "lastUpdate": 1789921320632,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -73607,6 +73607,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 104706,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c9c53af0760579d46ca5879db714b6adb12bd407",
+          "message": "ci: lean PR gate — delete the quality ratchet stack, add patch coverage and cognitive-complexity 21 (#1117)\n\n* refactor: enable noExcessiveCognitiveComplexity (max 21) and extract helpers\n\nTurns the Biome cognitive-complexity rule on at error level with\nmaxAllowedComplexity 21 and fixes every editable violation by helper\nextraction; no suppressions and no threshold raises. A scoped biome\noverride exempts only the #1109-frozen script/run-quality-mutations.ts\nand script/quality-mutation-compiler.ts.\n\nPart of #1116\n\n* feat(ci): add diff-scoped patch coverage checker\n\nscript/check-patch-coverage.ts diffs <base>...HEAD with zero context,\nkeeps changed executable lines in packages/apps src and top-level\nnon-test script *.ts, and unions DA records across every lcov file\n(max hits per line; repo prefix inferred from artifact path). A changed\nline known to lcov with zero hits fails; lines absent from all lcov\nevidence are not executable and never count.\n\nPart of #1116\n\n* ci: delete the per-PR quality ratchet stack for the lean PR gate\n\nRemoves the Quality Static/Exact/Gates/Quality and Script Coverage jobs,\nthe coverage-receipt begin/seal steps, and their ~55 ratchet-only\nscripts, tests and baselines (check-census*, check-coverage-ratchet,\ncheck-quality-{coverage,metrics}, quality-measure, quality-ci-*,\nquality-coverage-record, quality-coverage/, quality-metrics/ except\ninput.ts, quality-proof, quality-schema, report-source-metrics,\ncoverage-baseline.json, quality-baseline-lcov-bound*). The scheduled\nmutation workflow and its import closure stay untouched.\n\nThe lean gate wires Patch Coverage as a PR-only job over the coverage-*\nlcov artifacts, relocates check-dead-exports/check-import-cycles/\nverify-tsconfig-inheritance into Dependency Rules, rebalances the\nscripts-tooling shards from four to two, runs the Python self-tests\ndirectly, and drops the now-unused analyzer devDependencies.\n\nPart of #1116\n\n* docs: record the lean PR gate and ratchet-stack deletion\n\nRewrites docs/ci.md around the lean gate and scheduled deep audits,\nupdates the AGENTS.md COMMANDS section, adds SLOP §I with the deletion\nreceipt, and syncs implementation-status (#1116 note, E5 row).\n\nPart of #1116\n\n* test: exercise changed CLI seams in-process for the patch gate\n\nThe patch-coverage gate requires the PR's own lcov evidence for every\nchanged executable line. Parameterizes check-patch-coverage and ci-plan\nmain() (argv/env/root injection), exports the check-topology main and\nlint-tools selfTest seams, and adds in-process tests: patch-coverage CLI\npass/fail/usage, ci-plan GITHUB_OUTPUT contract, repository topology\ngate, lint-tools self-test discrimination, and the external-reply origin\ncorrelation in message admission.\n\nPart of #1116\n\n* refactor: single-line self-test failure guards for line coverage\n\nThe extracted definitionSelfTest failure branches sat on their own\nlines, which no healthy run can execute; folding each guard onto one\nline keeps the discrimination and makes the patch-coverage evidence\nhonest.\n\nPart of #1116\n\n* fix: restore #1109/#1115 content reverted by stale refactor; patch gate fails on uncovered new files\n\nCommit 6cd3bcc1 was authored from a stale snapshot and shipped pre-#1109/\npre-#1115 file contents. Restores byte-identical origin/main versions of\nthe #1115 fix (per-turn completion budget + its RED regression test, the\nsingle IPC wire classifier + tests) and the #1109 sharded mutation\ncampaign (run-quality-mutations.ts, quality-native-mutation.ts,\nquality-mutation-join.ts, quality-mutation-shard.test.ts, workflow test,\nsharded quality-mutation.yml), re-adds the shard suite to the tooling\nlanes, and restores the SLOP §H1-H5 row states. The restored files pass\ncognitive-complexity 21 unmodified, so no re-extraction was needed.\n\nPatch gate (review MAJOR): a gated changed file with no SF record in any\nlcov was silently exempt; it now fails with '<path>: no coverage record'\nunless type-stripping proves zero executable lines. Documented in\ndocs/ci.md, with a fixture test that is red on the old checker.\n\nExtraction fidelity (review MEDIUMs): the empty-outbound path of the\nsession drive loop is synchronous again (no microtask yield between the\nclosed check and the action-tree read), and driveInbox steps assign\ntheir result unconditionally, matching main's clearing semantics.\n\nPart of #1116\n\n* test: run the ledger-rename verifier in-process; trust HEAD reads in the patch gate\n\nThe no-coverage-record rule flagged verify-ledger-rename.ts itself (its\nextraction changed lines but only a spawned lane executed it) — a real\ncatch by the new rule. The verifier's main is now exported and run by a\nscripts-contracts test. The checker's isExecutable read drops its\ndefensive catch: every diffed path exists at HEAD, and an unexpected\nread failure crashes the gate, which fails closed.\n\nPart of #1116\n\n* fix(ci): keep script/coverage ancestor in the scripts-contracts artifact; patch gate refuses flattened lcov\n\n* fix(ci): patch gate drops lines only an unexecuted lane reports as zero",
+          "timestamp": "2026-09-21T01:18:45+09:00",
+          "tree_id": "736fdb0b56ee00edcb16172a6545ff6c496832ce",
+          "url": "https://github.com/INONONO66/openomni/commit/c9c53af0760579d46ca5879db714b6adb12bd407"
+        },
+        "date": 1789921319536,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1040,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1400,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1379220,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 379567,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6721526,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1114,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 687,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 166360,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 809016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 679306,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 97541576,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9298359,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19480,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 186578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 965531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 253881,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15583565,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 91,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 181357,
             "unit": "ns/op"
           }
         ]
