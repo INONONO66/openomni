@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789858065612,
+  "lastUpdate": 1789905248310,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -73205,6 +73205,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 172036,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "374de398bd34ada4e7c3b81899b5e4f747a1ab8b",
+          "message": "chore(quality,docs): baseline shrink for deleted files, stale-claim sync, SLOP §H (#1114)\n\n* chore(quality,docs): shrink baseline for 38 deleted files, sync stale claims, add SLOP §H\n\n- script/conformance/quality-baseline-lcov-bound*: drop 1,830 rows (multiplicity 3,248) whose\n  files no longer exist; inventory 938 -> 900, rows 60,509 -> 58,679. Shrink only, no floor lowered.\n- docs/implementation-status.md: runtime-administration row no longer claims the separate\n  approval tool / old tool paths deleted in 239b4273.\n- AGENTS.md: header no longer says legacy catalog entries await stage 2.\n- docs/SLOP.md: §H 2026-09-20 sweep, 19 rows with wave owners (#1108, #1110-#1113).\n\nPart of #930\n\n* docs(slop): §H receipts stay pending until merge; H18/H10 owners named\n\nGate review (G008 a0/gate-review.md) blocker 4: worktree work was recorded as merged closure. H1-H5 now read 'pending merge' with the PR named; H18 owned by W5 #1113; H10 transfers to W5 if W4 is dropped.\n\nPart of #930",
+          "timestamp": "2026-09-20T20:50:28+09:00",
+          "tree_id": "fddc86736e432135c73afd0b465fe3ee7c252be3",
+          "url": "https://github.com/INONONO66/openomni/commit/374de398bd34ada4e7c3b81899b5e4f747a1ab8b"
+        },
+        "date": 1789905247868,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1371,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1283732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 356096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6443308,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 148,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1094,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 153866,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 749312,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 537382,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3845,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 92519701,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 8656243,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18819,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 179359,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 897682,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 230545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14652994,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 92,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 168098,
             "unit": "ns/op"
           }
         ]
