@@ -1546,7 +1546,7 @@ function timedOut(tested: Awaited<ReturnType<typeof runTests>>): boolean {
 	return tested.batches.some((batch) => batch.process.timedOut);
 }
 
-function classifyCandidate(result: Result, tested: Awaited<ReturnType<typeof runTests>>): void {
+export function classifyCandidate(result: Pick<Result, "outcome" | "reason" | "assertionIdentities">, tested: TestSelectionReceipt): void {
 	if (timedOut(tested)) {
 		// A bounded suite that never finishes under the mutant is a kill by
 		// non-termination (Stryker semantics); it is not an environmental fault.

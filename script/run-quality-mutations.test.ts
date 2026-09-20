@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import ts from "typescript";
-import { copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256 } from "./run-quality-mutations";
+import { classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -345,6 +345,30 @@ test("mutation main rejects an invalid invocation in process", async () => {
 });
 const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, dependencies, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
+
+function selection(overrides: Partial<TestSelectionReceipt> & { timedOut?: boolean }): TestSelectionReceipt {
+  const { timedOut = false, ...rest } = overrides;
+  const process = { stage: "tests", argv: [], pid: 1, exitCode: timedOut ? null : 1, signal: null, timedOut, overflow: false, spawnError: false, stdout: "", stderr: "", stdoutSha256: "", stderrSha256: "", cleanupExit: null };
+  return { batches: [{ process, junit: "", tests: 1, failures: 1, assertions: ["t"], valid: true }], files: ["src/a.test.ts"], tests: 1, failures: 1, assertions: ["t"], valid: true, exitCode: 1, ...rest };
+}
+
+test("classifyCandidate: a bounded suite that never finishes is a kill by non-termination, not infrastructure", () => {
+  const timed = { outcome: "survived" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(timed, selection({ timedOut: true, failures: 0, assertions: [], valid: false, exitCode: 1 }));
+  expect([timed.outcome, timed.reason]).toEqual(["killed", "suite-timeout"]);
+
+  const survivor = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(survivor, selection({ failures: 0, assertions: [], exitCode: 0 }));
+  expect([survivor.outcome, survivor.reason]).toEqual(["survived", "green-mutated-test-selection"]);
+
+  const behavioral = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(behavioral, selection({}));
+  expect([behavioral.outcome, behavioral.reason, behavioral.assertionIdentities]).toEqual(["killed", "behavioral-assertion", ["t"]]);
+
+  const broken = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(broken, selection({ assertions: [], exitCode: 1 }));
+  expect([broken.outcome, broken.reason]).toEqual(["infrastructure", "failure-without-complete-behavioral-assertions"]);
+});
 
 test("rendered process receipts redact split and inline secrets without hiding ordinary arguments", async () => {
   const command = [process.execPath, "-e", "process.exit(7)", "--"];
