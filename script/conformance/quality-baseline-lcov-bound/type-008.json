@@ -1208,38 +1208,6 @@
     "count": 4
   },
   {
-    "path": "packages/policy/src/effects/merge/rules.ts",
-    "line": 65,
-    "symbol": "implicitAny:state",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/effects/merge/rules.ts",
-    "line": 65,
-    "symbol": "implicitAny:toolFilters",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/src/effects/merge/rules.ts",
-    "line": 22,
-    "symbol": "implicitAny:type",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/src/effects/records.ts",
-    "line": 40,
-    "symbol": "implicitAny:value",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/policy/src/index.ts",
     "line": 4,
     "symbol": "implicitAny:PolicyCompileError",
@@ -1910,46 +1878,6 @@
     "gate": "type",
     "value": 1,
     "count": 2
-  },
-  {
-    "path": "packages/policy/test/bucket-lookup.bench.ts",
-    "line": 49,
-    "symbol": "unknown:NewExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/bucket-lookup.bench.ts",
-    "line": 20,
-    "symbol": "unknown:_",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/bucket-lookup.bench.ts",
-    "line": 20,
-    "symbol": "unknown:unrelated",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/policy/test/effect-composition.test.ts",
-    "line": 366,
-    "symbol": "implicitAny:CallExpression",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/policy/test/effect-composition.test.ts",
-    "line": 41,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 3
   },
   {
     "path": "packages/policy/test/engine-determinism.test.ts",

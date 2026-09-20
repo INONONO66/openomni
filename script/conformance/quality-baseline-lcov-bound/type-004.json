@@ -1144,78 +1144,6 @@
     "count": 1
   },
   {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 5,
-    "symbol": "implicitAny:input",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 5,
-    "symbol": "implicitAny:modelFixture",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 5,
-    "symbol": "implicitAny:run",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 5,
-    "symbol": "unknown:input",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 10,
-    "symbol": "unknown:message",
-    "gate": "type",
-    "value": 1,
-    "count": 2
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 5,
-    "symbol": "unknown:modelFixture",
-    "gate": "type",
-    "value": 1,
-    "count": 5
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 10,
-    "symbol": "unknown:onMessage",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 8,
-    "symbol": "unknown:result",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
-    "path": "packages/agent/test/helpers/model-fixture.ts",
-    "line": 5,
-    "symbol": "unknown:run",
-    "gate": "type",
-    "value": 1,
-    "count": 4
-  },
-  {
     "path": "packages/agent/test/helpers/request-ledger.ts",
     "line": 136,
     "symbol": "unknown:bounded",
@@ -3950,46 +3878,6 @@
     "gate": "type",
     "value": 1,
     "count": 3
-  },
-  {
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 19,
-    "symbol": "implicitAny:authenticateGitHubWebhook",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 18,
-    "symbol": "implicitAny:authenticateWebSocketUpgrade",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 1,
-    "symbol": "unknown:ChannelAuthnDecisionObserver",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 11,
-    "symbol": "unknown:decisionOption",
-    "gate": "type",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 11,
-    "symbol": "unknown:onDecision",
-    "gate": "type",
-    "value": 1,
-    "count": 6
   },
   {
     "path": "packages/channels/src/index.ts",
