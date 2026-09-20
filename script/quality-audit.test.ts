@@ -203,6 +203,10 @@ function fixture() {
   mkdirSync(join(root, "script/conformance"), { recursive: true });
   mkdirSync(join(root, "src"));
   writeFileSync(join(root, "src/value.ts"), "export const value = 1;\n");
+  // Lane lcov paths resolve under the lane's workspace; an inventoried file
+  // there is what the coverage audit reports on.
+  mkdirSync(join(root, "packages/agent/src"), { recursive: true });
+  writeFileSync(join(root, "packages/agent/src/value.ts"), "export const value = 1;\n");
   writeFileSync(
     join(root, "tsconfig.json"),
     JSON.stringify({
@@ -221,7 +225,7 @@ function fixture() {
     JSON.stringify({
       version: 1,
       typescript: "5.9.2",
-      roots: ["src"],
+      roots: ["src", "packages/agent/src"],
       projects: ["tsconfig.json"],
       topology: false,
     }),
