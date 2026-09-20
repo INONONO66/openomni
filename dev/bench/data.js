@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789924025246,
+  "lastUpdate": 1789941137956,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -73875,6 +73875,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 112427,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9a5bb123f55896923d8e5c060441baeda187c63b",
+          "message": "fix(mutation): production-only universe, suite-timeout kills, receipt-only join (#1120)\n\n* fix(mutation): production-only candidate universe, suite timeout is a kill, receipt-only join\n\n- mutable() exempts historical|test|fixture|benchmark categories; census keeps them\n- classifyCandidate: timed-out batch = killed/suite-timeout (non-termination)\n- wrapper suite timeout 300s; shard budget default 240 min for job headroom\n- delete quality-ratchet.ts and every --baseline argument; the referenced\n  quality-baseline-mutation.json never existed so complete joins exited 2\n- recordMutationMeasurement writes current.json and exits by survivor count\n\nPart of #1049\n\n* test(mutation): workflow shape pins no --baseline argument and the shard budget\n\n* test(mutation): classify outcomes in-process so the suite-timeout kill is patch-covered",
+          "timestamp": "2026-09-20T21:49:17Z",
+          "tree_id": "5ba3f31ecc94271dcb0b10ee81b1e17f2e02a68b",
+          "url": "https://github.com/INONONO66/openomni/commit/9a5bb123f55896923d8e5c060441baeda187c63b"
+        },
+        "date": 1789941137555,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1032,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1780,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1364,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1316217,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 353640,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6577965,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 151,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1086,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 642,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 155027,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 760841,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 532779,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 94317197,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 8921422,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18958,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 179898,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 898400,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 239127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14744744,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 91,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 166878,
             "unit": "ns/op"
           }
         ]
