@@ -21,7 +21,7 @@ test("native pilot executes the real campaign without creating a full ratchet me
   });
   expect(await mutationMain([
     ...prepareNative(input.root),
-    "--baseline", "unused-for-pilot.json", "--pilot", "--limit", "1", "--target", "src/a.ts",
+    "--pilot", "--limit", "1", "--target", "src/a.ts",
   ])).toBe(0);
   const result = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
   const document = jsonObject(result.document);
@@ -29,12 +29,11 @@ test("native pilot executes the real campaign without creating a full ratchet me
   expect(document.complete).toBe(true);
   expect(jsonObject(document.selectedCounts).killed).toBe(1);
   expect(existsSync(join(input.root, "quality-mutation-results/current.json"))).toBe(false);
-  await expect(mutationMain(["--limit", "1", "--baseline", "baseline.json"])).rejects.toThrow();
-  await expect(mutationMain(["--target", "src/a.ts", "--baseline", "baseline.json"])).rejects.toThrow();
-  await expect(mutationMain([])).rejects.toThrow();
+  await expect(mutationMain(["--limit", "1"])).rejects.toThrow("--limit/--target require --pilot");
+  await expect(mutationMain(["--target", "src/a.ts"])).rejects.toThrow("--limit/--target require --pilot");
 }, 90000);
 
-test("native full campaign normalizes all candidates before enforcing the baseline", async () => {
+test("native full campaign records a complete measurement receipt and exits by survivor count", async () => {
   const input = await fixture("", "", {
     "src/a.test.ts": 'import "../support/assertion";',
     "packages/demo/src/main.ts": "export const run = true;",
@@ -43,10 +42,7 @@ test("native full campaign normalizes all candidates before enforcing the baseli
   const contractPath = join(input.root, "contract.json");
   const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
   writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
-  expect(await mutationMain([
-    ...prepareNative(input.root),
-    "--baseline", "missing-baseline.json",
-  ])).toBe(2);
+  expect(await mutationMain(prepareNative(input.root))).toBe(0);
   const native = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
   const document = jsonObject(native.document);
   expect(document.full).toBe(true);

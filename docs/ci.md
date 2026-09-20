@@ -195,9 +195,13 @@ Python quality tools are installed from
 
 Full mutation runs in the explicit `quality-mutation` daily scheduled/manual
 workflow, not in PR admission. It retains failed/incomplete process evidence
-and fails closed until a complete campaign and reviewed baseline exist; a
-missing baseline is not a zero-survivor claim. A PR pilot is never reported as
-zero survivors.
+and fails closed until a complete campaign exists; a complete campaign is
+recorded as one measurement receipt (`current.json`) whose findings are the
+surviving mutants, with no baseline to ratchet against. Candidates come only
+from production, tooling and migration sources: test, fixture and benchmark
+files are censused but never mutated. A mutant whose test batch hits the
+suite timeout is killed by non-termination, not infrastructure. A PR pilot is
+never reported as zero survivors.
 
 The TypeScript/JavaScript mutation runner builds a campaign-scoped reach map
 before candidate execution. Files recorded in the green baseline's native JUnit

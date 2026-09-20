@@ -422,7 +422,7 @@ deleted the ratchet stack in one PR:
 - **Kept**: the scheduled mutation workflow (`quality-mutation.yml`,
   `run-quality-mutations*.ts`, `quality-mutation-*`, `quality-native-mutation`,
   `check-quality-python`) and its minimal import closure
-  (`quality-{inventory,plan,ratchet,source,json,ci-input,ci-receipt,native-lcov,native-process}`,
+  (`quality-{inventory,plan,source,json,ci-input,ci-receipt,native-lcov,native-process}`,
   `check-types-census`, `census-program`, `quality-metrics/input.ts`).
 - **Added**: `complexity/noExcessiveCognitiveComplexity` (max 21) in
   `biome.json` with ~20 violations fixed by extraction (no suppressions; a
@@ -435,3 +435,9 @@ deleted the ratchet stack in one PR:
 - The #945 absolute census receipt above keeps its historical measurement; the
   baseline fragments it describes are deleted at HEAD and any future closure
   claim requires a fresh scheduled-campaign measurement, not a ratchet state.
+- Follow-up (#1049 sharded campaign, 2026-09-21): `quality-ratchet.ts` itself
+  is deleted; the mutation wrapper/join referenced a
+  `quality-baseline-mutation.json` that never existed and would have exited 2
+  on every complete join. The campaign now records `current.json` only. The
+  candidate universe drops test/fixture/benchmark files (61% of the 182,404
+  candidates in run 35512259166) and suite-timeout hangs count as kills.

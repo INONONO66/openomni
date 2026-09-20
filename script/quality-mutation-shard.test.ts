@@ -184,7 +184,7 @@ test("shard slices resume append-only progress and join into the single full rec
   for (const line of repaired.split("\n").filter((piece) => piece.length)) decode(line);
   // Re-running the complete shard through the wrapper carries every result and
   // executes none.
-  const base = ["--root", input.root, "--contract", "contract.json", "--decision", decision, "--baseline", "missing-baseline.json"];
+  const base = ["--root", input.root, "--contract", "contract.json", "--decision", decision];
   const shardBase = [...base, ...shard0];
   expect(await mutationMain([...shardBase, "--output", "shard-0-c"])).toBe(0);
   const carried = shardDocument(input.root, "shard-0-c");
@@ -202,13 +202,13 @@ test("shard slices resume append-only progress and join into the single full rec
   expect(await mutationMain([...base, "--shard", "1", "--shard-count", "2", "--progress", join(input.root, "progress", "shard-1.jsonl"), "--output", "shard-1"])).toBe(0);
   const second = shardDocument(input.root, "shard-1");
   expect(second.document.complete).toBe(true);
-  // Join: all shards complete -> the existing full receipt shape plus ratchet.
+  // Join: all shards complete -> the existing full receipt shape plus one measurement receipt.
   const joinDir = join(input.root, "join-shards");
   for (const [index, output] of [["0", "shard-0-c"], ["1", "shard-1"]] as const) {
     mkdirSync(join(joinDir, `quality-mutation-shard-${index}`), { recursive: true });
     cpSync(join(input.root, output, "native.json"), join(joinDir, `quality-mutation-shard-${index}`, "native.json"));
   }
-  expect(joinMain(["--root", input.root, "--contract", "contract.json", "--baseline", "missing-baseline.json", "--shards", joinDir, "--output", "joined"])).toBe(2);
+  const joinCode = joinMain(["--root", input.root, "--contract", "contract.json", "--shards", joinDir, "--output", "joined"]);
   const joined = jsonObject(jsonObject(decodeJson(readFileSync(join(input.root, "joined", "native.json"), "utf8"))).document);
   expect(joined.full).toBe(true);
   expect(joined.complete).toBe(true);
@@ -216,13 +216,16 @@ test("shard slices resume append-only progress and join into the single full rec
   expect(Array.isArray(results) && results.length).toBe(sliceSize + jsonNumber(second.shard.sliceSize));
   const merged = jsonObject(decodeJson(readFileSync(join(input.root, "joined", "current.json"), "utf8")));
   expect(merged.analyzed).toEqual(["mutation"]);
+  const survivors = jsonNumber(jsonObject(joined.counts).survived);
+  expect(Array.isArray(merged.findings) && merged.findings.length).toBe(survivors);
+  expect(joinCode).toBe(survivors > 0 ? 1 : 0);
   // Join with a partial shard document: incomplete summary, exit 0, no receipt.
   const partialDir = join(input.root, "join-partial");
   mkdirSync(join(partialDir, "quality-mutation-shard-1"), { recursive: true });
   cpSync(join(joinDir, "quality-mutation-shard-1", "native.json"), join(partialDir, "quality-mutation-shard-1", "native.json"));
   mkdirSync(join(partialDir, "quality-mutation-shard-0"), { recursive: true });
   writeFileSync(join(partialDir, "quality-mutation-shard-0", "native.json"), JSON.stringify({ command: ["runner"], exitCode: partial.exitCode, document: partial.document }));
-  expect(joinMain(["--root", input.root, "--contract", "contract.json", "--baseline", "missing-baseline.json", "--shards", partialDir, "--output", "joined-partial"])).toBe(0);
+  expect(joinMain(["--root", input.root, "--contract", "contract.json", "--shards", partialDir, "--output", "joined-partial"])).toBe(0);
   expect(existsSync(join(input.root, "joined-partial"))).toBe(false);
   // Stale identity fails closed inside the real join function.
   expect(() =>
@@ -230,7 +233,7 @@ test("shard slices resume append-only progress and join into the single full rec
   ).toThrow("stale shard inventory");
   // Spawned exit codes for the join entry point.
   const script = join(import.meta.dir, "quality-mutation-join.ts");
-  const incomplete = Bun.spawnSync([process.execPath, script, "--root", input.root, "--contract", "contract.json", "--baseline", "missing-baseline.json", "--shards", partialDir, "--output", "joined-spawn"], { timeout: 120000 });
+  const incomplete = Bun.spawnSync([process.execPath, script, "--root", input.root, "--contract", "contract.json", "--shards", partialDir, "--output", "joined-spawn"], { timeout: 120000 });
   expect(incomplete.exitCode).toBe(0);
   expect(incomplete.stderr.toString()).toContain("campaign incomplete: shards 1/2 complete");
   const missingBaseline = Bun.spawnSync([process.execPath, script], { timeout: 120000 });
@@ -238,12 +241,12 @@ test("shard slices resume append-only progress and join into the single full rec
 }, 600000);
 
 test("shard arguments are validated before any campaign work starts", async () => {
-  await expect(mutationMain(["--baseline", "b.json", "--shard", "0"])).rejects.toThrow("sharded execution requires");
+  await expect(mutationMain(["--shard", "0"])).rejects.toThrow("sharded execution requires");
   await expect(
-    mutationMain(["--baseline", "b.json", "--pilot", "--shard", "0", "--shard-count", "2", "--progress", "p.jsonl"]),
+    mutationMain(["--pilot", "--shard", "0", "--shard-count", "2", "--progress", "p.jsonl"]),
   ).rejects.toThrow("--shard is incompatible with --pilot");
   await expect(
-    mutationMain(["--baseline", "b.json", "--shard", "0", "--shard-count", "2", "--progress", "p.jsonl", "--budget-minutes", "0"]),
+    mutationMain(["--shard", "0", "--shard-count", "2", "--progress", "p.jsonl", "--budget-minutes", "0"]),
   ).rejects.toThrow("invalid --budget-minutes");
   // The runner itself refuses incomplete or piloted shard selections.
   const incomplete = await runnerMain(["--shard", "0"]);
@@ -253,8 +256,7 @@ test("shard arguments are validated before any campaign work starts", async () =
   const piloted = await runnerMain(["--shard", "0", "--shard-count", "2", "--progress", "p.jsonl", "--pilot"]);
   expect(piloted.exitCode).toBe(2);
   expect(String(record(piloted.document.error).message)).toContain("incompatible with pilot");
-  expect(() => joinMain([])).toThrow("measured mutation baseline required");
-  expect(() => joinMain(["--baseline", "b.json"])).toThrow("shard documents directory required");
+  expect(() => joinMain([])).toThrow("shard documents directory required");
 });
 
 test("an all-invalid slice completes per shard while the join enforces campaign validity", async () => {
@@ -271,7 +273,7 @@ test("an all-invalid slice completes per shard while the join enforces campaign 
   cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
   const progress = join(input.root, "progress", "shard-0.jsonl");
   expect(
-    await mutationMain(["--root", input.root, "--contract", "contract.json", "--decision", decision, "--baseline", "missing-baseline.json", "--shard", "0", "--shard-count", "1", "--progress", progress, "--output", "shard-only"]),
+    await mutationMain(["--root", input.root, "--contract", "contract.json", "--decision", decision, "--shard", "0", "--shard-count", "1", "--progress", progress, "--output", "shard-only"]),
   ).toBe(0);
   const only = shardDocument(input.root, "shard-only");
   const counts = jsonObject(only.document.counts);

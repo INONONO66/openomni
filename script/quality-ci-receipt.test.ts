@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { normalizeTypes, normalizeCensus, mergeMeasurements } from "./quality-ci-receipt";
-import { regressions } from "./quality-ratchet";
 
 const identity = {
 	inventoryHash: "a".repeat(64),
@@ -20,7 +19,6 @@ test("complete native types yield a genuinely clean normalized receipt", () => {
 	expect(receipt.complete).toBe(true);
 	expect(receipt.analyzed).toEqual(["type"]);
 	expect(receipt.findings).toEqual([]);
-	expect(regressions(receipt, receipt, new Set())).toEqual([]);
 });
 
 test("missing incomplete and stale native type receipts never normalize to zero", () => {
@@ -31,7 +29,7 @@ test("missing incomplete and stale native type receipts never normalize to zero"
 	]) expect(() => normalizeTypes(changed, identity)).toThrow();
 });
 
-test("native type findings retain identity and trigger growth and changed-file ratchets", () => {
+test("native type findings retain identity and reject unlabelled or unknown origins", () => {
 	const violation = { path: "script/example.ts", line: 4, kind: "implicitAny", symbol: "value", offset: 10, origin: "owned" };
 	const native = { ...types, violations: [violation] };
 	const base = mergeMeasurements(identity.paths, [normalizeTypes(native, identity)]);
@@ -40,10 +38,7 @@ test("native type findings retain identity and trigger growth and changed-file r
 	expect(() => normalizeTypes({ ...types, violations: [unlabelled] }, identity)).toThrow();
 	expect(() => normalizeTypes({ ...types, violations: [{ ...violation, origin: "guessed" }] }, identity)).toThrow();
 	const doubled = mergeMeasurements(identity.paths, [normalizeTypes({ ...native, violations: [violation, violation] }, identity)]);
-	expect(regressions(base, doubled, new Set()).length).toBe(2);
-	expect(regressions(base, base, new Set(identity.paths))).toHaveLength(1);
-	const clean = mergeMeasurements(identity.paths, [normalizeTypes(types, identity)]);
-	expect(regressions(clean, base, new Set())).toHaveLength(1);
+	expect(doubled.findings).toHaveLength(2);
 });
 
 test("census normalizer rejects wrong class counts and incomplete provenance", () => {

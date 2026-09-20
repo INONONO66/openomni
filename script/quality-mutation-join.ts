@@ -13,7 +13,7 @@ import {
 } from "./quality-inventory";
 import { fingerprint } from "./quality-ci-input";
 import { requireMeasurement, type Identity } from "./quality-ci-receipt";
-import { ratchetMutationMeasurement } from "./quality-native-mutation";
+import { recordMutationMeasurement } from "./quality-native-mutation";
 
 const outcomes = ["killed", "survived", "noCoverage", "invalid", "infrastructure", "uncompleted"] as const;
 export type JoinOutcome =
@@ -112,13 +112,10 @@ export function joinMain(argv = Bun.argv.slice(2)): number {
     options: {
       root: { type: "string", default: process.cwd() },
       contract: { type: "string", default: "script/conformance/quality-contract.json" },
-      baseline: { type: "string" },
-      base: { type: "string", default: "origin/main" },
       shards: { type: "string" },
       output: { type: "string", default: "quality-mutation-results" },
     },
   });
-  requireMeasurement(Boolean(values.baseline), "measured mutation baseline required");
   requireMeasurement(Boolean(values.shards), "shard documents directory required");
   const root = resolve(values.root),
     directory = resolve(root, values.output);
@@ -133,14 +130,12 @@ export function joinMain(argv = Bun.argv.slice(2)): number {
     JSON.stringify({ command: ["quality-mutation-join"], exitCode: 0, document: joined.document }),
     { flag: "wx" },
   );
-  return ratchetMutationMeasurement({
+  return recordMutationMeasurement({
     document: joined.document,
     identity,
     root,
     contract: values.contract,
     directory,
-    base: values.base,
-    baseline: values.baseline,
     driftMessage: "sources changed during mutation join",
   });
 }
