@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   ciTestSteps,
-  coverageLanes,
   knipWorkspaces,
   TOPOLOGY,
   topologyInventoryDrift,
@@ -16,7 +15,6 @@ export type TopologyConsumer =
   | "knip"
   | "dead-exports"
   | "ci-tests"
-  | "coverage-ratchet"
   | "tsconfig";
 
 export type TopologyProblems = Record<TopologyConsumer, string[]>;
@@ -27,7 +25,6 @@ const CONSUMERS: readonly TopologyConsumer[] = [
   "knip",
   "dead-exports",
   "ci-tests",
-  "coverage-ratchet",
   "tsconfig",
 ];
 
@@ -42,7 +39,6 @@ function emptyProblems(): TopologyProblems {
     knip: [],
     "dead-exports": [],
     "ci-tests": [],
-    "coverage-ratchet": [],
     tsconfig: [],
   };
 }
@@ -66,7 +62,6 @@ function checkWorkspaceBoundary(
   const manifestPath = join(root, workspace.dir, "package.json");
   if (!existsSync(manifestPath)) {
     problems["dependency-bands"].push(`${workspace.dir} has no package.json`);
-    problems["coverage-ratchet"].push(`${workspace.dir} has no package.json`);
     return;
   }
   const manifest = json(manifestPath);
@@ -171,23 +166,6 @@ function checkCiTests(
   }
 }
 
-function checkCoverageInventory(
-  topology: readonly WorkspaceTopology[],
-  root: string,
-  problems: TopologyProblems,
-): void {
-  const baseline = json(join(root, "script/conformance/coverage-baseline.json"));
-  const expected = coverageLanes(topology)
-    .map((lane) => lane.dir)
-    .sort();
-  const actual = Object.keys(baseline).sort();
-  if (actual.join("\n") !== expected.join("\n")) {
-    problems["coverage-ratchet"].push(
-      `baseline expected [${expected.join(", ")}], got [${actual.join(", ")}]`,
-    );
-  }
-}
-
 export function topologyProblems(
   topology: readonly WorkspaceTopology[] = TOPOLOGY,
   root = join(import.meta.dir, ".."),
@@ -205,7 +183,6 @@ export function topologyProblems(
   checkInventory(topology, root, problems);
   checkKnipInventory(topology, root, problems);
   checkCiTests(topology, root, problems);
-  checkCoverageInventory(topology, root, problems);
 
   if (tsconfigWorkspaces(topology).length === 0) {
     problems.tsconfig.push("topology contributes zero tsconfig workspaces");
@@ -223,7 +200,7 @@ function main(): void {
     process.exit(1);
   }
   process.stdout.write(
-    `OK: topology conformance — ${TOPOLOGY.length} workspaces feed dependency, cycle, knip/dead-export, CI, coverage, and tsconfig gates\n`,
+    `OK: topology conformance — ${TOPOLOGY.length} workspaces feed dependency, cycle, knip/dead-export, CI, and tsconfig gates\n`,
   );
 }
 

@@ -11,7 +11,6 @@ const consumers: readonly TopologyConsumer[] = [
   "knip",
   "dead-exports",
   "ci-tests",
-  "coverage-ratchet",
   "tsconfig",
 ];
 
@@ -45,10 +44,6 @@ function fixture() {
     "packages/phantom/test/index.test.ts": "",
     "packages/phantom/tsconfig.json": "{}",
     "knip.json": JSON.stringify({ workspaces: { ".": {}, [workspace.dir]: {} } }),
-    "script/conformance/coverage-baseline.json": JSON.stringify({
-      [workspace.dir]: {},
-      script: {},
-    }),
     ".github/workflows/ci.yml": [
       "      # topology:test-steps:start",
       ciTestSteps([workspace]),
@@ -111,14 +106,6 @@ const damagedConsumers: readonly {
     affected: ["ci-tests"],
     damage(root, workspace) {
       writeFileSync(join(root, ".github/workflows/ci.yml"), "");
-      return workspace;
-    },
-  },
-  {
-    name: "coverage inventory",
-    affected: ["coverage-ratchet"],
-    damage(root, workspace) {
-      writeFileSync(join(root, "script/conformance/coverage-baseline.json"), '{"script":{}}');
       return workspace;
     },
   },

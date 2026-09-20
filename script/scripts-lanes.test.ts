@@ -19,13 +19,12 @@ test("every Python self-test belongs to the explicit manifest the first tooling 
   const actual = [...new Bun.Glob("**/{test_*,*.test}.py").scanSync({ cwd: import.meta.dir })].sort();
   expect(actual).toEqual([...pythonSelfTests].sort());
   expect(pythonTests(actual)).toEqual(pythonSelfTests);
-  expect(() => pythonTests([...actual, "quality-coverage/test_python_new.py"])).toThrow("quality-coverage/test_python_new.py");
+  expect(() => pythonTests([...actual, "quality-mutation/test_python_new.py"])).toThrow("quality-mutation/test_python_new.py");
   expect(() => pythonTests(actual.slice(1))).toThrow(actual[0] ?? "");
 });
 
 test("compiler contracts run separately from mutation campaigns", () => {
-  expect(scriptToolingPartitions["scripts-tooling-4"]).toContain("run-quality-mutations-compiler.test.ts");
-  expect(scriptToolingPartitions["scripts-tooling-3"]).toContain("check-census.test.ts");
+  expect(scriptToolingPartitions["scripts-tooling-2"]).toContain("run-quality-mutations-compiler.test.ts");
   expect(scriptToolingPartitions["scripts-tooling-1"]).toContain("run-quality-mutations.test.ts");
   expect(scriptsLanes["scripts-contracts"]).toContain("check-benchmark-regression.test.ts");
 });
@@ -37,5 +36,5 @@ test("shard commands execute each assigned test exactly once without hash shardi
     return command.filter((arg) => arg.endsWith(".test.ts")).map((arg) => arg.slice(2));
   });
   expect(selected.sort()).toEqual([...new Bun.Glob("**/*.test.ts").scanSync({ cwd: import.meta.dir })].sort());
-  expect(() => scriptTestCommand("scripts-tooling-5")).toThrow("invalid script partition");
+  expect(() => scriptTestCommand("scripts-tooling-3")).toThrow("invalid script partition");
 });

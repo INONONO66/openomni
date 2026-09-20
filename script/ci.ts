@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
@@ -70,30 +70,16 @@ function run(command: readonly string[], cwd = ROOT, env: Record<string, string>
   const child = Bun.spawnSync(argv(command), { cwd, env: { ...process.env, ...env }, stdin: "ignore", stdout: "inherit", stderr: "inherit" });
   if (child.exitCode !== 0) throw new CiError(command.join(" "));
 }
-function capture(command: readonly string[], cwd: string): string {
-  const child = Bun.spawnSync(argv(command), { cwd, stdin: "ignore", stdout: "pipe", stderr: "inherit" });
-  if (child.exitCode !== 0) throw new CiError(command.join(" "));
-  return child.stdout.toString();
-}
 
-/** The Python analyzers' self-tests run under coverage.py, whose subprocess
- * patch follows every interpreter they spawn; the combined LCOV is appended to
- * the shard's Bun report so the sealed receipt carries both runtimes. Measuring
- * a coverage collector needs coverage.py's own self-measurement mode, or an
- * explicit Coverage in a child silences the automatic one. */
+/** The Python analyzers' self-tests run directly; the scheduled mutation audit
+ * owns Python evidence, so the PR gate only needs the tests to pass. */
 function pythonSelfTests(root: string): void {
   const cwd = join(root, "script");
-  const coverage = [process.env.D945_PYTHON ?? "python3", "-m", "coverage"];
-  const rcfile = "--rcfile=conformance/quality-python-coverage.ini";
+  const python = process.env.D945_PYTHON ?? "python3";
   const env = {
-    COVERAGE_COVERAGE: "1",
     QUALITY_MUTATION_DECISION: join(cwd, "conformance/quality-mutation-contract.json"),
   };
-  for (const test of pythonTests()) run([...coverage, "run", rcfile, test], cwd, env);
-  // Identical child interpreters write identical data files; combine skips the
-  // duplicates and would report each one.
-  run([...coverage, "combine", "--quiet", rcfile], cwd);
-  appendFileSync(join(cwd, "coverage/lcov.info"), capture([...coverage, "lcov", rcfile, "-o", "-"], cwd));
+  for (const test of pythonTests()) run([python, test], cwd, env);
 }
 
 function readPlan(path?: string) {
@@ -116,7 +102,6 @@ export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void 
     ["prepare", true],
     ["tests", plan.verify],
     ["scripts-contracts", true],
-    ["scripts-coverage", plan.toolingTests],
     ...(testOnly
       ? []
       : ([
@@ -126,10 +111,7 @@ export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void 
           ],
           ["static", plan.verify],
           ["deps", plan.verify],
-          ["quality-static", plan.verify],
-          ["quality-exact", plan.verify],
-          ["quality-gates", plan.verify],
-          ["quality", plan.verify],
+          ["patch-coverage", plan.verify && process.env.CI_EVENT === "pull_request"],
           ["dependency-review", plan.dependencyReview && process.env.CI_EVENT === "pull_request"],
         ] satisfies [string, boolean][])),
   ]);
@@ -175,7 +157,6 @@ function testLane(key: string | undefined, root: string): void {
     "bun", "test", "--timeout", "15000",
     ...(lane.coverage ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"] : []),
   ], join(root, lane.dir));
-  if (lane.coverage) run(["bun", "run", "script/check-coverage-ratchet.ts", "--lane", lane.dir], root);
 }
 
 export function ciMain(argv = Bun.argv.slice(2)): void {

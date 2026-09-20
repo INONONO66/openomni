@@ -9,7 +9,6 @@ import { pythonSelfTests, scriptContracts, scriptTestCommand } from "./scripts-l
 import { TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
-const QUALITY_JOBS = ["quality-static", "quality-exact", "quality-gates", "quality"];
 function cli(args: readonly string[], env: Record<string, string> = {}) {
   return Bun.spawnSync([process.execPath, "script/ci.ts", ...args], {
     cwd: root,
@@ -54,10 +53,7 @@ test("docs-only planning keeps both final statuses successful while work is inte
   // Given a real planner decision and GitHub's skipped job results.
   const plan = planChanges(["README.md"]);
   const needs = Object.fromEntries(
-    [
-      "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
-      "dependency-review", "scripts-coverage",
-    ].map((job) => [job, { result: "skipped" }]),
+    ["tests", "static", "deps", "desktop-smoke", "patch-coverage", "dependency-review"].map((job) => [job, { result: "skipped" }]),
   );
   // When the actual CLI consumes GitHub's serialized output.
   const result = cli(["gate"], {
@@ -70,17 +66,17 @@ test("docs-only planning keeps both final statuses successful while work is inte
 });
 
 for (const job of [
-  "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
-  "dependency-review", "scripts-contracts", "scripts-coverage",
+  "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "patch-coverage",
+  "dependency-review", "scripts-contracts",
 ]) {
   for (const status of ["failure", "cancelled", "skipped", "missing"]) {
     test(`final gate rejects ${job} ${status} for a required full run`, () => {
-      // Given a full plan and one unsuccessful/missing required result. Quality
-      // is required on pushes, so the push event exercises every job.
+      // Given a full plan and one unsuccessful/missing required result. On a
+      // pull request every job in the lean gate is required.
       const needs: Record<string, { result: string }> = Object.fromEntries(
         [
-          "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
-          "dependency-review", "scripts-contracts", "scripts-coverage",
+          "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "patch-coverage",
+          "dependency-review", "scripts-contracts",
         ].map((key) => [key, { result: "success" }]),
       );
       if (status === "missing") delete needs[job];
@@ -89,7 +85,7 @@ for (const job of [
       const result = cli(["gate"], {
         CI_PLAN: JSON.stringify(planChanges([], true)),
         CI_NEEDS: JSON.stringify(needs),
-        CI_EVENT: job === "dependency-review" ? "pull_request" : "push",
+        CI_EVENT: "pull_request",
       });
       // Then matrix failure/cancellation and unexpected skips remain failures.
       expect(result.exitCode).not.toBe(0);
@@ -105,9 +101,7 @@ for (const path of ["README.md", "apps/desktop/src/main/index.ts", "packages/ui/
     const needs = {
       plan: { result: "success" }, prepare: { result: "success" },
       "scripts-contracts": { result: "success" },
-      "scripts-coverage": { result: plan.toolingTests ? "success" : "skipped" },
-      ...Object.fromEntries(["tests", "static", "deps"].map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
-      ...Object.fromEntries(QUALITY_JOBS.map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
+      ...Object.fromEntries(["tests", "static", "deps", "patch-coverage"].map((job) => [job, { result: plan.verify ? "success" : "skipped" }])),
       "dependency-review": { result: plan.dependencyReview ? "success" : "skipped" },
     };
     for (const status of ["success", "skipped", "failure", "cancelled"]) {
@@ -125,17 +119,17 @@ test("desktop smoke uses exact selected lane keys and joins the final gate", () 
   expect(jobs["desktop-smoke"]?.needs).toEqual(["plan", "prepare"]);
   expect(jobs["desktop-smoke"]?.if).toBe("needs.plan.outputs.verify == 'true' && (contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'desktopApp') || contains(fromJSON(needs.plan.outputs.matrix).include.*.key, 'ui'))");
   expect(jobs["desktop-smoke"]?.steps.some((step) => step.run === "xvfb-run -a bun run test:e2e")).toBe(true);
-  for (const job of ["desktop-smoke", "scripts-contracts", "scripts-coverage"]) expect(jobs.ci?.needs).toContain(job);
+  for (const job of ["desktop-smoke", "scripts-contracts", "patch-coverage"]) expect(jobs.ci?.needs).toContain(job);
 });
 
-test("full gate executes the required quality jobs in process", () => {
+test("full gate executes the required lean jobs in process", () => {
   const plan = planChanges([], true);
   const env = {
     CI_NEEDS: JSON.stringify({
       ...Object.fromEntries([
-        "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality",
-        "scripts-contracts", "scripts-coverage",
+        "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "scripts-contracts",
       ].map((job) => [job, { result: "success" }])),
+      "patch-coverage": { result: "skipped" },
       "dependency-review": { result: "skipped" },
     }),
     CI_EVENT: "push",
@@ -173,7 +167,6 @@ test("test entry dispatches workspace and script lanes through their canonical c
     ciMain(["test", "--lane", "protocol"]);
     expect(commands.splice(0)).toEqual([
       [process.execPath, "test", "--timeout", "15000", "--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"],
-      [process.execPath, "run", "script/check-coverage-ratchet.ts", "--lane", "packages/protocol"],
     ]);
     ciMain(["test", "--lane", "agent"]);
     expect(commands[0]).toEqual([process.execPath, "run", "test:ci"]);
@@ -187,40 +180,28 @@ test("test entry dispatches workspace and script lanes through their canonical c
   } finally { spawn.mockRestore(); }
 });
 
-test("tooling shard one measures the Python self-tests and appends their LCOV to the shard report", () => {
-  // Given a shard whose Bun tests already wrote the lane report.
+test("tooling shard one runs the Python self-tests directly", () => {
   using fixture = { dir: mkdtempSync(join(tmpdir(), "openomni-ci-")), [Symbol.dispose]() { rmSync(this.dir, { recursive: true, force: true }); } };
   const script = join(fixture.dir, "script");
-  const bunLcov = "SF:ci.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\n";
-  const pythonLcov = "SF:quality-coverage/python.py\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n";
-  mkdirSync(join(script, "coverage"), { recursive: true });
-  writeFileSync(join(script, "coverage/lcov.info"), bunLcov);
+  mkdirSync(script, { recursive: true });
   const calls: { args: string[]; options?: SpawnOptions }[] = [];
   const native = Bun.spawnSync;
   const spawn = spyOn(runner, "spawnSync").mockImplementation((args: string[], options?: SpawnOptions) => {
     calls.push({ args, options });
-    return native(args.at(-1) === "-" ? ["/usr/bin/printf", "%s", pythonLcov] : ["/usr/bin/true"]);
+    return native(["/usr/bin/true"]);
   });
   try {
     // When the shard runs through the canonical entry.
     ciMain(["test", "--lane", "scripts-tooling-1", "--root", fixture.dir]);
-    // Then every self-test runs under the pinned coverage.py configuration from script/,
-    // in coverage.py's self-measurement mode with the decision contract located for it.
-    const coverage = [process.env.D945_PYTHON ?? "python3", "-m", "coverage"];
-    const rcfile = "--rcfile=conformance/quality-python-coverage.ini";
+    const python = process.env.D945_PYTHON ?? "python3";
     expect(calls.map((call) => call.args)).toEqual([
       [process.execPath, ...scriptTestCommand("scripts-tooling-1").slice(1)],
-      ...pythonSelfTests.map((test) => [...coverage, "run", rcfile, test]),
-      [...coverage, "combine", "--quiet", rcfile],
-      [...coverage, "lcov", rcfile, "-o", "-"],
+      ...pythonSelfTests.map((test) => [python, test]),
     ]);
     expect(calls.map((call) => call.options?.cwd)).toEqual(calls.map(() => script));
-    for (const call of calls.slice(1, 1 + pythonSelfTests.length)) {
-      expect(call.options?.env?.COVERAGE_COVERAGE).toBe("1");
+    for (const call of calls.slice(1)) {
       expect(call.options?.env?.QUALITY_MUTATION_DECISION).toBe(join(script, "conformance/quality-mutation-contract.json"));
     }
-    // And the combined Python records follow Bun's in the same report.
-    expect(readFileSync(join(script, "coverage/lcov.info"), "utf8")).toBe(bunLcov + pythonLcov);
   } finally { spawn.mockRestore(); }
 });
 
@@ -285,7 +266,7 @@ test("workflow restores the one build before every executable consumer", () => {
     .object({ jobs: z.record(z.string(), jobSchema) })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
   // When discovering consumers, then none rebuilds or bypasses artifact validation.
-  for (const name of ["tests", "static", "deps", "quality-static", "quality-exact", "quality-gates", "quality"]) {
+  for (const name of ["tests", "static", "deps"]) {
     expect(
       jobs[name]?.steps.some((step) => step.uses?.startsWith("actions/download-artifact@")),
     ).toBe(true);
@@ -309,58 +290,35 @@ test("v2 workflow carries scope as an artifact and always runs repository contra
   expect(jobs.plan?.outputs?.plan).toBeUndefined();
   expect(jobs["scripts-contracts"]?.needs).toEqual(["plan", "prepare"]);
   expect(jobs["scripts-contracts"]?.if).toBeUndefined();
-  expect(jobs["scripts-coverage"]?.needs).toContain("tests");
+  expect(jobs["patch-coverage"]?.needs).toContain("tests");
   expect(jobs.test).toBeUndefined();
-  expect(jobs["quality-static"]?.["timeout-minutes"]).toBe(`\${{ matrix.leg == 'publisher' && 30 || 20 }}`);
   expect(jobs.tests?.["timeout-minutes"]).toBe(`\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}`);
-  expect(jobs["quality-static"]?.steps.some((step) => step.run?.includes('--plan ci-plan.json'))).toBe(true);
 });
 
-test("quality collectors run beside tests and join the required final gates", () => {
+test("patch coverage unions every lane's lcov evidence and gates only pull requests", () => {
   const jobs = z
-    .object({ jobs: z.object({ quality: jobSchema, "quality-static": jobSchema, "quality-exact": jobSchema, "quality-gates": jobSchema, ci: jobSchema }) })
+    .object({ jobs: z.object({ "patch-coverage": jobSchema, deps: jobSchema, ci: jobSchema }) })
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
-  expect(jobs.quality.needs).toContain("quality-static");
-  expect(jobs.quality.needs).toContain("quality-exact");
-  expect(jobs.quality.needs).toContain("tests");
-  expect(jobs["quality-static"].needs).toEqual(["plan", "prepare"]);
-  expect(jobs["quality-static"].needs).not.toContain("tests");
-  expect(jobs["quality-exact"].needs).toEqual(["plan", "prepare"]);
-  expect(jobs["quality-gates"].needs).toEqual(["plan", "prepare"]);
-  expect(jobs.ci.needs).toContain("quality-static");
-  expect(jobs.ci.needs).toContain("quality-exact");
-  expect(jobs.ci.needs).toContain("quality-gates");
-  // Exact statement evidence is sharded by the planner and collected beside
-  // the tests; finish only consumes the sealed shard artifacts.
-  expect(jobs["quality-exact"].strategy).toEqual({ "fail-fast": false, matrix: ["$", "{{ fromJSON(needs.plan.outputs.exactShards) }}"].join("") });
-  const exact = jobs["quality-exact"].steps.find((step) => step.run?.includes("quality-measure.ts collect --root ."));
-  expect(exact?.run).toContain("--leg exact");
-  expect(exact?.run).toContain('--shard "$SHARD"');
-  expect(exact?.run).toContain('--run "$QUALITY_RUN"');
-  expect(exact?.run).toContain("status=$?");
-  expect(exact?.run).toContain('[[ "$status" -ne 1 ]]');
-  expect(jobs.quality.steps.some((step) => step.run?.includes("quality-measure.ts collect"))).toBe(false);
-  expect(jobs.quality.steps.some((step) => step.with?.pattern === "quality-exact-*" && step.with?.path === "quality-receipts")).toBe(true);
-  expect(jobs.quality.steps.some((step) => step.run?.includes("quality-measure.ts finish"))).toBe(true);
+  const job = jobs["patch-coverage"];
+  expect(job.needs).toEqual(["plan", "tests", "scripts-contracts"]);
+  // A skipped or failed test lane must skip the gate rather than let it pass
+  // with partial evidence; !cancelled() keeps the skip observable at fan-in.
+  expect(job.if).toBe(
+    "!cancelled() && github.event_name == 'pull_request' && needs.plan.outputs.verify == 'true' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success'",
+  );
+  expect(job.steps.some((step) => step.with?.pattern === "coverage-*" && step.with?.path === "coverage-artifacts")).toBe(true);
+  const run = job.steps.find((step) => step.run?.includes("check-patch-coverage.ts"));
+  expect(run?.run).toContain('--base "$BASE"');
+  expect(run?.run).toContain("--glob 'coverage-artifacts/**/lcov.info'");
+  expect(jobs.ci.needs).toContain("patch-coverage");
+  // The relocated structural gates run once, in the dependency-rules job.
+  const depsRuns = jobs.deps.steps.flatMap((step) => step.run ?? []);
+  for (const command of ["check-dead-exports.ts", "check-import-cycles.ts", "verify-tsconfig-inheritance.ts"])
+    expect(depsRuns.some((line) => line.includes(command))).toBe(true);
+  expect(depsRuns.some((line) => line.includes("check-dead-exports.ts --self-test"))).toBe(false);
 });
 
-test("quality gates leave repository-contract self-tests to scripts-contracts", () => {
-  const jobs = z
-    .object({ jobs: z.object({ prepare: jobSchema, "quality-gates": jobSchema }) })
-    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
-  expect(jobs.prepare.needs).toBeUndefined();
-  const runs = jobs["quality-gates"].steps.flatMap((step) => step.run ?? []);
-  for (const command of [
-    "check-dead-exports.ts --self-test",
-    "check-import-cycles.ts --self-test",
-    "check-deps.ts --self-test",
-    "verify-ledger-rename.ts",
-    "check-ledger-schema-drift.ts",
-  ])
-    expect(runs.some((run) => run.includes(command))).toBe(false);
-});
-
-test("quality matrix has exactly five bounded legs and no job exceeds sixty minutes", () => {
+test("no job exceeds sixty minutes and only tests carries a matrix timeout", () => {
   const jobs = z
     .object({
       jobs: z.record(
@@ -375,19 +333,15 @@ test("quality matrix has exactly five bounded legs and no job exceeds sixty minu
       expect(timeout).toBeGreaterThan(0);
       expect(timeout).toBeLessThanOrEqual(60);
     } else {
-      expect(["tests", "quality-static"]).toContain(name);
-      expect(timeout).toBe(name === "tests" ? `\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}` : `\${{ matrix.leg == 'publisher' && 30 || 20 }}`);
+      expect(name).toBe("tests");
+      expect(timeout).toBe(`\${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}`);
     }
   }
-  expect(jobs["quality-static"]?.strategy).toEqual({
-    "fail-fast": false,
-    matrix: { leg: ["types", "publisher", "export", "store", "metrics"] },
-  });
 });
 
-test("a pull request requires every quality job to succeed", () => {
+test("a pull request requires the lean job set to succeed", () => {
   const needs = Object.fromEntries(
-    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review", "scripts-contracts", "scripts-coverage", ...QUALITY_JOBS].map((key) => [key, { result: "success" }]),
+    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "dependency-review", "scripts-contracts", "patch-coverage"].map((key) => [key, { result: "success" }]),
   );
   const result = cli(["gate"], {
     CI_PLAN: JSON.stringify(planChanges([], true)),
@@ -397,7 +351,7 @@ test("a pull request requires every quality job to succeed", () => {
   expect(result.exitCode).toBe(0);
 });
 
-test("quality jobs run on executable pull requests and merge groups", () => {
+test("merge groups and pushes verify fully without the PR-only patch gate", () => {
   const workflow = z
     .object({
       on: z.object({ merge_group: z.object({}).nullable() }),
@@ -407,28 +361,19 @@ test("quality jobs run on executable pull requests and merge groups", () => {
     .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")));
   // Only pull requests cancel superseded runs; merge groups and main keep every run.
   expect(workflow.concurrency["cancel-in-progress"]).toBe(["$", "{{ github.event_name == 'pull_request' }}"].join(""));
-  const conditions = QUALITY_JOBS.map((q) => workflow.jobs[q]?.if);
-  expect(conditions.slice(0, 3)).toEqual(new Array(3).fill("needs.plan.outputs.verify == 'true'"));
-  // A skipped need (scripts-coverage on non-tooling PRs) skips a dependent job
-  // unless its condition carries a status-check function; without `!cancelled()`
-  // the `skipped` branch below is unreachable and the fan-in is skipped.
-  expect(conditions[3]).toBe(
-    "!cancelled() && needs.plan.outputs.verify == 'true' && needs.prepare.result == 'success' && needs.tests.result == 'success' && needs.scripts-contracts.result == 'success' && needs.quality-static.result == 'success' && needs.quality-exact.result == 'success' && (needs.scripts-coverage.result == 'success' || needs.scripts-coverage.result == 'skipped')",
-  );
+  expect(workflow.jobs["patch-coverage"]?.if).toContain("github.event_name == 'pull_request'");
 });
 
-test("the full push gate accepts successful checks without PR-only dependency review", () => {
-  // Given full main-branch results with only the PR-specific check disabled.
+test("the full push gate accepts successful checks without PR-only jobs", () => {
+  // Given full main-branch results with only the PR-specific checks disabled.
   const needs = Object.fromEntries(
-    [
-      "plan", "prepare", "tests", "static", "deps", "desktop-smoke", "quality-static", "quality-exact", "quality-gates", "quality", "scripts-contracts", "scripts-coverage",
-    ].map((key) => [key, { result: "success" }]),
+    ["plan", "prepare", "tests", "static", "deps", "desktop-smoke", "scripts-contracts"].map((key) => [key, { result: "success" }]),
   );
   // When the real gate executes, then all mandatory work is accepted.
   const result = cli(["gate"], {
     CI_PLAN: JSON.stringify(planChanges([], true)),
     CI_EVENT: "push",
-    CI_NEEDS: JSON.stringify({ ...needs, "dependency-review": { result: "skipped" } }),
+    CI_NEEDS: JSON.stringify({ ...needs, "patch-coverage": { result: "skipped" }, "dependency-review": { result: "skipped" } }),
   });
   expect(result.exitCode).toBe(0);
 });

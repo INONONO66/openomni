@@ -12,21 +12,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { planChanges } from "./ci-plan";
-import { hasCompleteQualityProof } from "./quality-proof";
-import { digest } from "./quality-inventory";
 import { TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 const keys = (paths: readonly string[], topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
   planChanges(paths, false, topology).matrix.include.map((row) => row.key);
-const allKeys = [...TOPOLOGY.map((workspace) => workspace.key), "scripts-tooling-1", "scripts-tooling-2", "scripts-tooling-3", "scripts-tooling-4"];
+const allKeys = [...TOPOLOGY.map((workspace) => workspace.key), "scripts-tooling-1", "scripts-tooling-2"];
 const cli = join(import.meta.dir, "ci-plan.ts");
 const planSchema = z
   .object({
     version: z.literal(2),
     class: z.enum(["docs", "desktop", "kernel", "tooling", "global"]),
     lanes: z.array(z.string()),
-    qualityScope: z.array(z.string()),
-    projects: z.array(z.string()),
     toolingTests: z.boolean(),
     full: z.boolean(),
     verify: z.boolean(),
@@ -62,17 +58,12 @@ test("merge-group planning is full and global", () => {
   expect(plan.lanes).toEqual(allKeys);
 });
 
-test("v2 scopes desktop quality to its workspace and never kernel projects", () => {
+test("v2 scopes a desktop change to its own lanes", () => {
   const plan = planChanges(["packages/ui/src/index.ts"]);
-  expect(plan.qualityScope.length).toBeGreaterThan(0);
-  expect(plan.qualityScope.every((path) => path.startsWith("packages/ui/") || path.startsWith("apps/desktop/"))).toBe(true);
-  expect(plan.projects.length).toBeGreaterThan(0);
-  expect(plan.projects.every((path) => path.startsWith("packages/ui/") || path.startsWith("apps/desktop/"))).toBe(true);
   expect(plan.lanes).toEqual(["ui", "desktopApp"]);
   const full = planChanges(undefined, true);
   expect(full.class).toBe("global");
-  expect(full.qualityScope).toContain("script/ci.ts");
-  expect(full.projects).toContain("script/tsconfig.json");
+  expect(full.lanes).toEqual(allKeys);
 });
 
 test("skips executable jobs when only root documentation changes", () => {
@@ -209,14 +200,9 @@ function fixture() {
       JSON.stringify({ name: workspace.packageName }),
     );
   }
-  mkdirSync(join(root, "script/conformance"), { recursive: true });
+  mkdirSync(join(root, "script"), { recursive: true });
   writeFileSync(join(root, "script/fixture.ts"), "export const fixture = 1;\n");
-  writeFileSync(join(root, "script/conformance/quality-baseline-lcov-bound.json"), JSON.stringify({
-    version: 1, complete: true, inventory: ["script/fixture.ts"],
-    sha256: { "script/fixture.ts": digest("export const fixture = 1;\n") },
-  }));
   writeFileSync(join(root, "script/tsconfig.json"), '{"include":["*.ts"]}');
-  writeFileSync(join(root, "script/conformance/quality-contract.json"), JSON.stringify({ version: 1, typescript: "5.9.2", roots: ["script", "packages", "apps"], projects: ["script/tsconfig.json"], topology: false }));
   const snapshot = () => {
     git("add", "--all");
     return git("commit-tree", git("write-tree"), "-m", "isolated fixture");
@@ -255,15 +241,6 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
     "desktopApp",
   ]);
   const lines = readFileSync(output, "utf8").trim().split("\n");
-  expect(lines.map((line) => line.slice(0, line.indexOf("=")))).toEqual([
-    "full",
-    "verify",
-    "dependencyReview",
-    "matrix",
-    "class",
-    "toolingTests",
-    "exactShards",
-  ]);
   expect(lines).toEqual([
     `full=${plan.full}`,
     `verify=${plan.verify}`,
@@ -271,7 +248,6 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
     `matrix=${JSON.stringify(plan.matrix)}`,
     `class=${plan.class}`,
     `toolingTests=${plan.toolingTests}`,
-    `exactShards=${JSON.stringify({ include: [...plan.lanes, "scripts-contracts"].map((shard) => ({ shard })) })}`,
   ]);
   expect(existsSync(join(repo.root, "PWNED"))).toBe(false);
 });
@@ -283,36 +259,6 @@ test("fails the actual CLI when git cannot resolve a supplied commit", () => {
   expect(result.exitCode).not.toBe(0);
   expect(result.stdout.toString()).toBe("");
   expect(result.stderr.toString().length).toBeGreaterThan(0);
-});
-
-test("a scoped PR remeasures sources whose baseline evidence is stale", () => {
-  using repo = fixture();
-  const unmeasured = "apps/desktop/src/unchanged.ts";
-  mkdirSync(join(repo.root, "apps/desktop/src"), { recursive: true });
-  writeFileSync(join(repo.root, unmeasured), "export const current = 2;\n");
-  const base = repo.snapshot();
-  mkdirSync(join(repo.root, "packages/machines/src"), { recursive: true });
-  writeFileSync(join(repo.root, "packages/machines/src/change.ts"), "export const changed = 1;\n");
-  const head = repo.snapshot();
-  const result = repo.run(["--base", base, "--head", head], { QUALITY_BASE: base });
-  expect(result.exitCode).toBe(0);
-  const plan = planSchema.parse(JSON.parse(result.stdout.toString()));
-  expect(plan).toMatchObject({ full: true, class: "global", reason: "unproven-quality-scope" });
-  expect(plan.qualityScope).toContain(unmeasured);
-  expect(plan.lanes).toContain("desktopApp");
-  expect(plan.lanes).toContain("scripts-tooling-4");
-});
-
-test("quality proof accepts exact base bytes and rejects an unproven source", () => {
-  using repo = fixture();
-  const other = "script/other.ts";
-  writeFileSync(join(repo.root, other), "export const other = 1;\n");
-  const base = repo.snapshot();
-  const planned = planChanges(["packages/machines/src/test.ts"], false, TOPOLOGY, repo.root);
-  const plan = { ...planned, qualityScope: ["script/fixture.ts"], toolingTests: false, full: false, verify: true };
-  expect(hasCompleteQualityProof(repo.root, base, plan)).toBe(false);
-  const full = planChanges(undefined, true, TOPOLOGY, repo.root);
-  expect(hasCompleteQualityProof(repo.root, base, full)).toBe(true);
 });
 
 test("fails the actual CLI when PR input is absent", () => {
