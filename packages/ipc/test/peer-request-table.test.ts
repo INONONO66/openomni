@@ -3,7 +3,7 @@ import { Ipc } from "@openomni/protocol";
 import { z } from "zod";
 
 import { IpcConnectionError, IpcRemoteError, IpcTimeoutError } from "../src/errors";
-import { PeerRequestTable } from "../src/peer-request-table";
+import { classifyIpcMessage, PeerRequestTable } from "../src/peer-request-table";
 import { captureError } from "./helpers/signal";
 
 type Frame = Ipc.Request | Ipc.Response | Ipc.Notification;
@@ -163,5 +163,36 @@ describe("PeerRequestTable", () => {
     expect(table.dispatch(Ipc.createNotification("event.ready"), "peer-a")).toBe(true);
     expect(table.dispatch({ type: "mystery" }, "peer-a")).toBe(false);
     expect(observed).toEqual(["event.ready"]);
+  });
+
+  test("classifyIpcMessage is the one classifier: typed dispatch routes what it returns", () => {
+    const sent: Frame[] = [];
+    const seen: string[] = [];
+    const table = new PeerRequestTable<string>({
+      send: (_peer, frame) => sent.push(frame),
+      onRequest: (_peer, method, _params, respond) => {
+        seen.push(`request:${method}`);
+        respond("ok");
+      },
+      onNotification: (_peer, method) => {
+        seen.push(`notification:${method}`);
+      },
+    });
+    const request = Ipc.createRequest("typed-1", "ping");
+    const notification = Ipc.createNotification("event.tick");
+    const response = Ipc.createResponse("nobody", 1);
+    expect(classifyIpcMessage(request)).toEqual({ kind: "request", value: request });
+    expect(classifyIpcMessage(notification)).toEqual({ kind: "notification", value: notification });
+    expect(classifyIpcMessage(response)).toEqual({ kind: "response", value: response });
+    expect(classifyIpcMessage({ type: "mystery" })).toBeUndefined();
+    expect(classifyIpcMessage(null)).toBeUndefined();
+
+    for (const raw of [request, notification, response]) {
+      const message = classifyIpcMessage(raw);
+      if (message === undefined) throw new Error("classified above");
+      table.dispatchMessage(message, "peer-a");
+    }
+    expect(seen).toEqual(["request:ping", "notification:event.tick"]);
+    expect(sent).toEqual([Ipc.createResponse("typed-1", "ok")]);
   });
 });

@@ -2,6 +2,25 @@ import { Ipc, type IdSource, type PlainValue } from "@openomni/protocol";
 
 import { IpcRemoteError, IpcTimeoutError } from "./errors";
 
+/** One inbound frame after schema classification; the only place the three wire schemas are tried. */
+export type IpcMessage =
+  | { readonly kind: "response"; readonly value: Ipc.Response }
+  | { readonly kind: "request"; readonly value: Ipc.Request }
+  | { readonly kind: "notification"; readonly value: Ipc.Notification };
+
+/** `undefined` when `raw` matches no IPC message schema. */
+export type IpcWireInput = PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification;
+
+export function classifyIpcMessage(raw: IpcWireInput): IpcMessage | undefined {
+  const response = Ipc.Response.safeParse(raw);
+  if (response.success) return { kind: "response", value: response.data };
+  const request = Ipc.Request.safeParse(raw);
+  if (request.success) return { kind: "request", value: request.data };
+  const notification = Ipc.Notification.safeParse(raw);
+  if (notification.success) return { kind: "notification", value: notification.data };
+  return undefined;
+}
+
 type PendingCall<TPeer> = {
   readonly peer: TPeer;
   readonly reject: (error: Error) => void;
@@ -69,26 +88,26 @@ export class PeerRequestTable<TPeer = undefined> {
   }
 
   /** Returns false when `raw` matches no IPC message schema. */
-  dispatch(raw: PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification, peer: TPeer): boolean {
-    const response = Ipc.Response.safeParse(raw);
-    if (response.success) {
-      this.settleResponse(response.data, peer);
-      return true;
-    }
+  dispatch(raw: IpcWireInput, peer: TPeer): boolean {
+    const message = classifyIpcMessage(raw);
+    if (message === undefined) return false;
+    this.dispatchMessage(message, peer);
+    return true;
+  }
 
-    const request = Ipc.Request.safeParse(raw);
-    if (request.success) {
-      this.dispatchRequest(request.data, peer);
-      return true;
+  /** Route an already-classified frame; the server classifies once to answer unknown frames itself. */
+  dispatchMessage(message: IpcMessage, peer: TPeer): void {
+    switch (message.kind) {
+      case "response":
+        this.settleResponse(message.value, peer);
+        return;
+      case "request":
+        this.dispatchRequest(message.value, peer);
+        return;
+      case "notification":
+        this.dispatchNotification(message.value, peer);
+        return;
     }
-
-    const notification = Ipc.Notification.safeParse(raw);
-    if (notification.success) {
-      this.dispatchNotification(notification.data, peer);
-      return true;
-    }
-
-    return false;
   }
 
   disconnect(peer: TPeer, error: Error): void {

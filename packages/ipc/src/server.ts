@@ -2,9 +2,9 @@ import fs from "node:fs";
 import net from "node:net";
 import { Ipc, type PlainValue } from "@openomni/protocol";
 
-import { IpcConnectionError, IpcProtocolError } from "./errors";
+import { IpcConnectionError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PeerRequestTable } from "./peer-request-table";
+import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";
 
 /** Remove the socket file, tolerating a concurrent removal (ENOENT). */
 function unlinkIfExists(socketPath: string): void {
@@ -141,7 +141,7 @@ export async function createIpcServer(
     }
   }
 
-  function sendFrame(state: ConnectionState, msg: IpcMessage): void {
+  function sendFrame(state: ConnectionState, msg: Ipc.Request | Ipc.Response | Ipc.Notification): void {
     send(state, encode(msg));
   }
 
@@ -261,21 +261,18 @@ export async function createIpcServer(
         }
 
         for (const msg of messages) {
-          let parsed: Ipc.Request | Ipc.Response | Ipc.Notification;
-          try {
-            parsed = decodeMessage(msg);
-          } catch (err) {
-            if (err instanceof IpcProtocolError) {
-              // Echo the offending frame's own id when it carries one, so the
-              // requester's pending settles now instead of burning its
-              // timeout. "unknown" is reserved for frames without one.
-              const errResponse = Ipc.createErrorResponse(extractFrameId(msg), 4000, err.message);
-              sendFrame(state, errResponse);
-            }
+          const message = classifyIpcMessage(msg);
+          if (message === undefined) {
+            // Echo the offending frame's own id when it carries one, so the
+            // requester's pending settles now instead of burning its
+            // timeout. "unknown" is reserved for frames without one.
+            sendFrame(
+              state,
+              Ipc.createErrorResponse(extractFrameId(msg), 4000, unknownMessageError(msg)),
+            );
             continue;
           }
-
-          peer.dispatch(parsed, state);
+          peer.dispatchMessage(message, state);
         }
 
         // A malformed line costs only itself: every parseable frame above was
@@ -331,24 +328,11 @@ export async function createIpcServer(
   };
 }
 
-type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
-
 // Cap how much of an unrecognized payload the error message echoes back.
 const MAX_ERROR_PAYLOAD_CHARS = 200;
 
-function decodeMessage(raw: PlainValue): IpcMessage {
-  const req = Ipc.Request.safeParse(raw);
-  if (req.success) return req.data;
-
-  const res = Ipc.Response.safeParse(raw);
-  if (res.success) return res.data;
-
-  const notif = Ipc.Notification.safeParse(raw);
-  if (notif.success) return notif.data;
-
-  throw new IpcProtocolError(
-    `Unknown message type: ${String(JSON.stringify(raw)).slice(0, MAX_ERROR_PAYLOAD_CHARS)}`,
-  );
+function unknownMessageError(raw: PlainValue): string {
+  return `Unknown message type: ${String(JSON.stringify(raw)).slice(0, MAX_ERROR_PAYLOAD_CHARS)}`;
 }
 
 /** The offending frame's own id when it carries a string one, else "unknown". */

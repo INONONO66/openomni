@@ -111,10 +111,13 @@ describe("the completion tool", () => {
     expect(seen).toHaveLength(4);
   });
 
-  it(`serves ${MAX_COMPLETION_CALLS} calls, then classifies refusal without invoking the port`, async () => {
+  it(`serves ${MAX_COMPLETION_CALLS} calls per cell, then refuses that cell without invoking the port`, async () => {
+    // The defect this pins: the budget counter lived in the tool closure, and
+    // the catalog is cached per ports object, so every cell of every session
+    // drew from ONE process-wide budget. The cell door dispatches with
+    // turnId = cellId; the budget must be keyed by that identity.
     let invoked = 0;
-    const run = dispatchModelTool(
-      COMPLETION_TOOL_NAME,
+    const entries = createTools(
       {
         llm: async () => {
           invoked += 1;
@@ -123,19 +126,36 @@ describe("the completion tool", () => {
       },
       RESIDENT,
     );
-
-    for (let i = 1; i <= MAX_COMPLETION_CALLS; i++) {
-      const result = await run({ prompt: `q${i}` });
-      expect(result.output).toBe(`call ${i}`);
-      expect(result.isError).toBeUndefined();
-    }
-
-    expect(await run({ prompt: "one too many" })).toMatchObject({
+    const dispatcher = createDispatcher(entries, { executor });
+    let nextId = 0;
+    const run = (cellId: string, prompt: string) =>
+      dispatcher.executeCell(
+        { id: `cell:${cellId}:${++nextId}`, tool: COMPLETION_TOOL_NAME, input: { prompt } },
+        { sessionId: RESIDENT.sessionId, turnId: cellId },
+      );
+    const refusal = {
       isError: true,
       errorKind: "precondition_failed",
       output: `completion refused: the per-cell budget of ${MAX_COMPLETION_CALLS} sub-model calls is spent`,
-    });
+    };
+
+    for (let i = 1; i <= MAX_COMPLETION_CALLS; i++) {
+      const result = await run("cell-a", `q${i}`);
+      expect(result.output).toBe(`call ${i}`);
+      expect(result.isError).toBeUndefined();
+    }
+    expect(await run("cell-a", "one too many")).toMatchObject(refusal);
     expect(invoked).toBe(MAX_COMPLETION_CALLS);
+
+    // A second cell on the same catalog starts with its own full budget.
+    for (let i = 1; i <= MAX_COMPLETION_CALLS; i++) {
+      const result = await run("cell-b", `q${i}`);
+      expect(result.isError).toBeUndefined();
+    }
+    expect(await run("cell-b", "one too many")).toMatchObject(refusal);
+    // The first cell's refusal is durable: its budget does not refill.
+    expect(await run("cell-a", "still spent")).toMatchObject(refusal);
+    expect(invoked).toBe(2 * MAX_COMPLETION_CALLS);
   });
 
   it("surfaces a failure as an error RESULT through the dispatcher, never as data", async () => {
