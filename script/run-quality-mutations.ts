@@ -2103,7 +2103,7 @@ function campaignTests(options: Options, inventory: Inventory): string[] {
 function campaignErrors(
 	enumerated: ReturnType<typeof enumerate>,
 	tests: string[],
-	sourceDiagnostics: unknown[],
+	sourceDiagnostics: string[],
 ): string[] {
 	const errors = [...enumerated.errors];
 	if (!tests.length) errors.push("zero test selection");
@@ -2147,7 +2147,7 @@ function emitShardReceipt(context: {
 	pythonCapability: Awaited<ReturnType<typeof enumeratePython>>;
 	tests: string[];
 	reachReceipt: ReachMap | null;
-	sourceDiagnostics: unknown[];
+	sourceDiagnostics: string[];
 	canonical: ProcessReceipt;
 	baseline: TestSelectionReceipt | null;
 	census: ReturnType<typeof enumerate>["census"];

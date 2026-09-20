@@ -31,8 +31,8 @@ async function runnerMain(argv: string[]): Promise<{ exitCode: number; document:
   const errs: string[] = [];
   const originalLog = console.log;
   const originalError = console.error;
-  console.log = (...values: unknown[]) => { logs.push(values.join(" ")); };
-  console.error = (...values: unknown[]) => { errs.push(values.join(" ")); };
+  console.log = (...values: string[]) => { logs.push(values.join(" ")); };
+  console.error = (...values: string[]) => { errs.push(values.join(" ")); };
   try {
     const exitCode = await main(argv);
     const document = record(decode(logs.at(-1) ?? "{}"));
