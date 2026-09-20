@@ -118,23 +118,26 @@ export function checkPatchCoverage(base: string, globs: readonly string[], root:
   return uncoveredRows(changedLines(diff.stdout.toString()), union);
 }
 
-function main(): void {
+export function main(
+  argv: readonly string[] = Bun.argv.slice(2),
+  root: string = process.cwd(),
+): number {
   const { values } = parseArgs({
-    args: Bun.argv.slice(2),
+    args: [...argv],
     options: { base: { type: "string" }, glob: { type: "string", multiple: true } },
     strict: true,
   });
   if (values.base === undefined || values.glob === undefined || values.glob.length === 0) {
     throw new Error("usage: check-patch-coverage.ts --base <ref> --glob <lcov-glob> [--glob ...]");
   }
-  const rows = checkPatchCoverage(values.base, values.glob, process.cwd());
+  const rows = checkPatchCoverage(values.base, values.glob, root);
   for (const row of rows) console.error(`uncovered: ${row}`);
   if (rows.length > 0) {
     console.error(`patch coverage: ${rows.length} changed executable line(s) uncovered`);
-    process.exitCode = 1;
-    return;
+    return 1;
   }
   console.log("patch coverage: all changed executable lines are covered");
+  return 0;
 }
 
-if (import.meta.main) main();
+if (import.meta.main) process.exitCode = main();

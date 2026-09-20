@@ -8,6 +8,7 @@ import {
   gatedPath,
   lcovPrefix,
   lcovUnion,
+  main,
   uncoveredRows,
 } from "./check-patch-coverage";
 
@@ -124,6 +125,14 @@ test("end to end against a fixture repository", () => {
     );
     const rows = checkPatchCoverage(base, ["packages/*/coverage/lcov.info"], dir);
     expect(rows).toEqual(["packages/kit/src/sum.ts:3"]);
+    const glob = ["--glob", "packages/*/coverage/lcov.info"];
+    expect(main(["--base", base, ...glob], dir)).toBe(1);
+    writeFileSync(
+      join(dir, "packages/kit/coverage/lcov.info"),
+      "SF:src/sum.ts\nDA:1,1\nDA:2,1\nDA:3,1\nend_of_record\n",
+    );
+    expect(main(["--base", base, ...glob], dir)).toBe(0);
+    expect(() => main([], dir)).toThrow("usage:");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

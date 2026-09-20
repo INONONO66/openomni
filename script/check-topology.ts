@@ -190,7 +190,7 @@ export function topologyProblems(
   return problems;
 }
 
-function main(): void {
+export function main(): void {
   const problems = topologyProblems();
   const failures = CONSUMERS.flatMap((consumer) =>
     problems[consumer].map((problem) => `${consumer}: ${problem}`),

@@ -161,16 +161,19 @@ function validateGraph(topology: readonly WorkspaceTopology[]): void {
   }
 }
 
-function main(): void {
+export function main(
+  argv: readonly string[] = Bun.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
+): void {
   const { values } = parseArgs({
-    args: Bun.argv.slice(2),
+    args: [...argv],
     options: { base: { type: "string" }, head: { type: "string" }, full: { type: "boolean" } },
     strict: true,
     allowPositionals: false,
   });
   // Inventory validation must run even when a docs-only/full shortcut is used.
   assertTopologyComplete(TOPOLOGY, process.cwd());
-  const event = process.env.GITHUB_EVENT_NAME;
+  const event = env.GITHUB_EVENT_NAME;
   const full =
     values.full === true || (event !== undefined && event !== "" && event !== "pull_request");
   let paths: readonly string[] | undefined;
@@ -196,7 +199,7 @@ function main(): void {
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
   const plan = planChanges(paths, full, TOPOLOGY);
-  const outputPath = process.env.GITHUB_OUTPUT;
+  const outputPath = env.GITHUB_OUTPUT;
   if (outputPath) {
     appendFileSync(
       outputPath,

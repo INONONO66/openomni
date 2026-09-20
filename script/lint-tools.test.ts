@@ -8,6 +8,7 @@ import {
   definitionInvariantViolations,
   diffToolSchemaSnapshots,
   lintToolSurface,
+  selfTest,
   type LocatedDefinition,
 } from "./lint-tools";
 
@@ -180,4 +181,10 @@ describe("lint-tools definition invariants", () => {
       { check: "tool-schema-snapshot", subject: "TOOL_DEFINITIONS" },
     ]);
   });
+});
+
+test("the self-test discriminates on its known-bad fixtures in-process", () => {
+  // selfTest exits the process on a failed discrimination, so returning at all
+  // is the assertion; the spawned --self-test lane checks the same behavior.
+  expect(selfTest()).toBeUndefined();
 });

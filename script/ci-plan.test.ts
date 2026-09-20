@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { planChanges } from "./ci-plan";
+import { main, planChanges } from "./ci-plan";
 import { TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 const keys = (paths: readonly string[], topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
@@ -301,4 +301,25 @@ test("fails topology inventory drift before emitting even a full plan", () => {
   const result = repo.run(["--full"]);
   expect(result.exitCode).not.toBe(0);
   expect(result.stdout.toString()).toBe("");
+});
+
+test("main writes the complete GITHUB_OUTPUT contract for a full run", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ci-plan-output-"));
+  try {
+    const output = join(dir, "github-output");
+    writeFileSync(output, "");
+    const cwd = process.cwd();
+    process.chdir(join(import.meta.dir, ".."));
+    try {
+      main(["--full"], { GITHUB_OUTPUT: output });
+    } finally {
+      process.chdir(cwd);
+    }
+    const written = readFileSync(output, "utf8");
+    for (const key of ["full=true", "verify=true", "dependencyReview=", "matrix=", "class=global", "toolingTests="]) {
+      expect(written).toContain(key);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

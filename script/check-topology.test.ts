@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { topologyProblems, type TopologyConsumer } from "./check-topology";
+import { main, topologyProblems, type TopologyConsumer } from "./check-topology";
 import { assertTopologyComplete, ciTestSteps, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 const consumers: readonly TopologyConsumer[] = [
@@ -158,4 +158,9 @@ describe("topology conformance", () => {
       expect(problems[consumer].join(" | ")).toContain("packages/machines");
     }
   });
+});
+
+test("the real repository topology passes the executable gate", () => {
+  // main exits the process on a violation, so returning is the assertion.
+  expect(main()).toBeUndefined();
 });

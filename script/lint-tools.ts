@@ -647,7 +647,7 @@ function definitionSelfTest(failures: string[]): void {
   }
 }
 
-function selfTest(): void {
+export function selfTest(): void {
   const failures: string[] = [];
 
   const nouns = extractTierNouns(

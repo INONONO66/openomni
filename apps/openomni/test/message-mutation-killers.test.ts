@@ -4,6 +4,10 @@ import { Bus } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
+import {
+  messageMaterialization,
+  prepareMessage,
+} from "../src/composition/message-session";
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
@@ -345,4 +349,75 @@ test("real compiled B worker cannot interrupt its parent", async () => {
   expect(result.isError).toBe(true);
   expect(result.output).toContain("message.worker.interrupt_parent");
   expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
+});
+
+test("an external reply to an awaited message admits with the correlated reply origin", async () => {
+  const fixture = messageFixture("resident", {
+    deliveryRoutes: new Map([
+      ["ws", async () => ({ value: "accepted" as const, externalMessageId: "platform-reply" })],
+    ]),
+    grants: () => [
+      { id: "grant", senderId: "sender", targetActorId: "alice", operations: ["awaited"] },
+    ],
+    budgets: () => [
+      { id: "budget", targetActorId: "alice", maxPerWindow: 10, windowMs: 1000, cooldownMs: 0 },
+    ],
+  });
+  directories.push(fixture.directory);
+  ActorRegistry.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
+  ActorRegistry.registerEndpoint({
+    id: "ws:alice",
+    actorId: "alice",
+    channel: "ws",
+    externalId: "alice",
+  });
+  const sent = await fixture.send({
+    to: { kind: "actor", actorId: "alice" },
+    type: "message",
+    content: "question",
+    replyTo: "binding",
+    deadline: 200,
+  });
+  expect(sent.isError).not.toBe(true);
+  const db = new Database(fixture.dbPath);
+  const correlated = db
+    .query(
+      `SELECT id, json_extract(intent, '$.value.messageId') AS messageId FROM action
+       WHERE session_id = ? AND kind = 'message'
+       AND json_extract(intent, '$.value.messageId') IS NOT NULL ORDER BY ordinal LIMIT 1`,
+    )
+    .get(fixture.sessionId) as { id: string; messageId: string } | null;
+  db.close();
+  if (correlated === null) throw new Error("missing correlatable message action");
+  const messageId = correlated.messageId;
+  const prepare = prepareMessage((id, parentId, childRole, runner) =>
+    messageMaterialization({
+      id,
+      parentId,
+      role: childRole,
+      runner,
+      tools: [],
+      preset: "",
+      at: 100,
+    }),
+  );
+  const prepared = prepare(
+    { kind: "external", surface: "ws", externalId: "alice" },
+    {
+      to: { kind: "session", id: fixture.sessionId },
+      type: "message",
+      content: "answer",
+      replyTo: messageId,
+    },
+    fixture.sessionId,
+    "correlated-answer",
+  );
+  expect(prepared.createSession).toBeUndefined();
+  expect(prepared.message).toEqual({ sender: "external", eventIdUnique: true });
+  expect(prepared.origin).toMatchObject({
+    kind: "external_reply",
+    messageId,
+    sourceActionId: correlated.id,
+    replyTo: messageId,
+  });
 });
