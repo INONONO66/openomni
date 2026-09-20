@@ -5,6 +5,7 @@ import {
   type Model,
   type PlainObject,
   type PlainValue,
+  type ToolExecutionContext,
 } from "@openomni/protocol";
 import { Bus, newTraceId, currentExecutor, type Executor } from "@openomni/agent";
 import { z } from "zod";
@@ -25,7 +26,7 @@ interface LlmCall {
  */
 export type LlmPort = (call: LlmCall) => Promise<string>;
 
-/** The per-cell call budget: how many sub-model calls one executor may serve. */
+/** The per-cell call budget: how many sub-model calls one cell may make. */
 const MAX_COMPLETION_CALLS = 32;
 
 /** The cell's `completion(prompt, {model?, system?, schema?})`, one prompt per call. */
@@ -60,18 +61,24 @@ function conform(answer: string, schema: NonNullable<Machine.CompletionRequest["
   return JSON.stringify(checked.data);
 }
 
+/**
+ * Budgets keyed by the cell that spends them. The cell door dispatches with
+ * `turnId` = cell id, and one catalog serves every cell of a ports object, so
+ * a counter in the tool closure would be one process-wide budget.
+ */
 function executeCompletion(llm: LlmPort | undefined) {
-  let calls = 0;
-  return async (input: z.output<typeof Input>): Promise<string> => {
+  const spent = new Map<string, number>();
+  return async (input: z.output<typeof Input>, ctx: ToolExecutionContext): Promise<string> => {
     if (llm === undefined)
       throw new ToolRefused(COMPLETION_TOOL_NAME, "sub-model port is not composed");
+    const calls = spent.get(ctx.turnId) ?? 0;
     if (calls >= MAX_COMPLETION_CALLS) {
       throw new ToolRefused(
         COMPLETION_TOOL_NAME,
         `the per-cell budget of ${MAX_COMPLETION_CALLS} sub-model calls is spent`,
       );
     }
-    calls += 1;
+    spent.set(ctx.turnId, calls + 1);
     const system = systemText(input);
     const answer = await llm({
       prompt: input.prompt,

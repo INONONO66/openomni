@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Ipc } from "@openomni/protocol";
-import { z } from "zod";
 
 import { IpcConnectionError, IpcRemoteError, IpcTimeoutError } from "../src/errors";
-import { PeerRequestTable } from "../src/peer-request-table";
+import { classifyIpcMessage, PeerRequestTable } from "../src/peer-request-table";
 import { captureError } from "./helpers/signal";
 
 type Frame = Ipc.Request | Ipc.Response | Ipc.Notification;
@@ -111,20 +110,6 @@ describe("PeerRequestTable", () => {
     });
   });
 
-  test("request handlers parse params with the supplied Zod schema", () => {
-    const sent: Frame[] = [];
-    const table = new PeerRequestTable<string>({
-      send: (_peer, frame) => sent.push(frame),
-      onRequest: (_peer, _method, rawParams, respond) => {
-        const params = z.object({ value: z.number() }).parse(rawParams);
-        respond({ doubled: params.value * 2 });
-      },
-    });
-
-    table.dispatch(Ipc.createRequest("typed", "double", { value: 21 }), "peer-a");
-    expect(Ipc.Response.parse(sent[0]).result).toEqual({ doubled: 42 });
-  });
-
   test("missing and throwing request handlers become code-1000 responses", () => {
     const missingFrames: Frame[] = [];
     const missing = new PeerRequestTable<string>({
@@ -163,5 +148,34 @@ describe("PeerRequestTable", () => {
     expect(table.dispatch(Ipc.createNotification("event.ready"), "peer-a")).toBe(true);
     expect(table.dispatch({ type: "mystery" }, "peer-a")).toBe(false);
     expect(observed).toEqual(["event.ready"]);
+  });
+
+  test("classifyIpcMessage is the one classifier: typed dispatch routes what it returns", () => {
+    const sent: Frame[] = [];
+    const seen: string[] = [];
+    const table = new PeerRequestTable<string>({
+      send: (_peer, frame) => sent.push(frame),
+      onNotification: (_peer, method) => {
+        seen.push(`notification:${method}`);
+      },
+    });
+    const request = Ipc.createRequest("typed-1", "ping");
+    const notification = Ipc.createNotification("event.tick");
+    const response = Ipc.createResponse("nobody", 1);
+    expect(classifyIpcMessage(request)).toEqual({ kind: "request", value: request });
+    expect(classifyIpcMessage(notification)).toEqual({ kind: "notification", value: notification });
+    expect(classifyIpcMessage(response)).toEqual({ kind: "response", value: response });
+    expect(classifyIpcMessage({ type: "mystery" })).toBeUndefined();
+    expect(classifyIpcMessage(null)).toBeUndefined();
+
+    for (const raw of [request, notification, response]) {
+      const message = classifyIpcMessage(raw);
+      if (message === undefined) throw new Error("classified above");
+      table.dispatchMessage(message, "peer-a");
+    }
+    expect(seen).toEqual(["notification:event.tick"]);
+    expect(sent).toEqual([
+      Ipc.createErrorResponse("typed-1", 1000, "peer has no request handler for ping"),
+    ]);
   });
 });

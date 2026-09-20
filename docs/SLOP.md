@@ -379,15 +379,15 @@ Disposition: #945's literal-zero definition of done is **not met** at this HEAD.
 
 ## §H 2026-09-20 sweep (main `84704df2`, session 01a0bddf)
 
-Read-only sweep of slop not already recorded above and not named by the W1–W5 kernel ladder (#930). Five lanes, 61 findings; lane reports and issue triage under `.omo/reports/slop-sweep-20260920/`. Rows close per merged PR; ✅ = closed by `chore/slop-hygiene-20260920` / `fix/completion-budget-ipc-classifier-20260920`.
+Read-only sweep of slop not already recorded above and not named by the W1–W5 kernel ladder (#930). Five lanes, 61 findings; lane reports and issue triage under `.omo/reports/slop-sweep-20260920/`. Rows close per merged PR; ✅ = closed by PR #1114 (`374de398`) / PR #1115.
 
 | Row | Location | Slop | Owner | State |
 | --- | --- | --- | --- | --- |
-| H1 (SD04) | `script/conformance/quality-baseline-lcov-bound*` | 1,830 baseline rows (multiplicity 3,248) for 38 deleted files; inventory 938 → 900, rows 60,509 → 58,679 (worktree measurement). Shrink only, no floor lowered | PR #1114 | ⏳ pending merge |
-| H2 (SD05) | `docs/implementation-status.md` runtime-administration row | Claimed the separate `approval` tool and `tools/mutation|authority` paths deleted in `239b4273` | PR #1114 | ⏳ pending merge |
-| H3 (SD06) | `AGENTS.md` header | "retains the legacy catalog entries pending stage 2" after stage 2 landed | PR #1114 | ⏳ pending merge |
-| H4 (AU09) | `apps/openomni/src/tools/completion.ts` | Per-cell 32-call budget (#842) was one process-wide counter: `createTools` caches one catalog per `CatalogPorts`, so the closure counter was shared by every cell and session. Budget now keyed by `ctx.turnId` (= cell id at the cell door) | fix PR (`fix/completion-budget-ipc-classifier-20260920`) | ⏳ pending merge |
-| H5 | `packages/ipc/src/server.ts` vs `peer-request-table.ts` | Two wire-message classifiers (`decodeMessage` and `dispatch`) | fix PR (`fix/completion-budget-ipc-classifier-20260920`): `classifyIpcMessage` single owner | ⏳ pending merge |
+| H1 (SD04) | `script/conformance/quality-baseline-lcov-bound*` | 1,830 baseline rows (multiplicity 3,248) for 38 deleted files; inventory 938 → 900, rows 60,509 → 58,679 (worktree measurement). Shrink only, no floor lowered | PR #1114 | ✅ `374de398` |
+| H2 (SD05) | `docs/implementation-status.md` runtime-administration row | Claimed the separate `approval` tool and `tools/mutation|authority` paths deleted in `239b4273` | PR #1114 | ✅ `374de398` |
+| H3 (SD06) | `AGENTS.md` header | "retains the legacy catalog entries pending stage 2" after stage 2 landed | PR #1114 | ✅ `374de398` |
+| H4 (AU09) | `apps/openomni/src/tools/completion.ts` | Per-cell 32-call budget (#842) was one process-wide counter: `createTools` caches one catalog per `CatalogPorts`, so the closure counter was shared by every cell and session. Budget now keyed by `ctx.turnId` (= cell id at the cell door) | PR #1115 | ⏳ pending merge |
+| H5 | `packages/ipc/src/server.ts` vs `peer-request-table.ts` | Two wire-message classifiers (`decodeMessage` and `dispatch`) | PR #1115: `classifyIpcMessage` single owner | ⏳ pending merge |
 | H6 (S13) | `packages/agent/src/session-lifecycle/session-configuration.ts:23-30` | `authorizeConfigure` direct callback with `?? true` bypasses the compiled policy snapshot; KERNEL rule is `session.configure` through pre policy | W1 (#1108, same files) | 🔁 deferred |
 | H7 (AU07) | `apps/openomni/src/resident.ts:74-91` | Evidence-only authority is a string-prefix check on the prompt with a fabricated refusal text; must be a typed policy input at kernel admission | W3 #1111 | open |
 | H8 (S6) | `packages/policy/src/row-compiler.ts:580-654` vs ledger `policies.appendGeneration` | Two policy-generation writers; agent stubs `append: () => false` | W3 #1111 | open |
