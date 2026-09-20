@@ -8,13 +8,7 @@ import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";
 
 /** Remove the socket file, tolerating a concurrent removal (ENOENT). */
 function unlinkIfExists(socketPath: string): void {
-  try {
-    fs.unlinkSync(socketPath);
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
-      throw error;
-    }
-  }
+  fs.rmSync(socketPath, { force: true });
 }
 
 interface IpcServerOptions {

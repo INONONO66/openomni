@@ -3,13 +3,13 @@ import { Ipc, type IdSource, type PlainValue } from "@openomni/protocol";
 import { IpcRemoteError, IpcTimeoutError } from "./errors";
 
 /** One inbound frame after schema classification; the only place the three wire schemas are tried. */
-export type IpcMessage =
+type IpcMessage =
   | { readonly kind: "response"; readonly value: Ipc.Response }
   | { readonly kind: "request"; readonly value: Ipc.Request }
   | { readonly kind: "notification"; readonly value: Ipc.Notification };
 
 /** `undefined` when `raw` matches no IPC message schema. */
-export type IpcWireInput = PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification;
+type IpcWireInput = PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification;
 
 export function classifyIpcMessage(raw: IpcWireInput): IpcMessage | undefined {
   const response = Ipc.Response.safeParse(raw);

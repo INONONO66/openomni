@@ -170,10 +170,6 @@ describe("PeerRequestTable", () => {
     const seen: string[] = [];
     const table = new PeerRequestTable<string>({
       send: (_peer, frame) => sent.push(frame),
-      onRequest: (_peer, method, _params, respond) => {
-        seen.push(`request:${method}`);
-        respond("ok");
-      },
       onNotification: (_peer, method) => {
         seen.push(`notification:${method}`);
       },
@@ -192,7 +188,9 @@ describe("PeerRequestTable", () => {
       if (message === undefined) throw new Error("classified above");
       table.dispatchMessage(message, "peer-a");
     }
-    expect(seen).toEqual(["request:ping", "notification:event.tick"]);
-    expect(sent).toEqual([Ipc.createResponse("typed-1", "ok")]);
+    expect(seen).toEqual(["notification:event.tick"]);
+    expect(sent).toEqual([
+      Ipc.createErrorResponse("typed-1", 1000, "peer has no request handler for ping"),
+    ]);
   });
 });
