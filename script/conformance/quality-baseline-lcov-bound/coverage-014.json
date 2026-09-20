@@ -8866,15 +8866,6 @@
   },
   {
     "gate": "coverage",
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 17,
-    "endLine": 20,
-    "symbol": "unproven-statement:0fcc039656cc779c78ade77ee6e3b2a23bbe51a0fbb333c2689fd31015cc1239",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
     "path": "packages/channels/src/provider/discord/client.ts",
     "line": 54,
     "endLine": 59,

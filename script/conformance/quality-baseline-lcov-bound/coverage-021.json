@@ -3223,51 +3223,6 @@
   },
   {
     "gate": "coverage",
-    "path": "packages/ledger/src/storage/append-port.ts",
-    "line": 27,
-    "endLine": 27,
-    "symbol": "unproven-statement:350ffe185b068bd07daee6d6f0715c7556713cb9771e16a3d5ac32820acd98b1",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "packages/ledger/src/storage/append-port.ts",
-    "line": 22,
-    "endLine": 24,
-    "symbol": "unproven-statement:74576dc86a2c6261a9f6c376527fd4e8c2db62ccff07797f05c1d2387d6b6dbf",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "packages/ledger/src/storage/append-port.ts",
-    "line": 26,
-    "endLine": 28,
-    "symbol": "unproven-statement:b8087dbe7f212ec3e24c8565a2695a6d92becb6434027a7c21d9c8e84e751f54",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "packages/ledger/src/storage/append-port.ts",
-    "line": 23,
-    "endLine": 23,
-    "symbol": "unproven-statement:c00f1867e5845df28363c139f1e30edf29fd12b71e62f2521d5074db24ce4455",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "packages/ledger/src/storage/append-port.ts",
-    "line": 18,
-    "endLine": 29,
-    "symbol": "unproven-statement:e9f213aab33d94553fc6c21f7be9d0d077e9cd0f15f412d0314354e241b54c5d",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
     "path": "packages/ledger/src/storage/atomic-file.ts",
     "line": 23,
     "endLine": 23,
@@ -4597,24 +4552,6 @@
     "symbol": "unproven-statement:bf4cd72a75ff68af185f787c51bbcffbe8113ba8c12cd75266650fd8a87aa1bb",
     "value": 1,
     "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "packages/ledger/src/storage/sqlite-busy.ts",
-    "line": 19,
-    "endLine": 19,
-    "symbol": "unproven-statement:299154e41f1a3d9d3a24c22c6c625ba0a37539311151f5949a921cee48f6394f",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "packages/ledger/src/storage/sqlite-busy.ts",
-    "line": 18,
-    "endLine": 18,
-    "symbol": "unproven-statement:9a947174f34f83efb93b413822022cb97cba9c61b27db91b8f2563787cb681b3",
-    "value": 1,
-    "count": 2
   },
   {
     "gate": "coverage",
