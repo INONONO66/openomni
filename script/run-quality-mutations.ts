@@ -1961,22 +1961,44 @@ function loadShardProgress(options: Options): ShardProgress {
 		shardIndex: shard.index,
 		shardCount: shard.count,
 	};
-	if (!existsSync(shard.progress)) {
+	const fresh = (): ShardProgress => {
 		mkdirSync(dirname(shard.progress), { recursive: true });
-		writeFileSync(shard.progress, progressLine(header), { flag: "wx" });
+		writeFileSync(shard.progress, progressLine(header));
 		return { carried: new Map(), proofs: [], run };
-	}
+	};
+	if (!existsSync(shard.progress)) return fresh();
 	const lines = readFileSync(shard.progress, "utf8").split("\n").filter((line) => line.length);
-	const head = object(decode(lines[0] ?? "null"));
-	// Fail closed: a progress artifact from another inventory or slice must
-	// never be silently mixed into this shard.
-	for (const [key, value] of Object.entries(header))
-		if (head[key] !== value)
-			fail("progress", `Progress artifact does not match this shard (${key}: ${JSON.stringify(head[key])} != ${JSON.stringify(value)})`);
+	const parsed = lines.map((line) => {
+		try { return object(decode(line)); }
+		catch { return null; }
+	});
+	// A run killed mid-append leaves exactly one torn trailing line. Dropping
+	// it is sound: its row has no proof line, so it could never be carried.
+	if (parsed.length > 1 && parsed.at(-1) === null) {
+		console.error("[mutation] dropping torn trailing progress line");
+		lines.pop();
+		parsed.pop();
+		writeFileSync(shard.progress, lines.map((line) => `${line}\n`).join(""));
+	}
+	const head = parsed[0] ?? fail("progress", "Malformed progress header");
+	if (head.type !== header.type || head.version !== header.version)
+		fail("progress", "Malformed progress header");
+	// A progress artifact from another inventory is useless but harmless: its
+	// rows are never read, so discard it and start fresh instead of wedging
+	// the campaign until a manual fresh_progress dispatch.
+	if (head.inventorySha256 !== options.inventoryHash) {
+		console.error(`[mutation] progress artifact for inventory ${String(head.inventorySha256)} discarded (current ${options.inventoryHash})`);
+		return fresh();
+	}
+	// Same inventory but another slice's artifact is an operator error; mixing
+	// slices must fail closed, never silently re-key.
+	for (const key of ["shardIndex", "shardCount"] as const)
+		if (head[key] !== header[key])
+			fail("progress", `Progress artifact does not match this shard (${key}: ${JSON.stringify(head[key])} != ${JSON.stringify(header[key])})`);
 	const proofs = new Map<string, ObjectValue>();
 	const recorded: ObjectValue[] = [];
-	for (const line of lines.slice(1)) {
-		const row = object(decode(line));
+	for (const row of parsed.slice(1)) {
+		if (row === null) return fail("progress", "Malformed progress row");
 		if (row.inventorySha256 !== options.inventoryHash)
 			return fail("progress", "Progress row inventory mismatch");
 		if (row.type === "proof" && row.originalHashesVerified === true && row.cleanupVerified === true)
@@ -2215,13 +2237,13 @@ async function campaign(options: Options): Promise<number> {
 				}));
 			const { rows, counts, restored } = shardRows(slice, shardExecution.executed, shardProgress.carried);
 			const sliceComplete = rows.length === slice.length;
-			const validCount = counts.killed + counts.survived + counts.noCoverage;
+			// A slice may legitimately be entirely compiler-invalid; the
+			// valid-outcome sanity floor is enforced campaign-wide at join.
 			const complete =
 				sliceComplete &&
 				errors.length === 0 &&
 				counts.infrastructure === 0 &&
 				counts.uncompleted === 0 &&
-				(slice.length === 0 || validCount > 0) &&
 				restored &&
 				cleanupVerified;
 			const exitCode = errors.length ? 2 : 0;

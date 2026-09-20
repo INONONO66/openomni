@@ -72,6 +72,10 @@ export function joinShardDocuments(documents: Json[], identity: Identity): JoinO
       results.push(result);
     }
   }
+  requireMeasurement(
+    counts.killed + counts.survived + counts.noCoverage > 0,
+    "no valid outcomes across shards",
+  );
   const document: Json = {
     version: 1,
     algorithm: "d945-mutation@1",
