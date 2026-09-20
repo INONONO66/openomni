@@ -166,8 +166,8 @@ ui <- apps/desktop
 
 ## COMMANDS
 
-CI selection and verification wiring inspected at `c4fb7748` (includes PR #983),
-2026-09-06. See `docs/ci.md` for dependency-aware PR lanes, full runs, and
+CI selection and verification wiring inspected at `c9c53af0` (PR #1117),
+2026-09-20; scheduled Quality Audit added for #1116 PR B. See `docs/ci.md` for dependency-aware PR lanes, full runs, and
 fail-closed completion checks. Use Bun 1.4.1 as pinned in `package.json`;
 alarm monitoring requires Bun >=1.4.0 for built-in PTY support.
 
@@ -190,7 +190,10 @@ bun test --timeout 15000
 # the lane lcov evidence. Locally, point --glob at fresh coverage output:
 bun run script/check-patch-coverage.ts --base origin/main --glob 'packages/*/coverage/lcov.info' --glob 'apps/*/coverage/lcov.info' --glob 'script/coverage/lcov.info'
 
-# Scheduled/manual deep audit entry points (quality-mutation.yml, never per PR):
+# Weekly/manual Quality Audit preview (no gh calls; missing LCOV is reported):
+bun run script/quality-audit.ts --dry-run
+
+# Separate scheduled mutation campaign (quality-mutation.yml, never per PR):
 bun run script/check-quality-python.ts
 bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json
 
@@ -211,6 +214,7 @@ The per-PR quality ratchet stack (census, exact statement evidence, coverage
 ratchet, metrics legs) was deleted by #1116 in favor of the lean PR gate:
 build, types, lint (including `noExcessiveCognitiveComplexity`), dependency
 rules, tests, and the patch-coverage gate. Deep audits stay scheduled:
+`quality-audit.yml` records absolute findings and capped quality-debt issues;
 `quality-mutation.yml` runs `run-quality-mutations.ts`, which requires a
 complete campaign receipt, including restoration and cleanup proof.
 
