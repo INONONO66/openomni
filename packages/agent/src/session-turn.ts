@@ -9,6 +9,7 @@ import {
 } from "@openomni/protocol";
 import { settled } from "./core/settled";
 import { createExecutor } from "./executor";
+import type { ExecutionResult } from "./executor-contract";
 import { foldSessionHistory } from "./session-lifecycle/history";
 import { sessionStopEvidence } from "./session-stop-evidence";
 import type {
@@ -65,6 +66,24 @@ export function createSessionTurn(
     releaseHeldLease,
     hibernate,
   } = ports;
+  function errorResult(error: unknown): SessionRunnerResult {
+    return {
+      kind: "error",
+      text: error instanceof Error ? error.message : String(error),
+      ...(error instanceof Error ? { cause: error } : {}),
+    };
+  }
+
+  function resolveOutcome(
+    outcome: ExecutionResult,
+    runnerResult: SessionRunnerResult,
+  ): SessionRunnerResult {
+    if (outcome.terminal !== "executed") return policyRefusalResult(outcome.reason);
+    if (canonicalDigest(outcome.value) === canonicalDigest(sessionRunnerResultValue(runnerResult)))
+      return runnerResult;
+    return sessionRunnerResultFromValue(outcome.value) ?? policyRefusalResult("invalid_output");
+  }
+
   async function runTurn(input: {
     readonly turnId: string;
     readonly resultId: string;
@@ -213,26 +232,13 @@ export function createSessionTurn(
             try {
               runnerResult = await Promise.race([running, aborted]);
             } catch (error) {
-              runnerResult = {
-                kind: "error",
-                text: error instanceof Error ? error.message : String(error),
-                ...(error instanceof Error ? { cause: error } : {}),
-              };
+              runnerResult = errorResult(error);
             }
           }
           return sessionRunnerResultValue(runnerResult);
         },
       );
-      if (outcome.terminal !== "executed") {
-        result = policyRefusalResult(outcome.reason);
-      } else if (
-        canonicalDigest(outcome.value) === canonicalDigest(sessionRunnerResultValue(runnerResult))
-      ) {
-        result = runnerResult;
-      } else {
-        result =
-          sessionRunnerResultFromValue(outcome.value) ?? policyRefusalResult("invalid_output");
-      }
+      result = resolveOutcome(outcome, runnerResult);
       if (turnController.signal.aborted && running !== undefined) {
         interruptedRunner = running;
         // Mark the live runner BEFORE the interrupted terminal is sealed: any
@@ -244,11 +250,7 @@ export function createSessionTurn(
     } catch (error) {
       result = turnController.signal.aborted
         ? { kind: "interrupted", text: "" }
-        : {
-            kind: "error",
-            text: error instanceof Error ? error.message : String(error),
-            ...(error instanceof Error ? { cause: error } : {}),
-          };
+        : errorResult(error);
     } finally {
       // When the runner ignored the abort and is still alive, keep the heartbeat
       // renewing the durable lease so that no other runtime can acquire it and
@@ -277,32 +279,34 @@ export function createSessionTurn(
       result,
       interruptedRunner === undefined,
     );
-    if (interruptedRunner !== undefined) {
-      // The abort-ignoring runner is still alive and still holds the durable
-      // lease (renewed by the heartbeat above). The interrupted terminal is
-      // sealed, so the turn - and the caller's interrupt() - completes now;
-      // ownership maintenance detaches into `retainedRunner`: once the runner
-      // settles, stop the heartbeat and release the lease. Every turn start
-      // waits on it, so a resume can only run once this executor is genuinely
-      // gone - session-wide single flight without an unbounded caller wait.
-      state.retainedRunner = settled(interruptedRunner).then(async () => {
-        state.liveInterruptRunner = undefined;
-        state.stopHeartbeat?.();
-        state.stopHeartbeat = undefined;
-        try {
-          await releaseHeldLease();
-        } catch (error) {
-          // Storage refused/failed the release: never wedge the controller on
-          // a detached promise. Finalize in-memory state here and surface the
-          // failure to the next caller that starts a turn.
-          state.retainedFailure = error instanceof Error ? error : new Error(String(error));
-        } finally {
-          state.retainedRunner = undefined;
-        }
-        if (state.active === undefined) await hibernate(SessionHandleStore.row(sessionId));
-      });
-    }
+    if (interruptedRunner !== undefined) detachRetainedRunner(interruptedRunner);
     return result;
+  }
+
+  /** The abort-ignoring runner is still alive and still holds the durable
+   * lease (renewed by the turn heartbeat). The interrupted terminal is
+   * sealed, so the turn - and the caller's interrupt() - completes now;
+   * ownership maintenance detaches into `retainedRunner`: once the runner
+   * settles, stop the heartbeat and release the lease. Every turn start
+   * waits on it, so a resume can only run once this executor is genuinely
+   * gone - session-wide single flight without an unbounded caller wait. */
+  function detachRetainedRunner(interruptedRunner: Promise<SessionRunnerResult>): void {
+    state.retainedRunner = settled(interruptedRunner).then(async () => {
+      state.liveInterruptRunner = undefined;
+      state.stopHeartbeat?.();
+      state.stopHeartbeat = undefined;
+      try {
+        await releaseHeldLease();
+      } catch (error) {
+        // Storage refused/failed the release: never wedge the controller on
+        // a detached promise. Finalize in-memory state here and surface the
+        // failure to the next caller that starts a turn.
+        state.retainedFailure = error instanceof Error ? error : new Error(String(error));
+      } finally {
+        state.retainedRunner = undefined;
+      }
+      if (state.active === undefined) await hibernate(SessionHandleStore.row(sessionId));
+    });
   }
 
   async function drainBoundary(

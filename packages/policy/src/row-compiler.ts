@@ -453,50 +453,69 @@ interface CandidateEvaluation {
   readonly reason?: string;
 }
 
+interface CandidateState {
+  matchedRuleIds: string[];
+  effects: Policy.PolicyEffect[];
+  obligations: CompiledObligation[];
+  value: PlainValue;
+  verdict: EffectiveRowVerdict;
+  reason?: string | undefined;
+}
+
+function applyCandidate(candidate: CompiledRow["verdict"], state: CandidateState): "stop" | "next" {
+  if (candidate.type === "deny") {
+    state.verdict = "deny";
+    state.reason = candidate.reason ?? "denied";
+    return "stop";
+  }
+  if (candidate.type === "require_approval") {
+    state.verdict = "require_approval";
+    state.reason = candidate.reason;
+    return "stop";
+  }
+  if (candidate.type === "transform") {
+    state.verdict = "transform";
+    state.value = redact(state.value, candidate.paths, candidate.replacement);
+    return "next";
+  }
+  if (candidate.type === "obligation") {
+    if (state.verdict === "allow") state.verdict = "obligation";
+    state.obligations.push({
+      name: candidate.name,
+      metric: candidate.metric,
+      limit: candidate.limit,
+    });
+    return "next";
+  }
+  state.effects.push(...(candidate.effects ?? []));
+  state.reason ??= candidate.reason ?? candidate.reasonCodes?.[0];
+  return "next";
+}
+
 function applyCandidates(
   selected: readonly CompiledRow[],
   input: PolicyEvaluationInput,
   initialValue: PlainValue,
 ): CandidateEvaluation {
-  const matchedRuleIds: string[] = [];
-  const effects: Policy.PolicyEffect[] = [];
-  const obligations: CompiledObligation[] = [];
-  let value = initialValue;
   const missingMessageContext =
     input.kind === "message" && input.op === "send_message" && input.message === undefined;
-  let verdict: EffectiveRowVerdict = missingMessageContext ? "deny" : "allow";
-  let reason: string | undefined = missingMessageContext ? "message_context_missing" : undefined;
+  const state: CandidateState = {
+    matchedRuleIds: [],
+    effects: [],
+    obligations: [],
+    value: initialValue,
+    verdict: missingMessageContext ? "deny" : "allow",
+    reason: missingMessageContext ? "message_context_missing" : undefined,
+  };
 
   for (const compiled of selected) {
     if (missingMessageContext) break;
     if (!matches(compiled, input)) continue;
-    matchedRuleIds.push(compiled.name);
-    const candidate = compiled.verdict;
-    if (candidate.type === "deny") {
-      verdict = "deny";
-      reason = candidate.reason ?? "denied";
-      break;
-    }
-    if (candidate.type === "require_approval") {
-      verdict = "require_approval";
-      reason = candidate.reason;
-      break;
-    }
-    if (candidate.type === "transform") {
-      verdict = "transform";
-      value = redact(value, candidate.paths, candidate.replacement);
-      continue;
-    }
-    if (candidate.type === "obligation") {
-      if (verdict === "allow") verdict = "obligation";
-      obligations.push({ name: candidate.name, metric: candidate.metric, limit: candidate.limit });
-      continue;
-    }
-    effects.push(...(candidate.effects ?? []));
-    reason ??= candidate.reason ?? candidate.reasonCodes?.[0];
+    state.matchedRuleIds.push(compiled.name);
+    if (applyCandidate(compiled.verdict, state) === "stop") break;
   }
 
-  return { matchedRuleIds, effects, obligations, value, verdict, reason };
+  return state;
 }
 
 function evaluateSnapshot(

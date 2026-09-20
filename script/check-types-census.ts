@@ -342,6 +342,33 @@ function typeClassifier(program: ts.Program, checker: ts.TypeChecker, owned: Set
   const edges = new Map<ts.Type, { children: Edge[]; metadata: Set<AbiDeclaration> }>();
   // Reach a top type twice: once over owned/structural edges only, once over
   // every edge. A kind reached only on the second pass is foreign-origin.
+  function edgeOf(type: ts.Type) {
+    let edge = edges.get(type);
+    if (!edge) {
+      const excluded = new Set<AbiDeclaration>();
+      edge = { children: childrenOf(type, checker, owned, brands, excluded), metadata: excluded };
+      edges.set(type, edge);
+    }
+    return edge;
+  }
+  function expandEdges(
+    type: ts.Type,
+    ownedOnly: boolean,
+    pending: ts.Type[],
+    metadata: Set<AbiDeclaration>,
+  ) {
+    const edge = edgeOf(type);
+    for (const child of edge.children) if (!ownedOnly || !child.foreign) pending.push(child.type);
+    for (const entry of edge.metadata) metadata.add(entry);
+  }
+  /** Top-typed kinds terminate the walk; a generic parameter is not an
+   * instantiated default or an implicit top type. */
+  function topKind(type: ts.Type): Kind | "parameter" | undefined {
+    if (type.flags & ts.TypeFlags.Any) return "implicitAny";
+    if (type.flags & ts.TypeFlags.Unknown) return "unknown";
+    if (type.flags & ts.TypeFlags.TypeParameter) return "parameter";
+    return undefined;
+  }
   function reach(start: ts.Type, ownedOnly: boolean) {
     const seen = new Set<ts.Type>();
     const pending = [start];
@@ -351,24 +378,13 @@ function typeClassifier(program: ts.Program, checker: ts.TypeChecker, owned: Set
       const type = pending.pop();
       if (!type || seen.has(type)) continue;
       seen.add(type);
-      if (type.flags & ts.TypeFlags.Any) {
-        kinds.add("implicitAny");
+      const top = topKind(type);
+      if (top === "parameter") continue;
+      if (top !== undefined) {
+        kinds.add(top);
         continue;
       }
-      if (type.flags & ts.TypeFlags.Unknown) {
-        kinds.add("unknown");
-        continue;
-      }
-      // A generic parameter is not an instantiated default or an implicit top type.
-      if (type.flags & ts.TypeFlags.TypeParameter) continue;
-      let edge = edges.get(type);
-      if (!edge) {
-        const excluded = new Set<AbiDeclaration>();
-        edge = { children: childrenOf(type, checker, owned, brands, excluded), metadata: excluded };
-        edges.set(type, edge);
-      }
-      for (const child of edge.children) if (!ownedOnly || !child.foreign) pending.push(child.type);
-      for (const entry of edge.metadata) metadata.add(entry);
+      expandEdges(type, ownedOnly, pending, metadata);
     }
     return { kinds, metadata };
   }

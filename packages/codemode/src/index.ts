@@ -137,16 +137,9 @@ export function createCodemode(options: Options = {}) {
       ? dispatch(call)
       : binding.boundary(call, () => dispatch(call));
   }
-  async function dispatch(call: Machine.ToolCall): Promise<Machine.ToolCallResult> {
-    const binding = live.get(call.cellId);
-    if (binding === undefined)
-      throw new CodemodeError({ reason: "unknown_cell_id", message: "cell has settled" });
-    if (call.name === "codemode.listMachines")
-      return Machine.ToolCallResult.parse({ status: "completed", value: machines().list() });
-    if (call.name === "codemode.findMachine") {
-      const input = z.object({ query: FindInput }).strict().parse(call.arguments);
-      return { status: "completed", value: select(input.query) };
-    }
+  async function dispatchMachineOp(
+    call: Machine.ToolCall,
+  ): Promise<Machine.ToolCallResult | undefined> {
     if (call.name === "codemode.read") {
       const input = PathInput.parse(call.arguments);
       const value = await getMachine(input.machineId).read(input.path);
@@ -184,6 +177,21 @@ export function createCodemode(options: Options = {}) {
             : value,
       };
     }
+    return undefined;
+  }
+
+  async function dispatch(call: Machine.ToolCall): Promise<Machine.ToolCallResult> {
+    const binding = live.get(call.cellId);
+    if (binding === undefined)
+      throw new CodemodeError({ reason: "unknown_cell_id", message: "cell has settled" });
+    if (call.name === "codemode.listMachines")
+      return Machine.ToolCallResult.parse({ status: "completed", value: machines().list() });
+    if (call.name === "codemode.findMachine") {
+      const input = z.object({ query: FindInput }).strict().parse(call.arguments);
+      return { status: "completed", value: select(input.query) };
+    }
+    const machineOp = await dispatchMachineOp(call);
+    if (machineOp !== undefined) return machineOp;
     if (call.name === "codemode.eval") {
       const input = RunInput.parse(call.arguments);
       return {

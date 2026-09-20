@@ -214,6 +214,31 @@ export async function createIpcServer(
     if (state) options.onDisconnect?.(id);
   }
 
+  function decodeChunk(
+    state: ConnectionState,
+    raw: Buffer,
+  ): { frames: PlainValue[]; malformed: string[] } | undefined {
+    try {
+      return state.decoder.push(raw);
+    } catch (error) {
+      // Oversize line/buffer — the decoder already reset its buffer (DoS
+      // guard). The reset happened MID-frame, so whatever arrives next is
+      // an unparseable tail: answer 4001, then close the connection. The
+      // client destroys its socket on protocol errors already; the server
+      // is symmetric instead of keeping a desynced stream alive.
+      sendFrame(
+        state,
+        Ipc.createErrorResponse(
+          "unknown",
+          4001,
+          error instanceof Error ? error.message : "invalid IPC frame",
+        ),
+      );
+      closeAfterFlush(state);
+      return undefined;
+    }
+  }
+
   const server = Bun.listen({
     unix: socketPath,
     socket: {
@@ -238,27 +263,9 @@ export async function createIpcServer(
         // loop (and the reclaim timer with it) for nothing.
         if (state.endAfterFlush) return;
 
-        let messages: PlainValue[];
-        let malformed: string[];
-        try {
-          ({ frames: messages, malformed } = state.decoder.push(raw));
-        } catch (error) {
-          // Oversize line/buffer — the decoder already reset its buffer (DoS
-          // guard). The reset happened MID-frame, so whatever arrives next is
-          // an unparseable tail: answer 4001, then close the connection. The
-          // client destroys its socket on protocol errors already; the server
-          // is symmetric instead of keeping a desynced stream alive.
-          sendFrame(
-            state,
-            Ipc.createErrorResponse(
-              "unknown",
-              4001,
-              error instanceof Error ? error.message : "invalid IPC frame",
-            ),
-          );
-          closeAfterFlush(state);
-          return;
-        }
+        const decoded = decodeChunk(state, raw);
+        if (decoded === undefined) return;
+        const { frames: messages, malformed } = decoded;
 
         for (const msg of messages) {
           let parsed: Ipc.Request | Ipc.Response | Ipc.Notification;

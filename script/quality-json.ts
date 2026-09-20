@@ -16,18 +16,20 @@ export function decodeJson(input: string): Json {
   let depth = 0;
   const skip = (): void => { WHITESPACE.lastIndex = index; WHITESPACE.exec(input); index = WHITESPACE.lastIndex; };
   const literal = (token: string, value: Json): Json => { if (!input.startsWith(token, index)) invalid("non-JSON value"); index += token.length; return value; };
+  const escapeSequence = (): void => {
+    const escaped = input[++index];
+    if (escaped === "u") {
+      if (!/^[0-9a-fA-F]{4}$/.test(input.slice(index + 1, index + 5))) invalid("invalid Unicode escape");
+      index += 4;
+    } else if (!escaped || !'"\\/bfnrt'.includes(escaped)) invalid("invalid JSON escape");
+  };
   const string = (): string => {
     const start = index++;
     for (; ; index++) {
       const code = input.charCodeAt(index);
       if (Number.isNaN(code) || code < 32) invalid("invalid JSON string character");
       if (code === 34) break;
-      if (code !== 92) continue;
-      const escaped = input[++index];
-      if (escaped === "u") {
-        if (!/^[0-9a-fA-F]{4}$/.test(input.slice(index + 1, index + 5))) invalid("invalid Unicode escape");
-        index += 4;
-      } else if (!escaped || !'"\\/bfnrt'.includes(escaped)) invalid("invalid JSON escape");
+      if (code === 92) escapeSequence();
     }
     return JSON.parse(input.slice(start, ++index)) as string;
   };

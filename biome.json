@@ -36,7 +36,10 @@
         "useYield": "warn"
       },
       "complexity": {
-        "noExcessiveCognitiveComplexity": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 21 }
+        },
         "noExtraBooleanCast": "off",
         "noForEach": "off",
         "noUselessUndefined": "off",
@@ -95,5 +98,20 @@
       "!bun.lock",
       "!**/*.lock"
     ]
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "script/run-quality-mutations.ts",
+        "script/quality-mutation-compiler.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          }
+        }
+      }
+    }
+  ]
 }

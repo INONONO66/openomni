@@ -97,6 +97,71 @@ function recipientRelation(
   };
 }
 
+function prepareExternal(
+  materialize: (
+    id: string,
+    parentId: string | null,
+    role: LedgerSession.Role,
+    runner: string,
+  ) => LedgerSession.Materialize,
+  send: Parameters<Ports["prepare"]>[1],
+  target: string,
+  messageId: string,
+): ReturnType<Ports["prepare"]> {
+  const exists = SessionHandleStore.listRows().some((row) => row.id === target);
+  const source =
+    exists && send.replyTo !== undefined
+      ? SessionHandleStore.messageActionByPlatformId(target, send.replyTo)
+      : undefined;
+  return {
+    target,
+    ...(source === undefined || send.replyTo === undefined
+      ? {}
+      : {
+          origin: Inbox.ReplyOrigin.parse({
+            kind: "external_reply",
+            messageId: send.replyTo,
+            sourceActionId: source.id,
+            replyTo: send.replyTo,
+          }),
+        }),
+    ...(!exists ? { createSession: materialize(target, null, "resident", "resident") } : {}),
+    message: {
+      sender: "external",
+      eventIdUnique:
+        !exists || !SessionHandleStore.inboxRows(target).some((row) => row.id === messageId),
+    },
+  };
+}
+
+function admissionBounds(
+  source: ReturnType<typeof SessionHandleStore.row>,
+  send: Parameters<Ports["prepare"]>[1],
+) {
+  return SessionHandleStore.policyRows(source.policyGeneration).flatMap((row) => {
+    const match = row.match.value;
+    if (
+      row.kind !== "message" ||
+      row.phase !== "pre" ||
+      match === null ||
+      typeof match !== "object" ||
+      Array.isArray(match)
+    )
+      return [];
+    const parsed = Gateway.RuleTableB.safeParse(match.message);
+    if (!parsed.success) return [];
+    const rule = parsed.data;
+    return rule.senderRole === source.role &&
+      rule.effect === "deny" &&
+      (rule.targetKind === undefined || rule.targetKind === send.to.kind) &&
+      (rule.type === undefined || rule.type === send.type) &&
+      (rule.targetRole === undefined ||
+        (send.to.kind === "new_session" && rule.targetRole === send.to.role))
+      ? [rule.check]
+      : [];
+  });
+}
+
 export function prepareMessage(
   materialize: (
     id: string,
@@ -107,30 +172,7 @@ export function prepareMessage(
 ): Ports["prepare"] {
   return (sender, send, target, messageId) => {
     if (sender.kind === "external") {
-      const exists = SessionHandleStore.listRows().some((row) => row.id === target);
-      const source =
-        exists && send.replyTo !== undefined
-          ? SessionHandleStore.messageActionByPlatformId(target, send.replyTo)
-          : undefined;
-      return {
-        target,
-        ...(source === undefined || send.replyTo === undefined
-          ? {}
-          : {
-              origin: Inbox.ReplyOrigin.parse({
-                kind: "external_reply",
-                messageId: send.replyTo,
-                sourceActionId: source.id,
-                replyTo: send.replyTo,
-              }),
-            }),
-        ...(!exists ? { createSession: materialize(target, null, "resident", "resident") } : {}),
-        message: {
-          sender: "external",
-          eventIdUnique:
-            !exists || !SessionHandleStore.inboxRows(target).some((row) => row.id === messageId),
-        },
-      };
+      return prepareExternal(materialize, send, target, messageId);
     }
     const source = SessionHandleStore.row(sender.id);
     if (source.leaseOwner === null) throw new Error("session sender has no active lease");
@@ -142,28 +184,7 @@ export function prepareMessage(
     });
     const parentDeadline = origins.at(-1)?.deadline;
     const outbound = outboundMessage.getStore();
-    const bounds = SessionHandleStore.policyRows(source.policyGeneration).flatMap((row) => {
-      const match = row.match.value;
-      if (
-        row.kind !== "message" ||
-        row.phase !== "pre" ||
-        match === null ||
-        typeof match !== "object" ||
-        Array.isArray(match)
-      )
-        return [];
-      const parsed = Gateway.RuleTableB.safeParse(match.message);
-      if (!parsed.success) return [];
-      const rule = parsed.data;
-      return rule.senderRole === source.role &&
-        rule.effect === "deny" &&
-        (rule.targetKind === undefined || rule.targetKind === send.to.kind) &&
-        (rule.type === undefined || rule.type === send.type) &&
-        (rule.targetRole === undefined ||
-          (send.to.kind === "new_session" && rule.targetRole === send.to.role))
-        ? [rule.check]
-        : [];
-    });
+    const bounds = admissionBounds(source, send);
     const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
     const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
     if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
