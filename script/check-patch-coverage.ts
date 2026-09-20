@@ -43,30 +43,51 @@ function recordHit(rows: Map<number, number>, record: string): void {
   rows.set(lineNumber, Math.max(rows.get(lineNumber) ?? 0, hits));
 }
 
-function mergeLcov(union: Map<string, Map<number, number>>, file: string, root: string): void {
+type Merged = { hits: Map<number, number>; reports: number; seen: Map<number, number> };
+
+function mergeLcov(union: Map<string, Merged>, file: string, root: string): void {
   const prefix = lcovPrefix(file);
   if (prefix === "") throw new Error(`lcov without workspace ancestor (flattened artifact?): ${file}`);
-  let source = "";
+  let entry: Merged | undefined;
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (line.startsWith("SF:")) {
       const raw = line.slice(3).trim();
-      source = isAbsolute(raw) ? relative(root, raw) : `${prefix}/${raw}`;
+      const source = isAbsolute(raw) ? relative(root, raw) : `${prefix}/${raw}`;
+      entry = union.get(source) ?? { hits: new Map(), reports: 0, seen: new Map() };
+      entry.reports += 1;
+      union.set(source, entry);
       continue;
     }
-    if (!line.startsWith("DA:") || source === "") continue;
-    const rows = union.get(source) ?? new Map<number, number>();
-    union.set(source, rows);
-    recordHit(rows, line.slice(3));
+    if (!line.startsWith("DA:") || entry === undefined) continue;
+    const lineNumber = Number(line.slice(3).split(",")[0]);
+    if (!Number.isNaN(lineNumber)) entry.seen.set(lineNumber, (entry.seen.get(lineNumber) ?? 0) + 1);
+    recordHit(entry.hits, line.slice(3));
   }
 }
 
-/** Union of DA records across lcov files: repo path -> line -> max hits. */
+/**
+ * Union of DA records across lcov files: repo path -> line -> max hits.
+ *
+ * A lane that never executed a function reports every line in its range as
+ * `DA:n,0`, braces and comments included, while a lane that did execute it
+ * reports only the executable lines. A line is therefore an uncovered claim
+ * only when every lcov reporting the file records it; a line one reporting
+ * lane treats as non-executable is dropped instead of surfacing as a false
+ * zero.
+ */
 export function lcovUnion(
   files: readonly string[],
   root: string,
 ): Map<string, Map<number, number>> {
+  const merged = new Map<string, Merged>();
+  for (const file of files) mergeLcov(merged, file, root);
   const union = new Map<string, Map<number, number>>();
-  for (const file of files) mergeLcov(union, file, root);
+  for (const [source, entry] of merged) {
+    for (const [lineNumber, count] of entry.seen) {
+      if (count < entry.reports) entry.hits.delete(lineNumber);
+    }
+    union.set(source, entry.hits);
+  }
   return union;
 }
 

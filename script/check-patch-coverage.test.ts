@@ -105,6 +105,30 @@ test("lcov union takes the maximum hits across shards", () => {
   }
 });
 
+test("lcov union drops a line only an unexecuted lane reports as zero", () => {
+  // Bun emits DA:n,0 for every line of a never-run function (braces, comments);
+  // the lane that ran it reports only executable lines. Line 3 exists solely
+  // in the unexecuted lane and must not surface as an uncovered claim.
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-lanes-"));
+  try {
+    mkdirSync(join(dir, "a/script/coverage"), { recursive: true });
+    mkdirSync(join(dir, "b/script/coverage"), { recursive: true });
+    writeFileSync(join(dir, "a/script/coverage/lcov.info"), "SF:x.ts\nDA:1,0\nDA:2,0\nDA:3,0\nDA:4,0\n");
+    writeFileSync(join(dir, "b/script/coverage/lcov.info"), "SF:x.ts\nDA:1,5\nDA:2,0\nDA:4,3\n");
+    const union = lcovUnion(
+      [join(dir, "a/script/coverage/lcov.info"), join(dir, "b/script/coverage/lcov.info")],
+      dir,
+    );
+    const rows = union.get("script/x.ts");
+    expect(rows?.get(1)).toBe(5);
+    expect(rows?.get(2)).toBe(0);
+    expect(rows?.has(3)).toBe(false);
+    expect(rows?.get(4)).toBe(3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("lcov union refuses a flattened artifact whose workspace root is lost", () => {
   // upload-artifact with a single `path:` drops the `script/coverage/` ancestor;
   // every SF would then be attributed to the repo root and read as "no record".

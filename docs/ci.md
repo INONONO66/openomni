@@ -85,9 +85,14 @@ paths from different shards never collide) and runs
 The checker diffs `<base>...HEAD` with zero context, keeps changed/added lines
 in `packages/*/src/**`, `apps/*/src/**` and top-level non-test `script/*.ts`,
 and unions `DA:` records across every lcov file (maximum hits per line, with
-each file's repo prefix inferred from the artifact path). A changed line that
-an lcov file knows with zero hits fails the gate; a line absent from every
-lcov record is not executable (types, comments, imports) and never counts.
+each file's repo prefix inferred from the artifact path; an lcov whose
+artifact path lost its workspace ancestor is refused). A changed line that
+every lcov reporting the file knows with zero hits fails the gate; a line
+absent from every lcov record is not executable (types, comments, imports)
+and never counts. Bun reports every line of a never-executed function as
+`DA:n,0`, braces and comments included, so a line that only such a lane
+records while an executing lane omits it is dropped as non-executable rather
+than reported as uncovered.
 A gated file with no `SF:` record in any lcov was never loaded by any test:
 it fails with `<path>: no coverage record` unless type-stripping its source
 emits zero executable lines (pure type-only modules; `.d.ts` is outside the
