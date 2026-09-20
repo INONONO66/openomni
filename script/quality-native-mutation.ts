@@ -21,7 +21,10 @@ import {
   type Measurement,
 } from "./quality-ci-receipt";
 import { nativeJson } from "./quality-native-process";
-import { ratchetMain } from "./quality-ratchet";
+
+/** One test selection under one mutant may run this long before the runner
+ * kills it and records the mutant as killed by non-termination. */
+const SUITE_TIMEOUT_MS = 300_000;
 
 export function normalizeMutation(value: Json, identity: Identity, root: string): Measurement {
   const row = completeDocument(value);
@@ -94,38 +97,27 @@ export function normalizeMutation(value: Json, identity: Identity, root: string)
   });
   return { analyzed: ["mutation"], findings };
 }
-export function ratchetMutationMeasurement(context: {
+/** Records the complete campaign as one measurement receipt (`current.json`)
+ * beside the native document. Survivors are findings in that receipt and drive
+ * the exit code; there is no baseline to ratchet against (#945 measures the
+ * literal-zero DoD from the receipt). */
+export function recordMutationMeasurement(context: {
   document: Json;
   identity: Identity;
   root: string;
   contract: string;
   directory: string;
-  base: string;
-  baseline: string | undefined;
   driftMessage: string;
 }): number {
-  const { document, identity, root, contract, directory, base, baseline, driftMessage } = context;
+  const { document, identity, root, contract, directory, driftMessage } = context;
   const measurement = normalizeMutation(document, identity, root);
   requireMeasurement(fingerprint(root, contract).inventoryHash === identity.inventoryHash, driftMessage);
-  const current = resolve(directory, "current.json");
-  writeFileSync(current, JSON.stringify(mergeMeasurements(identity.paths, [measurement])), {
-    flag: "wx",
-  });
-  return ratchetMain([
-    "--root",
-    root,
-    "--contract",
-    resolve(root, contract),
-    "--base",
-    base,
-    "--baseline",
-    baseline ?? "",
-    "--current",
-    current,
-  ]);
+  const merged = mergeMeasurements(identity.paths, [measurement]);
+  writeFileSync(resolve(directory, "current.json"), JSON.stringify(merged), { flag: "wx" });
+  console.error(`[mutation] campaign complete: ${merged.findings.length} surviving mutants recorded`);
+  return merged.findings.length > 0 ? 1 : 0;
 }
 function mutationArguments(values: {
-  baseline?: string;
   limit?: string;
   target?: string;
   pilot: boolean;
@@ -134,7 +126,6 @@ function mutationArguments(values: {
   progress?: string;
   "budget-minutes"?: string;
 }): { shardMode: boolean; budgetMinutes: number | null } {
-  requireMeasurement(Boolean(values.baseline), "measured mutation baseline required");
   requireMeasurement(!(values.limit || values.target) || values.pilot, "--limit/--target require --pilot");
   const shardValues = [values.shard, values["shard-count"], values.progress];
   const shardMode = shardValues.some((value) => value !== undefined);
@@ -158,8 +149,6 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       root: { type: "string", default: process.cwd() },
       contract: { type: "string", default: "script/conformance/quality-contract.json" },
       decision: { type: "string", default: "script/conformance/quality-mutation-contract.json" },
-      baseline: { type: "string" },
-      base: { type: "string", default: "origin/main" },
       output: { type: "string", default: "quality-mutation-results" },
       pilot: { type: "boolean", default: false },
       limit: { type: "string" },
@@ -217,7 +206,7 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "--budget",
       String(budgetMinutes === null ? 20_000_000 : budgetMinutes * 60_000),
       "--suite-timeout",
-      "3600000",
+      String(SUITE_TIMEOUT_MS),
       ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
       ...(values.target ? ["--target", values.target] : []),
       ...(shardMode
@@ -243,14 +232,12 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
     console.error(`[mutation] pilot complete: ${JSON.stringify(pilot.selectedCounts)}`);
     return result.exitCode;
   }
-  return ratchetMutationMeasurement({
+  return recordMutationMeasurement({
     document: result.document,
     identity,
     root,
     contract: values.contract,
     directory,
-    base: values.base,
-    baseline: values.baseline,
     driftMessage: "sources changed during mutation",
   });
 }

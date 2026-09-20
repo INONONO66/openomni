@@ -20,9 +20,9 @@ on:
         type: number
         default: 8
       shard_budget_minutes:
-        description: 'Per-shard wall-clock budget in minutes before a clean partial stop'
+        description: 'Per-shard wall-clock budget in minutes before a clean partial stop (setup + baseline + reach take up to ~70 min before the budget clock starts; keep budget + 70 + one 5-minute suite timeout under the 360-minute job timeout)'
         type: number
-        default: 300
+        default: 240
       fresh_progress:
         description: 'Ignore previous shard progress artifacts (restart the campaign)'
         type: boolean
@@ -107,7 +107,7 @@ jobs:
           PILOT_TARGET: ${{ inputs.pilot_target || '' }}
           SHARD_COUNT: ${{ needs.plan.outputs.count }}
           SHARD_INDEX: ${{ matrix.shard }}
-          SHARD_BUDGET: ${{ inputs.shard_budget_minutes || 300 }}
+          SHARD_BUDGET: ${{ inputs.shard_budget_minutes || 240 }}
         run: |
           args=()
           if [[ "$PILOT_LIMIT" != 0 ]]; then
@@ -129,7 +129,7 @@ jobs:
           done &
           sampler=$!
           trap 'kill "$sampler"' EXIT
-          /usr/bin/time -v bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json "${args[@]}"
+          /usr/bin/time -v bun run script/quality-native-mutation.ts "${args[@]}"
       - name: Preserve shard progress for the next scheduled run
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -166,7 +166,7 @@ jobs:
           pattern: quality-mutation-shard-*
           path: mutation-shards
       - name: Join complete shards into the single campaign receipt
-        run: bun run script/quality-mutation-join.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json --shards mutation-shards
+        run: bun run script/quality-mutation-join.ts --shards mutation-shards
       - name: Preserve complete or failed campaign evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

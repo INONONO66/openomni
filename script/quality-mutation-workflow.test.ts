@@ -40,8 +40,10 @@ test("full mutation is an explicit scheduled workflow, never a silently skipped 
       continue;
     expect(step["continue-on-error"]).toBeUndefined();
     expect(step.if).toBeUndefined();
-    expect(jsonString(step.run)).toContain("--baseline");
+    // The receipt is measurement, not a ratchet: no baseline argument exists.
+    expect(jsonString(step.run)).not.toContain("--baseline");
     expect(jsonString(step.run)).toContain("--shard");
+    expect(jsonString(step.run)).toContain("--budget-minutes");
     expect(jsonString(step.run)).toContain("--progress");
   }
   // Sharded matrix: one failed shard must not cancel the others, and the shard
@@ -62,6 +64,6 @@ test("full mutation is an explicit scheduled workflow, never a silently skipped 
     (step) => typeof step.run === "string" && step.run.includes("script/quality-mutation-join.ts"),
   );
   expect(joinRun).toBeDefined();
-  expect(jsonString(jsonObject(joinRun ?? {}).run)).toContain("--baseline");
+  expect(jsonString(jsonObject(joinRun ?? {}).run)).not.toContain("--baseline");
   expect(jsonString(jsonObject(joinRun ?? {}).run)).toContain("--shards");
 });

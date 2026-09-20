@@ -491,6 +491,14 @@ function regexChanges(raw: string): string[] {
 	return result;
 }
 
+const EXEMPT_CATEGORIES: ReadonlySet<string> = new Set(["historical", "test", "fixture", "benchmark"]);
+
+/** Mutation targets shipped or tooling behavior; test, fixture and benchmark
+ * code is inventoried in the census but never mutated. */
+function mutable(file: { category: string; language: string }): boolean {
+	return !EXEMPT_CATEGORIES.has(file.category) && file.language !== "sql";
+}
+
 export function enumerate(
 	directory: string,
 	inventory: Inventory,
@@ -514,8 +522,7 @@ export function enumerate(
 			operators: [],
 		};
 		census.push(row);
-		const eligible = file.category !== "historical" && file.language !== "sql";
-		if (!eligible) row.syntax = "outside-executable-TS-JS-contract";
+		if (!mutable(file)) row.syntax = "outside-executable-TS-JS-contract";
 		else if (file.language === "python") {
 			row.syntax = "pending-python-AST";
 		} else {
@@ -1535,7 +1542,18 @@ function behavioralAssertion(tested: Awaited<ReturnType<typeof runTests>>): bool
 	return tested.valid && tested.exitCode === 1 && tested.failures > 0 && tested.assertions.length === tested.failures;
 }
 
-function classifyCandidate(result: Result, tested: Awaited<ReturnType<typeof runTests>>): void {
+function timedOut(tested: Awaited<ReturnType<typeof runTests>>): boolean {
+	return tested.batches.some((batch) => batch.process.timedOut);
+}
+
+export function classifyCandidate(result: Pick<Result, "outcome" | "reason" | "assertionIdentities">, tested: TestSelectionReceipt): void {
+	if (timedOut(tested)) {
+		// A bounded suite that never finishes under the mutant is a kill by
+		// non-termination (Stryker semantics); it is not an environmental fault.
+		result.outcome = "killed";
+		result.reason = "suite-timeout";
+		return;
+	}
 	if (green(tested)) {
 		result.outcome = "survived";
 		result.reason = "green-mutated-test-selection";
@@ -1776,7 +1794,7 @@ async function enumeratePython(
 			"Python operator definitions differ from frozen d945-python-mutation@1",
 		);
 	const pythonRows = enumerated.census.filter(
-		(row) => row.language === "python" && row.category !== "historical",
+		(row) => row.language === "python" && mutable(row),
 	);
 	const pythonReceipts: ProcessReceipt[] = [];
 	const pythonCapability = pythonRows.length

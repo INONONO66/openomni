@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import ts from "typescript";
-import { copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256 } from "./run-quality-mutations";
+import { classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -345,6 +345,30 @@ test("mutation main rejects an invalid invocation in process", async () => {
 });
 const { fixture, invoke, select, assertBehavioralKill, record, rows, evidence, tool, decision, runner, dependencies, FixtureError } = mutationFixture("campaign");
 type RecordValue = ReturnType<typeof record>;
+
+function selection(overrides: Partial<TestSelectionReceipt> & { timedOut?: boolean }): TestSelectionReceipt {
+  const { timedOut = false, ...rest } = overrides;
+  const process = { stage: "tests", argv: [], pid: 1, exitCode: timedOut ? null : 1, signal: null, timedOut, overflow: false, spawnError: false, stdout: "", stderr: "", stdoutSha256: "", stderrSha256: "", cleanupExit: null };
+  return { batches: [{ process, junit: "", tests: 1, failures: 1, assertions: ["t"], valid: true }], files: ["src/a.test.ts"], tests: 1, failures: 1, assertions: ["t"], valid: true, exitCode: 1, ...rest };
+}
+
+test("classifyCandidate: a bounded suite that never finishes is a kill by non-termination, not infrastructure", () => {
+  const timed = { outcome: "survived" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(timed, selection({ timedOut: true, failures: 0, assertions: [], valid: false, exitCode: 1 }));
+  expect([timed.outcome, timed.reason]).toEqual(["killed", "suite-timeout"]);
+
+  const survivor = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(survivor, selection({ failures: 0, assertions: [], exitCode: 0 }));
+  expect([survivor.outcome, survivor.reason]).toEqual(["survived", "green-mutated-test-selection"]);
+
+  const behavioral = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(behavioral, selection({}));
+  expect([behavioral.outcome, behavioral.reason, behavioral.assertionIdentities]).toEqual(["killed", "behavioral-assertion", ["t"]]);
+
+  const broken = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+  classifyCandidate(broken, selection({ assertions: [], exitCode: 1 }));
+  expect([broken.outcome, broken.reason]).toEqual(["infrastructure", "failure-without-complete-behavioral-assertions"]);
+});
 
 test("rendered process receipts redact split and inline secrets without hiding ordinary arguments", async () => {
   const command = [process.execPath, "-e", "process.exit(7)", "--"];
@@ -828,9 +852,10 @@ test("same-site candidates record each covering test exactly once in order", asy
 	expect(sites[0]?.site).toEqual(sites[1]?.site);
 	expect(result.selected.map((row) => row.testSelection)).toEqual([sha256(JSON.stringify(tests)), sha256(JSON.stringify(tests))]);
 	expect(result.selected.map((row) => row.outcome)).toEqual(["survived", "killed"]);
-	expect(rows(result.report.results)).toHaveLength(15);
+	// Test files are censused, never mutated: only src/a.ts contributes candidates.
+	expect(rows(result.report.results)).toHaveLength(3);
 	expect(rows(result.report.results).map(record).filter((row) => row.path === "src/a.ts")).toHaveLength(3);
-	expect(result.report.counts).toEqual({ killed: 1, survived: 1, noCoverage: 0, invalid: 0, infrastructure: 0, uncompleted: 13 });
+	expect(result.report.counts).toEqual({ killed: 1, survived: 1, noCoverage: 0, invalid: 0, infrastructure: 0, uncompleted: 1 });
 	expect(result.report.selectedCounts).toEqual({ killed: 1, survived: 1, noCoverage: 0, invalid: 0, infrastructure: 0, uncompleted: 0 });
 	expect(rows(record(result.report.reachMap).runs).map(record).map((run) => run.test)).toEqual([...tests, "src/c.test.ts"]);
 	expect(result.report.complete).toBe(true);
@@ -998,17 +1023,34 @@ test("GitHub grouped diagnostics preserve kills without promoting crashes", asyn
 	}
 }, 90000);
 
-test("bounded mutant hang is infrastructure, not killed", async () => {
+test("bounded mutant hang is killed by suite timeout, not infrastructure", async () => {
 	const input = await fixture(
 		"export const run = () => true;",
 		"if(!run()){while(true){}}expect(run()).toBe(true);",
 	);
 	const result = await invoke(input, "timeout", select("boolean-literal"));
-	expect(result.code).toBe(2);
-	expect(result.selected[0]?.outcome).toBe("infrastructure");
+	expect(result.code).toBe(0);
+	expect(result.report.complete).toBe(true);
+	expect(result.selected[0]?.outcome).toBe("killed");
 	expect(result.selected[0]?.typecheck).toBe("valid");
-	expect(result.selected[0]?.reason).toBe("failure-without-complete-behavioral-assertions");
+	expect(result.selected[0]?.reason).toBe("suite-timeout");
 	expect(rows(result.selected[0]?.receipts).map(record).at(-1)?.timedOut).toBe(true);
+}, 90000);
+
+test("test, fixture and benchmark files are censused but never mutated", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);", {
+		"src/fixtures/data.ts": "export const value = 1 + 2;",
+		"src/a.bench.ts": "export const bench = () => 1 + 2;",
+	});
+	const result = await invoke(input, "universe");
+	const census = new Map(rows(result.report.census).map(record).map((row) => [row.path, row]));
+	for (const path of ["src/a.test.ts", "src/fixtures/data.ts", "src/a.bench.ts"]) {
+		expect(census.get(path)?.category).not.toBe("production");
+		expect(census.get(path)?.syntax).toBe("outside-executable-TS-JS-contract");
+		expect(result.selected.some((row) => row.path === path)).toBe(false);
+	}
+	expect(census.get("src/a.ts")?.syntax).toBe("parsed");
+	expect(result.selected.some((row) => row.path === "src/a.ts")).toBe(true);
 }, 90000);
 
 test("exhausted budget accounts every candidate as uncompleted", async () => {
@@ -1021,7 +1063,8 @@ test("exhausted budget accounts every candidate as uncompleted", async () => {
 }, 90000);
 
 test("work budget cannot silently turn an unfinished full run into a selected pass", async () => {
-	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
+	// Two production candidates (both boolean literals) so a budget of one leaves work behind.
+	const input = await fixture("export const run = () => true && false;", "expect(run()).toBe(false);");
 	const result = await invoke(input, "max-candidates", ["--max-candidates", "1"]);
 	expect(result.code).toBe(2);
 	expect(result.selected.length).toBeGreaterThan(1);
@@ -1089,16 +1132,6 @@ test("probe side effects cannot contaminate the fresh mutation copy", async () =
 	expect(result.code).toBe(0);
 	expect(result.selected[0]?.outcome).toBe("killed");
 	expect(existsSync(join(input.root, "state"))).toBe(false);
-}, 90000);
-
-test("unfiltered execution includes mutations of tests and cannot claim global zero", async () => {
-	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
-	const result = await invoke(input, "full-census");
-	expect(result.report.full).toBe(true);
-	expect(record(result.report.counts).uncompleted).toBe(0);
-	expect(result.selected.some((row) => row.path === "src/a.test.ts")).toBe(true);
-	expect(result.selected.some((row) => row.outcome === "survived")).toBe(true);
-	expect(result.code).not.toBe(0);
 }, 90000);
 
 test("frozen inventory omission is an analysis error from canonical verifier", async () => {
