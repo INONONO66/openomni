@@ -1887,17 +1887,19 @@ async function compilerBatch(
 	);
 }
 
-async function executeSelection(
-	options: Options,
-	compilerWorker: MutationCompilerWorker | null,
-	contract: Contract,
-	temporary: string,
-	started: number,
-	enumerated: ReturnType<typeof enumerate>,
-	tests: string[],
-	errors: string[],
-	reachMap: Map<string, ProbeEvidence>,
-): Promise<Result[]> {
+type ExecutionContext = {
+	options: Options;
+	compilerWorker: MutationCompilerWorker | null;
+	contract: Contract;
+	temporary: string;
+	started: number;
+	enumerated: ReturnType<typeof enumerate>;
+	tests: string[];
+	errors: string[];
+	reachMap: Map<string, ProbeEvidence>;
+};
+async function executeSelection(context: ExecutionContext): Promise<Result[]> {
+	const { options, compilerWorker, contract, temporary, started, enumerated, tests, errors, reachMap } = context;
 	const results: Result[] = [];
 	const selected = selectedCandidates(options, enumerated.candidates);
 	if (!selected.length) errors.push("zero selected candidates");
@@ -2019,18 +2021,11 @@ function verifyCarried(progress: ShardProgress, slice: Candidate[]): void {
 	}
 }
 async function executeShardSelection(
-	options: Options,
-	compilerWorker: MutationCompilerWorker | null,
-	contract: Contract,
-	temporary: string,
-	started: number,
-	enumerated: ReturnType<typeof enumerate>,
-	tests: string[],
-	errors: string[],
-	reachMap: Map<string, ProbeEvidence>,
+	context: ExecutionContext,
 	pending: Candidate[],
 	progress: ShardProgress,
 ): Promise<{ executed: Result[]; budgetExhausted: boolean }> {
+	const { options, compilerWorker, contract, temporary, started, enumerated, tests, errors, reachMap } = context;
 	const shard = options.shard ?? fail("arguments", "Shard execution requires shard options");
 	const pendingIds = new Set(pending.map((candidate) => candidate.id));
 	const executed: Result[] = [];
@@ -2135,6 +2130,36 @@ async function campaignBaseline(input: {
 	}
 	return baseline;
 }
+function campaignDocumentBase(context: {
+	options: Options;
+	executionTreeSha256: string;
+	pythonCapability: Awaited<ReturnType<typeof enumeratePython>>;
+	tests: string[];
+	reachMap: ReachMap | null;
+	sourceDiagnostics: string[];
+}) {
+	const { options, executionTreeSha256, pythonCapability, tests, reachMap, sourceDiagnostics } = context;
+	return {
+		executionTreeSha256,
+		pythonCapability,
+		testSelections: [{ id: sha256(JSON.stringify(tests)), paths: tests }],
+		reachMap,
+		sourceDiagnostics,
+		sourceDiagnosticsSha256: sha256(JSON.stringify(sourceDiagnostics)),
+		inventorySha256: options.inventoryHash,
+		contractSha256: options.contractHash,
+		decisionSha256: options.decisionHash,
+		inventoryToolSha256: options.inventoryToolHash,
+		runnerSha256: sha256(readFileSync(import.meta.path)),
+		runtime: {
+			version: Bun.version,
+			path: process.execPath,
+			sha256: sha256(readFileSync(process.execPath)),
+			typescript: ts.version,
+			compilerSha256: sha256(readFileSync(require.resolve("typescript"))),
+		},
+	};
+}
 function emitShardReceipt(context: {
 	options: Options;
 	shardOptions: NonNullable<Options["shard"]>;
@@ -2199,24 +2224,7 @@ function emitShardReceipt(context: {
 				run: shardProgress.run,
 				carriedProofs: shardProgress.proofs,
 			},
-			executionTreeSha256,
-			pythonCapability,
-			testSelections: [{ id: sha256(JSON.stringify(tests)), paths: tests }],
-			reachMap: reachReceipt,
-			sourceDiagnostics,
-			sourceDiagnosticsSha256: sha256(JSON.stringify(sourceDiagnostics)),
-			inventorySha256: options.inventoryHash,
-			contractSha256: options.contractHash,
-			decisionSha256: options.decisionHash,
-			inventoryToolSha256: options.inventoryToolHash,
-			runnerSha256: sha256(readFileSync(import.meta.path)),
-			runtime: {
-				version: Bun.version,
-				path: process.execPath,
-				sha256: sha256(readFileSync(process.execPath)),
-				typescript: ts.version,
-				compilerSha256: sha256(readFileSync(require.resolve("typescript"))),
-			},
+			...campaignDocumentBase({ options, executionTreeSha256, pythonCapability, tests, reachMap: reachReceipt, sourceDiagnostics }),
 			canonical,
 			baseline,
 			census,
@@ -2319,16 +2327,13 @@ async function campaign(options: Options): Promise<number> {
 		const reach = errors.length || !baseline ? { map: new Map<string, ProbeEvidence>(), receipt: null } : await buildReachMap(options, frozen, temporary, reachCandidates, baseline.files, executionTreeSha256);
 		removeExecution(join(temporary, "reach"));
 		compilerWorker = errors.length || !executionRequired ? null : new MutationCompilerWorker(frozen, contract, inventory, executionTreeSha256, options.timeout * Math.max(1, contract.projects.length));
+		const executionContext: ExecutionContext = {
+			options, compilerWorker, contract, temporary, started, enumerated, tests, errors, reachMap: reach.map,
+		};
 		const shardExecution = shardProgress
-			? await executeShardSelection(
-				options, compilerWorker, contract, temporary, started, enumerated, tests, errors, reach.map, pending, shardProgress,
-			)
+			? await executeShardSelection(executionContext, pending, shardProgress)
 			: null;
-		const results = shardExecution
-			? []
-			: await executeSelection(
-				options, compilerWorker, contract, temporary, started, enumerated, tests, errors, reach.map,
-			);
+		const results = shardExecution ? [] : await executeSelection(executionContext);
 		if (compilerWorker) await compilerWorker.close();
 		console.error("[mutation] verifying restoration and cleaning execution copies");
 		verifySources(options.root, inventory);
@@ -2364,24 +2369,7 @@ async function campaign(options: Options): Promise<number> {
 				counts,
 				selectedCounts,
 				errors,
-				executionTreeSha256,
-				pythonCapability,
-				testSelections: [{ id: sha256(JSON.stringify(tests)), paths: tests }],
-				reachMap: reach.receipt,
-				sourceDiagnostics,
-				sourceDiagnosticsSha256: sha256(JSON.stringify(sourceDiagnostics)),
-				inventorySha256: options.inventoryHash,
-				contractSha256: options.contractHash,
-				decisionSha256: options.decisionHash,
-				inventoryToolSha256: options.inventoryToolHash,
-				runnerSha256: sha256(readFileSync(import.meta.path)),
-				runtime: {
-					version: Bun.version,
-					path: process.execPath,
-					sha256: sha256(readFileSync(process.execPath)),
-					typescript: ts.version,
-					compilerSha256: sha256(readFileSync(require.resolve("typescript"))),
-				},
+				...campaignDocumentBase({ options, executionTreeSha256, pythonCapability, tests, reachMap: reach.receipt, sourceDiagnostics }),
 				canonical,
 				baseline,
 				census: enumerated.census,

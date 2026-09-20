@@ -94,6 +94,36 @@ export function normalizeMutation(value: Json, identity: Identity, root: string)
   });
   return { analyzed: ["mutation"], findings };
 }
+export function ratchetMutationMeasurement(context: {
+  document: Json;
+  identity: Identity;
+  root: string;
+  contract: string;
+  directory: string;
+  base: string;
+  baseline: string | undefined;
+  driftMessage: string;
+}): number {
+  const { document, identity, root, contract, directory, base, baseline, driftMessage } = context;
+  const measurement = normalizeMutation(document, identity, root);
+  requireMeasurement(fingerprint(root, contract).inventoryHash === identity.inventoryHash, driftMessage);
+  const current = resolve(directory, "current.json");
+  writeFileSync(current, JSON.stringify(mergeMeasurements(identity.paths, [measurement])), {
+    flag: "wx",
+  });
+  return ratchetMain([
+    "--root",
+    root,
+    "--contract",
+    resolve(root, contract),
+    "--base",
+    base,
+    "--baseline",
+    baseline ?? "",
+    "--current",
+    current,
+  ]);
+}
 function mutationArguments(values: {
   baseline?: string;
   limit?: string;
@@ -213,26 +243,15 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
     console.error(`[mutation] pilot complete: ${JSON.stringify(pilot.selectedCounts)}`);
     return result.exitCode;
   }
-  const measurement = normalizeMutation(result.document, identity, root);
-  requireMeasurement(
-    fingerprint(root, values.contract).inventoryHash === identity.inventoryHash,
-    "sources changed during mutation",
-  );
-  const current = resolve(directory, "current.json");
-  writeFileSync(current, JSON.stringify(mergeMeasurements(identity.paths, [measurement])), {
-    flag: "wx",
-  });
-  return ratchetMain([
-    "--root",
+  return ratchetMutationMeasurement({
+    document: result.document,
+    identity,
     root,
-    "--contract",
-    contract,
-    "--base",
-    values.base,
-    "--baseline",
-    values.baseline ?? "",
-    "--current",
-    current,
-  ]);
+    contract: values.contract,
+    directory,
+    base: values.base,
+    baseline: values.baseline,
+    driftMessage: "sources changed during mutation",
+  });
 }
 if (import.meta.main) process.exitCode = await mutationMain();

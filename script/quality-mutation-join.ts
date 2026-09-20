@@ -12,9 +12,8 @@ import {
   type Json,
 } from "./quality-inventory";
 import { fingerprint } from "./quality-ci-input";
-import { mergeMeasurements, requireMeasurement, type Identity } from "./quality-ci-receipt";
-import { normalizeMutation } from "./quality-native-mutation";
-import { ratchetMain } from "./quality-ratchet";
+import { requireMeasurement, type Identity } from "./quality-ci-receipt";
+import { ratchetMutationMeasurement } from "./quality-native-mutation";
 
 const outcomes = ["killed", "survived", "noCoverage", "invalid", "infrastructure", "uncompleted"] as const;
 export type JoinOutcome =
@@ -134,26 +133,15 @@ export function joinMain(argv = Bun.argv.slice(2)): number {
     JSON.stringify({ command: ["quality-mutation-join"], exitCode: 0, document: joined.document }),
     { flag: "wx" },
   );
-  const measurement = normalizeMutation(joined.document, identity, root);
-  requireMeasurement(
-    fingerprint(root, values.contract).inventoryHash === identity.inventoryHash,
-    "sources changed during mutation join",
-  );
-  const current = resolve(directory, "current.json");
-  writeFileSync(current, JSON.stringify(mergeMeasurements(identity.paths, [measurement])), {
-    flag: "wx",
-  });
-  return ratchetMain([
-    "--root",
+  return ratchetMutationMeasurement({
+    document: joined.document,
+    identity,
     root,
-    "--contract",
-    resolve(root, values.contract),
-    "--base",
-    values.base,
-    "--baseline",
-    values.baseline ?? "",
-    "--current",
-    current,
-  ]);
+    contract: values.contract,
+    directory,
+    base: values.base,
+    baseline: values.baseline,
+    driftMessage: "sources changed during mutation join",
+  });
 }
 if (import.meta.main) process.exitCode = joinMain();
