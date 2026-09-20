@@ -174,6 +174,17 @@ The archive CLI creates a native SQLite image plus a v2 all-table receipt at exp
 
 ## Census and final quality: current versus required
 
+**#1116 lean PR gate (2026-09-20):** the per-PR Quality ratchet stack (census
+legs, exact statement evidence, coverage ratchets, metrics/clone legs, their
+receipts and the `quality-baseline-lcov-bound`/`coverage-baseline` fragments)
+is deleted. PR admission is build, types, lint (including cognitive-complexity
+max 21), dependency rules, tests, and the diff-scoped patch-coverage gate
+(`script/check-patch-coverage.ts`); deep audits run in the scheduled
+`quality-mutation.yml` workflow only. The #945 absolute-distance receipt in
+[SLOP](SLOP.md#945-absolute-census-receipt-2026-09-19-main-f5ea0e32) remains
+the record of quality debt at its measurement HEAD; a green lean gate makes no
+claim about it.
+
 | Gate/row | Current evidence | Not established |
 | --- | --- | --- |
 | Export ratchet / A9 | `script/check-dead-exports.ts`, empty `script/conformance/knip-baseline.json`, package-entry export scan and synthetic Knip discrimination test are wired into CI. | Benchmark/test/barrel/adapter-only references are not yet comprehensively excluded as #945 requires. |
@@ -181,7 +192,7 @@ The archive CLI creates a native SQLite image plus a v2 all-table receipt at exp
 | Ledger producers | `script/ledger-producer-manifest.ts` and its drift test enumerate current append/SQL writers. | This is not an all-store production read/write consumer census. |
 | E3 | No new fixture code or prose snapshots in this docs patch. | Reproducible separate production/test clone-zero receipts remain #945 work. |
 | E4 | Required by the Owner-approved #945 amendment; **not parked**. | Explicit/implicit TypeScript any type0 and unknown type0, with no boundary exemption. |
-| E5 | Script tests and script coverage ratchet lane exist. | Campaign-wide coverage100%, complexity and mutation guarantees, including the gates themselves. |
+| E5 | Script tests and the per-PR patch-coverage gate exist (#1116 deleted the script coverage ratchet lane). | Campaign-wide coverage100%, complexity and mutation guarantees, including the gates themselves. |
 | E7 | Runtime prompt has no deleted injection or tool instruction; structural assembly assertions already exist. | `apps/openomni/test/prompt.test.ts` still pins code-mode prose. E7 is not closed by a documentation-only PR; a negative signature/sentinel mutation gate is not claimed shipped. |
 
 #945 remains open. Its acceptance also requires cyclomatic<22, cognitive<22, Halstead difficulty<80, CRAP<25, surviving mutants0, frozen analyzer versions/inventory/settings/coverage dimensions/operators, and full scheduled/final-convergence mutation execution. A passing ratchet or lint command does not establish any of those absent receipts. Local verification results, including pre-existing failures, are recorded in [SLOP.md](SLOP.md); no zero-failure campaign receipt is claimed.

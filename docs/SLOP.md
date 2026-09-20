@@ -402,3 +402,36 @@ Read-only sweep of slop not already recorded above and not named by the W1–W5 
 | H17 | `script/check-quality-coverage.ts:155` vs `quality-json.ts:20`; `check-coverage-ratchet.ts:217` vs `quality-native-lcov.ts:62` | Duplicate JSON/LCOV parsers | W5 #1113 | open |
 | H18 | `gateway/schema.ts:105-106,365`, `transcript/index.ts:6-7`, `provider/contract.ts:98-123`, `resolve-route.ts:4-9`, `github/surface.ts:59-60,243` | Stale comments describing deleted behaviour | W5 #1113 (or the wave that deletes the surrounding code first) | open |
 | H19 | `docs/DESIGN.md` (475 lines) | Delivery receipt superseded by KERNEL.md / final-kernel-design | W5 #1113 docs | open |
+
+## §I #1116 lean PR gate: quality-ratchet stack deletion (2026-09-20)
+
+PR A of #1116 replaced the per-PR Quality ratchet with the lean gate and
+deleted the ratchet stack in one PR:
+
+- **Deleted jobs** (`.github/workflows/ci.yml`): Quality Static (5 legs),
+  Quality Exact (sharded), Quality Gates, Quality (fan-in), Script Coverage,
+  plus the coverage-receipt begin/seal steps in the test lanes.
+- **Deleted scripts/tests/baselines** (~55 files): `check-census*`,
+  `check-coverage-ratchet`, `check-quality-coverage`, `check-quality-metrics`,
+  `quality-measure`, `quality-ci-{bound,coverage,exact,legs,metrics,shard}`,
+  `quality-coverage-record`, `quality-coverage/`, `quality-metrics/` (except
+  `input.ts`), `quality-proof`, `quality-schema`, `report-source-metrics`,
+  `census-fixture`, their tests, `conformance/coverage-baseline.json`,
+  `conformance/quality-baseline-lcov-bound*` and
+  `conformance/quality-python-coverage.ini`.
+- **Kept**: the scheduled mutation workflow (`quality-mutation.yml`,
+  `run-quality-mutations*.ts`, `quality-mutation-*`, `quality-native-mutation`,
+  `check-quality-python`) and its minimal import closure
+  (`quality-{inventory,plan,ratchet,source,json,ci-input,ci-receipt,native-lcov,native-process}`,
+  `check-types-census`, `census-program`, `quality-metrics/input.ts`).
+- **Added**: `complexity/noExcessiveCognitiveComplexity` (max 21) in
+  `biome.json` with ~20 violations fixed by extraction (no suppressions; a
+  scoped override exempts only the #1109-frozen `run-quality-mutations.ts` and
+  `quality-mutation-compiler.ts`), and the PR-only `Patch Coverage` job over
+  `script/check-patch-coverage.ts`.
+- H17 above is partially closed by deletion: the duplicate parsers in
+  `check-quality-coverage.ts` and `check-coverage-ratchet.ts` no longer exist;
+  `quality-json.ts` and `quality-native-lcov.ts` are the single owners.
+- The #945 absolute census receipt above keeps its historical measurement; the
+  baseline fragments it describes are deleted at HEAD and any future closure
+  claim requires a fresh scheduled-campaign measurement, not a ratchet state.
