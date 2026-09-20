@@ -1026,6 +1026,8 @@ type TestsReceipt = {
 	assertions: string[];
 	valid: boolean;
 };
+/** Ceiling for the green-selection phases (baseline, reach), which run whole packages or instrumented files; `--suite-timeout` only bounds mutant executions. */
+export const SELECTION_SUITE_TIMEOUT_MS = 3_600_000;
 export type TestSelectionReceipt = {
 	batches: TestsReceipt[];
 	files: string[];
@@ -1251,7 +1253,7 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		if (readFileSync(join(directory, test), "utf8").trim() === "") continue;
 		rmSync(markers, { recursive: true, force: true });
 		mkdirSync(markers);
-		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, options.suiteTimeout, environment);
+		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, SELECTION_SUITE_TIMEOUT_MS, environment);
 		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0) {
 			const assertions = receipt.assertions.length ? receipt.assertions.join(", ") : "<none>";
 			const stderr = receipt.batches.map((batch) => batch.process.stderr).join("\n").slice(-2048);
@@ -2140,7 +2142,7 @@ async function campaignBaseline(input: {
 	console.error("[mutation] baseline tests starting");
 	const baseline = errors.length || !executionRequired
 		? null
-		: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
+		: await runTests(base, tests, options.timeout, temporary, options.python, SELECTION_SUITE_TIMEOUT_MS);
 	if (baseline && !green(baseline)) {
 		const red = describeRedBaseline(baseline.batches);
 		process.stderr.write(red.lines.map((line) => `[mutation] baseline red: ${line}\n`).join(""));

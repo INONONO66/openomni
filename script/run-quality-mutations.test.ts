@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import ts from "typescript";
-import { classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
+import { SELECTION_SUITE_TIMEOUT_MS, classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -1022,6 +1022,17 @@ test("GitHub grouped diagnostics preserve kills without promoting crashes", asyn
 		else process.env.GITHUB_ACTIONS = previous;
 	}
 }, 90000);
+
+test("baseline and reach selection runs are bounded by the selection ceiling, not --suite-timeout", () => {
+	// Run 35539891540: every shard's baseline was SIGKILLed after max(300 s, 15 s x files) because the mutant suite timeout also bounded the green-selection phases.
+	expect(SELECTION_SUITE_TIMEOUT_MS).toBe(3_600_000);
+	const source = readFileSync(join(import.meta.dir, "run-quality-mutations.ts"), "utf8");
+	const selectionCalls = source.match(/runTests\([^;]*SELECTION_SUITE_TIMEOUT_MS[^;]*\);/g) ?? [];
+	const mutantCalls = source.match(/runTests\([^;]*options\.suiteTimeout[^;]*\);/g) ?? [];
+	expect(selectionCalls).toHaveLength(2);
+	expect(mutantCalls).toHaveLength(2);
+	for (const call of selectionCalls) expect(call).not.toContain("options.suiteTimeout");
+});
 
 test("bounded mutant hang is killed by suite timeout, not infrastructure", async () => {
 	const input = await fixture(
