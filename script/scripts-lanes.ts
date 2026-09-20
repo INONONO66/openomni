@@ -28,6 +28,8 @@ export const scriptsLanes = {
     "check-quality-python.test.ts",
     "check-types-census.test.ts",
     "conformance/summarize-benchmark-runs.test.ts",
+    "quality-audit.test.ts",
+    "quality-audit-issues.test.ts",
     "quality-ci-receipt.test.ts",
     "quality-inventory.test.ts",
     "quality-json.test.ts",
@@ -44,7 +46,11 @@ export const scriptsLanes = {
   ],
 } as const;
 export type ScriptsLane = keyof typeof scriptsLanes;
-export const scriptPartitions = ["scripts-contracts", "scripts-tooling-1", "scripts-tooling-2"] as const;
+export const scriptPartitions = [
+  "scripts-contracts",
+  "scripts-tooling-1",
+  "scripts-tooling-2",
+] as const;
 // #1116 lean PR gate: the ratchet-only tooling suites are gone; the surviving
 // mutation-runner suites split by their measured heavy hitters
 // (run-quality-mutations ~197s uninstrumented, the full-repository compiler
@@ -57,6 +63,8 @@ export const scriptToolingPartitions = {
     "run-quality-mutations-operators.test.ts",
     "quality-native-mutation.test.ts",
     "quality-json.test.ts",
+    "quality-audit.test.ts",
+    "quality-audit-issues.test.ts",
     "quality-native-process.test.ts",
   ],
   "scripts-tooling-2": [
@@ -81,13 +89,19 @@ export const scriptContracts = [
 ] as const;
 /** Python analyzer self-tests: explicit inventory, run by the first tooling shard. */
 export const pythonSelfTests = ["quality-mutation/python-engine.test.py"] as const;
-export function pythonTests(actual = [...new Bun.Glob("**/{test_*,*.test}.py").scanSync({ cwd: import.meta.dir })]): readonly string[] {
+export function pythonTests(
+  actual = [...new Bun.Glob("**/{test_*,*.test}.py").scanSync({ cwd: import.meta.dir })],
+): readonly string[] {
   const missing = actual.filter((path) => !pythonSelfTests.some((entry) => entry === path));
   const absent = pythonSelfTests.filter((path) => !actual.includes(path));
-  if (missing.length || absent.length) throw new Error(`python self-test drift: ${[...missing, ...absent].join(", ")}`);
+  if (missing.length || absent.length)
+    throw new Error(`python self-test drift: ${[...missing, ...absent].join(", ")}`);
   return pythonSelfTests;
 }
-export function scriptTests(lane: ScriptsLane, actual = [...new Bun.Glob("**/*.test.ts").scanSync({ cwd: import.meta.dir })]): readonly string[] {
+export function scriptTests(
+  lane: ScriptsLane,
+  actual = [...new Bun.Glob("**/*.test.ts").scanSync({ cwd: import.meta.dir })],
+): readonly string[] {
   const assigned = Object.values(scriptsLanes).flat();
   const missing = actual.filter((path) => !assigned.some((entry) => entry === path));
   const absent = assigned.filter((path) => !actual.includes(path));
@@ -97,9 +111,20 @@ export function scriptTests(lane: ScriptsLane, actual = [...new Bun.Glob("**/*.t
   return scriptsLanes[lane];
 }
 export function scriptTestCommand(partition: string) {
-  if (!scriptPartitions.some((key) => key === partition)) throw new Error(`invalid script partition: ${partition}`);
+  if (!scriptPartitions.some((key) => key === partition))
+    throw new Error(`invalid script partition: ${partition}`);
   const tooling = partition !== "scripts-contracts";
   const lane = scriptTests(tooling ? "scripts-tooling" : "scripts-contracts");
   const tests = tooling ? scriptToolingPartitions[partition as ScriptToolingPartition] : lane;
-  return ["bun", "test", ...tests.map((path) => `./${path}`), "--timeout", "15000", "--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage", ...(tooling ? [`--timings=${join("coverage", "timings.json")}`, "--update-timings"] : [])];
+  return [
+    "bun",
+    "test",
+    ...tests.map((path) => `./${path}`),
+    "--timeout",
+    "15000",
+    "--coverage",
+    "--coverage-reporter=lcov",
+    "--coverage-dir=coverage",
+    ...(tooling ? [`--timings=${join("coverage", "timings.json")}`, "--update-timings"] : []),
+  ];
 }

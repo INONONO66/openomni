@@ -1,0 +1,22 @@
+{
+  "path": ["../packages", "../apps", "../script"],
+  "pattern": "**/*.{ts,tsx,js,jsx,py}",
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/fixtures/**",
+    "**/fixture/**",
+    "**/test/**",
+    "**/test-e2e/**",
+    "**/__tests__/**",
+    "**/*.{test,spec,bench}.{ts,tsx,js,jsx,py}",
+    "**/test_*.py",
+    "**/*.d.ts"
+  ],
+  "absolute": true,
+  "minLines": 5,
+  "minTokens": 50,
+  "reporters": ["json"],
+  "output": "../quality-audit-input/clones-production"
+}
