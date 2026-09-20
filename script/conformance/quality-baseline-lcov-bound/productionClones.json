@@ -37,33 +37,6 @@
   },
   {
     "gate": "productionClones",
-    "path": "apps/openomni/src/tools/code/bash.ts",
-    "line": 48,
-    "endLine": 54,
-    "symbol": "602e21bca585bc6e3f09b1b19e6a457cd95cdea9a94a7134795f2501e345d05a",
-    "value": 50,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "apps/openomni/src/tools/fs/edit.ts",
-    "line": 13,
-    "endLine": 18,
-    "symbol": "df4ec57506ec0d50ccb7deab31692af25bd958f170cfad4e43ca30329fd3970c",
-    "value": 62,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "apps/openomni/src/tools/fs/write.ts",
-    "line": 17,
-    "endLine": 22,
-    "symbol": "df4ec57506ec0d50ccb7deab31692af25bd958f170cfad4e43ca30329fd3970c",
-    "value": 62,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
     "path": "packages/agent/src/core/message-factory.ts",
     "line": 4,
     "endLine": 14,
@@ -97,15 +70,6 @@
     "symbol": "804f0bdd05f396f5463d31be03bff3e61c5f15d0e4a9d290a77ebbc78bb01e4f",
     "value": 82,
     "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/agent/src/session-history.ts",
-    "line": 106,
-    "endLine": 116,
-    "symbol": "9ff2a068976435d1d315df71a8a0b3bb76cf74df95240aa9b7570162131020a7",
-    "value": 72,
-    "count": 2
   },
   {
     "gate": "productionClones",
@@ -293,114 +257,6 @@
     "line": 171,
     "endLine": 181,
     "symbol": "b816cefa6d4393113bae89b149eeafece6694f591c39f55c4dd5fe0874fc7cc2",
-    "value": 63,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 434,
-    "endLine": 446,
-    "symbol": "04d0f34d06ea30c90488081c37a2bb1bd2fe0ecc785ac270b3aa547b0c869a4c",
-    "value": 61,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 543,
-    "endLine": 553,
-    "symbol": "5d798bb7008b278636a146c0bd7c1f0022ee8205ba6b9f3ae0f9edbf14d3afee",
-    "value": 58,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 722,
-    "endLine": 740,
-    "symbol": "833188cff7812d570ca48d504a20537c43c15fbfa9648c20ba7b4946cd8ef6ec",
-    "value": 115,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 221,
-    "endLine": 232,
-    "symbol": "9a917bf96f7dc08819db12b6198dd0e6a74d448ffe4fd7c84ba997898d2c2160",
-    "value": 84,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 555,
-    "endLine": 566,
-    "symbol": "a358673f8a052d0fffceebda263601ded943b86aaee0e8d05d28368dc30a28b9",
-    "value": 92,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 447,
-    "endLine": 463,
-    "symbol": "a388740d2f9f5e34f814e3e4d0c8f3850bfcfd0076cf720d87fd28b5cfd4776a",
-    "value": 95,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 705,
-    "endLine": 715,
-    "symbol": "b419ef6328911c042b7967b2da9d996916233a46b8c26a472af391da1e4ed773",
-    "value": 60,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 235,
-    "endLine": 258,
-    "symbol": "c7fa6401e776a5c6c39b641f52ffd0835805a59a048d8ce6ba14f4243b1ea7de",
-    "value": 130,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 405,
-    "endLine": 415,
-    "symbol": "d48cf4e2e2325a1bcaa047635f341bf5911092780e2f1b6fcbe6fbc0cd7b6f21",
-    "value": 66,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 504,
-    "endLine": 521,
-    "symbol": "da8549ea09c2f8d34602b1c7aff9157801affaf6ec9546c65c2e100775f4ba58",
-    "value": 147,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 415,
-    "endLine": 428,
-    "symbol": "db77bf1a53ecdf28c3fb55701bce1016445b6dfdfebcd6d85833dd4e026a5db3",
-    "value": 80,
-    "count": 1
-  },
-  {
-    "gate": "productionClones",
-    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
-    "line": 85,
-    "endLine": 96,
-    "symbol": "eac92ece79833f2d2f9e3b823608314dcb8384e5b05350fed9058403b86ce8a0",
     "value": 63,
     "count": 1
   },

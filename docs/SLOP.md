@@ -376,3 +376,29 @@ Main-push evidence at `f5ea0e32`: CI run 35447606308 completed success (49 jobs 
 Full mutation: campaign run 35447662597 dispatched on `f5ea0e32` (`quality-mutation.yml`, `pilot_limit=0`) reached compiler analysis (182,119 candidates, 0 diagnostics) and a green baseline (4,757 tests, 0 failures, exit 0), then exited 1 in the reach phase on `apps/openomni/test/code-mode-e2e.test.ts` (12/14 tests failing: `IpcTimeoutError: request timeout: machine.run_code`, cells "still running"). Cause: reach probes named bare `process`, and `packages/codemode/src/kernel.ts` declares a local `const process = spawn(...)` in `start()`, so the probe called `ChildProcess.getBuiltinModule` and killed every interpreter start. Fixed by #1103 (`97ec5b07`, probes reach globals only through `globalThis`); run 35455021958 re-dispatched on `97ec5b07`. No surviving-mutant count exists yet: no campaign has reached the execution phase.
 
 Disposition: #945's literal-zero definition of done is **not met** at this HEAD. The gates, receipts and campaign infrastructure are wired and fail-closed (#1082, #1088–#1102); the remaining work is reduction of the baseline above, which is measured work with no ambiguity, not tooling. No baseline row was lowered by exemption in this campaign.
+
+## §H 2026-09-20 sweep (main `84704df2`, session 01a0bddf)
+
+Read-only sweep of slop not already recorded above and not named by the W1–W5 kernel ladder (#930). Five lanes, 61 findings; lane reports and issue triage under `.omo/reports/slop-sweep-20260920/`. Rows close per merged PR; ✅ = closed by `chore/slop-hygiene-20260920` / `fix/completion-budget-ipc-classifier-20260920`.
+
+| Row | Location | Slop | Owner | State |
+| --- | --- | --- | --- | --- |
+| H1 (SD04) | `script/conformance/quality-baseline-lcov-bound*` | 1,830 baseline rows (multiplicity 3,248) for 38 deleted files; inventory 938 → 900, rows 60,509 → 58,679. Shrink only, no floor lowered | hygiene PR | ✅ |
+| H2 (SD05) | `docs/implementation-status.md` runtime-administration row | Claimed the separate `approval` tool and `tools/mutation|authority` paths deleted in `239b4273` | hygiene PR | ✅ |
+| H3 (SD06) | `AGENTS.md` header | "retains the legacy catalog entries pending stage 2" after stage 2 landed | hygiene PR | ✅ |
+| H4 (AU09) | `apps/openomni/src/tools/completion.ts` | Per-cell 32-call budget (#842) was one process-wide counter: `createTools` caches one catalog per `CatalogPorts`, so the closure counter was shared by every cell and session. Budget now keyed by `ctx.turnId` (= cell id at the cell door) | fix PR | ✅ |
+| H5 | `packages/ipc/src/server.ts` vs `peer-request-table.ts` | Two wire-message classifiers (`decodeMessage` and `dispatch`) | fix PR: `classifyIpcMessage` single owner | ✅ |
+| H6 (S13) | `packages/agent/src/session-lifecycle/session-configuration.ts:23-30` | `authorizeConfigure` direct callback with `?? true` bypasses the compiled policy snapshot; KERNEL rule is `session.configure` through pre policy | W1 (#1108, same files) | 🔁 deferred |
+| H7 (AU07) | `apps/openomni/src/resident.ts:74-91` | Evidence-only authority is a string-prefix check on the prompt with a fabricated refusal text; must be a typed policy input at kernel admission | W3 #1111 | open |
+| H8 (S6) | `packages/policy/src/row-compiler.ts:580-654` vs ledger `policies.appendGeneration` | Two policy-generation writers; agent stubs `append: () => false` | W3 #1111 | open |
+| H9 | `packages/ledger/src/storage/sqlite-l0-write.ts:89-115` | Hand-written `alarm` INSERT bypassing `armAlarm` — second alarm writer | W2 #1110 | open |
+| H10 (S7) | `packages/llm/src/provider/stream.ts:37` | `maxSteps` parameter inert (`stepCountIs(1)` hardcoded) | W4 #1112 | open |
+| H11 | `apps/openomni/src/config.ts:261-280` + `provisioning/declared.ts:56-80` | Env channel path duplicates declared provisioning path (#946 closed without cutover) | W2 #1110 | open |
+| H12 | `packages/protocol/src/app-connector/` | ~260–320 LOC contract with zero production consumers | W5 #1113 (delete or name consumer) | open |
+| H13 | 25 barrel-only exports (`Policy.Events`, ledger `Durability/ChainBreak/factsByType`, `machines/index.ts:1`, `codemode/index.ts:7`, `ipc/index.ts:4`, channels `chunk.ts:13`, provider metadata fields, `DeclaredChannelRow`/`ResidentOptions`/`CatalogOrigin`/`ProvisionStatusOutput`, desktop `setSessionPhase`/`setSessionAttention`/`queryKeys`/`DEFAULT_PROJECT_ID`/`INITIAL_CLIENT_STATE`, ui `Timeline`) | Knip counts barrel presence, not consumers | W5 #1113 gate + per-wave deletion | open |
+| H14 | `packages/channels/src/router/request/matcher.ts:37-42,92-95`; actor-resolver `:6-14,129,142` | Unreachable matcher branches and resolver fallback | W2 #1110 | open |
+| H15 | `apps/openomni/src/tools/{monitor,completion,provision}.ts` | 1,006 LOC of tool adapters, 706 over the 100-line adapter rule | W3 #1111 | open |
+| H16 | `apps/desktop/src/renderer/state/store.ts:95-114`, `app.tsx:210-211,309-311` | Provisional client-side truth pending a wire read model | W5 #1113 | open |
+| H17 | `script/check-quality-coverage.ts:155` vs `quality-json.ts:20`; `check-coverage-ratchet.ts:217` vs `quality-native-lcov.ts:62` | Duplicate JSON/LCOV parsers | W5 #1113 | open |
+| H18 | `gateway/schema.ts:105-106,365`, `transcript/index.ts:6-7`, `provider/contract.ts:98-123`, `resolve-route.ts:4-9`, `github/surface.ts:59-60,243` | Stale comments describing deleted behaviour | owning wave | open |
+| H19 | `docs/DESIGN.md` (475 lines) | Delivery receipt superseded by KERNEL.md / final-kernel-design | W5 #1113 docs | open |

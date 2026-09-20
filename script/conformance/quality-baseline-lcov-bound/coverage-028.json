@@ -8989,14 +8989,5 @@
     "symbol": "unproven-statement:43c3ae04f996b7259ab818d2929d68f7557db0bfd0eade5c638b43078a66c16d",
     "value": 1,
     "count": 1
-  },
-  {
-    "gate": "coverage",
-    "path": "packages/policy/src/effects/compose.ts",
-    "line": 29,
-    "endLine": 29,
-    "symbol": "unproven-statement:1165b194d940505ecb2ffcd692402cd585b3214726402eede40c66f887882717",
-    "value": 1,
-    "count": 1
   }
 ]

@@ -528,22 +528,6 @@
     "count": 1
   },
   {
-    "path": "apps/openomni/src/composition/session-bindings.ts",
-    "line": 18,
-    "symbol": "SessionBindingCache",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/composition/session-bindings.ts",
-    "line": 12,
-    "symbol": "SessionBindingLease",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "apps/openomni/src/gateway.ts",
     "line": 88,
     "symbol": "OutboundMessaging",
@@ -616,22 +600,6 @@
     "count": 1
   },
   {
-    "path": "apps/openomni/src/tools/authority/approval.ts",
-    "line": 6,
-    "symbol": "ApprovalPort",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/authority/send-message.ts",
-    "line": 4,
-    "symbol": "MessagePort",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "apps/openomni/src/tools/core/catalog.ts",
     "line": 7,
     "symbol": "CatalogOrigin",
@@ -672,62 +640,6 @@
     "count": 1
   },
   {
-    "path": "apps/openomni/src/tools/execution/llm.ts",
-    "line": 26,
-    "symbol": "LLM_TOOL_NAME",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/execution/llm.ts",
-    "line": 12,
-    "symbol": "LlmPort",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/execution/llm.ts",
-    "line": 15,
-    "symbol": "MAX_LLM_CALLS",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/fs/endpoint.ts",
-    "line": 82,
-    "symbol": "childPath",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/fs/endpoint.ts",
-    "line": 12,
-    "symbol": "fileOperation",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/fs/endpoint.ts",
-    "line": 24,
-    "symbol": "filesystem",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/fs/endpoint.ts",
-    "line": 89,
-    "symbol": "text",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "apps/openomni/src/tools/locus.ts",
     "line": 4,
     "symbol": "Locus",
@@ -739,14 +651,6 @@
     "path": "apps/openomni/src/tools/locus.ts",
     "line": 9,
     "symbol": "parseLocus",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "apps/openomni/src/tools/mutation/provision.ts",
-    "line": 343,
-    "symbol": "ProvisionStatusOutput",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -1051,22 +955,6 @@
     "path": "packages/channels/src/authn/websocket.ts",
     "line": 90,
     "symbol": "authenticateWebSocketUpgrade",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 17,
-    "symbol": "ChannelAuthnMiddleware",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/channels/src/channel-authn.ts",
-    "line": 11,
-    "symbol": "decisionOption",
     "gate": "export",
     "value": 1,
     "count": 1
@@ -1680,14 +1568,6 @@
     "count": 1
   },
   {
-    "path": "packages/ledger/src/storage/sqlite-busy.ts",
-    "line": 17,
-    "symbol": "isSqliteBusyError",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
     "line": 93,
     "symbol": "SqliteL0Adapters",
@@ -2184,30 +2064,6 @@
     "count": 1
   },
   {
-    "path": "packages/ui/src/chrome.tsx",
-    "line": 173,
-    "symbol": "MainHeader",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ui/src/chrome.tsx",
-    "line": 70,
-    "symbol": "SearchLine",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ui/src/chrome.tsx",
-    "line": 19,
-    "symbol": "SidebarHeader",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/ui/src/composer.tsx",
     "line": 37,
     "symbol": "ApprovalTray",
@@ -2304,22 +2160,6 @@
     "count": 1
   },
   {
-    "path": "packages/ui/src/primitives/disclosure.tsx",
-    "line": 72,
-    "symbol": "Disclosure",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ui/src/primitives/disclosure.tsx",
-    "line": 58,
-    "symbol": "DisclosureTone",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
     "path": "packages/ui/src/primitives/epoch-rule.tsx",
     "line": 36,
     "symbol": "EpochRule",
@@ -2347,22 +2187,6 @@
     "path": "packages/ui/src/primitives/highlight.tsx",
     "line": 31,
     "symbol": "HighlightRun",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ui/src/primitives/row.tsx",
-    "line": 72,
-    "symbol": "Row",
-    "gate": "export",
-    "value": 1,
-    "count": 1
-  },
-  {
-    "path": "packages/ui/src/primitives/row.tsx",
-    "line": 38,
-    "symbol": "RowLines",
     "gate": "export",
     "value": 1,
     "count": 1

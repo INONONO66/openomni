@@ -37,15 +37,6 @@
   },
   {
     "gate": "cyclomatic",
-    "path": "packages/agent/src/session-history.ts",
-    "line": 6,
-    "endLine": 142,
-    "symbol": "FunctionDeclaration:sessionHistory",
-    "value": 34,
-    "count": 1
-  },
-  {
-    "gate": "cyclomatic",
     "path": "packages/agent/src/session-record.ts",
     "line": 289,
     "endLine": 344,
