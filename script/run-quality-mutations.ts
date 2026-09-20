@@ -1633,6 +1633,29 @@ function argumentsMap(argv: string[]): Map<string, string[]> {
 export function pythonExecutable(command: string): string {
 	return Bun.which(command) ?? command;
 }
+function shardFrom(values: Map<string, string[]>, pilot: boolean): Options["shard"] {
+	const shardIndex = values.get("--shard")?.[0];
+	const shardCount = values.get("--shard-count")?.[0];
+	const progress = values.get("--progress")?.[0];
+	if (shardIndex === undefined && shardCount === undefined && progress === undefined) return null;
+	const index = Number(shardIndex),
+		count = Number(shardCount);
+	if (
+		!progress ||
+		!Number.isSafeInteger(count) ||
+		count < 1 ||
+		count > 4096 ||
+		!Number.isSafeInteger(index) ||
+		index < 0 ||
+		index >= count
+	)
+		return fail(
+			"arguments",
+			"Sharded execution requires --shard, --shard-count and --progress with 0 <= shard < shard-count",
+		);
+	if (pilot) return fail("arguments", "--shard is incompatible with pilot selection");
+	return { index, count, progress: resolve(progress) };
+}
 function optionsFrom(values: Map<string, string[]>): Options {
 	const names = [
 		"root",
@@ -1679,31 +1702,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 	const pilot = ["--pilot", "--limit", "--test", "--target", "--operator"].some((key) =>
 		values.has(key),
 	);
-	const shardIndex = values.get("--shard")?.[0];
-	const shardCount = values.get("--shard-count")?.[0];
-	const progress = values.get("--progress")?.[0];
-	let shard: Options["shard"] = null;
-	if (shardIndex !== undefined || shardCount !== undefined || progress !== undefined) {
-		const index = Number(shardIndex),
-			count = Number(shardCount);
-		if (
-			!progress ||
-			shardIndex === undefined ||
-			shardCount === undefined ||
-			!Number.isSafeInteger(count) ||
-			count < 1 ||
-			count > 4096 ||
-			!Number.isSafeInteger(index) ||
-			index < 0 ||
-			index >= count
-		)
-			return fail(
-				"arguments",
-				"Sharded execution requires --shard, --shard-count and --progress with 0 <= shard < shard-count",
-			);
-		if (pilot) return fail("arguments", "--shard is incompatible with pilot selection");
-		shard = { index, count, progress: resolve(progress) };
-	}
+	const shard = shardFrom(values, pilot);
 	return {
 		root: realpathSync(required("root")),
 		contract: resolve(required("contract")),
@@ -2075,6 +2074,160 @@ function shardRows(slice: Candidate[], executed: Result[], carried: Map<string, 
 	return { rows, counts, restored };
 }
 
+function shardPlan(candidates: Candidate[], shard: Options["shard"], progress: ShardProgress | null) {
+	const slice = shard
+		? candidates.filter((_, index) => index % shard.count === shard.index)
+		: candidates;
+	if (progress) verifyCarried(progress, slice);
+	const pending = progress ? slice.filter((candidate) => !progress.carried.has(candidate.id)) : [];
+	if (shard)
+		console.error(`[mutation] shard ${shard.index}/${shard.count}: slice ${slice.length}, carried ${progress?.carried.size ?? 0}, pending ${pending.length}`);
+	return { slice, pending, executionRequired: !progress || pending.length > 0 };
+}
+function campaignTests(options: Options, inventory: Inventory): string[] {
+	const tests = options.tests.length
+		? options.tests
+		: inventory.files
+			.filter(
+				(file) =>
+					file.category === "test" &&
+					["typescript", "javascript"].includes(file.language) &&
+					/\.(test|spec)\.[cm]?[jt]sx?$/.test(file.path),
+			)
+			.map((file) => file.path);
+	for (const test of tests)
+		if (!inventory.files.some((file) => file.path === test))
+			return fail("incompleteInventory", `Test absent from inventory: ${test}`);
+	return tests;
+}
+function campaignErrors(
+	enumerated: ReturnType<typeof enumerate>,
+	tests: string[],
+	sourceDiagnostics: unknown[],
+): string[] {
+	const errors = [...enumerated.errors];
+	if (!tests.length) errors.push("zero test selection");
+	if (sourceDiagnostics.length)
+		errors.push(`baseline compiler rejected ${sourceDiagnostics.length} diagnostics`);
+	if (!enumerated.candidates.length) errors.push("zero eligible mutation candidates");
+	return errors;
+}
+async function campaignBaseline(input: {
+	frozen: string;
+	base: string;
+	tests: string[];
+	options: Options;
+	temporary: string;
+	errors: string[];
+	executionRequired: boolean;
+}): Promise<TestSelectionReceipt | null> {
+	const { frozen, base, tests, options, temporary, errors, executionRequired } = input;
+	console.error(`[mutation] baseline execution copy (${tests.length} test files, ${errors.length} errors)`);
+	if (!errors.length && executionRequired) copyExecution(frozen, base);
+	console.error("[mutation] baseline tests starting");
+	const baseline = errors.length || !executionRequired
+		? null
+		: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
+	if (baseline && !green(baseline)) {
+		const red = describeRedBaseline(baseline.batches);
+		process.stderr.write(red.lines.map((line) => `[mutation] baseline red: ${line}\n`).join(""));
+		errors.push(red.summary);
+	}
+	return baseline;
+}
+function emitShardReceipt(context: {
+	options: Options;
+	shardOptions: NonNullable<Options["shard"]>;
+	shardProgress: ShardProgress;
+	shardExecution: { executed: Result[]; budgetExhausted: boolean };
+	slice: Candidate[];
+	errors: string[];
+	cleanupVerified: boolean;
+	executionTreeSha256: string;
+	pythonCapability: Awaited<ReturnType<typeof enumeratePython>>;
+	tests: string[];
+	reachReceipt: ReachMap | null;
+	sourceDiagnostics: unknown[];
+	canonical: ProcessReceipt;
+	baseline: TestSelectionReceipt | null;
+	census: ReturnType<typeof enumerate>["census"];
+}): number {
+	const { options, shardOptions, shardProgress, shardExecution, slice, errors, cleanupVerified, executionTreeSha256, pythonCapability, tests, reachReceipt, sourceDiagnostics, canonical, baseline, census } = context;
+	if (!errors.length)
+		appendFileSync(shardOptions.progress, progressLine({
+			type: "proof",
+			run: shardProgress.run,
+			inventorySha256: options.inventoryHash,
+			executionTreeSha256,
+			originalHashesVerified: true,
+			cleanupVerified,
+			results: shardExecution.executed.length,
+		}));
+	const { rows, counts, restored } = shardRows(slice, shardExecution.executed, shardProgress.carried);
+	const sliceComplete = rows.length === slice.length;
+	// A slice may legitimately be entirely compiler-invalid; the
+	// valid-outcome sanity floor is enforced campaign-wide at join.
+	const complete =
+		sliceComplete &&
+		errors.length === 0 &&
+		counts.infrastructure === 0 &&
+		counts.uncompleted === 0 &&
+		restored &&
+		cleanupVerified;
+	const exitCode = errors.length ? 2 : 0;
+	console.error(`[mutation] shard ${shardOptions.index}/${shardOptions.count} finished: ${JSON.stringify({ recorded: rows.length, sliceSize: slice.length, executed: shardExecution.executed.length, budgetExhausted: shardExecution.budgetExhausted, complete, errors })}`);
+	console.log(
+		JSON.stringify({
+			version: 1,
+			algorithm: "d945-mutation@1",
+			exitCode,
+			full: false,
+			complete,
+			globalZero: false,
+			mutationZero: false,
+			counts,
+			selectedCounts: counts,
+			errors,
+			shard: {
+				index: shardOptions.index,
+				count: shardOptions.count,
+				sliceSize: slice.length,
+				recorded: rows.length,
+				executed: shardExecution.executed.length,
+				budgetExhausted: shardExecution.budgetExhausted,
+				sliceComplete,
+				run: shardProgress.run,
+				carriedProofs: shardProgress.proofs,
+			},
+			executionTreeSha256,
+			pythonCapability,
+			testSelections: [{ id: sha256(JSON.stringify(tests)), paths: tests }],
+			reachMap: reachReceipt,
+			sourceDiagnostics,
+			sourceDiagnosticsSha256: sha256(JSON.stringify(sourceDiagnostics)),
+			inventorySha256: options.inventoryHash,
+			contractSha256: options.contractHash,
+			decisionSha256: options.decisionHash,
+			inventoryToolSha256: options.inventoryToolHash,
+			runnerSha256: sha256(readFileSync(import.meta.path)),
+			runtime: {
+				version: Bun.version,
+				path: process.execPath,
+				sha256: sha256(readFileSync(process.execPath)),
+				typescript: ts.version,
+				compilerSha256: sha256(readFileSync(require.resolve("typescript"))),
+			},
+			canonical,
+			baseline,
+			census,
+			results: rows,
+			originalHashesVerified: true,
+			cleanupVerified,
+		}, diagnosticField),
+	);
+	return exitCode;
+}
+
 function campaignOutcome(
 	options: Options,
 	enumerated: ReturnType<typeof enumerate>,
@@ -2154,46 +2307,11 @@ async function campaign(options: Options): Promise<number> {
 		const pythonCapability = await enumeratePython(options, temporary, frozen, enumerated);
 		enumerated.candidates.sort(compareCandidates);
 		const shardOptions = options.shard;
-		const slice = shardOptions
-			? enumerated.candidates.filter((_, index) => index % shardOptions.count === shardOptions.index)
-			: enumerated.candidates;
-		if (shardProgress) verifyCarried(shardProgress, slice);
-		const pending = shardProgress
-			? slice.filter((candidate) => !shardProgress.carried.has(candidate.id))
-			: [];
-		const executionRequired = !shardProgress || pending.length > 0;
-		if (shardOptions)
-			console.error(`[mutation] shard ${shardOptions.index}/${shardOptions.count}: slice ${slice.length}, carried ${shardProgress?.carried.size ?? 0}, pending ${pending.length}`);
+		const { slice, pending, executionRequired } = shardPlan(enumerated.candidates, shardOptions, shardProgress);
 		console.error(`[mutation] compiler analysis finished (${enumerated.candidates.length} candidates, ${sourceDiagnostics.length} diagnostics)`);
-		const tests = options.tests.length
-			? options.tests
-			: inventory.files
-				.filter(
-					(file) =>
-						file.category === "test" &&
-						["typescript", "javascript"].includes(file.language) &&
-						/\.(test|spec)\.[cm]?[jt]sx?$/.test(file.path),
-				)
-				.map((file) => file.path);
-		for (const test of tests)
-			if (!inventory.files.some((file) => file.path === test))
-				return fail("incompleteInventory", `Test absent from inventory: ${test}`);
-		const errors = [...enumerated.errors];
-		if (!tests.length) errors.push("zero test selection");
-		if (sourceDiagnostics.length)
-			errors.push(`baseline compiler rejected ${sourceDiagnostics.length} diagnostics`);
-		if (!enumerated.candidates.length) errors.push("zero eligible mutation candidates");
-		console.error(`[mutation] baseline execution copy (${tests.length} test files, ${errors.length} errors)`);
-		if (!errors.length && executionRequired) copyExecution(frozen, base);
-		console.error("[mutation] baseline tests starting");
-		const baseline = errors.length || !executionRequired
-			? null
-			: await runTests(base, tests, options.timeout, temporary, options.python, options.suiteTimeout);
-		if (baseline && !green(baseline)) {
-			const red = describeRedBaseline(baseline.batches);
-			process.stderr.write(red.lines.map((line) => `[mutation] baseline red: ${line}\n`).join(""));
-			errors.push(red.summary);
-		}
+		const tests = campaignTests(options, inventory);
+		const errors = campaignErrors(enumerated, tests, sourceDiagnostics);
+		const baseline = await campaignBaseline({ frozen, base, tests, options, temporary, errors, executionRequired });
 		console.error(`[mutation] baseline tests finished: ${JSON.stringify(baseline ? { tests: baseline.tests, failures: baseline.failures, exitCode: baseline.exitCode, processes: baseline.batches.map((batch) => ({ exitCode: batch.process.exitCode, signal: batch.process.signal, timedOut: batch.process.timedOut })) } : { errors })}`);
 		const selected = selectedCandidates(options, enumerated.candidates);
 		const reachPool = shardProgress ? pending : selected;
@@ -2224,81 +2342,12 @@ async function campaign(options: Options): Promise<number> {
 		removeExecution(frozen);
 		rmSync(temporary, { recursive: true, force: true });
 		cleanupVerified = !existsSync(temporary);
-		if (shardOptions && shardProgress && shardExecution) {
-			if (!errors.length)
-				appendFileSync(shardOptions.progress, progressLine({
-					type: "proof",
-					run: shardProgress.run,
-					inventorySha256: options.inventoryHash,
-					executionTreeSha256,
-					originalHashesVerified: true,
-					cleanupVerified,
-					results: shardExecution.executed.length,
-				}));
-			const { rows, counts, restored } = shardRows(slice, shardExecution.executed, shardProgress.carried);
-			const sliceComplete = rows.length === slice.length;
-			// A slice may legitimately be entirely compiler-invalid; the
-			// valid-outcome sanity floor is enforced campaign-wide at join.
-			const complete =
-				sliceComplete &&
-				errors.length === 0 &&
-				counts.infrastructure === 0 &&
-				counts.uncompleted === 0 &&
-				restored &&
-				cleanupVerified;
-			const exitCode = errors.length ? 2 : 0;
-			console.error(`[mutation] shard ${shardOptions.index}/${shardOptions.count} finished: ${JSON.stringify({ recorded: rows.length, sliceSize: slice.length, executed: shardExecution.executed.length, budgetExhausted: shardExecution.budgetExhausted, complete, errors })}`);
-			console.log(
-				JSON.stringify({
-					version: 1,
-					algorithm: "d945-mutation@1",
-					exitCode,
-					full: false,
-					complete,
-					globalZero: false,
-					mutationZero: false,
-					counts,
-					selectedCounts: counts,
-					errors,
-					shard: {
-						index: shardOptions.index,
-						count: shardOptions.count,
-						sliceSize: slice.length,
-						recorded: rows.length,
-						executed: shardExecution.executed.length,
-						budgetExhausted: shardExecution.budgetExhausted,
-						sliceComplete,
-						run: shardProgress.run,
-						carriedProofs: shardProgress.proofs,
-					},
-					executionTreeSha256,
-					pythonCapability,
-					testSelections: [{ id: sha256(JSON.stringify(tests)), paths: tests }],
-					reachMap: reach.receipt,
-					sourceDiagnostics,
-					sourceDiagnosticsSha256: sha256(JSON.stringify(sourceDiagnostics)),
-					inventorySha256: options.inventoryHash,
-					contractSha256: options.contractHash,
-					decisionSha256: options.decisionHash,
-					inventoryToolSha256: options.inventoryToolHash,
-					runnerSha256: sha256(readFileSync(import.meta.path)),
-					runtime: {
-						version: Bun.version,
-						path: process.execPath,
-						sha256: sha256(readFileSync(process.execPath)),
-						typescript: ts.version,
-						compilerSha256: sha256(readFileSync(require.resolve("typescript"))),
-					},
-					canonical,
-					baseline,
-					census: enumerated.census,
-					results: rows,
-					originalHashesVerified: true,
-					cleanupVerified,
-				}, diagnosticField),
-			);
-			return exitCode;
-		}
+		if (shardOptions && shardProgress && shardExecution)
+			return emitShardReceipt({
+				options, shardOptions, shardProgress, shardExecution, slice, errors, cleanupVerified,
+				executionTreeSha256, pythonCapability, tests, reachReceipt: reach.receipt,
+				sourceDiagnostics, canonical, baseline, census: enumerated.census,
+			});
 		const { counts, selectedCounts, complete, exitCode, full } = campaignOutcome(
 			options, enumerated, results, errors, cleanupVerified,
 		);

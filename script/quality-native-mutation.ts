@@ -94,6 +94,32 @@ export function normalizeMutation(value: Json, identity: Identity, root: string)
   });
   return { analyzed: ["mutation"], findings };
 }
+function mutationArguments(values: {
+  baseline?: string;
+  limit?: string;
+  target?: string;
+  pilot: boolean;
+  shard?: string;
+  "shard-count"?: string;
+  progress?: string;
+  "budget-minutes"?: string;
+}): { shardMode: boolean; budgetMinutes: number | null } {
+  requireMeasurement(Boolean(values.baseline), "measured mutation baseline required");
+  requireMeasurement(!(values.limit || values.target) || values.pilot, "--limit/--target require --pilot");
+  const shardValues = [values.shard, values["shard-count"], values.progress];
+  const shardMode = shardValues.some((value) => value !== undefined);
+  requireMeasurement(
+    !shardMode || shardValues.every((value) => value !== undefined),
+    "sharded execution requires --shard, --shard-count and --progress",
+  );
+  requireMeasurement(!(shardMode && values.pilot), "--shard is incompatible with --pilot");
+  const budgetMinutes = values["budget-minutes"] === undefined ? null : Number(values["budget-minutes"]);
+  requireMeasurement(
+    budgetMinutes === null || (Number.isSafeInteger(budgetMinutes) && budgetMinutes >= 1 && budgetMinutes <= 10_000),
+    "invalid --budget-minutes",
+  );
+  return { shardMode, budgetMinutes };
+}
 export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
   const { values } = parseArgs({
     args: argv,
@@ -114,20 +140,7 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "budget-minutes": { type: "string" },
     },
   });
-  requireMeasurement(Boolean(values.baseline), "measured mutation baseline required");
-  requireMeasurement(!(values.limit || values.target) || values.pilot, "--limit/--target require --pilot");
-  const shardValues = [values.shard, values["shard-count"], values.progress];
-  const shardMode = shardValues.some((value) => value !== undefined);
-  requireMeasurement(
-    !shardMode || shardValues.every((value) => value !== undefined),
-    "sharded execution requires --shard, --shard-count and --progress",
-  );
-  requireMeasurement(!(shardMode && values.pilot), "--shard is incompatible with --pilot");
-  const budgetMinutes = values["budget-minutes"] === undefined ? null : Number(values["budget-minutes"]);
-  requireMeasurement(
-    budgetMinutes === null || (Number.isSafeInteger(budgetMinutes) && budgetMinutes >= 1 && budgetMinutes <= 10_000),
-    "invalid --budget-minutes",
-  );
+  const { shardMode, budgetMinutes } = mutationArguments(values);
   console.error(`[mutation] fingerprinting source inventory (pilot=${values.pilot})`);
   const root = resolve(values.root),
     directory = resolve(root, values.output);
