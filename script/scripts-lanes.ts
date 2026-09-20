@@ -31,6 +31,7 @@ export const scriptsLanes = {
     "quality-inventory.test.ts",
     "quality-json.test.ts",
     "quality-mutation-reach-overlay.test.ts",
+    "quality-mutation-shard.test.ts",
     "quality-mutation-workflow.test.ts",
     "quality-native-mutation.test.ts",
     "quality-native-process.test.ts",
@@ -59,6 +60,7 @@ export const scriptToolingPartitions = {
   ],
   "scripts-tooling-2": [
     "run-quality-mutations-compiler.test.ts",
+    "quality-mutation-shard.test.ts",
     "check-types-census.test.ts",
     "quality-mutation-reach-overlay.test.ts",
     "quality-ci-receipt.test.ts",

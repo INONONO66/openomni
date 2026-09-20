@@ -2,19 +2,13 @@ import fs from "node:fs";
 import net from "node:net";
 import { Ipc, type PlainValue } from "@openomni/protocol";
 
-import { IpcConnectionError, IpcProtocolError } from "./errors";
+import { IpcConnectionError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PeerRequestTable } from "./peer-request-table";
+import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";
 
 /** Remove the socket file, tolerating a concurrent removal (ENOENT). */
 function unlinkIfExists(socketPath: string): void {
-  try {
-    fs.unlinkSync(socketPath);
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
-      throw error;
-    }
-  }
+  fs.rmSync(socketPath, { force: true });
 }
 
 interface IpcServerOptions {
@@ -141,7 +135,7 @@ export async function createIpcServer(
     }
   }
 
-  function sendFrame(state: ConnectionState, msg: IpcMessage): void {
+  function sendFrame(state: ConnectionState, msg: Ipc.Request | Ipc.Response | Ipc.Notification): void {
     send(state, encode(msg));
   }
 
@@ -214,31 +208,6 @@ export async function createIpcServer(
     if (state) options.onDisconnect?.(id);
   }
 
-  function decodeChunk(
-    state: ConnectionState,
-    raw: Buffer,
-  ): { frames: PlainValue[]; malformed: string[] } | undefined {
-    try {
-      return state.decoder.push(raw);
-    } catch (error) {
-      // Oversize line/buffer — the decoder already reset its buffer (DoS
-      // guard). The reset happened MID-frame, so whatever arrives next is
-      // an unparseable tail: answer 4001, then close the connection. The
-      // client destroys its socket on protocol errors already; the server
-      // is symmetric instead of keeping a desynced stream alive.
-      sendFrame(
-        state,
-        Ipc.createErrorResponse(
-          "unknown",
-          4001,
-          error instanceof Error ? error.message : "invalid IPC frame",
-        ),
-      );
-      closeAfterFlush(state);
-      return undefined;
-    }
-  }
-
   const server = Bun.listen({
     unix: socketPath,
     socket: {
@@ -263,26 +232,41 @@ export async function createIpcServer(
         // loop (and the reclaim timer with it) for nothing.
         if (state.endAfterFlush) return;
 
-        const decoded = decodeChunk(state, raw);
-        if (decoded === undefined) return;
-        const { frames: messages, malformed } = decoded;
+        let messages: PlainValue[];
+        let malformed: string[];
+        try {
+          ({ frames: messages, malformed } = state.decoder.push(raw));
+        } catch (error) {
+          // Oversize line/buffer — the decoder already reset its buffer (DoS
+          // guard). The reset happened MID-frame, so whatever arrives next is
+          // an unparseable tail: answer 4001, then close the connection. The
+          // client destroys its socket on protocol errors already; the server
+          // is symmetric instead of keeping a desynced stream alive.
+          sendFrame(
+            state,
+            Ipc.createErrorResponse(
+              "unknown",
+              4001,
+              error instanceof Error ? error.message : "invalid IPC frame",
+            ),
+          );
+          closeAfterFlush(state);
+          return;
+        }
 
         for (const msg of messages) {
-          let parsed: Ipc.Request | Ipc.Response | Ipc.Notification;
-          try {
-            parsed = decodeMessage(msg);
-          } catch (err) {
-            if (err instanceof IpcProtocolError) {
-              // Echo the offending frame's own id when it carries one, so the
-              // requester's pending settles now instead of burning its
-              // timeout. "unknown" is reserved for frames without one.
-              const errResponse = Ipc.createErrorResponse(extractFrameId(msg), 4000, err.message);
-              sendFrame(state, errResponse);
-            }
+          const message = classifyIpcMessage(msg);
+          if (message === undefined) {
+            // Echo the offending frame's own id when it carries one, so the
+            // requester's pending settles now instead of burning its
+            // timeout. "unknown" is reserved for frames without one.
+            sendFrame(
+              state,
+              Ipc.createErrorResponse(extractFrameId(msg), 4000, unknownMessageError(msg)),
+            );
             continue;
           }
-
-          peer.dispatch(parsed, state);
+          peer.dispatchMessage(message, state);
         }
 
         // A malformed line costs only itself: every parseable frame above was
@@ -338,24 +322,11 @@ export async function createIpcServer(
   };
 }
 
-type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
-
 // Cap how much of an unrecognized payload the error message echoes back.
 const MAX_ERROR_PAYLOAD_CHARS = 200;
 
-function decodeMessage(raw: PlainValue): IpcMessage {
-  const req = Ipc.Request.safeParse(raw);
-  if (req.success) return req.data;
-
-  const res = Ipc.Response.safeParse(raw);
-  if (res.success) return res.data;
-
-  const notif = Ipc.Notification.safeParse(raw);
-  if (notif.success) return notif.data;
-
-  throw new IpcProtocolError(
-    `Unknown message type: ${String(JSON.stringify(raw)).slice(0, MAX_ERROR_PAYLOAD_CHARS)}`,
-  );
+function unknownMessageError(raw: PlainValue): string {
+  return `Unknown message type: ${String(JSON.stringify(raw)).slice(0, MAX_ERROR_PAYLOAD_CHARS)}`;
 }
 
 /** The offending frame's own id when it carries a string one, else "unknown". */

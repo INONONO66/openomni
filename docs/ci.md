@@ -88,7 +88,11 @@ and unions `DA:` records across every lcov file (maximum hits per line, with
 each file's repo prefix inferred from the artifact path). A changed line that
 an lcov file knows with zero hits fails the gate; a line absent from every
 lcov record is not executable (types, comments, imports) and never counts.
-There is no baseline and no ratchet: the gate is scoped to the PR's own diff.
+A gated file with no `SF:` record in any lcov was never loaded by any test:
+it fails with `<path>: no coverage record` unless type-stripping its source
+emits zero executable lines (pure type-only modules; `.d.ts` is outside the
+gate entirely). There is no baseline and no ratchet: the gate is scoped to
+the PR's own diff.
 
 Skipped or failed test lanes skip the gate rather than passing it with partial
 evidence; the fan-in `CI` gate then rejects the unexpected skip on executable

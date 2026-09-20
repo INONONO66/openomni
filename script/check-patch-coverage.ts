@@ -6,8 +6,12 @@
  * (non-test) come from `git diff --unified=0 <base>...HEAD`. A changed line is
  * uncovered when the lcov union knows it (`DA:` record) with zero hits; lines
  * absent from every lcov are not executable (types, comments) and never count.
- * Each lcov's repo prefix is inferred from its path: the segment starting at
- * `packages/`, `apps/` or `script` before the `coverage/` directory.
+ * A gated file with NO `SF:` record in any lcov was never loaded by any test:
+ * it fails outright (`<path>: no coverage record`) unless transpilation proves
+ * the file has zero executable lines (type-only modules; `.d.ts` is excluded
+ * from gating). Each lcov's repo prefix is inferred from its path: the segment
+ * starting at `packages/`, `apps/` or `script` before the `coverage/`
+ * directory.
  */
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -39,11 +43,7 @@ function recordHit(rows: Map<number, number>, record: string): void {
   rows.set(lineNumber, Math.max(rows.get(lineNumber) ?? 0, hits));
 }
 
-function mergeLcov(
-  union: Map<string, Map<number, number>>,
-  file: string,
-  root: string,
-): void {
+function mergeLcov(union: Map<string, Map<number, number>>, file: string, root: string): void {
   const prefix = lcovPrefix(file);
   let source = "";
   for (const line of readFileSync(file, "utf8").split("\n")) {
@@ -90,14 +90,28 @@ export function changedLines(diff: string): Map<string, Set<number>> {
   return changed;
 }
 
+/** True when the type-stripped emit of a module still contains code. */
+export function hasExecutableCode(source: string, path: string): boolean {
+  const transpiled = new Bun.Transpiler({
+    loader: path.endsWith(".tsx") ? "tsx" : "ts",
+  }).transformSync(source);
+  return transpiled.split("\n").some((line) => line.trim() !== "");
+}
+
 export function uncoveredRows(
   changed: Map<string, Set<number>>,
   union: Map<string, Map<number, number>>,
+  isExecutable: (path: string) => boolean,
 ): string[] {
   const rows: string[] = [];
   for (const [path, lines] of [...changed.entries()].sort()) {
     const coverage = union.get(path);
-    if (coverage === undefined) continue; // no lcov knows the file: not executable evidence
+    if (coverage === undefined) {
+      // No lane ever loaded this file. Type-only modules emit nothing and are
+      // exempt; anything else is untested by construction and fails closed.
+      if (isExecutable(path)) rows.push(`${path}: no coverage record`);
+      continue;
+    }
     for (const line of [...lines].sort((a, b) => a - b)) {
       if (coverage.get(line) === 0) rows.push(`${path}:${line}`);
     }
@@ -114,8 +128,18 @@ export function checkPatchCoverage(base: string, globs: readonly string[], root:
   const files = globs.flatMap((glob) => [
     ...new Bun.Glob(glob).scanSync({ cwd: root, onlyFiles: true }),
   ]);
-  const union = lcovUnion(files.map((file) => resolve(root, file)), root);
-  return uncoveredRows(changedLines(diff.stdout.toString()), union);
+  const union = lcovUnion(
+    files.map((file) => resolve(root, file)),
+    root,
+  );
+  const isExecutable = (path: string): boolean => {
+    try {
+      return hasExecutableCode(readFileSync(resolve(root, path), "utf8"), path);
+    } catch {
+      return true; // unreadable at HEAD: fail closed, the row names the file
+    }
+  };
+  return uncoveredRows(changedLines(diff.stdout.toString()), union, isExecutable);
 }
 
 export function main(

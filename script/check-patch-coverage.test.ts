@@ -6,6 +6,7 @@ import {
   changedLines,
   checkPatchCoverage,
   gatedPath,
+  hasExecutableCode,
   lcovPrefix,
   lcovUnion,
   main,
@@ -72,10 +73,13 @@ test("uncovered rows: zero-hit lines fail, unknown lines are not executable", ()
     const changed = new Map([
       ["packages/agent/src/a.ts", new Set([10, 11, 12])],
       ["script/check-thing.ts", new Set([5])],
-      ["packages/agent/src/unknown.ts", new Set([1])],
+      ["packages/agent/src/type-only.ts", new Set([1])],
+      ["packages/agent/src/untested.ts", new Set([1])],
     ]);
-    expect(uncoveredRows(changed, union)).toEqual([
+    const executable = (path: string) => !path.includes("type-only");
+    expect(uncoveredRows(changed, union, executable)).toEqual([
       "packages/agent/src/a.ts:10",
+      "packages/agent/src/untested.ts: no coverage record",
       "script/check-thing.ts:5",
     ]);
   } finally {
@@ -125,6 +129,17 @@ test("end to end against a fixture repository", () => {
     );
     const rows = checkPatchCoverage(base, ["packages/*/coverage/lcov.info"], dir);
     expect(rows).toEqual(["packages/kit/src/sum.ts:3"]);
+    // A brand-new file no test ever loads has no SF record and must fail;
+    // a type-only module emits no code and is exempt.
+    writeFileSync(join(dir, "packages/kit/src/orphan.ts"), "export const orphan = () => 4;\n");
+    writeFileSync(join(dir, "packages/kit/src/shape.ts"), "export type Shape = { x: number };\n");
+    git(dir, "add", "packages/kit/src");
+    git(dir, "commit", "-qm", "orphan");
+    expect(checkPatchCoverage(base, ["packages/*/coverage/lcov.info"], dir)).toEqual([
+      "packages/kit/src/orphan.ts: no coverage record",
+      "packages/kit/src/sum.ts:3",
+    ]);
+    git(dir, "reset", "-q", "--hard", "HEAD~1");
     const glob = ["--glob", "packages/*/coverage/lcov.info"];
     expect(main(["--base", base, ...glob], dir)).toBe(1);
     writeFileSync(
@@ -136,4 +151,13 @@ test("end to end against a fixture repository", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("hasExecutableCode strips types and keeps code", () => {
+  expect(
+    hasExecutableCode("export type A = number;\nexport interface B { x: string }\n", "a.ts"),
+  ).toBe(false);
+  expect(hasExecutableCode("// comments only\n", "a.ts")).toBe(false);
+  expect(hasExecutableCode("export type A = 1;\nexport const b = 2;\n", "a.ts")).toBe(true);
+  expect(hasExecutableCode("export const Chip = () => <div />;\n", "chip.tsx")).toBe(true);
 });

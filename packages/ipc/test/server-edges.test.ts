@@ -48,7 +48,7 @@ describe("server edge branches", () => {
     mkdirSync(path);
     try {
       const error = await captureError(createIpcServer(path, () => undefined));
-      expect(z.object({ code: z.string() }).parse(error).code).toMatch(/^(EPERM|EISDIR)$/);
+      expect(z.object({ code: z.string() }).parse(error).code).toBe("ERR_FS_EISDIR");
       expect(statSync(path).isDirectory()).toBe(true);
     } finally {
       rmdirSync(path);

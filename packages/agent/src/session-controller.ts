@@ -298,15 +298,22 @@ export function createController(
     return work;
   }
 
+  function pendingOutbound(): boolean {
+    return SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "pending");
+  }
+
   async function dispatchPendingOutbound(): Promise<void> {
-    if (!SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "pending"))
-      return;
     state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
     await dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, pinPolicy, true);
   }
 
-  /** One pending-inbox step; undefined means the drive loop is finished. */
-  async function driveInbox(): Promise<{ result?: SessionRunnerResult } | undefined> {
+  /**
+   * One pending-inbox step; undefined means the drive loop is finished and
+   * "noop" consumed inbox items without producing (or clearing) a result.
+   */
+  async function driveInbox(): Promise<
+    { result: SessionRunnerResult | undefined } | "noop" | undefined
+  > {
     const pending = SessionHandleStore.pendingInbox(sessionId);
     if (pending.length === 0) return undefined;
     const current = SessionHandleStore.row(sessionId);
@@ -318,18 +325,20 @@ export function createController(
     const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
     if (firstPrompt > 0) {
       await consumeNoopInbox(pending.slice(0, firstPrompt));
-      return {};
+      return "noop";
     }
     if (firstPrompt === 0) return { result: await startTurn() };
     await consumeNoopInbox(pending);
-    return {};
+    return "noop";
   }
 
   async function driveAvailable(): Promise<SessionRunnerResult | undefined> {
     let result: SessionRunnerResult | undefined;
     for (;;) {
       if (state.closed) return result;
-      await dispatchPendingOutbound();
+      // The no-outbound path must stay synchronous: no microtask yield between
+      // the closed check and the action-tree read (extraction contract).
+      if (pendingOutbound()) await dispatchPendingOutbound();
       const actions = SessionHandleStore.tree(sessionId);
       const open = SessionHandleStore.openTurns(actions).at(-1);
       if (open !== undefined) {
@@ -338,7 +347,7 @@ export function createController(
       }
       const step = await driveInbox();
       if (step === undefined) return result;
-      if (step.result !== undefined) result = step.result;
+      if (step !== "noop") result = step.result;
     }
   }
 
