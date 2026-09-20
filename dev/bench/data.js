@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789905248310,
+  "lastUpdate": 1789909381730,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -73339,6 +73339,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 168098,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e7b79ee3fe7cd8de6a0fb1a85c12fa65cadad787",
+          "message": "mutation: matrix-sharded resumable campaign with joined receipt (#1109)\n\n* mutation: shard slicing, resumable progress JSONL, and shard-receipt join\n\nRunner: --shard/--shard-count/--progress slice the sorted candidate list\ndeterministically (index % count), resume from append-only JSONL keyed by\ncandidate id + inventory hash (fail closed on any header/row mismatch), stop\ncleanly at --budget with a partial shard document and exit 0, and append a\nper-run restoration/cleanup proof line; unproven or environmental results are\nre-executed, never mixed in.\n\nWrapper: forwards shard flags plus --budget-minutes and skips normalization/\nratchet for shard runs (native.json still written for the join).\n\nJoin: quality-mutation-join.ts merges complete shard documents for the current\ninventory fingerprint into the existing native.json/current.json receipt shape\nand runs the ratchet; any partial or missing shard reports 'campaign\nincomplete: shards X/Y complete' and exits 0 without touching baselines.\n\nPart of #1049\n\n* mutation: shard matrix workflow with cross-run progress artifacts and join job\n\nplan job sizes the matrix (shard_count dispatch input, default 8; pilots stay a\nsingle unsharded job); each shard downloads its previous progress artifact via\nthe actions API, resumes, and re-uploads quality-mutation-progress-<N>-<i> plus\nits shard receipt; the join job merges receipts from the current run and only\nthen enforces the measured baseline. fail-fast disabled so one shard cannot\ncancel the rest; fresh_progress input restarts a campaign after inventory\nchanges.\n\nTests: quality-mutation-shard.test.ts drives the real runner/wrapper/join over\na fixture campaign - budget-1 partial stop, resume-with-carry, disjoint slice\njoin into the full receipt, incomplete-join summary exit 0, foreign-progress\nfail-closed refusal, and spawned join exit codes; workflow test pins the\nmatrix/join wiring.\n\nPart of #1049\n\n* mutation: drop redundant returns before fail() in progress decoding (noVoidTypeReturn)\n\n* mutation: self-heal stale progress artifacts, tolerate torn trailing line, join-level validity floor\n\nReview follow-ups from the PR #1109 adversarial review (MAJ-1, MAJ-2, MED-3,\nMED-4, MED-5):\n\n- A progress artifact whose header carries a different inventory hash is\n  discarded with a logged line and overwritten instead of failing the shard\n  forever; its rows are never read, so mixing stays impossible. Malformed or\n  unparseable headers and same-inventory shardIndex/shardCount mismatches\n  remain hard refusals (exit 2, code progress).\n- Exactly one unparseable trailing JSONL line (job killed mid-append) is\n  dropped with a warning and the artifact rewritten without it; any\n  unparseable non-final line remains a hard refusal. Sound because rows whose\n  run never appended its restoration proof are never carried anyway.\n- The valid-outcome sanity floor moved from per-shard completeness to the\n  join: an all-compiler-invalid slice can complete, and the join refuses to\n  mint a receipt from a campaign with zero valid outcomes.\n- New kill coverage for both previously surviving mutants: an unproven-run\n  result row (tampered outcome, no proof line) must be ignored on resume\n  (kills the proof-gate mutant), and resuming shard 1 on shard 0's artifact\n  must fail closed with the header message (kills the header-check mutant).\n  Both verified apply->run->revert: each mutant fails the suite.\n\nPart of #1049\n\n* mutation: cover shard paths in-process and split campaign/options/wrapper helpers\n\nQuality ratchet flagged 113 rows on the shard PR: 106 unexecuted lines that\nonly ran inside the spawned runner, plus complexity bounds on campaign (44/35),\noptionsFrom (29) and mutationMain (22), and CRAP on the progress loaders.\n\n- Drive the runner through its exported main() in the shard test so coverage\n  observes progress decoding (torn trailing repair, torn middle refusal,\n  malformed/wrong-version headers, foreign-inventory discard, cross-slice\n  refusal, row inventory mismatch, unrecognized rows), the proof-gated carry\n  filter (unproven tampering rejected, proven result/candidate mismatch\n  refused, proven environmental outcomes re-executed), slice execution and\n  the shard receipt. Exactly one spawned runner invocation remains for CLI\n  exit codes.\n- Extract shardFrom out of optionsFrom, shardPlan/campaignTests/campaignErrors/\n  campaignBaseline/emitShardReceipt out of campaign, and mutationArguments out\n  of mutationMain; every unit now measures under 22 on both metrics and all\n  helpers stay module-private.\n- No schedule changes: extracted helpers are awaited at their original points.\n\n* mutation: type shard diagnostics and captured console lines as strings\n\nCloses the four remaining type-census rows on PR #1109 (sourceDiagnostics and\nthe in-process console capture were typed unknown).\n\n* quality: deduplicate mutation receipt, execution context, and ratchet tail\n\nRemove the three productionClones pairs flagged on this PR:\n- extract campaignDocumentBase() shared by the shard receipt and full\n  campaign document emitters (key order preserved in both outputs)\n- bundle the nine shared executeSelection/executeShardSelection\n  parameters into one ExecutionContext type\n- extract ratchetMutationMeasurement() in quality-native-mutation.ts\n  and call it from both the join and native mutation CLI tails\n\nNo behavior change; all receipt fields and ratchet arguments identical.",
+          "timestamp": "2026-09-20T21:59:35+09:00",
+          "tree_id": "3e912fc4616abb2e778abcb140e49b5110ca706e",
+          "url": "https://github.com/INONONO66/openomni/commit/e7b79ee3fe7cd8de6a0fb1a85c12fa65cadad787"
+        },
+        "date": 1789909380580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 804,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1489,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1102,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1096601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 296936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5613788,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 125,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 101529,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 607160,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 401875,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2556,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 86874316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 7840378,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14003,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 133450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 672290,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 174766,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 12033538,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 73,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 122325,
             "unit": "ns/op"
           }
         ]
