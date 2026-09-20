@@ -305,7 +305,13 @@ jobs:
         if: always()
         with:
           name: coverage-scripts-contracts
-          path: script/coverage/
+          # Same multi-path list as the matrix upload: a single path makes
+          # upload-artifact flatten the tree, and the patch gate derives the
+          # `script/` prefix from the preserved `script/coverage/` ancestor.
+          path: |
+            packages/*/coverage/
+            apps/*/coverage/
+            script/coverage/
           if-no-files-found: warn
           retention-days: 14
 

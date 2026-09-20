@@ -45,11 +45,12 @@ function recordHit(rows: Map<number, number>, record: string): void {
 
 function mergeLcov(union: Map<string, Map<number, number>>, file: string, root: string): void {
   const prefix = lcovPrefix(file);
+  if (prefix === "") throw new Error(`lcov without workspace ancestor (flattened artifact?): ${file}`);
   let source = "";
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (line.startsWith("SF:")) {
       const raw = line.slice(3).trim();
-      source = isAbsolute(raw) ? relative(root, raw) : prefix === "" ? raw : `${prefix}/${raw}`;
+      source = isAbsolute(raw) ? relative(root, raw) : `${prefix}/${raw}`;
       continue;
     }
     if (!line.startsWith("DA:") || source === "") continue;

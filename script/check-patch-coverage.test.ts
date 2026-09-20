@@ -105,6 +105,20 @@ test("lcov union takes the maximum hits across shards", () => {
   }
 });
 
+test("lcov union refuses a flattened artifact whose workspace root is lost", () => {
+  // upload-artifact with a single `path:` drops the `script/coverage/` ancestor;
+  // every SF would then be attributed to the repo root and read as "no record".
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-flat-"));
+  try {
+    mkdirSync(join(dir, "coverage-scripts-contracts"), { recursive: true });
+    const flat = join(dir, "coverage-scripts-contracts/lcov.info");
+    writeFileSync(flat, "SF:ci.ts\nDA:1,1\n");
+    expect(() => lcovUnion([flat], dir)).toThrow(/without workspace ancestor/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("end to end against a fixture repository", () => {
   const dir = mkdtempSync(join(tmpdir(), "patch-cov-repo-"));
   try {
