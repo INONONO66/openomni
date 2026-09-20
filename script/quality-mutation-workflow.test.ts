@@ -41,5 +41,27 @@ test("full mutation is an explicit scheduled workflow, never a silently skipped 
     expect(step["continue-on-error"]).toBeUndefined();
     expect(step.if).toBeUndefined();
     expect(jsonString(step.run)).toContain("--baseline");
+    expect(jsonString(step.run)).toContain("--shard");
+    expect(jsonString(step.run)).toContain("--progress");
   }
+  // Sharded matrix: one failed shard must not cancel the others, and the shard
+  // list comes from the plan job so shard_count stays a dispatch input.
+  const strategy = jsonObject(job.strategy);
+  expect(strategy["fail-fast"]).toBe(false);
+  expect(jsonString(jsonObject(strategy.matrix).shard)).toContain("needs.plan.outputs.shards");
+  expect(Object.hasOwn(jsonObject(workflow.jobs), "plan")).toBe(true);
+  const uploads = steps.filter(
+    (step) =>
+      typeof step.name === "string" && jsonString(jsonObject(step.with ?? {}).name ?? "").includes("quality-mutation-progress-"),
+  );
+  expect(uploads.length).toBe(1);
+  // Join job merges shard receipts through the real join entry point.
+  const joinJob = jsonObject(jsonObject(workflow.jobs).join);
+  const joinSteps = jsonArray(joinJob.steps, jsonObject);
+  const joinRun = joinSteps.find(
+    (step) => typeof step.run === "string" && step.run.includes("script/quality-mutation-join.ts"),
+  );
+  expect(joinRun).toBeDefined();
+  expect(jsonString(jsonObject(joinRun ?? {}).run)).toContain("--baseline");
+  expect(jsonString(jsonObject(joinRun ?? {}).run)).toContain("--shards");
 });
