@@ -115,6 +115,8 @@ test("coverage unions lane hits and distinguishes missing source records", () =>
           { line: 2, hits: 0 },
         ],
       },
+      // Loaded by a lane but not an inventoried source (test helper): ignored.
+      { path: "test/helpers/h.ts", lines: [{ line: 1, hits: 0 }] },
     ],
     ["a.ts", "b.ts", "c.ts"],
   );
@@ -130,8 +132,8 @@ test("coverage unions lane hits and distinguishes missing source records", () =>
 });
 
 test("coverage preserves zero-line loaded modules without a debt finding", () => {
-  const result = coverageFindings([{ path: "types.ts", lines: [] }], []);
-  expect(result.coverage[0]?.loaded).toBe(true);
+  const result = coverageFindings([{ path: "types.ts", lines: [] }], ["types.ts"]);
+  expect(result.coverage).toEqual([{ path: "types.ts", loaded: true, lines: 0, covered: 0 }]);
   expect(result.findings).toEqual([]);
 });
 

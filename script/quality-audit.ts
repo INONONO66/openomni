@@ -86,7 +86,9 @@ export function aggregateFiles(findings: readonly Finding[]) {
 export function coverageFindings(records: readonly NativeLines[], sources: readonly string[]) {
   const merged = mergeNativeLines(records);
   const loaded = new Map(merged.map((record) => [record.path, record]));
-  const paths = [...new Set([...sources, ...loaded.keys()])].sort();
+  // Only inventoried sources are audited: lanes also load test helpers and
+  // fixtures, and their uncovered lines are not product debt.
+  const paths = [...new Set(sources)].sort();
   const coverage = paths.map((path) => {
     const record = loaded.get(path);
     return {

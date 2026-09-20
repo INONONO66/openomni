@@ -195,7 +195,7 @@ bun run script/quality-audit.ts --dry-run
 
 # Separate scheduled mutation campaign (quality-mutation.yml, never per PR):
 bun run script/check-quality-python.ts
-bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json
+gh workflow run quality-mutation.yml --ref main -f pilot_limit=0 -f shard_count=8
 
 # Reproduce one CI test lane:
 bun run ci test --lane agent
