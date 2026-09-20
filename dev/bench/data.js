@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789909381730,
+  "lastUpdate": 1789913121100,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -73473,6 +73473,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 122325,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a2e469a73f755ebb99fc9582cb5751b5530a906",
+          "message": "fix(tools,ipc): per-turn completion budget, single IPC wire classifier (#1115)\n\n* fix(tools,ipc): per-turn completion budget, single IPC wire classifier\n\ncompletion.ts: the per-cell 32-call budget (#842) was one process-wide\ncounter. createTools caches one catalog per CatalogPorts (WeakMap), so the\nclosure's `let calls` was shared by every cell and every session; the first\n32 completion calls anywhere exhausted the budget for the whole process.\nThe budget is now a Map keyed by ctx.turnId (the cell door sets\nturnId = cellId), cleared when a turn ends. RED test reproduces the shared\ncounter across two cells before the fix.\n\npackages/ipc: server.ts had its own decodeMessage classifier next to\npeer-request-table.ts dispatch. classifyIpcMessage is now the single wire\nclassifier; server.ts decodeMessage deleted (grep-zero).\n\nCloses docs/SLOP.md §H4 and §H5 (rows flip on merge in PR #1114's table).\nPart of #930\n\n* fix(ipc,tools): ratchet rows - unexport classifier types, rmSync socket cleanup\n\nQuality run 35506837021 reported 13 owned-origin type/export rows on #1115:\n- IpcMessage / IpcWireInput had one consumer each -> exports dropped\n- unlinkIfExists catch narrowed via unknown -> fs.rmSync(path, { force: true })\n  (ENOENT tolerated natively; a directory still refuses with ERR_FS_EISDIR,\n  server-edges pin updated to the exact code)\n- peer-request-table test rewritten without untyped onRequest callbacks:\n  classifier asserted directly, dispatchMessage drives the no-handler path\n- SLOP section H: H1-H3 closed by #1114 (374de398), H4/H5 owned by #1115\n\n* test(ipc): drop duplicate onRequest schema test that re-counted untyped callback params",
+          "timestamp": "2026-09-20T23:01:50+09:00",
+          "tree_id": "226a71126bdc5f9fef3d70f84d51d928a6d56b4c",
+          "url": "https://github.com/INONONO66/openomni/commit/4a2e469a73f755ebb99fc9582cb5751b5530a906"
+        },
+        "date": 1789913119798,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 815,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1138,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1139750,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 300869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5656370,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 103,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 904,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 92509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 639670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 419042,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2696,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 77842110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 7414142,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 17011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 161693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 813550,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 177449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 13168162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 79,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 104706,
             "unit": "ns/op"
           }
         ]
