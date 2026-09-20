@@ -109,7 +109,7 @@ async function checkResolution(failures: string[]): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const failures: string[] = [];
   await checkLayout(failures);
   await checkLock(failures);

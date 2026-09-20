@@ -132,13 +132,10 @@ export function checkPatchCoverage(base: string, globs: readonly string[], root:
     files.map((file) => resolve(root, file)),
     root,
   );
-  const isExecutable = (path: string): boolean => {
-    try {
-      return hasExecutableCode(readFileSync(resolve(root, path), "utf8"), path);
-    } catch {
-      return true; // unreadable at HEAD: fail closed, the row names the file
-    }
-  };
+  // Every path with added lines in a base...HEAD diff exists at HEAD, so the
+  // read is trusted; an unexpected failure crashes the gate, which fails closed.
+  const isExecutable = (path: string): boolean =>
+    hasExecutableCode(readFileSync(resolve(root, path), "utf8"), path);
   return uncoveredRows(changedLines(diff.stdout.toString()), union, isExecutable);
 }
 

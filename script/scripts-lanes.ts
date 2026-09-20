@@ -21,6 +21,7 @@ export const scriptsLanes = {
     "lint-tools.test.ts",
     "scripts-lanes.test.ts",
     "tool-target-deletion.test.ts",
+    "verify-ledger-rename.test.ts",
     "verify-tsconfig-inheritance.test.ts",
   ],
   "scripts-tooling": [
