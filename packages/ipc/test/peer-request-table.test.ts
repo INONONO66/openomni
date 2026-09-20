@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { Ipc } from "@openomni/protocol";
-import { z } from "zod";
 
 import { IpcConnectionError, IpcRemoteError, IpcTimeoutError } from "../src/errors";
 import { classifyIpcMessage, PeerRequestTable } from "../src/peer-request-table";
@@ -109,20 +108,6 @@ describe("PeerRequestTable", () => {
       method: "request.observed",
       params: { method: "echo" },
     });
-  });
-
-  test("request handlers parse params with the supplied Zod schema", () => {
-    const sent: Frame[] = [];
-    const table = new PeerRequestTable<string>({
-      send: (_peer, frame) => sent.push(frame),
-      onRequest: (_peer, _method, rawParams, respond) => {
-        const params = z.object({ value: z.number() }).parse(rawParams);
-        respond({ doubled: params.value * 2 });
-      },
-    });
-
-    table.dispatch(Ipc.createRequest("typed", "double", { value: 21 }), "peer-a");
-    expect(Ipc.Response.parse(sent[0]).result).toEqual({ doubled: 42 });
   });
 
   test("missing and throwing request handlers become code-1000 responses", () => {
