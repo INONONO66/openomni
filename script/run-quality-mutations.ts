@@ -1941,14 +1941,14 @@ function carriedResult(row: ObjectValue, carried: Map<string, CarriedResult>): v
 	const result = object(row.result);
 	const candidateId = hash(text(row.candidateId));
 	if (text(result.id) !== candidateId || result.selected !== true)
-		return fail("progress", "Recorded result does not match its candidate");
+		fail("progress", "Recorded result does not match its candidate");
 	const outcome = shardOutcome(result.outcome);
 	// Environmental outcomes are re-executed on the next run instead of carried.
 	if (outcome === "infrastructure" || outcome === "uncompleted") {
 		carried.delete(candidateId);
 		return;
 	}
-	if (result.restored !== true) return fail("progress", "Recorded result without restoration proof");
+	if (result.restored !== true) fail("progress", "Recorded result without restoration proof");
 	carried.set(candidateId, { candidateId, outcome, sourceSha256: hash(text(result.sourceSha256)), document: result });
 }
 function loadShardProgress(options: Options): ShardProgress {
