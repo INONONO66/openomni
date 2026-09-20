@@ -108,10 +108,26 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       pilot: { type: "boolean", default: false },
       limit: { type: "string" },
       target: { type: "string" },
+      shard: { type: "string" },
+      "shard-count": { type: "string" },
+      progress: { type: "string" },
+      "budget-minutes": { type: "string" },
     },
   });
   requireMeasurement(Boolean(values.baseline), "measured mutation baseline required");
   requireMeasurement(!(values.limit || values.target) || values.pilot, "--limit/--target require --pilot");
+  const shardValues = [values.shard, values["shard-count"], values.progress];
+  const shardMode = shardValues.some((value) => value !== undefined);
+  requireMeasurement(
+    !shardMode || shardValues.every((value) => value !== undefined),
+    "sharded execution requires --shard, --shard-count and --progress",
+  );
+  requireMeasurement(!(shardMode && values.pilot), "--shard is incompatible with --pilot");
+  const budgetMinutes = values["budget-minutes"] === undefined ? null : Number(values["budget-minutes"]);
+  requireMeasurement(
+    budgetMinutes === null || (Number.isSafeInteger(budgetMinutes) && budgetMinutes >= 1 && budgetMinutes <= 10_000),
+    "invalid --budget-minutes",
+  );
   console.error(`[mutation] fingerprinting source inventory (pilot=${values.pilot})`);
   const root = resolve(values.root),
     directory = resolve(root, values.output);
@@ -156,16 +172,28 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "--max-candidates",
       "1000000",
       "--budget",
-      "20000000",
+      String(budgetMinutes === null ? 20_000_000 : budgetMinutes * 60_000),
       "--suite-timeout",
       "3600000",
       ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
       ...(values.target ? ["--target", values.target] : []),
+      ...(shardMode
+        ? ["--shard", values.shard ?? "", "--shard-count", values["shard-count"] ?? "", "--progress", resolve(values.progress ?? "")]
+        : []),
       "--failure-output",
       resolve(directory, "reach-failure.json"),
     ],
   });
   writeFileSync(resolve(directory, "native.json"), JSON.stringify(result), { flag: "wx" });
+  if (shardMode) {
+    const document = jsonObject(result.document);
+    requireMeasurement(document.full === false, "shard run must not claim full convergence");
+    const shard = jsonObject(document.shard);
+    console.error(
+      `[mutation] shard ${jsonNumber(shard.index)}/${jsonNumber(shard.count)} recorded ${jsonNumber(shard.recorded)}/${jsonNumber(shard.sliceSize)} complete=${document.complete === true}`,
+    );
+    return result.exitCode;
+  }
   if (values.pilot) {
     const pilot = completeDocument(result.document);
     requireMeasurement(pilot.full === false, "pilot must not claim full convergence");
