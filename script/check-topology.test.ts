@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { topologyProblems, type TopologyConsumer } from "./check-topology";
+import { main, topologyProblems, type TopologyConsumer } from "./check-topology";
 import { assertTopologyComplete, ciTestSteps, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 const consumers: readonly TopologyConsumer[] = [
@@ -11,7 +11,6 @@ const consumers: readonly TopologyConsumer[] = [
   "knip",
   "dead-exports",
   "ci-tests",
-  "coverage-ratchet",
   "tsconfig",
 ];
 
@@ -45,10 +44,6 @@ function fixture() {
     "packages/phantom/test/index.test.ts": "",
     "packages/phantom/tsconfig.json": "{}",
     "knip.json": JSON.stringify({ workspaces: { ".": {}, [workspace.dir]: {} } }),
-    "script/conformance/coverage-baseline.json": JSON.stringify({
-      [workspace.dir]: {},
-      script: {},
-    }),
     ".github/workflows/ci.yml": [
       "      # topology:test-steps:start",
       ciTestSteps([workspace]),
@@ -114,14 +109,6 @@ const damagedConsumers: readonly {
       return workspace;
     },
   },
-  {
-    name: "coverage inventory",
-    affected: ["coverage-ratchet"],
-    damage(root, workspace) {
-      writeFileSync(join(root, "script/conformance/coverage-baseline.json"), '{"script":{}}');
-      return workspace;
-    },
-  },
 ];
 
 describe("topology conformance", () => {
@@ -171,4 +158,9 @@ describe("topology conformance", () => {
       expect(problems[consumer].join(" | ")).toContain("packages/machines");
     }
   });
+});
+
+test("the real repository topology passes the executable gate", () => {
+  // main exits the process on a violation, so returning is the assertion.
+  expect(main()).toBeUndefined();
 });

@@ -467,6 +467,76 @@ function entryAt(dirfd: number, name: string): { name: string; kind: EntryKind; 
  * Symlinks are expanded lexically and every expansion restarts at the root fd,
  * so no pathname is checked and then resolved again for use.
  */
+function openFlags(op: Machine.FsRequest["op"]): number {
+  return op === "write" ? constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK : O_TARGET;
+}
+
+function executeWrite(target: OpenedTarget, data: Buffer, shown: string): Machine.FsResult {
+  if (!fstatSync(target.fd).isFile()) return refused("wrong_kind", `path is not a file: ${shown}`);
+  // Never truncate before checking the pinned descriptor's kind.
+  ftruncateSync(target.fd, 0);
+  let bytesWritten = 0;
+  while (bytesWritten < data.length) {
+    bytesWritten += writeSync(
+      target.fd,
+      data,
+      bytesWritten,
+      data.length - bytesWritten,
+      bytesWritten,
+    );
+  }
+  return { status: "completed", value: { op: "write", bytesWritten } };
+}
+
+function executeRead(
+  target: OpenedTarget,
+  request: Extract<Machine.FsRequest, { op: "read" }>,
+  shown: string,
+): Machine.FsResult {
+  const metadata = fstatSync(target.fd);
+  if (!metadata.isFile()) return refused("wrong_kind", `path is not a file: ${shown}`);
+  const limit = Math.min(request.limit ?? Machine.FS_READ_MAX_BYTES, Machine.FS_READ_MAX_BYTES);
+  const offset = request.offset ?? 0;
+  const buffer = Buffer.alloc(limit);
+  const bytesRead = readSync(target.fd, buffer, 0, limit, offset);
+  return {
+    status: "completed",
+    value: {
+      op: "read",
+      data: buffer.subarray(0, bytesRead).toString("base64"),
+      bytesRead,
+      size: metadata.size,
+      truncated: offset + bytesRead < metadata.size,
+    },
+  };
+}
+
+function executeList(target: OpenedTarget, testHooks: FsDriverTestHooks): Machine.FsResult {
+  const directoryEntries = directoryNames(target.fd, testHooks);
+  const selected = directoryEntries.slice(0, Machine.FS_LIST_MAX_ENTRIES);
+  return {
+    status: "completed",
+    value: {
+      op: "list",
+      entries: selected.map((name) => entryAt(target.fd, name)),
+      truncated: directoryEntries.length > Machine.FS_LIST_MAX_ENTRIES,
+    },
+  };
+}
+
+function executeStat(target: OpenedTarget): Machine.FsResult {
+  const metadata = target.symlinkStat ?? fstatSync(target.fd);
+  return {
+    status: "completed",
+    value: {
+      op: "stat",
+      kind: kindOf(metadata),
+      size: Number(metadata.size),
+      mtimeMs: Number(metadata.mtimeMs),
+    },
+  };
+}
+
 export function createFsDriver(
   exports: ReadonlyMap<string, string>,
   testHooks: FsDriverTestHooks = {},
@@ -504,77 +574,17 @@ export function createFsDriver(
       request.op === "list",
       request.op === "stat",
       shown,
-      request.op === "write"
-        ? constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK
-        : O_TARGET,
+      openFlags(request.op),
       testHooks,
     );
 
     if (isRefusal(target)) return target;
 
     try {
-      if (data !== undefined) {
-        if (!fstatSync(target.fd).isFile())
-          return refused("wrong_kind", `path is not a file: ${shown}`);
-        // Never truncate before checking the pinned descriptor's kind.
-        ftruncateSync(target.fd, 0);
-        let bytesWritten = 0;
-        while (bytesWritten < data.length) {
-          bytesWritten += writeSync(
-            target.fd,
-            data,
-            bytesWritten,
-            data.length - bytesWritten,
-            bytesWritten,
-          );
-        }
-        return { status: "completed", value: { op: "write", bytesWritten } };
-      }
-      if (request.op === "read") {
-        const metadata = fstatSync(target.fd);
-        if (!metadata.isFile()) return refused("wrong_kind", `path is not a file: ${shown}`);
-        const limit = Math.min(
-          request.limit ?? Machine.FS_READ_MAX_BYTES,
-          Machine.FS_READ_MAX_BYTES,
-        );
-        const offset = request.offset ?? 0;
-        const buffer = Buffer.alloc(limit);
-        const bytesRead = readSync(target.fd, buffer, 0, limit, offset);
-        return {
-          status: "completed",
-          value: {
-            op: "read",
-            data: buffer.subarray(0, bytesRead).toString("base64"),
-            bytesRead,
-            size: metadata.size,
-            truncated: offset + bytesRead < metadata.size,
-          },
-        };
-      }
-
-      if (request.op === "list") {
-        const directoryEntries = directoryNames(target.fd, testHooks);
-        const selected = directoryEntries.slice(0, Machine.FS_LIST_MAX_ENTRIES);
-        return {
-          status: "completed",
-          value: {
-            op: "list",
-            entries: selected.map((name) => entryAt(target.fd, name)),
-            truncated: directoryEntries.length > Machine.FS_LIST_MAX_ENTRIES,
-          },
-        };
-      }
-
-      const metadata = target.symlinkStat ?? fstatSync(target.fd);
-      return {
-        status: "completed",
-        value: {
-          op: "stat",
-          kind: kindOf(metadata),
-          size: Number(metadata.size),
-          mtimeMs: Number(metadata.mtimeMs),
-        },
-      };
+      if (data !== undefined) return executeWrite(target, data, shown);
+      if (request.op === "read") return executeRead(target, request, shown);
+      if (request.op === "list") return executeList(target, testHooks);
+      return executeStat(target);
     } catch {
       return refused("io_error", `filesystem operation failed for: ${shown}`);
     } finally {

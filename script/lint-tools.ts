@@ -612,7 +612,36 @@ const badTool: ToolSurface = {
   },
 };
 
-function selfTest(): void {
+function definitionSelfTest(failures: string[]): void {
+  const exemplar = TOOL_DEFINITIONS[0];
+  if (exemplar === undefined) failures.push("definition invariant self-test has no exemplar");
+  if (exemplar === undefined) return;
+  const unsafeQuery = {
+    ...exemplar,
+    name: "unsafe_query",
+    category: "query",
+  } as AnyToolDefinition;
+  const earnedFlagged = definitionInvariantViolations(
+    [],
+    [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/query/unsafe.ts" }],
+  ).some(({ check }) => check === "earned-check");
+  if (!earnedFlagged) failures.push("earned-check did not flag an uncatalogued definition");
+  const fileNameChecks = [
+    ["send_message", "apps/openomni/src/tools/send-message.ts", 0],
+    ["send_message", "apps/openomni/src/tools/send_message.ts", 1],
+    ["read", "apps/openomni/src/tools/files/read.ts", 0],
+    ["read", "apps/openomni/src/tools/files/read-file.ts", 1],
+  ] as const;
+  for (const [name, filePath, expected] of fileNameChecks) {
+    const definition = { ...exemplar, name } as AnyToolDefinition;
+    const flagged = definitionInvariantViolations([definition], [{ definition, filePath }]).filter(
+      ({ message }) => message.startsWith("[tool-file-name]"),
+    ).length;
+    if (flagged !== expected) failures.push(`tool-file-name misjudged ${filePath} for ${name}`);
+  }
+}
+
+export function selfTest(): void {
   const failures: string[] = [];
 
   const nouns = extractTierNouns(
@@ -645,37 +674,7 @@ function selfTest(): void {
     failures.push("naming lint flagged a clean identifier");
   }
 
-  const exemplar = TOOL_DEFINITIONS[0];
-  if (exemplar === undefined) failures.push("definition invariant self-test has no exemplar");
-  else {
-    const unsafeQuery = {
-      ...exemplar,
-      name: "unsafe_query",
-      category: "query",
-    } as AnyToolDefinition;
-    if (
-      !definitionInvariantViolations(
-        [],
-        [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/query/unsafe.ts" }],
-      ).some(({ check }) => check === "earned-check")
-    ) {
-      failures.push("earned-check did not flag an exported definition absent from the catalog");
-    }
-    const fileNameChecks = [
-      ["send_message", "apps/openomni/src/tools/send-message.ts", 0],
-      ["send_message", "apps/openomni/src/tools/send_message.ts", 1],
-      ["read", "apps/openomni/src/tools/files/read.ts", 0],
-      ["read", "apps/openomni/src/tools/files/read-file.ts", 1],
-    ] as const;
-    for (const [name, filePath, expected] of fileNameChecks) {
-      const definition = { ...exemplar, name } as AnyToolDefinition;
-      const flagged = definitionInvariantViolations(
-        [definition],
-        [{ definition, filePath }],
-      ).filter(({ message }) => message.startsWith("[tool-file-name]")).length;
-      if (flagged !== expected) failures.push(`tool-file-name misjudged ${filePath} for ${name}`);
-    }
-  }
+  definitionSelfTest(failures);
 
   const composedSchema = {
     $defs: { common: { type: "object", properties: { a: {}, b: {}, c: {} } } },

@@ -230,6 +230,25 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
     });
   }
 
+  /** Provider attempts carry the external effect; an open one makes the
+   * logical llm ambiguous, while settled attempts leave only the local commit. */
+  async function settleLlm(action: LedgerAction.Node, all: readonly LedgerAction.Node[]) {
+    let ambiguous = false;
+    let lastSettled: LedgerAction.Node = action;
+    for (const attempt of all) {
+      if (attempt.kind !== "attempt" || attempt.parentId !== action.id) continue;
+      if (object(attempt.intent.value).phase !== "intent") continue;
+      const settled = terminal(attempt.id);
+      if (settled !== undefined) {
+        lastSettled = settled;
+        continue;
+      }
+      ambiguous = true;
+      await settleCrash(attempt, crashVerdict(attempt));
+    }
+    await settleCrash(action, ambiguous ? crashVerdict(action) : localAbsent(lastSettled));
+  }
+
   /** Crash-open settlement for this turn: persisted evidence only, no body, guarded waves stay with their captured dispatcher. */
   async function recover(): Promise<void> {
     const all = actions();
@@ -240,22 +259,7 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
         else await settleFromBoundary(action, boundary);
         continue;
       }
-      // Provider attempts carry the external effect; an open one makes the
-      // logical llm ambiguous, while settled attempts leave only the local commit.
-      let ambiguous = false;
-      let lastSettled: LedgerAction.Node = action;
-      for (const attempt of all) {
-        if (attempt.kind !== "attempt" || attempt.parentId !== action.id) continue;
-        if (object(attempt.intent.value).phase !== "intent") continue;
-        const settled = terminal(attempt.id);
-        if (settled !== undefined) {
-          lastSettled = settled;
-          continue;
-        }
-        ambiguous = true;
-        await settleCrash(attempt, crashVerdict(attempt));
-      }
-      await settleCrash(action, ambiguous ? crashVerdict(action) : localAbsent(lastSettled));
+      await settleLlm(action, all);
     }
   }
 

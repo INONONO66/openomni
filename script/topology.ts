@@ -3,13 +3,6 @@ import { join } from "node:path";
 
 export type DependencyBand = "none" | "any-except-self" | readonly string[];
 
-export interface CoverageLane {
-  readonly displayName: string;
-  readonly dir: string;
-  /** Workspace-relative source root owned by this lane. */
-  readonly sourceRoot: "src/" | ".";
-}
-
 export interface WorkspaceTopology {
   readonly key: string;
   readonly displayName: string;
@@ -247,21 +240,6 @@ export function assertTopologyComplete(
     );
   }
 }
-
-const SCRIPT_COVERAGE_LANE: CoverageLane = {
-  displayName: "scripts",
-  dir: "script",
-  sourceRoot: ".",
-};
-
-export const coverageLanes = (
-  topology: readonly WorkspaceTopology[] = TOPOLOGY,
-): readonly CoverageLane[] => [
-  ...topology
-    .filter((workspace) => workspace.coverageLane)
-    .map(({ displayName, dir }) => ({ displayName, dir, sourceRoot: "src/" as const })),
-  SCRIPT_COVERAGE_LANE,
-];
 
 export const knipWorkspaces = (topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
   topology.filter((workspace) => workspace.knipWorkspace);

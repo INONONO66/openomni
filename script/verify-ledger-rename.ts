@@ -23,9 +23,7 @@ const BANNED = [OLD_PACKAGE_NAME, OLD_PACKAGE_PATH];
 
 const root = new URL("..", import.meta.url).pathname;
 
-async function main(): Promise<void> {
-  const failures: string[] = [];
-
+async function checkLayout(failures: string[]): Promise<void> {
   // 1. Old directory must be gone; new directory and migrations must exist.
   if (existsSync(join(root, OLD_PACKAGE_PATH))) {
     failures.push(`old directory still exists: ${OLD_PACKAGE_PATH}`);
@@ -50,7 +48,9 @@ async function main(): Promise<void> {
   if (manifest.name !== "@openomni/ledger") {
     failures.push(`packages/ledger/package.json name is ${JSON.stringify(manifest.name)}`);
   }
+}
 
+async function checkLock(failures: string[]): Promise<void> {
   // 3. Lockfile carries the new workspace mapping and none of the old one.
   const lock = await Bun.file(join(root, "bun.lock")).text();
   if (!lock.includes('"packages/ledger"')) {
@@ -59,7 +59,9 @@ async function main(): Promise<void> {
   if (!lock.includes("@openomni/ledger")) {
     failures.push("bun.lock has no @openomni/ledger resolution");
   }
+}
 
+async function scanTracked(failures: string[]): Promise<readonly string[]> {
   // 4. Zero old identity across every tracked file (lock, tsconfigs, CI,
   //    scripts, docs, fixtures — everything git tracks), this script included.
   const proc = Bun.spawnSync(["git", "ls-files"], { cwd: root });
@@ -85,7 +87,10 @@ async function main(): Promise<void> {
       }
     }
   }
+  return trackedFiles;
+}
 
+async function checkResolution(failures: string[]): Promise<void> {
   // 5. From a real consumer package the old specifier must not resolve and the
   //    new one must import cleanly. (The workspace root declares no dependency
   //    on either name, so resolution is checked where consumers live.)
@@ -102,6 +107,14 @@ async function main(): Promise<void> {
   } catch (err) {
     failures.push(`import("@openomni/ledger") failed from apps/openomni: ${String(err)}`);
   }
+}
+
+export async function main(): Promise<void> {
+  const failures: string[] = [];
+  await checkLayout(failures);
+  await checkLock(failures);
+  const trackedFiles = await scanTracked(failures);
+  await checkResolution(failures);
 
   if (failures.length > 0) {
     console.error(`verify-ledger-rename: FAIL (${failures.length})`);

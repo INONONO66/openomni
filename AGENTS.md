@@ -186,22 +186,17 @@ bun run script/verify-ledger-rename.ts
 bun run script/check-ledger-schema-drift.ts
 bun test --timeout 15000
 
-# After the coverage-producing package test commands used by CI:
-bun run script/check-coverage-ratchet.ts
+# PR patch-coverage gate (#1116): changed executable lines must be covered by
+# the lane lcov evidence. Locally, point --glob at fresh coverage output:
+bun run script/check-patch-coverage.ts --base origin/main --glob 'packages/*/coverage/lcov.info' --glob 'apps/*/coverage/lcov.info' --glob 'script/coverage/lcov.info'
 
-# #945 measurement entry points (native source/coverage receipts are mandatory):
-mkdir -p quality-results
-bun run script/quality-inventory.ts > quality-results/inventory.json
-bun run script/check-types-census.ts --inventory quality-results/inventory.json
+# Scheduled/manual deep audit entry points (quality-mutation.yml, never per PR):
 bun run script/check-quality-python.ts
-# After sealing coverage receipts as described in docs/ci.md:
-bun run script/quality-measure.ts --base origin/main --baseline script/conformance/quality-baseline-lcov-bound.json --plan quality-plan.json --run "$QUALITY_RUN" --coverage-directory quality-receipts
-# Scheduled/manual full mutation, never a claim inferred from a PR pilot:
 bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json
 
-# Reproduce one CI lane, including its fresh coverage gate:
+# Reproduce one CI test lane:
 bun run ci test --lane agent
-bun run ci test --lane scripts
+bun run ci test --lane scripts-contracts
 
 # Sole deployable app
 bun run --cwd apps/openomni dev
@@ -210,18 +205,14 @@ bun run --cwd apps/openomni dev
 bun run --cwd apps/desktop dev
 ```
 
-Coverage baselines are updated after coverage-producing test runs with `bun run script/check-coverage-ratchet.ts --update`. Dead-export shrinkage uses `bun run script/check-dead-exports.ts --update`.
+Dead-export shrinkage uses `bun run script/check-dead-exports.ts --update`.
 
-`quality-measure.ts` invokes the named publisher, export, and store outcomes of
-`check-census.ts`, the type census, and the frozen analyzers behind
-`check-quality-metrics.ts` and `check-quality-coverage.ts`. Their strict original
-coverage-receipt API remains available for exact statement-counter verification.
-`quality-ratchet.ts` requires an exact complete measurement for initial baseline
-admission. Once established in the Git base, it rejects baseline growth and any
-finding on added/modified source lines (or anywhere in a newly added file). Baseline
-fragments contain measured multiplicities, not exemptions; there is no update or
-soft mode for this ratchet. Full mutation uses `run-quality-mutations.ts` and
-requires a complete campaign receipt, including restoration and cleanup proof.
+The per-PR quality ratchet stack (census, exact statement evidence, coverage
+ratchet, metrics legs) was deleted by #1116 in favor of the lean PR gate:
+build, types, lint (including `noExcessiveCognitiveComplexity`), dependency
+rules, tests, and the patch-coverage gate. Deep audits stay scheduled:
+`quality-mutation.yml` runs `run-quality-mutations.ts`, which requires a
+complete campaign receipt, including restoration and cleanup proof.
 
 ## NOTES
 

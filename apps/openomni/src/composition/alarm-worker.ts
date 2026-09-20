@@ -114,6 +114,49 @@ export function createAlarmWorker(options: {
     void options.wake(row.sessionId).catch((error: Error) => options.failure(error));
   }
 
+  function startWatch(owned: Alarm.Row, preAcquireFence: number) {
+    const { watch } = Alarm.WatchSpec.parse(owned.spec?.value);
+    if (watch.timeout_ms !== undefined && now() >= owned.fireAt + watch.timeout_ms) {
+      summary(owned, "timeout", null);
+      return;
+    }
+    if (recovering && preAcquireFence > 0 && watch.persistent !== true) {
+      summary(owned, "restart", null);
+      return;
+    }
+    try {
+      const source =
+        "command" in watch
+          ? startCommandWatch(owned, watch)
+          : pathSource(
+              watch,
+              (content, identity) => deliver(owned, `path:${identity}`, content, false),
+              (error) => sourceFailure(owned, error),
+            );
+      running.set(owned.id, { row: owned, source });
+    } catch {
+      sourceFailure(owned, new AlarmSourceError("source.start"));
+    }
+  }
+
+  function startCommandWatch(
+    owned: Alarm.Row,
+    watch: Extract<Alarm.Watch, { command: string }>,
+  ): AlarmSource {
+    const filter = watch.filter === undefined ? undefined : new RegExp(watch.filter);
+    let lines = 0;
+    return commandSource(
+      watch.command,
+      (content) => {
+        lines += 1;
+        if (filter === undefined || filter.test(content))
+          deliver(owned, `line:${owned.fence}:${lines}`, content, false, canonicalDigest(content));
+      },
+      (code) => summary(owned, "exit", code),
+      (error) => sourceFailure(owned, error),
+    );
+  }
+
   function start(row: Alarm.Row) {
     const deadline = Alarm.RequestDeadline.safeParse(row.spec?.value);
     if (row.kind === "at" && deadline.success) {
@@ -139,47 +182,7 @@ export function createAlarmWorker(options: {
       );
       return;
     }
-    const { watch } = Alarm.WatchSpec.parse(owned.spec?.value);
-    if (watch.timeout_ms !== undefined && now() >= owned.fireAt + watch.timeout_ms) {
-      summary(owned, "timeout", null);
-      return;
-    }
-    if (recovering && row.fence > 0 && watch.persistent !== true) {
-      summary(owned, "restart", null);
-      return;
-    }
-    try {
-      let source: AlarmSource;
-      if ("command" in watch) {
-        const filter = watch.filter === undefined ? undefined : new RegExp(watch.filter);
-        let lines = 0;
-        source = commandSource(
-          watch.command,
-          (content) => {
-            lines += 1;
-            if (filter === undefined || filter.test(content))
-              deliver(
-                owned,
-                `line:${owned.fence}:${lines}`,
-                content,
-                false,
-                canonicalDigest(content),
-              );
-          },
-          (code) => summary(owned, "exit", code),
-          (error) => sourceFailure(owned, error),
-        );
-      } else {
-        source = pathSource(
-          watch,
-          (content, identity) => deliver(owned, `path:${identity}`, content, false),
-          (error) => sourceFailure(owned, error),
-        );
-      }
-      running.set(row.id, { row: owned, source });
-    } catch {
-      sourceFailure(owned, new AlarmSourceError("source.start"));
-    }
+    startWatch(owned, row.fence);
   }
 
   function tick() {

@@ -120,6 +120,80 @@ export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject
   return projected;
 }
 
+function invalidInputReason(error: z.ZodError): string {
+  const issue = error.issues[0];
+  const path = issue?.path.map(String).join(".") ?? "";
+  return issue === undefined
+    ? "invalid input"
+    : path === ""
+      ? issue.message
+      : `${path}: ${issue.message}`;
+}
+
+/** Non-executed terminals map to a failed result; a cell-door refusal throws. */
+function finishResult(
+  call: Tool.Call,
+  definition: AnyToolDefinition,
+  inputData: unknown,
+  door: "model" | "cell",
+  execution: ExecutionBatchResult,
+): ToolDispatchResult | CellToolDispatchResult {
+  if (execution.terminal === "cancelled")
+    return failed(call, "tool execution cancelled", "execution_failed");
+  if (execution.terminal === "failed")
+    return failed(call, execution.error.message, "execution_failed");
+  if (execution.terminal !== "executed") {
+    const refusal = new ToolRefused(definition.name, execution.reason);
+    if (door === "cell") throw refusal;
+    return failed(call, refusal.message, "precondition_failed");
+  }
+  const parsedOutcome = ToolBodyOutcome.safeParse(execution.value);
+  if (!parsedOutcome.success) {
+    return failed(call, `${definition.name} produced invalid output`, "invalid_output");
+  }
+  const outcome = parsedOutcome.data;
+  if (outcome.status === "timed_out") {
+    return failed(call, `${definition.name} timed out`, "execution_failed");
+  }
+  if (outcome.status === "error") {
+    return failed(call, outcome.message, outcome.errorKind);
+  }
+
+  const transformedOutput = definition.output.safeParse(outcome.output);
+  if (!transformedOutput.success) {
+    return failed(call, `${definition.name} produced invalid output`, "invalid_output");
+  }
+  const output = PlainValueSchema.safeParse(transformedOutput.data);
+  if (!output.success) {
+    return failed(call, `${definition.name} produced invalid output`, "invalid_output");
+  }
+  return {
+    toolCallId: call.id,
+    id: call.id,
+    toolName: call.tool,
+    output:
+      door === "cell" ? output.data : truncate(definition.render(inputData, output.data)),
+  } satisfies ToolDispatchResult | CellToolDispatchResult;
+}
+
+function approvalFromOriginal(
+  original: PlainValue | undefined,
+  approval: ExecutionRequest["approval"],
+): ExecutionRequest["approval"] {
+  if (
+    original === undefined ||
+    original === null ||
+    typeof original !== "object" ||
+    Array.isArray(original)
+  )
+    return approval;
+  return {
+    required: original.approvalRequired === true,
+    domainRevisions: z.record(z.string(), z.number().int()).parse(original.domainRevisions),
+    timeoutMs: approval?.timeoutMs,
+  };
+}
+
 export function createDispatcher(
   definitions: readonly AnyToolDefinition[],
   options?: DispatcherOptions,
@@ -163,14 +237,7 @@ export function createDispatcher(
     }
     const parsedInput = definition.input.safeParse(call.input);
     if (!parsedInput.success) {
-      const issue = parsedInput.error.issues[0];
-      const path = issue?.path.map(String).join(".") ?? "";
-      const reason =
-        issue === undefined
-          ? "invalid input"
-          : path === ""
-            ? issue.message
-            : `${path}: ${issue.message}`;
+      const reason = invalidInputReason(parsedInput.error);
       return {
         kind: "refused",
         result: failed(call, `${definition.name} refused: ${reason}`, "invalid_input"),
@@ -183,20 +250,7 @@ export function createDispatcher(
     }
     const parsedValue = PlainValueSchema.parse(parsedInput.data);
     const binding = approvalBindings.get(definition);
-    let approval = binding?.(parsedValue);
-    const original = originalAction?.intent.value;
-    if (
-      original !== undefined &&
-      original !== null &&
-      typeof original === "object" &&
-      !Array.isArray(original)
-    ) {
-      approval = {
-        required: original.approvalRequired === true,
-        domainRevisions: z.record(z.string(), z.number().int()).parse(original.domainRevisions),
-        timeoutMs: approval?.timeoutMs,
-      };
-    }
+    const approval = approvalFromOriginal(originalAction?.intent.value, binding?.(parsedValue));
     const request: ExecutionRequest = {
       kind: "tool",
       op: definition.name,
@@ -231,53 +285,8 @@ export function createDispatcher(
       );
     const finish = (
       execution: ExecutionBatchResult,
-    ): ToolDispatchResult | CellToolDispatchResult => {
-      if (execution.terminal === "cancelled")
-        return failed(call, "tool execution cancelled", "execution_failed");
-      if (execution.terminal === "failed")
-        return failed(call, execution.error.message, "execution_failed");
-      if (execution.terminal !== "executed") {
-        const refusal = new ToolRefused(definition.name, execution.reason);
-        if (door === "cell") throw refusal;
-        return failed(call, refusal.message, "precondition_failed");
-      }
-
-      const parsedOutcome = ToolBodyOutcome.safeParse(execution.value);
-      if (!parsedOutcome.success) {
-        const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-        return result;
-      }
-      const outcome = parsedOutcome.data;
-      if (outcome.status === "timed_out") {
-        const result = failed(call, `${definition.name} timed out`, "execution_failed");
-        return result;
-      }
-      if (outcome.status === "error") {
-        const result = failed(call, outcome.message, outcome.errorKind);
-        return result;
-      }
-
-      const transformedOutput = definition.output.safeParse(outcome.output);
-      if (!transformedOutput.success) {
-        const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-        return result;
-      }
-      const output = PlainValueSchema.safeParse(transformedOutput.data);
-      if (!output.success) {
-        const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-        return result;
-      }
-      const result = {
-        toolCallId: call.id,
-        id: call.id,
-        toolName: call.tool,
-        output:
-          door === "cell"
-            ? output.data
-            : truncate(definition.render(parsedInput.data, output.data)),
-      } satisfies ToolDispatchResult | CellToolDispatchResult;
-      return result;
-    };
+    ): ToolDispatchResult | CellToolDispatchResult =>
+      finishResult(call, definition, parsedInput.data, door, execution);
     let modelResult: ToolDispatchResult | undefined;
     return {
       kind: "ready",

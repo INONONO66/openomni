@@ -141,12 +141,11 @@ function projectRequestDeadline(db: Database, action: LedgerAction.Append): void
   );
 }
 
-export function commitSession(
+function commitPreconditionRefusal(
   db: Database,
   request: LedgerSession.Commit,
+  current: LedgerSession.Row,
 ): LedgerSession.CommitResult | undefined {
-  const current = selectSession(db, request.sessionId);
-  if (current === undefined) return undefined;
   const refusal = sessionAuthorityRefusal(db, request, current);
   if (refusal !== undefined) return refusal;
   if (!validActionBatch(db, request.actions, request.sessionId)) {
@@ -158,6 +157,17 @@ export function commitSession(
   if (!canConsumeInbox(db, request)) {
     return refusedSessionCommit("inbox", current);
   }
+  return undefined;
+}
+
+export function commitSession(
+  db: Database,
+  request: LedgerSession.Commit,
+): LedgerSession.CommitResult | undefined {
+  const current = selectSession(db, request.sessionId);
+  if (current === undefined) return undefined;
+  const refusal = commitPreconditionRefusal(db, request, current);
+  if (refusal !== undefined) return refusal;
 
   const receipts: LedgerAction.Receipt[] = [];
   let revision = current.revision;

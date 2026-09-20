@@ -82,6 +82,31 @@ export namespace Processor {
       if (fact.type !== "message.created") sink.onMessage(folded);
     }
 
+    async function closeStream(iterator: {
+      return?: () => unknown;
+    }): Promise<void> {
+      const closing = iterator.return?.();
+      if (closing === undefined) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.resolve(closing).then(
+            () => undefined,
+            (error: Error) => {
+              publishInfo(events, sessionID, trace.traceId, "stream.close.failed", {
+                error: String(error),
+              });
+            },
+          ),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, STREAM_CLOSE_GRACE_MS);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     async function process(streamInput: StreamInput): Promise<void> {
       publishStatus(events, sessionID, trace.traceId, "busy");
       record({ type: "message.created", attemptId, message: { ...assistantMessage } });
@@ -122,27 +147,7 @@ export namespace Processor {
             handleStreamEvent(next.value, eventState, eventContext);
           }
         } finally {
-          const closing = iterator.return?.();
-          if (closing !== undefined) {
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            try {
-              await Promise.race([
-                Promise.resolve(closing).then(
-                  () => undefined,
-                  (error: Error) => {
-                    publishInfo(events, sessionID, trace.traceId, "stream.close.failed", {
-                      error: String(error),
-                    });
-                  },
-                ),
-                new Promise<void>((resolve) => {
-                  timer = setTimeout(resolve, STREAM_CLOSE_GRACE_MS);
-                }),
-              ]);
-            } finally {
-              clearTimeout(timer);
-            }
-          }
+          await closeStream(iterator);
         }
         settleAttempt(eventState, eventContext, {
           aborted: false,

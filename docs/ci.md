@@ -7,223 +7,145 @@ compares the PR base with that tested commit using NUL-delimited Git paths,
 including both endpoints of renames. A Git or topology error fails planning.
 
 `script/topology.ts` owns workspace identities and permitted dependencies.
-`script/ci-plan.ts` emits plan v2: `class`, logical `lanes`, `qualityScope`,
-`projects`, `toolingTests`, and the executable test `matrix`. Impact follows the
-broader permitted dependency band, including test dependencies and transitive
-consumers. Mixed changes take the maximum class in the table; scopes are unions.
+`script/ci-plan.ts` emits plan v2: `class`, logical `lanes`, `toolingTests`,
+and the executable test `matrix`. Impact follows the broader permitted
+dependency band, including test dependencies and transitive consumers. Mixed
+changes take the maximum class in the table; scopes are unions.
 
-| Class (ascending) | Trigger | Workspace tests | Quality scope | Tooling tests |
-| --- | --- | --- | --- | --- |
-| `docs` | Root `*.md` or `docs/**` only | None | None | No |
-| `desktop` | `apps/desktop/**`, `packages/ui/**` | Affected workspaces and consumers | Affected source inventory | No |
-| `kernel` | Other packages or `apps/openomni/**` | Affected workspaces and consumers | Affected source inventory | No |
-| `tooling` | `script/**` except conformance contracts | Changed workspace lanes, if present | Whole inventory | Four tooling shards |
-| `global` | Protocol, manifests/lockfile, conformance contracts, CI/root configuration, malformed or unowned paths | All | Whole inventory | Four tooling shards |
+| Class (ascending) | Trigger | Workspace tests | Tooling tests |
+| --- | --- | --- | --- |
+| `docs` | Root `*.md` or `docs/**` only | None | No |
+| `desktop` | `apps/desktop/**`, `packages/ui/**` | Affected workspaces and consumers | No |
+| `kernel` | Other packages or `apps/openomni/**` | Affected workspaces and consumers | No |
+| `tooling` | `script/**` except conformance contracts | Changed workspace lanes, if present | Two tooling shards |
+| `global` | Protocol, manifests/lockfile, conformance contracts, CI/root configuration, malformed or unowned paths | All | Two tooling shards |
 
 Package-local documentation retains workspace impact. Main pushes, schedules,
 manual dispatch, and the planner's `merge_group` event mode select `global`.
 The workflow trigger for merge groups belongs to the subsequent two-tier change.
-`projects` comes from TypeScript's parsed tsconfig root-file lists intersecting
-the affected file closure; planning never constructs compiler programs.
 
 Repository contracts run on **every PR**, including docs-only PRs. Consequently
-Build also runs for documentation changes, but workspace tests, static/dependency
-jobs, and quality remain omitted. Build/pack/restore deliberately remain global:
-contracts and consumers require the complete validated dist archive. Scoping that
-archive and its producer is a follow-up, not an unverified saving claimed here.
-The plan travels as `ci-plan.json` in the `ci-plan` artifact; only small selection
-fields and the matrix travel through job outputs, never `qualityScope`.
+Build also runs for documentation changes, but workspace tests and
+static/dependency jobs remain omitted. Build/pack/restore deliberately remain
+global: contracts and consumers require the complete validated dist archive.
+The plan travels as `ci-plan.json` in the `ci-plan` artifact; only small
+selection fields and the matrix travel through job outputs.
 
 ## CI tiers and merge queue
 
 CI has two tiers with the same job names and required `CI` status. The scoped PR
- tier uses the change class and affected closure from `ci-plan.json`; quality
-runs for executable plans against the PR base SHA, while docs-only executable
-jobs are skipped. Tooling self-tests run only when `script/**` changes.
+tier uses the change class and affected closure from `ci-plan.json`; docs-only
+executable jobs are skipped. Tooling self-tests run only when `script/**`
+changes.
 
 The full tier runs on `merge_group`, pushes to `main`, nightly schedules, and
-manual dispatch. It uses the global plan, all workspace lanes, the whole quality
-inventory, and all tooling self-tests. The merge queue trigger is required so
-its unchanged job contexts report the required status.
-
-| Class | Workspace tests | Quality scope | Tooling self-tests |
-| --- | --- | --- | --- |
-| docs | none | none | no |
-| desktop | UI/desktop closure | affected inventory | no |
-| kernel | affected closure | affected inventory | no |
-| tooling | scripts | whole inventory | yes |
-| global | all | whole inventory | yes |
+manual dispatch. It uses the global plan, all workspace lanes, and all tooling
+self-tests. The merge queue trigger is required so its unchanged job contexts
+report the required status.
 
 Only pull-request runs are cancellable; queue entries and main pushes are never
-cancelled. Dependency review remains pull-request-only. The lead applies the
-reversible ruleset requirement for `CI` with `gh api` after merge; this workflow
-does not apply the ruleset.
+cancelled. Dependency review and the patch-coverage gate are pull-request-only.
+The lead applies the reversible ruleset requirement for `CI` with `gh api`
+after merge; this workflow does not apply the ruleset.
 
+## The lean PR gate (#1116)
+
+Issue #1116 deleted the per-PR quality ratchet stack (census legs, exact
+statement evidence, coverage ratchets, metrics/clone legs, receipts and their
+baselines). A PR is admitted by:
+
+- **Build** (`prepare`) and the restored `workspace-dist` artifact.
+- **Static Analysis**: `lint` (Ultracite, including
+  `complexity/noExcessiveCognitiveComplexity` at `maxAllowedComplexity: 21`,
+  suppression-free) and `check-types`.
+- **Dependency Rules** (`deps`): topology, dependency bands, guards,
+  side-effects, tool lint, plus the relocated structural gates
+  `check-dead-exports.ts`, `check-import-cycles.ts` and
+  `verify-tsconfig-inheritance.ts`.
+- **Tests**: selected workspace lanes and, for tooling/full plans, the two
+  scripts-tooling shards; `scripts-contracts` always runs.
+- **Patch Coverage** (`patch-coverage`, PR-only): every changed executable line
+  must be covered by the PR's own lcov evidence.
+- **Dependency Review** (PR-only, on dependency-affecting plans).
+
+Deep audits are scheduled, not per-PR: `.github/workflows/quality-mutation.yml`
+runs the full mutation campaign (`run-quality-mutations.ts`,
+`quality-native-mutation.ts`, `check-quality-python.ts`) daily and on dispatch.
+
+### Patch coverage
+
+Every selected coverage test lane produces fresh LCOV (`coverage/lcov.info`)
+and uploads it as `coverage-<key>`; `scripts-contracts` uploads
+`coverage-scripts-contracts`. The `patch-coverage` job downloads every
+`coverage-*` artifact into its own subdirectory (identical `script/coverage`
+paths from different shards never collide) and runs
+`script/check-patch-coverage.ts --base <PR base SHA> --glob
+'coverage-artifacts/**/lcov.info'`.
+
+The checker diffs `<base>...HEAD` with zero context, keeps changed/added lines
+in `packages/*/src/**`, `apps/*/src/**` and top-level non-test `script/*.ts`,
+and unions `DA:` records across every lcov file (maximum hits per line, with
+each file's repo prefix inferred from the artifact path; an lcov whose
+artifact path lost its workspace ancestor is refused). A changed line that
+every lcov reporting the file knows with zero hits fails the gate; a line
+absent from every lcov record is not executable (types, comments, imports)
+and never counts. Bun reports every line of a never-executed function as
+`DA:n,0`, braces and comments included, so a line that only such a lane
+records while an executing lane omits it is dropped as non-executable rather
+than reported as uncovered.
+A gated file with no `SF:` record in any lcov was never loaded by any test:
+it fails with `<path>: no coverage record` unless type-stripping its source
+emits zero executable lines (pure type-only modules; `.d.ts` is outside the
+gate entirely). There is no baseline and no ratchet: the gate is scoped to
+the PR's own diff.
+
+Skipped or failed test lanes skip the gate rather than passing it with partial
+evidence; the fan-in `CI` gate then rejects the unexpected skip on executable
+pull requests.
 
 ## Operations
 
-Partial workflow reruns are unsupported by design. `gh run rerun --failed` cannot
-reliably pass the Script Coverage merge because `QUALITY_RUN` embeds the attempt
-number; partitions produced by an earlier attempt fail the fail-closed freshness
-check with `InventoryError: stale coverage partition: scripts-contracts`. Use a
-full `gh run rerun <id>` (or push) instead. The typical reason a full rerun is
-needed is the artifact-service 403 flake class tracked by
+Partial workflow reruns (`gh run rerun --failed`) are supported; the
+patch-coverage job re-downloads the run's `coverage-*` artifacts. The known
+full-rerun reason is the artifact-service 403 flake class tracked by
 actions/upload-artifact#560.
 
 ## Execution
 
 The shared setup action installs Bun 1.4.1, pinned in `package.json`,
-and uses `bun install --frozen-lockfile`. Package downloads and Knip's validated
-`node_modules/.cache/knip` cache are reused. The Knip key includes the lockfile,
-configuration, census implementation and change class; Knip revalidates source
-content. Test results and native coverage are not cached. Alarm monitoring requires Bun >=1.4.0
-for its built-in PTY support; unsupported runtimes refuse app construction.
+and uses `bun install --frozen-lockfile`. Test results and coverage are not
+cached. Alarm monitoring requires Bun >=1.4.0 for its built-in PTY support;
+unsupported runtimes refuse app construction.
 
-The Build job creates workspace `dist` artifacts once per run. Typechecking,
-quality checks, and test lanes restore the same archive and reject missing
-outputs. Workspace tests run in separate jobs with their own files, ports, and
-process environments. Tests do not wait for unrelated lint or typecheck jobs.
-Machine integration uses Python 3.12.
-
-Every selected workspace produces fresh LCOV and runs its ratchet. On tooling/full
-plans, the script floor runs only after merging the contracts partition and all
-four tooling partitions. #945 adds the first measured floors for machines, UI,
-and desktop; it does not invent old coverage evidence for those lanes.
-Missing executable source records, malformed counts, empty instrumentation,
-and an unknown lane fail. A selected PR does not borrow old reports from
-unselected workspaces. Full runs select every lane. Topology remains the owner
-of workspace lane membership and test commands.
+The Build job creates workspace `dist` artifacts once per run. Typechecking and
+test lanes restore the same archive and reject missing outputs. Workspace tests
+run in separate jobs with their own files, ports, and process environments.
+Tests do not wait for unrelated lint or typecheck jobs. Machine integration
+uses Python 3.12.
 
 `script/scripts-lanes.ts` is the explicit recursive test manifest. Its contract
 test rejects missing, duplicate and newly unassigned `script/**/*.test.ts` files.
-`scripts-contracts` contains topology, CI planning/execution, tsconfig inheritance,
-ledger contracts and repository-consumer tests; its command also runs dead-export,
-dependency and import-cycle self-tests plus ledger rename/schema checks.
-`scripts-tooling` contains census, mutation, metrics, coverage and quality engine
-self-tests. It runs only when `toolingTests` is true, as four explicit matrix
-partitions. The file lists are packed longest-first from run 34675244728's
-per-file measurements (roughly 344–347 seconds), separating
-`check-census.test.ts` from `run-quality-mutations.test.ts`. They still emit
-`--timings=coverage/timings.json --update-timings`, but do not use `--shard`:
-an absent timing input previously fell back to hashing both slowest files into
-shard 2. Contract tests reject unassigned or duplicate files across partitions
-and verify the actual commands select every recursive test exactly once.
-No tests, including the intentional 20-second hang, are removed or skipped.
-`scripts-tooling-1` also runs the Python analyzer self-tests (`pythonSelfTests` in
-`script/scripts-lanes.ts`, an explicit manifest its contract test checks against
-`script/**/{test_*,*.test}.py`) under coverage.py with
-`script/conformance/quality-python-coverage.ini`, from `script/` in coverage.py's
-self-measurement mode so the collector's own child interpreters keep saving; the
-combined LCOV is appended to the partition's `coverage/lcov.info` before the
-receipt is sealed, so touched Python lines carry native line evidence.
+`scripts-contracts` contains topology, CI planning/execution, patch coverage,
+tsconfig inheritance, ledger contracts and repository-consumer tests; its
+command also runs dead-export, dependency and import-cycle self-tests plus
+ledger rename/schema checks. `scripts-tooling` contains the surviving mutation
+runner, quality-plan/inventory/receipt and type-census self-tests. It runs only
+when `toolingTests` is true, as two explicit matrix partitions packed by their
+measured heavy hitters. Contract tests reject unassigned or duplicate files
+across partitions and verify the actual commands select every recursive test
+exactly once. `scripts-tooling-1` also runs the Python analyzer self-tests
+(`pythonSelfTests` in `script/scripts-lanes.ts`, an explicit manifest its
+contract test checks against `script/**/{test_*,*.test}.py`) directly under the
+pinned Python.
 
-Each script partition has a separate run/runtime/inventory-bound receipt.
-`quality-coverage-record.ts merge` requires contracts and tooling shards 1, 2,
-3 and 4,
-validates every receipt and native LCOV record, and unions line counters before
-running the unchanged script coverage floor. A shard's percentage is never
-averaged or treated as the whole lane. Non-tooling PRs owe no tooling coverage.
+Python quality tools are installed from
+`script/conformance/quality-python-requirements.txt` under Python 3.12.12.
 
-Quality Static runs five independent matrix legs (`types`, `publisher`, `export`,
-`store`, and `metrics`) after Build, in parallel with tests. The metrics leg
-collects static complexity, instrumentation maps, and clones without coverage.
-Scoped metrics still run clone detection over the complete quality-source
-inventory because clone identity crosses workspace boundaries; only function
-and coverage records are scoped. The metrics receipt also carries the complete
-source-map executable-line set. Quality ratchet treats a touched executable
-line missing from native LCOV as failed proof rather than silently ignoring the
-missing record.
-Each leg uploads `quality-leg-<leg>` with its measurement, identity, and native
-process JSON where applicable. Identity records bind the inventory and contract
-hashes, the scoped plan hash where applicable, and duration. The Quality fan-in
-writes a per-leg phase/seconds table to `$GITHUB_STEP_SUMMARY`. Phase timings appear on stderr as
-`[quality-phase] name=<phase> ms=<duration>`.
-
-Quality Gates also runs after Build without waiting for tests. It runs ratchet
-self-tests, dead-export and import-cycle checks, tsconfig inheritance, ledger
-rename and schema-drift checks, and uploads `source-metrics`. Schema drift uses
-Bun's SQLite; this job does not install Python.
-
-Each selected coverage test lane seals one immutable native receipt. Quality
-waits for tests and all Quality Static legs, downloads their artifacts, checks
-Python, and runs `quality-measure.ts finish`. Finish rejects missing or stale
-leg identities, verifies native coverage, joins coverage-dependent metrics, and
-runs the ratchet. Each exact statement receipt is verified in its own Bun child
-(`script/quality-ci-shard.ts`, at most two at once); the finish process admits
-only the child's digest-checked merge document, never the receipt bytes. Its `quality-measurements` artifact retains `quality-results/`,
-`quality-legs/`, and `ci-plan.json`, including available results on failure.
-Per-leg artifacts and measurements are retained for 14 days.
-
-Publisher has a 30-minute timeout; other Quality Static legs and Quality finish
-retain 20 minutes. `check-census.ts --class publisher` has no shard/root-selection
-CLI. Its Provenance constructor computes shared points-to and reachability
-fixpoints, including cross-root event registration/emission. `publisherCensus`
-then reports declarations with no reachable publisher: these negative findings
-cannot be unioned across root subsets (one subset's missing publisher may exist
-in another). Invocation rows also retain the graph's selected root and complete
-implementation set, not independently unionable per-root provenance. `--plan`
-only filters findings after constructing that complete graph. Splitting output
-afterwards would duplicate the expensive graph work, not shorten the critical
-path. We retain the intact census rather than claim byte identity for an unsafe
-split. Run 34310546345 was cancelled at the previous 20-minute limit.
-Quality Gates
-and script contracts/tooling shards have 15 minutes; workspace tests have 30.
-Script Coverage has five minutes.
-The final CI gate requires Quality Static, Quality Gates, and Quality to succeed
-for executable plans; only planned documentation skips are accepted.
-
-`d945-exact-statement-evidence@1` takes its statement counters only from the
-verified exact receipt: original-source statement hits including every
-descendant process. There is no LCOV line inference and no bound; a statement
-without exact evidence is an `unproven-statement` finding, and a source missing
-from the receipt refuses measurement rather than fabricating coverage. CRAP
-uses these exact counters directly. Metrics measure the plan's source inventory; clones
-remain whole-inventory because they cross file boundaries. Type census measures
-only scoped files in the selected projects, retaining complete ownership for
-origin attribution. Publisher/store/export findings are scoped to affected
-workspaces and consumers; their shared invocation graph and schema inputs remain
-complete so cross-file provenance is not severed. Knip selects those workspaces.
-Coverage/CRAP use selected lanes, and every changed source must belong to both
-the quality scope and a selected coverage lane.
-
-Native coverage aggregation retains the union of DA lines from lanes that
-executed a file, taking the maximum observed hit value per line. A different
-lane omitting that line cannot erase existing execution evidence. Zero-hit
-lines reported by executing lanes remain zero; when no lane executed a file,
-all observed zero-hit lines remain. Missing executable-line evidence still
-fails the ratchet. The same aggregator is used for live receipts, saved
-`coverage.json`, and script partition merges.
-
-CRAP remains measured for test sources and retained in the full receipt, but
-the PR ratchet does not block on test-source CRAP. The conservative function
-coverage bound is meaningful for production/tooling complexity; applying it to
-table-driven test bodies turns assertion organization into a false regression
-signal. Test duplication and production/tooling CRAP remain admission checks.
-
-### Proof or measure
-
-Scoped finish requires **every unmeasured baseline path**, including paths with
-zero findings, to have a `sha256[path]` content hash equal to the source at head.
-Missing proof, missing source, changed hash, stale scope, incomplete metrics, or
-missing leg fails closed and names the offending path/leg. Proven baseline
-findings are carried forward; no old execution receipt is credited as fresh.
-Cross-file clones and schema identities are measured, not carried. Unattributable
-growth no longer reports all untouched rows when no changed row owns it.
-
-The baseline index's optional `sha256` map is a **format extension, not a floor
-change**. Legacy indexes remain admissible for whole-inventory measurements;
-scoped use requires proofs. Initial hashes are recovered from the recorded
-admission tree `f01220b4` (#995), not stamped from today's unmeasured working tree.
-All finding fragments, values, multiplicities and coverage floors are unchanged.
-Adding hashes is not finding growth. A later merged change can invalidate a proof:
-remeasure that scope or use the full tier, then refresh proofs from that verified
-measurement. Never label changed-but-unmeasured source as unchanged.
 Full mutation runs in the explicit `quality-mutation` daily scheduled/manual
-workflow, not in PR admission. On 2026-09-09 the workflow API reported zero runs:
-the active workflow was added on September 7 UTC and its first Sunday trigger
-had not arrived. Daily scheduling closes that initial evidence gap. It retains failed/incomplete process evidence and fails
-closed until a complete campaign and reviewed baseline exist; a missing baseline
-is not a zero-survivor claim. A PR pilot is never reported as zero survivors.
+workflow, not in PR admission. It retains failed/incomplete process evidence
+and fails closed until a complete campaign and reviewed baseline exist; a
+missing baseline is not a zero-survivor claim. A PR pilot is never reported as
+zero survivors.
 
 The TypeScript/JavaScript mutation runner builds a campaign-scoped reach map
 before candidate execution. Files recorded in the green baseline's native JUnit
@@ -264,98 +186,18 @@ records the candidate/source/configuration identities, native diagnostics and
 per-project `frozen`, `cold` or `incremental` modes separately from actual
 subprocess `receipts`. It is not an independent process exit receipt.
 Compiler failure is infrastructure, and workers terminate before source cleanup.
-A bounded real-source receipt covered 16 distinct candidates in two batches;
-cold comparisons at indices 0, 8 and 15 matched exactly and the frozen
-execution tree was restored. This is throughput/identity evidence only, not a
-complete mutation campaign or zero-survivor result.
-
-Python quality tools are installed from
-`script/conformance/quality-python-requirements.txt` under Python 3.12.12.
 
 Ownership is handwritten `.ts`, `.tsx`, and `.py` under `packages/*/src|test`,
 `apps/*/src|test`, and `script/`. Handwritten declarations remain type inputs;
 `dist`, dependency trees and generated directories never contribute findings.
-Configuration, historical SQL and embedded-driver identities remain recorded as
-resolver/schema inputs. Product censuses exclude test, fixture, benchmark and
-diagnostic-tool roots as product consumers; the tools themselves still participate
-in the other quality gates. SQLite-maintained `sqlite_sequence` is intrinsic,
-not an owned table requiring an invented application writer.
-
-Quality baseline fragments are exact measured multiplicities by gate, source and
-symbol. Both the index and fragments are compared with the Git base: editing a
-fragment cannot make growth legal. The initial admission baseline must equal a
-complete measurement, without spare allowances; it records debt rather than
-claiming convergence. Missing or incomplete measurements always fail.
-
-Once the baseline exists in the Git base, `script/quality-ratchet.ts` attributes
-growth to the PR's own changes rather than to paths:
-
-- Changed files come from `git diff --name-status --find-renames` plus untracked
-  owned sources. A moved file inherits the baseline recorded under its Git base
-  path; hunks are the added/changed line ranges of that base-to-current diff,
-  and an added file is entirely new. Deleted paths simply stop matching.
-- Findings compare by content identity: gate, mapped path and symbol, with
-  anonymous function byte offsets erased (a per-file value multiset) and clone
-  clusters keyed by token hash alone. Pre-existing complexity inside a touched
-  function is not growth; a worse metric value, or a new function/symbol, is.
-  When an identity grows, the rows in changed files are reported.
-- The type census labels each top type `owned` or `foreign`. Written `any`/
-  `unknown`, owned bindings, parameters and members, and reach through owned
-  declarations are owned; reach only through dependency or `lib.*.d.ts`
-  declarations (zod internals, `Error.cause`, foreign generic instantiations) is
-  foreign and never counts as PR growth. Owned top types on changed lines always
-  fail (the literal-zero target); unlabelled rows are owned. The repo-total
-  shrink-only baseline is unchanged and still lists every finding.
-- Coverage on the PR is the native LCOV evidence itself (the measurement
-  bundle's `coverage.json` beside `current.json`, or `--coverage`): every touched
-  line of a production or tooling source (not tests, fixtures or benchmarks) must
-  have executed in a selected lane; a touched production file with no native
-  record owes all of its measured statements. The proof-bit `unproven-statement` class
-  remains the whole-repository floor and is no longer ratcheted per statement
-  hash, because multi-line statements can never satisfy it. CRAP growth counts
-  only where the function contains a natively unexecuted line.
-
-Baseline integrity (fragments versus the Git base) and initial admission keep
-the strict path-keyed comparison. `script/quality-ratchet.test.ts` proves each
-rule with a passing case and a mutation that flips it.
-
-### Initial measured admission baseline (#945)
-
-The baseline covers 908 owned source files. It was re-measured after the
-merge of `main` (#969/#994/#996/#997 landed between the first measurement and
-admission) with the same pinned tooling: Bun 1.4.1, Python 3.12.12; its source
-inventory hash is
-`207f0b8f6a8165ff7210c74dd9b19e344e962121e98edfa3e594ce97442a4c6a`.
-The fragments preserve exact measured values and multiplicities, not padding.
-
-| Per-PR finding class | Measured findings |
-| --- | ---: |
-| Type census | 43,363 |
-| Publisher / export / store | 39 / 372 / 5 |
-| Cyclomatic / cognitive / Halstead | 16 / 11 / 0 |
-| CRAP upper bound | 1,280 |
-| Production clone occurrences | 74 (36 clusters) |
-| Test clone occurrences | 560 (272 clusters) |
-| Unproven original statements | 54,335 |
-
-The script line floor increases from 34.11% to **55.71%** (7,519 of 13,497
-owned lines). First measured Linux floors are machines 90.49%, UI 92.93%, and
-desktop 92.96%. The existing line ratchet retains its 0.5 percentage-point
-platform tolerance; the finding ratchet does not grant a growth tolerance.
-These are admission baselines, not achievement of the final zero/100% targets.
-Full mutation has no fabricated baseline or zero-survivor claim: the scheduled
-lane requires a complete campaign and reviewed measurement before admission.
-
-The manifest partitions the recursive script tests without losing conformance
-or tooling tests. Script coverage merges partitions before applying its floor.
 
 `CI` is the stable completion check. It runs even after upstream failure and
-rejects failed, cancelled, missing, or unexpectedly skipped jobs.
-Only skips justified by the plan and event are accepted; contracts remain required
-for docs-only/empty plans, and tooling coverage is required only for tooling/full plans. Configure
-the repository ruleset to require `CI`; adding the workflow does not itself
-change GitHub branch protection. Benchmark checks are post-merge checks and
-must not be required for PR admission.
+rejects failed, cancelled, missing, or unexpectedly skipped jobs. Only skips
+justified by the plan and event are accepted; contracts remain required for
+docs-only/empty plans, and patch coverage is required on executable pull
+requests. Configure the repository ruleset to require `CI`; adding the workflow
+does not itself change GitHub branch protection. Benchmark checks are
+post-merge checks and must not be required for PR admission.
 
 ## Desktop smoke
 
@@ -383,86 +225,13 @@ b run script/check-dead-exports.ts
 b run script/verify-tsconfig-inheritance.ts
 b run script/verify-ledger-rename.ts
 b run script/check-ledger-schema-drift.ts
-```
-
-### Exact statement evidence
-
-The plan job derives the exact commands once (`quality-ci-exact.ts --plan
-ci-plan.json`: lane test discovery, `scripts-contracts`, and the script CLI
-contracts) and embeds them into the uploaded selection as `exact.commands`
-with `exact.derived: true`. Consumers take commands only from the selection
-whose bytes every exact receipt binds through `run.selectionHash`; a frozen
-plan cannot author its own list. Because the selection declares the commands
-derived, every consumer re-derives them against its checkout and rejects lane
-ownership or test discovery drift. Fixtures embed authored commands with
-`derived: false`, which the fixture's own selection hash still binds.
-
-The `quality-exact` job runs the plan's selected test commands under the
-instrumented collector, one matrix shard per selected lane plus the
-`scripts-contracts` shard (the planner emits the list as `exactShards`; it
-equals the collector's `exactCiShards`). Every shard freezes the same
-`exact.inventory.json` and `exact.plan.json` (version 3), runs only its subset plan
-(`exact.<shard>.plan.json`), and seals `exact.<shard>.coverage.json` with its
-verdict and process receipt. `finish` requires every shard of the frozen plan,
-rejects a shard whose plan is not the planner's subset, rejects evidence that is
-both whole and sharded, and merges the shard counters under one run identity
-derived from the shard receipt hashes. Python test files
-(`script/quality-coverage/test_*.py`, `python-engine.test.py`) are not exact
-commands: each spawns interpreters, which the Python runner refuses as
-unobservable, so their sources remain uncovered exact evidence until the runner
-observes children as the Bun collector does; their native line evidence is the
-coverage.py LCOV that `scripts-tooling-1` appends. A whole `exact.coverage.json` from a
-single unsharded collect remains accepted.
-
-For measured quality, use Python 3.12.12 and Node 24.19.0 as in CI. Start from
-fresh lane coverage directories and a new receipt directory: `begin` rejects
-pre-existing LCOV. The following uses `jq` to run every selected lane, wrapping
-coverage lanes with receipts bound to the same run identity. Do not change owned
-sources between collection, tests, and finish.
-
-```bash
-set -euo pipefail
-python -m pip install --requirement script/conformance/quality-python-requirements.txt
-export D945_PYTHON="$(command -v python)"
-export PYTHONDONTWRITEBYTECODE=1
-QUALITY_RUN="local:$(uuidgen):$(git rev-parse HEAD)"
-QUALITY_BASE=origin/main
-mkdir quality-receipts
-for leg in types publisher export store metrics; do
-  b run script/quality-measure.ts collect --leg "$leg" --plan ci-plan.json --output quality-legs
-done
-# Workspace lanes keep their original receipts and per-lane floors.
-while IFS=$'\t' read -r key lane; do
-  receipt="quality-receipts/${lane//\//-}.json"
-  b run script/quality-coverage-record.ts begin --lane "$lane" --run "$QUALITY_RUN" --output "$receipt"
-  b run ci test --lane "$key"
-  b run script/quality-coverage-record.ts finish --lane "$lane" --run "$QUALITY_RUN" --output "$receipt"
-done < <(jq -r '.matrix.include[] | select(.dir != "script") | [.key, .dir] | @tsv' ci-plan.json)
-if [[ "$(jq -r .toolingTests ci-plan.json)" == true ]]; then
-  mkdir quality-partitions
-  for part in scripts-contracts scripts-tooling-1 scripts-tooling-2 scripts-tooling-3 scripts-tooling-4; do
-    b run script/quality-coverage-record.ts begin --lane script --partition "$part" --run "$QUALITY_RUN" --output "quality-partitions/$part.json"
-    b run ci test --lane "$part"
-    b run script/quality-coverage-record.ts finish --lane script --partition "$part" --run "$QUALITY_RUN" --output "quality-partitions/$part.json"
-    mv script/coverage "quality-partitions/$part-coverage"
-  done
-  b run script/quality-coverage-record.ts merge --lane script --directory quality-partitions --run "$QUALITY_RUN" --output quality-receipts/script.json
-  b run script/check-coverage-ratchet.ts --lane script
-else
-  b run ci test --lane scripts-contracts
-fi
-b run script/check-quality-python.ts
-# Exact statement evidence: one instrumented shard per selected lane plus the
-# contracts shard, exactly as the `quality-exact` matrix runs them. Exit 1 is
-# measured uncovered evidence, exit 2 a refused measurement with its full
-# message; finish merges the sealed shard receipts.
-for shard in $(jq -r '.lanes[]' ci-plan.json) scripts-contracts; do
-  b run script/quality-measure.ts collect --leg exact --shard "$shard" --plan ci-plan.json \
-    --run "$QUALITY_RUN" --output quality-receipts || [[ $? -eq 1 ]]
-done
-b run script/quality-measure.ts finish --legs quality-legs --base "$QUALITY_BASE" \
-  --baseline script/conformance/quality-baseline-lcov-bound.json --plan ci-plan.json \
-  --run "$QUALITY_RUN" --coverage-directory quality-receipts --output quality-results
+# Test lanes (fresh lcov lands in each workspace's coverage/):
+b run ci test --lane agent
+b run ci test --lane scripts-contracts
+# Patch coverage over the local evidence:
+b run script/check-patch-coverage.ts --base origin/main \
+  --glob 'packages/*/coverage/lcov.info' --glob 'apps/*/coverage/lcov.info' \
+  --glob 'script/coverage/lcov.info'
 ```
 
 The planner accepts `--base <full-SHA> --head <full-SHA>` for a local change
@@ -471,14 +240,9 @@ comparison. Save its JSON output and pass the path to
 intentionally selects everything.
 
 `bun test --timeout 15000` remains a useful local test command, but is not
-equivalent to all CI gates. `bun run ci test --lane <key>` matches a CI lane,
-including workspace coverage checks. Script partitions instead require the merge
-and floor commands above. Do not use a cached Turbo test result as evidence
-that a fresh coverage report was produced.
-
-Coverage baseline updates require all valid lane reports and cannot combine
-`--update` with a selected lane. Baseline policy changes remain reviewable
-changes; invalid instrumentation is never a reason to lower a floor.
+equivalent to all CI gates. `bun run ci test --lane <key>` matches a CI lane.
+Do not use a cached Turbo test result as evidence that a fresh coverage report
+was produced.
 
 ## Benchmark references and diagnostics
 

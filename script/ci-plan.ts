@@ -1,20 +1,14 @@
 import { appendFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import ts from "typescript";
-import { buildInventory, readContract } from "./quality-inventory";
 import { scriptPartitions } from "./scripts-lanes";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
-import { hasCompleteQualityProof } from "./quality-proof";
 
 export const changeClasses = ["docs", "desktop", "kernel", "tooling", "global"] as const;
 export interface CiPlan {
   readonly version: 2;
   readonly class: (typeof changeClasses)[number];
   readonly lanes: readonly string[];
-  readonly qualityScope: readonly string[];
-  readonly projects: readonly string[];
   readonly toolingTests: boolean;
   readonly full: boolean;
   readonly verify: boolean;
@@ -30,28 +24,10 @@ export interface CiPlan {
 }
 
 function finishPlan(
-  paths: readonly string[] | undefined,
   plan: Selection,
   changeClass: CiPlan["class"],
-  root: string,
 ): CiPlan {
-  const contract = readContract(resolve(root, "script/conformance/quality-contract.json"));
-  const inventory = buildInventory(root, contract);
   const whole = changeClass === "tooling" || changeClass === "global";
-  const dirs = plan.matrix.include.filter((row) => row.dir !== "script").map((row) => row.dir);
-  const qualityScope = inventory.files
-    .filter((row) => whole || dirs.some((dir) => row.path.startsWith(`${dir}/`)) || paths?.includes(row.path))
-    .map((row) => row.path);
-  const membership = new Set(qualityScope.map((path) => resolve(root, path)));
-  const projects = contract.projects.filter((project) => {
-    if (whole) return true;
-    const path = resolve(root, project);
-    const config = ts.readConfigFile(path, ts.sys.readFile);
-    if (config.error) throw new Error(`invalid project: ${project}`);
-    const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(path));
-    if (parsed.errors.length) throw new Error(`invalid project: ${project}`);
-    return parsed.fileNames.some((file) => membership.has(file));
-  });
   const matrix = {
     include: [
       ...plan.matrix.include.filter((row) => row.dir !== "script"),
@@ -68,8 +44,6 @@ function finishPlan(
     version: 2,
     class: changeClass,
     lanes: matrix.include.map((row) => row.key),
-    qualityScope,
-    projects,
     toolingTests: whole,
   };
 }
@@ -107,15 +81,14 @@ export function planChanges(
   paths: readonly string[] | undefined,
   full = false,
   topology: readonly WorkspaceTopology[] = TOPOLOGY,
-  root = resolve(import.meta.dir, ".."),
 ): CiPlan {
   validateGraph(topology);
-  if (full) return finishPlan(undefined, fullPlan(topology, "full-requested"), "global", root);
+  if (full) return finishPlan(fullPlan(topology, "full-requested"), "global");
   if (paths === undefined) throw new Error("PR planning requires discovered changed paths");
 
   const selection = selectChanges(paths, topology);
   if (selection.globalReason)
-    return finishPlan(paths, fullPlan(topology, selection.globalReason), "global", root);
+    return finishPlan(fullPlan(topology, selection.globalReason), "global");
   const { selected, changeClass } = selection;
 
   // allowedDeps intentionally includes test-only edges, unlike srcAllowedDeps.
@@ -129,7 +102,7 @@ export function planChanges(
   }
   const workspaces = topology.filter((workspace) => selected.has(workspace.packageName));
   const verify = workspaces.length > 0 || changeClass === "tooling";
-  const plan = finishPlan(paths, {
+  return finishPlan({
     full: false,
     verify,
     dependencyReview: false,
@@ -139,16 +112,7 @@ export function planChanges(
       : paths.length === 0
         ? "empty-diff"
         : "root-documentation-only",
-  }, changeClass, root);
-  if (
-    process.env.QUALITY_BASE &&
-    plan.verify &&
-    !plan.toolingTests &&
-    !plan.full &&
-    !hasCompleteQualityProof(root, process.env.QUALITY_BASE, plan)
-  )
-    return finishPlan(undefined, fullPlan(topology, "unproven-quality-scope"), "global", root);
-  return plan;
+  }, changeClass);
 }
 
 function rows(topology: readonly WorkspaceTopology[]) {
@@ -156,12 +120,6 @@ function rows(topology: readonly WorkspaceTopology[]) {
     ...topology.map(({ key, dir, coverageLane }) => ({ key, dir, coverage: coverageLane })),
     { key: "scripts", dir: "script", coverage: true },
   ];
-}
-
-/** Exact statement evidence shards: one per selected lane plus the
- * always-run contracts shard (`exactCiShards` in quality-ci-exact.ts). */
-export function exactShards(plan: Pick<CiPlan, "lanes">) {
-  return { include: [...plan.lanes, "scripts-contracts"].map((shard) => ({ shard })) };
 }
 
 type Selection = Pick<CiPlan, "full" | "verify" | "dependencyReview" | "matrix" | "reason">;
@@ -203,16 +161,19 @@ function validateGraph(topology: readonly WorkspaceTopology[]): void {
   }
 }
 
-function main(): void {
+export function main(
+  argv: readonly string[] = Bun.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
+): void {
   const { values } = parseArgs({
-    args: Bun.argv.slice(2),
+    args: [...argv],
     options: { base: { type: "string" }, head: { type: "string" }, full: { type: "boolean" } },
     strict: true,
     allowPositionals: false,
   });
   // Inventory validation must run even when a docs-only/full shortcut is used.
   assertTopologyComplete(TOPOLOGY, process.cwd());
-  const event = process.env.GITHUB_EVENT_NAME;
+  const event = env.GITHUB_EVENT_NAME;
   const full =
     values.full === true || (event !== undefined && event !== "" && event !== "pull_request");
   let paths: readonly string[] | undefined;
@@ -237,12 +198,12 @@ function main(): void {
       throw new Error("git diff output is not NUL terminated");
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
-  const plan = planChanges(paths, full, TOPOLOGY, process.cwd());
-  const outputPath = process.env.GITHUB_OUTPUT;
+  const plan = planChanges(paths, full, TOPOLOGY);
+  const outputPath = env.GITHUB_OUTPUT;
   if (outputPath) {
     appendFileSync(
       outputPath,
-      `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\nclass=${plan.class}\ntoolingTests=${plan.toolingTests}\nexactShards=${JSON.stringify(exactShards(plan))}\n`,
+      `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\nclass=${plan.class}\ntoolingTests=${plan.toolingTests}\n`,
     );
   }
   process.stdout.write(`${JSON.stringify(plan)}\n`);

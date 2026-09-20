@@ -166,6 +166,37 @@ export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
   return `installed and started (systemd user unit: ${path}); linger enabled — survives logout and starts at boot`;
 }
 
+function proveLaunchdStopped(target: DaemonTarget, io: DaemonIo): void {
+  const bootout = io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
+  if (bootout.code === 0) return;
+  // Only a specifically recognized not-found answer proves the job is
+  // unloaded; permission or IPC failures prove nothing.
+  const print = io.exec(["launchctl", "print", launchdDomainTarget(target)]);
+  const notLoaded =
+    print.code !== 0 && /could not find service/i.test(`${print.stderr}${print.stdout}`);
+  if (!notLoaded) {
+    throw new Error("daemon could not be stopped and may still be loaded — unit left installed");
+  }
+}
+
+function proveSystemdStopped(io: DaemonIo): void {
+  const disable = io.exec(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT]);
+  if (disable.code === 0) return;
+  // Stop and disable are separate outcomes; each must be proven.
+  const state = io.exec(["systemctl", "--user", "is-active", SYSTEMD_UNIT]).stdout.trim();
+  if (state !== "inactive" && state !== "failed") {
+    throw new Error(
+      `daemon could not be stopped (state: ${state || "unknown"}) — unit left installed`,
+    );
+  }
+  const enabled = io.exec(["systemctl", "--user", "is-enabled", SYSTEMD_UNIT]).stdout.trim();
+  if (enabled !== "disabled" && enabled !== "not-found") {
+    throw new Error(
+      `daemon stopped but is still enabled (state: ${enabled || "unknown"}) — unit left installed`,
+    );
+  }
+}
+
 export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
   const path = unitPath(target);
   if (!io.fileExists(path)) return "not installed";
@@ -173,36 +204,9 @@ export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
   // transitional states (activating, loaded-but-waiting KeepAlive) are NOT
   // license to delete the unit out from under a live daemon.
   if (target.platform === "darwin") {
-    const bootout = io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
-    if (bootout.code !== 0) {
-      // Only a specifically recognized not-found answer proves the job is
-      // unloaded; permission or IPC failures prove nothing.
-      const print = io.exec(["launchctl", "print", launchdDomainTarget(target)]);
-      const notLoaded =
-        print.code !== 0 && /could not find service/i.test(`${print.stderr}${print.stdout}`);
-      if (!notLoaded) {
-        throw new Error(
-          "daemon could not be stopped and may still be loaded — unit left installed",
-        );
-      }
-    }
+    proveLaunchdStopped(target, io);
   } else {
-    const disable = io.exec(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT]);
-    if (disable.code !== 0) {
-      // Stop and disable are separate outcomes; each must be proven.
-      const state = io.exec(["systemctl", "--user", "is-active", SYSTEMD_UNIT]).stdout.trim();
-      if (state !== "inactive" && state !== "failed") {
-        throw new Error(
-          `daemon could not be stopped (state: ${state || "unknown"}) — unit left installed`,
-        );
-      }
-      const enabled = io.exec(["systemctl", "--user", "is-enabled", SYSTEMD_UNIT]).stdout.trim();
-      if (enabled !== "disabled" && enabled !== "not-found") {
-        throw new Error(
-          `daemon stopped but is still enabled (state: ${enabled || "unknown"}) — unit left installed`,
-        );
-      }
-    }
+    proveSystemdStopped(io);
   }
   io.removeFile(path);
   if (target.platform === "darwin") return "stopped and uninstalled (launchd)";

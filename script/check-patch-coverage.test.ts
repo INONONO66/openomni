@@ -1,0 +1,201 @@
+import { expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  changedLines,
+  checkPatchCoverage,
+  gatedPath,
+  hasExecutableCode,
+  lcovPrefix,
+  lcovUnion,
+  main,
+  uncoveredRows,
+} from "./check-patch-coverage";
+
+function git(cwd: string, ...args: string[]): string {
+  const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr.toString()}`);
+  return result.stdout.toString().trim();
+}
+
+test("gatedPath admits product src and tooling, refuses tests and docs", () => {
+  expect(gatedPath("packages/agent/src/executor.ts")).toBe(true);
+  expect(gatedPath("apps/openomni/src/cli/daemon.ts")).toBe(true);
+  expect(gatedPath("script/check-deps.ts")).toBe(true);
+  expect(gatedPath("script/check-deps.test.ts")).toBe(false);
+  expect(gatedPath("packages/agent/src/executor.test.ts")).toBe(false);
+  expect(gatedPath("packages/agent/test/helper.ts")).toBe(false);
+  expect(gatedPath("script/quality-metrics/tool.ts")).toBe(false);
+  expect(gatedPath("docs/ci.md")).toBe(false);
+});
+
+test("lcovPrefix maps artifact layouts to repo prefixes", () => {
+  expect(lcovPrefix("cov/coverage-agent/packages/agent/coverage/lcov.info")).toBe("packages/agent");
+  expect(lcovPrefix("cov/coverage-x/apps/openomni/coverage/lcov.info")).toBe("apps/openomni");
+  expect(lcovPrefix("cov/coverage-scripts-tooling-1/script/coverage/lcov.info")).toBe("script");
+  expect(lcovPrefix("packages/agent/coverage/lcov.info")).toBe("packages/agent");
+});
+
+test("changedLines keeps only gated files with unified-0 hunks", () => {
+  const diff = [
+    "diff --git a/packages/agent/src/a.ts b/packages/agent/src/a.ts",
+    "--- a/packages/agent/src/a.ts",
+    "+++ b/packages/agent/src/a.ts",
+    "@@ -1,2 +10,3 @@",
+    "@@ -9 +20 @@",
+    "--- a/docs/ci.md",
+    "+++ b/docs/ci.md",
+    "@@ -1 +1,5 @@",
+  ].join("\n");
+  const changed = changedLines(diff);
+  expect([...changed.keys()]).toEqual(["packages/agent/src/a.ts"]);
+  expect([...(changed.get("packages/agent/src/a.ts") ?? [])]).toEqual([10, 11, 12, 20]);
+});
+
+test("uncovered rows: zero-hit lines fail, unknown lines are not executable", () => {
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-lcov-"));
+  try {
+    mkdirSync(join(dir, "packages/agent/coverage"), { recursive: true });
+    mkdirSync(join(dir, "script/coverage"), { recursive: true });
+    writeFileSync(
+      join(dir, "packages/agent/coverage/lcov.info"),
+      "SF:src/a.ts\nDA:10,0\nDA:11,3\nend_of_record\n",
+    );
+    writeFileSync(
+      join(dir, "script/coverage/lcov.info"),
+      "SF:check-thing.ts\nDA:5,0\nend_of_record\n",
+    );
+    const union = lcovUnion(
+      [join(dir, "packages/agent/coverage/lcov.info"), join(dir, "script/coverage/lcov.info")],
+      dir,
+    );
+    const changed = new Map([
+      ["packages/agent/src/a.ts", new Set([10, 11, 12])],
+      ["script/check-thing.ts", new Set([5])],
+      ["packages/agent/src/type-only.ts", new Set([1])],
+      ["packages/agent/src/untested.ts", new Set([1])],
+    ]);
+    const executable = (path: string) => !path.includes("type-only");
+    expect(uncoveredRows(changed, union, executable)).toEqual([
+      "packages/agent/src/a.ts:10",
+      "packages/agent/src/untested.ts: no coverage record",
+      "script/check-thing.ts:5",
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("lcov union takes the maximum hits across shards", () => {
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-union-"));
+  try {
+    mkdirSync(join(dir, "a/script/coverage"), { recursive: true });
+    mkdirSync(join(dir, "b/script/coverage"), { recursive: true });
+    writeFileSync(join(dir, "a/script/coverage/lcov.info"), "SF:x.ts\nDA:1,0\nDA:2,2\n");
+    writeFileSync(join(dir, "b/script/coverage/lcov.info"), "SF:x.ts\nDA:1,7\nDA:2,0\n");
+    const union = lcovUnion(
+      [join(dir, "a/script/coverage/lcov.info"), join(dir, "b/script/coverage/lcov.info")],
+      dir,
+    );
+    expect(union.get("script/x.ts")?.get(1)).toBe(7);
+    expect(union.get("script/x.ts")?.get(2)).toBe(2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("lcov union drops a line only an unexecuted lane reports as zero", () => {
+  // Bun emits DA:n,0 for every line of a never-run function (braces, comments);
+  // the lane that ran it reports only executable lines. Line 3 exists solely
+  // in the unexecuted lane and must not surface as an uncovered claim.
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-lanes-"));
+  try {
+    mkdirSync(join(dir, "a/script/coverage"), { recursive: true });
+    mkdirSync(join(dir, "b/script/coverage"), { recursive: true });
+    writeFileSync(join(dir, "a/script/coverage/lcov.info"), "SF:x.ts\nDA:1,0\nDA:2,0\nDA:3,0\nDA:4,0\n");
+    writeFileSync(join(dir, "b/script/coverage/lcov.info"), "SF:x.ts\nDA:1,5\nDA:2,0\nDA:4,3\n");
+    const union = lcovUnion(
+      [join(dir, "a/script/coverage/lcov.info"), join(dir, "b/script/coverage/lcov.info")],
+      dir,
+    );
+    const rows = union.get("script/x.ts");
+    expect(rows?.get(1)).toBe(5);
+    expect(rows?.get(2)).toBe(0);
+    expect(rows?.has(3)).toBe(false);
+    expect(rows?.get(4)).toBe(3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("lcov union refuses a flattened artifact whose workspace root is lost", () => {
+  // upload-artifact with a single `path:` drops the `script/coverage/` ancestor;
+  // every SF would then be attributed to the repo root and read as "no record".
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-flat-"));
+  try {
+    mkdirSync(join(dir, "coverage-scripts-contracts"), { recursive: true });
+    const flat = join(dir, "coverage-scripts-contracts/lcov.info");
+    writeFileSync(flat, "SF:ci.ts\nDA:1,1\n");
+    expect(() => lcovUnion([flat], dir)).toThrow(/without workspace ancestor/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("end to end against a fixture repository", () => {
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-repo-"));
+  try {
+    git(dir, "init", "-q");
+    git(dir, "config", "user.email", "qa@example.com");
+    git(dir, "config", "user.name", "qa");
+    mkdirSync(join(dir, "packages/kit/src"), { recursive: true });
+    writeFileSync(join(dir, "packages/kit/src/sum.ts"), "export const sum = 1;\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "base");
+    const base = git(dir, "rev-parse", "HEAD");
+    writeFileSync(
+      join(dir, "packages/kit/src/sum.ts"),
+      "export const sum = 1;\nexport const covered = 2;\nexport const uncovered = 3;\nexport type OnlyType = number;\n",
+    );
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "change");
+    mkdirSync(join(dir, "packages/kit/coverage"), { recursive: true });
+    writeFileSync(
+      join(dir, "packages/kit/coverage/lcov.info"),
+      "SF:src/sum.ts\nDA:1,1\nDA:2,1\nDA:3,0\nend_of_record\n",
+    );
+    const rows = checkPatchCoverage(base, ["packages/*/coverage/lcov.info"], dir);
+    expect(rows).toEqual(["packages/kit/src/sum.ts:3"]);
+    // A brand-new file no test ever loads has no SF record and must fail;
+    // a type-only module emits no code and is exempt.
+    writeFileSync(join(dir, "packages/kit/src/orphan.ts"), "export const orphan = () => 4;\n");
+    writeFileSync(join(dir, "packages/kit/src/shape.ts"), "export type Shape = { x: number };\n");
+    git(dir, "add", "packages/kit/src");
+    git(dir, "commit", "-qm", "orphan");
+    expect(checkPatchCoverage(base, ["packages/*/coverage/lcov.info"], dir)).toEqual([
+      "packages/kit/src/orphan.ts: no coverage record",
+      "packages/kit/src/sum.ts:3",
+    ]);
+    git(dir, "reset", "-q", "--hard", "HEAD~1");
+    const glob = ["--glob", "packages/*/coverage/lcov.info"];
+    expect(main(["--base", base, ...glob], dir)).toBe(1);
+    writeFileSync(
+      join(dir, "packages/kit/coverage/lcov.info"),
+      "SF:src/sum.ts\nDA:1,1\nDA:2,1\nDA:3,1\nend_of_record\n",
+    );
+    expect(main(["--base", base, ...glob], dir)).toBe(0);
+    expect(() => main([], dir)).toThrow("usage:");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("hasExecutableCode strips types and keeps code", () => {
+  expect(
+    hasExecutableCode("export type A = number;\nexport interface B { x: string }\n", "a.ts"),
+  ).toBe(false);
+  expect(hasExecutableCode("// comments only\n", "a.ts")).toBe(false);
+  expect(hasExecutableCode("export type A = 1;\nexport const b = 2;\n", "a.ts")).toBe(true);
+  expect(hasExecutableCode("export const Chip = () => <div />;\n", "chip.tsx")).toBe(true);
+});

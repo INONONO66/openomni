@@ -104,6 +104,26 @@ export function createAttemptRunner(
     };
   }
 
+  async function admitAttempt<T extends PlainValue>(
+    parent: LedgerAction.Receipt,
+    attempts: LlmAttempts<T>,
+    attempt: number,
+    failures: readonly string[],
+  ) {
+    // Preparation is not a provider attempt: invalid identity/config never earns a retry.
+    const prepared = await attempts.prepare(attempt, failures);
+    const policy = attempt === 1 ? undefined : await admit(prepared.request, parent);
+    if (policy !== undefined && (policy.verdict === "deny" || policy.verdict === "transform"))
+      throw new Error(`llm admission refused: ${policy.reason ?? policy.verdict}`);
+    await prepared.admit();
+    options.signal?.throwIfAborted();
+    const intent = await appendAttemptIntent(prepared.request, parent, attempt, failures);
+    if (policy?.verdict === "require_approval") {
+      await requireApproval(prepared.request, intent, policy);
+    }
+    return { prepared, intent };
+  }
+
   return async function runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
@@ -112,17 +132,7 @@ export function createAttemptRunner(
     let instantFailures = 0;
     for (let attempt = 1; ; attempt += 1) {
       options.signal?.throwIfAborted();
-      // Preparation is not a provider attempt: invalid identity/config never earns a retry.
-      const prepared = await attempts.prepare(attempt, failures);
-      const policy = attempt === 1 ? undefined : await admit(prepared.request, parent);
-      if (policy !== undefined && (policy.verdict === "deny" || policy.verdict === "transform"))
-        throw new Error(`llm admission refused: ${policy.reason ?? policy.verdict}`);
-      await prepared.admit();
-      options.signal?.throwIfAborted();
-      const intent = await appendAttemptIntent(prepared.request, parent, attempt, failures);
-      if (policy?.verdict === "require_approval") {
-        await requireApproval(prepared.request, intent, policy);
-      }
+      const { prepared, intent } = await admitAttempt(parent, attempts, attempt, failures);
       const started = options.clock();
       const outcome = await prepared.body().then(
         (value) => ({ status: "fulfilled" as const, value }),

@@ -298,47 +298,56 @@ export function createController(
     return work;
   }
 
+  function pendingOutbound(): boolean {
+    return SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "pending");
+  }
+
+  async function dispatchPendingOutbound(): Promise<void> {
+    state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
+    await dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, pinPolicy, true);
+  }
+
+  /**
+   * One pending-inbox step; undefined means the drive loop is finished and
+   * "noop" consumed inbox items without producing (or clearing) a result.
+   */
+  async function driveInbox(): Promise<
+    { result: SessionRunnerResult | undefined } | "noop" | undefined
+  > {
+    const pending = SessionHandleStore.pendingInbox(sessionId);
+    if (pending.length === 0) return undefined;
+    const current = SessionHandleStore.row(sessionId);
+    if (current.state === "interrupted") {
+      const resume = pending.find((item) => item.kind === "resume");
+      if (resume === undefined) return undefined;
+      return { result: await resumeInterrupted(resume) };
+    }
+    const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
+    if (firstPrompt > 0) {
+      await consumeNoopInbox(pending.slice(0, firstPrompt));
+      return "noop";
+    }
+    if (firstPrompt === 0) return { result: await startTurn() };
+    await consumeNoopInbox(pending);
+    return "noop";
+  }
+
   async function driveAvailable(): Promise<SessionRunnerResult | undefined> {
     let result: SessionRunnerResult | undefined;
     for (;;) {
       if (state.closed) return result;
-      if (SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "pending")) {
-        state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
-        await dispatchSessionOutbound(
-          sessionId,
-          runtime,
-          owner,
-          state.fence,
-          clock,
-          pinPolicy,
-          true,
-        );
-      }
+      // The no-outbound path must stay synchronous: no microtask yield between
+      // the closed check and the action-tree read (extraction contract).
+      if (pendingOutbound()) await dispatchPendingOutbound();
       const actions = SessionHandleStore.tree(sessionId);
       const open = SessionHandleStore.openTurns(actions).at(-1);
       if (open !== undefined) {
         result = await resumeTurn(open);
         continue;
       }
-      const pending = SessionHandleStore.pendingInbox(sessionId);
-      if (pending.length === 0) return result;
-      const current = SessionHandleStore.row(sessionId);
-      if (current.state === "interrupted") {
-        const resume = pending.find((item) => item.kind === "resume");
-        if (resume === undefined) return result;
-        result = await resumeInterrupted(resume);
-        continue;
-      }
-      const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
-      if (firstPrompt > 0) {
-        await consumeNoopInbox(pending.slice(0, firstPrompt));
-        continue;
-      }
-      if (firstPrompt === 0) {
-        result = await startTurn();
-        continue;
-      }
-      await consumeNoopInbox(pending);
+      const step = await driveInbox();
+      if (step === undefined) return result;
+      if (step !== "noop") result = step.result;
     }
   }
 
