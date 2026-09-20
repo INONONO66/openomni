@@ -3,6 +3,7 @@ name: quality-mutation
 on:
   schedule:
     # Daily evidence: the initial weekly schedule had no runs as of 2026-09-09.
+    # Each night resumes shard progress until every slice is complete.
     - cron: '41 2 * * *'
   workflow_dispatch:
     inputs:
@@ -14,19 +15,58 @@ on:
         description: 'Optional inventory path for a diagnostic pilot (requires pilot_limit > 0)'
         type: string
         default: ''
+      shard_count:
+        description: 'Number of execution shards for the full campaign'
+        type: number
+        default: 8
+      shard_budget_minutes:
+        description: 'Per-shard wall-clock budget in minutes before a clean partial stop'
+        type: number
+        default: 300
+      fresh_progress:
+        description: 'Ignore previous shard progress artifacts (restart the campaign)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: quality-mutation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan shard matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - name: Emit deterministic shard list
+        id: plan
+        env:
+          PILOT_LIMIT: ${{ inputs.pilot_limit || 0 }}
+          SHARD_COUNT: ${{ inputs.shard_count || 8 }}
+        run: |
+          if [[ "$PILOT_LIMIT" != 0 ]]; then
+            echo "count=1" >> "$GITHUB_OUTPUT"
+            echo "shards=[0]" >> "$GITHUB_OUTPUT"
+          else
+            echo "count=$SHARD_COUNT" >> "$GITHUB_OUTPUT"
+            echo "shards=[$(seq -s, 0 $((SHARD_COUNT - 1)))]" >> "$GITHUB_OUTPUT"
+          fi
   mutation:
-    name: Full mutation campaign
+    name: Mutation campaign shard
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -47,14 +87,36 @@ jobs:
       - name: Build workspace declarations with the CI entry point
         run: bun run ci build
       - run: bun run script/check-quality-python.ts
-      - name: Execute complete campaign and enforce measured baseline
+      - name: Download previous shard progress
+        if: ${{ (inputs.pilot_limit || 0) == 0 && inputs.fresh_progress != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: quality-mutation-progress-${{ needs.plan.outputs.count }}-${{ matrix.shard }}
+        run: |
+          run_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ARTIFACT}&per_page=10" \
+            --jq '[.artifacts[] | select(.expired == false)][0].workflow_run.id // empty')
+          if [[ -n "$run_id" ]]; then
+            gh run download "$run_id" --name "$ARTIFACT" --dir mutation-progress
+            wc -l mutation-progress/* || true
+          else
+            echo "no previous progress artifact: fresh shard start"
+          fi
+      - name: Execute campaign shard and enforce measured baseline
         env:
           PILOT_LIMIT: ${{ inputs.pilot_limit || 0 }}
           PILOT_TARGET: ${{ inputs.pilot_target || '' }}
+          SHARD_COUNT: ${{ needs.plan.outputs.count }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_BUDGET: ${{ inputs.shard_budget_minutes || 300 }}
         run: |
           args=()
           if [[ "$PILOT_LIMIT" != 0 ]]; then
             args+=(--pilot --limit "$PILOT_LIMIT")
+          else
+            mkdir -p mutation-progress
+            args+=(--shard "$SHARD_INDEX" --shard-count "$SHARD_COUNT")
+            args+=(--progress "mutation-progress/shard-${SHARD_COUNT}-${SHARD_INDEX}.jsonl")
+            args+=(--budget-minutes "$SHARD_BUDGET")
           fi
           if [[ -n "$PILOT_TARGET" ]]; then
             args+=(--target "$PILOT_TARGET")
@@ -68,6 +130,43 @@ jobs:
           sampler=$!
           trap 'kill "$sampler"' EXIT
           /usr/bin/time -v bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json "${args[@]}"
+      - name: Preserve shard progress for the next scheduled run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quality-mutation-progress-${{ needs.plan.outputs.count }}-${{ matrix.shard }}
+          path: mutation-progress/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Preserve shard receipt for the join step
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quality-mutation-shard-${{ matrix.shard }}
+          path: quality-mutation-results/
+          if-no-files-found: warn
+          retention-days: 14
+  join:
+    name: Join shard receipts and enforce measured baseline
+    needs: [plan, mutation]
+    if: ${{ always() && needs.plan.result == 'success' && (inputs.pilot_limit || 0) == 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Install manifest-pinned Bun and frozen workspace dependencies
+        uses: ./.github/actions/setup
+      - name: Build workspace declarations with the CI entry point
+        run: bun run ci build
+      - name: Download shard receipts from this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: quality-mutation-shard-*
+          path: mutation-shards
+      - name: Join complete shards into the single campaign receipt
+        run: bun run script/quality-mutation-join.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json --shards mutation-shards
       - name: Preserve complete or failed campaign evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
