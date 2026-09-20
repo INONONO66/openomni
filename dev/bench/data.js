@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789941137956,
+  "lastUpdate": 1789944058032,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -74009,6 +74009,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 166878,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5861a66dc8f2c8f22a471d132d8e40813c15058f",
+          "message": "fix(mutation): bound baseline/reach selection by a 60-minute ceiling, not --suite-timeout (#1121)\n\nRun 35539891540 killed every shard's baseline after max(300 s, 15 s x files): #1120\nlowered --suite-timeout for mutant hangs, but campaignBaseline and buildReachMap\nreused it for whole-package green-selection runs. SELECTION_SUITE_TIMEOUT_MS now\nbounds those phases; --suite-timeout bounds only mutant executions.\n\nPart of #1049",
+          "timestamp": "2026-09-20T22:38:14Z",
+          "tree_id": "8f41d0d5db36e805f7f9147d86b8627bc4658b1c",
+          "url": "https://github.com/INONONO66/openomni/commit/5861a66dc8f2c8f22a471d132d8e40813c15058f"
+        },
+        "date": 1789944057486,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 812,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1071028,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 283850,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5328016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 103,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 521,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 97443,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 596072,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 390433,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 79187985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 7157852,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14089,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 133763,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 664554,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 159294,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 11477478,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 70,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 118281,
             "unit": "ns/op"
           }
         ]
