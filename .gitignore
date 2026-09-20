@@ -62,4 +62,6 @@ skills-lock.json
 /quality-receipts/
 /quality-results/
 /quality-mutation-results/
+/quality-audit.json
+/quality-audit-input/
 __pycache__/

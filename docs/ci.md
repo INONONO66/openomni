@@ -68,9 +68,9 @@ baselines). A PR is admitted by:
   must be covered by the PR's own lcov evidence.
 - **Dependency Review** (PR-only, on dependency-affecting plans).
 
-Deep audits are scheduled, not per-PR: `.github/workflows/quality-mutation.yml`
-runs the full mutation campaign (`run-quality-mutations.ts`,
-`quality-native-mutation.ts`, `check-quality-python.ts`) daily and on dispatch.
+Deep audits are scheduled, not per-PR. The weekly Quality Audit records debt
+and maintains issues; the separate mutation campaign runs daily and on dispatch.
+Neither workflow is a required check.
 
 ### Patch coverage
 
@@ -102,6 +102,58 @@ the PR's own diff.
 Skipped or failed test lanes skip the gate rather than passing it with partial
 evidence; the fan-in `CI` gate then rejects the unexpected skip on executable
 pull requests.
+
+## Quality Audit
+
+`.github/workflows/quality-audit.yml` runs weekly (Monday 05:17 UTC) and on
+`workflow_dispatch`. It is never a PR gate or a required check. Its matrix uses
+`script/ci-plan.ts`'s full plan plus `scripts-contracts`, and executes each lane
+through `bun run ci test --lane <key>` rather than maintaining another test list.
+Each coverage lane runs Bun LCOV once; separate artifacts retain both tooling
+shards. All lanes must succeed before the audit can publish issues.
+
+`script/quality-audit.ts` writes the Zod-validated `quality-audit.json`:
+
+| Measurement | Tool and meaning |
+| --- | --- |
+| Absolute line coverage | Bun LCOV, unioned across the same lanes as CI; per-file covered/executable denominators, with unloaded production/tooling sources explicitly reported as missing records |
+| Cognitive complexity | The pinned Biome engine used by Ultracite, JSON reporter, `noExcessiveCognitiveComplexity` above 21; `--only` also measures the two lint-override files |
+| Clones | Pinned jscpd, separate production and test configurations, at least 5 lines and 50 tokens; fixtures, declarations and generated output excluded |
+| Type census | Surviving `check-types-census.ts`, preserving site kind and owned/foreign origin |
+| Mutation | Link to `quality-mutation.yml`; no second campaign or inferred completion |
+
+Coverage totals count uncovered executable lines, or one finding for an unloaded
+file whose executable denominator is unavailable. Complexity counts violating
+functions, clones count both endpoints, and types count census sites. Python is
+included in clone scans, not Bun coverage. This audit does not add a separate
+cyclomatic/CRAP analyzer or claim all functions have measured complexity scores.
+
+`script/quality-audit-issues.ts` uses `gh` with parsed JSON, creates missing
+`quality-debt` and `quality:{coverage,complexity,clones,types}` labels, and maintains
+one rolling `quality: audit summary` issue. The first run creates **only** that
+summary. Subsequent runs update/reopen `quality: <repo-relative path>` issues,
+close resolved files with a comment, and create at most 50 open per-file issues.
+Existing open debt retains its slots; remaining slots go to highest finding
+counts first (path breaks ties). The summary lists skipped files. Per-file bodies
+show up to 100 finding groups; the artifact contains the complete findings.
+Growth in a kind's total creates `quality: regression <base>..<head>` using the
+previous summary's fenced JSON totals. The summary advances last for retry safety;
+malformed history and incomplete measurements stop publication, not reset it.
+
+Local preview after building:
+
+```bash
+bun run script/quality-audit.ts --dry-run
+```
+
+This measures lint, clones and census, reads downloaded LCOV under
+`quality-audit-input/coverage-<lane>/lcov.info`, and prints the audit plus planned
+issue operations without invoking `gh`. With no GitHub reads the preview assumes
+first-run state. Missing lanes are explicitly marked incomplete and cannot be
+published; copy fresh local lane LCOV or download the workflow artifacts for a
+complete preview. `--publish` is reserved for the scheduled workflow's issue-write
+token. Measurement findings are recorded, not a debt ratchet; tool failures still
+fail the run. Audit artifacts are retained for 30 days.
 
 ## Operations
 

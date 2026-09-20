@@ -1,0 +1,17 @@
+{
+  "path": ["../packages", "../apps", "../script"],
+  "pattern": "{**/{test,test-e2e,__tests__}/**/*.{ts,tsx,js,jsx,py},**/*.{test,spec}.{ts,tsx,js,jsx,py},**/test_*.py}",
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/fixtures/**",
+    "**/fixture/**",
+    "**/*.d.ts"
+  ],
+  "absolute": true,
+  "minLines": 5,
+  "minTokens": 50,
+  "reporters": ["json"],
+  "output": "../quality-audit-input/clones-test"
+}
