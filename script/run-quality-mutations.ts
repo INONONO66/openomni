@@ -113,6 +113,7 @@ type Options = {
 	timeout: number;
 	suiteTimeout: number;
 	mutantMemoryBytes: number;
+	testRuntime: TestRuntime;
 	budget: number;
 	pilot: boolean;
 	failureOutput: string;
@@ -1055,12 +1056,37 @@ export function boundedArgv(argv: string[], capBytes: number, platform: string, 
 	return ["sh", "-c", `ulimit -v ${Math.floor(capBytes / 1024)} && exec "$@"`, "sh", ...argv];
 }
 
-async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number, environment: Record<string, string> = {}, capBytes = 0): Promise<TestSelectionReceipt> {
+type ExecuteProcess = typeof execute;
+export type TestRuntime = { execute: ExecuteProcess; platform: NodeJS.Platform; hasPrlimit: boolean };
+function nativeTestRuntime(): TestRuntime {
+	return { execute, platform: process.platform, hasPrlimit: Bun.which("prlimit") !== null };
+}
+
+export async function verifyMutantMemoryCap(
+	capBytes: number,
+	platform: string,
+	hasPrlimit: boolean,
+	run: ExecuteProcess = execute,
+): Promise<void> {
+	const receipt = await run(
+		boundedArgv([process.execPath, "--smol", "-e", "process.stdout.write('cap-ok')"], capBytes, platform, hasPrlimit),
+		process.cwd(),
+		15_000,
+		{},
+		"mutant-memory-cap-self-check",
+	);
+	if (broken(receipt) || receipt.exitCode !== 0 || receipt.stdout !== "cap-ok") {
+		setupProcessFailure = receipt;
+		fail("infrastructure", `mutant memory cap unavailable: ${receipt.stderr.trim() || "Bun startup acknowledgement missing"}`);
+	}
+}
+
+async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number, environment: Record<string, string> = {}, capBytes = 0, runtime: TestRuntime = nativeTestRuntime()): Promise<TestSelectionReceipt> {
 	const batches: TestsReceipt[] = [];
 	const files: string[] = [];
 	for (const [cwd, selected] of testGroups(root, tests)) {
 		console.error(`[mutation] test package ${relative(root, cwd) || "."} (${selected.length} files)`);
-		const batch = await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout, environment, capBytes);
+		const batch = await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout, environment, capBytes, runtime);
 		batches.push(batch);
 		for (const suite of batch.junit.matchAll(/<testsuite\b([^>]*)>/g)) {
 			const file = attribute(suite[1] ?? "", "file").replace(/^\.\//, "");
@@ -1086,10 +1112,11 @@ async function runTestBatch(
 	suiteTimeout: number,
 	environment: Record<string, string>,
 	capBytes: number,
+	runtime: TestRuntime,
 ): Promise<TestsReceipt> {
 	const report = join(directory, "tests.xml");
 	rmSync(report, { force: true });
-	const processReceipt = await execute(
+	const processReceipt = await runtime.execute(
 		boundedArgv([
 			process.execPath,
 			"--smol",
@@ -1099,7 +1126,7 @@ async function runTestBatch(
 			"--reporter=junit",
 			`--reporter-outfile=${report}`,
 			...tests.map((test) => `./${test}`),
-		], capBytes, process.platform, Bun.which("prlimit") !== null),
+		], capBytes, runtime.platform, runtime.hasPrlimit),
 		root,
 		Math.max(suiteTimeout, timeout * tests.length),
 		{
@@ -1264,7 +1291,7 @@ async function buildReachMap(options: Options, frozen: string, temporary: string
 		if (readFileSync(join(directory, test), "utf8").trim() === "") continue;
 		rmSync(markers, { recursive: true, force: true });
 		mkdirSync(markers);
-		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, SELECTION_SUITE_TIMEOUT_MS, environment);
+		const receipt = await runTests(directory, [test], options.timeout, temporary, options.python, SELECTION_SUITE_TIMEOUT_MS, environment, 0, options.testRuntime);
 		if (!receipt.valid || receipt.failures !== 0 || receipt.exitCode !== 0) {
 			const assertions = receipt.assertions.length ? receipt.assertions.join(", ") : "<none>";
 			const stderr = receipt.batches.map((batch) => batch.process.stderr).join("\n").slice(-2048);
@@ -1486,11 +1513,12 @@ async function probeCandidate(context: CandidateContext, source: ReturnType<type
 		return true;
 	}
 	writeMutation(source, probedSource);
-	const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout, {}, options.mutantMemoryBytes);
+	const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout, {}, options.mutantMemoryBytes, options.testRuntime);
 	result.receipts.push(...probe.batches.map((batch) => batch.process));
 	result.junitReports.push(...probe.batches.map((batch) => batch.junit));
 	if (!green(probe)) {
-		classifyProbeFailure(result, probe);
+		result.outcome = "infrastructure";
+		result.reason = "baseline-probe-not-green";
 		return false;
 	}
 	const hit = existsSync(marker) ? readFileSync(marker, "utf8") : "";
@@ -1567,12 +1595,6 @@ function nonTerminationReason(tested: TestSelectionReceipt): string {
 	return "";
 }
 
-function classifyProbeFailure(result: Result, probe: TestSelectionReceipt): void {
-	const reason = nonTerminationReason(probe);
-	result.outcome = reason ? "killed" : "infrastructure";
-	result.reason = reason || "baseline-probe-not-green";
-}
-
 export function classifyCandidate(result: Pick<Result, "outcome" | "reason" | "assertionIdentities">, tested: TestSelectionReceipt): void {
 	const nonTermination = nonTerminationReason(tested);
 	if (nonTermination) {
@@ -1610,7 +1632,7 @@ async function executeMutatedCandidate(context: CandidateExecution, workspace: C
 	removeExecution(root);
 	copyExecution(join(context.temporary, "frozen"), root);
 	writeMutation(source, mutated);
-	const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout, {}, options.mutantMemoryBytes);
+	const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout, {}, options.mutantMemoryBytes, options.testRuntime);
 	result.receipts.push(...tested.batches.map((batch) => batch.process));
 	result.junitReports.push(...tested.batches.map((batch) => batch.junit));
 	classifyCandidate(result, tested);
@@ -1702,7 +1724,7 @@ function shardFrom(values: Map<string, string[]>, pilot: boolean): Options["shar
 	if (pilot) return fail("arguments", "--shard is incompatible with pilot selection");
 	return { index, count, progress: resolve(progress) };
 }
-function optionsFrom(values: Map<string, string[]>): Options {
+function optionsFrom(values: Map<string, string[]>, testRuntime: TestRuntime): Options {
 	const names = [
 		"root",
 		"contract",
@@ -1770,6 +1792,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		timeout: bound("timeout", 15000, 15000),
 		suiteTimeout: bound("suite-timeout", 15000, 3600000),
 		mutantMemoryBytes: bound("mutant-memory-mb", 6144, 1048576) * 1024 * 1024,
+		testRuntime,
 		budget: bound("budget", 3600000, 604800000),
 		failureOutput: values.get("--failure-output")?.[0] ?? "",
 		pilot,
@@ -2166,11 +2189,15 @@ async function campaignBaseline(input: {
 }): Promise<TestSelectionReceipt | null> {
 	const { frozen, base, tests, options, temporary, errors, executionRequired } = input;
 	console.error(`[mutation] baseline execution copy (${tests.length} test files, ${errors.length} errors)`);
-	if (!errors.length && executionRequired) copyExecution(frozen, base);
+	if (!errors.length && executionRequired) {
+		const { platform, hasPrlimit, execute: run } = options.testRuntime;
+		await verifyMutantMemoryCap(options.mutantMemoryBytes, platform, hasPrlimit, run);
+		copyExecution(frozen, base);
+	}
 	console.error("[mutation] baseline tests starting");
 	const baseline = errors.length || !executionRequired
 		? null
-		: await runTests(base, tests, options.timeout, temporary, options.python, SELECTION_SUITE_TIMEOUT_MS);
+		: await runTests(base, tests, options.timeout, temporary, options.python, SELECTION_SUITE_TIMEOUT_MS, {}, 0, options.testRuntime);
 	if (baseline && !green(baseline)) {
 		const red = describeRedBaseline(baseline.batches);
 		process.stderr.write(red.lines.map((line) => `[mutation] baseline red: ${line}\n`).join(""));
@@ -2452,12 +2479,12 @@ async function typecheckRoot(values: Map<string, string[]>): Promise<number> {
 	return errors.length ? 1 : 0;
 }
 
-export async function main(argv: string[] = Bun.argv.slice(2)): Promise<number> {
+export async function main(argv: string[] = Bun.argv.slice(2), testRuntime: TestRuntime = nativeTestRuntime()): Promise<number> {
 	mutationFailure.current = null;
 	setupProcessFailure = null;
-	return dispatch(argv).catch(reportFailure);
+	return dispatch(argv, testRuntime).catch(reportFailure);
 }
-async function dispatch(argv: string[]): Promise<number> {
+async function dispatch(argv: string[], testRuntime: TestRuntime): Promise<number> {
 	if (!["1.3.6", "1.4.1"].includes(Bun.version) || ts.version !== "5.9.2")
 		return fail(
 			"toolVersion",
@@ -2465,7 +2492,7 @@ async function dispatch(argv: string[]): Promise<number> {
 	);
 	const values = argumentsMap(argv);
 	if (values.has("--typecheck-root")) return typecheckRoot(values);
-	return await campaign(optionsFrom(values));
+	return await campaign(optionsFrom(values, testRuntime));
 }
 function reportFailure(error: Error | MutationError | string): number {
 	const caught = error instanceof Error || error instanceof MutationError ? error.message : String(error);

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import ts from "typescript";
-import { SELECTION_SUITE_TIMEOUT_MS, boundedArgv, classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
+import { SELECTION_SUITE_TIMEOUT_MS, verifyMutantMemoryCap, type TestRuntime, boundedArgv, classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -387,6 +387,37 @@ for (const junit of ["", '<testsuites tests="1" failures="0"><testsuite>']) {
   }
 }
 
+function processFixture(overrides: Partial<Awaited<ReturnType<typeof execute>>> = {}): Awaited<ReturnType<typeof execute>> {
+  return { stage: "tests", argv: [], pid: 1, exitCode: 0, signal: null, timedOut: false, overflow: false, spawnError: false, stdout: "cap-ok", stderr: "", stdoutSha256: "", stderrSha256: "", cleanupExit: 0, ...overrides };
+}
+
+for (const hasPrlimit of [true, false]) {
+  test(`memory cap self-check accepts Bun acknowledgement through ${hasPrlimit ? "prlimit" : "ulimit"}`, async () => {
+    const calls: string[][] = [];
+    await verifyMutantMemoryCap(6144 * 1024 * 1024, "linux", hasPrlimit, async (argv, _cwd, timeout, _environment, stage) => {
+      calls.push(argv);
+      expect(timeout).toBe(15_000);
+      expect(stage).toBe("mutant-memory-cap-self-check");
+      return processFixture();
+    });
+    const prefix = hasPrlimit ? ["prlimit", "--as=6442450944", "--"] : ["sh", "-c", 'ulimit -v 6291456 && exec "$@"', "sh"];
+    expect(calls).toEqual([[...prefix, process.execPath, "--smol", "-e", "process.stdout.write('cap-ok')"]]);
+  });
+
+  test(`memory cap self-check rejects ${hasPrlimit ? "prlimit" : "ulimit"} setup failure as infrastructure`, async () => {
+    const stderr = hasPrlimit ? "prlimit: failed to set the AS resource limit: Operation not permitted" : "ulimit: error setting limit (Operation not permitted)";
+    await expect(verifyMutantMemoryCap(6144 * 1024 * 1024, "linux", hasPrlimit, async () => processFixture({
+      exitCode: hasPrlimit ? 1 : 2, stdout: "", stderr,
+    }))).rejects.toMatchObject({ code: "infrastructure", message: `mutant memory cap unavailable: ${stderr}` });
+  });
+}
+
+test("memory cap self-check rejects missing acknowledgement and broken process receipts", async () => {
+  for (const failure of [{ stdout: "" }, { stdout: "cap-ok-extra" }, { signal: "SIGABRT" }, { spawnError: true }, { timedOut: true }, { overflow: true }]) {
+    await expect(verifyMutantMemoryCap(6144 * 1024 * 1024, "linux", true, async () => processFixture(failure))).rejects.toMatchObject({ code: "infrastructure" });
+  }
+});
+
 test("boundedArgv uses prlimit on Linux with an address-space limit in bytes", () => {
   const argv = ["bun", "--smol", "test", "./space and $literal.test.ts"];
   expect(boundedArgv(argv, 6144 * 1024 * 1024, "linux", true)).toEqual([
@@ -766,7 +797,7 @@ test("weak assertion survives; original location is really covered", async () =>
 	expect(result.selected[0]?.outcome).toBe("survived");
 }, 90000);
 
-async function runMain(input: Awaited<ReturnType<typeof fixture>>, python: string, selection: string[], expectedExit = 1): Promise<RecordValue> {
+async function runMain(input: Awaited<ReturnType<typeof fixture>>, python: string, selection: string[], expectedExit = 1, runtime?: TestRuntime): Promise<RecordValue> {
 	const paths = { contract: join(input.root, "contract.json"), inventory: input.inventory, decision, "inventory-tool": tool };
 	const argv = ["--root", input.root, "--dependencies", dependencies, "--python", python];
 	for (const [key, path] of Object.entries(paths)) argv.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
@@ -774,7 +805,7 @@ async function runMain(input: Awaited<ReturnType<typeof fixture>>, python: strin
 	const output: string[] = [];
 	const originalLog = console.log;
 	console.log = (...values: string[]) => output.push(values.join(" "));
-	try { expect(await main(argv)).toBe(expectedExit); } finally { console.log = originalLog; }
+	try { expect(await main(argv, runtime)).toBe(expectedExit); } finally { console.log = originalLog; }
 	return record(decode(output.at(-1) ?? "{}"));
 }
 
@@ -1076,20 +1107,88 @@ test("GitHub grouped diagnostics preserve kills without promoting crashes", asyn
 	}
 }, 90000);
 
-test("baseline and reach selection runs are bounded by the selection ceiling, not --suite-timeout", () => {
-	// Run 35539891540: every shard's baseline was SIGKILLed after max(300 s, 15 s x files) because the mutant suite timeout also bounded the green-selection phases.
-	expect(SELECTION_SUITE_TIMEOUT_MS).toBe(3_600_000);
-	const source = readFileSync(join(import.meta.dir, "run-quality-mutations.ts"), "utf8");
-	const selectionCalls = source.match(/runTests\([^;]*SELECTION_SUITE_TIMEOUT_MS[^;]*\);/g) ?? [];
-	const mutantCalls = source.match(/runTests\([^;]*options\.suiteTimeout[^;]*\);/g) ?? [];
-	expect(selectionCalls).toHaveLength(2);
-	expect(mutantCalls).toHaveLength(2);
-	for (const call of selectionCalls) {
-		expect(call).not.toContain("options.suiteTimeout");
-		expect(call).not.toContain("options.mutantMemoryBytes");
-	}
-	for (const call of mutantCalls) expect(call).toContain("{}, options.mutantMemoryBytes");
-});
+for (const hasPrlimit of [true, false]) {
+	test(`campaign checks ${hasPrlimit ? "prlimit" : "ulimit"} once and wraps only mutant test commands`, async () => {
+		const input = await fixture("export const run = () => true && true;", "expect(run()).toBe(true);");
+		const calls: { argv: string[]; cwd: string; timeout: number; stage: string | undefined }[] = [];
+		const prefix = hasPrlimit ? ["prlimit", "--as=6442450944", "--"] : ["sh", "-c", 'ulimit -v 6291456 && exec "$@"', "sh"];
+		const runtime: TestRuntime = {
+			platform: "linux", hasPrlimit,
+			execute: async (argv, cwd, timeout, environment, stage) => {
+				calls.push({ argv, cwd, timeout, stage });
+				// Capture the real Linux argv, but run its Bun payload on this host.
+				const payload = argv[0] === process.execPath ? argv : argv.slice(prefix.length);
+				return execute(payload, cwd, timeout, environment, stage);
+			},
+		};
+		const report = await runMain(input, process.env.D945_PYTHON ?? "python3", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"], 0, runtime);
+		expect(report.complete).toBe(true);
+		const checks = calls.filter((call) => call.stage === "mutant-memory-cap-self-check");
+		expect(checks).toHaveLength(1);
+		expect(calls[0]).toBe(checks[0]);
+		expect(checks[0]?.argv).toEqual([...prefix, process.execPath, "--smol", "-e", "process.stdout.write('cap-ok')"]);
+		for (const phase of ["baseline", "reach"]) {
+			const selection = calls.filter((call) => call.cwd.endsWith(`/${phase}`));
+			expect(selection).toHaveLength(1);
+			expect(selection[0]?.argv.slice(0, 3)).toEqual([process.execPath, "--smol", "test"]);
+			expect(selection[0]?.timeout).toBe(SELECTION_SUITE_TIMEOUT_MS);
+		}
+		const mutants = calls.filter((call) => call.cwd.endsWith("/candidate/source"));
+		expect(mutants).toHaveLength(2);
+		for (const mutant of mutants) {
+			expect(mutant.argv.slice(0, prefix.length + 3)).toEqual([...prefix, process.execPath, "--smol", "test"]);
+			expect(mutant.timeout).toBe(15_000);
+		}
+	}, 120000);
+}
+
+test("campaign fails closed with wrapper stderr before any mutant can be scored", async () => {
+	const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);");
+	const stages: (string | undefined)[] = [];
+	const stderr = "prlimit: failed to set the AS resource limit: Operation not permitted";
+	const runtime: TestRuntime = {
+		platform: "linux", hasPrlimit: true,
+		execute: async (argv, _cwd, _timeout, _environment, stage) => {
+			stages.push(stage);
+			return processFixture({ argv, stage: stage ?? "process", exitCode: 1, stdout: "", stderr });
+		},
+	};
+	const report = await runMain(input, process.env.D945_PYTHON ?? "python3", select("boolean-literal"), 2, runtime);
+	expect(stages).toEqual(["mutant-memory-cap-self-check"]);
+	expect(report.complete).toBe(false);
+	expect(report.results).toBeUndefined();
+	expect(record(report.error).code).toBe("infrastructure");
+	expect(record(report.error).message).toContain(stderr);
+	expect(record(record(report.error).process).stderr).toBe(stderr);
+}, 120000);
+
+for (const mode of ["timeout", "crash"] as const) {
+	test(`original Python probe ${mode} remains infrastructure without executing the mutant`, async () => {
+		const input = await fixture("export const run = () => true;", "expect(run()).toBe(true);", {
+			"src/calc.py": "def f(value):\n    return value + 1\n",
+			"src/calc.test.ts": 'import { expect, test } from "bun:test"; test("calc", () => { const result = Bun.spawnSync([process.env.D945_PYTHON!, "-c", "import sys;sys.path.insert(0, \'src\');import calc;print(calc.f(2))"]); expect(result.stdout.toString().trim()).toBe("3"); expect(result.exitCode).toBe(0); });',
+		});
+		let probes = 0;
+		const runtime: TestRuntime = {
+			platform: "darwin", hasPrlimit: false,
+			execute: async (argv, cwd, timeout, environment, stage) => {
+				if (!cwd.endsWith("/candidate/source")) return execute(argv, cwd, timeout, environment, stage);
+				probes++;
+				expect(readFileSync(join(cwd, "src/calc.py"), "utf8")).not.toBe(input.files["src/calc.py"]);
+				return processFixture({ argv, stdout: "", exitCode: null, signal: "SIGKILL", timedOut: mode === "timeout" });
+			},
+		};
+		const report = await runMain(input, process.env.D945_PYTHON ?? "python3", ["--target", "src/calc.py", "--operator", "py-number", "--limit", "1"], 2, runtime);
+		const result = reportResults(report)[0];
+		expect(probes).toBe(1);
+		expect([result?.outcome, result?.reason]).toEqual(["infrastructure", "baseline-probe-not-green"]);
+		expect(result?.coverage).toBeNull();
+		expect(result?.restored).toBe(true);
+		expect(rows(result?.receipts).map(record).some((receipt) => receipt.stage === "python-probe")).toBe(true);
+		expect(report.complete).toBe(false);
+		expect(report.cleanupVerified).toBe(true);
+	}, 120000);
+}
 
 test("crashed mutant child without JUnit is killed and campaign cleanup completes", async () => {
 	const input = await fixture(
