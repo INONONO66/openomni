@@ -1110,30 +1110,46 @@ test("GitHub grouped diagnostics preserve kills without promoting crashes", asyn
 for (const hasPrlimit of [true, false]) {
 	test(`campaign checks ${hasPrlimit ? "prlimit" : "ulimit"} once and wraps only mutant test commands`, async () => {
 		const input = await fixture("export const run = () => true && true;", "expect(run()).toBe(true);");
-		const calls: { argv: string[]; cwd: string; timeout: number; stage: string | undefined }[] = [];
+		type Call = { argv: string[]; cwd: string; timeout: number; stage: string | undefined };
+		const calls: Call[] = [];
 		const prefix = hasPrlimit ? ["prlimit", "--as=6442450944", "--"] : ["sh", "-c", 'ulimit -v 6291456 && exec "$@"', "sh"];
 		const runtime: TestRuntime = {
 			platform: "linux", hasPrlimit,
-			execute: async (argv, cwd, timeout, environment, stage) => {
+			execute: async (argv: string[], cwd: string, timeout: number, environment?: Record<string, string>, stage?: string) => {
 				calls.push({ argv, cwd, timeout, stage });
 				// Capture the real Linux argv, but run its Bun payload on this host.
 				const payload = argv[0] === process.execPath ? argv : argv.slice(prefix.length);
 				return execute(payload, cwd, timeout, environment, stage);
 			},
 		};
-		const report = await runMain(input, process.env.D945_PYTHON ?? "python3", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"], 0, runtime);
+		// The campaign baseline runs this suite from an execution copy whose path
+		// ends in /baseline; the startup self-check inherits that cwd, so a cwd
+		// suffix alone must not be mistaken for a second baseline selection.
+		const parent = join(input.root, "baseline");
+		mkdirSync(parent, { recursive: true });
+		const originalCwd = process.cwd();
+		let report: RecordValue;
+		try {
+			process.chdir(parent);
+			report = await runMain(input, process.env.D945_PYTHON ?? "python3", ["--target", "src/a.ts", "--operator", "boolean-literal", "--limit", "2"], 0, runtime);
+		} finally {
+			process.chdir(originalCwd);
+		}
 		expect(report.complete).toBe(true);
-		const checks = calls.filter((call) => call.stage === "mutant-memory-cap-self-check");
+		const checks = calls.filter((call: Call) => call.stage === "mutant-memory-cap-self-check");
 		expect(checks).toHaveLength(1);
 		expect(calls[0]).toBe(checks[0]);
+		expect(checks[0]?.cwd).toBe(realpathSync(parent));
 		expect(checks[0]?.argv).toEqual([...prefix, process.execPath, "--smol", "-e", "process.stdout.write('cap-ok')"]);
+		const testCalls = calls.filter((call: Call) => call.stage !== "mutant-memory-cap-self-check");
+		expect(testCalls).toHaveLength(4);
 		for (const phase of ["baseline", "reach"]) {
-			const selection = calls.filter((call) => call.cwd.endsWith(`/${phase}`));
+			const selection = testCalls.filter((call: Call) => call.cwd.endsWith(`/${phase}`));
 			expect(selection).toHaveLength(1);
 			expect(selection[0]?.argv.slice(0, 3)).toEqual([process.execPath, "--smol", "test"]);
 			expect(selection[0]?.timeout).toBe(SELECTION_SUITE_TIMEOUT_MS);
 		}
-		const mutants = calls.filter((call) => call.cwd.endsWith("/candidate/source"));
+		const mutants = testCalls.filter((call: Call) => call.cwd.endsWith("/candidate/source"));
 		expect(mutants).toHaveLength(2);
 		for (const mutant of mutants) {
 			expect(mutant.argv.slice(0, prefix.length + 3)).toEqual([...prefix, process.execPath, "--smol", "test"]);
