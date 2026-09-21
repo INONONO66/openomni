@@ -22,6 +22,8 @@ test("full mutation is an explicit scheduled workflow, never a silently skipped 
   expect(jsonArray(triggers.schedule, jsonObject).length).toBeGreaterThan(0);
   expect(Object.hasOwn(triggers, "workflow_dispatch")).toBe(true);
   expect(Object.hasOwn(triggers, "pull_request")).toBe(false);
+  const inputs = jsonObject(jsonObject(triggers.workflow_dispatch).inputs);
+  expect(jsonObject(inputs.mutant_memory_mb).default).toBe(6144);
   const job = jsonObject(jsonObject(workflow.jobs).mutation);
   const steps = jsonArray(job.steps, jsonObject);
   expect(
@@ -44,6 +46,8 @@ test("full mutation is an explicit scheduled workflow, never a silently skipped 
     expect(jsonString(step.run)).not.toContain("--baseline");
     expect(jsonString(step.run)).toContain("--shard");
     expect(jsonString(step.run)).toContain("--budget-minutes");
+    expect(jsonString(step.run)).toContain('args=(--mutant-memory-mb "$MUTANT_MEMORY_MB")');
+    expect(jsonObject(step.env).MUTANT_MEMORY_MB).toBe(`\${{ inputs.mutant_memory_mb || 6144 }}`);
     expect(jsonString(step.run)).toContain("--progress");
   }
   // Sharded matrix: one failed shard must not cancel the others, and the shard

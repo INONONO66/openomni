@@ -202,6 +202,7 @@ from production, tooling and migration sources: test, fixture and benchmark
 files are censused but never mutated. A mutant whose test batch hits the
 suite timeout is killed by non-termination, not infrastructure. A PR pilot is
 never reported as zero survivors.
+The `--mutant-memory-mb` option defaults to 6144 MiB and caps only mutant test children on Linux (`prlimit --as`, with `ulimit -v` fallback; Darwin runs unwrapped), recording abnormal exits with missing or truncated JUnit as `killed`/`resource-exhaustion` after green selection.
 
 The TypeScript/JavaScript mutation runner builds a campaign-scoped reach map
 before candidate execution. Files recorded in the green baseline's native JUnit

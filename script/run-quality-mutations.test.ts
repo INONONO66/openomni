@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import ts from "typescript";
-import { SELECTION_SUITE_TIMEOUT_MS, classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
+import { SELECTION_SUITE_TIMEOUT_MS, boundedArgv, classifyCandidate, copyExecution, removeExecution, decode, describeRedBaseline, execute, executionTreeHash, instrument, main, mutationSource, probeText, pythonWorker, sha256, type TestSelectionReceipt } from "./run-quality-mutations";
 import { mutationFixture, mutationEvidence, replaceArguments, reportResults } from "./quality-mutation-fixture";
 import { buildInventory, readContract } from "./quality-inventory";
 import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./run-quality-mutations";
@@ -349,7 +349,7 @@ type RecordValue = ReturnType<typeof record>;
 function selection(overrides: Partial<TestSelectionReceipt> & { timedOut?: boolean }): TestSelectionReceipt {
   const { timedOut = false, ...rest } = overrides;
   const process = { stage: "tests", argv: [], pid: 1, exitCode: timedOut ? null : 1, signal: null, timedOut, overflow: false, spawnError: false, stdout: "", stderr: "", stdoutSha256: "", stderrSha256: "", cleanupExit: null };
-  return { batches: [{ process, junit: "", tests: 1, failures: 1, assertions: ["t"], valid: true }], files: ["src/a.test.ts"], tests: 1, failures: 1, assertions: ["t"], valid: true, exitCode: 1, ...rest };
+  return { batches: [{ process, junit: '<testsuites tests="1" failures="1"></testsuites>', tests: 1, failures: 1, assertions: ["t"], valid: true }], files: ["src/a.test.ts"], tests: 1, failures: 1, assertions: ["t"], valid: true, exitCode: 1, ...rest };
 }
 
 test("classifyCandidate: a bounded suite that never finishes is a kill by non-termination, not infrastructure", () => {
@@ -368,6 +368,59 @@ test("classifyCandidate: a bounded suite that never finishes is a kill by non-te
   const broken = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
   classifyCandidate(broken, selection({ assertions: [], exitCode: 1 }));
   expect([broken.outcome, broken.reason]).toEqual(["infrastructure", "failure-without-complete-behavioral-assertions"]);
+});
+
+for (const junit of ["", '<testsuites tests="1" failures="0"><testsuite>']) {
+  for (const mode of ["nonzero", "signal"] as const) {
+    test(`classifyCandidate: ${mode} with ${junit ? "truncated" : "missing"} JUnit is resource-exhaustion after green selection`, () => {
+      const tested = selection({ failures: 0, assertions: [], valid: false });
+      const batch = tested.batches[0];
+      if (!batch) throw new Error("missing fixture batch");
+      batch.junit = junit;
+      batch.valid = false;
+      batch.process.exitCode = mode === "nonzero" ? 134 : null;
+      batch.process.signal = mode === "signal" ? "SIGABRT" : null;
+      const result = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+      classifyCandidate(result, tested);
+      expect([result.outcome, result.reason, result.assertionIdentities]).toEqual(["killed", "resource-exhaustion", []]);
+    });
+  }
+}
+
+test("boundedArgv uses prlimit on Linux with an address-space limit in bytes", () => {
+  const argv = ["bun", "--smol", "test", "./space and $literal.test.ts"];
+  expect(boundedArgv(argv, 6144 * 1024 * 1024, "linux", true)).toEqual([
+    "prlimit", "--as=6442450944", "--", ...argv,
+  ]);
+  expect(argv).toEqual(["bun", "--smol", "test", "./space and $literal.test.ts"]);
+});
+
+test("boundedArgv falls back to a quoted exec with a KiB ulimit on Linux", () => {
+  const argv = ["bun", "--smol", "test", "./space and $literal.test.ts"];
+  expect(boundedArgv(argv, 6144 * 1024 * 1024, "linux", false)).toEqual([
+    "sh", "-c", 'ulimit -v 6291456 && exec "$@"', "sh", ...argv,
+  ]);
+});
+
+test("boundedArgv leaves Darwin and uncapped selection commands unwrapped", () => {
+  const argv = ["bun", "--smol", "test", "./a.test.ts"];
+  for (const hasPrlimit of [true, false]) {
+    expect(boundedArgv(argv, 6144 * 1024 * 1024, "darwin", hasPrlimit)).toBe(argv);
+    expect(boundedArgv(argv, 0, "linux", hasPrlimit)).toBe(argv);
+  }
+});
+
+test("classifyCandidate keeps spawn failures, output overflow and unexplained missing exits as infrastructure", () => {
+  for (const failure of [{ spawnError: true }, { overflow: true }, { exitCode: null }]) {
+    const tested = selection({ valid: false, assertions: [] });
+    const batch = tested.batches[0];
+    if (!batch) throw new Error("missing fixture batch");
+    batch.junit = "";
+    Object.assign(batch.process, failure);
+    const result = { outcome: "invalid" as const, reason: "", assertionIdentities: [] as string[] };
+    classifyCandidate(result, tested);
+    expect([result.outcome, result.reason]).toEqual(["infrastructure", "failure-without-complete-behavioral-assertions"]);
+  }
 });
 
 test("rendered process receipts redact split and inline secrets without hiding ordinary arguments", async () => {
@@ -1031,8 +1084,30 @@ test("baseline and reach selection runs are bounded by the selection ceiling, no
 	const mutantCalls = source.match(/runTests\([^;]*options\.suiteTimeout[^;]*\);/g) ?? [];
 	expect(selectionCalls).toHaveLength(2);
 	expect(mutantCalls).toHaveLength(2);
-	for (const call of selectionCalls) expect(call).not.toContain("options.suiteTimeout");
+	for (const call of selectionCalls) {
+		expect(call).not.toContain("options.suiteTimeout");
+		expect(call).not.toContain("options.mutantMemoryBytes");
+	}
+	for (const call of mutantCalls) expect(call).toContain("{}, options.mutantMemoryBytes");
 });
+
+test("crashed mutant child without JUnit is killed and campaign cleanup completes", async () => {
+	const input = await fixture(
+		"export const run = () => true;",
+		'if(!run())process.kill(process.pid,"SIGABRT");expect(run()).toBe(true);',
+	);
+	const result = await invoke(input, "resource-exhaustion", select("boolean-literal"));
+	expect(result.code).toBe(0);
+	expect(result.report.complete).toBe(true);
+	expect(result.report.originalHashesVerified).toBe(true);
+	expect(result.report.cleanupVerified).toBe(true);
+	expect(result.selected[0]?.outcome).toBe("killed");
+	expect(result.selected[0]?.reason).toBe("resource-exhaustion");
+	expect(result.selected[0]?.restored).toBe(true);
+	const receipt = rows(result.selected[0]?.receipts).map(record).at(-1);
+	expect(receipt?.signal).toBe("SIGABRT");
+	expect(receipt?.timedOut).toBe(false);
+}, 90000);
 
 test("bounded mutant hang is killed by suite timeout, not infrastructure", async () => {
 	const input = await fixture(

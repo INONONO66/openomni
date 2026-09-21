@@ -21,9 +21,10 @@ test("native pilot executes the real campaign without creating a full ratchet me
   });
   expect(await mutationMain([
     ...prepareNative(input.root),
-    "--pilot", "--limit", "1", "--target", "src/a.ts",
+    "--pilot", "--limit", "1", "--target", "src/a.ts", "--mutant-memory-mb", "7168",
   ])).toBe(0);
   const result = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
+  expect(result.command).toEqual(expect.arrayContaining(["--mutant-memory-mb", "7168"]));
   const document = jsonObject(result.document);
   expect(document.full).toBe(false);
   expect(document.complete).toBe(true);
@@ -44,6 +45,7 @@ test("native full campaign records a complete measurement receipt and exits by s
   writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
   expect(await mutationMain(prepareNative(input.root))).toBe(0);
   const native = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
+  expect(native.command).toEqual(expect.arrayContaining(["--mutant-memory-mb", "6144"]));
   const document = jsonObject(native.document);
   expect(document.full).toBe(true);
   expect(document.complete).toBe(true);

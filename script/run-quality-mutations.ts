@@ -112,6 +112,7 @@ type Options = {
 	maxCandidates: number;
 	timeout: number;
 	suiteTimeout: number;
+	mutantMemoryBytes: number;
 	budget: number;
 	pilot: boolean;
 	failureOutput: string;
@@ -1048,12 +1049,18 @@ function testGroups(root: string, tests: string[]): Map<string, string[]> {
 	}
 	return groups;
 }
-async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number, environment: Record<string, string> = {}): Promise<TestSelectionReceipt> {
+export function boundedArgv(argv: string[], capBytes: number, platform: string, hasPrlimit: boolean): string[] {
+	if (platform !== "linux" || capBytes === 0) return argv;
+	if (hasPrlimit) return ["prlimit", `--as=${capBytes}`, "--", ...argv];
+	return ["sh", "-c", `ulimit -v ${Math.floor(capBytes / 1024)} && exec "$@"`, "sh", ...argv];
+}
+
+async function runTests(root: string, tests: string[], timeout: number, directory: string, python: string, suiteTimeout: number, environment: Record<string, string> = {}, capBytes = 0): Promise<TestSelectionReceipt> {
 	const batches: TestsReceipt[] = [];
 	const files: string[] = [];
 	for (const [cwd, selected] of testGroups(root, tests)) {
 		console.error(`[mutation] test package ${relative(root, cwd) || "."} (${selected.length} files)`);
-		const batch = await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout, environment);
+		const batch = await runTestBatch(cwd, selected, timeout, directory, python, suiteTimeout, environment, capBytes);
 		batches.push(batch);
 		for (const suite of batch.junit.matchAll(/<testsuite\b([^>]*)>/g)) {
 			const file = attribute(suite[1] ?? "", "file").replace(/^\.\//, "");
@@ -1078,11 +1085,12 @@ async function runTestBatch(
 	python: string,
 	suiteTimeout: number,
 	environment: Record<string, string>,
+	capBytes: number,
 ): Promise<TestsReceipt> {
 	const report = join(directory, "tests.xml");
 	rmSync(report, { force: true });
 	const processReceipt = await execute(
-		[
+		boundedArgv([
 			process.execPath,
 			"--smol",
 			"test",
@@ -1091,7 +1099,7 @@ async function runTestBatch(
 			"--reporter=junit",
 			`--reporter-outfile=${report}`,
 			...tests.map((test) => `./${test}`),
-		],
+		], capBytes, process.platform, Bun.which("prlimit") !== null),
 		root,
 		Math.max(suiteTimeout, timeout * tests.length),
 		{
@@ -1111,8 +1119,11 @@ async function runTestBatch(
 		tests: Number(header?.[1] ?? 0),
 		failures: Number(header?.[2] ?? 0),
 		assertions: assertionIdentities(xml, processReceipt.stderr),
-		valid: !!header && !broken(processReceipt),
+		valid: !!header && validTestReport(xml, processReceipt),
 	};
+}
+function validTestReport(xml: string, receipt: ProcessReceipt): boolean {
+	return xml.trimEnd().endsWith("</testsuites>") && !broken(receipt);
 }
 function assertionDiagnostic(segment: string[]): boolean {
 	const errors = segment.filter((item) => /^(?:error|[A-Za-z]*Error):/.test(item));
@@ -1475,12 +1486,11 @@ async function probeCandidate(context: CandidateContext, source: ReturnType<type
 		return true;
 	}
 	writeMutation(source, probedSource);
-	const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+	const probe = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout, {}, options.mutantMemoryBytes);
 	result.receipts.push(...probe.batches.map((batch) => batch.process));
 	result.junitReports.push(...probe.batches.map((batch) => batch.junit));
 	if (!green(probe)) {
-		result.outcome = "infrastructure";
-		result.reason = "baseline-probe-not-green";
+		classifyProbeFailure(result, probe);
 		return false;
 	}
 	const hit = existsSync(marker) ? readFileSync(marker, "utf8") : "";
@@ -1544,16 +1554,32 @@ function behavioralAssertion(tested: Awaited<ReturnType<typeof runTests>>): bool
 	return tested.valid && tested.exitCode === 1 && tested.failures > 0 && tested.assertions.length === tested.failures;
 }
 
-function timedOut(tested: Awaited<ReturnType<typeof runTests>>): boolean {
-	return tested.batches.some((batch) => batch.process.timedOut);
+function resourceExhausted(batch: TestsReceipt): boolean {
+	const receipt = batch.process;
+	if (receipt.spawnError || receipt.overflow) return false;
+	const crashed = receipt.signal !== null || (receipt.exitCode !== null && receipt.exitCode !== 0);
+	return crashed && !batch.junit.trimEnd().endsWith("</testsuites>");
+}
+
+function nonTerminationReason(tested: TestSelectionReceipt): string {
+	if (tested.batches.some((batch) => batch.process.timedOut)) return "suite-timeout";
+	if (tested.batches.some(resourceExhausted)) return "resource-exhaustion";
+	return "";
+}
+
+function classifyProbeFailure(result: Result, probe: TestSelectionReceipt): void {
+	const reason = nonTerminationReason(probe);
+	result.outcome = reason ? "killed" : "infrastructure";
+	result.reason = reason || "baseline-probe-not-green";
 }
 
 export function classifyCandidate(result: Pick<Result, "outcome" | "reason" | "assertionIdentities">, tested: TestSelectionReceipt): void {
-	if (timedOut(tested)) {
-		// A bounded suite that never finishes under the mutant is a kill by
-		// non-termination (Stryker semantics); it is not an environmental fault.
+	const nonTermination = nonTerminationReason(tested);
+	if (nonTermination) {
+		// Selection was green before mutation: a timeout or a crashed test child
+		// without a complete report is a mutant kill, not an environmental fault.
 		result.outcome = "killed";
-		result.reason = "suite-timeout";
+		result.reason = nonTermination;
 		return;
 	}
 	if (green(tested)) {
@@ -1584,7 +1610,7 @@ async function executeMutatedCandidate(context: CandidateExecution, workspace: C
 	removeExecution(root);
 	copyExecution(join(context.temporary, "frozen"), root);
 	writeMutation(source, mutated);
-	const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout);
+	const tested = await runTests(root, tests, options.timeout, run, options.python, options.suiteTimeout, {}, options.mutantMemoryBytes);
 	result.receipts.push(...tested.batches.map((batch) => batch.process));
 	result.junitReports.push(...tested.batches.map((batch) => batch.junit));
 	classifyCandidate(result, tested);
@@ -1696,6 +1722,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		"max-candidates",
 		"timeout",
 		"suite-timeout",
+		"mutant-memory-mb",
 		"budget",
 		"pilot",
 		"failure-output",
@@ -1742,6 +1769,7 @@ function optionsFrom(values: Map<string, string[]>): Options {
 		maxCandidates: bound("max-candidates", 10000, 1000000),
 		timeout: bound("timeout", 15000, 15000),
 		suiteTimeout: bound("suite-timeout", 15000, 3600000),
+		mutantMemoryBytes: bound("mutant-memory-mb", 6144, 1048576) * 1024 * 1024,
 		budget: bound("budget", 3600000, 604800000),
 		failureOutput: values.get("--failure-output")?.[0] ?? "",
 		pilot,
