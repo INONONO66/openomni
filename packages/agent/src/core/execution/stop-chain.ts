@@ -1,4 +1,5 @@
 import { canonicalDigest } from "@openomni/protocol";
+import { Effect } from "effect";
 
 export interface StopObservation {
   readonly text: string;
@@ -39,12 +40,13 @@ export function stopState(): StopState {
 }
 
 /** Fixed precedence, including policy reads. Invocation is not effect/state progress. */
-export async function judgeStop(
+export function judgeStop<E, R>(
   previous: StopState,
   observation: StopObservation,
-  limit: (metric: StopMetric) => Promise<number>,
-  completion: () => Promise<boolean>,
-): Promise<{ state: StopState; verdict: StopVerdict }> {
+  limit: (metric: StopMetric) => Effect.Effect<number, E, R>,
+  completion: () => Effect.Effect<boolean, E, R>,
+): Effect.Effect<{ state: StopState; verdict: StopVerdict }, E, R> {
+  return Effect.gen(function* () {
   const outputHash = canonicalDigest(observation.text);
   const state: StopState = {
     outputHash,
@@ -65,19 +67,20 @@ export async function judgeStop(
     observation.toolCalls === 0 &&
     !observation.continueRequested
   ) {
-    const permitted = await completion();
+    const permitted = yield* completion();
     if (permitted && observation.openIntent.length === 0 && !observation.blocked)
       return done({ kind: "result", reason: "completion" });
   }
-  if (state.repetition >= (await limit("exact_repeat")))
+  if (state.repetition >= (yield* limit("exact_repeat")))
     return done({ kind: "error", reason: "exact_repeat" });
-  if (state.stall >= (await limit("toolless_stall")))
+  if (state.stall >= (yield* limit("toolless_stall")))
     return done({ kind: "error", reason: "toolless_stall" });
-  if (state.blocked >= (await limit("blocked_recurrence")))
+  if (state.blocked >= (yield* limit("blocked_recurrence")))
     return done({ kind: "error", reason: "blocked_recurrence" });
   if (observation.alarmIds.length > 0)
     return done({ kind: "waiting", reason: "live_wait", alarmIds: observation.alarmIds });
-  if (state.continuation >= (await limit("continuation")))
+  if (state.continuation >= (yield* limit("continuation")))
     return done({ kind: "error", reason: "continuation" });
   return done({ kind: "continue", reason: "continue" });
+  });
 }

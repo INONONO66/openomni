@@ -4,7 +4,7 @@ type Delay = { ms: number; directive: boolean };
 
 /** Explicit directives outrank inferred reset buckets. */
 export function headerDelay(error?: ApiFailure): Delay | undefined {
-  const headers = error?.data.responseHeaders;
+  const headers = error?.responseHeaders;
   if (headers === undefined) return undefined;
   const directive = directiveDelay(headers);
   return directive === undefined ? resetDelay(headers) : { ms: directive, directive: true };

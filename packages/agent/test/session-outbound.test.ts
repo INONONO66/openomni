@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/receive-outbound";
@@ -217,28 +218,31 @@ test("a lease stolen during dispatch fails both the ack and the release as one a
     observations: { publish: () => undefined },
     clock: () => 100,
     dispatchOutbound: async ({ message }) => {
-      const stolen = SessionHandleStore.acquireLease({
-        sessionId: message.sourceSessionId,
-        owner: "other-runtime",
-        expectedFence: SessionHandleStore.row(message.sourceSessionId).leaseFence,
-        now: 100 + SessionHandleStore.LEASE_TTL_MS,
-        expiresAt: 100 + 2 * SessionHandleStore.LEASE_TTL_MS,
-      });
+      const stolen = Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.acquireLease({
+              sessionId: message.sourceSessionId,
+              owner: "other-runtime",
+              expectedFence: SessionHandleStore.row(message.sourceSessionId).leaseFence,
+              now: 100 + SessionHandleStore.LEASE_TTL_MS,
+              expiresAt: 100 + 2 * SessionHandleStore.LEASE_TTL_MS,
+            }),
+          ),
+        ),
+        (error) => error,
+      );
       if (!stolen.ok) throw new Error("test takeover refused");
       return receiveOutbound(message, 100).receipt;
     },
   });
-  const failure = await prompted.then(
-    () => undefined,
-    (error: unknown) => error,
-  );
-  expect(failure).toBeInstanceOf(AggregateError);
-  if (!(failure instanceof AggregateError)) throw new Error("unreachable");
-  expect(failure.message).toBe("outbound dispatch and source lease release failed");
-  expect(failure.errors.map((error) => String(error))).toEqual([
-    "SessionCommitError: session commit stale",
-    "SessionCommitError: session commit stale",
-  ]);
+  await expect(prompted).rejects.toBeInstanceOf(AggregateError);
+  await expect(prompted).rejects.toMatchObject({
+    errors: [
+      { _tag: "CommitRefused", reason: "fence", sessionId: "child" },
+      { _tag: "CommitRefused", reason: "fence", sessionId: "child" },
+    ],
+  });
   expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
   expect(SessionHandleStore.row("child").leaseOwner).toBe("other-runtime");
 });

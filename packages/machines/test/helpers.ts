@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import type { Machine } from "@openomni/protocol";
-import { attachMachineDaemon, createMachineHost } from "../src/index";
+import { attachMachineDaemon, createMachineHost } from "./helpers/native";
 
 export const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
 export function enrollment(): Machine.Enrollment {

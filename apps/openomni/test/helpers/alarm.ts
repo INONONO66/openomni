@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { createObservationBus, createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
@@ -11,19 +12,26 @@ export function alarmFixture(
   const events = createObservationBus();
   const storage = new SqliteStorageAdapter(path, events);
   Storage.configure(storage);
-  storage.sessions.create({
-    id: "monitor-session",
-    parentId: null,
-    role: "resident",
-    state: "idle",
-    revision: 0,
-    leaseOwner: null,
-    leaseFence: 0,
-    leaseExpiresAt: null,
-    toolsGeneration: 0,
-    systemHash: "",
-    policyGeneration: 1,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        storage.sessions.create({
+          id: "monitor-session",
+          parentId: null,
+          role: "resident",
+          state: "idle",
+          revision: 0,
+          leaseOwner: null,
+          leaseFence: 0,
+          leaseExpiresAt: null,
+          toolsGeneration: 0,
+          systemHash: "",
+          policyGeneration: 1,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   let at = 1000;
   const errors: Error[] = [];
   const wakes: string[] = [];
@@ -45,27 +53,49 @@ export function alarmFixture(
   });
   /** A committed one-shot retry.scheduled alarm, due at the fixture clock. */
   function armRetry(id: string) {
-    const row = storage.alarms.arm({
-      id,
-      sessionId: "monitor-session",
-      kind: "at",
-      fireAt: at,
-      spec: {
-        encodingVersion: 1,
-        value: { kind: "retry.scheduled", attempt: 1, reason: "transient_error", notBefore: at },
-      },
-    });
+    const row = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          storage.alarms.arm({
+            id,
+            sessionId: "monitor-session",
+            kind: "at",
+            fireAt: at,
+            spec: {
+              encodingVersion: 1,
+              value: {
+                kind: "retry.scheduled",
+                attempt: 1,
+                reason: "transient_error",
+                notBefore: at,
+              },
+            },
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     if (row === undefined) throw new Error("fixture retry arm refused");
     return row;
   }
   function arm(id: string, watch: Alarm.Watch, limit = 8) {
-    const row = storage.alarms.arm({
-      id,
-      sessionId: "monitor-session",
-      kind: "watch",
-      fireAt: at,
-      spec: { encodingVersion: 1, value: { watch, notificationLimit: limit, policyGeneration: 1 } },
-    });
+    const row = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          storage.alarms.arm({
+            id,
+            sessionId: "monitor-session",
+            kind: "watch",
+            fireAt: at,
+            spec: {
+              encodingVersion: 1,
+              value: { watch, notificationLimit: limit, policyGeneration: 1 },
+            },
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     if (row === undefined) throw new Error("fixture arm refused");
     return row;
   }

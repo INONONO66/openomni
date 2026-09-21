@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Inbox, Gateway, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
@@ -16,7 +17,10 @@ export function commitMessageInbox(input: Inbox.Commit): Inbox.Row {
   ) {
     throw new Error("outbound inbox binding mismatch");
   }
-  const received = SessionHandleStore.commitReceivedMessage(input);
+  const received = Either.getOrThrowWith(
+    Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(input))),
+    (error) => error,
+  );
   if (outbound !== undefined) outbound.receipt = received.receipt;
   return received.row;
 }

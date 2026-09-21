@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,13 +12,20 @@ test("alarm restart: SQLite reopen fires at the exact boundary with atomic promp
     const database = join(directory, "ledger.db");
     let fixture = alarmFixture(database);
     try {
-      fixture.storage.alarms.arm({
-        id: "at",
-        sessionId: "monitor-session",
-        kind: "at",
-        fireAt: 2000,
-        spec: { encodingVersion: 1, value: "deadline" },
-      });
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            fixture.storage.alarms.arm({
+              id: "at",
+              sessionId: "monitor-session",
+              kind: "at",
+              fireAt: 2000,
+              spec: { encodingVersion: 1, value: "deadline" },
+            }),
+          ),
+        ),
+        (error) => error,
+      );
       await fixture.close();
       fixture = alarmFixture(database);
       fixture.advance(1999);

@@ -8,7 +8,7 @@ import { DecisionFacts } from "@openomni/ledger";
 import { targetsOfRequest, responderCandidates, ingressEvidence } from "./request/matcher.js";
 import type { GatewayRouterPorts } from "./message-ports.js";
 import type { resolveAndRecordRoute } from "./routing-resolution.js";
-import { IngressRoutingError } from "./routing-error";
+import { IngressRoutingError } from "../errors";
 
 // A rejected request-correlated delivery records a correction without changing
 // the original route decision. Redelivery preserves the first correction fact.

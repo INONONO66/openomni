@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { messageDecisionRules } from "./message-decision";
 import { createExecutor, Bus } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
@@ -10,29 +11,42 @@ type Run = Parameters<typeof createGatewayRouter>[0]["run"];
 /** External authentication has no active model turn; its message actions have one fenced owner. */
 export function createIngressExecutor(clock: () => number): Run {
   const id = "gateway-ingress";
-  SessionHandleStore.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: SessionHandleStore.currentPolicyGeneration(),
-    actionId: crypto.randomUUID(),
-    at: clock(),
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id,
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+          actionId: crypto.randomUUID(),
+          at: clock(),
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   let tail: Promise<void> = Promise.resolve();
   return (_sender, request, body) => {
     const operation = tail.then(async () => {
       const row = SessionHandleStore.row(id);
       const owner = crypto.randomUUID();
-      const lease = SessionHandleStore.acquireLease({
-        sessionId: id,
-        owner,
-        expectedFence: row.leaseFence,
-        now: clock(),
-        expiresAt: clock() + SessionHandleStore.LEASE_TTL_MS,
-      });
-      if (!lease.ok) throw new Error(`gateway ingress lease ${lease.reason}`);
+      const lease = Either.getOrThrowWith(
+        await Effect.runPromise(
+          Effect.either(
+            SessionHandleStore.acquireLease({
+              sessionId: id,
+              owner,
+              expectedFence: row.leaseFence,
+              now: clock(),
+              expiresAt: clock() + SessionHandleStore.LEASE_TTL_MS,
+            }),
+          ),
+        ),
+        (error) => error,
+      );
       const executor = createExecutor({
         identity: { sessionId: id, role: "resident", parentActionId: null },
         policy: compilePolicySnapshot({
@@ -43,18 +57,24 @@ export function createIngressExecutor(clock: () => number): Run {
         ledger: {
           async commit(action) {
             const current = SessionHandleStore.row(id);
-            const committed = SessionHandleStore.commit({
-              sessionId: id,
-              owner,
-              fence: lease.fence,
-              now: clock(),
-              expectedRevision: current.revision,
-              actions: [action],
-              consumeInboxIds: [],
-              state: "idle",
-              releaseLease: false,
-            });
-            if (!committed.ok) throw new Error(`gateway message commit ${committed.reason}`);
+            const committed = Either.getOrThrowWith(
+              await Effect.runPromise(
+                Effect.either(
+                  SessionHandleStore.commit({
+                    sessionId: id,
+                    owner,
+                    fence: lease.fence,
+                    now: clock(),
+                    expectedRevision: current.revision,
+                    actions: [action],
+                    consumeInboxIds: [],
+                    state: "idle",
+                    releaseLease: false,
+                  }),
+                ),
+              ),
+              (error) => error,
+            );
             const receipt = committed.receipts[0];
             if (receipt === undefined) throw new Error("gateway message action receipt missing");
             return receipt;
@@ -69,17 +89,24 @@ export function createIngressExecutor(clock: () => number): Run {
         return { ...result, matchedRuleIds: messageDecisionRules(id, request) };
       } finally {
         const current = SessionHandleStore.row(id);
-        SessionHandleStore.commit({
-          sessionId: id,
-          owner,
-          fence: lease.fence,
-          now: clock(),
-          expectedRevision: current.revision,
-          actions: [],
-          consumeInboxIds: [],
-          state: "idle",
-          releaseLease: true,
-        });
+        Either.getOrThrowWith(
+          await Effect.runPromise(
+            Effect.either(
+              SessionHandleStore.commit({
+                sessionId: id,
+                owner,
+                fence: lease.fence,
+                now: clock(),
+                expectedRevision: current.revision,
+                actions: [],
+                consumeInboxIds: [],
+                state: "idle",
+                releaseLease: true,
+              }),
+            ),
+          ),
+          (error) => error,
+        );
       }
     });
     tail = operation.then(

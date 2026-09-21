@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { createSessionRequests, decideRequestTransition } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import {
@@ -22,7 +23,7 @@ export function requestPort(
 }
 
 export function originalAction(requestId: string, sessionId: string, value: PlainValue = {}) {
-  SessionHandleStore.materialize({
+  Effect.runSync(SessionHandleStore.materialize({
     id: sessionId,
     parentId: null,
     role: "resident",
@@ -31,19 +32,19 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
     policyGeneration: 0,
     actionId: `${sessionId}:configure`,
     at: 0,
-  });
+  }));
   const existing = SessionHandleStore.tree(sessionId).find((action) => action.id === requestId);
   if (existing) return;
   const row = SessionHandleStore.row(sessionId);
-  const lease = SessionHandleStore.acquireLease({
+  const lease = Effect.runSync(SessionHandleStore.acquireLease({
     sessionId,
     owner: "fixture",
     expectedFence: row.leaseFence,
     now: 1,
     expiresAt: 100,
-  });
+  }));
   if (!lease.ok) throw new Error("fixture lease refused");
-  const result = SessionHandleStore.commit({
+  const result = Effect.runSync(SessionHandleStore.commit({
     sessionId,
     owner: "fixture",
     fence: lease.fence,
@@ -67,7 +68,7 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
     consumeInboxIds: [],
     state: "idle",
     releaseLease: true,
-  });
+  }));
   if (!result.ok) throw new Error("fixture commit refused");
 }
 
@@ -100,7 +101,7 @@ export function seededRequests(clock?: () => number) {
   };
 }
 
-export function command(
+export async function command(
   requestId: string,
   payload: SessionTransition.Payload,
   at: number,
@@ -110,13 +111,13 @@ export function command(
   if (!request) throw new Error("missing request");
   const sessionId = request.sessionId;
   const row = SessionHandleStore.row(sessionId);
-  const lease = SessionHandleStore.acquireLease({
+  const lease = await Effect.runPromise(SessionHandleStore.acquireLease({
     sessionId,
     owner: "command",
     expectedFence: row.leaseFence,
     now: at,
     expiresAt: at + 100,
-  });
+  }));
   if (!lease.ok) throw new Error("command lease refused");
   const current = SessionHandleStore.row(sessionId);
   const decision = decideRequestTransition(
@@ -131,7 +132,7 @@ export function command(
     },
     { row: current, actions: SessionHandleStore.tree(sessionId), request },
   );
-  const committed = SessionHandleStore.commitRequestTransition({
+  const committed = await Effect.runPromise(SessionHandleStore.commitRequestTransition({
     sessionId,
     owner: "command",
     fence: lease.fence,
@@ -141,7 +142,7 @@ export function command(
     consumeInboxIds: [],
     state: current.state,
     releaseLease: true,
-  });
+  }));
   if (!committed.ok) throw new Error("command commit refused");
   return decision;
 }

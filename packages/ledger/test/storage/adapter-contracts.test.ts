@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -21,10 +22,10 @@ let inspection: Database;
 
 interface L0Adapter {
   transaction<T>(operation: () => T): T;
-  sessions: ProtocolStorage.SessionSubAdapter;
+  sessions: NonNullable<Storage.Adapter["sessions"]>;
   actions: ProtocolStorage.ActionSubAdapter;
-  inbox: ProtocolStorage.InboxSubAdapter;
-  alarms: ProtocolStorage.AlarmSubAdapter;
+  inbox: NonNullable<Storage.Adapter["inbox"]>;
+  alarms: NonNullable<Storage.Adapter["alarms"]>;
   policies: ProtocolStorage.PolicyRowSubAdapter;
 }
 
@@ -45,8 +46,18 @@ function sessionRow(id: string): LedgerSession.Row {
 
 function exerciseL0Contracts(storage: L0Adapter) {
   const session = sessionRow("session-l0");
-  expect(storage.sessions.create(session)).toBe(true);
-  expect(storage.sessions.create(session)).toBe(false);
+  expect(
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(storage.sessions.create(session))),
+      (error) => error,
+    ),
+  ).toBe(true);
+  expect(
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(storage.sessions.create(session))),
+      (error) => error,
+    ),
+  ).toBe(false);
 
   const root = storage.actions.append(
     LedgerAction.Append.parse({
@@ -63,7 +74,12 @@ function exerciseL0Contracts(storage: L0Adapter) {
   );
   expect(root?.revision).toBe(1);
 
-  expect(storage.sessions.create(sessionRow("session-other"))).toBe(true);
+  expect(
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(storage.sessions.create(sessionRow("session-other")))),
+      (error) => error,
+    ),
+  ).toBe(true);
   expect(
     storage.actions.append(
       LedgerAction.Append.parse({
@@ -112,27 +128,41 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(reverted?.revision).toBe(2);
 
   expect(
-    storage.inbox.commit(
-      Inbox.Commit.parse({
-        id: "inbox-2",
-        sessionId: session.id,
-        kind: "interrupt",
-        content: "stop",
-        origin: encoded("owner"),
-        createdAt: 201,
-      }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          storage.inbox.commit(
+            Inbox.Commit.parse({
+              id: "inbox-2",
+              sessionId: session.id,
+              kind: "interrupt",
+              content: "stop",
+              origin: encoded("owner"),
+              createdAt: 201,
+            }),
+          ),
+        ),
+      ),
+      (error) => error,
     ),
   ).toMatchObject({ ordinal: 1, status: "pending" });
   expect(
-    storage.inbox.commit(
-      Inbox.Commit.parse({
-        id: "inbox-1",
-        sessionId: session.id,
-        kind: "prompt",
-        content: "go",
-        origin: encoded("owner"),
-        createdAt: 200,
-      }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          storage.inbox.commit(
+            Inbox.Commit.parse({
+              id: "inbox-1",
+              sessionId: session.id,
+              kind: "prompt",
+              content: "go",
+              origin: encoded("owner"),
+              createdAt: 200,
+            }),
+          ),
+        ),
+      ),
+      (error) => error,
     ),
   ).toMatchObject({ ordinal: 2, status: "pending" });
   expect(storage.inbox.list(session.id, "pending").map((row) => row.id)).toEqual([
@@ -141,27 +171,46 @@ function exerciseL0Contracts(storage: L0Adapter) {
   ]);
 
   expect(
-    storage.alarms.arm(
-      Alarm.Arm.parse({
-        id: "alarm-later",
-        sessionId: session.id,
-        kind: "watch",
-        fireAt: 500,
-      }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          storage.alarms.arm(
+            Alarm.Arm.parse({
+              id: "alarm-later",
+              sessionId: session.id,
+              kind: "watch",
+              fireAt: 500,
+            }),
+          ),
+        ),
+      ),
+      (error) => error,
     ),
   ).toMatchObject({ status: "armed" });
   expect(
-    storage.alarms.arm(
-      Alarm.Arm.parse({
-        id: "alarm-now",
-        sessionId: session.id,
-        kind: "watch",
-        fireAt: 400,
-        spec: encoded("watch"),
-      }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          storage.alarms.arm(
+            Alarm.Arm.parse({
+              id: "alarm-now",
+              sessionId: session.id,
+              kind: "watch",
+              fireAt: 400,
+              spec: encoded("watch"),
+            }),
+          ),
+        ),
+      ),
+      (error) => error,
     ),
   ).toMatchObject({ status: "armed" });
-  expect(storage.alarms.cancel("alarm-later", session.id, 450)).toMatchObject({
+  expect(
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(storage.alarms.cancel("alarm-later", session.id, 450))),
+      (error) => error,
+    ),
+  ).toMatchObject({
     status: "cancelled",
   });
   expect(storage.alarms.due(450).map((row) => row.id)).toEqual(["alarm-now"]);
@@ -236,12 +285,24 @@ describe("L0 adapter contracts", () => {
     const create = sqliteAdapter;
     const storage = create();
     const row = sessionRow("session-boundary");
-    expect(storage.sessions.create(row)).toBe(true);
     expect(
-      storage.alarms.arm(
-        Alarm.Arm.parse({ id: "orphan", sessionId: "missing", kind: "at", fireAt: 10 }),
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(storage.sessions.create(row))),
+        (error) => error,
       ),
-    ).toBeUndefined();
+    ).toBe(true);
+    expect(() =>
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            storage.alarms.arm(
+              Alarm.Arm.parse({ id: "orphan", sessionId: "missing", kind: "at", fireAt: 10 }),
+            ),
+          ),
+        ),
+        (error) => error,
+      ),
+    ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
     expect(
       storage.actions.append(
         LedgerAction.Append.parse({
@@ -257,18 +318,25 @@ describe("L0 adapter contracts", () => {
         0,
       ),
     ).toBeDefined();
-    expect(
-      storage.inbox.commit(
-        Inbox.Commit.parse({
-          id: "collision",
-          sessionId: row.id,
-          kind: "prompt",
-          content: "content",
-          origin: encoded("origin"),
-          createdAt: 11,
-        }),
+    expect(() =>
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            storage.inbox.commit(
+              Inbox.Commit.parse({
+                id: "collision",
+                sessionId: row.id,
+                kind: "prompt",
+                content: "content",
+                origin: encoded("origin"),
+                createdAt: 11,
+              }),
+            ),
+          ),
+        ),
+        (error) => error,
       ),
-    ).toBeUndefined();
+    ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused" }));
     expect(storage.sessions.get(row.id)?.revision).toBe(1);
     expect(storage.actions.tree(row.id).map((action) => action.kind)).toEqual(["turn"]);
     expect(storage.inbox.list(row.id)).toEqual([]);
@@ -288,7 +356,12 @@ describe("SQLite adapter contract guards", () => {
 
   test("action revision rolls back when the append insert fails", () => {
     const row = sessionRow("session-action-rollback");
-    expect(adapter.sessions.create(row)).toBe(true);
+    expect(
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.sessions.create(row))),
+        (error) => error,
+      ),
+    ).toBe(true);
     database().exec(`
       CREATE TRIGGER refuse_action BEFORE INSERT ON action
       BEGIN SELECT RAISE(ABORT, 'refuse action'); END
@@ -315,30 +388,45 @@ describe("SQLite adapter contract guards", () => {
 
   test("inbox action and row roll back together when the row insert fails", () => {
     const row = sessionRow("session-rollback");
-    expect(adapter.sessions.create(row)).toBe(true);
+    expect(
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.sessions.create(row))),
+        (error) => error,
+      ),
+    ).toBe(true);
     database().exec(`
       CREATE TRIGGER refuse_inbox BEFORE INSERT ON inbox
       BEGIN SELECT RAISE(ABORT, 'refuse inbox'); END
     `);
 
     expect(() =>
-      adapter.inbox.commit(
-        Inbox.Commit.parse({
-          id: "inbox-rollback",
-          sessionId: row.id,
-          kind: "prompt",
-          content: "content",
-          origin: encoded("origin"),
-          createdAt: 12,
-        }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            adapter.inbox.commit(
+              Inbox.Commit.parse({
+                id: "inbox-rollback",
+                sessionId: row.id,
+                kind: "prompt",
+                content: "content",
+                origin: encoded("origin"),
+                createdAt: 12,
+              }),
+            ),
+          ),
+        ),
+        (error) => error,
       ),
-    ).toThrow("refuse inbox");
+    ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
     expect(adapter.sessions.get(row.id)?.revision).toBe(0);
     expect(adapter.actions.tree(row.id)).toEqual([]);
   });
 
   test("request action compare-and-set rejects foreign parent and stale revision", () => {
-    adapter.sessions.create(sessionRow("request-owner"));
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(adapter.sessions.create(sessionRow("request-owner")))),
+      (error) => error,
+    );
     const action = LedgerAction.Append.parse({
       id: "request",
       parentId: "missing",
@@ -356,7 +444,10 @@ describe("SQLite adapter contract guards", () => {
   });
 
   test("canonical session reads cannot mutate a later snapshot", () => {
-    adapter.sessions.create(sessionRow("session-isolated"));
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(adapter.sessions.create(sessionRow("session-isolated")))),
+      (error) => error,
+    );
     const first = adapter.sessions.get("session-isolated");
     if (first === undefined) throw new Error("missing session");
     first.revision = 99;

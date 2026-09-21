@@ -1,6 +1,7 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Deadline, SessionGeneration, type LedgerSession } from "@openomni/protocol";
-import { SessionLeaseError, type SessionRuntime, type SessionSystem } from "./session-contract";
+import type { SessionRuntime, SessionSystem } from "./session-contract";
 import { requireCommit } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 
@@ -68,22 +69,29 @@ export function createSessionConfiguration(
       snapshot,
       at: clock(),
     });
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: [configured],
-      consumeInboxIds: [],
-      state: current.state,
-      generation: {
-        toolsGeneration: snapshot.generation,
-        systemHash: snapshot.systemHash,
-        policyGeneration: snapshot.policyGeneration,
-      },
-      releaseLease: !ownsRunningLease,
-    });
+    const committed = Either.getOrThrowWith(
+      await Effect.runPromise(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: current.revision,
+            actions: [configured],
+            consumeInboxIds: [],
+            state: current.state,
+            generation: {
+              toolsGeneration: snapshot.generation,
+              systemHash: snapshot.systemHash,
+              policyGeneration: snapshot.policyGeneration,
+            },
+            releaseLease: !ownsRunningLease,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     const configuredRow = requireCommit(committed);
     await hibernate(configuredRow);
     return { generation: snapshot.generation, revertTo: snapshot.revertTo };
@@ -91,14 +99,20 @@ export function createSessionConfiguration(
 
   function acquire(expectedFence: number): number {
     const now = clock();
-    const result = SessionHandleStore.acquireLease({
-      sessionId,
-      owner,
-      expectedFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    if (!result.ok) throw new SessionLeaseError(result);
+    const result = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.acquireLease({
+            sessionId,
+            owner,
+            expectedFence,
+            now,
+            expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     return result.fence;
   }
 
@@ -119,17 +133,24 @@ export function createSessionConfiguration(
     // stale by the fenced kernel.
     if (current.leaseOwner !== owner || current.leaseFence !== state.fence) return;
     if (!leaseLive(current)) return;
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: [],
-      consumeInboxIds: [],
-      state: current.state,
-      releaseLease: true,
-    });
+    const committed = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: current.revision,
+            actions: [],
+            consumeInboxIds: [],
+            state: current.state,
+            releaseLease: true,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     requireCommit(committed);
   }
   return { configure, acquire, leaseLive, releaseHeldLease };

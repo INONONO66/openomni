@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import {
   canonicalDigest,
@@ -8,7 +9,6 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import type { SessionRuntime } from "./session-contract";
-import { SessionLeaseError } from "./session-contract";
 import { getSessionHandle } from "./session-handle";
 import { requireCommit } from "./session-record";
 import { requestBindingDigest } from "./session-request";
@@ -71,14 +71,20 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
     const owner = `${runtime.processId ?? process.pid}:request:${entropy()}`;
     const row = SessionHandleStore.row(sessionId);
     const now = clock();
-    const lease = SessionHandleStore.acquireLease({
-      sessionId,
-      owner,
-      expectedFence: row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    if (!lease.ok) throw new SessionLeaseError(lease);
+    const lease = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.acquireLease({
+            sessionId,
+            owner,
+            expectedFence: row.leaseFence,
+            now,
+            expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     try {
       return commitSessionRequest(
         sessionId,
@@ -92,17 +98,24 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
     } finally {
       const current = SessionHandleStore.row(sessionId);
       requireCommit(
-        SessionHandleStore.commit({
-          sessionId,
-          owner,
-          fence: lease.fence,
-          now: clock(),
-          expectedRevision: current.revision,
-          actions: [],
-          consumeInboxIds: [],
-          state: current.state,
-          releaseLease: true,
-        }),
+        Either.getOrThrowWith(
+          Effect.runSync(
+            Effect.either(
+              SessionHandleStore.commit({
+                sessionId,
+                owner,
+                fence: lease.fence,
+                now: clock(),
+                expectedRevision: current.revision,
+                actions: [],
+                consumeInboxIds: [],
+                state: current.state,
+                releaseLease: true,
+              }),
+            ),
+          ),
+          (error) => error,
+        ),
       );
     }
   }

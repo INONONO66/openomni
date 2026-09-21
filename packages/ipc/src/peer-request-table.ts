@@ -1,6 +1,7 @@
 import { Ipc, type IdSource, type PlainValue } from "@openomni/protocol";
-
-import { IpcRemoteError, IpcTimeoutError } from "./errors";
+import { Cause, Deferred, Effect, Exit, Option } from "effect";
+import { IpcRemoteError, IpcTimeoutError, type IpcError } from "./errors";
+import { decodeIpcFailure } from "./failure";
 
 /** One inbound frame after schema classification; the only place the three wire schemas are tried. */
 type IpcMessage =
@@ -23,27 +24,16 @@ export function classifyIpcMessage(raw: IpcWireInput): IpcMessage | undefined {
 
 type PendingCall<TPeer> = {
   readonly peer: TPeer;
-  readonly reject: (error: Error) => void;
-  readonly resolve: (value: Ipc.Response["result"]) => void;
-  readonly timer: ReturnType<typeof setTimeout>;
+  readonly method: string;
+  readonly result: Deferred.Deferred<Ipc.Response["result"], IpcError>;
 };
-
 type SendFrame<TPeer> = (peer: TPeer, frame: Ipc.Request | Ipc.Response | Ipc.Notification) => void;
-
 type RequestHandler<TPeer> = (
-  peer: TPeer,
-  method: string,
-  params: Ipc.Request["params"],
+  peer: TPeer, method: string, params: Ipc.Request["params"],
   respond: (result: Ipc.Response["result"]) => void,
   notify: (method: string, params?: Ipc.Notification["params"]) => void,
-) => void | Promise<void>;
-
-type NotificationHandler<TPeer> = (
-  peer: TPeer,
-  method: string,
-  params: Ipc.Notification["params"],
-) => void | Promise<void>;
-
+) => Effect.Effect<void, IpcError>;
+type NotificationHandler<TPeer> = (peer: TPeer, method: string, params: Ipc.Notification["params"]) => Effect.Effect<void, IpcError>;
 type PeerRequestTableOptions<TPeer> = {
   readonly send: SendFrame<TPeer>;
   readonly idSource?: IdSource;
@@ -53,140 +43,74 @@ type PeerRequestTableOptions<TPeer> = {
   readonly samePeer?: (pendingPeer: TPeer, inboundPeer: TPeer) => boolean;
 };
 
-/**
- * Owns the transport-neutral request lifecycle for one IPC endpoint: request
- * issuance, pending promise correlation, peer-scoped disconnect rejection,
- * and dispatch of inbound responses, requests, and notifications.
- */
+/** Request correlation is peer-scoped; interruption removes the waiter without replaying bytes. */
 export class PeerRequestTable<TPeer = undefined> {
   private readonly pending = new Map<string, PendingCall<TPeer>>();
   private readonly samePeer: (pendingPeer: TPeer, inboundPeer: TPeer) => boolean;
-
   constructor(private readonly options: PeerRequestTableOptions<TPeer>) {
     this.samePeer = options.samePeer ?? Object.is;
   }
-
-  call(
-    peer: TPeer,
-    method: string,
-    params: Ipc.Request["params"],
-    timeoutMs: number,
-  ): Promise<Ipc.Response["result"]> {
-    const request = Ipc.createRequest(
-      (this.options.idSource ?? (() => crypto.randomUUID()))(),
-      method,
-      params,
-    );
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(request.id);
-        reject(new IpcTimeoutError(`request timeout: ${method}`));
-      }, timeoutMs);
-      this.pending.set(request.id, { peer, reject, resolve, timer });
-      this.options.send(peer, request);
+  call(peer: TPeer, method: string, params: Ipc.Request["params"], timeoutMs: number): Effect.Effect<Ipc.Response["result"], IpcError> {
+    return Effect.gen(this, function* () {
+      const request = Ipc.createRequest((this.options.idSource ?? (() => crypto.randomUUID()))(), method, params);
+      const result = yield* Deferred.make<Ipc.Response["result"], IpcError>();
+      this.pending.set(request.id, { peer, method, result });
+      return yield* Effect.try({ try: () => this.options.send(peer, request), catch: decodeIpcFailure("request.send") }).pipe(
+        Effect.zipRight(Deferred.await(result)),
+        Effect.timeoutFail({ duration: timeoutMs, onTimeout: () => new IpcTimeoutError({ message: `request timeout: ${method}`, requestId: request.id, method }) }),
+        Effect.ensuring(Effect.sync(() => { this.pending.delete(request.id); })),
+      );
     });
   }
-
-  /** Returns false when `raw` matches no IPC message schema. */
-  dispatch(raw: IpcWireInput, peer: TPeer): boolean {
+  dispatch(raw: IpcWireInput, peer: TPeer): Effect.Effect<boolean, IpcError> {
     const message = classifyIpcMessage(raw);
-    if (message === undefined) return false;
-    this.dispatchMessage(message, peer);
-    return true;
+    return message === undefined ? Effect.succeed(false) : Effect.as(this.dispatchMessage(message, peer), true);
   }
-
-  /** Route an already-classified frame; the server classifies once to answer unknown frames itself. */
-  dispatchMessage(message: IpcMessage, peer: TPeer): void {
+  dispatchMessage(message: IpcMessage, peer: TPeer): Effect.Effect<void, IpcError> {
     switch (message.kind) {
-      case "response":
-        this.settleResponse(message.value, peer);
-        return;
-      case "request":
-        this.dispatchRequest(message.value, peer);
-        return;
-      case "notification":
-        this.dispatchNotification(message.value, peer);
-        return;
+      case "response": return Effect.sync(() => this.settleResponse(message.value, peer));
+      case "request": return this.dispatchRequest(message.value, peer);
+      case "notification": return this.dispatchNotification(message.value, peer);
     }
   }
-
-  disconnect(peer: TPeer, error: Error): void {
+  disconnect(peer: TPeer, error: IpcError): void {
     this.rejectPending(error, (pendingPeer) => this.samePeer(pendingPeer, peer));
   }
-
-  disconnectAll(error: Error): void {
-    this.rejectPending(error, () => true);
-  }
-
+  disconnectAll(error: IpcError): void { this.rejectPending(error, () => true); }
   private settleResponse(response: Ipc.Response, peer: TPeer): void {
     const pending = this.pending.get(response.id);
     if (!pending || !this.samePeer(pending.peer, peer)) return;
-
-    clearTimeout(pending.timer);
     this.pending.delete(response.id);
-    if (response.error) {
-      pending.reject(new IpcRemoteError(response.error.code, response.error.message));
-    } else {
-      pending.resolve(response.result);
-    }
+    Deferred.unsafeDone(pending.result, response.error
+      ? Exit.fail(new IpcRemoteError({ code: response.error.code, message: `IPC error ${response.error.code}: ${response.error.message}`, requestId: response.id, method: pending.method }))
+      : Exit.succeed(response.result));
   }
-
-  private dispatchRequest(request: Ipc.Request, peer: TPeer): void {
-    if (!this.options.onRequest) {
-      const message =
-        this.options.missingRequestHandlerMessage?.(request.method) ??
-        `peer has no request handler for ${request.method}`;
-      this.options.send(peer, Ipc.createErrorResponse(request.id, 1000, message));
-      return;
-    }
-
-    const respond = (result: Ipc.Response["result"]) => {
-      this.options.send(peer, Ipc.createResponse(request.id, result));
-    };
-    const notify = (method: string, params?: Ipc.Notification["params"]) => {
-      this.options.send(peer, Ipc.createNotification(method, params));
-    };
-    const failRequest = (error: unknown) => {
-      this.options.send(
-        peer,
-        Ipc.createErrorResponse(
-          request.id,
-          1000,
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
-    };
-
-    try {
-      const result = this.options.onRequest(peer, request.method, request.params, respond, notify);
-      if (result instanceof Promise) result.catch(failRequest);
-    } catch (error) {
-      failRequest(error);
-    }
+  private dispatchRequest(request: Ipc.Request, peer: TPeer): Effect.Effect<void, IpcError> {
+    const send = (frame: Ipc.Response) => Effect.try({ try: () => this.options.send(peer, frame), catch: decodeIpcFailure("response.send") });
+    const handler = this.options.onRequest;
+    if (!handler) return send(Ipc.createErrorResponse(request.id, 1000,
+      this.options.missingRequestHandlerMessage?.(request.method) ?? `peer has no request handler for ${request.method}`));
+    return Effect.suspend(() => handler(peer, request.method, request.params,
+      (result) => this.options.send(peer, Ipc.createResponse(request.id, result)),
+      (method, params) => this.options.send(peer, Ipc.createNotification(method, params)),
+    )).pipe(Effect.catchAllCause((cause) => {
+      const failure = Cause.failureOption(cause);
+      if (Option.isNone(failure)) return Effect.failCause(cause);
+      const error = failure.value;
+      const message = error._tag === "ForeignFailure" ? error.cause.replace(/^\w*Error: /, "") : error.message;
+      return send(Ipc.createErrorResponse(request.id, 1000, message));
+    }));
   }
-
-  private dispatchNotification(notification: Ipc.Notification, peer: TPeer): void {
-    const warnFailure = (error: unknown) => {
-      console.warn(
-        "IPC notification handler failed:",
-        error instanceof Error ? error.message : String(error),
-      );
-    };
-
-    try {
-      const result = this.options.onNotification?.(peer, notification.method, notification.params);
-      if (result instanceof Promise) result.catch(warnFailure);
-    } catch (error) {
-      warnFailure(error);
-    }
+  private dispatchNotification(notification: Ipc.Notification, peer: TPeer): Effect.Effect<void> {
+    return Effect.suspend(() => this.options.onNotification?.(peer, notification.method, notification.params) ?? Effect.void).pipe(
+      Effect.catchAllCause((cause) => Effect.sync(() => console.warn("IPC notification handler failed:", Cause.pretty(cause)))),
+    );
   }
-
-  private rejectPending(error: Error, matches: (peer: TPeer) => boolean): void {
+  private rejectPending(error: IpcError, matches: (peer: TPeer) => boolean): void {
     for (const [id, pending] of this.pending) {
       if (!matches(pending.peer)) continue;
-      clearTimeout(pending.timer);
       this.pending.delete(id);
-      pending.reject(error);
+      Deferred.unsafeDone(pending.result, Exit.fail(error));
     }
   }
 }

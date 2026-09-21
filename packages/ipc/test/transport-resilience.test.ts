@@ -1,9 +1,9 @@
 import { describe, test, expect } from "bun:test";
 import fs from "node:fs";
 import net from "node:net";
-import { connectIpcClient } from "../src/client";
+import { connectIpcClient } from "./helpers/native";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
-import { createIpcServer } from "../src/server";
+import { createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 import { transportFixture } from "./helpers/transport";

@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -20,16 +21,23 @@ for (const replyFirst of [false, true]) {
       let at = 1000;
       const requests = createSessionRequests({ observations: fixture.events, clock: () => at });
       try {
-        SessionHandleStore.materialize({
-          id: "request-session",
-          parentId: null,
-          role: "resident",
-          tools: [],
-          system: { preset: "", blocks: [] },
-          policyGeneration: 1,
-          actionId: "configure-request",
-          at,
-        });
+        Either.getOrThrowWith(
+          Effect.runSync(
+            Effect.either(
+              SessionHandleStore.materialize({
+                id: "request-session",
+                parentId: null,
+                role: "resident",
+                tools: [],
+                system: { preset: "", blocks: [] },
+                policyGeneration: 1,
+                actionId: "configure-request",
+                at,
+              }),
+            ),
+          ),
+          (error) => error,
+        );
         expect(
           fixture.storage.actions.append(
             {

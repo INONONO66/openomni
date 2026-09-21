@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   Alarm,
@@ -53,7 +54,10 @@ describe("ledger-first observations", () => {
     };
     const adapter = new SqliteStorageAdapter(":memory:", sink);
     adapters.push(adapter);
-    adapter.sessions.create(session("session-observed"));
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(adapter.sessions.create(session("session-observed")))),
+      (error) => error,
+    );
 
     const receipt = adapter.actions.append(action("action-observed", "session-observed"), 0);
 
@@ -75,28 +79,45 @@ describe("ledger-first observations", () => {
     };
     const adapter = new SqliteStorageAdapter(":memory:", sink);
     adapters.push(adapter);
-    adapter.sessions.create(session("session-surfaces"));
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(adapter.sessions.create(session("session-surfaces")))),
+      (error) => error,
+    );
 
     expect(
-      adapter.inbox.commit(
-        Inbox.Commit.parse({
-          id: "inbox-observed",
-          sessionId: "session-surfaces",
-          kind: "prompt",
-          content: "go",
-          origin: encoded("owner"),
-          createdAt: 101,
-        }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            adapter.inbox.commit(
+              Inbox.Commit.parse({
+                id: "inbox-observed",
+                sessionId: "session-surfaces",
+                kind: "prompt",
+                content: "go",
+                origin: encoded("owner"),
+                createdAt: 101,
+              }),
+            ),
+          ),
+        ),
+        (error) => error,
       ),
     ).toBeDefined();
     expect(
-      adapter.alarms.arm(
-        Alarm.Arm.parse({
-          id: "alarm-observed",
-          sessionId: "session-surfaces",
-          kind: "at",
-          fireAt: 102,
-        }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            adapter.alarms.arm(
+              Alarm.Arm.parse({
+                id: "alarm-observed",
+                sessionId: "session-surfaces",
+                kind: "at",
+                fireAt: 102,
+              }),
+            ),
+          ),
+        ),
+        (error) => error,
       ),
     ).toBeDefined();
 
@@ -122,7 +143,10 @@ describe("ledger-first observations", () => {
     };
     const adapter = new SqliteStorageAdapter(":memory:", sink);
     adapters.push(adapter);
-    adapter.sessions.create(session("session-refused"));
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(adapter.sessions.create(session("session-refused")))),
+      (error) => error,
+    );
 
     expect(adapter.actions.append(action("action-refused", "session-refused"), 1)).toBeUndefined();
     expect(adapter.sessions.get("session-refused")?.revision).toBe(0);
@@ -139,8 +163,14 @@ describe("ledger-first observations", () => {
     const throwingAdapter = new SqliteStorageAdapter(":memory:", throwing);
     const noopAdapter = new SqliteStorageAdapter(":memory:", { publish: () => undefined });
     adapters.push(throwingAdapter, noopAdapter);
-    throwingAdapter.sessions.create(session("session-parity"));
-    noopAdapter.sessions.create(session("session-parity"));
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(throwingAdapter.sessions.create(session("session-parity")))),
+      (error) => error,
+    );
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(noopAdapter.sessions.create(session("session-parity")))),
+      (error) => error,
+    );
 
     const withThrow = throwingAdapter.actions.append(action("action-parity", "session-parity"), 0);
     const withNoop = noopAdapter.actions.append(action("action-parity", "session-parity"), 0);

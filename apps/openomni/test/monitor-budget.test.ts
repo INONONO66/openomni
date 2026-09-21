@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
 import { alarmFixture } from "./helpers/alarm";
@@ -34,7 +35,12 @@ test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch",
       fixture.worker.tick();
       expect(fixture.rows()).toHaveLength(3);
       const resumed = fixture.next("budget", (row) => row.content === "one");
-      fixture.storage.alarms.rearm("budget", "monitor-session", 1000);
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(fixture.storage.alarms.rearm("budget", "monitor-session", 1000)),
+        ),
+        (error) => error,
+      );
       await resumed;
       expect(fixture.storage.alarms.get("budget")?.epoch).toBe(2);
       expect(fixture.errors).toEqual([]);
@@ -63,7 +69,14 @@ test("monitor timeout: exact deadline fences source before its exit summary", ()
       fixture.worker.tick();
       expect(alarmSummary((await summary).content).reason).toBe("timeout");
       expect(fixture.rows()).toHaveLength(2);
-      expect(fixture.storage.alarms.rearm("timeout", "monitor-session", 1050)).toBeUndefined();
+      expect(() =>
+        Either.getOrThrowWith(
+          Effect.runSync(
+            Effect.either(fixture.storage.alarms.rearm("timeout", "monitor-session", 1050)),
+          ),
+          (error) => error,
+        ),
+      ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
       fixture.worker.tick();
       expect(fixture.storage.alarms.get("timeout")).toMatchObject({ epoch: 1, status: "fired" });
       expect(fixture.rows()).toHaveLength(2);

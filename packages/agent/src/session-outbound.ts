@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
@@ -102,17 +103,24 @@ export async function dispatchSessionOutbound(
   const commit = (actions: LedgerAction.Append[], release: boolean) => {
     const row = SessionHandleStore.row(sessionId);
     requireCommit(
-      SessionHandleStore.commit({
-        sessionId,
-        owner,
-        fence,
-        now: clock(),
-        expectedRevision: row.revision,
-        actions,
-        consumeInboxIds: [],
-        state: row.state,
-        releaseLease: release,
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              sessionId,
+              owner,
+              fence,
+              now: clock(),
+              expectedRevision: row.revision,
+              actions,
+              consumeInboxIds: [],
+              state: row.state,
+              releaseLease: release,
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
   };
   try {

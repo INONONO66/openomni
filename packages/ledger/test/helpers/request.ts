@@ -1,16 +1,24 @@
+import { Effect, Either } from "effect";
 import { type LedgerAction, type LedgerSession, SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore } from "../../src/index";
 import { materializeSession } from "./session";
 
 export function requestFixture(mode: SessionTransition.Request["mode"] = "reply") {
   materializeSession("request-session");
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: "request-session",
-    owner: "writer",
-    expectedFence: 0,
-    now: 2,
-    expiresAt: 1002,
-  });
+  const lease = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: "request-session",
+          owner: "writer",
+          expectedFence: 0,
+          now: 2,
+          expiresAt: 1002,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   if (!lease.ok) throw new Error("fixture lease refused");
   const request = SessionTransition.Request.parse({
     requestId: "original",
@@ -53,17 +61,24 @@ export function requestFixture(mode: SessionTransition.Request["mode"] = "reply"
     actions: LedgerAction.Append[],
     revision = SessionHandleStore.row(request.sessionId).revision,
   ) =>
-    SessionHandleStore.commitRequestTransition({
-      sessionId: request.sessionId,
-      owner: "writer",
-      fence: lease.fence,
-      now: 4,
-      expectedRevision: revision,
-      actions,
-      consumeInboxIds: [],
-      state: "idle",
-      releaseLease: false,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitRequestTransition({
+            sessionId: request.sessionId,
+            owner: "writer",
+            fence: lease.fence,
+            now: 4,
+            expectedRevision: revision,
+            actions,
+            consumeInboxIds: [],
+            state: "idle",
+            releaseLease: false,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
   return { request, original, commit, lease };
 }
 

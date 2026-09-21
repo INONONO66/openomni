@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { type Channel, Operational, type PlainObject, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 import { SlackAdapter } from "../src/provider/slack/surface";
-import { SlackEndpointKeyError, SlackHandlerMissingError } from "../src/provider/slack/error";
+import { SlackEndpointKeyError, SlackHandlerMissingError } from "../src/errors";
 import type { PublishPort } from "../src/types";
 import { bounded } from "./helpers/bounded";
 

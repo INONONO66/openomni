@@ -106,7 +106,8 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   const bodies: string[] = [];
   const initial = requestLedger();
   const crashed = dispatcher(
-    crashAfterRequestOpen(initial, "process lost after durable suspension"), bodies,
+    crashAfterRequestOpen(initial, "process lost after durable suspension"),
+    bodies,
   );
   await expect(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
@@ -214,8 +215,10 @@ it("a gateway answer cannot borrow another live owner's lease", async () => {
     observations: { publish: () => undefined },
   });
   await expect(gateway.answer(ownerAnswer(request))).rejects.toMatchObject({
-    name: "SessionLeaseError",
-    result: { reason: "held" },
+    _tag: "LeaseRefused",
+    reason: "held",
+    holder: before.leaseOwner,
+    fence: before.leaseFence,
   });
   expect(SessionHandleStore.row(request.sessionId)).toEqual(before);
   expect(currentRequest().state).toBe("open");

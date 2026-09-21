@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -284,19 +285,26 @@ describe("SqliteStorageAdapter", () => {
         receipts: db.query("SELECT name FROM _migrations ORDER BY name").all(),
         sessions: db.query("SELECT * FROM session ORDER BY id").all(),
       });
-      adapter.sessions.create({
-        id: "l0-digest",
-        parentId: null,
-        role: "resident",
-        leaseOwner: null,
-        leaseFence: 0,
-        leaseExpiresAt: null,
-        revision: 0,
-        state: "idle",
-        toolsGeneration: 0,
-        systemHash: "",
-        policyGeneration: 0,
-      });
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            adapter.sessions.create({
+              id: "l0-digest",
+              parentId: null,
+              role: "resident",
+              leaseOwner: null,
+              leaseFence: 0,
+              leaseExpiresAt: null,
+              revision: 0,
+              state: "idle",
+              toolsGeneration: 0,
+              systemHash: "",
+              policyGeneration: 0,
+            }),
+          ),
+        ),
+        (error) => error,
+      );
       expect(() =>
         db
           .query(
@@ -377,7 +385,10 @@ describe("SqliteStorageAdapter", () => {
       // gateway-domain surface (docs/gateway-design.md §4) and a session-row
       // removal may not mutate it behind the gateway's back. The surviving
       // entry converges by brain-side re-materialization on the next Deliver.
-      adapter.sessions.create(canonicalRow("s1"));
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s1")))),
+        (error) => error,
+      );
       adapter.surfaceKey.claim("channel:123", "s1");
 
       storageDb(adapter).query("DELETE FROM session WHERE id = 's1'").run();
@@ -388,8 +399,14 @@ describe("SqliteStorageAdapter", () => {
 
   describe("surfaceKey", () => {
     beforeEach(() => {
-      adapter.sessions.create(canonicalRow("s1"));
-      adapter.sessions.create(canonicalRow("s2"));
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s1")))),
+        (error) => error,
+      );
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s2")))),
+        (error) => error,
+      );
     });
 
     test("lookup: returns undefined for unregistered key", () => {
@@ -428,7 +445,10 @@ describe("SqliteStorageAdapter", () => {
         messages: db.query("SELECT * FROM message").all(),
         parts: db.query("SELECT * FROM part").all(),
       };
-      adapter.sessions.create(canonicalRow("live"));
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("live")))),
+        (error) => error,
+      );
       adapter.close();
       const reopened = new SqliteStorageAdapter(dbPath);
       try {
@@ -444,7 +464,10 @@ describe("SqliteStorageAdapter", () => {
 
     test("data survives close and reopen", () => {
       const session = canonicalRow("s1");
-      adapter.sessions.create(session);
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.sessions.create(session))),
+        (error) => error,
+      );
       adapter.close();
 
       const adapter2 = new SqliteStorageAdapter(dbPath);

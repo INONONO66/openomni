@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Policy } from "@openomni/protocol";
-import { Run, run } from "../src/run";
+import { type Run, run, LlmRunFailure } from "./helpers/native";
 import type { StreamEvent } from "../src/processor/stream-events";
 
 const input = {
@@ -25,14 +25,14 @@ test("the provider produces typed failure facts, never a legacy error shape", as
   });
   expect(result.type).toBe("error");
   if (result.type !== "error") throw new Error("missing failure");
-  expect(result.error).toBeInstanceOf(Run.FailureError);
-  expect(result.error.data).toMatchObject({
+  expect(result.error).toBeInstanceOf(LlmRunFailure);
+  expect(result.error).toMatchObject({
     aborted: false,
     contextOverflow: false,
     visibleOutput: false,
     usage: { inputTokens: 0, outputTokens: 0 },
   });
-  expect(result.error.cause).toBe(cause);
+    expect(result.error.cause).toContain(cause.message);
 });
 
 test("stop and aborted are produced by the real attempt entry", async () => {
@@ -61,7 +61,7 @@ test("stop and aborted are produced by the real attempt entry", async () => {
   expect(await run({ ...input, signal: AbortSignal.abort() }, sink)).toEqual({ type: "aborted" });
 });
 
-test("policy owns persisted lifecycle validation independently of the static provider outcome", () => {
+test("policy owns persisted lifecycle validation independently of the static provider outcome", async () => {
   const schema = Policy.PolicyPoint.InputSchemas["run.lifecycle.post"];
   const embed = (runOutcome: { type: string }) => ({
     sessionId: "session",
@@ -71,5 +71,6 @@ test("policy owns persisted lifecycle validation independently of the static pro
   expect(schema.safeParse(embed({ type: "stop" })).success).toBe(true);
   expect(schema.safeParse(embed({ type: "max-steps" })).success).toBe(true);
   expect(schema.safeParse(embed({ type: "invalid" })).success).toBe(false);
-  expect("Outcome" in Run).toBe(false);
+  const root = await import("../src");
+  expect("FailureError" in root).toBe(false);
 });

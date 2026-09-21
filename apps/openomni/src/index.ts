@@ -1,3 +1,13 @@
+import { Effect } from "effect";
+import { bootResource } from "./composition/boot";
+import { shutdownSessions } from "./shutdown";
+import {
+  AppClock,
+  AppEntropy,
+  AppObservations,
+  type AppRuntime,
+  lifecycleFailure,
+} from "./runtime";
 import { AsyncResource } from "node:async_hooks";
 import { timingSafeEqual } from "node:crypto";
 import { createAlarmWorker } from "./composition/alarm-worker";
@@ -5,7 +15,6 @@ import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import {
   type ChatAgentConfig,
-  closeSessions,
   createSessionRequests,
   type SessionRuntime,
   getSessionHandle,
@@ -22,11 +31,10 @@ import { homedir } from "node:os";
 import {
   ActorRegistry,
   ChannelInstanceStore,
-  initialize,
+  LedgerWrites,
   PersonStore,
   SecretStore,
   SessionHandleStore,
-  Storage,
 } from "@openomni/ledger";
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
@@ -48,16 +56,28 @@ import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { dispatchOutboundMessage } from "./composition/terminal-message";
-import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
-import { createComposer, rollbackToCause } from "./composition/composer";
+import {
+  createMonitorPorts,
+  createMountedChannelGrantRegistrar,
+  createResidentGateway,
+  gatewayRuntime,
+  runAppBoot,
+} from "./gateway";
 import { createResident } from "./resident";
 import { composeCodemode } from "./composition/codemode";
 import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
 
 interface StartOptions {
+  readonly runtime?: AppRuntime;
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    "clock" | "approvalTimeoutMs" | "retryAlarm" | "openIntent" | "onHibernate"
+    | "clock"
+    | "entropy"
+    | "closeGraceMs"
+    | "approvalTimeoutMs"
+    | "retryAlarm"
+    | "openIntent"
+    | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
@@ -67,7 +87,7 @@ interface StartOptions {
 /**
  * Owner-admitted delegation targets, recorded as durable identity facts.
  * Registration is an upsert, so a restart re-asserting the same actors is a
- * no-op — which is also why this is not a composer effect: durable facts are
+ * no-op — which is also why this is not a scoped resource: durable facts are
  * history, not runtime handles.
  */
 function registerActors(actors: readonly RegisteredActor[]): void {
@@ -149,25 +169,47 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // One resolution of the operator's endpoint and headers, shared by every
   // model caller this composition builds.
   const transport = modelTransport(config.model);
-  // Every stage whose teardown matters is mounted on the composer: boot
-  // rollback and shutdown are the same reverse-order release, owned by the
-  // stage that acquired the thing rather than restated by hand in two places.
-  const composer = createComposer();
-  const doorbell = new AsyncResource("session-inbox");
-  try {
-    await composer.mount("journal", (ctx) => {
-      initialize({ dbPath: config.dbPath, observationSink: Bus });
-      seedKernelPolicyRows();
-      ctx.effect(() => Storage.reset());
+  const runtime =
+    options.runtime ??
+    gatewayRuntime({
+      dbPath: config.dbPath,
+      clock: options.sessionRuntime?.clock,
+      entropy: options.sessionRuntime?.entropy,
     });
+  try {
+    const services = await runAppBoot(
+      runtime,
+      Effect.gen(function* () {
+        return {
+          ledger: yield* LedgerWrites,
+          clock: yield* AppClock,
+          entropy: yield* AppEntropy,
+          observations: yield* AppObservations,
+        };
+      }),
+    );
+    const acquire = <A, E, E2>(
+      resource: Effect.Effect<A, E>,
+      release: (value: A) => Effect.Effect<void, E2>,
+    ) => runAppBoot(runtime, bootResource(resource, release));
+    const doorbell = await acquire(
+      Effect.sync(() => new AsyncResource("session-inbox")),
+      (resource) =>
+        Effect.sync(() => {
+          resource.emitDestroy();
+        }),
+    );
+    seedKernelPolicyRows();
 
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
+      clock: services.clock.now,
+      entropy: services.entropy.next,
       dispatchOutbound: dispatchOutboundMessage(
         (...args) => messages.ingest(...args),
-        options.sessionRuntime?.clock ?? Date.now,
+        services.clock.now,
       ),
-      observations: Bus,
+      observations: services.observations,
       requestDomainRevisions,
       onRequestReady: (id) => sessionRuntime.onInboxCommitted?.([id]),
       onInboxCommitted: (ids) => {
@@ -180,18 +222,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     };
     const requests = createSessionRequests(sessionRuntime);
     let recovery: Promise<void> = Promise.resolve();
-    await composer.mount("session.handles", (ctx) => {
-      ctx.effect(async () => {
-        const outcomes = await Promise.allSettled([closeSessions(sessionRuntime), recovery]);
-        const failures = outcomes.flatMap((outcome) =>
-          outcome.status === "rejected"
-            ? [outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason))]
-            : [],
-        );
-        if (failures.length > 0)
-          throw new AggregateError(failures, "session shutdown and recovery failed");
-      });
-    });
+    await acquire(Effect.void, () => shutdownSessions(sessionRuntime, recovery));
     const actors: readonly RegisteredActor[] = config.actors ?? [];
     registerActors(actors);
     // Declared Person manifests materialize alongside env actors — both are
@@ -247,7 +278,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
           });
     if (host !== undefined) {
       const attachedHost = host;
-      await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
+      await acquire(Effect.succeed(attachedHost), (resource) =>
+        Effect.try({
+          try: () => resource.close(),
+          catch: lifecycleFailure("machines.close"),
+        }),
+      );
     }
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
@@ -258,7 +294,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
     if (host !== undefined) {
       cells = composeCodemode(host);
       const composed = cells;
-      await composer.mount("codemode", (ctx) => ctx.effect(() => composed.close()));
+      await acquire(Effect.succeed(composed), (resource) =>
+        Effect.try({
+          try: () => resource.close(),
+          catch: lifecycleFailure("codemode.close"),
+        }),
+      );
     }
 
     const resident = createResident({
@@ -266,6 +307,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
+        alarms: await createMonitorPorts(runtime),
         messages,
         machines: host,
         ...(cells === undefined ? {} : { cells }),
@@ -323,7 +365,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
           });
       },
     });
-    await composer.mount("session.processes", (ctx) => ctx.effect(() => processSessions.close()));
+    await acquire(Effect.succeed(processSessions), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.close(),
+        catch: lifecycleFailure("processes.close"),
+      }),
+    );
     const wake = (id: string) => {
       const row = SessionHandleStore.row(id);
       const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
@@ -377,10 +424,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
             ),
       },
     );
-    const alarmStore = Storage.get().alarms;
-    if (alarmStore === undefined) throw new Error("alarm storage unavailable at boot");
     const alarms = createAlarmWorker({
-      alarms: alarmStore,
+      alarms: services.ledger.alarms,
       requestTimeout: requests.timeout,
       observations: Bus,
       clock: sessionRuntime.clock,
@@ -389,15 +434,21 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
       failure: (error) => console.error("alarm worker failure", error),
     });
-    await composer.mount("alarms", (ctx) => {
-      ctx.effect(() => alarms.close());
-      alarms.start();
-    });
+    await acquire(Effect.succeed(alarms), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.close(),
+        catch: lifecycleFailure("alarms.close"),
+      }),
+    );
+    alarms.start();
 
-    await composer.mount("channels", async (ctx) => {
-      ctx.effect(() => supervisor.stopAll());
-      await supervisor.reconcile();
-    });
+    await acquire(Effect.succeed(supervisor), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.stopAll(),
+        catch: lifecycleFailure("channels.close"),
+      }),
+    );
+    await supervisor.reconcile();
 
     wsHandler = new WebSocketHandler(routingHandler, Bus.publish, {
       ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
@@ -414,14 +465,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
     if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
     const boundServer = server;
     const boundPort: number = server.port;
-    await composer.mount("ws.server", (ctx) => {
-      // Initiate the graceful stop without awaiting it: Bun resolves this
-      // promise only after every open client connection closes, and shutdown
-      // must not wait on clients (the pre-composer stop never did).
-      ctx.effect(() => {
-        void boundServer.stop();
-      });
-    });
+    await acquire(Effect.succeed(boundServer), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.stop(true),
+        catch: lifecycleFailure("websocket.close"),
+      }),
+    );
     const awaitingOwner = requests
       .list()
       .some((request) => request.mode === "approval" && request.state === "open");
@@ -436,15 +485,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // The boot's honest channel record: where config came from and why each
       // declared row did or did not mount (provision_status reads this later).
       channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },
-      // Shutdown is the same reverse-order release boot rollback uses: the
-      // composer owns the sequence, so a new stage cannot leak by forgetting
-      // a line here.
-      stop: () => composer.dispose(),
+      runtime,
+      stop: runtime.dispose,
     };
   } catch (error) {
-    // Fail-closed boot rollback leaves no armed kernel timer or configured
-    // storage behind, so a later boot starts clean.
-    return rollbackToCause(composer, error instanceof Error ? error : new Error(String(error)));
+    await runtime.dispose().catch((disposal: Error) => {
+      throw new AggregateError([error, disposal], "app boot and disposal failed");
+    });
+    throw error;
   }
 }
 
@@ -457,10 +505,16 @@ export function installShutdownHandlers(deps: {
   readonly exit: (code: number) => void;
   readonly on: (signal: "SIGINT" | "SIGTERM", handler: () => void) => void;
 }): void {
+  let stopping = false;
   const handler = () => {
+    if (stopping) return;
+    stopping = true;
     void deps.stop().then(
       () => deps.exit(0),
-      () => deps.exit(1),
+      (error: Error) => {
+        console.error("app shutdown incident", error);
+        deps.exit(1);
+      },
     );
   };
   deps.on("SIGINT", handler);

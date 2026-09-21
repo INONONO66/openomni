@@ -1,3 +1,8 @@
+import type { LedgerError } from "@openomni/ledger";
+import type { Effect, Scope } from "effect";
+import type { RawToolSlots } from "./executor-raw";
+import type { ExecutionError } from "./errors";
+export { ExecutionApprovalError } from "./errors";
 import type {
   BusEvent,
   LedgerAction,
@@ -19,14 +24,14 @@ interface ExecutionKindRegistration {
 }
 
 export interface ExecutionLedger {
-  commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
+  commit(action: LedgerAction.Append): Effect.Effect<LedgerAction.Receipt, LedgerError>;
   actions?(): readonly LedgerAction.Node[];
   validateRequest?(request: SessionTransition.Request): boolean;
   transition?(
     payload: SessionTransition.Payload,
     inputId: string,
     at: number,
-  ): Promise<import("./session-request").RequestDecision>;
+  ): Effect.Effect<import("./session-request").RequestDecision, ExecutionError>;
 }
 
 interface ExecutionIdentity {
@@ -51,7 +56,6 @@ export type RecoveryClassification =
   | "endpoint_idempotent"
   | "read_back_reconcilable"
   | "ambiguous_no_replay";
-export type RecoverySite = "post_policy" | "reverter" | "result_commit" | "crash";
 
 export interface ExecutionRequest {
   readonly kind: string;
@@ -61,7 +65,7 @@ export interface ExecutionRequest {
   /** Recorded on the intent so crash-open recovery classifies from durable evidence. */
   readonly recovery?: RecoveryClassification;
   readonly message?: PolicyEvaluationInput["message"];
-  readonly revert?: () => void | Promise<void>;
+  readonly revert?: () => Effect.Effect<void, ExecutionError>;
   /** Result-dependent evidence for a reversible durable projection. */
   readonly revertData?: () => PlainValue | undefined;
   /**
@@ -92,13 +96,13 @@ export interface LlmAttempts<T extends PlainValue> {
   prepare(
     attempt: number,
     failureReasons: readonly string[],
-  ): Promise<{
+  ): Effect.Effect<{
     readonly request: AttemptRequest;
     readonly fallbackAvailable?: boolean;
-    admit(): Promise<void>;
-    body(): Promise<T>;
-  }>;
-  recoverOverflow?(error: Error): Promise<boolean>;
+    admit(): Effect.Effect<void, ExecutionError>;
+    body(): Effect.Effect<T, ExecutionError>;
+  }, ExecutionError>;
+  recoverOverflow?(error: ExecutionError): Effect.Effect<boolean, ExecutionError>;
   /** Durable attempt evidence (usage, visible-output boundary, credential handle) projected from a settled body. */
   evidence?(value: T): PlainValue;
   onRetry?(decision: {
@@ -113,7 +117,9 @@ export interface LlmAttempts<T extends PlainValue> {
 
 export type ExecutionResult =
   | { readonly terminal: "blocked_pre"; readonly reason: string }
-  | { readonly terminal: "executed"; readonly value: PlainValue }
+  | { readonly terminal: "executed"; readonly value: PlainValue; readonly failure?: ExecutionError }
+  | { readonly terminal: "interrupted"; readonly reason: string }
+  | { readonly terminal: "outcome_unknown"; readonly reason: string }
   | {
       readonly terminal: "blocked_post";
       readonly disposition: "reverted" | "irreversible";
@@ -150,68 +156,56 @@ interface OwnerApprovalEvidence {
 
 export interface ExecutionApprovals {
   pending(): readonly ExecutionApprovalRequest[];
-  answer(answer: ExecutionApprovalAnswer): Promise<void>;
+  answer(answer: ExecutionApprovalAnswer): Effect.Effect<void, ExecutionError>;
   notify?(request: SessionTransition.Request): void;
 }
 
-export class ExecutionApprovalError extends Error {
-  constructor(
-    readonly code: "stale_approval" | "approval_authority_unavailable" | "unauthenticated",
-  ) {
-    super(code);
-    this.name = "ExecutionApprovalError";
-  }
-}
-
-export interface ExecutionBatchItem {
+export interface ExecutionBatchItem<R = never> {
   readonly request: ExecutionRequest;
   readonly sequential?: true;
-  body(intent: LedgerAction.Receipt): Promise<PlainValue>;
+  body(intent: LedgerAction.Receipt): Effect.Effect<PlainValue, ExecutionError, R>;
 }
-export type ExecutionBatchResult =
-  | ExecutionResult
-  | { readonly terminal: "cancelled" }
-  | { readonly terminal: "failed"; readonly error: Error };
+export type ExecutionBatchResult = ExecutionResult;
 
 export interface Executor {
-  recover?(): Promise<void>;
+  recover?(): Effect.Effect<void, ExecutionError>;
   runAttempts?<T extends PlainValue>(
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
-  ): Promise<T>;
+  ): Effect.Effect<T, ExecutionError>;
   readonly judgeStop?: DurableExecutor["judgeStop"];
   readonly approvals?: ExecutionApprovals;
-  runBatch?(
-    items: readonly ExecutionBatchItem[],
+  runBatch?<R>(
+    items: readonly ExecutionBatchItem<R>[],
     control: WaveControl,
-  ): Promise<readonly ExecutionBatchResult[]>;
-  run<T extends PlainValue>(
+  ): Effect.Effect<readonly ExecutionBatchResult[], ExecutionError, Exclude<Exclude<R, RawToolSlots>, Scope.Scope>>;
+  run<T extends PlainValue, R>(
     request: ExecutionRequest,
-    body: (intent: LedgerAction.Receipt) => Promise<T>,
-  ): Promise<ExecutionResult>;
+    body: (intent: LedgerAction.Receipt) => Effect.Effect<T, ExecutionError, R>,
+  ): Effect.Effect<ExecutionResult, ExecutionError, Exclude<Exclude<R, RawToolSlots>, Scope.Scope>>;
 }
 
 export interface DurableExecutor extends Executor {
-  recover(): Promise<void>;
-  runBatch(
-    items: readonly ExecutionBatchItem[],
+  recover(): Effect.Effect<void, ExecutionError>;
+  runBatch<R>(
+    items: readonly ExecutionBatchItem<R>[],
     control: WaveControl,
-  ): Promise<readonly ExecutionBatchResult[]>;
+  ): Effect.Effect<readonly ExecutionBatchResult[], ExecutionError, Exclude<Exclude<R, RawToolSlots>, Scope.Scope>>;
   judgeStop(
     state: import("./core/execution/stop-chain").StopState,
     observation: import("./core/execution/stop-chain").StopObservation,
-  ): Promise<{
+  ): Effect.Effect<{
     state: import("./core/execution/stop-chain").StopState;
     verdict: import("./core/execution/stop-chain").StopVerdict;
-  }>;
-  runExisting<T extends PlainValue>(
+  }, ExecutionError>;
+  runExisting<T extends PlainValue, R>(
     request: ExecutionRequest,
-    body: () => Promise<T>,
-  ): Promise<ExecutionResult>;
+    body: () => Effect.Effect<T, ExecutionError, R>,
+  ): Effect.Effect<ExecutionResult, ExecutionError, R>;
   runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
-  ): Promise<T>;
+  ): Effect.Effect<T, ExecutionError>;
 }
 
 export interface ExecutorOptions {
@@ -219,6 +213,7 @@ export interface ExecutorOptions {
   readonly retryAlarm?: RetryAlarmPort;
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
+  readonly closeGraceMs?: number;
   readonly approvalTimeoutMs?: number;
   readonly policy: CompiledPolicySnapshot;
   readonly ledger: ExecutionLedger;
@@ -230,5 +225,5 @@ export interface ExecutorOptions {
   readonly authorizeApproval?: (
     credential: string,
     request: ExecutionApprovalRequest,
-  ) => Promise<OwnerApprovalEvidence>;
+  ) => Effect.Effect<OwnerApprovalEvidence, ExecutionError>;
 }

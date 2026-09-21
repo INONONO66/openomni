@@ -4,7 +4,6 @@ import type { ChatAgentConfig } from "../types";
 import { recordToolCall } from "../budget";
 import type { RunState, TurnArtifacts } from "./state";
 
-/** Nested calls inherit ownership as well as cancellation after a body detaches. */
 export const waveBodyScope = new AsyncLocalStorage<WaveControl>();
 
 type WaveBodyOutcome =
@@ -22,7 +21,7 @@ export interface WaveControl {
   readonly retain?: (effect: Promise<void>) => void;
 }
 
-/** Scheduling only: the executor stages pre decisions and commits ordered settlements. */
+/** Legacy scheduling helper retained for the non-Effect model loop; executor ownership is Effect-native. */
 export async function runWaveBodies(
   items: readonly WaveBody[],
   control: WaveControl,
@@ -54,8 +53,7 @@ export async function runWaveBodies(
     control.retain?.(effect);
     return effect;
   };
-  const join = (group: readonly Promise<void>[]) =>
-    Promise.race([Promise.all(group), aborted.promise]);
+  const join = (group: readonly Promise<void>[]) => Promise.race([Promise.all(group), aborted.promise]);
   try {
     let group: Promise<void>[] = [];
     for (const [index, item] of items.entries()) {
@@ -77,6 +75,7 @@ export async function runWaveBodies(
     control.signal.removeEventListener("abort", abort);
   }
 }
+
 
 /** Assemble tool results on the original assistant slots, never completion order. */
 export async function settleModelTools(

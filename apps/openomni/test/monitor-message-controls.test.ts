@@ -1,10 +1,12 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Bus, createSessionRequests, ToolRefused } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
-import { monitorTool } from "../src/tools/monitor";
+import { createMonitorTool } from "../src/tools/monitor";
+import { createMonitorPorts, gatewayRuntime } from "../src/gateway";
 import { messageFixture } from "./helpers/message-fixture";
 import { actorPolicy } from "./helpers/message-scenarios";
 
@@ -22,6 +24,8 @@ for (const status of ["armed", "fired"] as const) {
           deliveryRoutes: new Map([["ws", async () => ({ value: "accepted" as const })]]),
           ...actorPolicy("peer", 10),
         });
+        const appRuntime = gatewayRuntime({ dbPath: fixture.dbPath });
+        const monitorTool = createMonitorTool(await createMonitorPorts(appRuntime));
         ActorRegistry.registerIdentity({ id: "peer", kind: "human", trustTier: "owner" });
         ActorRegistry.registerEndpoint({
           id: "ws:peer",
@@ -88,12 +92,19 @@ for (const status of ["armed", "fired"] as const) {
 
           // A refused control must preserve both the pending timeout and shared scan.
           expect(
-            alarmStore().arm({
-              id: "later-alarm",
-              sessionId: "sender",
-              kind: "at",
-              fireAt: 201,
-            }),
+            Either.getOrThrowWith(
+              Effect.runSync(
+                Effect.either(
+                  alarmStore().arm({
+                    id: "later-alarm",
+                    sessionId: "sender",
+                    kind: "at",
+                    fireAt: 201,
+                  }),
+                ),
+              ),
+              (error) => error,
+            ),
           ).toBeDefined();
           at = 201;
           worker.tick();
@@ -107,15 +118,22 @@ for (const status of ["armed", "fired"] as const) {
           expect(SessionHandleStore.inboxRows("sender")).toHaveLength(2);
 
           expect(
-            alarmStore().arm({
-              id: "reopen-alarm",
-              sessionId: "sender",
-              kind: "at",
-              fireAt: 202,
-            }),
+            Either.getOrThrowWith(
+              Effect.runSync(
+                Effect.either(
+                  alarmStore().arm({
+                    id: "reopen-alarm",
+                    sessionId: "sender",
+                    kind: "at",
+                    fireAt: 202,
+                  }),
+                ),
+              ),
+              (error) => error,
+            ),
           ).toBeDefined();
           await worker.close();
-          Storage.reset();
+          await appRuntime.dispose();
           Storage.initialize({ dbPath: fixture.dbPath });
           worker = makeWorker();
           at = 202;
@@ -127,6 +145,7 @@ for (const status of ["armed", "fired"] as const) {
           expect(errors).toEqual([]);
         } finally {
           await worker.close();
+          await appRuntime.dispose();
           unsubscribe();
           bound.removeEventListener("abort", abort);
           Storage.reset();

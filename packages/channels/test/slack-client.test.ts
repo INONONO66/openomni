@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { SlackClient } from "../src/provider/slack/client";
-import { SlackApiError } from "../src/provider/slack/error";
+import { SlackApiError } from "../src/errors";
 import type { PublishPort } from "../src/types";
 import type { PlainValue } from "@openomni/protocol";
 import { z } from "zod";

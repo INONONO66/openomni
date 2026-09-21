@@ -1,18 +1,26 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { LedgerAction, PlainValue, SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
 
 function materialize(id: string) {
-  return SessionHandleStore.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 0,
-    actionId: `${id}:configure`,
-    at: 1,
-  });
+  return Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id,
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 0,
+          actionId: `${id}:configure`,
+          at: 1,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 beforeEach(() => {

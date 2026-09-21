@@ -1,3 +1,4 @@
+import { RateLimited } from "../errors";
 import { Operational } from "@openomni/protocol";
 import type { z } from "zod";
 import type { PublishPort } from "../types";
@@ -7,20 +8,6 @@ export function sleep(ms: number): Promise<void> {
 }
 
 const MAX_API_RETRIES = 3;
-
-export class RetryExhaustedError extends Error {
-  readonly status: number;
-
-  constructor(
-    readonly response: Response,
-    readonly attempts: number,
-    label: string,
-  ) {
-    super(`${label}: rate limited after ${attempts - 1} retries`);
-    this.name = "RetryExhaustedError";
-    this.status = response.status;
-  }
-}
 
 export async function fetchWithRetry(
   url: string,
@@ -43,7 +30,13 @@ export async function fetchWithRetry(
 
   if (response.status === 429) {
     if (retries >= MAX_API_RETRIES) {
-      throw new RetryExhaustedError(response, retries + 1, label);
+      throw new RateLimited({
+        message: `${label}: rate limited after ${retries} retries`,
+        status: response.status,
+        attempts: retries + 1,
+        responseHeaders: Object.fromEntries(response.headers),
+        responseBody: await response.text(),
+      });
     }
 
     let retryAfter = 5;

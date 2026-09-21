@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { LedgerSession } from "@openomni/protocol";
@@ -33,7 +34,10 @@ describe("canonical SQLite reads fail closed", () => {
     expect(() => SessionHandleStore.getSnapshot("corrupt")).toThrow();
   });
 
-  test.each([-1, "not-a-number"])("invalid canonical session counter %s rejects get and list reads", (value) => {
+  test.each([
+    -1,
+    "not-a-number",
+  ])("invalid canonical session counter %s rejects get and list reads", (value) => {
     raw.query("UPDATE session SET tools_generation = ? WHERE id = ?").run(value, "corrupt");
     expect(() => SessionHandleStore.row("corrupt")).toThrow();
     expect(() => SessionHandleStore.listRows()).toThrow();
@@ -56,15 +60,22 @@ describe("canonical SQLite reads fail closed", () => {
   });
 
   test("corrupt inbox origin rejects reads without consuming the row", () => {
-    SessionHandleStore.commitInbox({
-      id: "pending",
-      sessionId: "corrupt",
-      kind: "prompt",
-      content: "input",
-      origin: { encodingVersion: 1, value: {} },
-      createdAt: 2,
-      parentActionId: null,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "pending",
+            sessionId: "corrupt",
+            kind: "prompt",
+            content: "input",
+            origin: { encodingVersion: 1, value: {} },
+            createdAt: 2,
+            parentActionId: null,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     raw.query("UPDATE inbox SET origin = ? WHERE id = ?").run("{", "pending");
     expect(() => SessionHandleStore.pendingInbox("corrupt")).toThrow();
     expect(raw.query("SELECT status FROM inbox WHERE id = ?").get("pending")).toEqual({

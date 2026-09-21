@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -63,10 +64,30 @@ test("killing the kernel during the retry wait leaves a durable schedule that bo
 
         // Boot alarm owner: fenced consume-once, then wake the session.
         const alarms = Storage.get().alarms;
-        expect(alarms?.cancel(alarmId, rearmSessionId, 100_000)).toMatchObject({
+        expect(
+          Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(
+                alarms?.cancel(alarmId, rearmSessionId, 100_000) ??
+                  Effect.die("missing test storage capability"),
+              ),
+            ),
+            (error) => error,
+          ),
+        ).toMatchObject({
           status: "cancelled",
         });
-        expect(alarms?.cancel(alarmId, rearmSessionId, 100_000)).toBeUndefined();
+        expect(() =>
+          Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(
+                alarms?.cancel(alarmId, rearmSessionId, 100_000) ??
+                  Effect.die("missing test storage capability"),
+              ),
+            ),
+            (error) => error,
+          ),
+        ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
 
         const calls = { model: 0 };
         const runtime: SessionRuntime = {

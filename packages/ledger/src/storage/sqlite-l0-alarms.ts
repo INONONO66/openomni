@@ -1,14 +1,12 @@
 import type { Database } from "bun:sqlite";
-import {
-  Alarm,
-  canonicalDigest,
-  type ObservationSink,
-  type Storage as ProtocolStorage,
-} from "@openomni/protocol";
+import { Alarm, canonicalDigest, type ObservationSink } from "@openomni/protocol";
 import { alarmAppend, alarmFired, alarmPrompt, inboxAppend } from "./l0-action-builders.js";
 import { AlarmSqlRow, decodeAlarm } from "./sqlite-l0-rows.js";
 import { selectSession, appendAction, insertInbox } from "./sqlite-l0-write.js";
 import { publishCommitted } from "./sqlite-l0-observation";
+import { AlarmRefused, CorruptRecord } from "../errors";
+import type { AlarmWriteAdapter } from "../services";
+import { writeEffect, type RefuseWrite } from "./write-effect";
 
 type AlarmOccurrence = {
   readonly actionId: string;
@@ -73,11 +71,13 @@ function selectAlarm(db: Database, id: string): Alarm.Row | undefined {
   return row === null ? undefined : decodeAlarm(AlarmSqlRow.parse(row));
 }
 
-function armAlarm(db: Database, parsed: Alarm.Arm) {
+function armAlarm(db: Database, parsed: Alarm.Arm, refuse: RefuseWrite) {
   const session = selectSession(db, parsed.sessionId);
-  if (session === undefined) return undefined;
+  if (session === undefined)
+    return refuse(new AlarmRefused({ alarmId: parsed.id, operation: "arm", reason: "session" }));
   const receipt = appendAction(db, alarmAppend(parsed), session.revision);
-  if (receipt === undefined) return undefined;
+  if (receipt === undefined)
+    return refuse(new AlarmRefused({ alarmId: parsed.id, operation: "arm", reason: "append" }));
   const row = Alarm.Row.parse({
     ...parsed,
     status: "armed",
@@ -104,43 +104,57 @@ export function createAlarms(
   db: Database,
   transaction: <T>(operation: () => T) => T,
   observationSink: ObservationSink,
-): ProtocolStorage.AlarmSubAdapter {
+): AlarmWriteAdapter {
   return {
-    arm(input) {
-      const parsed = Alarm.Arm.parse(input);
-      const result = transaction(() => armAlarm(db, parsed));
-      if (result === undefined) return undefined;
-      publishCommitted(db, observationSink, result.receipt);
-      return result.row;
-    },
+    arm: (input) =>
+      writeEffect("alarm.arm", (refuse) => {
+        const result = transaction(() => armAlarm(db, Alarm.Arm.parse(input), refuse));
+        publishCommitted(db, observationSink, result.receipt);
+        return result.row;
+      }),
     get: (id) => selectAlarm(db, id),
-    cancel(id, sessionId, at) {
-      const result = transaction(() => controlAlarm(db, id, sessionId, at, "cancel"));
-      if (result !== undefined) publishCommitted(db, observationSink, result.receipt);
-      return result?.row;
-    },
-    rearm(id, sessionId, at) {
-      const result = transaction(() => controlAlarm(db, id, sessionId, at, "rearm"));
-      if (result !== undefined) publishCommitted(db, observationSink, result.receipt);
-      return result?.row;
-    },
-    acquire(id, expectedFence) {
-      return transaction(() => {
-        const updated = db
-          .query(
-            "UPDATE alarm SET fence = fence + 1 WHERE id = ? AND fence = ? AND status = 'armed'",
-          )
-          .run(id, expectedFence);
-        return updated.changes === 1 ? selectAlarm(db, id) : undefined;
-      });
-    },
-    fire(input) {
-      const parsed = Alarm.Fire.parse(input);
-      const result = transaction(() => fireAlarm(db, parsed));
-      if (result !== undefined)
+    cancel: (id, sessionId, at) =>
+      writeEffect("alarm.cancel", (refuse) => {
+        const result = transaction(() => controlAlarm(db, id, sessionId, at, "cancel", refuse));
+        publishCommitted(db, observationSink, result.receipt);
+        return result.row;
+      }),
+    rearm: (id, sessionId, at) =>
+      writeEffect("alarm.rearm", (refuse) => {
+        const result = transaction(() => controlAlarm(db, id, sessionId, at, "rearm", refuse));
+        publishCommitted(db, observationSink, result.receipt);
+        return result.row;
+      }),
+    acquire: (id, expectedFence) =>
+      writeEffect("alarm.acquire", (refuse) =>
+        transaction(() => {
+          const updated = db
+            .query(
+              "UPDATE alarm SET fence = fence + 1 WHERE id = ? AND fence = ? AND status = 'armed'",
+            )
+            .run(id, expectedFence);
+          const current = selectAlarm(db, id);
+          if (current === undefined)
+            return refuse(
+              new AlarmRefused({ alarmId: id, operation: "acquire", reason: "missing" }),
+            );
+          if (updated.changes !== 1)
+            return refuse(
+              new AlarmRefused({
+                alarmId: id,
+                operation: "acquire",
+                reason: current.status === "armed" ? "fence" : "state",
+              }),
+            );
+          return current;
+        }),
+      ),
+    fire: (input) =>
+      writeEffect("alarm.fire", (refuse) => {
+        const result = transaction(() => fireAlarm(db, Alarm.Fire.parse(input), refuse));
         for (const receipt of result.receipts) publishCommitted(db, observationSink, receipt);
-      return result;
-    },
+        return result;
+      }),
     due(at) {
       const rows = AlarmSqlRow.array().parse(
         db
@@ -158,19 +172,23 @@ function controlAlarm(
   sessionId: string,
   at: number,
   op: "cancel" | "rearm",
+  refuse: RefuseWrite,
 ) {
   const current = selectAlarm(db, id);
+  if (current === undefined)
+    return refuse(new AlarmRefused({ alarmId: id, operation: op, reason: "missing" }));
+  if (current.sessionId !== sessionId)
+    return refuse(new AlarmRefused({ alarmId: id, operation: op, reason: "session" }));
   // A one-shot `at` alarm may be cancelled (consumed exactly once by the live
   // waiter or the boot alarm owner via this fenced CAS); rearm stays watch-only.
   if (
-    current === undefined ||
-    current.sessionId !== sessionId ||
     (current.kind !== "watch" && op !== "cancel") ||
     (current.status !== "armed" && current.status !== "paused")
   )
-    return undefined;
+    return refuse(new AlarmRefused({ alarmId: id, operation: op, reason: "state" }));
   const session = selectSession(db, current.sessionId);
-  if (session === undefined) return undefined;
+  if (session === undefined)
+    return refuse(new AlarmRefused({ alarmId: id, operation: op, reason: "session" }));
   const row: Alarm.Row = {
     ...current,
     status: op === "cancel" ? "cancelled" : "armed",
@@ -204,26 +222,33 @@ function controlAlarm(
     },
     session.revision,
   );
-  if (receipt === undefined) return undefined;
+  if (receipt === undefined)
+    return refuse(new AlarmRefused({ alarmId: id, operation: op, reason: "append" }));
   db.query(
     "UPDATE alarm SET status = ?, time_updated = ?, fire_at = ?, epoch = ?, fence = ?, notifications = ?, last_batch = ? WHERE id = ?",
   ).run(row.status, at, row.fireAt, row.epoch, row.fence, row.notifications, row.lastBatch, id);
   return { row, receipt };
 }
 
-function fireAlarm(db: Database, input: Alarm.Fire): Alarm.Fired | undefined {
+function fireAlarm(db: Database, input: Alarm.Fire, refuse: RefuseWrite): Alarm.Fired {
   const row = selectAlarm(db, input.id);
-  const occurrence = row === undefined ? undefined : alarmOccurrence(row, input);
-  if (row === undefined || occurrence === undefined) return undefined;
+  if (row === undefined)
+    return refuse(new AlarmRefused({ alarmId: input.id, operation: "fire", reason: "missing" }));
+  const occurrence = alarmOccurrence(row, input);
+  if (occurrence === undefined)
+    return refuse(new AlarmRefused({ alarmId: input.id, operation: "fire", reason: "occurrence" }));
   const session = selectSession(db, row.sessionId);
-  if (session === undefined) return undefined;
+  if (session === undefined)
+    return refuse(new AlarmRefused({ alarmId: input.id, operation: "fire", reason: "session" }));
   const { status, terminal } = occurrence;
   const fired = appendAction(db, alarmFired(row, input, occurrence), session.revision);
-  if (fired === undefined) return undefined;
+  if (fired === undefined)
+    return refuse(new AlarmRefused({ alarmId: input.id, operation: "fire", reason: "append" }));
   const pending = alarmPrompt(row, input, occurrence);
   const prompt = appendAction(db, inboxAppend(pending), fired.revision);
-  if (prompt === undefined) throw new Error("alarm prompt append refused");
-  const inbox = insertInbox(db, pending);
+  if (prompt === undefined)
+    return refuse(new AlarmRefused({ alarmId: input.id, operation: "fire", reason: "prompt" }));
+  const inbox = insertInbox(db, pending, refuse);
   db.query(
     "UPDATE alarm SET status = ?, notifications = notifications + ?, last_batch = ?, fence = fence + ?, time_updated = ? WHERE id = ?",
   ).run(
@@ -235,6 +260,7 @@ function fireAlarm(db: Database, input: Alarm.Fire): Alarm.Fired | undefined {
     row.id,
   );
   const committed = selectAlarm(db, row.id);
-  if (committed === undefined) throw new Error("fired alarm disappeared");
+  if (committed === undefined)
+    return refuse(new CorruptRecord({ operation: "alarm.fire", id: input.id }));
   return { row: committed, inbox, receipts: [fired, prompt] };
 }

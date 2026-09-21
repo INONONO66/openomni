@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Bus, createExecutor, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
@@ -33,17 +34,23 @@ export function dispatchOutboundMessage(
       ledger: {
         async commit(action) {
           const row = SessionHandleStore.row(message.sourceSessionId);
-          const result = SessionHandleStore.commit({
-            sessionId: message.sourceSessionId,
-            ...authority,
-            now: clock(),
-            expectedRevision: row.revision,
-            actions: [action],
-            consumeInboxIds: [],
-            state: row.state,
-            releaseLease: false,
-          });
-          if (!result.ok) throw new Error(`outbound policy commit ${result.reason}`);
+          const result = Either.getOrThrowWith(
+            await Effect.runPromise(
+              Effect.either(
+                SessionHandleStore.commit({
+                  sessionId: message.sourceSessionId,
+                  ...authority,
+                  now: clock(),
+                  expectedRevision: row.revision,
+                  actions: [action],
+                  consumeInboxIds: [],
+                  state: row.state,
+                  releaseLease: false,
+                }),
+              ),
+            ),
+            (error) => error,
+          );
           const receipt = result.receipts[0];
           if (receipt === undefined) throw new Error("outbound policy receipt missing");
           return receipt;

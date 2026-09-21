@@ -1,11 +1,7 @@
 import { AsyncResource } from "node:async_hooks";
-import {
-  canonicalDigest,
-  L0Observation,
-  Alarm,
-  type ObservationSink,
-  type Storage,
-} from "@openomni/protocol";
+import { Effect, Either } from "effect";
+import type { AlarmWriteAdapter } from "@openomni/ledger";
+import { canonicalDigest, L0Observation, Alarm, type ObservationSink } from "@openomni/protocol";
 import {
   AlarmSourceError,
   assertAlarmRuntime,
@@ -21,7 +17,7 @@ interface Running {
 
 /** One app-owned band; session release has no connection to source lifetime. */
 export function createAlarmWorker(options: {
-  readonly alarms: Storage.AlarmSubAdapter;
+  readonly alarms: AlarmWriteAdapter;
   readonly observations: Required<Pick<ObservationSink, "subscribe">>;
   readonly wake: (sessionId: string) => Promise<void>;
   readonly requestTimeout: (requestId: string, at: number) => void;
@@ -67,16 +63,29 @@ export function createAlarmWorker(options: {
     batchHash?: string,
   ) {
     if (stopped) return;
-    const fired = options.alarms.fire({
-      id: row.id,
-      epoch: row.epoch,
-      fence: row.fence,
-      sourceKey,
-      at: now(),
-      content,
-      terminal,
-      ...(batchHash === undefined ? {} : { batchHash }),
-    });
+    const fired = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          options.alarms
+            .fire({
+              id: row.id,
+              epoch: row.epoch,
+              fence: row.fence,
+              sourceKey,
+              at: now(),
+              content,
+              terminal,
+              ...(batchHash === undefined ? {} : { batchHash }),
+            })
+            .pipe(
+              Effect.catchTag("AlarmRefused", (error) =>
+                error.reason === "prompt" ? Effect.fail(error) : Effect.succeed(undefined),
+              ),
+            ),
+        ),
+      ),
+      (error) => error,
+    );
     if (fired === undefined) return;
     if (fired.row.status !== "armed") release(row);
     // Session shutdown owns runner settlement; this band owns only its sources.
@@ -109,7 +118,16 @@ export function createAlarmWorker(options: {
   // only wakes the session: the open turn re-runs the model attempt itself, so
   // no inbox prompt is injected into the resumed model input.
   function consumeRetrySchedule(row: Alarm.Row) {
-    const consumed = options.alarms.cancel(row.id, row.sessionId, now());
+    const consumed = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          options.alarms
+            .cancel(row.id, row.sessionId, now())
+            .pipe(Effect.catchTag("AlarmRefused", () => Effect.succeed(undefined))),
+        ),
+      ),
+      (error) => error,
+    );
     if (consumed === undefined) return;
     void options.wake(row.sessionId).catch((error: Error) => options.failure(error));
   }
@@ -167,7 +185,16 @@ export function createAlarmWorker(options: {
       consumeRetrySchedule(row);
       return;
     }
-    const owned = options.alarms.acquire(row.id, row.fence);
+    const owned = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          options.alarms
+            .acquire(row.id, row.fence)
+            .pipe(Effect.catchTag("AlarmRefused", () => Effect.succeed(undefined))),
+        ),
+      ),
+      (error) => error,
+    );
     if (owned === undefined) return;
     if (owned.kind === "at") {
       deliver(
@@ -246,7 +273,16 @@ export function createAlarmWorker(options: {
       unsubscribe?.();
       for (const [id, entry] of running) {
         // Persist invalidation before physical shutdown. This preserves takeover dedupe.
-        options.alarms.acquire(id, entry.row.fence);
+        Either.getOrThrowWith(
+          await Effect.runPromise(
+            Effect.either(
+              options.alarms
+                .acquire(id, entry.row.fence)
+                .pipe(Effect.catchTag("AlarmRefused", () => Effect.void)),
+            ),
+          ),
+          (error) => error,
+        );
         release(entry.row);
       }
       await Promise.all([...settling]);

@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type LedgerAction } from "@openomni/protocol";
@@ -5,16 +6,23 @@ import { createSessionRequests } from "../src/session-requests";
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
-  SessionHandleStore.materialize({
-    id: "source",
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 0,
-    actionId: "configure",
-    at: 1,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id: "source",
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 0,
+          actionId: "configure",
+          at: 1,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   const actions = Storage.get().actions;
   if (actions === undefined) throw new Error("missing action adapter");
   for (const id of ["first", "second"]) {
@@ -179,41 +187,55 @@ test("request opening uses its original turn generation, never a later catalog",
     "original request generation is unavailable",
   );
   const row = SessionHandleStore.row("source");
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: "source",
-    owner: "configure",
-    expectedFence: row.leaseFence,
-    now: 100,
-    expiresAt: 200,
-  });
+  const lease = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: "source",
+          owner: "configure",
+          expectedFence: row.leaseFence,
+          now: 100,
+          expiresAt: 200,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   if (!lease.ok) throw new Error("configuration lease refused");
   const next = { ...generation, generation: 2, revertTo: 1 };
   expect(
-    SessionHandleStore.commit({
-      sessionId: "source",
-      owner: "configure",
-      fence: lease.fence,
-      now: 100,
-      expectedRevision: row.revision,
-      actions: [
-        SessionHandleStore.configureAction({
-          id: "next",
-          sessionId: "source",
-          parentId: "configure",
-          operation: "tools.add",
-          snapshot: next,
-          at: 100,
-        }),
-      ],
-      consumeInboxIds: [],
-      state: "idle",
-      releaseLease: true,
-      generation: {
-        toolsGeneration: 2,
-        systemHash: next.systemHash,
-        policyGeneration: next.policyGeneration,
-      },
-    }).ok,
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId: "source",
+            owner: "configure",
+            fence: lease.fence,
+            now: 100,
+            expectedRevision: row.revision,
+            actions: [
+              SessionHandleStore.configureAction({
+                id: "next",
+                sessionId: "source",
+                parentId: "configure",
+                operation: "tools.add",
+                snapshot: next,
+                at: 100,
+              }),
+            ],
+            consumeInboxIds: [],
+            state: "idle",
+            releaseLease: true,
+            generation: {
+              toolsGeneration: 2,
+              systemHash: next.systemHash,
+              policyGeneration: next.policyGeneration,
+            },
+          }),
+        ),
+      ),
+      (error) => error,
+    ).ok,
   ).toBe(true);
   expect(() => port.open(opening("stale"))).toThrow("request open refused");
 });

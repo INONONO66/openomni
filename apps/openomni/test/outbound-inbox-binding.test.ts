@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -18,16 +19,23 @@ afterEach(() => {
 });
 
 function materialize(id: string) {
-  SessionHandleStore.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: SessionHandleStore.currentPolicyGeneration(),
-    actionId: `${id}:config`,
-    at: 100,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id,
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+          actionId: `${id}:config`,
+          at: 100,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 const message: SessionTransition.OutboundMessage = {

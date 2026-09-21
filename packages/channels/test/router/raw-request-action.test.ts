@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { ActorRegistry, Storage, SessionHandleStore } from "@openomni/ledger";
 import { type Gateway, type Inbox, Ingress } from "@openomni/protocol";
 import { createGatewayRouter } from "../../src/router";
-import { IngressRoutingError } from "../../src/router/routing-error";
+import { IngressRoutingError } from "../../src/errors";
 
 beforeEach(() => {
   Storage.reset();
@@ -112,7 +112,7 @@ test.each([
     expect(SessionHandleStore.requestById("request-raw-action")?.state).toBe("resolved");
   } else {
     await expect(outcome).rejects.toBeInstanceOf(IngressRoutingError);
-    await expect(outcome).rejects.toMatchObject({ data: { code: "route_blocked" } });
+    await expect(outcome).rejects.toMatchObject({ _tag: "IngressRoutingError", code: "route_blocked" });
     expect(decisions[0]).toMatchObject({
       stage: "request_correlation",
       outcome: "block",

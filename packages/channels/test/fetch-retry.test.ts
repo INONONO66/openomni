@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { z } from "zod";
 import { controlledTimeouts } from "./helpers/timeouts";
-import { fetchWithRetry, RetryExhaustedError } from "../src/support/fetch-retry";
+import { fetchWithRetry } from "../src/support/fetch-retry";
+import { RateLimited } from "../src/errors";
 
 for (const finalOutcome of ["refused", "network", "server", "accepted"] as const) {
   test(`retry exhaustion preserves ${finalOutcome} evidence after earlier refusals`, async () => {
@@ -40,14 +42,13 @@ for (const finalOutcome of ["refused", "network", "server", "accepted"] as const
       expect(requests).toBe(4);
       expect(timer.delays).toEqual([5000, 5000, 5000]);
       if (finalOutcome === "refused") {
-        expect(received).toBeInstanceOf(RetryExhaustedError);
-        if (!(received instanceof RetryExhaustedError))
+        expect(received).toMatchObject({ _tag: "RateLimited" });
+        if (!(received instanceof RateLimited))
           throw new Error("missing typed exhaustion evidence");
         expect(received.attempts).toBe(4);
         expect(received.status).toBe(429);
-        expect(received.response).toBe(response);
-        expect(received.response.headers.get("retry-after")).toBe("7");
-        expect(await received.response.json()).toEqual({ code: "last_response" });
+        expect(received.responseHeaders["retry-after"]).toBe("7");
+        expect(z.object({ code: z.string() }).parse(JSON.parse(received.responseBody))).toEqual({ code: "last_response" });
       } else {
         expect(received).toBe(finalOutcome === "network" ? networkError : response);
       }

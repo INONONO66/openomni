@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { openRequest } from "./helpers/open-request";
@@ -14,7 +15,7 @@ import {
   type SessionRuntime,
   sweepSessions,
 } from "../src/session-handle";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { CommitRefused, ForeignFailure, SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   type BusEvent,
   type LedgerAction,
@@ -120,7 +121,9 @@ async function expectLeaseHeldUntilSettled(
   hibernated: Signal<void>,
   fence = handle.get().lease.fence,
 ): Promise<void> {
-  expect(contendLease(handle, fence).ok).toBe(false);
+  expect(() => contendLease(handle, fence)).toThrow(
+    expect.objectContaining({ _tag: "LeaseRefused", reason: "held" }),
+  );
   expect(run.maximumActive()).toBe(1);
   await settleStubborn(handle, run, pending, hibernated);
   expect(contendLease(handle).ok).toBe(true);
@@ -144,13 +147,20 @@ function hibernatingSession(
 
 /** A second runtime trying to take the lease right now, without waiting for the TTL. */
 function contendLease(handle: SessionHandle, expectedFence = handle.get().lease.fence) {
-  return SessionHandleStore.acquireLease({
-    sessionId: handle.id,
-    owner: "second-runtime",
-    expectedFence,
-    now,
-    expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-  });
+  return Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: handle.id,
+          owner: "second-runtime",
+          expectedFence,
+          now,
+          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 class TestObservationSink implements ObservationSink {
@@ -240,60 +250,81 @@ function commitOpenTurn(input: {
   readonly resumeCount: number;
   readonly toolsHash?: string;
 }): void {
-  const created = SessionHandleStore.materialize({
-    id: input.sessionId,
-    parentId: null,
-    role: "resident",
-    tools: [tool("read")],
-    system,
-    policyGeneration: SessionHandleStore.currentPolicyGeneration(),
-    actionId: `${input.sessionId}:configure`,
-    at: now,
-  });
+  const created = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id: input.sessionId,
+          parentId: null,
+          role: "resident",
+          tools: [tool("read")],
+          system,
+          policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+          actionId: `${input.sessionId}:configure`,
+          at: now,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(input.sessionId));
-  const acquired = SessionHandleStore.acquireLease({
-    sessionId: input.sessionId,
-    owner: "crashed-owner",
-    expectedFence: created.row.leaseFence,
-    now,
-    expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-  });
+  const acquired = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: input.sessionId,
+          owner: "crashed-owner",
+          expectedFence: created.row.leaseFence,
+          now,
+          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   if (!acquired.ok) throw new Error("crash fixture could not acquire its lease");
-  const committed = SessionHandleStore.commit({
-    sessionId: input.sessionId,
-    owner: "crashed-owner",
-    fence: acquired.fence,
-    now,
-    expectedRevision: created.row.revision,
-    actions: [
-      {
-        id: `${input.sessionId}:turn`,
-        parentId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
-        sessionId: input.sessionId,
-        kind: "turn",
-        intent: {
-          encodingVersion: 1,
-          value: {
-            phase: "intent",
-            resultId: input.resultId,
-            inboxIds: [],
-            toolsGeneration: generation.generation,
-            toolsHash: input.toolsHash ?? generation.toolsHash,
-            systemHash: generation.systemHash,
-            policyGeneration: generation.policyGeneration,
-            resumeCount: input.resumeCount,
-            boundaryActionId: null,
-          },
-        },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        irreversible: true,
-        ts: now,
-      },
-    ],
-    consumeInboxIds: [],
-    state: "running",
-    releaseLease: false,
-  });
+  const committed = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.commit({
+          sessionId: input.sessionId,
+          owner: "crashed-owner",
+          fence: acquired.fence,
+          now,
+          expectedRevision: created.row.revision,
+          actions: [
+            {
+              id: `${input.sessionId}:turn`,
+              parentId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
+              sessionId: input.sessionId,
+              kind: "turn",
+              intent: {
+                encodingVersion: 1,
+                value: {
+                  phase: "intent",
+                  resultId: input.resultId,
+                  inboxIds: [],
+                  toolsGeneration: generation.generation,
+                  toolsHash: input.toolsHash ?? generation.toolsHash,
+                  systemHash: generation.systemHash,
+                  policyGeneration: generation.policyGeneration,
+                  resumeCount: input.resumeCount,
+                  boundaryActionId: null,
+                },
+              },
+              effect: { encodingVersion: 1, value: { phase: "pending" } },
+              irreversible: true,
+              ts: now,
+            },
+          ],
+          consumeInboxIds: [],
+          state: "running",
+          releaseLease: false,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   if (!committed.ok) throw new Error("crash fixture could not commit its open turn");
   now += SessionHandleStore.LEASE_TTL_MS;
 }
@@ -819,10 +850,15 @@ describe("durable session handle", () => {
       const decision = input.actions.find((action) => action.kind === "policy.decision");
       if (decision === undefined || policyHook(decision) !== "turn.pre") return commit(input);
       explode.mockRestore();
-      throw new Error("storage exploded during admission");
+      return Effect.fail(
+        new ForeignFailure({ operation: "session.commit", cause: "admission fixture" }),
+      );
     });
     const result = await bounded(handle.prompt("admission fails"), "prompt completion");
-    expect(result).toMatchObject({ kind: "error", text: "storage exploded during admission" });
+    expect(result).toMatchObject({
+      kind: "error",
+      cause: { _tag: "ForeignFailure", operation: "session.commit", cause: "admission fixture" },
+    });
     expect(runs).toBe(0);
     expect(handle.get().state).toBe("idle");
     expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
@@ -831,15 +867,22 @@ describe("durable session handle", () => {
   test("records an idle interrupt as a no-op without resuming the next prompt", async () => {
     const { runner, inputs } = recordingRunner("ran once");
     const handle = session(residentOptions("idle-interrupt", runner), runtime);
-    SessionHandleStore.commitInbox({
-      id: "idle-interrupt:interrupt",
-      sessionId: handle.id,
-      kind: "interrupt",
-      content: "",
-      origin: { encodingVersion: 1, value: { source: "test" } },
-      createdAt: now,
-      parentActionId: SessionHandleStore.tree(handle.id).at(-1)?.id ?? null,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "idle-interrupt:interrupt",
+            sessionId: handle.id,
+            kind: "interrupt",
+            content: "",
+            origin: { encodingVersion: 1, value: { source: "test" } },
+            createdAt: now,
+            parentActionId: SessionHandleStore.tree(handle.id).at(-1)?.id ?? null,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
 
     const result = await handle.prompt("run after the no-op");
 
@@ -862,24 +905,38 @@ describe("durable session handle", () => {
     };
     const handle = session(residentOptions("queued-interrupt", runner), runtime);
     const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
-    SessionHandleStore.commitInbox({
-      id: "queued-interrupt:prompt",
-      sessionId: handle.id,
-      kind: "prompt",
-      content: "do not run",
-      origin: { encodingVersion: 1, value: { source: "test" } },
-      createdAt: now,
-      parentActionId,
-    });
-    SessionHandleStore.commitInbox({
-      id: "queued-interrupt:interrupt",
-      sessionId: handle.id,
-      kind: "interrupt",
-      content: "",
-      origin: { encodingVersion: 1, value: { source: "test" } },
-      createdAt: now + 1,
-      parentActionId,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "queued-interrupt:prompt",
+            sessionId: handle.id,
+            kind: "prompt",
+            content: "do not run",
+            origin: { encodingVersion: 1, value: { source: "test" } },
+            createdAt: now,
+            parentActionId,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "queued-interrupt:interrupt",
+            sessionId: handle.id,
+            kind: "interrupt",
+            content: "",
+            origin: { encodingVersion: 1, value: { source: "test" } },
+            createdAt: now + 1,
+            parentActionId,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
 
     await sweepSessions(() => runner, runtime);
 
@@ -895,24 +952,38 @@ describe("durable session handle", () => {
     const { runner, inputs } = recordingRunner("ran once");
     const handle = session(residentOptions("leading-idle-interrupt", runner), runtime);
     const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
-    SessionHandleStore.commitInbox({
-      id: "leading-idle-interrupt:interrupt",
-      sessionId: handle.id,
-      kind: "interrupt",
-      content: "",
-      origin: { encodingVersion: 1, value: { source: "test" } },
-      createdAt: now,
-      parentActionId,
-    });
-    SessionHandleStore.commitInbox({
-      id: "leading-idle-interrupt:prompt",
-      sessionId: handle.id,
-      kind: "prompt",
-      content: "run afterward",
-      origin: { encodingVersion: 1, value: { source: "test" } },
-      createdAt: now + 1,
-      parentActionId,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "leading-idle-interrupt:interrupt",
+            sessionId: handle.id,
+            kind: "interrupt",
+            content: "",
+            origin: { encodingVersion: 1, value: { source: "test" } },
+            createdAt: now,
+            parentActionId,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "leading-idle-interrupt:prompt",
+            sessionId: handle.id,
+            kind: "prompt",
+            content: "run afterward",
+            origin: { encodingVersion: 1, value: { source: "test" } },
+            createdAt: now + 1,
+            parentActionId,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
 
     await sweepSessions(() => runner, runtime);
 
@@ -1057,14 +1128,20 @@ describe("durable session handle", () => {
       if (input.releaseLease && input.actions.length === 0 && input.sessionId === handle.id) {
         refuseRelease.mockRestore();
         releaseRefused.resolve();
-        throw new Error("release refused by storage");
+        return Effect.fail(
+          new ForeignFailure({ operation: "session.commit", cause: "release fixture" }),
+        );
       }
       return commit(input);
     });
     releaseRunner.resolve();
     await bounded(Promise.all([running, releaseRefused.promise]), "retained settlement");
 
-    await expect(handle.resume()).rejects.toThrow("release refused by storage");
+    await expect(handle.resume()).rejects.toMatchObject({
+      _tag: "ForeignFailure",
+      operation: "session.commit",
+      cause: "release fixture",
+    });
     await bounded(handle.resume(), "resume after the surfaced failure");
     expect(calls()).toBe(2);
     expect(handle.get().state).toBe("idle");
@@ -1117,7 +1194,9 @@ describe("durable session handle", () => {
     const row = SessionHandleStore.row(handle.id);
     expect(row.leaseFence).toBe(fenceAtSeal);
     expect(row.leaseOwner).not.toBeNull();
-    expect(contendLease(handle, row.leaseFence).ok).toBe(false);
+    expect(() => contendLease(handle, row.leaseFence)).toThrow(
+      expect.objectContaining({ _tag: "LeaseRefused", reason: "held" }),
+    );
 
     await settleStubborn(handle, run, { running, interrupted }, hibernated);
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
@@ -1157,7 +1236,9 @@ describe("durable session handle", () => {
     // and its heartbeat keeps renewing, so no second executor can start.
     const row = SessionHandleStore.row(handle.id);
     expect(row.leaseOwner).not.toBeNull();
-    expect(contendLease(handle, row.leaseFence).ok).toBe(false);
+    expect(() => contendLease(handle, row.leaseFence)).toThrow(
+      expect.objectContaining({ _tag: "LeaseRefused", reason: "held" }),
+    );
 
     // Once the runner settles the turn continuation releases the lease itself.
     releaseRunner.resolve();
@@ -1189,19 +1270,26 @@ describe("durable session handle", () => {
     const running = handle.prompt("start");
     await bounded(entered.promise, "heartbeat runner entry");
     now += SessionHandleStore.LEASE_TTL_MS;
-    const stolen = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "replacement-owner",
-      expectedFence: handle.get().lease.fence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
+    const stolen = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.acquireLease({
+            sessionId: handle.id,
+            owner: "replacement-owner",
+            expectedFence: handle.get().lease.fence,
+            now,
+            expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     expect(stolen.ok).toBe(true);
     if (heartbeat === undefined) throw new Error("heartbeat was not scheduled");
     heartbeat();
 
     await bounded(aborted.promise, "heartbeat abort");
-    await expect(running).rejects.toBeInstanceOf(SessionCommitError);
+    await expect(running).rejects.toBeInstanceOf(CommitRefused);
     expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toHaveLength(1);
     expect(
       SessionHandleStore.tree(handle.id).some((action) => SessionHandleStore.turnTerminal(action)),
@@ -1297,24 +1385,28 @@ describe("durable session handle", () => {
   test("reports typed lease contention from the SQLite-backed session API", async () => {
     const runner: SessionRunner = async () => ({ kind: "result", text: "must not run" });
     const handle = session(residentOptions("lease-contention", runner), runtime);
-    const acquired = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "other-process",
-      expectedFence: 0,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
+    const acquired = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.acquireLease({
+            sessionId: handle.id,
+            owner: "other-process",
+            expectedFence: 0,
+            now,
+            expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     if (!acquired.ok) throw new Error("contention fixture could not acquire its lease");
 
     await expect(handle.prompt("contended turn")).rejects.toMatchObject({
-      name: "SessionLeaseError",
-      message: "session lease held",
-      result: {
-        ok: false,
-        reason: "held",
-        holder: "other-process",
-        expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-      },
+      _tag: "LeaseRefused",
+      reason: "held",
+      holder: "other-process",
+      fence: 1,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
     });
   });
 
@@ -1531,15 +1623,22 @@ describe("durable session handle", () => {
           sourceSessionId: "reply-child",
           terminal: kind === "result" ? "completed" : kind,
         });
-        return SessionHandleStore.commitReceivedMessage({
-          id: message.messageId,
-          sessionId: message.destinationSessionId,
-          kind: "prompt",
-          content: message.content,
-          createdAt: now,
-          parentActionId: null,
-          origin: { encodingVersion: 1, value: message },
-        }).receipt;
+        return Either.getOrThrowWith(
+          Effect.runSync(
+            Effect.either(
+              SessionHandleStore.commitReceivedMessage({
+                id: message.messageId,
+                sessionId: message.destinationSessionId,
+                kind: "prompt",
+                content: message.content,
+                createdAt: now,
+                parentActionId: null,
+                origin: { encodingVersion: 1, value: message },
+              }),
+            ),
+          ),
+          (error) => error,
+        ).receipt;
       },
     };
     const worker = session(
@@ -1659,15 +1758,22 @@ describe("session crash recovery and observation", () => {
       const isolatedRuntime = { ...runtime };
       const drained = signal<unknown>();
       const runner: SessionRunner = async (input) => {
-        SessionHandleStore.commitInbox({
-          id: "boundary-deny:late",
-          sessionId: input.sessionId,
-          kind: "prompt",
-          content: "late prompt",
-          origin: { encodingVersion: 1, value: { source: "test" } },
-          createdAt: now,
-          parentActionId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
-        });
+        Either.getOrThrowWith(
+          Effect.runSync(
+            Effect.either(
+              SessionHandleStore.commitInbox({
+                id: "boundary-deny:late",
+                sessionId: input.sessionId,
+                kind: "prompt",
+                content: "late prompt",
+                origin: { encodingVersion: 1, value: { source: "test" } },
+                createdAt: now,
+                parentActionId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
+              }),
+            ),
+          ),
+          (error) => error,
+        );
         try {
           return { kind: "result", text: JSON.stringify(await input.boundary("after_llm")) };
         } catch (error) {
@@ -1703,15 +1809,22 @@ describe("session crash recovery and observation", () => {
 
   test("boot sweep seals a durable interrupt before admitting an open turn", async () => {
     commitOpenTurn({ sessionId: "cancelled-turn", resultId: "cancelled-result", resumeCount: 0 });
-    SessionHandleStore.commitInbox({
-      id: "cancel-request",
-      sessionId: "cancelled-turn",
-      kind: "interrupt",
-      content: "",
-      createdAt: now,
-      origin: { encodingVersion: 1, value: { kind: "sdk" } },
-      parentActionId: "cancelled-turn:turn",
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "cancel-request",
+            sessionId: "cancelled-turn",
+            kind: "interrupt",
+            content: "",
+            createdAt: now,
+            origin: { encodingVersion: 1, value: { kind: "sdk" } },
+            parentActionId: "cancelled-turn:turn",
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     const prefix = SessionHandleStore.tree("cancelled-turn");
     let runnerEntries = 0;
     await bounded(
@@ -1767,25 +1880,39 @@ describe("session crash recovery and observation", () => {
       runtime,
     );
     const row = SessionHandleStore.row(handle.id);
-    const lease = SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "earlier-runtime",
-      expectedFence: row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
+    const lease = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.acquireLease({
+            sessionId: handle.id,
+            owner: "earlier-runtime",
+            expectedFence: row.leaseFence,
+            now,
+            expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     if (!lease.ok) throw new Error("test lease refused");
-    const marked = SessionHandleStore.commit({
-      sessionId: handle.id,
-      owner: "earlier-runtime",
-      fence: lease.fence,
-      now,
-      expectedRevision: SessionHandleStore.row(handle.id).revision,
-      actions: [],
-      consumeInboxIds: [],
-      state: "interrupted",
-      releaseLease: true,
-    });
+    const marked = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId: handle.id,
+            owner: "earlier-runtime",
+            fence: lease.fence,
+            now,
+            expectedRevision: SessionHandleStore.row(handle.id).revision,
+            actions: [],
+            consumeInboxIds: [],
+            state: "interrupted",
+            releaseLease: true,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     if (!marked.ok) throw new Error("test interrupt refused");
 
     expect(await bounded(handle.resume(), "resume without terminal")).toBeUndefined();
@@ -1801,16 +1928,23 @@ describe("session crash recovery and observation", () => {
   });
 
   test("watch installs its subscription before reading the initial snapshot", () => {
-    SessionHandleStore.materialize({
-      id: "watch-order",
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: 0,
-      actionId: "watch-order:configure",
-      at: now,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.materialize({
+            id: "watch-order",
+            parentId: null,
+            role: "resident",
+            tools: [],
+            system: { preset: "", blocks: [] },
+            policyGeneration: 0,
+            actionId: "watch-order:configure",
+            at: now,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     let subscribed = false;
     const adapter = Storage.get();
     const sessions = adapter.sessions;
@@ -1850,24 +1984,38 @@ describe("session crash recovery and observation", () => {
     const stop = watch.subscribe(observed.resolve);
     sink.dropNextCommit = true;
 
-    SessionHandleStore.commitInbox({
-      id: "watched-session:prompt-1",
-      sessionId: "watched-session",
-      kind: "prompt",
-      content: "first",
-      origin: { encodingVersion: 1, value: { source: "test" } },
-      createdAt: now + 1,
-      parentActionId: configureId,
-    });
-    SessionHandleStore.commitInbox({
-      id: "watched-session:prompt-2",
-      sessionId: "watched-session",
-      kind: "prompt",
-      content: "second",
-      origin: { encodingVersion: 1, value: { source: "test" } },
-      createdAt: now + 2,
-      parentActionId: "watched-session:prompt-1",
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "watched-session:prompt-1",
+            sessionId: "watched-session",
+            kind: "prompt",
+            content: "first",
+            origin: { encodingVersion: 1, value: { source: "test" } },
+            createdAt: now + 1,
+            parentActionId: configureId,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitInbox({
+            id: "watched-session:prompt-2",
+            sessionId: "watched-session",
+            kind: "prompt",
+            content: "second",
+            origin: { encodingVersion: 1, value: { source: "test" } },
+            createdAt: now + 2,
+            parentActionId: "watched-session:prompt-1",
+          }),
+        ),
+      ),
+      (error) => error,
+    );
 
     expect(await bounded(observed.promise, "revision gap")).toEqual({
       kind: "gap",

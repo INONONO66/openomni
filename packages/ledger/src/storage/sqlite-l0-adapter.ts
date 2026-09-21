@@ -6,11 +6,13 @@ import { createInbox } from "./sqlite-l0-inbox.js";
 import { createAlarms } from "./sqlite-l0-alarms.js";
 import { createPolicies } from "./sqlite-l0-policies.js";
 
+import type { AlarmWriteAdapter, InboxWriteAdapter, SessionWriteAdapter } from "../services";
+
 interface SqliteL0Adapters {
-  sessions: ProtocolStorage.SessionSubAdapter;
+  sessions: SessionWriteAdapter;
   actions: ProtocolStorage.ActionSubAdapter;
-  inbox: ProtocolStorage.InboxSubAdapter;
-  alarms: ProtocolStorage.AlarmSubAdapter;
+  inbox: InboxWriteAdapter;
+  alarms: AlarmWriteAdapter;
   policies: ProtocolStorage.PolicyRowSubAdapter;
 }
 

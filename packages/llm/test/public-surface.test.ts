@@ -38,11 +38,20 @@ describe("@openomni/llm root public surface", () => {
     // Then: only package-level namespaces and entry points are exposed.
     // #500 C1: `Run` (Outcome vocabulary) moved here from protocol; `Sink` is type-only.
     expect(publicKeys).toEqual([
+      "APIError",
       "Auth",
+      "AuthInvalidFileError",
+      "AuthResolutionError",
+      "ForeignFailure",
+      "InvalidProviderData",
+      "Llm",
+      "LlmRunFailure",
+      "ModelResolutionError",
       "ModelsDev",
       "Provider",
+      "ProxyModelsError",
       "Retry",
-      "Run",
+      "TransportFailure",
       "accumulateUsage",
       "observeRetry",
       "run",
@@ -67,7 +76,6 @@ describe("@openomni/llm root public surface", () => {
       // imported these from the root barrel (internals still use them —
       // e.g. the stream fold reaches TokenTracker by deep import, per the
       // #606 re-audit).
-      "APIError",
       "NamedError",
       "TokenTracker",
     ] as const;

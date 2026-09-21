@@ -20,6 +20,15 @@ Updated on `kernel/s1-authority-cut-2`, 2026-09-18. These closure rows are new h
 | `Policy.EffectiveDecision` | ✅ G002 (#930) | Schema/type, re-exports, deleted-surface tests and snapshot entry removed; consumed effect/obligation/decision contracts remain. |
 | App `SessionHandleStore.tree()` consumers | ✅ G002 (#930) | Five consumers use exact-key SQL-backed read ports; configuration folding is reused and outbound answers are schema-decoded. `packages/ledger/test/session/read-ports.test.ts` covers each port. Agent tree consumers are unchanged. |
 
+## Effect foundation (#1122) pending-merge rows
+
+| Row | Status |
+| --- | --- |
+| Composer ownership | ⏳ pending merge (#1122 PR) |
+| NamedError package error unions | ⏳ pending merge (#1122 PR) |
+| `throw new Error` ledger write refusals | ⏳ pending merge (#1122 PR) |
+| dual Promise adapter surface | ⏳ pending merge (#1122 PR) |
+
 ## Receipt location and scope
 
 This is the tracked successor for the #948 rows formerly recorded in `.omo/reports/operation-architecture-20260902/SLOP.md`. PRs #981/#982 removed tracked agent artifacts; no `.omo/` file is recreated. Historical ledger/design text remains in git history, not an active contract. This file synchronizes the I09 rows and #811 disposition only; it does not mark unrelated historical SLOP rows closed.

@@ -21,7 +21,7 @@ function fileRefusal(name: string, error: Error): Error {
   if (error instanceof ToolRefused) return error;
   const { code } = error as NodeJS.ErrnoException;
   if (code !== undefined) return new ToolRefused(name, `${code}: ${error.message}`);
-  if (error instanceof MachineRefusalError) return new ToolRefused(name, error.data.message);
+  if (error instanceof MachineRefusalError) return new ToolRefused(name, error.message);
   return error;
 }
 

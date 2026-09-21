@@ -3,13 +3,86 @@ import {
   createGatewayRouter,
   type GatewayRouter,
 } from "@openomni/channels";
-import { ChannelGrantStore } from "@openomni/ledger";
+import { ChannelGrantStore, LedgerWrites, type LedgerError } from "@openomni/ledger";
 import type { Actor, Gateway } from "@openomni/protocol";
 import { Bus, createSessionRequests, currentExecutor, scopeObservation } from "@openomni/agent";
 import { Gateway as GatewayProtocol } from "@openomni/protocol";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
+import { Cause, Effect, Either, Exit, Option } from "effect";
+import { MonitorRefused, type MonitorPorts } from "./tools/monitor";
+import {
+  AppClock,
+  AppEntropy,
+  AppLifecycleFailure,
+  AppLive,
+  createAppRuntime,
+  type AppRuntime,
+  type AppRuntimeOptions,
+  type AppServices,
+} from "./runtime";
+
+let processRuntime: AppRuntime | undefined;
+
+export function gatewayRuntime(options: AppRuntimeOptions): AppRuntime {
+  if (processRuntime !== undefined) return processRuntime;
+  const runtime = createAppRuntime(AppLive(options));
+  const dispose = runtime.dispose.bind(runtime);
+  let disposal: Promise<void> | undefined;
+  Object.assign(runtime, {
+    dispose: () => {
+      disposal ??= dispose().finally(() => {
+        if (processRuntime === runtime) processRuntime = undefined;
+      });
+      return disposal;
+    },
+  });
+  processRuntime = runtime;
+  return runtime;
+}
+
+export async function runAppBoot<A, E>(
+  runtime: AppRuntime,
+  effect: Effect.Effect<A, E, AppServices>,
+): Promise<A> {
+  const exit = await runtime.runPromiseExit(effect);
+  if (Exit.isSuccess(exit)) return exit.value;
+  const failure = Option.getOrElse(
+    Cause.failureOption(exit.cause),
+    () => new AppLifecycleFailure({ operation: "app.boot", cause: Cause.pretty(exit.cause) }),
+  );
+  console.error("app boot incident", failure);
+  await runtime.dispose().catch((disposal: Error) => {
+    throw new AggregateError([failure, disposal], "app boot and disposal failed");
+  });
+  throw failure;
+}
+
+export async function createMonitorPorts(runtime: AppRuntime): Promise<MonitorPorts> {
+  const { alarms, clock, entropy } = await runAppBoot(
+    runtime,
+    Effect.gen(function* () {
+      return {
+        alarms: (yield* LedgerWrites).alarms,
+        clock: yield* AppClock,
+        entropy: yield* AppEntropy,
+      };
+    }),
+  );
+  const execute = <A>(effect: Effect.Effect<A, LedgerError>, signal: AbortSignal): Promise<A> =>
+    runtime.runPromise(Effect.either(effect), { signal }).then((result) => {
+      if (Either.isLeft(result)) throw new MonitorRefused(result.left);
+      return result.right;
+    });
+  return {
+    arm: (input, signal) => execute(alarms.arm(input), signal),
+    cancel: (id, sessionId, at, signal) => execute(alarms.cancel(id, sessionId, at), signal),
+    rearm: (id, sessionId, at, signal) => execute(alarms.rearm(id, sessionId, at), signal),
+    clock: clock.now,
+    entropy: entropy.next,
+  };
+}
 
 /**
  * The tier a named channel surface mounts with when no Owner decision

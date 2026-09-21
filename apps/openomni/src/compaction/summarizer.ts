@@ -1,5 +1,5 @@
 import type { CompactionOptions } from "@openomni/agent";
-import { Run, type RunInput } from "@openomni/llm";
+import { LlmRunFailure, type RunInput } from "@openomni/llm";
 import type { Message, PlainObject } from "@openomni/protocol";
 import { runResolvedText, type LlmIo } from "../tools/completion";
 
@@ -88,7 +88,7 @@ export function createCompactionSummarizer(
         return answer;
       } catch (error) {
         lastError = error;
-        const contextOverflow = Run.FailureError.isInstance(error) && error.data.contextOverflow;
+        const contextOverflow = error instanceof LlmRunFailure && error.contextOverflow;
         if (contextOverflow && attempt < 2) {
           working = working.slice(1);
           continue;

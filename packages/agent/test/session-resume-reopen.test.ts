@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -78,34 +79,55 @@ for (const mode of ["interrupted", "crash-open"] as const) {
           await handle.system.blocks.set([
             { id: "new", source: "fixture", content: "generation two" },
           ]);
-          SessionHandleStore.commitInbox({
-            id: "resume-request",
-            sessionId: "resume",
-            kind: "resume",
-            content: "",
-            createdAt: 1001,
-            origin: { encodingVersion: 1, value: { source: "fixture" } },
-            parentActionId: originalResult,
-          });
+          Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(
+                SessionHandleStore.commitInbox({
+                  id: "resume-request",
+                  sessionId: "resume",
+                  kind: "resume",
+                  content: "",
+                  createdAt: 1001,
+                  origin: { encodingVersion: 1, value: { source: "fixture" } },
+                  parentActionId: originalResult,
+                }),
+              ),
+            ),
+            (error) => error,
+          );
         } else {
-          SessionHandleStore.materialize({
-            id: "resume",
-            role: "resident",
-            parentId: null,
-            tools: [],
-            system: { preset: "", blocks: [] },
-            policyGeneration: 1,
-            actionId: "initial",
-            at: 1,
-          });
+          Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(
+                SessionHandleStore.materialize({
+                  id: "resume",
+                  role: "resident",
+                  parentId: null,
+                  tools: [],
+                  system: { preset: "", blocks: [] },
+                  policyGeneration: 1,
+                  actionId: "initial",
+                  at: 1,
+                }),
+              ),
+            ),
+            (error) => error,
+          );
           const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree("resume"));
-          const lease = SessionHandleStore.acquireLease({
-            sessionId: "resume",
-            owner: "crashed",
-            expectedFence: 0,
-            now: 1,
-            expiresAt: 10,
-          });
+          const lease = Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(
+                SessionHandleStore.acquireLease({
+                  sessionId: "resume",
+                  owner: "crashed",
+                  expectedFence: 0,
+                  now: 1,
+                  expiresAt: 10,
+                }),
+              ),
+            ),
+            (error) => error,
+          );
           if (!lease.ok) throw new Error("missing fixture lease");
           const newer = SessionHandleStore.generationSnapshot({
             generation: 2,
@@ -117,50 +139,61 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             },
             policyGeneration: 1,
           });
-          const commit = SessionHandleStore.commit({
-            sessionId: "resume",
-            owner: "crashed",
-            fence: lease.fence,
-            now: 2,
-            expectedRevision: SessionHandleStore.row("resume").revision,
-            consumeInboxIds: [],
-            releaseLease: false,
-            state: "running",
-            generation: { toolsGeneration: 2, systemHash: newer.systemHash, policyGeneration: 1 },
-            actions: [
-              {
-                id: originalTurn,
-                sessionId: "resume",
-                parentId: "initial",
-                kind: "turn",
-                intent: {
-                  encodingVersion: 1,
-                  value: SessionTurn.Intent.parse({
-                    phase: "intent",
-                    resultId: originalResult,
-                    inboxIds: [],
-                    resumeCount: 0,
-                    boundaryActionId: "initial",
-                    toolsGeneration: 1,
-                    toolsHash: generation.toolsHash,
-                    systemHash: generation.systemHash,
+          const commit = Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(
+                SessionHandleStore.commit({
+                  sessionId: "resume",
+                  owner: "crashed",
+                  fence: lease.fence,
+                  now: 2,
+                  expectedRevision: SessionHandleStore.row("resume").revision,
+                  consumeInboxIds: [],
+                  releaseLease: false,
+                  state: "running",
+                  generation: {
+                    toolsGeneration: 2,
+                    systemHash: newer.systemHash,
                     policyGeneration: 1,
-                  }),
-                },
-                effect: { encodingVersion: 1, value: { phase: "pending" } },
-                irreversible: true,
-                ts: 2,
-              },
-              SessionHandleStore.configureAction({
-                id: "newer",
-                sessionId: "resume",
-                parentId: originalTurn,
-                operation: "system.blocks.set",
-                snapshot: newer,
-                at: 3,
-              }),
-            ],
-          });
+                  },
+                  actions: [
+                    {
+                      id: originalTurn,
+                      sessionId: "resume",
+                      parentId: "initial",
+                      kind: "turn",
+                      intent: {
+                        encodingVersion: 1,
+                        value: SessionTurn.Intent.parse({
+                          phase: "intent",
+                          resultId: originalResult,
+                          inboxIds: [],
+                          resumeCount: 0,
+                          boundaryActionId: "initial",
+                          toolsGeneration: 1,
+                          toolsHash: generation.toolsHash,
+                          systemHash: generation.systemHash,
+                          policyGeneration: 1,
+                        }),
+                      },
+                      effect: { encodingVersion: 1, value: { phase: "pending" } },
+                      irreversible: true,
+                      ts: 2,
+                    },
+                    SessionHandleStore.configureAction({
+                      id: "newer",
+                      sessionId: "resume",
+                      parentId: originalTurn,
+                      operation: "system.blocks.set",
+                      snapshot: newer,
+                      at: 3,
+                    }),
+                  ],
+                }),
+              ),
+            ),
+            (error) => error,
+          );
           expect(commit.ok).toBe(true);
         }
         const immutable = SessionHandleStore.tree("resume");
@@ -186,18 +219,26 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             (action) => SessionHandleStore.turnTerminal(action)?.turnId === recovered.turnId,
           ),
         ).toHaveLength(1);
-        const stale = SessionHandleStore.commit({
-          sessionId: "resume",
-          owner: "crashed",
-          fence: 1,
-          now: 2000,
-          expectedRevision: SessionHandleStore.row("resume").revision,
-          actions: [],
-          consumeInboxIds: [],
-          state: "running",
-          releaseLease: false,
-        });
-        expect(stale).toMatchObject({ ok: false, reason: "stale" });
+        const stale = () =>
+          Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(
+                SessionHandleStore.commit({
+                  sessionId: "resume",
+                  owner: "crashed",
+                  fence: 1,
+                  now: 2000,
+                  expectedRevision: SessionHandleStore.row("resume").revision,
+                  actions: [],
+                  consumeInboxIds: [],
+                  state: "running",
+                  releaseLease: false,
+                }),
+              ),
+            ),
+            (error) => error,
+          );
+        expect(stale).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "fence" }));
         expect(SessionHandleStore.tree("resume")).toEqual(tree);
       } finally {
         await closeSessions(runtime);

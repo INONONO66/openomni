@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/receive-outbound";
@@ -902,18 +903,28 @@ describe("session lifecycle conformance", () => {
             const input = await bounded(swept.promise, "sweep entry");
             expect(input).toMatchObject({ resultId: "R", resumeCount: 1, toolsGeneration: 1 });
             expect(SessionHandleStore.row("C").toolsGeneration).toBe(2);
-            const stale = SessionHandleStore.commit({
-              sessionId: "C",
-              owner: "dead",
-              fence: 1,
-              now,
-              expectedRevision: SessionHandleStore.row("C").revision,
-              actions: [],
-              consumeInboxIds: [],
-              state: "running",
-              releaseLease: false,
-            });
-            expect(stale).toMatchObject({ ok: false, reason: "stale", currentFence: 2 });
+            const stale = () =>
+              Either.getOrThrowWith(
+                Effect.runSync(
+                  Effect.either(
+                    SessionHandleStore.commit({
+                      sessionId: "C",
+                      owner: "dead",
+                      fence: 1,
+                      now,
+                      expectedRevision: SessionHandleStore.row("C").revision,
+                      actions: [],
+                      consumeInboxIds: [],
+                      state: "running",
+                      releaseLease: false,
+                    }),
+                  ),
+                ),
+                (error) => error,
+              );
+            expect(stale).toThrow(
+              expect.objectContaining({ _tag: "CommitRefused", reason: "fence", currentFence: 2 }),
+            );
           },
         },
       ],
@@ -1076,27 +1087,41 @@ describe("session lifecycle conformance", () => {
   test("lifecycle v1 alarm takeover pause rearm and dedupe", async () => {
     const alarms = Storage.get().alarms;
     if (alarms === undefined) throw new Error("missing alarm adapter");
-    SessionHandleStore.materialize({
-      id: "S",
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: 1,
-      actionId: "cfg",
-      at: now,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.materialize({
+            id: "S",
+            parentId: null,
+            role: "resident",
+            tools: [],
+            system: { preset: "", blocks: [] },
+            policyGeneration: 1,
+            actionId: "cfg",
+            at: now,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     const fire = (epoch: number, fence: number, sourceKey: string, content: string, at: number) =>
-      alarms.fire({
-        id: "A",
-        epoch,
-        fence,
-        sourceKey,
-        at,
-        content,
-        batchHash: content,
-        terminal: false,
-      });
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            alarms.fire({
+              id: "A",
+              epoch,
+              fence,
+              sourceKey,
+              at,
+              content,
+              batchHash: content,
+              terminal: false,
+            }),
+          ),
+        ),
+        (error) => error,
+      );
     let evaluations = 0;
     const evaluate = (fired: Alarm.Fired | undefined) => {
       if (fired !== undefined) evaluations += 1;
@@ -1111,28 +1136,45 @@ describe("session lifecycle conformance", () => {
           name: "A_ARM",
           run: () => {
             expect(
-              alarms.arm({
-                id: "A",
-                sessionId: "S",
-                kind: "watch",
-                fireAt: 1_000,
-                spec: {
-                  encodingVersion: 1,
-                  value: {
-                    watch: { command: "poll", description: "watch-1", persistent: true },
-                    notificationLimit: 2,
-                    policyGeneration: 1,
-                  },
-                },
-              }),
+              Either.getOrThrowWith(
+                Effect.runSync(
+                  Effect.either(
+                    alarms.arm({
+                      id: "A",
+                      sessionId: "S",
+                      kind: "watch",
+                      fireAt: 1_000,
+                      spec: {
+                        encodingVersion: 1,
+                        value: {
+                          watch: { command: "poll", description: "watch-1", persistent: true },
+                          notificationLimit: 2,
+                          policyGeneration: 1,
+                        },
+                      },
+                    }),
+                  ),
+                ),
+                (error) => error,
+              ),
             ).toMatchObject({ status: "armed", epoch: 1, fence: 0, notifications: 0 });
           },
         },
         {
           name: "A_LEASE",
           run: () => {
-            expect(alarms.acquire("A", 0)).toMatchObject({ fence: 1 });
-            expect(alarms.acquire("A", 0)).toBeUndefined();
+            expect(
+              Either.getOrThrowWith(
+                Effect.runSync(Effect.either(alarms.acquire("A", 0))),
+                (error) => error,
+              ),
+            ).toMatchObject({ fence: 1 });
+            expect(() =>
+              Either.getOrThrowWith(
+                Effect.runSync(Effect.either(alarms.acquire("A", 0))),
+                (error) => error,
+              ),
+            ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
           },
         },
         {
@@ -1149,9 +1191,15 @@ describe("session lifecycle conformance", () => {
         {
           name: "A_DEDUPED",
           run: () => {
-            expect(evaluate(fire(1, 1, "poll-1", "A", 1_000))).toBeUndefined();
-            expect(evaluate(fire(1, 1, "poll-2", "A", 1_060))).toBeUndefined();
-            expect(evaluate(fire(1, 0, "poll-3", "B", 1_060))).toBeUndefined();
+            expect(() => evaluate(fire(1, 1, "poll-1", "A", 1_000))).toThrow(
+              expect.objectContaining({ _tag: "AlarmRefused" }),
+            );
+            expect(() => evaluate(fire(1, 1, "poll-2", "A", 1_060))).toThrow(
+              expect.objectContaining({ _tag: "AlarmRefused" }),
+            );
+            expect(() => evaluate(fire(1, 0, "poll-3", "B", 1_060))).toThrow(
+              expect.objectContaining({ _tag: "AlarmRefused" }),
+            );
           },
         },
         {
@@ -1173,7 +1221,9 @@ describe("session lifecycle conformance", () => {
               "alarm.paused",
               "prompt",
             ]);
-            expect(evaluate(fire(1, 1, "poll-5", "D", 1_070))).toBeUndefined();
+            expect(() => evaluate(fire(1, 1, "poll-5", "D", 1_070))).toThrow(
+              expect.objectContaining({ _tag: "AlarmRefused" }),
+            );
             expect(alarms.due(2_000).map((row) => row.id)).toEqual([]);
           },
         },
@@ -1181,7 +1231,10 @@ describe("session lifecycle conformance", () => {
           name: "A_REARMED",
           run: () => {
             now = 1_080;
-            const rearmed = alarms.rearm("A", "S", now);
+            const rearmed = Either.getOrThrowWith(
+              Effect.runSync(Effect.either(alarms.rearm("A", "S", now))),
+              (error) => error,
+            );
             expect(rearmed).toMatchObject({
               status: "armed",
               epoch: 2,
@@ -1189,17 +1242,29 @@ describe("session lifecycle conformance", () => {
               lastBatch: null,
               fireAt: 1_080,
             });
-            expect(alarms.rearm("A", "other", now)).toBeUndefined();
-            expect(evaluate(fire(1, rearmed?.fence ?? -1, "poll-6", "A", 1_080))).toBeUndefined();
+            expect(() =>
+              Either.getOrThrowWith(
+                Effect.runSync(Effect.either(alarms.rearm("A", "other", now))),
+                (error) => error,
+              ),
+            ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
+            expect(() => evaluate(fire(1, rearmed?.fence ?? -1, "poll-6", "A", 1_080))).toThrow(
+              expect.objectContaining({ _tag: "AlarmRefused" }),
+            );
           },
         },
         {
           name: "A_TAKEN",
           run: () => {
             const fence = alarms.get("A")?.fence ?? -1;
-            const taken = alarms.acquire("A", fence);
+            const taken = Either.getOrThrowWith(
+              Effect.runSync(Effect.either(alarms.acquire("A", fence))),
+              (error) => error,
+            );
             expect(taken?.fence).toBe(fence + 1);
-            expect(evaluate(fire(2, fence, "poll-7", "A", 1_080))).toBeUndefined();
+            expect(() => evaluate(fire(2, fence, "poll-7", "A", 1_080))).toThrow(
+              expect.objectContaining({ _tag: "AlarmRefused" }),
+            );
             expect(evaluate(fire(2, fence + 1, "poll-7", "A", 1_080))?.row).toMatchObject({
               epoch: 2,
               notifications: 1,
@@ -1210,10 +1275,27 @@ describe("session lifecycle conformance", () => {
           name: "ALARM_CANCELLED",
           run: () => {
             const fence = alarms.get("A")?.fence ?? -1;
-            expect(alarms.cancel("A", "S", 1_090)?.status).toBe("cancelled");
-            expect(evaluate(fire(2, fence, "poll-8", "B", 1_090))).toBeUndefined();
-            expect(alarms.rearm("A", "S", 1_090)).toBeUndefined();
-            expect(alarms.acquire("A", fence + 1)).toBeUndefined();
+            expect(
+              Either.getOrThrowWith(
+                Effect.runSync(Effect.either(alarms.cancel("A", "S", 1_090))),
+                (error) => error,
+              )?.status,
+            ).toBe("cancelled");
+            expect(() => evaluate(fire(2, fence, "poll-8", "B", 1_090))).toThrow(
+              expect.objectContaining({ _tag: "AlarmRefused" }),
+            );
+            expect(() =>
+              Either.getOrThrowWith(
+                Effect.runSync(Effect.either(alarms.rearm("A", "S", 1_090))),
+                (error) => error,
+              ),
+            ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
+            expect(() =>
+              Either.getOrThrowWith(
+                Effect.runSync(Effect.either(alarms.acquire("A", fence + 1))),
+                (error) => error,
+              ),
+            ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
           },
         },
       ],
@@ -1308,19 +1390,26 @@ describe("session lifecycle conformance", () => {
             const fresh = SessionHandleStore.row(q.sessionId);
             await expect(
               Promise.resolve().then(() =>
-                SessionHandleStore.commitRequestTransition({
-                  sessionId: q.sessionId,
-                  owner: "stranger",
-                  fence: fresh.leaseFence,
-                  now: 1_099,
-                  expectedRevision: fresh.revision,
-                  actions: [],
-                  consumeInboxIds: [],
-                  state: fresh.state,
-                  releaseLease: false,
-                }),
+                Either.getOrThrowWith(
+                  Effect.runSync(
+                    Effect.either(
+                      SessionHandleStore.commitRequestTransition({
+                        sessionId: q.sessionId,
+                        owner: "stranger",
+                        fence: fresh.leaseFence,
+                        now: 1_099,
+                        expectedRevision: fresh.revision,
+                        actions: [],
+                        consumeInboxIds: [],
+                        state: fresh.state,
+                        releaseLease: false,
+                      }),
+                    ),
+                  ),
+                  (error) => error,
+                ),
               ),
-            ).resolves.toMatchObject({ ok: false, reason: "stale" });
+            ).rejects.toMatchObject({ _tag: "CommitRefused", reason: "fence" });
             expect(
               await port.answer({ ...reply(q, "corrupt-binding", 1_099), bindingDigest: "forged" }),
             ).toBe("rejected");
@@ -1527,14 +1616,21 @@ function cancelRequest(
 ): SessionTransition.Resolution {
   const controller = `conformance:control:${++nextId}`;
   const row = SessionHandleStore.row(q.sessionId);
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: q.sessionId,
-    owner: controller,
-    expectedFence: row.leaseFence,
-    now,
-    expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-  });
-  if (!lease.ok) throw new Error(`control lease ${lease.reason}`);
+  const lease = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: q.sessionId,
+          owner: controller,
+          expectedFence: row.leaseFence,
+          now,
+          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
+
   try {
     return commitSessionRequest(
       q.sessionId,
@@ -1546,17 +1642,24 @@ function cancelRequest(
     ).resolution;
   } finally {
     const current = SessionHandleStore.row(q.sessionId);
-    SessionHandleStore.commit({
-      sessionId: q.sessionId,
-      owner: controller,
-      fence: lease.fence,
-      now,
-      expectedRevision: current.revision,
-      actions: [],
-      consumeInboxIds: [],
-      state: current.state,
-      releaseLease: true,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId: q.sessionId,
+            owner: controller,
+            fence: lease.fence,
+            now,
+            expectedRevision: current.revision,
+            actions: [],
+            consumeInboxIds: [],
+            state: current.state,
+            releaseLease: true,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
   }
 }
 
@@ -1618,24 +1721,38 @@ function pendingTurn(
 
 /** A fresh resident at G1 whose lease `owner` holds for `leaseMs`: the seed every request fixture starts from. */
 function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs: number) {
-  const created = SessionHandleStore.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 1,
-    actionId,
-    at: now,
-  });
+  const created = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id,
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 1,
+          actionId,
+          at: now,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: id,
-    owner,
-    expectedFence: created.row.leaseFence,
-    now,
-    expiresAt: now + leaseMs,
-  });
+  const lease = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: id,
+          owner,
+          expectedFence: created.row.leaseFence,
+          now,
+          expiresAt: now + leaseMs,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   if (!lease.ok) throw new Error(`${owner} lease refused`);
   return { created, generation, lease };
 }
@@ -1644,61 +1761,67 @@ function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs
 function seedRequestSession(id: string): void {
   const { created, generation, lease } = seedLeasedResident(id, `${id}:cfg`, "o", 30_000);
   const turn = `${id}:T`;
-  const committed = SessionHandleStore.commit({
-    sessionId: id,
-    owner: "o",
-    fence: lease.fence,
-    now,
-    expectedRevision: created.row.revision,
-    consumeInboxIds: [],
-    state: "running",
-    releaseLease: true,
-    actions: [
-      pendingTurn(id, turn, `${id}:cfg`, `${id}:R`, generation),
-      {
-        id: `${id}:q-pre`,
-        sessionId: id,
-        parentId: turn,
-        kind: "policy.decision",
-        intent: {
-          encodingVersion: 1,
-          value: {
-            hook: "tool.pre",
-            op: "B",
-            generation: 1,
-            matchedRuleIds: [],
-            verdict: "allow",
-            inputHash: canonicalDigest({ value: "B" }),
-          },
-        },
-        effect: { encodingVersion: 1, value: { phase: "result", reason: null } },
-        ts: now,
-        irreversible: true,
-      },
-      {
-        id: `${id}:q`,
-        sessionId: id,
-        parentId: turn,
-        kind: "tool",
-        intent: {
-          encodingVersion: 1,
-          value: {
-            phase: "intent",
-            op: "B",
-            value: { value: "B" },
-            effectHash: canonicalDigest({ category: "query" }),
-            callId: "B",
-            turnId: turn,
-            waveId: `${id}:q`,
-          },
-        },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: now,
-        irreversible: true,
-      },
-    ],
-  });
-  if (!committed.ok) throw new Error(`seed commit ${committed.reason}`);
+  const committed = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.commit({
+          sessionId: id,
+          owner: "o",
+          fence: lease.fence,
+          now,
+          expectedRevision: created.row.revision,
+          consumeInboxIds: [],
+          state: "running",
+          releaseLease: true,
+          actions: [
+            pendingTurn(id, turn, `${id}:cfg`, `${id}:R`, generation),
+            {
+              id: `${id}:q-pre`,
+              sessionId: id,
+              parentId: turn,
+              kind: "policy.decision",
+              intent: {
+                encodingVersion: 1,
+                value: {
+                  hook: "tool.pre",
+                  op: "B",
+                  generation: 1,
+                  matchedRuleIds: [],
+                  verdict: "allow",
+                  inputHash: canonicalDigest({ value: "B" }),
+                },
+              },
+              effect: { encodingVersion: 1, value: { phase: "result", reason: null } },
+              ts: now,
+              irreversible: true,
+            },
+            {
+              id: `${id}:q`,
+              sessionId: id,
+              parentId: turn,
+              kind: "tool",
+              intent: {
+                encodingVersion: 1,
+                value: {
+                  phase: "intent",
+                  op: "B",
+                  value: { value: "B" },
+                  effectHash: canonicalDigest({ category: "query" }),
+                  callId: "B",
+                  turnId: turn,
+                  waveId: `${id}:q`,
+                },
+              },
+              effect: { encodingVersion: 1, value: { phase: "pending" } },
+              ts: now,
+              irreversible: true,
+            },
+          ],
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 function openRequest(port: ReturnType<typeof createSessionRequests>, id: string) {
@@ -1727,33 +1850,39 @@ function seedCrashOpen(id: string): void {
     system: { preset: "", blocks: [{ id: "b", source: "fixture", content: "v2" }] },
     policyGeneration: 1,
   });
-  const committed = SessionHandleStore.commit({
-    sessionId: id,
-    owner: "dead",
-    fence: lease.fence,
-    now,
-    expectedRevision: created.row.revision,
-    consumeInboxIds: [],
-    state: "running",
-    releaseLease: false,
-    generation: {
-      toolsGeneration: g2.generation,
-      systemHash: g2.systemHash,
-      policyGeneration: g2.policyGeneration,
-    },
-    actions: [
-      pendingTurn(id, "T", "cfg", "R", generation),
-      SessionHandleStore.configureAction({
-        id: "cfg2",
-        sessionId: id,
-        parentId: "T",
-        operation: "system.blocks.set",
-        snapshot: g2,
-        at: now + 1,
-      }),
-    ],
-  });
-  if (!committed.ok) throw new Error(`crash seed ${committed.reason}`);
+  const committed = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.commit({
+          sessionId: id,
+          owner: "dead",
+          fence: lease.fence,
+          now,
+          expectedRevision: created.row.revision,
+          consumeInboxIds: [],
+          state: "running",
+          releaseLease: false,
+          generation: {
+            toolsGeneration: g2.generation,
+            systemHash: g2.systemHash,
+            policyGeneration: g2.policyGeneration,
+          },
+          actions: [
+            pendingTurn(id, "T", "cfg", "R", generation),
+            SessionHandleStore.configureAction({
+              id: "cfg2",
+              sessionId: id,
+              parentId: "T",
+              operation: "system.blocks.set",
+              snapshot: g2,
+              at: now + 1,
+            }),
+          ],
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 /** Child/parent loss boundary of 6.4 on two real session histories and the real outbound path. */

@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { originalAction, requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
@@ -166,7 +167,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     },
     inbox: {
       commit: (row) => {
-        SessionHandleStore.materialize({
+        Effect.runSync(SessionHandleStore.materialize({
           id: row.sessionId,
           parentId: null,
           role: "resident",
@@ -175,11 +176,11 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
           policyGeneration: 0,
           actionId: `${row.sessionId}:configure`,
           at: 0,
-        });
+        }));
         const existed = SessionHandleStore.inboxRows(row.sessionId).some(
           (input) => input.id === row.id,
         );
-        const received = SessionHandleStore.commitReceivedMessage(row);
+        const received = Effect.runSync(SessionHandleStore.commitReceivedMessage(row));
         if (!existed) commits.push(row);
         return received.row;
       },

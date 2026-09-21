@@ -1,5 +1,6 @@
 import type { BusEvent, Storage as ProtocolStorage } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { AlarmWriteAdapter, InboxWriteAdapter, SessionWriteAdapter } from "../services";
 
 export const productionStorageAdapterBrand: unique symbol = Symbol("productionStorageAdapter");
 
@@ -39,10 +40,10 @@ export namespace Storage {
     // (typed adapter_absent) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
     provisioning?: ProtocolStorage.ProvisioningSubAdapter;
-    sessions?: ProtocolStorage.SessionSubAdapter;
+    sessions?: SessionWriteAdapter;
     actions?: ProtocolStorage.ActionSubAdapter;
-    inbox?: ProtocolStorage.InboxSubAdapter;
-    alarms?: ProtocolStorage.AlarmSubAdapter;
+    inbox?: InboxWriteAdapter;
+    alarms?: AlarmWriteAdapter;
     policies?: ProtocolStorage.PolicyRowSubAdapter;
   }
 }

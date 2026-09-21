@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { Effect } from "effect";
+import { decodeChannelFailure } from "../src/errors";
+import { websocketCallbacks } from "./helpers/websocket-server";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,7 +48,7 @@ afterEach(async () => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-function approval() {
+async function approval() {
   originalAction("protected-call", "owner-session", { person: "alice", trustTier: "trusted" });
   const row = SessionHandleStore.row("owner-session");
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(row.id));
@@ -66,13 +69,13 @@ function approval() {
     correlation: {},
   });
   request.bindingDigest = requestBindingDigest(request);
-  const lease = SessionHandleStore.acquireLease({
+  const lease = await Effect.runPromise(SessionHandleStore.acquireLease({
     sessionId: row.id,
     owner: "fixture",
     expectedFence: row.leaseFence,
     now: 2,
     expiresAt: 100,
-  });
+  }));
   if (!lease.ok) throw new Error("fixture lease refused");
   const decision = decideRequestTransition(
     {
@@ -87,7 +90,7 @@ function approval() {
     { row: SessionHandleStore.row(row.id), actions: SessionHandleStore.tree(row.id) },
   );
   expect(decision.resolution).toBe("opened");
-  const result = SessionHandleStore.commitRequestTransition({
+  const result = await Effect.runPromise(SessionHandleStore.commitRequestTransition({
     sessionId: row.id,
     owner: "fixture",
     fence: lease.fence,
@@ -97,7 +100,7 @@ function approval() {
     consumeInboxIds: [],
     state: row.state,
     releaseLease: true,
-  });
+  }));
   if (!result.ok) throw new Error("fixture request refused");
   return request;
 }
@@ -161,22 +164,25 @@ async function connect(
   logs: string[] = [],
 ) {
   const handler = new WebSocketHandler(
-    async (message) => {
+    (message) => Effect.sync(() => {
       messages.push(message);
-    },
+    }),
     (_event, data) => {
       logs.push(JSON.stringify(data));
     },
     {
       token: "upgrade-secret",
-      onRequestAnswer: (who, answer) => gateway.ingest(who, answer),
+      onRequestAnswer: (who, answer) => Effect.tryPromise({
+        try: () => gateway.ingest(who, answer),
+        catch: decodeChannelFailure("fixture.request_answer"),
+      }),
     },
   );
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch: (request, instance) => handler.handleUpgrade(request, instance),
-    websocket: handler.ws,
+    websocket: websocketCallbacks(handler),
   });
   stops.push(() => server.stop(true));
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?actor=owner-console`, [
@@ -202,7 +208,7 @@ test.each([
   "approve",
   "refuse",
 ] as const)("real authenticated WebSocket %s reaches only canonical request actions", async (decision) => {
-  const request = approval();
+  const request = await approval();
   const authenticated: object[] = [];
   const gateway = router({
     authenticated: (who, proof, requestId) => {
@@ -238,7 +244,7 @@ test.each([
 });
 
 test("same typed answer survives SQLite and gateway restart with a fresh owner clock", async () => {
-  const request = approval();
+  const request = await approval();
   const first = await connect(router());
   const answer = wireAnswer(request);
   const wire = { type: "request_answer", ...answer };
@@ -259,7 +265,7 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
 });
 
 test("wrong frame credential is refused without recording or leaking it", async () => {
-  const request = approval();
+  const request = await approval();
   const before = SessionHandleStore.tree(request.sessionId);
   const { socket } = await connect(router());
   const answer = wireAnswer(request);
@@ -276,7 +282,7 @@ test("wrong frame credential is refused without recording or leaking it", async 
 });
 
 test("session sender, malformed input, missing authenticator, and non-Owner evidence fail closed", async () => {
-  const request = approval();
+  const request = await approval();
   let calls = 0;
   const gateway = router({
     authenticated: () => {
@@ -313,7 +319,7 @@ test.each([
   "generation",
   "domainRevisions",
 ] as const)("canonical kernel rejects altered %s", async (field) => {
-  const request = approval();
+  const request = await approval();
   const altered = {
     ...request,
     ...(field === "generation"
@@ -330,7 +336,7 @@ test.each([
 });
 
 test("current domain revision and captured owner receipt time remain kernel gates", async () => {
-  const request = approval();
+  const request = await approval();
   expect(await router({ domainRevision: 2 }).ingest(sender, envelope(request))).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.rejected",
@@ -344,7 +350,7 @@ test("current domain revision and captured owner receipt time remain kernel gate
 });
 
 test("Owner authentication finishing at the deadline cannot approve into the past", async () => {
-  const request = approval();
+  const request = await approval();
   const gateway = router({
     authenticated: () => {
       at = request.deadline;
@@ -358,7 +364,7 @@ test("Owner authentication finishing at the deadline cannot approve into the pas
 });
 
 test("an authenticated Owner answer cannot bypass the absolute blacklist", async () => {
-  const request = approval();
+  const request = await approval();
   BlacklistStore.put({ id: "blocked-surface", kind: "channel", value: "ws", createdBy: "owner" });
   const before = SessionHandleStore.tree(request.sessionId);
   expect(await router().ingest(sender, envelope(request))).toMatchObject({
@@ -369,7 +375,7 @@ test("an authenticated Owner answer cannot bypass the absolute blacklist", async
 });
 
 test("plain text preserves stable driver event ID and cannot enter Owner authentication", async () => {
-  const request = approval();
+  const request = await approval();
   const messages: Channel.InboundMessage[] = [];
   let calls = 0;
   const { socket } = await connect(
@@ -399,7 +405,7 @@ test("plain text preserves stable driver event ID and cannot enter Owner authent
 });
 
 test("typed frames reject missing input identity and untrusted principal fields", async () => {
-  const request = approval();
+  const request = await approval();
   const { socket } = await connect(router());
   const answer = wireAnswer(request);
   for (const value of [
@@ -409,14 +415,14 @@ test("typed frames reject missing input identity and untrusted principal fields"
   ]) {
     expect(await frame(socket, { type: "request_answer", ...value })).toEqual({
       type: "error",
-      message: "invalid request_answer frame",
+      reason: "InvalidInbound",
     });
   }
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
 });
 
 test("actual WebSocket upgrade rejects the wrong transport token", async () => {
-  approval();
+  await approval();
   const { server } = await connect(router());
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, ["auth", "wrong-upgrade"]);
   const failed = event<ErrorEvent>(socket, "error");
@@ -424,8 +430,8 @@ test("actual WebSocket upgrade rejects the wrong transport token", async () => {
   expect(socket.readyState).not.toBe(WebSocket.OPEN);
 });
 
-test("typed public schema rejects caller-supplied trust or receipt time", () => {
-  const request = approval();
+test("typed public schema rejects caller-supplied trust or receipt time", async () => {
+  const request = await approval();
   expect(Gateway.RequestAnswer.safeParse(envelope(request)).success).toBe(true);
   for (const extra of [{ trustTier: "owner" }, { receivedAt: 0 }, { principal }]) {
     expect(Gateway.RequestAnswer.safeParse({ ...envelope(request), ...extra }).success).toBe(false);

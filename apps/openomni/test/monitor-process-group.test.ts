@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { createServer, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -83,7 +84,12 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
         const gone = bound(Promise.all(original.map((peer) => peer.closed)).then(() => undefined));
         if (mode === "rearm") {
           const readyAgain = fixture.next("group", (row) => row.content === "READY");
-          fixture.storage.alarms.rearm("group", "monitor-session", 1000);
+          Either.getOrThrowWith(
+            Effect.runSync(
+              Effect.either(fixture.storage.alarms.rearm("group", "monitor-session", 1000)),
+            ),
+            (error) => error,
+          );
           fixture.worker.tick();
           await Promise.all([gone, readyAgain]);
           expect(fixture.storage.alarms.get("group")).toMatchObject({ status: "armed", epoch: 2 });
@@ -99,7 +105,13 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           await Promise.all([gone, terminal]);
           expect(await writer.exited).toBe(0);
         } else {
-          if (mode === "cancel") fixture.storage.alarms.cancel("group", "monitor-session", 1000);
+          if (mode === "cancel")
+            Either.getOrThrowWith(
+              Effect.runSync(
+                Effect.either(fixture.storage.alarms.cancel("group", "monitor-session", 1000)),
+              ),
+              (error) => error,
+            );
           if (mode === "timeout") fixture.advance(1050);
           if (mode !== "shutdown") fixture.worker.tick();
           await Promise.all([gone, fixture.worker.close()]);

@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { L0Observation } from "@openomni/protocol";
@@ -22,7 +23,9 @@ test("failed request insert rolls back original action, revision and observation
     BEGIN SELECT RAISE(ABORT, 'request write failed'); END`);
   const before = SessionHandleStore.row(request.sessionId);
   const tree = SessionHandleStore.tree(request.sessionId);
-  expect(() => commit([original, requestStateAction(request)])).toThrow("request write failed");
+  expect(() => commit([original, requestStateAction(request)])).toThrow(
+    expect.objectContaining({ _tag: "ForeignFailure" }),
+  );
   expect(SessionHandleStore.row(request.sessionId)).toEqual(before);
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(tree);
   expect(SessionHandleStore.requestRows()).toEqual([]);
@@ -32,18 +35,26 @@ test("request commit requires the live lease rather than borrowing another owner
   const { request, original, commit } = requestFixture();
   expectCommitted(commit([original, requestStateAction(request)]));
   const before = SessionHandleStore.tree(request.sessionId);
-  const result = SessionHandleStore.commitRequestTransition({
-    sessionId: request.sessionId,
-    owner: "foreign",
-    fence: 1,
-    now: 5,
-    expectedRevision: SessionHandleStore.row(request.sessionId).revision,
-    actions: [requestStateAction(request, "foreign")],
-    consumeInboxIds: [],
-    state: "idle",
-    releaseLease: false,
-  });
-  expect(result).toMatchObject({ ok: false, reason: "stale" });
+  const result = () =>
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitRequestTransition({
+            sessionId: request.sessionId,
+            owner: "foreign",
+            fence: 1,
+            now: 5,
+            expectedRevision: SessionHandleStore.row(request.sessionId).revision,
+            actions: [requestStateAction(request, "foreign")],
+            consumeInboxIds: [],
+            state: "idle",
+            releaseLease: false,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
+  expect(result).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "fence" }));
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
 });
 

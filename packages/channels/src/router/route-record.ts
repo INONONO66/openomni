@@ -1,7 +1,7 @@
 import { Ingress } from "@openomni/protocol";
 import { DecisionFacts } from "@openomni/ledger";
 import { replyGrantEndpointFromFacts } from "./messaging/reply-grant";
-import { IngressRoutingError } from "./routing-error";
+import { IngressRoutingError } from "../errors";
 
 /** Record before projection; a competing fact must preserve routing and reply authority. */
 export function recordRouteDecided(

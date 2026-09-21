@@ -58,10 +58,10 @@ test.each([0, 1])("timeout keeps %s partial replies in original action history",
   });
   if (count) await answer("original", "a", "early", 2);
   expect(
-    command("original", { kind: "request.timeout", requestId: "original" }, 9).resolution,
+    (await command("original", { kind: "request.timeout", requestId: "original" }, 9)).resolution,
   ).toBe("rejected");
   expect(
-    command("original", { kind: "request.timeout", requestId: "original" }, 10).resolution,
+    (await command("original", { kind: "request.timeout", requestId: "original" }, 10)).resolution,
   ).toBe("expired");
   expect(SessionHandleStore.requestById("original")).toMatchObject({
     state: "expired",
@@ -78,7 +78,7 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
   });
   await answer("original", "a", "early", 2);
   expect(
-    command(
+    (await command(
       "original",
       {
         kind: "request.cancel",
@@ -86,10 +86,10 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
         principal: { kind: "actor", principalId: "a", evidenceId: "external" },
       },
       3,
-    ).resolution,
+    )).resolution,
   ).toBe("rejected");
   expect(
-    command(
+    (await command(
       "original",
       {
         kind: "request.cancel",
@@ -97,7 +97,7 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
         principal: { kind: "session", principalId: "request-owner", evidenceId: "session" },
       },
       4,
-    ).resolution,
+    )).resolution,
   ).toBe("cancelled");
   expect(await answer("original", "b", "late", 5)).toBe("duplicate");
   expect(SessionHandleStore.requestById("original")).toMatchObject({

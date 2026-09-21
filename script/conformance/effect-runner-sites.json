@@ -1,0 +1,10 @@
+[
+  "packages/agent/src/session-admission.ts:commitSessionRequest",
+  "packages/agent/src/session-admission.ts:createSessionAdmission",
+  "packages/agent/src/session-configuration.ts:createSessionConfiguration",
+  "packages/agent/src/session-controller.ts:createController",
+  "packages/agent/src/session-handle.ts:111",
+  "packages/agent/src/session-outbound.ts:dispatchSessionOutbound",
+  "packages/agent/src/session-requests.ts:createSessionRequests",
+  "packages/agent/src/session-turn.ts:createSessionTurn"
+]

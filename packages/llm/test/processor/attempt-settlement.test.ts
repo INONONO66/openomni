@@ -31,8 +31,7 @@ describe("Processor attempt settlement", () => {
         return true;
       },
     );
-    if (synchronous) assertSettled();
-    await expect(processing).rejects.toBe(failure);
+    await expect(processing).rejects.toMatchObject({ _tag: "TransportFailure", cause: String(failure) });
     expect(await settledAtRejection).toBe(true);
   });
 });

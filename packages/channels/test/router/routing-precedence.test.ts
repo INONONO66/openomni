@@ -4,7 +4,7 @@ import { resolveRoute, type RouteState } from "../../src/router/resolve-route.js
 
 type RouteInbound = Parameters<typeof resolveRoute>[0];
 import { requireRoutedDecision } from "../../src/router/routing-execution.js";
-import { IngressRoutingError } from "../../src/router/routing-error";
+import { IngressRoutingError } from "../../src/errors";
 import { z } from "zod";
 import { rejected } from "../helpers/rejection";
 

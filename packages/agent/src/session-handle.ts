@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import { createPolicyCompiler, type CompiledPolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
@@ -106,19 +107,27 @@ class SessionRegistry {
       return existing.controller.handle;
     }
     const tools = (options.tools ?? []).map(toolSnapshot);
-    const materialized = SessionHandleStore.materialize({
-      id,
-      parentId: options.parentId ?? null,
-      role: options.role,
-      tools,
-      system: {
-        preset: options.system?.preset ?? "",
-        blocks: options.system?.blocks ?? [],
-      },
-      policyGeneration: options.policyGeneration ?? SessionHandleStore.currentPolicyGeneration(),
-      actionId: entropy(),
-      at: (this.runtime.clock ?? Date.now)(),
-    });
+    const materialized = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.materialize({
+            id,
+            parentId: options.parentId ?? null,
+            role: options.role,
+            tools,
+            system: {
+              preset: options.system?.preset ?? "",
+              blocks: options.system?.blocks ?? [],
+            },
+            policyGeneration:
+              options.policyGeneration ?? SessionHandleStore.currentPolicyGeneration(),
+            actionId: entropy(),
+            at: (this.runtime.clock ?? Date.now)(),
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     if (!materialized.created) {
       assertDeclaration(materialized.row, options, tools, options.system);
     }

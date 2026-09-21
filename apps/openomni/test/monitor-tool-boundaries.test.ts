@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,20 +77,32 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       expect(alarmPathEvent((await modified).content)).toEqual({ path, event: "modify" });
       const old = fixture.storage.alarms.get("modify");
       if (old === undefined) throw new Error("missing alarm");
-      fixture.storage.alarms.cancel("modify", "monitor-session", 1001);
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(fixture.storage.alarms.cancel("modify", "monitor-session", 1001)),
+        ),
+        (error) => error,
+      );
       writeFileSync(path, "after cancel");
       fixture.worker.tick();
-      expect(
-        fixture.storage.alarms.fire({
-          id: old.id,
-          epoch: old.epoch,
-          fence: old.fence,
-          sourceKey: "path:stale",
-          at: 1001,
-          content: "late callback",
-          terminal: false,
-        }),
-      ).toBeUndefined();
+      expect(() =>
+        Either.getOrThrowWith(
+          Effect.runSync(
+            Effect.either(
+              fixture.storage.alarms.fire({
+                id: old.id,
+                epoch: old.epoch,
+                fence: old.fence,
+                sourceKey: "path:stale",
+                at: 1001,
+                content: "late callback",
+                terminal: false,
+              }),
+            ),
+          ),
+          (error) => error,
+        ),
+      ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
       expect(fixture.rows()).toHaveLength(2);
       expect(fixture.errors).toEqual([]);
     } finally {

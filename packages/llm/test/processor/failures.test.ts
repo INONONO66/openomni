@@ -40,7 +40,7 @@ describe("Processor failures", () => {
     const processor = createProcessor();
     fixture.abortController.abort();
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      name: "AbortError",
+      _tag: "TransportFailure", providerErrorName: "AbortError",
     });
   });
 
@@ -57,7 +57,7 @@ describe("Processor failures", () => {
         })(),
       }),
     });
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(reason);
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ _tag: "TransportFailure", cause: String(reason) });
     expect(processor.message.finish).toBe("aborted");
     expect(capture.finalParts()).toMatchObject([
       { type: "tool", state: { status: "error", error: "interrupted" } },
@@ -91,7 +91,7 @@ describe("Processor failures", () => {
   ])("propagates %s after exactly one attempt", async (error) => {
     const stream = failingStream(error);
     const processor = createProcessor({ createStream: stream });
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(error);
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ _tag: "APIError", message: error.message, isRetryable: true });
     expect(stream).toHaveBeenCalledTimes(1);
   });
 

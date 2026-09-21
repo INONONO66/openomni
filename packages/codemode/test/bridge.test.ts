@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ChildProcess } from "node:child_process";
 import { z } from "zod";
 import type { Machine } from "@openomni/protocol";
-import { PythonKernel } from "../src/kernel";
+import { PythonKernel } from "./helpers/native";
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (error: Error) => void;
@@ -40,7 +40,7 @@ describe("interpreter bridge ownership", () => {
         },
       );
       await callEntered.promise;
-      const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel, "process"));
+      const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel.native, "process"));
       child.stdin?.write(
         `${JSON.stringify({ callId: "not-in-flight", status: "completed", value: "stray" })}\n`,
       );
@@ -71,6 +71,7 @@ describe("interpreter bridge ownership", () => {
     rejectionEvents.on("unhandledRejection", onUnhandled);
     try {
       await warmInterpreter(kernel);
+      const calls: Promise<Machine.ToolCallResult>[] = [];
       const running = kernel.run(
         {
           cellId: "timeout-in-flight",
@@ -78,23 +79,14 @@ describe("interpreter bridge ownership", () => {
           timeoutMs: 1_000,
         },
         () => {
+          const answer = toolAnswer.promise.then((value) => value);
+          calls.push(answer);
           callEntered.resolve();
-          return toolAnswer.promise;
+          return answer;
         },
       );
       await callEntered.promise;
-      const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel, "process"));
-      const callbacks = [
-        ...z
-          .object({
-            inFlight: z.map(
-              z.string(),
-              z.custom<Promise<void>>((value) => value instanceof Promise),
-            ),
-          })
-          .parse(Reflect.get(kernel, "pending"))
-          .inFlight.values(),
-      ];
+      const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel.native, "process"));
       const kill = child.kill.bind(child);
       child.kill = ((signal?: KillSignal) => {
         signals.push(signal);
@@ -107,8 +99,9 @@ describe("interpreter bridge ownership", () => {
         output: { stdout: "", stderr: "" },
       });
       expect(signals).toContain("SIGKILL");
+      const settled = Promise.allSettled(calls);
       toolAnswer.reject(new Error("late tool failure"));
-      await Promise.all(callbacks);
+      expect((await settled).every((result) => result.status === "rejected")).toBe(true);
       expect(unhandled).toEqual([]);
     } finally {
       rejectionEvents.off("unhandledRejection", onUnhandled);

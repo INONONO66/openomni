@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { openRequest } from "./helpers/open-request";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { CommitRefused, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
 import { commitSessionRequest } from "../src/session-admission";
-import { SessionCommitError } from "../src/session-contract";
+
 import { requestLedger } from "./helpers/request-ledger";
 
 beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
@@ -70,7 +70,7 @@ test("admission carries its observed count into the real SQLite transaction", as
   });
   const before = SessionHandleStore.row(first.sessionId);
   const actions = SessionHandleStore.tree(first.sessionId);
-  expect(() => open(first)).toThrow(SessionCommitError);
+  expect(() => open(first)).toThrow(CommitRefused);
   expect(SessionHandleStore.row(first.sessionId)).toEqual(before);
   expect(SessionHandleStore.tree(first.sessionId)).toEqual(actions);
   expect(SessionHandleStore.requestRows().map((request) => request.requestId)).toEqual([

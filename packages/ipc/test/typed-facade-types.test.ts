@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { Ipc } from "@openomni/protocol";
 import type { z } from "zod";
-import { connectIpcClient, createIpcServer, typedCall } from "../src/index";
+import { connectIpcClient, createIpcServer, typedCall } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";
 
 const fixtureConfig = fileURLToPath(

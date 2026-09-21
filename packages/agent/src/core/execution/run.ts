@@ -1,7 +1,7 @@
 import {
   Provider,
   Retry as LlmRetry,
-  Run,
+  LlmRunFailure,
   observeRetry,
   run as llmRun,
   type Sink,
@@ -84,7 +84,7 @@ export async function runAgent(
       maxAttempts: LlmRetry.MAX_ATTEMPTS,
     };
     emitRunFailed(config.events, base, cause.message, facts);
-    const llmFailure: boolean = Run.FailureError.isInstance(error);
+    const llmFailure: boolean = error instanceof LlmRunFailure;
     if (llmFailure) Retry.attachFailureFacts(cause, { ...facts, llm: true });
     throw error;
   } finally {

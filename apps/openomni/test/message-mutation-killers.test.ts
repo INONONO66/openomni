@@ -1,13 +1,11 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
-import {
-  messageMaterialization,
-  prepareMessage,
-} from "../src/composition/message-session";
+import { messageMaterialization, prepareMessage } from "../src/composition/message-session";
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
@@ -88,7 +86,10 @@ test("external ingress retry after inbox fault commits once despite a recorded r
     db.exec(
       "CREATE TRIGGER fail_external BEFORE INSERT ON inbox BEGIN SELECT RAISE(ABORT, 'inbox fault'); END",
     );
-    await expect(fixture.gateway.ingest(sender, facts)).rejects.toThrow("inbox fault");
+    await expect(fixture.gateway.ingest(sender, facts)).rejects.toMatchObject({
+      _tag: "ForeignFailure",
+      operation: "inbox.receive",
+    });
     db.exec("DROP TRIGGER fail_external");
     const result = await fixture.gateway.ingest(sender, facts);
     expect(result.status).toBe("executed");
@@ -232,16 +233,23 @@ function materialize(
   parentId: string | null = null,
   role: "resident" | "worker" = "resident",
 ) {
-  SessionHandleStore.materialize({
-    id,
-    parentId,
-    role,
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: SessionHandleStore.currentPolicyGeneration(),
-    actionId: `${id}:config`,
-    at: 100,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id,
+          parentId,
+          role,
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+          actionId: `${id}:config`,
+          at: 100,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
@@ -304,24 +312,31 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         deadline: 150,
         at: 100,
       });
-      SessionHandleStore.commitInbox({
-        id: "bound-request",
-        sessionId: f.sessionId,
-        kind: "prompt",
-        content: "work",
-        createdAt: 100,
-        parentActionId: null,
-        origin: {
-          encodingVersion: 1,
-          value: {
-            kind: "message",
-            messageId: "bound-request",
-            senderSessionId: "parent",
-            sourceActionId: "parent:request",
-            deadline: 150,
-          },
-        },
-      });
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commitInbox({
+              id: "bound-request",
+              sessionId: f.sessionId,
+              kind: "prompt",
+              content: "work",
+              createdAt: 100,
+              parentActionId: null,
+              origin: {
+                encodingVersion: 1,
+                value: {
+                  kind: "message",
+                  messageId: "bound-request",
+                  senderSessionId: "parent",
+                  sourceActionId: "parent:request",
+                  deadline: 150,
+                },
+              },
+            }),
+          ),
+        ),
+        (error) => error,
+      );
       send = {
         to: { kind: "session", id: "parent" },
         type: "message",

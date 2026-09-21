@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
@@ -32,64 +33,85 @@ export function requestLedger(
 ) {
   const id = input.id ?? "request-session";
   const clock = input.clock ?? (() => 100);
-  const created = SessionHandleStore.materialize({
-    id,
-    role: "resident",
-    parentId: null,
-    policyGeneration: 1,
-    tools: [],
-    system: { preset: "", blocks: [] },
-    actionId: `${id}:configure`,
-    at: clock(),
-  });
+  const created = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id,
+          role: "resident",
+          parentId: null,
+          policyGeneration: 1,
+          tools: [],
+          system: { preset: "", blocks: [] },
+          actionId: `${id}:configure`,
+          at: clock(),
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   const owner = `${id}:owner`;
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: id,
-    owner,
-    expectedFence: created.row.leaseFence,
-    now: clock(),
-    expiresAt: clock() + 30_000,
-  });
+  const lease = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: id,
+          owner,
+          expectedFence: created.row.leaseFence,
+          now: clock(),
+          expiresAt: clock() + 30_000,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   if (!lease.ok) throw new Error("test lease refused");
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
   const turnId = `${id}:turn`;
   if (!SessionHandleStore.tree(id).some((action) => action.id === turnId)) {
     const row = SessionHandleStore.row(id);
-    const opened = SessionHandleStore.commit({
-      sessionId: id,
-      owner,
-      fence: lease.fence,
-      now: clock(),
-      expectedRevision: row.revision,
-      consumeInboxIds: [],
-      state: "running",
-      releaseLease: false,
-      actions: [
-        {
-          id: turnId,
-          sessionId: id,
-          parentId: `${id}:configure`,
-          kind: "turn",
-          intent: {
-            encodingVersion: 1,
-            value: {
-              phase: "intent",
-              resultId: `${id}:result`,
-              inboxIds: [],
-              resumeCount: 0,
-              boundaryActionId: null,
-              toolsGeneration: generation.generation,
-              toolsHash: generation.toolsHash,
-              systemHash: generation.systemHash,
-              policyGeneration: 1,
-            },
-          },
-          effect: { encodingVersion: 1, value: { phase: "pending" } },
-          ts: clock(),
-          irreversible: true,
-        },
-      ],
-    });
+    const opened = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId: id,
+            owner,
+            fence: lease.fence,
+            now: clock(),
+            expectedRevision: row.revision,
+            consumeInboxIds: [],
+            state: "running",
+            releaseLease: false,
+            actions: [
+              {
+                id: turnId,
+                sessionId: id,
+                parentId: `${id}:configure`,
+                kind: "turn",
+                intent: {
+                  encodingVersion: 1,
+                  value: {
+                    phase: "intent",
+                    resultId: `${id}:result`,
+                    inboxIds: [],
+                    resumeCount: 0,
+                    boundaryActionId: null,
+                    toolsGeneration: generation.generation,
+                    toolsHash: generation.toolsHash,
+                    systemHash: generation.systemHash,
+                    policyGeneration: 1,
+                  },
+                },
+                effect: { encodingVersion: 1, value: { phase: "pending" } },
+                ts: clock(),
+                irreversible: true,
+              },
+            ],
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     if (!opened.ok) throw new Error("test turn refused");
   }
   const runtime: SessionRuntime = {
@@ -101,18 +123,25 @@ export function requestLedger(
     actions: () => SessionHandleStore.tree(id),
     async commit(action) {
       const row = SessionHandleStore.row(id);
-      const committed = SessionHandleStore.commit({
-        sessionId: id,
-        owner,
-        fence: lease.fence,
-        now: clock(),
-        expectedRevision: row.revision,
-        actions: [action],
-        consumeInboxIds: [],
-        state: row.state,
-        releaseLease: false,
-      });
-      if (!committed.ok) throw new Error(`test commit ${committed.reason}`);
+      const committed = Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              sessionId: id,
+              owner,
+              fence: lease.fence,
+              now: clock(),
+              expectedRevision: row.revision,
+              actions: [action],
+              consumeInboxIds: [],
+              state: row.state,
+              releaseLease: false,
+            }),
+          ),
+        ),
+        (error) => error,
+      );
+
       const receipt = committed.receipts[0];
       if (receipt === undefined) throw new Error("test receipt missing");
       return receipt;

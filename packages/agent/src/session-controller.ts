@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { Inbox, LedgerSession } from "@openomni/protocol";
@@ -15,7 +16,7 @@ import type {
   SessionToolsHandle,
   SessionSystemBlocksHandle,
 } from "./session-contract";
-import { toolSnapshot, internalOrigin, requireCommit } from "./session-record";
+import { toolSnapshot, internalOrigin } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { createSessionTurn } from "./session-turn";
 import { createSessionAdmission, commitSessionRequest } from "./session-admission";
@@ -253,19 +254,19 @@ export function createController(
     if (state.closed) throw new Error(`session handle is closed: ${sessionId}`);
     const current = SessionHandleStore.row(sessionId);
     const actions = SessionHandleStore.tree(sessionId);
-    SessionHandleStore.commitInbox({
-      id: entropy(),
-      sessionId,
-      kind,
-      content,
-      origin,
-      createdAt: clock(),
-      parentActionId: actions.at(-1)?.id ?? null,
-    });
-    if (kind === "interrupt" && current.state === "running") {
-      try {
+    const admission = Effect.gen(function* () {
+      yield* SessionHandleStore.commitInbox({
+        id: entropy(),
+        sessionId,
+        kind,
+        content,
+        origin,
+        createdAt: clock(),
+        parentActionId: actions.at(-1)?.id ?? null,
+      });
+      if (kind === "interrupt" && current.state === "running") {
         const interrupted = SessionHandleStore.row(sessionId);
-        const committed = SessionHandleStore.commit({
+        yield* SessionHandleStore.commit({
           sessionId,
           owner,
           fence: state.fence,
@@ -275,12 +276,10 @@ export function createController(
           consumeInboxIds: [],
           state: "interrupted",
           releaseLease: false,
-        });
-        requireCommit(committed);
-      } finally {
-        state.controller?.abort();
+        }).pipe(Effect.ensuring(Effect.sync(() => state.controller?.abort())));
       }
-    }
+    });
+    Either.getOrThrowWith(await Effect.runPromise(Effect.either(admission)), (error) => error);
     if (kind === "resume" && current.state === "running") return undefined;
     return reconcile();
   }

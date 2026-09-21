@@ -2,7 +2,10 @@ import fs from "node:fs";
 import net from "node:net";
 import { Ipc, type PlainValue } from "@openomni/protocol";
 
-import { IpcConnectionError } from "./errors";
+import { Effect, type Scope } from "effect";
+import { IpcConnectionError, type IpcError } from "./errors";
+import { decodeIpcFailure } from "./failure";
+import { makeDispatcher } from "./callbacks";
 import { LineDecoder, encode } from "./framing";
 import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";
 
@@ -16,7 +19,7 @@ interface IpcServerOptions {
    * Fires once per connection after it is torn down (close or error). The
    * connection's in-flight requests have already been failed when this runs.
    */
-  readonly onDisconnect?: (connectionId: string) => void;
+  readonly onDisconnect?: (connectionId: string) => Effect.Effect<void, IpcError>;
 }
 
 type RequestHandler = (
@@ -25,7 +28,7 @@ type RequestHandler = (
   respond: (result: Ipc.Response["result"]) => void,
   notify: (method: string, params?: Ipc.Notification["params"]) => void,
   connectionId: string,
-) => void | Promise<void>;
+) => Effect.Effect<void, IpcError>;
 
 export interface IpcServer {
   readonly socketPath: string;
@@ -33,11 +36,11 @@ export interface IpcServer {
     method: string,
     params?: Ipc.Request["params"],
     timeoutMs?: number,
-  ): Promise<Ipc.Response["result"]>;
+  ): Effect.Effect<Ipc.Response["result"], IpcError>;
   /** Returns false when the notification was dropped because no client is connected. */
-  notify(method: string, params?: Ipc.Notification["params"]): boolean;
+  notify(method: string, params?: Ipc.Notification["params"]): Effect.Effect<boolean, IpcError>;
   useConnection(id: string): void;
-  close(): void;
+  close(): Effect.Effect<void, IpcError>;
 }
 
 // How long the pre-listen probe waits for the existing socket to answer
@@ -49,41 +52,32 @@ const SOCKET_PROBE_TIMEOUT_MS = 500;
  * True when something accepts connections on `socketPath`. Connection refused
  * (or any other connect error) means the socket file is a stale leftover.
  */
-function probeSocketLive(socketPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
+function probeSocketLive(socketPath: string): Effect.Effect<boolean> {
+  return Effect.async<boolean>((resume) => {
     const probe = new net.Socket();
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Install this before the timer/connect listeners so refused-connect
-    // errors cannot be emitted before they are observed.
-    probe.once("error", () => settle(false));
-    const settle = (live: boolean) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      probe.destroy();
-      resolve(live);
-    };
-    timer = setTimeout(() => settle(true), SOCKET_PROBE_TIMEOUT_MS);
-    probe.once("connect", () => settle(true));
+    probe.once("error", () => { probe.destroy(); resume(Effect.succeed(false)); });
+    probe.once("connect", () => { probe.destroy(); resume(Effect.succeed(true)); });
     probe.connect(socketPath);
-  });
+    return Effect.sync(() => probe.destroy());
+  }).pipe(Effect.timeoutOption(SOCKET_PROBE_TIMEOUT_MS), Effect.map((value) => value._tag === "None" || value.value));
 }
 
-export async function createIpcServer(
+export function createIpcServer(
   socketPath: string,
   handler: RequestHandler,
   options: IpcServerOptions = {},
-): Promise<IpcServer> {
+): Effect.Effect<IpcServer, IpcError, Scope.Scope> {
+  return Effect.gen(function* () {
+  const dispatch = yield* makeDispatcher;
   // A leftover socket file blocks Bun.listen with EADDRINUSE — but blindly
   // unlinking would steal a LIVE server's socket (new connections silently
   // divert to the newcomer while the old server keeps running blind). Probe
   // first; only a provably dead socket file is removed.
   if (fs.existsSync(socketPath)) {
-    if (await probeSocketLive(socketPath)) {
-      throw new IpcConnectionError(`socket ${socketPath} is in use by a live server`);
+    if (yield* probeSocketLive(socketPath)) {
+      return yield* new IpcConnectionError({ message: `socket ${socketPath} is in use by a live server` });
     }
-    unlinkIfExists(socketPath);
+    yield* Effect.try({ try: () => unlinkIfExists(socketPath), catch: decodeIpcFailure("socket.unlink") });
   }
 
   interface SocketData {
@@ -202,13 +196,24 @@ export async function createIpcServer(
     // A dead connection fails ITS in-flight requests as a connection loss —
     // leaving them to age out would misreport the failure as a timeout. This
     // includes requests whose bytes were still sitting in the write queue.
-    if (state) peer.disconnect(state, new IpcConnectionError(reason));
+    if (state) peer.disconnect(state, new IpcConnectionError({ message: reason }));
     // `state` guards double delivery: close always follows error, and the
     // second call finds the connection already deleted.
-    if (state) options.onDisconnect?.(id);
+    if (state && options.onDisconnect) dispatch(options.onDisconnect(id));
   }
 
-  const server = Bun.listen({
+  function dispatchFrame(msg: PlainValue, state: ConnectionState): Effect.Effect<void, IpcError> {
+    const message = classifyIpcMessage(msg);
+    if (message === undefined) return Effect.sync(() => sendFrame(state, Ipc.createErrorResponse(extractFrameId(msg), 4000, unknownMessageError(msg))));
+    if (message.kind === "response") return peer.dispatchMessage(message, state);
+    return Effect.sync(() => dispatch(peer.dispatchMessage(message, state).pipe(Effect.catchAllCause((cause) => Effect.sync(() => {
+      console.warn("IPC request handler defect:", cause);
+      removeConnection(state.id, "request handler defect");
+      state.socket.end();
+    })))));
+  }
+
+  const server = yield* Effect.try({ try: () => Bun.listen({
     unix: socketPath,
     socket: {
       open(socket: BunSocket) {
@@ -232,52 +237,15 @@ export async function createIpcServer(
         // loop (and the reclaim timer with it) for nothing.
         if (state.endAfterFlush) return;
 
-        let messages: PlainValue[];
-        let malformed: string[];
-        try {
-          ({ frames: messages, malformed } = state.decoder.push(raw));
-        } catch (error) {
-          // Oversize line/buffer — the decoder already reset its buffer (DoS
-          // guard). The reset happened MID-frame, so whatever arrives next is
-          // an unparseable tail: answer 4001, then close the connection. The
-          // client destroys its socket on protocol errors already; the server
-          // is symmetric instead of keeping a desynced stream alive.
-          sendFrame(
-            state,
-            Ipc.createErrorResponse(
-              "unknown",
-              4001,
-              error instanceof Error ? error.message : "invalid IPC frame",
-            ),
-          );
+        dispatch(Effect.gen(function* () {
+          if (state.endAfterFlush || state.closed) return;
+          const { frames: messages, malformed } = yield* Effect.try({ try: () => state.decoder.push(raw), catch: decodeIpcFailure("frame.decode") });
+          for (const msg of messages) yield* dispatchFrame(msg, state);
+          for (const line of malformed) sendFrame(state, Ipc.createErrorResponse("unknown", 4001, `IPC frame is not valid JSON: ${line}`));
+        }).pipe(Effect.catchAll((error) => Effect.sync(() => {
+          sendFrame(state, Ipc.createErrorResponse("unknown", 4001, error.message || String(error)));
           closeAfterFlush(state);
-          return;
-        }
-
-        for (const msg of messages) {
-          const message = classifyIpcMessage(msg);
-          if (message === undefined) {
-            // Echo the offending frame's own id when it carries one, so the
-            // requester's pending settles now instead of burning its
-            // timeout. "unknown" is reserved for frames without one.
-            sendFrame(
-              state,
-              Ipc.createErrorResponse(extractFrameId(msg), 4000, unknownMessageError(msg)),
-            );
-            continue;
-          }
-          peer.dispatchMessage(message, state);
-        }
-
-        // A malformed line costs only itself: every parseable frame above was
-        // already processed; each bad line gets its own 4001 error frame and
-        // the connection survives. Non-JSON lines have no recoverable id.
-        for (const line of malformed) {
-          sendFrame(
-            state,
-            Ipc.createErrorResponse("unknown", 4001, `IPC frame is not valid JSON: ${line}`),
-          );
-        }
+        }))));
       },
       drain(socket: BunSocket) {
         const connId = connectionIdOf(socket);
@@ -294,32 +262,39 @@ export async function createIpcServer(
         if (id !== undefined) removeConnection(id, "socket closed");
       },
     },
-  });
+  }), catch: decodeIpcFailure("server.listen") });
 
+  let closed = false;
+  const close = Effect.try({ try: () => {
+    if (closed) return;
+    closed = true;
+    peer.disconnectAll(new IpcConnectionError({ message: "server closed" }));
+    server.stop(true);
+    unlinkIfExists(socketPath);
+  }, catch: decodeIpcFailure("server.close") });
+  yield* Effect.addFinalizer(() => Effect.orDie(close));
   return {
     socketPath,
     call(method, params, timeoutMs = 30_000) {
-      const conn = getActiveConnection();
-      if (!conn) {
-        return Promise.reject(new IpcConnectionError("no connected client"));
-      }
-      return peer.call(conn, method, params, timeoutMs);
+      return Effect.suspend(() => {
+        const conn = getActiveConnection();
+        return conn ? peer.call(conn, method, params, timeoutMs) : new IpcConnectionError({ message: "no connected client" });
+      });
     },
     notify(method, params) {
-      const conn = getActiveConnection();
-      if (!conn) return false;
-      sendFrame(conn, Ipc.createNotification(method, params));
-      return true;
+      return Effect.try({ try: () => {
+        const conn = getActiveConnection();
+        if (!conn) return false;
+        sendFrame(conn, Ipc.createNotification(method, params));
+        return true;
+      }, catch: decodeIpcFailure("server.notify") });
     },
     useConnection(id) {
       if (connections.has(id)) activeConnectionId = id;
     },
-    close() {
-      peer.disconnectAll(new IpcConnectionError("server closed"));
-      server.stop(true);
-      unlinkIfExists(socketPath);
-    },
+    close: () => close,
   };
+  });
 }
 
 // Cap how much of an unrecognized payload the error message echoes back.

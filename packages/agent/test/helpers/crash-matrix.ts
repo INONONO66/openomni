@@ -1,6 +1,13 @@
+import { Effect, Either } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue } from "@openomni/protocol";
+import {
+  LedgerAction,
+  Message,
+  PlainObjectSchema,
+  PlainValueSchema,
+  type PlainValue,
+} from "@openomni/protocol";
 import { z } from "zod";
 import { createExecutor, type ExecutionLedger } from "../../src/executor";
 import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
@@ -19,6 +26,7 @@ import { seedPolicy } from "./seed-policy";
 export const crashPoint = z.enum([
   "turn_intent_before_llm_entry",
   "llm_body_before_attempt_result_commit",
+  "fiber_exit_after_execute_before_action_commit",
   "llm_result_committed",
   "tool_wave_between_result_commits",
   "retry_backoff_wait",
@@ -215,15 +223,22 @@ async function executePoint(point: CrashPoint, bodies: string[]) {
         onSummarize: async () => {
           bodies.push("summary");
           if (point === "compaction_concurrent_tail_committed_before_owner_crash") {
-            SessionHandleStore.commitReceivedMessage({
-              id: "tail",
-              sessionId,
-              kind: "prompt",
-              content: "concurrent tail",
-              createdAt: 100,
-              origin: { encodingVersion: 1, value: {} },
-              parentActionId: null,
-            });
+            Either.getOrThrowWith(
+              Effect.runSync(
+                Effect.either(
+                  SessionHandleStore.commitReceivedMessage({
+                    id: "tail",
+                    sessionId,
+                    kind: "prompt",
+                    content: "concurrent tail",
+                    createdAt: 100,
+                    origin: { encodingVersion: 1, value: {} },
+                    parentActionId: null,
+                  }),
+                ),
+              ),
+              (error) => error,
+            );
           }
           return "checkpoint";
         },
@@ -290,27 +305,41 @@ async function admissionPoint(point: CrashPoint, bodies: string[], dbPath: strin
   };
   if (point === "inbox_admitted_before_turn_open") {
     session({ id: sessionId, role: "resident", runner }, runtime);
-    SessionHandleStore.commitReceivedMessage({
-      id: "admitted",
-      sessionId,
-      kind: "prompt",
-      content: "original prompt",
-      createdAt: 100,
-      origin: { encodingVersion: 1, value: {} },
-      parentActionId: null,
-    });
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitReceivedMessage({
+            id: "admitted",
+            sessionId,
+            kind: "prompt",
+            content: "original prompt",
+            createdAt: 100,
+            origin: { encodingVersion: 1, value: {} },
+            parentActionId: null,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     return stop(point, bodies);
   }
   session({ id: "parent", role: "resident", runner }, runtime);
-  const commission = SessionHandleStore.commitReceivedMessage({
-    id: "commission",
-    sessionId: "parent",
-    kind: "prompt",
-    content: "commission",
-    createdAt: 100,
-    origin: { encodingVersion: 1, value: {} },
-    parentActionId: null,
-  });
+  const commission = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.commitReceivedMessage({
+          id: "commission",
+          sessionId: "parent",
+          kind: "prompt",
+          content: "commission",
+          createdAt: 100,
+          origin: { encodingVersion: 1, value: {} },
+          parentActionId: null,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   const child = session({ id: sessionId, parentId: "parent", role: "worker", runner }, runtime);
   return child
     .prompt("work", {

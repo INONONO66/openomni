@@ -65,7 +65,7 @@ export class LineDecoder {
 
     if (Buffer.byteLength(this.splitter.buffered, "utf-8") > MAX_FRAME_BYTES) {
       this.reset();
-      throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
+      throw new IpcProtocolError({ message: `IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes` });
     }
 
     const frames: PlainValue[] = [];
@@ -74,7 +74,7 @@ export class LineDecoder {
       if (!line.trim()) continue;
       if (Buffer.byteLength(line, "utf-8") > MAX_FRAME_BYTES) {
         this.reset();
-        throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
+        throw new IpcProtocolError({ message: `IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes` });
       }
       try {
         frames.push(FrameSchema.parse(JSON.parse(line)));

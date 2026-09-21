@@ -5,7 +5,7 @@ import {
   DiscordApiError,
   DiscordGatewayFetchError,
   DiscordHandlerMissingError,
-} from "../src/provider/discord/error";
+} from "../src/errors";
 import { DiscordNormalizer } from "../src/provider/discord/normalizer";
 import { DiscordAdapter } from "../src/provider/discord/surface";
 import type { DiscordMessage } from "../src/provider/discord/types";

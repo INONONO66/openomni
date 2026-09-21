@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { IpcConnectionError } from "../src/errors";
-import { connectIpcClient, createIpcServer } from "../src/index";
+import { connectIpcClient, createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath } from "./helpers/socket-path";
 import { connectRaw, transportFixture } from "./helpers/transport";

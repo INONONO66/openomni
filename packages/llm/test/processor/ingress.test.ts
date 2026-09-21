@@ -73,7 +73,7 @@ describe("processor ingress", () => {
       }),
     });
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      name: "AbortError",
+      _tag: "TransportFailure", providerErrorName: "AbortError",
     });
     expect(capture.finalParts()).toMatchObject([{ type: "text", text: "partial" }]);
     expect(processor.message.finish).toBe("aborted");

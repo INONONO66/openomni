@@ -1,178 +1,94 @@
-import { Retry, Run } from "@openomni/llm";
+import { Retry } from "@openomni/llm";
 import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation } from "@openomni/policy";
+import { Cause, Effect, Exit, Option } from "effect";
 import type { AttemptRequest, ExecutorOptions, LlmAttempts } from "./executor-contract";
 import { createRetryAlarmPort } from "./executor-retry-alarm";
 import type { createExecutionRecord } from "./executor-record";
+import { PolicyDenied, type ExecutionError } from "./errors";
+import { causeEvidence } from "./executor-outcome";
 
 type RecordPort = ReturnType<typeof createExecutionRecord>;
 type Admission = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
 
-/** The executor alone schedules attempts; llm supplies failure classification and delay. */
 export function createAttemptRunner(
   options: ExecutorOptions,
   record: Pick<RecordPort, "appendIntent" | "appendResult" | "appendFailure">,
-  admit: (request: AttemptRequest, parent: LedgerAction.Receipt) => Promise<Admission>,
-  approve: (
-    request: AttemptRequest,
-    intent: LedgerAction.Receipt,
-    admission: Admission,
-  ) => Promise<"approve" | "refuse" | "timeout">,
+  admit: (request: AttemptRequest, parent: LedgerAction.Receipt) => Effect.Effect<Admission, ExecutionError>,
+  approve: (request: AttemptRequest, intent: LedgerAction.Receipt, admission: Admission) =>
+    Effect.Effect<"approve" | "refuse" | "timeout", ExecutionError>,
 ) {
-  // Attempt ordinal, the provider-retry cap and the reason this attempt
-  // exists are pinned on the intent; llm decided them, the ledger keeps them.
-  function appendAttemptIntent(
-    request: AttemptRequest,
-    parent: LedgerAction.Receipt,
-    attempt: number,
-    failures: readonly string[],
-  ): Promise<LedgerAction.Receipt> {
-    return record.appendIntent({
-      kind: "attempt",
-      op: request.op,
-      parentId: parent.action.id,
-      value: request.intent,
-      invocation: {
-        effectHash: canonicalDigest(request.effect),
-        attempt,
-        maxAttempts: Retry.MAX_ATTEMPTS,
-        retryReason: failures.at(-1) ?? null,
-      },
-    });
-  }
-  function appendExecuted(
-    request: AttemptRequest,
-    intent: LedgerAction.Receipt,
-    evidence: PlainValue | undefined,
-  ): Promise<void> {
-    return record.appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
-      phase: "result",
-      terminal: "executed",
-      effect: request.effect,
-      ...(evidence === undefined ? {} : { evidence }),
-    });
-  }
-  const retryAlarm =
-    options.retryAlarm ?? createRetryAlarmPort(options.identity.sessionId, options.clock);
-  // The schedule is durable before the wait: an `alarm.arm` action carrying the
-  // retry.scheduled spec commits first, so a crash mid-wait leaves a boot-visible
-  // alarm that the single alarm owner consumes exactly once (fenced cancel CAS).
-  async function scheduleRetry<T extends PlainValue>(
-    attempts: LlmAttempts<T>,
-    intentId: string,
-    retry: {
-      readonly attempt: number;
-      readonly delayMs: number;
-      readonly decision: Retry.Decision;
-      readonly error: Error;
-      readonly reason: string;
-    },
-  ): Promise<void> {
-    attempts.onRetry?.({ ...retry, maxAttempts: Retry.MAX_ATTEMPTS });
-    const id = `${intentId}:retry:${retry.attempt}`;
-    const fireAt = options.clock() + retry.delayMs;
-    await retryAlarm.arm({ id, attempt: retry.attempt, reason: retry.reason, fireAt });
-    await retryAlarm.wait(fireAt, options.signal);
-    await retryAlarm.settle(id);
-  }
-  async function requireApproval(
-    request: AttemptRequest,
-    intent: LedgerAction.Receipt,
-    policy: Admission,
-  ): Promise<void> {
-    const decision = await approve(request, intent, policy);
-    if (decision === "approve") return;
-    await record.appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
-      phase: "result",
-      terminal: "blocked_pre",
-      reason: decision === "timeout" ? "approval_timeout" : "approval_refused",
-    });
-    throw new Error(`llm attempt approval ${decision}`);
-  }
+  const retryAlarm = options.retryAlarm ?? createRetryAlarmPort(options.identity.sessionId, options.clock);
 
-  function requireRetryableFailure(error: Error): void {
-    const failure = error instanceof Run.FailureError ? error : undefined;
-    if (options.signal?.aborted || failure?.data.aborted || failure?.data.visibleOutput)
-      throw error;
-  }
-
-  function retryContinuation(error: Error, decision: Retry.Decision, recover: boolean) {
-    if (!recover && (Retry.isContextOverflow(error) || !decision.retry)) throw error;
-    return {
-      delayMs: recover ? 0 : decision.retry ? decision.delayMs : 0,
-      reason: recover ? "context_overflow" : Retry.attemptReason(error),
-    };
-  }
-
-  async function admitAttempt<T extends PlainValue>(
-    parent: LedgerAction.Receipt,
-    attempts: LlmAttempts<T>,
-    attempt: number,
-    failures: readonly string[],
-  ) {
-    // Preparation is not a provider attempt: invalid identity/config never earns a retry.
-    const prepared = await attempts.prepare(attempt, failures);
-    const policy = attempt === 1 ? undefined : await admit(prepared.request, parent);
-    if (policy !== undefined && (policy.verdict === "deny" || policy.verdict === "transform"))
-      throw new Error(`llm admission refused: ${policy.reason ?? policy.verdict}`);
-    await prepared.admit();
-    options.signal?.throwIfAborted();
-    const intent = await appendAttemptIntent(prepared.request, parent, attempt, failures);
-    if (policy?.verdict === "require_approval") {
-      await requireApproval(prepared.request, intent, policy);
-    }
-    return { prepared, intent };
-  }
-
-  return async function runAttempts<T extends PlainValue>(
-    parent: LedgerAction.Receipt,
-    attempts: LlmAttempts<T>,
-  ): Promise<T> {
-    const failures: string[] = [];
-    let instantFailures = 0;
-    for (let attempt = 1; ; attempt += 1) {
-      options.signal?.throwIfAborted();
-      const { prepared, intent } = await admitAttempt(parent, attempts, attempt, failures);
-      const started = options.clock();
-      const outcome = await prepared.body().then(
-        (value) => ({ status: "fulfilled" as const, value }),
-        (error: Error) => ({
-          status: "rejected" as const,
-          error: error instanceof Error ? error : new Error(String(error)),
-        }),
-      );
-      if (outcome.status === "fulfilled") {
-        await appendExecuted(prepared.request, intent, attempts.evidence?.(outcome.value));
-        return outcome.value;
-      }
-      await record.appendFailure(
-        { kind: "attempt", op: prepared.request.op },
-        intent.action.id,
-        prepared.request.effect,
-        outcome.error,
-      );
-      requireRetryableFailure(outcome.error);
-      const overflow = Retry.isContextOverflow(outcome.error);
-      instantFailures = Retry.isInstantTransportFailure(outcome.error, options.clock() - started)
-        ? instantFailures + 1
-        : 0;
-      const decision = Retry.decide(
-        attempt,
-        outcome.error,
-        instantFailures,
-        prepared.fallbackAvailable,
-      );
-      if (attempt >= Retry.MAX_ATTEMPTS) throw outcome.error;
-      const recover = overflow && (await attempts.recoverOverflow?.(outcome.error)) === true;
-      const { delayMs, reason } = retryContinuation(outcome.error, decision, recover);
-      failures.push(reason);
-      await scheduleRetry(attempts, intent.action.id, {
-        attempt,
-        delayMs,
-        decision,
-        error: outcome.error,
-        reason,
+  function admitAttempt<T extends PlainValue>(parent: LedgerAction.Receipt,
+    attempts: LlmAttempts<T>, attempt: number, failures: readonly string[]) {
+    return Effect.gen(function* () {
+      const prepared = yield* attempts.prepare(attempt, failures);
+      const policy = attempt === 1 ? undefined : yield* admit(prepared.request, parent);
+      if (policy !== undefined && (policy.verdict === "deny" || policy.verdict === "transform"))
+        return yield* new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds });
+      yield* prepared.admit();
+      if (options.signal?.aborted) return yield* Effect.interrupt;
+      const intent = yield* record.appendIntent({
+        kind: "attempt", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
+        invocation: { effectHash: canonicalDigest(prepared.request.effect), attempt,
+          maxAttempts: Retry.MAX_ATTEMPTS, retryReason: failures.at(-1) ?? null },
       });
-    }
+      if (policy?.verdict === "require_approval") {
+        const decision = yield* approve(prepared.request, intent, policy);
+        if (decision !== "approve") {
+          yield* record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
+            phase: "result", terminal: "blocked_pre",
+            reason: decision === "timeout" ? "approval_timeout" : "approval_refused",
+          });
+          return yield* new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds });
+        }
+      }
+      return { prepared, intent };
+    });
+  }
+
+  return function runAttempts<T extends PlainValue>(parent: LedgerAction.Receipt,
+    attempts: LlmAttempts<T>): Effect.Effect<T, ExecutionError> {
+    return Effect.gen(function* () {
+      const failures: string[] = [];
+      let instantFailures = 0;
+      for (let attempt = 1; ; attempt += 1) {
+        if (options.signal?.aborted) return yield* Effect.interrupt;
+        const { prepared, intent } = yield* admitAttempt(parent, attempts, attempt, failures);
+        const started = options.clock();
+        const outcome = yield* Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
+          const exit = yield* Effect.exit(restore(Effect.scoped(prepared.body())));
+          yield* record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
+            phase: "result", effect: prepared.request.effect,
+            terminal: Exit.isFailure(exit) && Cause.isInterrupted(exit.cause) ? "interrupted" : "executed",
+            ...(Exit.isSuccess(exit) ? { evidence: attempts.evidence?.(exit.value) ?? null }
+              : { evidence: causeEvidence(exit.cause) }),
+          });
+          return exit;
+        }));
+        if (Exit.isSuccess(outcome)) return outcome.value;
+        const error = Cause.failureOption(outcome.cause);
+        if (Cause.isInterrupted(outcome.cause) || Cause.isDie(outcome.cause) || Option.isNone(error))
+          return yield* Effect.failCause(outcome.cause);
+        const failure = error.value;
+        if (failure._tag === "CommitFailed" || options.signal?.aborted) return yield* failure;
+        const overflow = Retry.isContextOverflow(failure);
+        instantFailures = Retry.isInstantTransportFailure(failure, options.clock() - started) ? instantFailures + 1 : 0;
+        const decision = Retry.decide(attempt, failure, instantFailures, prepared.fallbackAvailable);
+        if (attempt >= Retry.MAX_ATTEMPTS) return yield* failure;
+        const recover = overflow && (yield* attempts.recoverOverflow?.(failure) ?? Effect.succeed(false));
+        if (!recover && (overflow || !decision.retry)) return yield* failure;
+        const delayMs = recover ? 0 : decision.retry ? decision.delayMs : 0;
+        const reason = recover ? "context_overflow" : Retry.attemptReason(failure);
+        failures.push(reason);
+        attempts.onRetry?.({ attempt, maxAttempts: Retry.MAX_ATTEMPTS, delayMs, decision, error: failure, reason });
+        const id = `${intent.action.id}:retry:${attempt}`;
+        const fireAt = options.clock() + delayMs;
+        yield* retryAlarm.arm({ id, attempt, reason, fireAt });
+        yield* retryAlarm.wait(fireAt, options.signal);
+        yield* retryAlarm.settle(id);
+      }
+    });
   };
 }

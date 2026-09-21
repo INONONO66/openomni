@@ -10,7 +10,7 @@ import { createEvalTool } from "../eval";
 import { createFindTool } from "../find";
 import { createGrepTool } from "../grep";
 import { createLsTool } from "../ls";
-import { monitorTool } from "../monitor";
+import { createMonitorTool, type MonitorPorts } from "../monitor";
 import { createProvisionTool, type ProvisionPort } from "../provision";
 import { createReadTool } from "../read";
 import { createSendMessageTool } from "../send-message";
@@ -22,6 +22,7 @@ export interface CatalogOrigin {
 }
 
 export interface CatalogPorts {
+  readonly alarms?: MonitorPorts;
   readonly messages?: Pick<GatewayRouter, "ingest">;
   readonly machines?: MachineHost;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
@@ -52,7 +53,7 @@ export function createTools(
     eraseTool(createGrepTool(ports)),
     eraseTool(createBashTool(ports)),
     eraseTool(createEvalTool(ports.cells?.cell)),
-    eraseTool(monitorTool),
+    eraseTool(createMonitorTool(ports.alarms)),
     eraseTool(createSendMessageTool(ports.messages, ports.clock)),
     eraseTool(createProvisionTool(ports.provisioning)),
     eraseTool(createCompletionTool(ports.llm)),

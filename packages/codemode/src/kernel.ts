@@ -1,6 +1,10 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
+import type { MachineError } from "@openomni/machines";
+import { Cause, Deferred, Effect, Exit, Queue, type Scope } from "effect";
+import { DriverFailure, type CodeError } from "./errors";
+import { decodeCodeFailure } from "./failure";
 import { z } from "zod";
 
 const PYTHON_DRIVER = String.raw`
@@ -266,283 +270,137 @@ const Frame = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict(),
 ]);
 
-const NO_OUTPUT: Machine.CellOutput = { stdout: "", stderr: "" };
-
 /** Answers a call made from inside a cell. */
-type CellToolCaller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
-
+type CellToolCaller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
 type PendingCell = {
-  readonly resolve: (result: Machine.CellResult) => void;
-  readonly reject: (error: Error) => void;
-  readonly timer: ReturnType<typeof setTimeout>;
   readonly cellId: string;
-  readonly callTool: CellToolCaller;
-  readonly inFlight: Map<string, Promise<void>>;
-  /** Streamed as the cell writes, so a peek or an interruption can report it. */
-  readonly output: { stdout: string; stderr: string };
-  /**
-   * The interpreter this cell was written to. A replaced interpreter dies
-   * asynchronously, so its exit must never settle a cell already handed to
-   * its successor.
-   */
   readonly process: ChildProcessWithoutNullStreams;
+  readonly frames: Queue.Queue<string | DriverFailure>;
+  readonly output: { stdout: string; stderr: string };
+  readonly inFlight: Set<string>;
 };
 
-/** One serial, persistent Python interpreter owned by a daemon attachment. */
+/** A serial interpreter; fibers belong to each invocation, not a package runtime. */
 export class PythonKernel {
   private process: ChildProcessWithoutNullStreams | undefined;
   private lines: Interface | undefined;
   private pending: PendingCell | undefined;
-  private tail: Promise<void> = Promise.resolve();
+  private readonly lock = Effect.unsafeMakeSemaphore(1);
   private readonly lifetime = new AbortController();
-  private readonly exits = new Set<Promise<void>>();
+  private readonly exits = new Set<Deferred.Deferred<void>>();
 
-  run(
-    request: Machine.CellRequest,
-    callTool: CellToolCaller,
-    signal?: AbortSignal,
-  ): Promise<Machine.CellResult> {
-    const cancellation =
-      signal === undefined ? this.lifetime.signal : AbortSignal[`${"a"}${"ny"}`]([signal, this.lifetime.signal]);
-    if (cancellation.aborted)
-      return Promise.resolve({ status: "cancelled", cellId: request.cellId, output: NO_OUTPUT });
-    const deadline = Date.now() + request.timeoutMs;
-    let queueExpired = false;
-    let resolveResult!: (result: Machine.CellResult) => void;
-    let rejectResult!: (error: Error) => void;
-    const result = new Promise<Machine.CellResult>((resolve, reject) => {
-      resolveResult = resolve;
-      rejectResult = reject;
-    });
-    const queueTimer = setTimeout(() => {
-      queueExpired = true;
-      resolveResult({ status: "timed_out", cellId: request.cellId, output: NO_OUTPUT });
-    }, request.timeoutMs);
-
-    const abort = () => {
-      queueExpired = true;
-      clearTimeout(queueTimer);
-      const pending = this.pending;
-      // An interrupted cell keeps what it printed; a cell still queued printed nothing.
-      const interrupted: Machine.CellResult = {
-        status: "cancelled",
-        cellId: request.cellId,
-        output: pending?.cellId === request.cellId ? { ...pending.output } : NO_OUTPUT,
-      };
-      if (pending?.cellId === request.cellId) {
-        clearTimeout(pending.timer);
-        this.pending = undefined;
-        pending.inFlight.clear();
-        this.discard(pending.process);
-        pending.resolve(interrupted);
-      }
-      resolveResult(interrupted);
-    };
-    cancellation.addEventListener("abort", abort, { once: true });
-    const operation = this.tail.then(() => {
-      clearTimeout(queueTimer);
-      if (queueExpired) return;
-      const remainingMs = deadline - Date.now();
-      if (remainingMs <= 0) {
-        queueExpired = true;
-        resolveResult({ status: "timed_out", cellId: request.cellId, output: NO_OUTPUT });
-        return;
-      }
-      return this.execute(request, callTool, remainingMs).then(resolveResult, rejectResult);
-    });
-    this.tail = operation.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result.finally(() => cancellation.removeEventListener("abort", abort));
-  }
-
-  /** The output the named cell has produced so far; undefined unless it is the one executing. */
-  peek(cellId: string): Machine.CellOutput | undefined {
-    const pending = this.pending;
-    return pending?.cellId === cellId ? { ...pending.output } : undefined;
-  }
-
-  async close(): Promise<void> {
-    this.lifetime.abort();
-    if (this.process !== undefined) this.discard(this.process);
-    await this.tail;
-    await Promise.all([...this.exits]);
-  }
-
-  private execute(
-    request: Machine.CellRequest,
-    callTool: CellToolCaller,
-    timeoutMs: number,
-  ): Promise<Machine.CellResult> {
-    const process = this.process ?? this.start();
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const pending = this.pendingFor(process);
-        this.pending = undefined;
-        pending?.inFlight.clear();
-        // Python cannot safely interrupt arbitrary extension/native code. Kill
-        // and replace the interpreter instead: state is lost after a timeout,
-        // but the next queued cell is guaranteed a fresh, unwedgeable process.
-        this.discard(process);
-        resolve({
-          status: "timed_out",
-          cellId: request.cellId,
-          output: pending === undefined ? NO_OUTPUT : { ...pending.output },
-        });
-      }, timeoutMs);
-      this.pending = {
-        resolve,
-        reject,
-        timer,
-        process,
-        cellId: request.cellId,
-        callTool,
-        inFlight: new Map(),
-        output: { stdout: "", stderr: "" },
-      };
-      process.stdin.write(`${JSON.stringify(request)}\n`);
-    });
-  }
-
-  private start(): ChildProcessWithoutNullStreams {
-    const process = spawn("python3", ["-u", "-c", PYTHON_DRIVER]);
-    const exited = new Promise<void>((resolve) => process.once("close", () => resolve()));
-    this.exits.add(exited);
-    void exited.then(() => this.exits.delete(exited));
-    const lines = createInterface({ input: process.stdout });
-    this.process = process;
-    this.lines = lines;
-
-    lines.on("line", (line) => {
-      const pending = this.pending;
-      if (pending?.process !== process) return;
-      let frame: z.infer<typeof Frame>;
-      try {
-        frame = Frame.parse(JSON.parse(line));
-      } catch {
-        this.settleWithParseFailure(process, pending, new Error("invalid driver frame"));
-        return;
-      }
-      // A tool call leaves the cell pending — including its deadline, so a cell
-      // that hangs waiting on a tool still times out honestly.
-      if (frame.kind === "tool_call") {
-        this.answerToolCall(process, pending, frame);
-        return;
-      }
-      // Output is attributed to the cell that owns the redirect; a frame naming
-      // another cell came from a forged raw-stdout write and is inert.
-      if (frame.kind === "output") {
-        if (frame.cellId === pending.cellId) pending.output[frame.stream] += frame.text;
-        return;
-      }
-      clearTimeout(pending.timer);
-      this.pending = undefined;
-      pending.inFlight.clear();
-      try {
-        pending.resolve(frame.result);
-      } catch {
-        this.discard(process);
-        pending.reject(new Error("invalid cell result"));
-      }
-    });
-
-    const fail = (error: Error) => {
-      if (this.process === process) {
-        this.process = undefined;
-        this.lines = undefined;
-      }
-      const pending = this.pending;
-      if (pending?.process !== process) return;
-      clearTimeout(pending.timer);
-      this.pending = undefined;
-      pending.inFlight.clear();
-      pending.reject(error);
-    };
-    process.once("error", fail);
-    process.once("exit", (code, signal) => {
-      fail(new Error(`python3 exited before replying (code=${String(code)}, signal=${signal})`));
-    });
-    return process;
-  }
-
-  private settleWithParseFailure(
-    process: ChildProcessWithoutNullStreams,
-    pending: PendingCell,
-    error: Error,
-  ): void {
-    clearTimeout(pending.timer);
-    this.pending = undefined;
-    pending.inFlight.clear();
-    this.discard(process);
-    pending.reject(error);
-  }
-
-  private answerToolCall(
-    process: ChildProcessWithoutNullStreams,
-    pending: PendingCell,
-    frame: ToolCallFrame,
-  ): void {
-    // The driver stamps every tool call with the cell it belongs to. A frame
-    // claiming a different cell — forged from inside cell code via the raw
-    // stdout, or from a driver bug — must never execute under the running
-    // cell's identity; it is answered with a refusal instead.
-    if (frame.cellId !== pending.cellId) {
-      try {
-        process.stdin.write(
-          `${JSON.stringify({
-            status: "failed",
-            error: `tool call refused: cell ${String(frame.cellId)} is not the running cell`,
-            callId: frame.callId,
-          })}\n`,
-        );
-      } catch {
-        this.settleWithParseFailure(process, pending, new Error("driver write failed"));
-      }
-      return;
-    }
-    // Duplicate or late frames have no waiter and must not create another host call.
-    if (pending.inFlight.has(frame.callId)) return;
-
-    const task = Promise.resolve()
-      .then(() =>
-        pending.callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments }),
-      )
-      .catch((error): Machine.ToolCallResult => ({
-        status: "failed",
-        error: error instanceof Error ? error.message : String(error),
-      }))
-      .then((answer) => {
-        // The cell may already have timed out and taken its interpreter with
-        // it; a callId removed from this cell's map no longer owns an answer.
-        if (this.pending !== pending || !pending.inFlight.has(frame.callId)) return;
-        process.stdin.write(`${JSON.stringify({ ...answer, callId: frame.callId })}\n`);
-      })
-      .catch(() => {
-        // A synchronous serialization/write failure is a kernel-channel failure,
-        // but a stale process has already been deliberately discarded.
-        if (this.pending === pending && pending.inFlight.has(frame.callId)) {
-          this.settleWithParseFailure(process, pending, new Error("driver write failed"));
-        }
+  run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Effect.Effect<Machine.CellResult, CodeError> {
+    return Effect.suspend(() => {
+      const cancellation = signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal;
+      const output = { stdout: "", stderr: "" };
+      const cancelled = (): Machine.CellResult => ({ status: "cancelled", cellId: request.cellId, output: { ...output } });
+      if (cancellation.aborted) return Effect.succeed(cancelled());
+      const abort = Effect.async<Machine.CellResult>((resume) => {
+        const listener = () => resume(Effect.sync(cancelled));
+        cancellation.addEventListener("abort", listener, { once: true });
+        if (cancellation.aborted) listener();
+        return Effect.sync(() => cancellation.removeEventListener("abort", listener));
       });
-    pending.inFlight.set(frame.callId, task);
-    void task.finally(() => {
-      if (pending.inFlight.get(frame.callId) === task) {
-        pending.inFlight.delete(frame.callId);
-      }
+      return this.lock.withPermits(1)(this.execute(request, callTool, output)).pipe(
+        Effect.raceFirst(abort),
+        Effect.timeoutOption(request.timeoutMs),
+        Effect.map((result): Machine.CellResult => result._tag === "Some" ? result.value : { status: "timed_out", cellId: request.cellId, output: { ...output } }),
+      );
     });
   }
 
-  private pendingFor(process: ChildProcessWithoutNullStreams): PendingCell | undefined {
-    return this.pending?.process === process ? this.pending : undefined;
+  peek(cellId: string): Machine.CellOutput | undefined {
+    return this.pending?.cellId === cellId ? { ...this.pending.output } : undefined;
   }
 
-  private discard(process: ChildProcessWithoutNullStreams): void {
-    if (this.process === process) {
-      this.process = undefined;
-      this.lines?.close();
-      this.lines = undefined;
-    }
-    process.kill("SIGKILL");
+  close(): Effect.Effect<void, CodeError> {
+    return Effect.gen(this, function* () {
+      this.lifetime.abort();
+      if (this.process) yield* this.discard(this.process);
+      yield* Effect.forEach([...this.exits], Deferred.await, { discard: true });
+    });
+  }
+
+  private execute(request: Machine.CellRequest, callTool: CellToolCaller, output: PendingCell["output"]): Effect.Effect<Machine.CellResult, CodeError> {
+    return Effect.scoped(Effect.gen(this, function* () {
+      const process = this.process ?? (yield* this.start());
+      const frames = yield* Queue.unbounded<string | DriverFailure>();
+      const pending: PendingCell = { cellId: request.cellId, process, frames, output, inFlight: new Set() };
+      this.pending = pending;
+      return yield* Effect.gen(this, function* () {
+        yield* this.write(process, request);
+        for (;;) {
+          const line = yield* Queue.take(frames);
+          if (line instanceof DriverFailure) return yield* line;
+          const frame = yield* Effect.try({ try: () => Frame.parse(JSON.parse(line)), catch: decodeCodeFailure("driver.frame") }).pipe(
+            Effect.mapError((error) => new DriverFailure({ operation: "driver.frame", message: "invalid driver frame", cause: String(error) })),
+          );
+          if (frame.kind === "tool_call") {
+            yield* this.answerToolCall(pending, frame, callTool);
+          } else if (frame.kind === "output") {
+            if (frame.cellId === pending.cellId) pending.output[frame.stream] += frame.text;
+          } else {
+            this.pending = undefined;
+            return frame.result;
+          }
+        }
+      }).pipe(Effect.ensuring(Effect.gen(this, function* () {
+        if (this.pending === pending) {
+          this.pending = undefined;
+          yield* Effect.orDie(this.discard(process));
+        }
+        pending.inFlight.clear();
+        yield* Queue.shutdown(frames);
+      })));
+    }));
+  }
+
+  private answerToolCall(pending: PendingCell, frame: ToolCallFrame, callTool: CellToolCaller): Effect.Effect<void, CodeError, Scope.Scope> {
+    return Effect.gen(this, function* () {
+      if (frame.cellId !== pending.cellId) {
+        return yield* this.write(pending.process, { status: "failed", error: `tool call refused: cell ${frame.cellId} is not the running cell`, callId: frame.callId });
+      }
+      if (pending.inFlight.has(frame.callId)) return;
+      pending.inFlight.add(frame.callId);
+      yield* Effect.forkScoped(Effect.suspend(() => callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments })).pipe(
+        Effect.catchAllCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
+        Effect.flatMap((answer) => this.pending === pending ? this.write(pending.process, { ...answer, callId: frame.callId }) : Effect.void),
+        Effect.catchAll((error) => Effect.sync(() => { pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
+        Effect.ensuring(Effect.sync(() => { pending.inFlight.delete(frame.callId); })),
+      ));
+    });
+  }
+
+  private write(process: ChildProcessWithoutNullStreams, value: Machine.CellRequest | (Machine.ToolCallResult & { callId: string })): Effect.Effect<void, CodeError> {
+    return Effect.try({ try: () => { process.stdin.write(`${JSON.stringify(value)}\n`); }, catch: decodeCodeFailure("driver.write") });
+  }
+
+  private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
+    return Effect.gen(this, function* () {
+      const exited = yield* Deferred.make<void>();
+      const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
+      this.exits.add(exited);
+      process.once("close", () => { this.exits.delete(exited); Deferred.unsafeDone(exited, Exit.void); });
+      const lines = createInterface({ input: process.stdout });
+      this.process = process;
+      this.lines = lines;
+      lines.on("line", (line) => {
+        if (this.pending?.process === process) this.pending.frames.unsafeOffer(line);
+      });
+      const fail = (message: string) => {
+        if (this.process === process) { this.process = undefined; this.lines = undefined; }
+        if (this.pending?.process === process) this.pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.process", message, cause: message }));
+      };
+      process.once("error", (error) => fail(error.message));
+      process.once("exit", (code, signal) => fail(`python3 exited before replying (code=${String(code)}, signal=${signal})`));
+      return process;
+    });
+  }
+
+  private discard(process: ChildProcessWithoutNullStreams): Effect.Effect<void, CodeError> {
+    return Effect.try({ try: () => {
+      if (this.process === process) { this.process = undefined; this.lines?.close(); this.lines = undefined; }
+      process.kill("SIGKILL");
+    }, catch: decodeCodeFailure("driver.kill") });
   }
 }

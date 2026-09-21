@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect } from "bun:test";
 import { Bus, defineTool, eraseTool, type SessionHandle } from "@openomni/agent";
 import { LlmCall, type AnyToolDefinition } from "@openomni/protocol";
@@ -77,43 +78,64 @@ export function interruptSecondModel(
 
 export function acquireContender(sessionId: string, owner: string, expectedFence: number) {
   const now = Date.now();
-  return SessionHandleStore.acquireLease({
-    sessionId,
-    owner,
-    expectedFence,
-    now,
-    expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-  });
+  return Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId,
+          owner,
+          expectedFence,
+          now,
+          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 export function releaseContender(sessionId: string, owner: string, fence: number | undefined) {
   if (fence === undefined) return;
   const row = SessionHandleStore.row(sessionId);
   expect(
-    SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence,
-      now: Date.now(),
-      expectedRevision: row.revision,
-      actions: [],
-      consumeInboxIds: [],
-      state: row.state,
-      releaseLease: true,
-    }).ok,
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence,
+            now: Date.now(),
+            expectedRevision: row.revision,
+            actions: [],
+            consumeInboxIds: [],
+            state: row.state,
+            releaseLease: true,
+          }),
+        ),
+      ),
+      (error) => error,
+    ).ok,
   ).toBe(true);
 }
 
 export function commitInterrupt(sessionId: string, id: string) {
-  SessionHandleStore.commitInbox({
-    id,
-    sessionId,
-    kind: "interrupt",
-    content: "",
-    createdAt: Date.now(),
-    origin: { encodingVersion: 1, value: { kind: "sdk" } },
-    parentActionId: SessionHandleStore.tree(sessionId).at(-1)?.id ?? null,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.commitInbox({
+          id,
+          sessionId,
+          kind: "interrupt",
+          content: "",
+          createdAt: Date.now(),
+          origin: { encodingVersion: 1, value: { kind: "sdk" } },
+          parentActionId: SessionHandleStore.tree(sessionId).at(-1)?.id ?? null,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 export function interruptDeliveries(sessionId: string) {

@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +11,7 @@ import { createExecutor } from "../src/executor";
 import { closeSessions, wakeSession, type SessionRuntime } from "../src/session-handle";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { bounded } from "./helpers/bounded";
+import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { countingRunner } from "./helpers/counting-runner";
 import { nth } from "./helpers/nth";
@@ -285,7 +287,9 @@ function expectCompactedProjection(
       metadata: {
         compactionAnchor: true,
         anchorBody: "checkpoint",
-        keptWindow: [{ role: "assistant", text: "answer", time: originalAnswer?.info.time.created }],
+        keptWindow: [
+          { role: "assistant", text: "answer", time: originalAnswer?.info.time.created },
+        ],
       },
     },
   ]);
@@ -346,7 +350,10 @@ async function recoverContinuation(witness: Witness) {
 async function recoverRetryAlarm(witness: Witness) {
   expect(witness.bodies).toEqual(["llm"]);
   const attempts = actions().filter((action) => action.kind === "attempt");
-  expect(attempts.map(intentOf)).toMatchObject([{ phase: "intent", attempt: 1 }, { phase: "result" }]);
+  expect(attempts.map(intentOf)).toMatchObject([
+    { phase: "intent", attempt: 1 },
+    { phase: "result" },
+  ]);
   const alarmId = `${nth(attempts, 0).id}:retry:1`;
   const armed = actions().find((action) => action.id === alarmId);
   expect(armed).toMatchObject({
@@ -355,15 +362,33 @@ async function recoverRetryAlarm(witness: Witness) {
       value: { status: "armed", spec: { kind: "retry.scheduled", attempt: 1, notBefore: 100 } },
     },
   });
-  expect(
-    Alarm.RetrySchedule.parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason,
-  ).toBe("transient_error");
+  expect(Alarm.RetrySchedule.parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason).toBe(
+    "transient_error",
+  );
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
   // Boot alarm owner: fenced consume-once, then wake. A second consume finds nothing.
   const alarms = Storage.get().alarms;
-  const consumed = alarms?.cancel(alarmId, sessionId, 100_000);
+  const consumed = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        alarms?.cancel(alarmId, sessionId, 100_000) ??
+          Effect.die("missing test storage capability"),
+      ),
+    ),
+    (error) => error,
+  );
   expect(consumed).toMatchObject({ id: alarmId, kind: "at", status: "cancelled" });
-  expect(alarms?.cancel(alarmId, sessionId, 100_000)).toBeUndefined();
+  expect(() =>
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          alarms?.cancel(alarmId, sessionId, 100_000) ??
+            Effect.die("missing test storage capability"),
+        ),
+      ),
+      (error) => error,
+    ),
+  ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
   expect(await recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
@@ -388,18 +413,26 @@ async function recoverStaleOwner(witness: Witness) {
     expect(current.leaseFence).toBeGreaterThan(witness.lease.fence);
     expect(200_000).toBeGreaterThan(expiresAt);
     const before = actions();
-    const refused = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: witness.lease.fence,
-      now: 200_000,
-      expectedRevision: current.revision,
-      actions: [staleAction],
-      consumeInboxIds: [],
-      state: current.state,
-      releaseLease: false,
-    });
-    expect(refused).toMatchObject({ ok: false, reason: "stale" });
+    const refused = () =>
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              sessionId,
+              owner,
+              fence: witness.lease.fence,
+              now: 200_000,
+              expectedRevision: current.revision,
+              actions: [staleAction],
+              consumeInboxIds: [],
+              state: current.state,
+              releaseLease: false,
+            }),
+          ),
+        ),
+        (error) => error,
+      );
+    expect(refused).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "fence" }));
     expect(actions()).toEqual(before);
     expect(SessionHandleStore.row(sessionId)).toEqual(current);
     refusals += 1;
@@ -446,27 +479,41 @@ function reclaimAcknowledgedLease(witness: Witness) {
   expect(row.leaseFence).toBe(witness.lease.fence);
   expect(z.number().parse(row.leaseExpiresAt)).toBeLessThan(200_000);
   const owner = "cleanup-owner";
-  const lease = SessionHandleStore.acquireLease({
-    sessionId,
-    owner,
-    expectedFence: row.leaseFence,
-    now: 200_000,
-    expiresAt: 200_000 + SessionHandleStore.LEASE_TTL_MS,
-  });
+  const lease = Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId,
+          owner,
+          expectedFence: row.leaseFence,
+          now: 200_000,
+          expiresAt: 200_000 + SessionHandleStore.LEASE_TTL_MS,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   expect(lease.ok).toBe(true);
   if (!lease.ok) throw new Error("acknowledged lease was not reacquirable");
   expect(
-    SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: lease.fence,
-      now: 200_000,
-      expectedRevision: row.revision,
-      actions: [],
-      consumeInboxIds: [],
-      state: row.state,
-      releaseLease: true,
-    }).ok,
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: lease.fence,
+            now: 200_000,
+            expectedRevision: row.revision,
+            actions: [],
+            consumeInboxIds: [],
+            state: row.state,
+            releaseLease: true,
+          }),
+        ),
+      ),
+      (error) => error,
+    ).ok,
   ).toBe(true);
   expect(SessionHandleStore.row(sessionId).leaseOwner).toBeNull();
 }
@@ -570,6 +617,8 @@ for (const row of matrix.rows) {
     try {
       const result = await Storage.withIsolation(async () => {
         const dbPath = join(directory, "kernel.sqlite");
+        if (row.crashPoint === "fiber_exit_after_execute_before_action_commit")
+          return fiberCrashCell(dbPath);
         const witness = await crashCell(row.crashPoint, dbPath);
         Storage.initialize({ dbPath });
         const persisted = actions();

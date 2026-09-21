@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
-import { connectIpcClient } from "../src/client";
+import { connectIpcClient } from "./helpers/native";
 import { IpcConnectionError, IpcProtocolError, IpcRemoteError } from "../src/errors";
 import { LineDecoder, encode } from "../src/framing";
-import { createIpcServer } from "../src/server";
+import { createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 import { connectRaw, transportFixture } from "./helpers/transport";
@@ -13,27 +13,26 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   const { servers, clients, rawSockets } = transportFixture();
 
   test("public IPC errors use the shared serializable error contract", () => {
-    const connection = new IpcConnectionError("closed");
-    const remote = new IpcRemoteError(4000, "bad request");
-    expect(IpcConnectionError.isInstance(connection)).toBe(true);
-    expect(connection.toObject()).toEqual({
-      name: "IpcConnectionError",
-      data: { message: "closed" },
+    const connection = new IpcConnectionError({ message: "closed" });
+    const remote = new IpcRemoteError({ code: 4000, message: "IPC error 4000: bad request", requestId: "fixture-request", method: "fixture.method" });
+    expect(connection._tag).toBe("IpcConnectionError");
+    expect(JSON.parse(JSON.stringify(connection))).toMatchObject({
+      _tag: "IpcConnectionError", message: "closed",
     });
-    expect(IpcRemoteError.isInstance(remote)).toBe(true);
+    expect(remote._tag).toBe("IpcRemoteError");
     expect(remote.code).toBe(4000);
     expect(remote.message).toBe("IPC error 4000: bad request");
   });
 
   test("IPC constructors retain defined falsy causes but omit undefined", () => {
-    const nullCause = new IpcConnectionError("closed", null);
-    const falseCause = new IpcProtocolError("bad frame", false);
-    const emptyCause = new IpcConnectionError("empty", "");
-    const undefinedCause = new IpcProtocolError("absent", undefined);
+    const nullCause = new IpcConnectionError({ message: "closed", cause: String(null) });
+    const falseCause = new IpcProtocolError({ message: "bad frame", cause: String(false) });
+    const emptyCause = new IpcConnectionError({ message: "empty", cause: String("") });
+    const undefinedCause = new IpcProtocolError({ message: "absent" });
 
     for (const [error, cause] of [
-      [nullCause, null],
-      [falseCause, false],
+      [nullCause, "null"],
+      [falseCause, "false"],
       [emptyCause, ""],
     ] as const) {
       expect(Object.getOwnPropertyDescriptor(error, "cause") !== undefined).toBe(true);

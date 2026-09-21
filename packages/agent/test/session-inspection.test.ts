@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { runChatAttempts } from "./helpers/chat-attempts";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -31,15 +32,22 @@ const runtime: SessionRuntime = {
   retryAlarm: nullRetryAlarm,
   authorizeApproval: async () => ({ kind: "owner", principalId: "owner", evidenceId: "auth-1" }),
   async dispatchOutbound({ message }) {
-    const received = SessionHandleStore.commitReceivedMessage({
-      id: message.messageId,
-      sessionId: message.destinationSessionId,
-      kind: "prompt",
-      content: message.content,
-      origin: { encodingVersion: 1, value: message },
-      createdAt: 1_000,
-      parentActionId: null,
-    });
+    const received = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitReceivedMessage({
+            id: message.messageId,
+            sessionId: message.destinationSessionId,
+            kind: "prompt",
+            content: message.content,
+            origin: { encodingVersion: 1, value: message },
+            createdAt: 1_000,
+            parentActionId: null,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     await wakeSession(message.destinationSessionId, parentRunner, runtime);
     return received.receipt;
   },
@@ -208,19 +216,34 @@ async function lifecycle(): Promise<SessionHandle> {
   });
   const alarms = Storage.get().alarms;
   if (alarms === undefined) throw new Error("missing alarm adapter");
-  alarms.arm({ id: "monitor", sessionId: "parent", kind: "at", fireAt: 1_000 });
-  const owned = alarms.acquire("monitor", 0);
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(alarms.arm({ id: "monitor", sessionId: "parent", kind: "at", fireAt: 1_000 })),
+    ),
+    (error) => error,
+  );
+  const owned = Either.getOrThrowWith(
+    Effect.runSync(Effect.either(alarms.acquire("monitor", 0))),
+    (error) => error,
+  );
   if (owned === undefined) throw new Error("alarm acquisition refused");
   const woke = committed("parent", "turn");
-  alarms.fire({
-    id: "monitor",
-    epoch: 1,
-    fence: owned.fence,
-    sourceKey: `timer:${owned.fireAt}`,
-    at: 1_000,
-    content: "monitor woke",
-    terminal: true,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        alarms.fire({
+          id: "monitor",
+          epoch: 1,
+          fence: owned.fence,
+          sourceKey: `timer:${owned.fireAt}`,
+          at: 1_000,
+          content: "monitor woke",
+          terminal: true,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   await wakeSession("parent", parentRunner, runtime);
   await bounded(woke);
   return parent;

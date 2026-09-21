@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
@@ -98,13 +99,20 @@ export function createSessionTurn(
     state.controller = turnController;
     state.stopHeartbeat = scheduleHeartbeat(() => {
       const now = clock();
-      const renewed = SessionHandleStore.renewLease({
-        sessionId,
-        owner,
-        fence: state.fence,
-        now,
-        expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-      });
+      const renewed = Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.renewLease({
+              sessionId,
+              owner,
+              fence: state.fence,
+              now,
+              expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+            }).pipe(Effect.catchTag("LeaseRefused", () => Effect.succeed(false))),
+          ),
+        ),
+        (error) => error,
+      );
       if (!renewed) {
         // The lease was stolen or lapsed: this executor no longer owns the
         // session. Stop renewing at once and abort the runner.
@@ -342,17 +350,24 @@ export function createSessionTurn(
       at: clock(),
     });
     const current = SessionHandleStore.row(sessionId);
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: [checkpoint, ...deliveries],
-      consumeInboxIds: pending.map((item) => item.id),
-      state: current.state === "interrupted" ? "interrupted" : "running",
-      releaseLease: false,
-    });
+    const committed = Either.getOrThrowWith(
+      await Effect.runPromise(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: current.revision,
+            actions: [checkpoint, ...deliveries],
+            consumeInboxIds: pending.map((item) => item.id),
+            state: current.state === "interrupted" ? "interrupted" : "running",
+            releaseLease: false,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     requireCommit(committed);
     observeDrained(pending, turnId, boundary, clock(), runtime.observations);
     const interrupted = pending.some((item) => item.kind === "interrupt");
@@ -396,21 +411,28 @@ export function createSessionTurn(
     });
     const nextState = result.kind === "interrupted" ? "interrupted" : "idle";
     const reply = parentReply(current, terminal, result);
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: [
-        ...deliveries,
-        terminal,
-        ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)]),
-      ],
-      consumeInboxIds: interrupts.map((item) => item.id),
-      state: nextState,
-      releaseLease: reply === undefined && releaseLease,
-    });
+    const committed = Either.getOrThrowWith(
+      await Effect.runPromise(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: current.revision,
+            actions: [
+              ...deliveries,
+              terminal,
+              ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)]),
+            ],
+            consumeInboxIds: interrupts.map((item) => item.id),
+            state: nextState,
+            releaseLease: reply === undefined && releaseLease,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     requireCommit(committed);
     observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations);
     if (reply !== undefined) {

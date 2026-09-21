@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
 import { SEEDED_POLICY_ROWS } from "@openomni/policy";
@@ -44,22 +45,36 @@ async function scenario(
           async execute(_input, context) {
             bodies += 1;
             if (mode === "wait")
-              Storage.get().alarms?.arm({
-                id: "current-alarm",
-                sessionId: context.sessionId,
-                kind: "at",
-                fireAt: Date.now() + 60000,
-              });
+              Either.getOrThrowWith(
+                Effect.runSync(
+                  Effect.either(
+                    Storage.get().alarms?.arm({
+                      id: "current-alarm",
+                      sessionId: context.sessionId,
+                      kind: "at",
+                      fireAt: Date.now() + 60000,
+                    }) ?? Effect.die("missing test storage capability"),
+                  ),
+                ),
+                (error) => error,
+              );
             if (mode === "progress")
-              SessionHandleStore.commitInbox({
-                id: `progress-${bodies}`,
-                sessionId: context.sessionId,
-                kind: "prompt",
-                content: `state ${bodies}`,
-                origin: { encodingVersion: 1, value: { source: "fixture" } },
-                createdAt: Date.now(),
-                parentActionId: null,
-              });
+              Either.getOrThrowWith(
+                Effect.runSync(
+                  Effect.either(
+                    SessionHandleStore.commitInbox({
+                      id: `progress-${bodies}`,
+                      sessionId: context.sessionId,
+                      kind: "prompt",
+                      content: `state ${bodies}`,
+                      origin: { encodingVersion: 1, value: { source: "fixture" } },
+                      createdAt: Date.now(),
+                      parentActionId: null,
+                    }),
+                  ),
+                ),
+                (error) => error,
+              );
             return "ok";
           },
           render: (_input, output) => output,
@@ -95,12 +110,19 @@ async function scenario(
       runtime,
     );
     if (mode === "prior-alarm")
-      Storage.get().alarms?.arm({
-        id: "old-alarm",
-        sessionId: handle.id,
-        kind: "at",
-        fireAt: Date.now() + 60000,
-      });
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            Storage.get().alarms?.arm({
+              id: "old-alarm",
+              sessionId: handle.id,
+              kind: "at",
+              fireAt: Date.now() + 60000,
+            }) ?? Effect.die("missing test storage capability"),
+          ),
+        ),
+        (error) => error,
+      );
     try {
       const result = await handle.prompt("work");
       return {

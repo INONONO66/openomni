@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { z } from "zod";
-import { connectIpcClient } from "../src/client";
-import { createIpcServer } from "../src/server";
+import { connectIpcClient } from "./helpers/native";
+import { createIpcServer } from "./helpers/native";
 import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 import { transportFixture } from "./helpers/transport";

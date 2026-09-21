@@ -4,7 +4,7 @@
 // the dominant cost under the exact collector.
 import { z } from "zod";
 import { Machine } from "@openomni/protocol";
-import { createFsDriver } from "../../src/fs";
+import { createFsDriver } from "./native";
 
 const [root, requests] = process.argv.slice(2);
 if (root === undefined || requests === undefined) throw new Error("usage: fifo-request <root> <requests-json>");

@@ -1,28 +1,39 @@
 import { z } from "zod";
+import { Effect, type Context } from "effect";
+import type { WebSocketFrames } from "./services";
+import { decodeChannelFailure, InvalidInbound, type ChannelError } from "./errors";
 import { newTraceId } from "./support/trace";
 import { Channel, Gateway, Operational } from "@openomni/protocol";
 import { authenticateWebSocketUpgrade } from "./authn/websocket";
 import type { ChannelAuthnDecisionObserver } from "./authn/types";
 import type { PublishPort } from "./types";
 
-interface WebSocketConfig {
+export type WebSocketMessageHandler = (
+  message: Channel.InboundMessage,
+) => Effect.Effect<void, ChannelError>;
+
+export type WebSocketFrameOutcome =
+  | { readonly type: "receipt"; readonly status: "accepted" }
+  | { readonly type: "receipt"; readonly inputId: string; readonly result: Gateway.IngestResult };
+
+export interface WebSocketConfig {
   token?: string;
   onAuthDecision?: ChannelAuthnDecisionObserver;
   /** Compose with the same gateway.ingest used by ordinary channel messages. */
   onRequestAnswer?: (
     sender: Gateway.IngestSender & { kind: "external" },
     answer: Gateway.RequestAnswer,
-  ) => Promise<Gateway.IngestResult>;
+  ) => Effect.Effect<Gateway.IngestResult, ChannelError>;
 }
 
-interface WsConnectionData {
+export interface WsConnectionData {
   surfaceKey: string;
   authenticated: boolean;
   /** Declared actor address or a connection-local deliverable address. */
   externalId: string;
 }
 
-interface WsConnection {
+export interface WsConnection {
   data: WsConnectionData;
   send(msg: string): void;
 }
@@ -61,7 +72,7 @@ const TextFrame = z
   }));
 const WebSocketFrame = z.union([RequestAnswerFrame, TextFrame]);
 
-export class WebSocketHandler {
+export class WebSocketHandler implements Context.Tag.Service<typeof WebSocketFrames> {
   /**
    * Live connections by declared externalId, last-wins: a reconnect replaces
    * the previous socket as the delivery target. Everyone on this socket is
@@ -71,7 +82,7 @@ export class WebSocketHandler {
   private readonly connections = new Map<string, WsConnection>();
 
   constructor(
-    private readonly handler: Channel.MessageHandler,
+    private readonly handler: WebSocketMessageHandler,
     private readonly publish: PublishPort,
     private readonly config: WebSocketConfig = {},
   ) {}
@@ -101,20 +112,6 @@ export class WebSocketHandler {
   get ws() {
     const self = this;
     return {
-      message(ws: WsConnection, data: string | Buffer) {
-        const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
-        // Origin: the first frame of an inbound websocket message — this ONE
-        // mint is the message's trace, carried to the run (D11).
-        const traceId = newTraceId();
-        self.publish(Operational.Events.Debug, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "websocket message received",
-          context: { surfaceKey: ws.data.surfaceKey },
-        });
-        void self.handleMessage(ws, raw);
-      },
       open(ws: WsConnection) {
         self.connections.set(ws.data.externalId, ws);
         self.publish(Operational.Events.Info, {
@@ -186,70 +183,74 @@ export class WebSocketHandler {
     return new Response("WebSocket upgrade failed", { status: 400 });
   }
 
-  private async handleMessage(ws: WsConnection, raw: string): Promise<void> {
-    try {
-      const parsedResult = z.record(z.string(), z.json()).safeParse(JSON.parse(raw));
-      if (!parsedResult.success) {
-        ws.send(JSON.stringify({ type: "error", message: "invalid websocket frame" }));
-        return;
-      }
-      const frame = WebSocketFrame.safeParse(parsedResult.data);
-      if (!frame.success) {
-        ws.send(
-          JSON.stringify({
-            type: "error",
-            message:
-              parsedResult.data.type === "request_answer"
-                ? "invalid request_answer frame"
-                : "text field required",
-          }),
-        );
-        return;
-      }
-      const parsed = frame.data;
+  handleFrame(
+    connection: WsConnectionData,
+    data: string | Buffer,
+  ): Effect.Effect<WebSocketFrameOutcome, ChannelError> {
+    return Effect.gen(this, function* () {
+      yield* Effect.try({
+        try: () => this.publish(Operational.Events.Debug, {
+          traceId: newTraceId(),
+          time: Date.now(),
+          component: "server",
+          msg: "websocket message received",
+          context: { surfaceKey: connection.surfaceKey },
+        }),
+        catch: decodeChannelFailure("websocket.observe"),
+      });
+      const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
+      const parsed = yield* decodeFrame(raw);
       const sender = {
         kind: "external",
         surface: "ws",
-        externalId: ws.data.externalId,
+        externalId: connection.externalId,
       } as const;
       if (parsed.kind === "request_answer") {
         if (this.config.onRequestAnswer === undefined) {
-          ws.send(JSON.stringify({ type: "error", message: "request_answer unavailable" }));
-          return;
+          return yield* new InvalidInbound({
+            operation: "websocket.frame",
+            reason: "request_answer_unavailable",
+          });
         }
-        try {
-          const result = await this.config.onRequestAnswer(sender, parsed);
-          ws.send(JSON.stringify({ type: "receipt", inputId: parsed.inputId, result }));
-        } catch {
-          ws.send(JSON.stringify({ type: "error", message: "request_answer failed" }));
-        }
-        return;
+        const result = yield* this.config.onRequestAnswer(sender, parsed);
+        return { type: "receipt", inputId: parsed.inputId, result };
       }
-
-      const surfaceKey = ws.data.surfaceKey;
-
-      await this.handler({
+      yield* this.handler({
         sender,
         facts: {
           eventId: parsed.eventId ?? crypto.randomUUID(),
           surface: "ws",
-          channelId: surfaceKey,
+          channelId: connection.surfaceKey,
           addressees: [],
           dm: true,
           ...(parsed.replyToId !== undefined ? { reply: { chain: [parsed.replyToId] } } : {}),
-          payload: { websocket: { authenticated: ws.data.authenticated } },
+          payload: { websocket: { authenticated: connection.authenticated } },
           render: parsed.text,
         },
       });
-
-      ws.send(JSON.stringify({ type: "receipt", status: "accepted" }));
-    } catch {
-      ws.send(
-        JSON.stringify({
-          type: "error",
-          message: "websocket message failed",
-        }),
-      );
-    }
+      return { type: "receipt", status: "accepted" };
+    });
   }
+}
+
+function decodeFrame(raw: string): Effect.Effect<z.infer<typeof WebSocketFrame>, InvalidInbound> {
+  return Effect.gen(function* () {
+    const document = yield* Effect.try({
+      try: () => z.record(z.string(), z.json()).safeParse(JSON.parse(raw)),
+      catch: decodeChannelFailure("websocket.decode"),
+    }).pipe(Effect.mapError((failure) => new InvalidInbound({
+      operation: "websocket.frame", reason: "invalid_json", cause: failure.cause,
+    })));
+    if (!document.success) {
+      return yield* new InvalidInbound({ operation: "websocket.frame", reason: "invalid_frame" });
+    }
+    const frame = WebSocketFrame.safeParse(document.data);
+    if (!frame.success) {
+      return yield* new InvalidInbound({
+        operation: "websocket.frame",
+        reason: document.data.type === "request_answer" ? "invalid_request_answer" : "text_required",
+      });
+    }
+    return frame.data;
+  });
 }

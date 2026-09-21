@@ -11,7 +11,9 @@ import { dirname } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
-import { createComposer } from "../src/composition/composer";
+import { Effect } from "effect";
+import { bootResource } from "../src/composition/boot";
+import { gatewayRuntime, runAppBoot } from "../src/gateway";
 import { MOUNTED_CHANNEL_DEFAULT_TIER, registerTrustedChannelGrant } from "../src/gateway";
 import {
   type ChannelSupervisor,
@@ -100,8 +102,10 @@ test("967 boot preserves promoted expired session", async () => {
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(template.id));
   await first.stop();
 
-  const seed = new SqliteStorageAdapter(config.dbPath);
-  Storage.configure(seed);
+  const seedRuntime = gatewayRuntime({ dbPath: config.dbPath });
+  await seedRuntime.runPromise(Effect.void);
+  const { actions, alarms } = Storage.get();
+  if (actions === undefined || alarms === undefined) throw new Error("fixture storage missing");
   const raw = new Database(config.dbPath);
   const id = "promoted-expired";
   const legacy = JSON.stringify({
@@ -117,19 +121,23 @@ test("967 boot preserves promoted expired session", async () => {
       .query("INSERT INTO session (id, data, time_created, time_updated) VALUES (?, ?, 1, 1)")
       .run(id, legacy);
     expect(
-      SessionHandleStore.materialize({
-        id,
-        parentId: null,
-        role: "resident",
-        tools: generation.tools,
-        system: { preset: generation.systemPreset, blocks: generation.systemBlocks },
-        policyGeneration: generation.policyGeneration,
-        actionId: "historical-configure",
-        at: 3,
-      }).created,
+      (
+        await seedRuntime.runPromise(
+          SessionHandleStore.materialize({
+            id,
+            parentId: null,
+            role: "resident",
+            tools: generation.tools,
+            system: { preset: generation.systemPreset, blocks: generation.systemBlocks },
+            policyGeneration: generation.policyGeneration,
+            actionId: "historical-configure",
+            at: 3,
+          }),
+        )
+      ).created,
     ).toBe(true);
     expect(
-      seed.actions.append(
+      actions.append(
         {
           id: "historical-completed",
           sessionId: id,
@@ -143,21 +151,25 @@ test("967 boot preserves promoted expired session", async () => {
         1,
       ),
     ).toBeDefined();
-    SessionHandleStore.commitInbox({
-      id: "historical-pending",
-      sessionId: id,
-      kind: "prompt",
-      content: "recover this",
-      origin: { encodingVersion: 1, value: { source: "967-fixture" } },
-      createdAt: 5,
-      parentActionId: "historical-completed",
-    });
+    await seedRuntime.runPromise(
+      SessionHandleStore.commitInbox({
+        id: "historical-pending",
+        sessionId: id,
+        kind: "prompt",
+        content: "recover this",
+        origin: { encodingVersion: 1, value: { source: "967-fixture" } },
+        createdAt: 5,
+        parentActionId: "historical-completed",
+      }),
+    );
     expect(
-      seed.alarms.arm({ id: "historical-alarm", sessionId: id, kind: "at", fireAt: 100 }),
+      await seedRuntime.runPromise(
+        alarms.arm({ id: "historical-alarm", sessionId: id, kind: "at", fireAt: 100 }),
+      ),
     ).toBeDefined();
     const before = persistedSession(raw, id);
     console.log("967 SQLite before boot", JSON.stringify(before));
-    Storage.reset();
+    await seedRuntime.dispose();
     calls = 0;
 
     const app = await suite.boot({ ...options, sessionRuntime: { clock: () => 50 } });
@@ -197,7 +209,7 @@ test("967 boot preserves promoted expired session", async () => {
     }
   } finally {
     raw.close();
-    seed.close();
+    await seedRuntime.dispose();
     await suite.cleanup();
     expect(ws.readyState).toBe(WebSocket.CLOSED);
     expect(existsSync(dirname(config.dbPath))).toBe(false);
@@ -442,7 +454,7 @@ describe("channel supervisor", () => {
     await supervisor.stopAll();
   });
 
-  test("composer stage disposal drives stopAll exactly like shutdown", async () => {
+  test("app scope disposal drives stopAll exactly like shutdown", async () => {
     const calls: string[] = [];
     const channel = fakeChannel("telegram", calls);
     const { supervisor } = supervisorFor(() => ({
@@ -450,15 +462,18 @@ describe("channel supervisor", () => {
       rows: [row(channel, "env", "env:telegram")],
       statuses: [],
     }));
-    const composer = createComposer();
-    await composer.mount("channels", async (ctx) => {
-      ctx.effect(() => supervisor.stopAll());
-      await supervisor.reconcile();
-    });
+    const runtime = gatewayRuntime({ dbPath: ":memory:" });
+    await runAppBoot(
+      runtime,
+      bootResource(Effect.succeed(supervisor), (resource) =>
+        Effect.promise(() => resource.stopAll()),
+      ),
+    );
+    await supervisor.reconcile();
 
     expect(calls).toEqual(["start:telegram"]);
     expect(supervisor.source()).toBe("env");
-    await composer.dispose();
+    await runtime.dispose();
     expect(calls).toEqual(["start:telegram", "stop:telegram"]);
     expect(supervisor.status()).toEqual([]);
   });

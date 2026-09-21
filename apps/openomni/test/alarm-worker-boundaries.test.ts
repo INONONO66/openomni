@@ -1,8 +1,10 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
+import { canonicalDigest } from "@openomni/protocol";
 import { AlarmSourceError } from "../src/composition/alarm-sources";
 import { alarmFixture } from "./helpers/alarm";
 import { alarmSummary } from "./helpers/alarm-payload";
@@ -122,12 +124,61 @@ test("a due retry.scheduled alarm is consumed once: one wake, no inbox prompt, c
     }
   }));
 
+test("an alarm prompt refusal remains typed at the worker and never wakes the session", () =>
+  Storage.withIsolation(async () => {
+    const fixture = alarmFixture();
+    try {
+      Effect.runSync(
+        fixture.storage.alarms.arm({
+          id: "refused",
+          sessionId: "monitor-session",
+          kind: "at",
+          fireAt: 1000,
+        }),
+      );
+      const collision = canonicalDigest(["alarm.inbox", "refused", 1, "timer:1000"]);
+      fixture.storage.actions.append(
+        {
+          id: collision,
+          sessionId: "monitor-session",
+          parentId: null,
+          kind: "turn",
+          intent: { encodingVersion: 1, value: {} },
+          effect: { encodingVersion: 1, value: {} },
+          irreversible: true,
+          ts: 1000,
+        },
+        1,
+      );
+      const before = fixture.storage.actions.tree("monitor-session");
+      expect(() => fixture.worker.tick()).toThrow(
+        expect.objectContaining({
+          _tag: "AlarmRefused",
+          operation: "fire",
+          reason: "prompt",
+          alarmId: "refused",
+        }),
+      );
+      expect(fixture.storage.actions.tree("monitor-session")).toEqual(before);
+      expect(fixture.storage.alarms.get("refused")?.status).toBe("armed");
+      expect(fixture.rows()).toEqual([]);
+      expect(fixture.wakes).toEqual([]);
+    } finally {
+      await fixture.close();
+    }
+  }));
+
 test("a retry schedule consumed by another owner mid-scan wakes nothing: losing the cancel CAS is silent", () =>
   Storage.withIsolation(async () => {
     // The first wake models the live waiter winning the fenced cancel CAS for the
     // second due schedule between the scan snapshot and its consumption.
     const fixture = alarmFixture(":memory:", undefined, () =>
-      fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000)),
+        ),
+        (error) => error,
+      ),
     );
     try {
       fixture.armRetry("retry-early");

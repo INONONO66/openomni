@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
@@ -95,17 +96,24 @@ export function createSessionAdmission(
       boundaryActionId: parentActionId,
       at: clock(),
     });
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: SessionHandleStore.row(sessionId).revision,
-      actions: [...deliveries, envelope],
-      consumeInboxIds: pending.map((item) => item.id),
-      state: "running",
-      releaseLease: false,
-    });
+    const committed = Either.getOrThrowWith(
+      await Effect.runPromise(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: SessionHandleStore.row(sessionId).revision,
+            actions: [...deliveries, envelope],
+            consumeInboxIds: pending.map((item) => item.id),
+            state: "running",
+            releaseLease: false,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     requireCommit(committed);
     observeDrained(pending, turnId, "before_llm", clock(), runtime.observations);
     if (pending.some((item) => item.kind === "interrupt")) {
@@ -207,19 +215,25 @@ export function createSessionAdmission(
     readonly releaseLease: boolean;
     readonly generation?: LedgerSession.GenerationPointers;
   }): Extract<LedgerSession.CommitResult, { readonly ok: true }> {
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: input.expectedRevision,
-      actions: [...input.actions],
-      consumeInboxIds: [...input.consumeInboxIds],
-      state: input.state,
-      ...(input.generation === undefined ? {} : { generation: input.generation }),
-      releaseLease: input.releaseLease,
-    });
-    if (!committed.ok) throw new SessionCommitError(committed);
+    const committed = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: input.expectedRevision,
+            actions: [...input.actions],
+            consumeInboxIds: [...input.consumeInboxIds],
+            state: input.state,
+            ...(input.generation === undefined ? {} : { generation: input.generation }),
+            releaseLease: input.releaseLease,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     return committed;
   }
 
@@ -351,17 +365,24 @@ export function createSessionAdmission(
       boundaryActionId: open.boundaryActionId,
       at: clock(),
     });
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: SessionHandleStore.row(sessionId).revision,
-      actions: [resume],
-      consumeInboxIds: [],
-      state: "running",
-      releaseLease: false,
-    });
+    const committed = Either.getOrThrowWith(
+      await Effect.runPromise(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: SessionHandleStore.row(sessionId).revision,
+            actions: [resume],
+            consumeInboxIds: [],
+            state: "running",
+            releaseLease: false,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     requireCommit(committed);
     return runTurn({
       turnId: open.turnId,
@@ -399,17 +420,24 @@ export function createSessionAdmission(
       boundaryActionId: terminal.effect.boundaryActionId,
       at: clock(),
     });
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: [...delivery, resume],
-      consumeInboxIds: [item.id],
-      state: "running",
-      releaseLease: false,
-    });
+    const committed = Either.getOrThrowWith(
+      await Effect.runPromise(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: current.revision,
+            actions: [...delivery, resume],
+            consumeInboxIds: [item.id],
+            state: "running",
+            releaseLease: false,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     requireCommit(committed);
     return runTurn({
       turnId,
@@ -427,17 +455,24 @@ export function createSessionAdmission(
     state.fence = acquire(current.leaseFence);
     const actions = SessionHandleStore.tree(sessionId);
     const noops = deliveryActions(items, "noop", "before_llm", actions.at(-1)?.id ?? null);
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: noops,
-      consumeInboxIds: items.map((item) => item.id),
-      state: current.state,
-      releaseLease: true,
-    });
+    const committed = Either.getOrThrowWith(
+      await Effect.runPromise(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: state.fence,
+            now: clock(),
+            expectedRevision: current.revision,
+            actions: noops,
+            consumeInboxIds: items.map((item) => item.id),
+            state: current.state,
+            releaseLease: true,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     requireCommit(committed);
   }
   return {
@@ -493,19 +528,28 @@ export function commitSessionRequest(
   );
   if (decision.actions.length > 0) {
     requireCommit(
-      SessionHandleStore.commitRequestTransition({
-        sessionId,
-        ...authority,
-        now: at,
-        expectedRevision: row.revision,
-        actions: [...decision.actions],
-        consumeInboxIds: [],
-        state: row.state,
-        releaseLease: false,
-        ...(decision.receive === undefined ? {} : { receive: decision.receive }),
-        ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
-        ...(admission === undefined ? {} : { admit: admission }),
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commitRequestTransition({
+              sessionId,
+              ...authority,
+              now: at,
+              expectedRevision: row.revision,
+              actions: [...decision.actions],
+              consumeInboxIds: [],
+              state: row.state,
+              releaseLease: false,
+              ...(decision.receive === undefined ? {} : { receive: decision.receive }),
+              ...(decision.requestCount === undefined
+                ? {}
+                : { requestCount: decision.requestCount }),
+              ...(admission === undefined ? {} : { admit: admission }),
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
   }
   return decision;

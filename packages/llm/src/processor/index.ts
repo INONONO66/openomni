@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { decodeLlmFailure, errorFacts } from "../error";
+import type { LlmError } from "../errors";
 import { drainToolSettlements } from "./tool-events";
 import {
   Operational,
@@ -40,7 +43,7 @@ export namespace Processor {
     estimateUsage?: EstimateUsage;
     sink?: Sink;
     events: BusEvent.Sink;
-    createStream: (input: StreamInput) => Promise<Stream>;
+    createStream: (input: StreamInput) => Effect.Effect<Stream, LlmError>;
     toolNames?: ReadonlyMap<string, string>;
     trace: { traceId: string; sessionId: string; runId?: string; provider?: string };
   }
@@ -49,7 +52,7 @@ export namespace Processor {
     message: Message.AssistantMessage;
     usageTotals: Transcript.Usage;
     visibleOutput: boolean;
-    process(streamInput: StreamInput): Promise<void>;
+    process(streamInput: StreamInput): Effect.Effect<void, LlmError>;
   }
 
   /** One provider attempt, one immutable transcript fold. Retry is executor control flow. */
@@ -82,32 +85,20 @@ export namespace Processor {
       if (fact.type !== "message.created") sink.onMessage(folded);
     }
 
-    async function closeStream(iterator: {
-      return?: () => unknown;
-    }): Promise<void> {
-      const closing = iterator.return?.();
-      if (closing === undefined) return;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          Promise.resolve(closing).then(
-            () => undefined,
-            (error: Error) => {
-              publishInfo(events, sessionID, trace.traceId, "stream.close.failed", {
-                error: String(error),
-              });
-            },
-          ),
-          new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, STREAM_CLOSE_GRACE_MS);
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
+    function closeStream(iterator: AsyncIterator<StreamEvent>): Effect.Effect<void> {
+      return Effect.tryPromise({
+        try: () => iterator.return?.() ?? Promise.resolve({ done: true as const, value: undefined }),
+        catch: decodeLlmFailure("stream.close"),
+      }).pipe(
+        Effect.timeoutOption(STREAM_CLOSE_GRACE_MS),
+        Effect.catchAll((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, "stream.close.failed", { error: error.cause ?? String(error) }))),
+        Effect.asVoid,
+        Effect.interruptible,
+      );
     }
 
-    async function process(streamInput: StreamInput): Promise<void> {
+    function process(streamInput: StreamInput): Effect.Effect<void, LlmError> {
+      return Effect.suspend(() => {
       publishStatus(events, sessionID, trace.traceId, "busy");
       record({ type: "message.created", attemptId, message: { ...assistantMessage } });
       const eventContext: StreamEventContext = {
@@ -132,36 +123,36 @@ export namespace Processor {
           usage: eventState.usage,
         });
       }
-      try {
-        abort.throwIfAborted();
-        const stream = await createStream(streamInput);
+      return Effect.gen(function* () {
+        yield* Effect.try({ try: () => abort.throwIfAborted(), catch: decodeLlmFailure("stream.abort") });
+        const stream = yield* createStream(streamInput);
         const iterator = stream.fullStream[Symbol.asyncIterator]();
-        try {
+        yield* Effect.gen(function* () {
           for (;;) {
-            const next = await iterator.next();
+            const next = yield* Effect.tryPromise({ try: () => iterator.next(), catch: decodeLlmFailure("stream.next") });
             if (next.done) break;
             if (abort.aborted) {
-              await drainToolSettlements(iterator, next.value, eventState, eventContext);
-              abort.throwIfAborted();
+              yield* drainToolSettlements(iterator, next.value, eventState, eventContext);
+              yield* Effect.try({ try: () => abort.throwIfAborted(), catch: decodeLlmFailure("stream.abort") });
             }
-            handleStreamEvent(next.value, eventState, eventContext);
+            yield* Effect.try({ try: () => handleStreamEvent(next.value, eventState, eventContext), catch: decodeLlmFailure("stream.event") });
           }
-        } finally {
-          await closeStream(iterator);
-        }
-        settleAttempt(eventState, eventContext, {
-          aborted: false,
-          preserveTools: options.externalTools,
-        });
+        }).pipe(Effect.ensuring(closeStream(iterator)));
+        settleAttempt(eventState, eventContext, { aborted: false, preserveTools: options.externalTools });
         finish(mapFinishReason(eventState.finishReason));
-      } catch (error) {
-        const aborted = abort.aborted || (error instanceof Error && error.name === "AbortError");
-        settleAttempt(eventState, eventContext, { aborted });
-        finish(aborted ? "aborted" : "error");
-        throw error;
-      } finally {
-        publishStatus(events, sessionID, trace.traceId, "idle");
-      }
+      }).pipe(
+        Effect.tapError((error) => Effect.sync(() => {
+          const aborted = abort.aborted || errorFacts(error).aborted === true;
+          settleAttempt(eventState, eventContext, { aborted });
+          finish(aborted ? "aborted" : "error");
+        })),
+        Effect.onInterrupt(() => Effect.sync(() => {
+          settleAttempt(eventState, eventContext, { aborted: true });
+          finish("aborted");
+        })),
+        Effect.ensuring(Effect.sync(() => publishStatus(events, sessionID, trace.traceId, "idle"))),
+      );
+      });
     }
     return {
       get message() {

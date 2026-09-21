@@ -1,0 +1,55 @@
+import type { LedgerError } from "@openomni/ledger";
+import { Data } from "effect";
+
+export class PolicyDenied extends Data.TaggedError("PolicyDenied")<{
+  readonly phase: "pre" | "post";
+  readonly ruleIds: readonly string[];
+}> {}
+
+export class ToolBodyFailed extends Data.TaggedError("ToolBodyFailed")<{
+  readonly tool: string;
+  readonly cause: string;
+}> {}
+
+export class Interrupted extends Data.TaggedError("Interrupted")<{}> {}
+
+export class CommitFailed extends Data.TaggedError("CommitFailed")<{
+  readonly error: LedgerError;
+}> {}
+
+export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
+  readonly reason: string;
+}> {}
+
+export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
+  readonly operation: string;
+  readonly cause: string;
+}> {}
+
+export class SessionMissing extends Data.TaggedError("SessionMissing")<{
+  readonly sessionId: string;
+}> {}
+
+export class LeaseLost extends Data.TaggedError("LeaseLost")<{
+  readonly sessionId: string;
+  readonly fence: number;
+}> {}
+
+export class GenerationUnavailable extends Data.TaggedError("GenerationUnavailable")<{
+  readonly generation: number;
+}> {}
+
+export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalError")<{
+  readonly code: "stale_approval" | "approval_authority_unavailable" | "unauthenticated";
+}> {}
+
+export type ExecutionError =
+  | PolicyDenied
+  | ToolBodyFailed
+  | Interrupted
+  | CommitFailed
+  | OutcomeUnknown
+  | ForeignFailure
+  | ExecutionApprovalError;
+
+export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable;

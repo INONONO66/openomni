@@ -11,6 +11,7 @@
   "dependencies": {
     "@openomni/protocol": "workspace:*",
     "@openomni/machines": "workspace:*",
+    "effect": "3.22.2",
     "zod": "^4.5.4"
   },
   "devDependencies": {

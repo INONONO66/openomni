@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createIpcServer, typedCall } from "@openomni/ipc";
+import { createIpcServer, typedCall } from "../../ipc/test/helpers/native";
 import { Machine } from "@openomni/protocol";
-import { attachMachineDaemon, createMachineHost, MachineRefusalError } from "../src/index";
+import { attachMachineDaemon, createMachineHost, MachineRefusalError } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";
 
 import {
@@ -61,12 +61,12 @@ describe("real machine consumer surface", () => {
         });
         expect((await target.fs.read(join(root, "data"))).data).toEqual(Buffer.from("x"));
         await expect(target.fs.read("/outside-export")).rejects.toMatchObject({
-          name: "MachineRefusalError",
-          data: { reason: "export_not_available" },
+          _tag: "MachineRefusalError",
+          reason: "export_not_available",
         });
         await expect(
           target.fs.write(join(root, "large"), Buffer.alloc(Machine.FS_WRITE_MAX_BYTES + 1)),
-        ).rejects.toMatchObject({ name: "MachineRefusalError", data: { reason: "too_large" } });
+        ).rejects.toMatchObject({ _tag: "MachineRefusalError", reason: "too_large" });
       } finally {
         await daemon.close();
         host.close();
@@ -93,8 +93,8 @@ describe("real machine consumer surface", () => {
         await expect(
           host.get("m-1").fs.write(join(root, "no"), Buffer.from("no")),
         ).rejects.toMatchObject({
-          name: "MachineRefusalError",
-          data: { reason: "fs_not_available" },
+          _tag: "MachineRefusalError",
+          reason: "fs_not_available",
         });
         expect(await host.get("m-1").exec("echo no", root)).toEqual({
           status: "refused",
@@ -183,9 +183,8 @@ describe("real machine consumer surface", () => {
           exitCode: null,
           signal: "SIGTERM",
         });
-        expect(await target.exec("true", join(root, "absent"))).toEqual({
-          status: "refused",
-          reason: "io_error",
+        await expect(target.exec("true", join(root, "absent"))).rejects.toMatchObject({
+          _tag: "TransportFailure", operation: "exec.call", cause: expect.stringContaining("ENOENT"),
         });
         symlinkSync("/tmp", join(root, "outside"));
         await expect(target.exec("true", join(root, "outside"))).resolves.toEqual({
@@ -226,8 +225,8 @@ test("longest normalized root wins, and equal roots refuse rather than selecting
     });
     try {
       await expect(host.get("m-1").fs.stat(nested)).rejects.toMatchObject({
-        name: "MachineRefusalError",
-        data: { reason: "export_not_available" },
+        _tag: "MachineRefusalError",
+        reason: "export_not_available",
       });
     } finally {
       await daemon.close();
@@ -243,8 +242,8 @@ test("longest normalized root wins, and equal roots refuse rather than selecting
     });
     try {
       await expect(host.get("m-1").fs.stat(root)).rejects.toMatchObject({
-        name: "MachineRefusalError",
-        data: { reason: "ambiguous_export" },
+        _tag: "MachineRefusalError",
+        reason: "ambiguous_export",
       });
     } finally {
       await duplicate.close();
@@ -384,7 +383,7 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
           },
         },
       }),
-    ).rejects.toMatchObject({ name: "IpcConnectionError" });
+    ).rejects.toMatchObject({ _tag: "TransportFailure", operation: "daemon.connect" });
     expect(closed).toBe(1);
   });
 });
