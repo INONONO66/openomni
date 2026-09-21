@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789944058032,
+  "lastUpdate": 1789985640209,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -74143,6 +74143,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 118281,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb7dfe1f65fb0e7c477d93d554084236af578b5b",
+          "message": "fix(mutation): cap mutant test children address space so memory-bomb mutants are killed, not the runner (#1123)\n\n* fix(mutation): cap mutant test child address space\n\nBound candidate probe and execution children to 6144 MiB on Linux using prlimit or a shell ulimit fallback, without limiting baseline/reach selections. Thread the cap through the native CLI and workflow, and classify crashed incomplete-report children as resource-exhaustion kills.\n\nAdd portable argv, in-process RED/GREEN classification, workflow wiring, and real crashed-child campaign coverage.\n\nPart of #1049\n\n* fix(mutation): fail closed when the memory cap wrapper cannot start Bun; probe failures stay infrastructure\n\nVerify capped Bun startup once during campaign/shard setup and retain failed wrapper receipts as infrastructure. Restore original-source Python probe failures to baseline-probe-not-green, never mutation kills.\n\nReplace source-regex checks with in-process campaign tests observing baseline, reach and mutant child argv through an injected test runtime. Cover cap acknowledgement, both wrapper setup failures, campaign fail-closed behavior and Python probe timeout/crash regressions.\n\nPart of #1049",
+          "timestamp": "2026-09-21T10:10:35Z",
+          "tree_id": "c1b870f0501498af191472057ae99c2e9bc4a8fa",
+          "url": "https://github.com/INONONO66/openomni/commit/bb7dfe1f65fb0e7c477d93d554084236af578b5b"
+        },
+        "date": 1789985638845,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1909,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1518,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1445541,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 384670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 7275090,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 151,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1123,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 695,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 170473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 883067,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 719866,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3649,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 103182923,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 10101035,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 20584,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 195774,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 1036407,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 259286,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 16620095,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 93,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 181640,
             "unit": "ns/op"
           }
         ]
