@@ -157,6 +157,7 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       "shard-count": { type: "string" },
       progress: { type: "string" },
       "budget-minutes": { type: "string" },
+      "mutant-memory-mb": { type: "string", default: "6144" },
     },
   });
   const { shardMode, budgetMinutes } = mutationArguments(values);
@@ -207,6 +208,8 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       String(budgetMinutes === null ? 20_000_000 : budgetMinutes * 60_000),
       "--suite-timeout",
       String(SUITE_TIMEOUT_MS),
+      "--mutant-memory-mb",
+      values["mutant-memory-mb"],
       ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
       ...(values.target ? ["--target", values.target] : []),
       ...(shardMode

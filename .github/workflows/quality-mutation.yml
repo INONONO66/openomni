@@ -23,6 +23,10 @@ on:
         description: 'Per-shard wall-clock budget in minutes before a clean partial stop (setup + baseline + reach take up to ~70 min before the budget clock starts; keep budget + 70 + one 5-minute suite timeout under the 360-minute job timeout)'
         type: number
         default: 240
+      mutant_memory_mb:
+        description: 'Linux address-space cap in MiB for each mutant test child (not baseline/reach selection)'
+        type: number
+        default: 6144
       fresh_progress:
         description: 'Ignore previous shard progress artifacts (restart the campaign)'
         type: boolean
@@ -108,8 +112,9 @@ jobs:
           SHARD_COUNT: ${{ needs.plan.outputs.count }}
           SHARD_INDEX: ${{ matrix.shard }}
           SHARD_BUDGET: ${{ inputs.shard_budget_minutes || 240 }}
+          MUTANT_MEMORY_MB: ${{ inputs.mutant_memory_mb || 6144 }}
         run: |
-          args=()
+          args=(--mutant-memory-mb "$MUTANT_MEMORY_MB")
           if [[ "$PILOT_LIMIT" != 0 ]]; then
             args+=(--pilot --limit "$PILOT_LIMIT")
           else
