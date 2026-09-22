@@ -1,5 +1,6 @@
 import { Cause, Effect, Scope } from "effect";
 import { bootResource } from "./composition/boot";
+import { foreignFailure } from "./composition/failure";
 import { shutdownSessions } from "./shutdown";
 import {
   AppClock,
@@ -394,7 +395,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         if (runner === "process") {
           yield* Effect.tryPromise({
             try: () => processSessions.wake(id),
-            catch: (error) => new AgentFailure({ operation: "process.wake", cause: String(error) }),
+            catch: foreignFailure((fields) => new AgentFailure(fields), "process.wake"),
           });
         } else {
           const scope = yield* AppScope;

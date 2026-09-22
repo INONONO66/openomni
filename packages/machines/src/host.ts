@@ -1,7 +1,7 @@
 import { chmodSync } from "node:fs";
 import { posix } from "node:path";
 import { createIpcServer, typedCall, ForeignFailure as IpcForeignFailure } from "@openomni/ipc";
-import { type BusEvent, type Ipc, Machine } from "@openomni/protocol";
+import { type BusEvent, Machine } from "@openomni/protocol";
 import { Effect, Fiber, type Scope } from "effect";
 import { MachineCellError, MachineRefusalError, TransportFailure, type MachineError } from "./errors";
 import { decodeMachineFailure } from "./failure";
@@ -64,9 +64,8 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
         return options.callTool ? options.callTool(call) : Effect.succeed({ status: "failed", error: "this host exposes no tools" } as const);
       });
     }
-    function attach(params: unknown, respond: (result: Ipc.Response["result"]) => void, connectionId: string): Effect.Effect<void, MachineError> {
+    function attach(offer: Machine.Offer, respond: (result: Machine.AttachResult) => void, connectionId: string): Effect.Effect<void, MachineError> {
       return Effect.gen(function* () {
-        const offer = yield* Effect.try({ try: () => Machine.Offer.parse(params), catch: decodeMachineFailure("attach.decode") });
         const found = options.enrollment(offer.machineId);
         if (found === undefined) { respond({ status: "refused", reason: "machine_not_enrolled" } satisfies Machine.AttachResult); return; }
         const enrollment = yield* Effect.try({ try: () => Machine.Enrollment.parse(found), catch: decodeMachineFailure("enrollment.decode") });
@@ -89,7 +88,8 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
         return;
       }
       if (method !== Machine.WireMethod.Attach) return yield* new MachineRefusalError({ reason: "invalid_method", message: `invalid method: ${method}` });
-      yield* attach(params, respond, connectionId);
+      const offer = yield* Effect.try({ try: () => Machine.Offer.parse(params), catch: decodeMachineFailure("attach.decode") });
+      yield* attach(offer, respond, connectionId);
     }).pipe(Effect.mapError((error) => new IpcForeignFailure({ operation: "machine.request", cause: error.message || String(error) }))), {
       onDisconnect: (id) => Effect.sync(() => detach(id, "connection_closed")),
     }).pipe(Effect.mapError((error) => new TransportFailure({ operation: "host.listen", message: error.message, cause: String(error) })));

@@ -85,7 +85,25 @@ const channels = {
   RateLimited: new Channels.RateLimited({ ...message, status: 429, attempts: 1, responseHeaders: {}, responseBody: "" }),
 } satisfies { [K in Channels.ChannelError["_tag"]]: Extract<Channels.ChannelError, { _tag: K }> };
 
-const packages = [
+type Failure =
+  | Agent.SessionError
+  | Channels.ChannelError
+  | Code.CodeError
+  | Ipc.IpcError
+  | Ledger.LedgerError
+  | Llm.LlmError
+  | Machines.MachineError;
+interface PackageEntry {
+  readonly name: string;
+  readonly module: Readonly<Record<string, object>>;
+  readonly union: string;
+  readonly failures: Readonly<Record<string, Failure>> & { readonly ForeignFailure: Failure & { readonly cause: string } };
+}
+type ErrorClass = abstract new (...args: never) => Error;
+const isErrorClass = (value: object): value is ErrorClass =>
+  typeof value === "function" && Object.prototype.isPrototypeOf.call(Error, value);
+
+const packages: readonly PackageEntry[] = [
   { name: "agent", module: Agent, union: "SessionError", failures: agent },
   { name: "channels", module: Channels, union: "ChannelError", failures: channels },
   { name: "codemode", module: Code, union: "CodeError", failures: code },
@@ -93,15 +111,15 @@ const packages = [
   { name: "ledger", module: Ledger, union: "LedgerError", failures: ledger },
   { name: "llm", module: Llm, union: "LlmError", failures: llm },
   { name: "machines", module: Machines, union: "MachineError", failures: machines },
-] as const;
+];
 
 for (const entry of packages) {
   test(`${entry.name}: every failure export is tagged, yieldable and covered by the package union`, () => {
-    const constructors = Object.values(entry.module).filter((value) => typeof value === "function" && value.prototype instanceof Error);
-    const failures = Object.values(entry.failures);
-    const owned = new Set(failures.map((failure) => failure.constructor));
+    const constructors: ErrorClass[] = Object.values(entry.module).filter(isErrorClass);
+    const failures: Failure[] = Object.values(entry.failures);
+    const owned = new Set<ErrorClass>(failures.map((failure) => failure.constructor as ErrorClass));
     for (const ctor of constructors) expect(owned.has(ctor)).toBe(true);
-    const foreign = packages.filter((other) => other !== entry).flatMap((other) => Object.values(other.module));
+    const foreign: object[] = packages.filter((other) => other !== entry).flatMap((other) => Object.values(other.module));
     for (const ctor of owned) expect(constructors.includes(ctor) || foreign.includes(ctor)).toBe(true);
     for (const failure of failures) {
       expect(Effect.isEffect(failure)).toBe(true);
