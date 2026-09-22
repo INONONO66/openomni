@@ -91,7 +91,7 @@ export function runAgent(
       attempt: facts?.attempt ?? state.attempt,
       maxAttempts: facts?.maxAttempts ?? LlmRetry.MAX_ATTEMPTS,
     });
-  })), Effect.ensuring(compaction?.abort() ?? Effect.void));
+  })), (effect) => compaction === undefined ? effect : Effect.ensuring(effect, compaction.abort()));
 
   function finish(result: AgentResult): AgentResult {
     emitRunCompleted(config.events, state, base, result.finishReason);

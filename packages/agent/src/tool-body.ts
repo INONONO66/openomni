@@ -31,12 +31,12 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
   executor?: Executor,
 ): Effect.Effect<ToolBodyOutcome, ToolBodyFailed, RawToolSlots> {
   return Effect.flatMap(RawToolSlots, (slots) => {
-    const execution = Effect.async<ToolBodyOutcome, ToolBodyFailed>((resume, signal) => {
+    const execution = Effect.async<ToolBodyOutcome, ToolBodyFailed>((resume) => {
       const settle = slots.open();
       const controller = new AbortController();
       const scopedContext = {
         ...context,
-        signal: AbortSignal.any([context.signal, signal, controller.signal]),
+        signal: AbortSignal.any([context.signal, controller.signal]),
       };
       const raw = Promise.resolve().then(() => executor === undefined
         ? definition.execute(input, scopedContext)
