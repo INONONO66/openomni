@@ -34,6 +34,7 @@ import {
   releaseContender,
   trackedWaveTools,
   waveTool,
+  interruptSecondModel,
 } from "./helpers/session-wave";
 
 const suite = residentSuite();
@@ -44,19 +45,6 @@ function bounded<T>(promise: Promise<T>, label = "wave/recovery"): Promise<T> {
   });
 }
 
-function interruptSecondModel(
-  resources: Pick<typeof suite, "defer">,
-  requestCount: () => number,
-  currentHandle: () => SessionHandle | undefined,
-): Promise<void> {
-  const interrupted = Promise.withResolvers<void>();
-  resources.defer(Bus.subscribe(LlmCall.Events.Completed, () => {
-    const handle = currentHandle();
-    if (requestCount() !== 2 || handle === undefined) return;
-    void runEffect(handle.interrupt()).then(interrupted.resolve, interrupted.reject);
-  }));
-  return interrupted.promise;
-}
 
 interface ProviderCall {
   readonly id: string;

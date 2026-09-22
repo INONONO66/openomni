@@ -2,11 +2,9 @@ import { Effect } from "effect";
 import type { Machine } from "@openomni/protocol";
 import * as Native from "../../src/index";
 import { createFsDriver as fsDriver } from "../../src/fs";
-import { execute as nativeExecute } from "../../src/exec";
 import { decodeMachineFailure } from "../../src/failure";
 import { acquire, run, sync } from "../../../ipc/test/helpers/effects";
 export * from "../../src/errors";
-export type { MachineInfo } from "../../src/host";
 
 export function foreign<A>(body: () => Promise<A>): Effect.Effect<A, Native.MachineError> {
   return Effect.tryPromise({ try: body, catch: decodeMachineFailure("test.machine") });
@@ -17,14 +15,14 @@ export interface CodeRunner {
   peekCode(cellId: string): Machine.CellOutput | undefined;
   close(): Promise<void>;
 }
-export function nativeRunner(runner: CodeRunner): Native.CodeRunner {
+function nativeRunner(runner: CodeRunner): Native.CodeRunner {
   return runner.native ?? {
     runCode: (request, call, signal) => foreign(() => runner.runCode(request, (request) => run(call(request)), signal)),
     peekCode: runner.peekCode,
     close: () => foreign(() => runner.close()),
   };
 }
-export function machineHandle(native: Native.MachineHandle) {
+function machineHandle(native: Native.MachineHandle) {
   return { native,
     fs: {
       read: (...args: Parameters<typeof native.fs.read>) => run(native.fs.read(...args)),
@@ -52,11 +50,9 @@ export async function attachMachineDaemon(options: Omit<Parameters<typeof Native
   const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, runner: options.runner ? nativeRunner(options.runner) : undefined }));
   return { native, attachment: native.attachment, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
 }
-export type MachineDaemon = Awaited<ReturnType<typeof attachMachineDaemon>>;
 export function createFsDriver(...args: Parameters<typeof fsDriver>) {
   const native = sync(fsDriver(...args));
   const driver = (...params: Parameters<typeof native>) => run(native(...params));
   driver.close = () => sync(native.close());
   return driver;
 }
-export const execute = (...args: Parameters<typeof nativeExecute>) => run(nativeExecute(...args));

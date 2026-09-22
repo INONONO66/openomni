@@ -7,7 +7,6 @@ import type { CodeError } from "../../src/errors";
 import { type CodeRunner, type MachineHost, foreign } from "../../../machines/test/helpers/native";
 import { acquireSync, run } from "../../../ipc/test/helpers/effects";
 export * from "../../src/errors";
-export type { RunOptions } from "../../src/index";
 
 type Caller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
 type Boundary = (call: Machine.ToolCall, body: () => Promise<Machine.ToolCallResult>) => Promise<Machine.ToolCallResult>;
