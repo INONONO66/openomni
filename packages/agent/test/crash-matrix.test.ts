@@ -53,6 +53,11 @@ function terminalClass(action: LedgerAction.Node) {
   }[terminal];
 }
 
+// A fresh kernel process loads agent+ledger, opens SQLite and runs one turn;
+// on a loaded shared runner that cold start alone has exceeded the 5 s in-process
+// bound (#1098). The child's exit is the signal; this is only the failure ceiling.
+const SPAWNED_CHILD_MS = 30_000;
+
 async function crash(point: CrashPoint, dbPath: string, stage = "initial"): Promise<Witness> {
   const child = Bun.spawn([process.execPath, worker, point, dbPath, stage], {
     stdin: "ignore",
@@ -67,6 +72,7 @@ async function crash(point: CrashPoint, dbPath: string, stage = "initial"): Prom
         new Response(child.stderr).text(),
       ]),
       point,
+      SPAWNED_CHILD_MS,
     );
     expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
     const witness = crashWitness.parse(JSON.parse(stdout));

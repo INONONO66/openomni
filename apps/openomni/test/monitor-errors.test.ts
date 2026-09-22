@@ -6,6 +6,11 @@ import { commandSource, pathSource } from "../src/composition/alarm-sources";
 import { alarmPathEvent, alarmSummary } from "./helpers/alarm-payload";
 import { eventSignal } from "./helpers/event-signal";
 
+// Each PTY test spawns /bin/sh under a fresh terminal; at load average 25+ that
+// spawn has stalled past the 5 s default (#1027). The line/exit callbacks are
+// the signals; this is only the failure ceiling for a spawned child.
+const SPAWNED_PTY_MS = 15_000;
+
 test("alarm JSON boundary validates values instead of assigning a payload type", () => {
   expect(() =>
     alarmSummary('{"alarmId":"id","epoch":1,"reason":"exit","exitCode":"zero"}'),
@@ -19,7 +24,7 @@ test("alarm JSON boundary validates values instead of assigning a payload type",
 });
 
 test("PTY callback faults surface a typed boundary failure", async () => {
-  const failed = eventSignal<Error>("PTY callback failure");
+  const failed = eventSignal<Error>("PTY callback failure", SPAWNED_PTY_MS);
   const source = commandSource(
     "printf 'LINE\\n'; read hold",
     () => {
@@ -36,7 +41,7 @@ test("PTY callback faults surface a typed boundary failure", async () => {
 });
 
 test("owned PTY drains the final UTF-8 line before reporting the child's exit status", async () => {
-  const exited = eventSignal<number>("PTY drained exit");
+  const exited = eventSignal<number>("PTY drained exit", SPAWNED_PTY_MS);
   const close = spyOn(Bun.Terminal.prototype, "close");
   const lines: string[] = [];
   const source = commandSource(
@@ -62,7 +67,7 @@ test("owned PTY drains the final UTF-8 line before reporting the child's exit st
 });
 
 test("PTY cancellation settles from a subscribed line signal without requiring natural EOF", async () => {
-  const ready = eventSignal<string>("PTY ready");
+  const ready = eventSignal<string>("PTY ready", SPAWNED_PTY_MS);
   const errors: Error[] = [];
   const exits: number[] = [];
   const source = commandSource(
@@ -76,7 +81,7 @@ test("PTY cancellation settles from a subscribed line signal without requiring n
   );
   try {
     expect(await ready.promise).toBe("READY");
-    const closed = eventSignal<void>("PTY cancelled");
+    const closed = eventSignal<void>("PTY cancelled", SPAWNED_PTY_MS);
     void Promise.all([source.close(), source.close()]).then(() => closed.resolve(), closed.reject);
     await closed.promise;
     expect(errors).toEqual([]);
