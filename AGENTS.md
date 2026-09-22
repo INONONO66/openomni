@@ -14,12 +14,7 @@ Effect foundation (#1122) is in PR as of 2026-09-21: Effect 3.22.2 is pinned for
 
 ## OVERVIEW
 
-Benchmark admission updated on `fix/benchmark-paired-reference-20260914`,
-2026-09-14: every event measures the latest accepted SHA and head on one runner
-in alternating serial order, with separate frozen dependencies and canonical
-14-metric summaries. The sole 20% gate uses a fresh one-reference history (zero
-historical noise band); only passing main push/dispatch runs publish original
-head timings. Raw paired observations and hashed provenance remain artifacts.
+Benchmark admission updated on `fix/benchmark-paired-reference-20260914`: every event measures the latest accepted SHA and head on one runner in alternating serial order, with separate frozen dependencies and canonical 14-metric summaries. The sole 20% gate uses a fresh one-reference history (zero historical noise band); only passing main push/dispatch runs publish original head timings. Raw paired observations and hashed provenance remain artifacts. An Owner-applied `benchmark:accept-baseline` label lets the PR gate pass with `ACCEPTED` rows. After merge, the Owner runs `gh workflow run benchmark.yml --ref main -f accept_baseline=true` to publish the new accepted reference; scheduled runs never accept baseline resets.
 See `docs/ci.md`; hosted execution and landing remain parent-owned.
 
 Native coverage merge correction on `fix/quality-lcov-union-20260914`: executing

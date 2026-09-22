@@ -332,7 +332,7 @@ writes `bench-results/reference.json`: exactly one freshly measured reference,
 using unrounded p50 values. The normal comparison command receives head
 statistics and that file. The workflow fixes the limit at 20%, with zero
 historical noise band because there is only one reference. A slowdown strictly
-above 20% in even one shared metric fails. This is stricter than both the former PR
+above 20% in even one shared metric fails. An Owner-applied `benchmark:accept-baseline` label lets the PR gate pass with `ACCEPTED` rows. After merge, the Owner runs `gh workflow run benchmark.yml --ref main -f accept_baseline=true` to publish the new accepted reference. Scheduled runs never accept baseline resets. This is stricter than both the former PR
 20%-plus-historical-two-sigma gate and the main publisher's 50% alert.
 
 Only successful paired comparisons permit main push/dispatch history storage;
