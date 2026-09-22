@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { measuredEntry } from "./helpers/measured-entry";
 import type { SessionTransition } from "@openomni/protocol";
 import { createProcessSessionTransport } from "../src/composition/process-session";
+import { PROCESS_SESSION_NO_REQUEST_EXIT } from "../src/process-entry";
 import { bounded } from "./helpers/protected-dispatch";
 
 const CHILD = new URL("./fixtures/process-session-child.ts", import.meta.url).pathname;
@@ -57,6 +58,15 @@ test("an answer whose principal is not the authenticated child is refused", asyn
     "process answer principal does not match its authenticated child",
   );
   expect(f.answers).toEqual([]);
+});
+
+test("measured process entry exits without a request on empty stdin", async () => {
+  const child = await measuredEntry(
+    new URL("../src/process-entry.ts", import.meta.url),
+    { PATH: process.env.PATH ?? "/usr/bin:/bin", OPENOMNI_DISABLE_MODELS_FETCH: "1" },
+    "",
+  );
+  expect(child.exitCode).toBe(PROCESS_SESSION_NO_REQUEST_EXIT);
 });
 
 test("native process entry validates and releases a request for a missing durable session", async () => {

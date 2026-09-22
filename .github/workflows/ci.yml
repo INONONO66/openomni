@@ -190,6 +190,8 @@ jobs:
     if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}
+    env:
+      OPENOMNI_CHILD_COVERAGE_DIR: ${{ github.workspace }}/apps/openomni/coverage/children
     strategy:
       fail-fast: false
       # ci-plan derives scripts-tooling-1 and scripts-tooling-2 from scriptPartitions.

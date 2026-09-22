@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { Machine } from "@openomni/protocol";
 import { Effect, Fiber, Cause, Exit, TestClock, TestContext } from "effect";
 import { execute as nativeExecute } from "../src/exec";
@@ -22,4 +22,51 @@ test("the execution deadline kills the real shell and settles timed_out", async 
     return yield* Fiber.join(fiber);
   })).pipe(Effect.provide(TestContext.TestContext)));
   expect(result).toEqual({ status: "timed_out" });
+});
+
+// Preserve the line-pinned runner sites above without growing the boundary allowlist.
+import * as childProcess from "node:child_process";
+import { run } from "../../ipc/test/helpers/effects";
+import { within } from "../../ipc/test/helpers/signal";
+
+test.each(["ESRCH", "EPERM", "EINVAL"])("aborted exec handles group kill failure %s", async (code: string) => {
+  const controller = new AbortController();
+  const closed = Promise.withResolvers<{ code: number | null; signal: NodeJS.Signals | null }>();
+  const spawn = childProcess.spawn;
+  let child: childProcess.ChildProcess | undefined;
+  const spawning = spyOn(childProcess, "spawn").mockImplementation(new Proxy(spawn, {
+    apply(target: typeof spawn, _receiver: typeof childProcess, args: Parameters<typeof spawn>) {
+      child = target(...args);
+      child.once("close", (exitCode: number | null, signal: NodeJS.Signals | null) => closed.resolve({ code: exitCode, signal }));
+      child.once("spawn", () => controller.abort());
+      return child;
+    },
+  }));
+  const error = Object.assign(new Error(`group kill ${code}`), { code });
+  const killing = spyOn(process, "kill").mockImplementation((pid: number, signal?: string | number) => {
+    expect(pid).toBe(-(child?.pid ?? 0));
+    expect(signal).toBe("SIGKILL");
+    throw error;
+  });
+  try {
+    const exit = await within(run(Effect.exit(nativeExecute({ cmd: "exec sleep 30", cwd: "/" }, controller.signal))), "aborted exec");
+    expect(killing).toHaveBeenCalledTimes(1);
+    expect(exit._tag).toBe("Failure");
+    if (Exit.isSuccess(exit)) throw new Error("aborted exec succeeded");
+    if (code === "EINVAL") {
+      expect(Array.from(Cause.defects(exit.cause))).toEqual([
+        expect.objectContaining({ _tag: "SpawnFailure", operation: "exec.spawn", cause: String(error) }),
+      ]);
+    } else {
+      expect(Cause.isInterruptedOnly(exit.cause)).toBe(true);
+      expect(await within(closed.promise, "fallback child close")).toEqual({ code: null, signal: "SIGKILL" });
+    }
+  } finally {
+    killing.mockRestore();
+    spawning.mockRestore();
+    if (child !== undefined) {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await within(closed.promise, "child cleanup");
+    }
+  }
 });
