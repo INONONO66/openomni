@@ -100,10 +100,10 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
   }
 
   function stageAll<R>(items: readonly ExecutionBatchItem<R>[]): Effect.Effect<Stage<R>[], ExecutionError> {
-    if (items.length === 1) {
-      const item = items[0]!;
-        return Effect.suspend<Stage<R>[], ExecutionError, never>(() => {
-          const request = { ...item.request, intent: structuredClone(item.request.intent) };
+    const [item] = items;
+    if (items.length === 1 && item !== undefined) {
+      return Effect.suspend<Stage<R>[], ExecutionError, never>(() => {
+        const request = { ...item.request, intent: structuredClone(item.request.intent) };
         if (!kinds.has(request.kind))
           return Effect.fail(new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` }));
         const kind = request.kind as LedgerAction.Kind;
