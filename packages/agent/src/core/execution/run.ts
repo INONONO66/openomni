@@ -66,6 +66,11 @@ export function runAgent(
   };
   const compaction = createCompactionSession(config);
   emitRunStarted(config.events, trace, config.model.id);
+  const needsExecutorContext = (config.tools?.length ?? 0) > 0 ||
+    config.toolExecutor !== undefined || config.toolWave !== undefined;
+  const runContext = needsExecutorContext
+    ? Context.make(ExecutorContext, durableExecutor).pipe(Context.add(Scope.Scope, scope))
+    : Context.make(Scope.Scope, scope);
   return Effect.gen(function* () {
     state.modelChainStart = yield* restoreModelSelection(durableExecutor, config.pinnedModel, [
       config.model,
@@ -81,7 +86,7 @@ export function runAgent(
       const result = yield* runModelStep(state, config, sink, trace, base, compaction, durableExecutor);
       if (result !== undefined) return finish(result);
     }
-  }).pipe(Effect.provide(Context.make(ExecutorContext, durableExecutor).pipe(Context.add(Scope.Scope, scope))), Effect.onError((cause) => Effect.sync(() => {
+  }).pipe(Effect.provide(runContext), Effect.onError((cause) => Effect.sync(() => {
     const error = Cause.squash(cause);
     const facts = failureFacts(error);
     const interrupted = Cause.isInterrupted(cause) || error instanceof Interrupted ||

@@ -189,39 +189,39 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
   }
 
   function executeBody<R>(stage: Stage<R>, signal: AbortSignal, guarded: boolean, settled: (body: BodyExit) => void) {
-    return Effect.withFiberRuntime<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(Effect.gen(function* () {
-      const generation = Context.getOption(fiber.currentContext, GenerationRawSlots);
-      const slots = createRawSlots((settlement) => {
-        if (Option.isSome(generation)) {
-          const release = generation.value.open();
-          void settlement.then(release);
-        }
-        options.retainEffect?.(settlement);
-      });
-      let startedAt: number | undefined;
-      const body = admittedBody(stage, guarded, () => { startedAt = record.publishToolStarted(stage.request); });
-      const owned = Effect.scopedWith((scope) => Effect.provide(
-        body, Context.make(RawToolSlots, slots).pipe(Context.add(Scope.Scope, scope)),
-      ));
-      // runBatch already forked this body. Bridge the foreign abort to that
-      // fiber, without a nested body fiber and a two-fiber abort race.
-      const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
-      signal.addEventListener("abort", abort, { once: true });
-      if (signal.aborted) abort();
-      const exit = yield* Effect.exit(Effect.interruptible(owned));
-      signal.removeEventListener("abort", abort);
-      if (slots.pending() > 0) {
-        // An interrupted body cannot itself perform an interruptible grace wait.
-        // Only the exceptional raw-pending path needs a separate wait fiber.
-        const grace = yield* Effect.fork(Effect.interruptible(slots.awaitSettled).pipe(
-          Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS),
+    return Effect.withFiberRuntime<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(
+      Effect.suspend(() => {
+        const generation = Context.getOption(fiber.currentContext, GenerationRawSlots);
+        const slots = createRawSlots((settlement) => {
+          if (Option.isSome(generation)) {
+            const release = generation.value.open();
+            void settlement.then(release);
+          }
+          options.retainEffect?.(settlement);
+        });
+        let startedAt: number | undefined;
+        const body = admittedBody(stage, guarded, () => { startedAt = record.publishToolStarted(stage.request); });
+        const owned = Effect.scopedWith((scope) => Effect.provide(
+          body, Context.make(RawToolSlots, slots).pipe(Context.add(Scope.Scope, scope)),
         ));
-        yield* Fiber.join(grace);
-      }
-      // Capture before leaving the mask: an interrupted fiber exits as failed,
-      // but its durable terminal still needs the body and raw-settlement facts.
-      settled({ exit, startedAt, rawPending: slots.pending() > 0 });
-    })));
+        const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+        return Effect.exit(Effect.interruptible(owned)).pipe(
+          Effect.flatMap((exit) => {
+            signal.removeEventListener("abort", abort);
+            if (slots.pending() === 0) return Effect.succeed(exit);
+            const grace = Effect.fork(Effect.interruptible(slots.awaitSettled).pipe(
+              Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS),
+            ));
+            return grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit));
+          }),
+          Effect.flatMap((exit) => Effect.sync(() => {
+            settled({ exit, startedAt, rawPending: slots.pending() > 0 });
+          })),
+        );
+      }),
+    ));
   }
 
   function appendOutcome<R>(stage: Stage<R>, outcome: ExecutionResult, evidence: PlainObject = {}, project = true) {
