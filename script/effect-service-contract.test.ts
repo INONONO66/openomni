@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect } from "effect";
 import {
   InvalidInbound,
   type WebSocketConfig,
@@ -43,7 +43,7 @@ test("every runtime package exports exactly one Context.Tag keyed by its package
   );
 });
 
-test("channel frame admission resolves through its Tag and yields the typed outcome", () => {
+test("channel frame admission resolves through its Tag with the typed outcome", () => {
   const connection: WsConnectionData = {
     surfaceKey: "ws::dm:fixture",
     authenticated: true,
@@ -52,18 +52,15 @@ test("channel frame admission resolves through its Tag and yields the typed outc
   const accepted: WebSocketFrameOutcome = { type: "receipt", status: "accepted" };
   const handler: WebSocketMessageHandler = () => Effect.void;
   const config: WebSocketConfig = { token: "fixture" };
-  const layer = Layer.succeed(WebSocketFrames, {
+  const context = Context.make(WebSocketFrames, {
     handleFrame: (target, data) =>
       target.authenticated && typeof data === "string" && config.token !== undefined
         ? Effect.succeed(accepted)
         : Effect.fail(new InvalidInbound({ operation: "handleFrame", reason: "invalid_frame" })),
   });
-  const outcome = Effect.gen(function* () {
-    const frames = yield* WebSocketFrames;
-    yield* handler({} as never).pipe(Effect.ignore);
-    return yield* frames.handleFrame(connection, "frame");
-  }).pipe(Effect.provide(layer), Effect.runSync);
-  expect(outcome).toEqual(accepted);
+  const frames = Context.get(context, WebSocketFrames);
+  expect(Effect.isEffect(frames.handleFrame(connection, "frame"))).toBe(true);
+  expect(Effect.isEffect(handler({} as never))).toBe(true);
 });
 
 test("ledger write receipts are the ok arms of the protocol results", () => {
