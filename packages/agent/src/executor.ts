@@ -289,6 +289,11 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       const decision = yield* restore(approval(single, signal));
       if (single.pre.verdict === "deny" || decision !== "approve")
         return [yield* finishStage(single, decision, undefined)];
+      if (single.request.kind === "llm" && single.request.toolObservation === undefined && options.signal === undefined) {
+        let body: BodyExit | undefined;
+        yield* executeBody(single, signal, false, (result) => { body = result; });
+        return [yield* finishStage(single, decision, body)];
+      }
       let body: BodyExit | undefined;
       const fiber = yield* Effect.fork(executeBody(single, signal, false, (result) => { body = result; }));
       const awaited = yield* Effect.exit(restore(Fiber.await(fiber)));

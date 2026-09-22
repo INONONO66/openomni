@@ -20,6 +20,8 @@ import {
 import { z } from "zod";
 import { entropyOf } from "./core/entropy";
 import { Effect } from "effect";
+
+const NEVER_ABORTED = new AbortController().signal;
 import type { ExecutionError } from "./errors";
 import type { RawToolSlots } from "./executor-raw";
 import {
@@ -220,7 +222,8 @@ export function createDispatcher(
     | { readonly kind: "refused"; readonly result: ToolDispatchResult }
     | {
         readonly kind: "ready";
-        readonly request: ExecutionRequest;
+        readonly executor: Executor;
+         readonly request: ExecutionRequest;
         readonly body: () => Effect.Effect<PlainValue, ExecutionError, RawToolSlots>;
         readonly sequential?: true;
         readonly finish: (
@@ -292,6 +295,7 @@ export function createDispatcher(
     let modelResult: ToolDispatchResult | undefined;
     return {
       kind: "ready",
+      executor,
       request: {
         ...request,
         ...(door === "model"
@@ -313,18 +317,19 @@ export function createDispatcher(
   }
 
   function dispatch(call: Tool.Call, context: DispatchContext, door: "model" | "cell") {
-    return Effect.gen(function* () {
+    return Effect.suspend(() => {
       const prepared = prepare(call, context, door);
-      if (prepared.kind === "refused") return prepared.result;
-      const executor = resolveExecutor();
-      if (executor === undefined) throw new ExecutorContextError();
+      if (prepared.kind === "refused") return Effect.succeed(prepared.result);
+      const executor = prepared.executor;
       if (executor.runBatch === undefined) throw new ExecutorContextError();
-      const results = yield* executor.runBatch([prepared], { signal: context.signal ?? new AbortController().signal });
-      const result = results[0];
-      if (result === undefined) throw new Error("single dispatch lost its result");
-      if (door === "cell" && result.terminal === "interrupted")
-        return yield* Effect.interrupt;
-      return prepared.finish(result);
+      return executor.runBatch([prepared], { signal: context.signal ?? NEVER_ABORTED }).pipe(
+        Effect.flatMap((results) => {
+          const result = results[0];
+          if (result === undefined) throw new Error("single dispatch lost its result");
+          if (door === "cell" && result.terminal === "interrupted") return Effect.interrupt;
+          return Effect.succeed(prepared.finish(result));
+        }),
+      );
     });
   }
 
@@ -336,7 +341,7 @@ export function createDispatcher(
     const executor = resolveExecutor();
     if (executor?.runBatch === undefined) throw new ExecutorContextError();
     return executor.runBatch(ready, {
-      signal: context.signal ?? new AbortController().signal,
+      signal: context.signal ?? NEVER_ABORTED,
       ...(retain === undefined ? {} : { retain }),
     });
   }
@@ -576,7 +581,7 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
     sessionId: context.sessionId,
     turnId: context.turnId,
     callId: call.id,
-    signal: context.signal ?? new AbortController().signal,
+    signal: context.signal ?? NEVER_ABORTED,
   };
 }
 
