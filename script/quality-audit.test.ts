@@ -16,6 +16,7 @@ import {
   findingTotals,
   measure,
   type Finding,
+  typeFindings,
 } from "./quality-audit";
 import { planChanges } from "./ci-plan";
 
@@ -374,4 +375,19 @@ test("CLI publishing uses injected gh results, and measurement-only does not pub
   await auditMain(["--publish"], io);
   expect(calls.some((args) => args.includes("--method"))).toBe(true);
   expect(output).toHaveLength(2);
+});
+
+test("typeFindings keeps owned rows only and folds duplicate sites into one count", () => {
+  const row = { path: "src/a.ts", line: 5, offset: 0, symbol: "Step", kind: "implicitAny", origin: "owned" };
+  const result = typeFindings([
+    row,
+    { ...row, offset: 3 },
+    { ...row, kind: "unknown" },
+    { ...row, origin: "foreign" },
+    { ...row, path: "src/b.ts", origin: "foreign", kind: "unknown" },
+  ]);
+  expect(result).toEqual([
+    { path: "src/a.ts", kind: "types", line: 5, count: 2, message: "implicitAny (owned): Step" },
+    { path: "src/a.ts", kind: "types", line: 5, count: 1, message: "unknown (owned): Step" },
+  ]);
 });

@@ -15,6 +15,24 @@ const repoPath = z
   .min(1)
   .refine((path) => !isAbsolute(path) && !path.split("/").includes("..") && !path.includes("\\"));
 export const findingKinds = ["coverage", "complexity", "clones", "types"] as const;
+
+/** Owned-origin any/unknown sites only: a foreign row is reached solely through
+ * declarations outside the campaign (zod internals, lib.d.ts) and is not our
+ * debt. Identical (path, line, kind, symbol) rows collapse into one count. */
+export function typeFindings(
+  violations: readonly { path: string; line: number; kind: string; symbol: string; origin: string }[],
+): Finding[] {
+  const merged = new Map<string, Finding>();
+  for (const row of violations) {
+    if (row.origin !== "owned") continue;
+    const message = `${row.kind} (owned): ${row.symbol}`;
+    const key = `${row.path}\u0000${row.line}\u0000${message}`;
+    const found = merged.get(key);
+    if (found) found.count += 1;
+    else merged.set(key, { path: row.path, kind: "types", line: row.line, count: 1, message });
+  }
+  return [...merged.values()];
+}
 const findingSchema = z.object({
   path: repoPath,
   kind: z.enum(findingKinds),
@@ -242,15 +260,7 @@ export async function measure(
   }
   const { inventory, types } = readTypes();
   if (!types.complete) throw new Error(`Incomplete type census: ${JSON.stringify(types.errors)}`);
-  findings.push(
-    ...types.violations.map((row) => ({
-      path: row.path,
-      kind: "types" as const,
-      line: row.line,
-      count: 1,
-      message: `${row.kind} (${row.origin}): ${row.symbol}`,
-    })),
-  );
+  findings.push(...typeFindings(types.violations));
   const evidence = readCoverage(directory);
   const sources = inventory.files
     .filter(
@@ -278,7 +288,7 @@ export async function measure(
       complexity:
         "biome@2.4.16 noExcessiveCognitiveComplexity >21 (including configured overrides)",
       clones: "jscpd@5.3.0, production/test separately, minLines=5 minTokens=50",
-      types: "check-types-census.ts (owned and foreign origins)",
+      types: "check-types-census.ts (owned origin only)",
     },
     mutation: "see quality-mutation.yml",
     coverage: coverage.coverage,
