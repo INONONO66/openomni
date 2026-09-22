@@ -4,8 +4,10 @@
  * Inputs are one or more lcov files (glob) plus a base ref. Changed and added
  * lines in packages/-/src, apps/-/src and top-level script *.ts files
  * (non-test) come from `git diff --unified=0 <base>...HEAD`. A changed line is
- * uncovered when the lcov union knows it (`DA:` record) with zero hits; lines
- * absent from every lcov are not executable (types, comments) and never count.
+ * uncovered when every lcov reporting the file records it with zero hits.
+ * An independent TypeScript AST filter removes syntactically non-executable
+ * lines, even when Bun records zero hits for them in every lane. Lines absent
+ * from the lcov intersection never count. AST skips are counted per file.
  * A gated file with NO `SF:` record in any lcov was never loaded by any test:
  * it fails outright (`<path>: no coverage record`) unless transpilation proves
  * the file has zero executable lines (type-only modules; `.d.ts` is excluded
@@ -16,6 +18,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import ts from "typescript";
 
 const GATED = /^(?:(?:packages|apps)\/[^/]+\/src\/.+|script\/[^/]+\.ts)$/;
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$|\.d\.ts$/;
@@ -117,7 +120,63 @@ export function hasExecutableCode(source: string, path: string): boolean {
   const transpiled = new Bun.Transpiler({
     loader: path.endsWith(".tsx") ? "tsx" : "ts",
   }).transformSync(source);
-  return transpiled.split("\n").some((line) => line.trim() !== "");
+  return transpiled.split("\n").some((line: string) => line.trim() !== "");
+}
+
+function typeOnlySyntax(node: ts.Node): boolean {
+  // TypeScript also calls runtime class heritage a TypeNode. Only implements
+  // clauses are erased; an extends expression can execute arbitrary code.
+  if (ts.isExpressionWithTypeArguments(node)) {
+    return ts.isHeritageClause(node.parent) && node.parent.token === ts.SyntaxKind.ImplementsKeyword;
+  }
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node) || ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeNode(node)) return true;
+  if (!ts.isPropertyDeclaration(node) && !ts.isMethodDeclaration(node)) return false;
+  // Decorators and initialized fields have runtime behavior, unlike declared
+  // fields and bodyless method signatures. Ordinary class fields stay gated.
+  if (ts.getDecorators(node)?.length) return false;
+  if (ts.isMethodDeclaration(node)) return node.body === undefined;
+  return node.initializer === undefined && (ts.getModifiers(node)?.some(
+    (modifier: ts.Modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword || modifier.kind === ts.SyntaxKind.AbstractKeyword,
+  ) ?? false);
+}
+
+function closingSyntax(node: ts.Node): boolean {
+  const parent = node.parent;
+  switch (node.kind) {
+    case ts.SyntaxKind.CloseBraceToken:
+      return ts.isBlock(parent) || ts.isModuleBlock(parent) || ts.isCaseBlock(parent) || ts.isClassDeclaration(parent) || ts.isClassExpression(parent) || ts.isObjectLiteralExpression(parent);
+    case ts.SyntaxKind.CloseParenToken:
+      return ts.isCallExpression(parent) || ts.isNewExpression(parent) || ts.isParenthesizedExpression(parent) || ts.isFunctionLike(parent);
+    case ts.SyntaxKind.CloseBracketToken:
+      return ts.isArrayLiteralExpression(parent) || ts.isElementAccessExpression(parent);
+    case ts.SyntaxKind.SemicolonToken:
+      return !ts.isEmptyStatement(parent) && !ts.isForStatement(parent);
+    default:
+      return false;
+  }
+}
+
+/** Lines with no runtime tokens, independent of lcov hits and lane selection. */
+function nonExecutableLines(text: string, path: string): Set<number> {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+  const skipped = new Set(source.getLineStarts().map((_start: number, index: number) => index + 1));
+  const visit = (node: ts.Node): void => {
+    if (typeOnlySyntax(node) || ts.isJSDoc(node)) return;
+    const children = node.getChildren(source);
+    if (children.length > 0) {
+      for (const child of children) visit(child);
+      return;
+    }
+    const start = node.getStart(source);
+    if (start === node.end || closingSyntax(node)) return;
+    // Use parsed tokens rather than raw text: multiline literals, template
+    // text and JSX text must not masquerade as comments or closing braces.
+    const first = source.getLineAndCharacterOfPosition(start).line + 1;
+    const last = source.getLineAndCharacterOfPosition(node.end - 1).line + 1;
+    for (let line = first; line <= last; line += 1) skipped.delete(line);
+  };
+  visit(source);
+  return skipped;
 }
 
 export function uncoveredRows(
@@ -134,31 +193,44 @@ export function uncoveredRows(
       if (isExecutable(path)) rows.push(`${path}: no coverage record`);
       continue;
     }
-    for (const line of [...lines].sort((a, b) => a - b)) {
+    for (const line of [...lines].sort((a: number, b: number) => a - b)) {
       if (coverage.get(line) === 0) rows.push(`${path}:${line}`);
     }
   }
   return rows;
 }
 
-export function checkPatchCoverage(base: string, globs: readonly string[], root: string): string[] {
+export function checkPatchCoverage(
+  base: string,
+  globs: readonly string[],
+  root: string,
+  skipped: Map<string, number> = new Map(),
+): string[] {
   const diff = Bun.spawnSync(
     ["git", "diff", "--no-ext-diff", "--no-renames", "--unified=0", `${base}...HEAD`, "--"],
     { cwd: root, stdout: "pipe", stderr: "pipe" },
   );
   if (diff.exitCode !== 0) throw new Error(`git diff failed: ${diff.stderr.toString()}`);
-  const files = globs.flatMap((glob) => [
+  const files = globs.flatMap((glob: string) => [
     ...new Bun.Glob(glob).scanSync({ cwd: root, onlyFiles: true }),
   ]);
   const union = lcovUnion(
-    files.map((file) => resolve(root, file)),
+    files.map((file: string) => resolve(root, file)),
     root,
   );
   // Every path with added lines in a base...HEAD diff exists at HEAD, so the
   // read is trusted; an unexpected failure crashes the gate, which fails closed.
   const isExecutable = (path: string): boolean =>
     hasExecutableCode(readFileSync(resolve(root, path), "utf8"), path);
-  return uncoveredRows(changedLines(diff.stdout.toString()), union, isExecutable);
+  const changed = changedLines(diff.stdout.toString());
+  for (const [path, lines] of changed) {
+    const nonExecutable = nonExecutableLines(readFileSync(resolve(root, path), "utf8"), path);
+    const executable = new Set([...lines].filter((line: number) => !nonExecutable.has(line)));
+    skipped.set(path, lines.size - executable.size);
+    // Retain even empty entries: no SF record still fails for runtime modules.
+    changed.set(path, executable);
+  }
+  return uncoveredRows(changed, union, isExecutable);
 }
 
 export function main(
@@ -173,7 +245,11 @@ export function main(
   if (values.base === undefined || values.glob === undefined || values.glob.length === 0) {
     throw new Error("usage: check-patch-coverage.ts --base <ref> --glob <lcov-glob> [--glob ...]");
   }
-  const rows = checkPatchCoverage(values.base, values.glob, root);
+  const skipped = new Map<string, number>();
+  const rows = checkPatchCoverage(values.base, values.glob, root, skipped);
+  for (const [path, count] of [...skipped.entries()].sort()) {
+    console.log(`patch coverage: ${path}: ${count} AST-skipped changed line(s)`);
+  }
   for (const row of rows) console.error(`uncovered: ${row}`);
   if (rows.length > 0) {
     console.error(`patch coverage: ${rows.length} changed executable line(s) uncovered`);

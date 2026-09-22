@@ -191,6 +191,84 @@ test("end to end against a fixture repository", () => {
   }
 });
 
+type SyntaxFixture = { name: string; source: string; uncovered: number[] };
+
+const syntaxFixtures: SyntaxFixture[] = [
+  {
+    name: "zero-hit import header before a TaggedError class",
+    source: 'import {\n  Data,\n} from "effect";\nimport type { Effect } from "effect";\nexport class Failure extends Data.TaggedError("Failure") {}\n',
+    uncovered: [5],
+  },
+  {
+    name: "type aliases, interfaces, type members and re-exports",
+    source: 'export type Name = string;\nexport interface Port {\n  readonly name: Name;\n  run(): void;\n}\nexport { value } from "./value";\nexport type { Other } from "./other";\nabstract class Base {\n  declare name: string;\n  abstract run(): void;\n  value = 1;\n}\n',
+    uncovered: [8, 11],
+  },
+  {
+    name: "generator and argument-list closing delimiters",
+    source: 'export function* values() {\n  yield consume(\n    [1\n    ]\n  );\n}\n',
+    uncovered: [1, 2, 3],
+  },
+  {
+    name: "real statements mixed with exempt declarations or closing braces",
+    source: 'import type { Name } from "./name"; execute();\nexport type Count = number; execute();\nfunction run() {\n  execute();\n} run();\nexport const value = 1;\n',
+    uncovered: [1, 2, 3, 4, 5, 6],
+  },
+  {
+    name: "child-only entry points remain executable",
+    source: 'if (import.meta.main) {\n  try {\n    await acquire();\n  } finally {\n    await dispose();\n  }\n}\n',
+    uncovered: [1, 2, 3, 4, 5],
+  },
+  {
+    name: "runtime heritage, fields, dynamic imports and export assignments",
+    source: 'export class Derived extends\n  makeBase()\n{\n  field: string;\n  value = compute();\n}\nexport default\n  compute();\nconst loaded = import(\n  "./module"\n);\n',
+    uncovered: [1, 2, 3, 4, 5, 7, 8, 9, 10],
+  },
+  {
+    name: "empty statements and loop separators stay gated",
+    source: ';\nfor (\n;\n;\n) {}\n',
+    uncovered: [1, 2, 3, 4, 5],
+  },
+  {
+    name: "comments and blank lines around executable statements",
+    source: '/** documentation */\n\n// comment\nexecute(); // runtime\n',
+    uncovered: [4],
+  },
+  {
+    name: "template and JSX text are not closing tokens or comments",
+    source: 'export const text = `\n}\n;\n`;\nexport const view = <div>\n)\n</div>;\n',
+    uncovered: [1, 2, 3, 4, 5, 6, 7],
+  },
+];
+
+test.each(syntaxFixtures)("AST filtering: $name", (fixture: SyntaxFixture) => {
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-syntax-"));
+  const path = "packages/kit/src/fixture.tsx";
+  try {
+    git(dir, "init", "-q");
+    git(dir, "config", "user.email", "qa@example.com");
+    git(dir, "config", "user.name", "qa");
+    git(dir, "commit", "--allow-empty", "-qm", "base");
+    const base = git(dir, "rev-parse", "HEAD");
+    mkdirSync(join(dir, "packages/kit/src"), { recursive: true });
+    writeFileSync(join(dir, path), fixture.source);
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "fixture");
+    mkdirSync(join(dir, "packages/kit/coverage"), { recursive: true });
+    const records = fixture.source.trimEnd().split("\n").map(
+      (_line: string, index: number) => `DA:${index + 1},0`,
+    );
+    writeFileSync(join(dir, "packages/kit/coverage/lcov.info"), `SF:src/fixture.tsx\n${records.join("\n")}\nend_of_record\n`);
+    const skipped = new Map<string, number>();
+    expect(checkPatchCoverage(base, ["packages/*/coverage/lcov.info"], dir, skipped)).toEqual(
+      fixture.uncovered.map((line: number) => `${path}:${line}`),
+    );
+    expect(skipped.get(path)).toBe(records.length - fixture.uncovered.length);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("hasExecutableCode strips types and keeps code", () => {
   expect(
     hasExecutableCode("export type A = number;\nexport interface B { x: string }\n", "a.ts"),
