@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790085887957,
+  "lastUpdate": 1790102207605,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -74411,6 +74411,138 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 181724,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "INONONO",
+            "username": "INONONO66",
+            "email": "inonono66@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "6e1cd457a6bf54a7f9b4effa871f6c6213c3488b",
+          "message": "kernel(F #1122): Effect foundation — pinned runtime, package error unions, ledger write ports, app runtime, boundary gate (#1176)\n\n* wip(effect): F/#1122 foundation lanes A+B (not merge-ready; verify-f FAIL receipt)\n\n* wip(effect): F/#1122 integration checkpoint (lanes g0-g4, ch0/ch1, app-a/b; not merge-ready)\n\n* wip(effect): rebuild check-effect-boundaries to its test contract\n\n* wip(effect): drop unconsumed src exports flagged by dead-exports\n\n* wip(effect): clear lint rows (unused lease error class, switch scope, unused import)\n\n* wip(effect): align agent test helpers/tests with Effect-native ports; delete orphan helpers\n\n* wip(effect): remove unused test-helper exports; single owner for interruptSecondModel\n\n* wip(effect): pin runtime package service Tags in a scripts-contracts lane test\n\n* wip(effect): service contract test asserts Effect values without a runner site\n\n* wip(effect): app suite green on native Effect contracts; typed AlarmRuntimeError/ForeignFailure at app edges; runner-site ratchet 229->226\n\n* wip(effect): single app foreign-boundary decoder; typed attach respond; contract test typed without Function\n\n* chore(effect): runner-site allowlist row follows lint fix line shift\n\n* test(effect): pin clonePlainValue canonicalization; make service-contract asserts runner-free\n\n- result-canonical-json.test.ts kills the 'return value' mutant in the executor's\n  post-policy canonicalization (Infinity/NaN/undefined must fold to JSON values).\n- effect-service-contract.test.ts asserts Tag resolution and shape instead of\n  tautological expects, without adding Effect runner sites (ratchet unchanged).\n\n* wip(effect): executor hot-path fiber reduction (bench fix in progress)\n\n* wip(effect): executor hot-path fiber reduction, pass 2 (first-delta +31%, dispatch +23% vs main)\n\n* perf(agent): streamline executor dispatch and llm body\n\n* perf(agent): compose single execution stages directly\n\n* perf(agent): hoist unused executor context from turns\n\n* perf(agent): compose llm attempt execution directly\n\n* perf(agent): remove attempt loop generator overhead\n\n* fix(agent): seal interrupted retained bodies\n\n* fix(agent): keep retained abort sealing off fast path\n\n* fix(agent): guard single-stage lookup without assertion\n\n* ci(bench): Owner-signed baseline accept path\n\n* test(bench): assemble accept-baseline expression without a template placeholder literal\n\n* fix(effect): typed failures on Effect-native paths; detect dynamic-import runners\n\n* docs(effect): record review fix gate results\n\n* test: patch coverage for Effect surfaces (checkpoint 1)\n\nCovers agent failure evidence, retry alarm, compaction summarizer deadline,\ncodemode/ipc/ledger/llm/machines service+error contracts and app tool ports.\nRunner sites route through existing test helpers; boundary ratchet unchanged.\n\n* test: restore surface-key Storage.reset afterEach, drop padding assertion (review r2)\n\n* test(ui): isolate composer DOM event initialization\n\n* test(w0): exercise effect boundary CLI verdicts\n\n* test(w0): exercise package-local effect services and failures\n\n* test(w0): cover fenced write refusal and shutdown evidence\n\n* test(w0): cover app boot ingress and machine failure boundaries\n\n* fix(ci): patch-coverage skips syntactically non-executable lines\n\n* refactor(app): extract process entry body for in-process coverage\n\n* test(w0): cover process entry boundary and exec kill fallback",
+          "timestamp": "2026-09-22T18:21:25Z",
+          "url": "https://github.com/INONONO66/openomni/commit/6e1cd457a6bf54a7f9b4effa871f6c6213c3488b"
+        },
+        "date": 1790102207176,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1036,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1913,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1368,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1581511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 426584,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6734101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 160,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1141,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 168227,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 815211,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 639853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3562,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 99181875,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9866968,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19247,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 185429,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 923770,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 367665,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 17308217,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 97,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 216999,
             "unit": "ns/op"
           }
         ]
