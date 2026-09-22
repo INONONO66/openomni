@@ -161,3 +161,17 @@ producer yet: every session starts `idle`, and the exported `setSessionPhase` /
 `setSessionAttention` store commands are called only by tests. No development
 global exposes them. The cleanup preserves those mappings, flags, density rules
 and held-order boundaries; it adds no kernel integration or phase lifecycle.
+
+## Session row second line
+
+`shell/session-secondary.tsx` renders one second line under the title on the
+sidebar tree and the Sessions list: the project name, then the attention reason
+(`attention/reason.ts` `sessionReason`) while `hasActiveState` holds (any phase
+other than `idle`/`archived`, or an unread `completed`/`failed`), otherwise the
+relative last-activity time. When `Session.surfaceKey` is set (the
+`Channel.SurfaceKey` string `<surface>:<path>` minted by the channels gateway
+for the conversation the session belongs to) and its surface prefix is one of
+slack/discord/telegram/github, a `·` and the brand `OriginMark` from
+`packages/ui` follow. Local sessions carry no key and draw no mark. No producer
+sets `surfaceKey` yet; the field waits on the same gateway session read model as
+phases.

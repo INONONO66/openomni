@@ -112,6 +112,8 @@ export const UI_NAMES = {
   /** A drawn 6px status mark in a fixed 2ch column. */
   StatusDot: "StatusDot",
   StatusGlyph: "StatusGlyph",
+  /** The brand mark naming the surface a session arrived on. */
+  OriginMark: "OriginMark",
   /** Match emphasis inside a label, as weight only. */
   Highlight: "Highlight",
   /** The named scroll owner. */

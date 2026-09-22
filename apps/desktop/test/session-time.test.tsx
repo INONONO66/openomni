@@ -1,7 +1,8 @@
 import { expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
-import { formatRelative, sessionReason } from "../src/renderer/attention/reason";
+import { formatRelative, hasActiveState, sessionReason } from "../src/renderer/attention/reason";
 import { consoleStore, INITIAL_CLIENT_STATE, openTab } from "../src/renderer/state/store";
+import type { Session } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
 import { makeSession } from "./helpers/session";
 
@@ -21,26 +22,36 @@ for (const [elapsed, expected] of [
   });
 }
 
+/** Both surfaces (sidebar tree, Sessions list) rendered against one frozen clock. */
+function renderRows(session: Session): Document {
+  consoleStore.setState(() => ({ ...INITIAL_CLIENT_STATE, sessions: [session] }));
+  openTab({ kind: "route", route: "sessions" });
+  const document = new Window().document;
+  document.body.innerHTML = renderShell();
+  return document as unknown as Document;
+}
+
+function withClock<T>(run: () => T): T {
+  const clock = spyOn(Date, "now").mockImplementation(() => now);
+  try {
+    return run();
+  } finally {
+    clock.mockRestore();
+    consoleStore.setState(() => INITIAL_CLIENT_STATE);
+  }
+}
+
 for (const phase of ["interrupted", "waiting_approval", "waiting_input", "running"] as const) {
-  test(`${phase} shares activity time and render clock across both surfaces`, () => {
-    const clock = spyOn(Date, "now").mockImplementation(() => now);
-    try {
+  test(`${phase} names its state on both surfaces instead of a time`, () => {
+    withClock(() => {
       const session = makeSession({
         phase,
         lastActivityAt: now - 120_000,
         phaseSince: now - 4 * 60_000,
       });
-      consoleStore.setState(() => ({ ...INITIAL_CLIENT_STATE, sessions: [session] }));
-      openTab({ kind: "route", route: "sessions" });
-      const document = new Window().document;
-      document.body.innerHTML = renderShell();
-      const times = [...document.querySelectorAll('[data-ui="TreeRow"] time')];
-      expect(times).toHaveLength(2);
-      expect(times.map((time) => time.textContent?.trim())).toEqual(["2m", "2m"]);
-      expect(times.map((time) => time.getAttribute("datetime"))).toEqual([
-        new Date(session.lastActivityAt).toISOString(),
-        new Date(session.lastActivityAt).toISOString(),
-      ]);
+      expect(hasActiveState(session)).toBe(true);
+      const document = renderRows(session);
+      expect(document.querySelectorAll('[data-ui="TreeRow"] time')).toHaveLength(0);
       const reasons = [...document.querySelectorAll("[data-secondary]")].map((node) =>
         node.textContent?.includes(sessionReason(session, now)),
       );
@@ -51,9 +62,57 @@ for (const phase of ["interrupted", "waiting_approval", "waiting_input", "runnin
           expect(reason.endsWith(formatRelative(now, now - elapsed))).toBe(true);
         }
       }
-    } finally {
-      clock.mockRestore();
-      consoleStore.setState(() => INITIAL_CLIENT_STATE);
-    }
+    });
   });
 }
+
+for (const [phase, unread] of [
+  ["idle", false],
+  ["idle", true],
+  ["archived", true],
+  ["completed", false],
+  ["failed", false],
+] as const) {
+  test(`${phase}${unread ? " (unread)" : ""} shows its last activity with one clock on both surfaces`, () => {
+    withClock(() => {
+      const session = makeSession({ phase, unread, lastActivityAt: now - 120_000 });
+      expect(hasActiveState(session)).toBe(false);
+      const document = renderRows(session);
+      const times = [...document.querySelectorAll('[data-ui="TreeRow"] time')];
+      expect(times.map((time) => time.textContent?.trim())).toEqual(["2m", "2m"]);
+      expect(times.map((time) => time.getAttribute("datetime"))).toEqual([
+        new Date(session.lastActivityAt).toISOString(),
+        new Date(session.lastActivityAt).toISOString(),
+      ]);
+    });
+  });
+}
+
+test("an unread completed session is still state, not time", () => {
+  expect(hasActiveState(makeSession({ phase: "completed", unread: true }))).toBe(true);
+  expect(hasActiveState(makeSession({ phase: "failed", unread: true }))).toBe(true);
+});
+
+test("a session bound to a drawn surface carries that surface's mark after a dot", () => {
+  withClock(() => {
+    const document = renderRows(makeSession({ surfaceKey: "slack:T1:dm:U1" }));
+    const marks = [...document.querySelectorAll('[data-ui="TreeRow"] [data-ui="OriginMark"]')];
+    expect(marks).toHaveLength(2);
+    for (const mark of marks) {
+      expect(mark.getAttribute("data-surface")).toBe("slack");
+      expect(mark.previousElementSibling?.textContent).toBe("·");
+      expect(mark.parentElement?.lastElementChild === mark).toBe(true);
+    }
+  });
+});
+
+test("a session started here, or on a surface without a mark, carries none", () => {
+  withClock(() => {
+    for (const session of [makeSession(), makeSession({ surfaceKey: "ws:host:dm:1" })]) {
+      const document = renderRows(session);
+      expect(document.querySelectorAll('[data-ui="OriginMark"]')).toHaveLength(0);
+      const secondary = document.querySelector("[data-secondary]");
+      expect(secondary?.textContent).not.toContain("·");
+    }
+  });
+});
