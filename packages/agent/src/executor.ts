@@ -207,13 +207,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
-        let completed: BodyExit | undefined;
-        const settle = (body: BodyExit) => {
-          if (completed !== undefined) return;
-          completed = body;
-          settled(body);
-        };
-        return Effect.exit(Effect.interruptible(owned)).pipe(
+        const exitEffect = Effect.exit(Effect.interruptible(owned)).pipe(
           Effect.flatMap((exit) => {
             signal.removeEventListener("abort", abort);
             if (slots.pending() === 0) return Effect.succeed(exit);
@@ -222,6 +216,18 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             ));
             return grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit));
           }),
+        );
+        if (options.retainEffect === undefined)
+          return exitEffect.pipe(Effect.flatMap((exit) => Effect.sync(() => {
+            settled({ exit, startedAt, rawPending: slots.pending() > 0 });
+          })));
+        let completed: BodyExit | undefined;
+        const settle = (body: BodyExit) => {
+          if (completed !== undefined) return;
+          completed = body;
+          settled(body);
+        };
+        return exitEffect.pipe(
           Effect.flatMap((exit) => Effect.sync(() => {
             settle({ exit, startedAt, rawPending: slots.pending() > 0 });
           })),
