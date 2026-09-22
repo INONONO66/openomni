@@ -110,6 +110,17 @@ test.each([
   }
 });
 
+test.each(["interrupted", "outcome_unknown"] as const)("%s preserves the handle without committing an inbox", async (terminal: "interrupted" | "outcome_unknown") => {
+  const { router, commits } = recordingRouter(() => Effect.succeed({
+    terminal, reason: "execution_stopped", matchedRuleIds: [],
+  }));
+  const result = await runEffect(sendToChild(router, "work"));
+  expect(result).toMatchObject({
+    status: "blocked_post", reasonCode: "execution_stopped", handle: { target: "child" },
+  });
+  expect(commits).toEqual([]);
+});
+
 test("post-execution denial retains the delivery handle and committed effect", async () => {
   const { router, commits } = recordingRouter((_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
     yield* body(messageExecutionReceipt("source", "parent", request.intent));

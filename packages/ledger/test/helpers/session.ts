@@ -1,12 +1,17 @@
 import { Effect, Either } from "effect";
-import { SessionHandleStore, type Storage } from "../../src/index";
+import { SessionHandleStore, type LedgerError, type Storage } from "../../src/index";
+import type { LedgerSession } from "@openomni/protocol";
 
 export function bareStorageAdapter(): Storage.Adapter {
   return { transaction: <T>(operation: () => T): T => operation() };
 }
 
 /** A real configured L0 session for store consumers; no legacy JSON writer. */
-export function materializeSession(id: string, parentId: string | null = null) {
+export function materializeSession<E = never>(
+  id: string,
+  parentId: string | null = null,
+  afterMaterialize?: (row: LedgerSession.Row) => Effect.Effect<void, E>,
+) {
   return Either.getOrThrowWith(
     Effect.runSync(
       Effect.either(
@@ -19,9 +24,11 @@ export function materializeSession(id: string, parentId: string | null = null) {
           policyGeneration: 0,
           actionId: `${id}:configure`,
           at: 1,
-        }),
+        }).pipe(Effect.tap((result: LedgerSession.MaterializeResult) =>
+          afterMaterialize?.(result.row) ?? Effect.void,
+        )),
       ),
     ),
-    (error) => error,
+    (error: LedgerError | E) => error,
   ).row;
 }
