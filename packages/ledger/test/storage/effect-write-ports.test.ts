@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
 import {
-  Alarm,
+  type Alarm,
   canonicalDigest,
   LedgerAction,
   type LedgerSession,

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import type { Message } from "@openomni/protocol";
+import { Effect } from "effect";
 import { planAnchoredCut } from "../../src/compaction/candidate";
 import { createCompactionPlan, restoreCompactionProjection } from "../../src/compaction/durable";
 import { CompactionSession } from "../../src/compaction/speculate";
+import { isolated } from "../helpers/isolated";
 import { textMessage } from "../helpers/messages";
 
 function history() {
@@ -65,25 +68,32 @@ describe("compaction boundary integrity", () => {
     expect(planAnchoredCut(messages, 1)?.prefixFingerprint).not.toBe(started);
   });
 
-  it("consumes candidates and disables further speculative work", async () => {
-    let calls = 0;
-    const session = new CompactionSession({
-      protectRecentMessages: 1,
-      summarize: async (messages) => {
-        calls += 1;
-        return messages.map((message) => message.info.id).join(",");
-      },
-    });
-    session.prepare(history(), 70, 60, 1000);
-    expect(session.inFlight()).toBe(true);
-    await session.settled();
-    expect(session.candidate()?.anchorBody).toBe("first");
-    expect(session.inFlight()).toBe(false);
-    session.consume();
-    expect(session.candidate()).toBeUndefined();
-    session.disable();
-    session.prepare(history(), 70, 60, 1000);
-    await session.settled();
-    expect(calls).toBe(1);
-  });
+  it("consumes candidates and disables further speculative work", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let calls = 0;
+          const session = new CompactionSession({
+            protectRecentMessages: 1,
+            summarize: (messages: Message.WithParts[]) => {
+              calls += 1;
+              return Effect.succeed(
+                messages.map((message: Message.WithParts) => message.info.id).join(","),
+              );
+            },
+          });
+          yield* session.prepare(history(), 70, 60, 1000);
+          expect(session.inFlight()).toBe(true);
+          yield* session.settled();
+          expect(session.candidate()?.anchorBody).toBe("first");
+          expect(session.inFlight()).toBe(false);
+          session.consume();
+          expect(session.candidate()).toBeUndefined();
+          yield* session.disable();
+          yield* session.prepare(history(), 70, 60, 1000);
+          yield* session.settled();
+          expect(calls).toBe(1);
+        }),
+      ),
+    ));
 });

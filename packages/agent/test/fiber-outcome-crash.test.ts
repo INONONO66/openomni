@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore, Storage, CommitRefused } from "@openomni/ledger";
+import { SessionHandleStore, CommitRefused } from "@openomni/ledger";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
@@ -11,6 +11,7 @@ import { ToolBodyFailed } from "../src/errors";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
 import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
+import { isolated } from "./helpers/isolated";
 
 const request = {
   kind: "tool", op: "write", intent: {}, effect: { category: "mutation" },
@@ -19,13 +20,6 @@ const request = {
 function results() {
   return SessionHandleStore.tree(fiberSessionId).filter((action) =>
     action.kind === "tool" && effectValue(action).phase === "result").map(effectValue);
-}
-function isolated<A, E>(program: Effect.Effect<A, E>) {
-  return Storage.withIsolation(async () => {
-    Storage.initialize({ dbPath: ":memory:" });
-    try { return await Effect.runPromise(program); }
-    finally { Storage.reset(); }
-  });
 }
 
 for (const receipt of ["absent", "present"] as const) {

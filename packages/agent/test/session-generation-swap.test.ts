@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { type AnyToolDefinition, type SessionGeneration } from "@openomni/protocol";
+import { SessionHandleStore } from "@openomni/ledger";
+import type { AnyToolDefinition, SessionGeneration } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { z } from "zod";
 import { createExecutor } from "../src/executor";
@@ -9,6 +9,7 @@ import { makeSessionGenerations, type GenerationBundle } from "../src/session-ge
 import { SessionLayer, ToolCatalog } from "../src/services";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
+import { isolated } from "./helpers/isolated";
 
 function bundle(generation: number, name: string, finalized: () => void,
   execute: () => Promise<string> = async () => name): GenerationBundle {
@@ -27,13 +28,6 @@ function bundle(generation: number, name: string, finalized: () => void,
     Layer.succeed(ToolCatalog, { definitions: [definition] }),
     Layer.scopedDiscard(Effect.addFinalizer(() => Effect.sync(finalized))),
   ) };
-}
-function isolated<A, E>(program: Effect.Effect<A, E>) {
-  return Storage.withIsolation(async () => {
-    Storage.initialize({ dbPath: ":memory:" });
-    try { return await Effect.runPromise(program); }
-    finally { Storage.reset(); }
-  });
 }
 function selectAction(snapshot: SessionGeneration.Snapshot) {
   return SessionHandleStore.configureAction({

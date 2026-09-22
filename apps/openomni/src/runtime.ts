@@ -1,6 +1,6 @@
 import { Bus } from "@openomni/agent";
-import { initialize, LedgerLive, LedgerWrites, type LedgerError, Storage } from "@openomni/ledger";
-import { Context, Data, Effect, Layer, ManagedRuntime, Scope, flow } from "effect";
+import { initialize, LedgerLive, type LedgerWrites, type LedgerError, Storage } from "@openomni/ledger";
+import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
 
 export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")<{
   readonly operation: string;
@@ -65,10 +65,3 @@ export function AppLive(options: AppRuntimeOptions) {
 export type AppServices = AppClock | AppEntropy | AppObservations | LedgerWrites | AppScope;
 export type AppRuntimeError = AppLifecycleFailure | LedgerError;
 export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, AppRuntimeError>;
-
-export function createAppRuntime(live: Layer.Layer<AppServices, AppRuntimeError>): AppRuntime {
-  const runtime = ManagedRuntime.make(live);
-  const dispose = runtime.dispose.bind(runtime);
-  let disposal: Promise<void> | undefined;
-  return Object.assign(runtime, { dispose: () => (disposal ??= dispose()) });
-}

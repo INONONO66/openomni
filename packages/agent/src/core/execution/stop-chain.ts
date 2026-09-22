@@ -1,5 +1,5 @@
 import { canonicalDigest } from "@openomni/protocol";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 
 export interface StopObservation {
   readonly text: string;
@@ -27,16 +27,35 @@ export type StopVerdict =
   | { readonly kind: "continue"; readonly reason: "continue" }
   | { readonly kind: "error"; readonly reason: "budget" | StopMetric };
 
-export class AgentStopError extends Error {
+/** Machine stop verdicts are typed execution failures, never defects. */
+export class AgentStopError extends Data.TaggedError("AgentStopError")<{
+  readonly reason: Extract<StopVerdict, { kind: "error" }>["reason"];
+}> {
   readonly code = "agent_stop";
-  constructor(readonly reason: Extract<StopVerdict, { kind: "error" }>["reason"]) {
-    super(`agent stop: ${reason}`);
-    this.name = "AgentStopError";
+  override get message(): string {
+    return `agent stop: ${this.reason}`;
   }
 }
 
 export function stopState(): StopState {
   return { repetition: 0, stall: 0, blocked: 0, continuation: 0 };
+}
+
+function advanceStopState(previous: StopState, observation: StopObservation): StopState {
+  const outputHash = canonicalDigest(observation.text);
+  return {
+    outputHash,
+    repetition: observation.progress
+      ? 0
+      : outputHash === previous.outputHash ? previous.repetition + 1 : 1,
+    stall: observation.progress || observation.toolCalls > 0 ? 0 : previous.stall + 1,
+    blocked: observation.blocked && !observation.progress ? previous.blocked + 1 : 0,
+    continuation: previous.continuation + 1,
+  };
+}
+
+function completionEligible(observation: StopObservation): boolean {
+  return observation.text.length > 0 && observation.toolCalls === 0 && !observation.continueRequested;
 }
 
 /** Fixed precedence, including policy reads. Invocation is not effect/state progress. */
@@ -47,26 +66,11 @@ export function judgeStop<E, R>(
   completion: () => Effect.Effect<boolean, E, R>,
 ): Effect.Effect<{ state: StopState; verdict: StopVerdict }, E, R> {
   return Effect.gen(function* () {
-  const outputHash = canonicalDigest(observation.text);
-  const state: StopState = {
-    outputHash,
-    repetition: observation.progress
-      ? 0
-      : outputHash === previous.outputHash
-        ? previous.repetition + 1
-        : 1,
-    stall: observation.progress || observation.toolCalls > 0 ? 0 : previous.stall + 1,
-    blocked: observation.blocked && !observation.progress ? previous.blocked + 1 : 0,
-    continuation: previous.continuation + 1,
-  };
+  const state = advanceStopState(previous, observation);
   const done = (verdict: StopVerdict) => ({ state, verdict });
   if (observation.interrupted) return done({ kind: "interrupted", reason: "abort" });
   if (observation.exhausted) return done({ kind: "error", reason: "budget" });
-  if (
-    observation.text.length > 0 &&
-    observation.toolCalls === 0 &&
-    !observation.continueRequested
-  ) {
+  if (completionEligible(observation)) {
     const permitted = yield* completion();
     if (permitted && observation.openIntent.length === 0 && !observation.blocked)
       return done({ kind: "result", reason: "completion" });

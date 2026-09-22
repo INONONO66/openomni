@@ -1,8 +1,9 @@
-import { Effect } from "effect";
+import { Effect, Scope } from "effect";
 import { bootResource } from "./composition/boot";
 import { shutdownSessions } from "./shutdown";
 import {
   AppClock,
+  AppScope,
   AppEntropy,
   AppObservations,
   type AppRuntime,
@@ -18,6 +19,7 @@ import {
   createSessionRequests,
   type SessionRuntime,
   getSessionHandle,
+  ForeignFailure as AgentFailure,
   ExecutionApprovalError,
   sweepSessions,
   wakeSession,
@@ -25,6 +27,8 @@ import {
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
+  decodeChannelFailure,
+  ForeignFailure as ChannelFailure,
   WebSocketHandler,
 } from "@openomni/channels";
 import { homedir } from "node:os";
@@ -37,7 +41,7 @@ import {
   SessionHandleStore,
 } from "@openomni/ledger";
 
-import { createMachineHost, type MachineHost } from "@openomni/machines";
+import { createMachineHost, ForeignFailure as MachineFailure, type MachineHost } from "@openomni/machines";
 import type { Channel } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
@@ -51,20 +55,25 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import { createCompletionPort } from "./tools/completion";
+import { createCompletionPort } from "./composition/completion";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { dispatchOutboundMessage } from "./composition/terminal-message";
 import {
+  acquireAppResource,
+  channelRequests,
   createMonitorPorts,
   createMountedChannelGrantRegistrar,
   createResidentGateway,
   gatewayRuntime,
   runAppBoot,
+  runAppEffect,
+  toolPorts,
+  webSocketCallbacks,
 } from "./gateway";
 import { createResident } from "./resident";
-import { composeCodemode } from "./composition/codemode";
+import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
 import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
 
 interface StartOptions {
@@ -162,7 +171,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       presented.length !== expected.length ||
       !timingSafeEqual(presented, expected)
     ) {
-      throw new ExecutionApprovalError("unauthenticated");
+      throw new ExecutionApprovalError({ code: "unauthenticated" });
     }
     return { kind: "owner" as const, principalId: "owner", evidenceId: `ws-owner:${requestId}` };
   };
@@ -182,6 +191,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       Effect.gen(function* () {
         return {
           ledger: yield* LedgerWrites,
+          scope: yield* AppScope,
           clock: yield* AppClock,
           entropy: yield* AppEntropy,
           observations: yield* AppObservations,
@@ -218,7 +228,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
             void wake(id);
           });
       },
-      authorizeApproval: async (credential, request) => authenticateOwner(credential, request.id),
+      authorizeApproval: (credential, request) => Effect.try({
+        try: () => authenticateOwner(credential, request.id),
+        catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
+      }),
+      generation: (snapshot) => resident.generation(snapshot),
     };
     const requests = createSessionRequests(sessionRuntime);
     let recovery: Promise<void> = Promise.resolve();
@@ -261,30 +275,21 @@ export async function startOpenOmni(options: StartOptions = {}) {
     };
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
-    let cells: ReturnType<typeof composeCodemode> | undefined;
+    let cells: ComposedCodemode | undefined;
     const machines = config.machines;
     const host: MachineHost | undefined =
       machines === undefined
         ? undefined
-        : await createMachineHost({
+        : await acquireAppResource(runtime, createMachineHost({
             socketPath: machines.socketPath,
             enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
             events: Bus,
             now: () => Date.now(),
             callTool: (call) =>
               cells === undefined
-                ? Promise.resolve({ status: "failed", error: "codemode is not composed" })
-                : cells.callTool(call),
-          });
-    if (host !== undefined) {
-      const attachedHost = host;
-      await acquire(Effect.succeed(attachedHost), (resource) =>
-        Effect.try({
-          try: () => resource.close(),
-          catch: lifecycleFailure("machines.close"),
-        }),
-      );
-    }
+                ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
+                : cells.callTool(call).pipe(Effect.mapError((error) => new MachineFailure({ operation: "codemode.callTool", cause: String(error) }))),
+          }));
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createCompletionPort(
@@ -292,14 +297,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       options.llm ?? {},
     );
     if (host !== undefined) {
-      cells = composeCodemode(host);
-      const composed = cells;
-      await acquire(Effect.succeed(composed), (resource) =>
-        Effect.try({
-          try: () => resource.close(),
-          catch: lifecycleFailure("codemode.close"),
-        }),
-      );
+      cells = await acquireAppResource(runtime, composeCodemode(host));
     }
 
     const resident = createResident({
@@ -308,10 +306,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
         alarms: await createMonitorPorts(runtime),
-        messages,
-        machines: host,
-        ...(cells === undefined ? {} : { cells }),
-        llm: llmPort,
+        ...toolPorts(runtime, { machines: host, cells, completion: llmPort, messages }),
         provisioning: provisioningPort,
       },
       sessionRuntime,
@@ -319,7 +314,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
 
     const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
-      const admission = await messages.ingest(sender, facts);
+      const admission = await runAppEffect(runtime, messages.ingest(sender, facts));
       if (admission.status === "blocked_pre") {
         throw new Error(`message admission refused: ${admission.reasonCode}`);
       }
@@ -350,7 +345,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     channelSupervisor = supervisor;
     const processSessions = createProcessSessionTransport({
       answer: (answer) =>
-        requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
+        runAppEffect(runtime, requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() })),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
         dbPath: config.dbPath,
@@ -371,22 +366,27 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("processes.close"),
       }),
     );
-    const wake = (id: string) => {
+    const wakeEffect = (id: string) => Effect.gen(function* () {
       const row = SessionHandleStore.row(id);
       const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
         (block) => block.id === "runner" && block.source === "app:runner",
       )?.content;
-      return runner === "process"
-        ? processSessions.wake(id)
-        : wakeSession(id, resident.runnerFor(row), sessionRuntime);
-    };
-    gateway = createResidentGateway(
+      if (runner === "process") {
+        yield* Effect.tryPromise({ try: () => processSessions.wake(id), catch: (error) => new AgentFailure({ operation: "process.wake", cause: String(error) }) });
+      } else {
+        const scope = yield* AppScope;
+        yield* Scope.extend(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
+      }
+    });
+    const wake = (id: string) => runAppEffect(runtime, wakeEffect(id));
+    gateway = await runAppBoot(runtime, createResidentGateway(
       {
-        inbox: { commit: commitMessageInbox },
+        inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
         prepare: prepareMessage(resident.materialize),
-        requests,
-        authenticateAnswer: async (_sender, credential, requestId) =>
-          authenticateOwner(credential, requestId),
+        requests: channelRequests(requests),
+        authenticateAnswer: (_sender, credential, requestId) => Effect.try({
+          try: () => authenticateOwner(credential, requestId), catch: decodeChannelFailure("answer.authenticate"),
+        }),
         committed: (row) => {
           doorbell.runInAsyncScope(() => {
             void wake(row.sessionId);
@@ -423,24 +423,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
               })),
             ),
       },
-    );
-    const alarms = createAlarmWorker({
+    ));
+    const alarms = await acquireAppResource(runtime, createAlarmWorker({
       alarms: services.ledger.alarms,
       requestTimeout: requests.timeout,
       observations: Bus,
       clock: sessionRuntime.clock,
-      wake: async (id) => {
-        await wake(id);
-      },
+      wake: (id) => Effect.flatMap(AppScope, () => wakeEffect(id)).pipe(Effect.provideService(AppScope, services.scope)),
       failure: (error) => console.error("alarm worker failure", error),
-    });
-    await acquire(Effect.succeed(alarms), (resource) =>
-      Effect.tryPromise({
-        try: () => resource.close(),
-        catch: lifecycleFailure("alarms.close"),
-      }),
-    );
-    alarms.start();
+    }));
+    await runAppBoot(runtime, alarms.start());
 
     await acquire(Effect.succeed(supervisor), (resource) =>
       Effect.tryPromise({
@@ -450,15 +442,26 @@ export async function startOpenOmni(options: StartOptions = {}) {
     );
     await supervisor.reconcile();
 
-    wsHandler = new WebSocketHandler(routingHandler, Bus.publish, {
-      ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
-      onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
-    });
+    wsHandler = new WebSocketHandler(
+      ({ sender, facts }) => messages.ingest(sender, facts).pipe(
+        Effect.flatMap((admission) => admission.status === "blocked_pre"
+          ? Effect.fail(new ChannelFailure({
+              operation: "message.admission",
+              cause: admission.reasonCode,
+            }))
+          : Effect.void),
+      ),
+      Bus.publish,
+      {
+        ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
+        onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
+      },
+    );
 
     const server = Bun.serve({
       hostname: config.host,
       port: config.wsPort,
-      websocket: wsHandler.ws,
+      websocket: webSocketCallbacks(runtime, wsHandler),
       fetch: createHttpRoutes(wsHandler, () => webhookHandlers.get("github")),
     });
 
@@ -474,7 +477,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const awaitingOwner = requests
       .list()
       .some((request) => request.mode === "approval" && request.state === "open");
-    recovery = sweepSessions(resident.runnerFor, sessionRuntime);
+    recovery = acquireAppResource(runtime, sweepSessions(resident.runnerFor, sessionRuntime));
     if (awaitingOwner) {
       void recovery.catch((error: Error) => console.error("session recovery failed", error));
     } else await recovery;

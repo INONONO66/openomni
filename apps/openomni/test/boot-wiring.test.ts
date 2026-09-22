@@ -39,11 +39,11 @@ describe("boot tool catalog", () => {
       config: suite.config("openomni-boot-catalog-", { wsToken: "boot-catalog-token" }),
       llm: {
         resolveModel: fakeProviderModel,
-        run: async (input: RunInput, sink: Sink) => {
+        run: (input: RunInput, sink: Sink) => Effect.sync(() => {
           resolveToolNames(input.tools.map((tool) => tool.name));
           sink.onMessage(assistantMessage(input, { id: "boot-catalog-reply", text: "ready" }));
-          return { type: "stop" };
-        },
+          return { type: "stop" as const };
+        }),
       },
     });
 
@@ -84,11 +84,11 @@ test("967 boot preserves promoted expired session", async () => {
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input: RunInput, sink: Sink) => {
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
         calls += 1;
         sink.onMessage(assistantMessage(input, { text: "recovered" }));
         return { type: "stop" as const };
-      },
+      }),
     },
   };
   // Capture the real app's catalog, not a dummy runner or a parallel declaration.

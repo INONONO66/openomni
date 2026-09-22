@@ -1,9 +1,10 @@
+import { Effect, Cause } from "effect";
 import { Bus } from "@openomni/agent";
 import { type BusEvent, Component, type TraceContext } from "@openomni/protocol";
 
 export interface ObservedComponent {
   readonly events: BusEvent.Sink;
-  run<T>(operation: () => Promise<T>): Promise<T>;
+  run<T, E, R>(operation: Effect.Effect<T, E, R>): Effect.Effect<T, E, R>;
 }
 
 interface ComponentIdentity extends TraceContext.Type {
@@ -35,29 +36,17 @@ export function observeComponent(trace: ComponentIdentity): ObservedComponent {
 
   return {
     events,
-    async run(operation) {
-      events.publish(Component.Events.Active, componentPayload(trace));
-      try {
-        const result = await operation();
-        events.publish(Component.Events.Disposed, {
-          ...componentPayload(trace),
-          outcome: "completed",
-        });
-        return result;
-      } catch (error) {
-        let message: string;
-        try {
-          message = error instanceof Error ? error.message : String(error);
-        } catch {
-          message = "unprintable error";
-        }
-        events.publish(Component.Events.Failed, { ...componentPayload(trace), error: message });
-        events.publish(Component.Events.Disposed, {
-          ...componentPayload(trace),
-          outcome: "failed",
-        });
-        throw error;
-      }
+    run(operation) {
+      return Effect.suspend(() => {
+        events.publish(Component.Events.Active, componentPayload(trace));
+        return operation.pipe(Effect.onExit((exit) => Effect.sync(() => {
+          if (exit._tag === "Failure")
+            events.publish(Component.Events.Failed, { ...componentPayload(trace), error: Cause.pretty(exit.cause) });
+          events.publish(Component.Events.Disposed, {
+            ...componentPayload(trace), outcome: exit._tag === "Success" ? "completed" : "failed",
+          });
+        })));
+      });
     },
   };
 }

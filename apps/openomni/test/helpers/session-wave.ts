@@ -5,6 +5,7 @@ import { LlmCall, type AnyToolDefinition } from "@openomni/protocol";
 import { SessionHandleStore } from "@openomni/ledger";
 import { z } from "zod";
 import { eventSignal } from "./event-signal";
+import { runEffect } from "./effect";
 import type { ResidentSuite } from "./resident-suite";
 
 export function waveTool(
@@ -70,7 +71,7 @@ export function interruptSecondModel(
     Bus.subscribe(LlmCall.Events.Completed, () => {
       const handle = currentHandle();
       if (requestCount() !== 2 || handle === undefined) return;
-      void handle.interrupt().then(interrupted.resolve, interrupted.reject);
+      void runEffect(handle.interrupt()).then(interrupted.resolve, interrupted.reject);
     }),
   );
   return interrupted.promise;

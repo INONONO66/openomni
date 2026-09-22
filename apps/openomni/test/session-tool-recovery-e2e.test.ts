@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { acquireEffect, runEffect } from "./helpers/effect";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -126,10 +127,10 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     try {
       initialize({ dbPath });
       seedKernelPolicyRows();
-      const handle = session(
+      const handle = await acquireEffect(session(
         { id: sessionId, role: "resident", runner, tools: definitions.map(sessionTool) },
         runtime,
-      );
+      ));
       const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
       let saved = false;
       unsubscribe =
@@ -165,10 +166,10 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
                 return;
               interruptInbox();
             });
-      const first = handle.prompt("execute each slot once");
+      const first = runEffect(handle.prompt("execute each slot once"));
       if (mode === "partial-wave") {
         await bounded(enteredB.promise);
-        await bounded(handle.interrupt());
+        await bounded(runEffect(handle.interrupt()));
       }
       expect((await bounded(first))?.kind).toBe(mode === "error-window" ? "error" : "interrupted");
       unsubscribe();
@@ -176,7 +177,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       let prefix = SessionHandleStore.tree(sessionId);
       if (mode === "crash-window") {
         expect(saved).toBe(true);
-        await closeSessions(runtime);
+        await runEffect(closeSessions(runtime));
         Storage.reset();
         initialize({ dbPath: crashPath });
         prefix = SessionHandleStore.tree(sessionId);
@@ -191,11 +192,11 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         const expiresAt = SessionHandleStore.row(sessionId).leaseExpiresAt;
         if (expiresAt === null) throw new Error("missing crash lease");
         runtime = { observations: Bus, clock: () => expiresAt + 1 };
-        await bounded(sweepSessions(() => runner, runtime));
+        await bounded(acquireEffect(sweepSessions(() => runner, runtime)));
       } else if (mode === "error-window") {
-        await bounded(handle.prompt("continue without replay"));
+        await bounded(runEffect(handle.prompt("continue without replay")));
       } else {
-        await bounded(handle.resume());
+        await bounded(runEffect(handle.resume()));
       }
       expect(SessionHandleStore.tree(sessionId).slice(0, prefix.length)).toEqual(prefix);
       const results = requests[1]?.messages.flatMap((message) =>
@@ -214,7 +215,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       expect(bodies).toEqual(names);
     } finally {
       unsubscribe();
-      await closeSessions(runtime);
+      await runEffect(closeSessions(runtime));
       await provider.stop(true);
       Storage.reset();
       rmSync(directory, { recursive: true, force: true });

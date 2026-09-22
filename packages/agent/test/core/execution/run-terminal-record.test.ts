@@ -1,12 +1,16 @@
-import { providerFailure } from "../../helpers/mock-llm";
-import { describe, expect, it, jest } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
+import { Effect } from "effect";
 import { RunEvents } from "../../../src/core/execution/events";
-import { runTestAgent, runUserMessage } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
-import { completeModel, mockLlm, countingStopLlm, createStopOutcome } from "../../helpers/mock-llm";
-import { runInput } from "../../helpers/run-input";
+import { bounded } from "../../helpers/bounded";
+import { compiledPolicy } from "../../helpers/compiled-policy";
+import { failure, turnExecutor } from "../../helpers/effect-g1";
+import { runTestAgent, runUserMessage } from "../../helpers/effect-g2";
 import { expectUncalledBudget } from "../../helpers/execution-assertions";
+import { isolated } from "../../helpers/isolated";
+import { completeModel, mockLlm, countingStopLlm, createStopOutcome, providerFailure } from "../../helpers/mock-llm";
+import { runInput } from "../../helpers/run-input";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 
@@ -27,7 +31,6 @@ function observeRunTerminals() {
   };
 }
 
-/** Resolves with the `agent.run.failed` operational record; call `unsubscribe` in `finally`. */
 function awaitRunFailed() {
   const failed = Promise.withResolvers<{
     error?: string;
@@ -39,7 +42,6 @@ function awaitRunFailed() {
   return { promise: failed.promise, unsubscribe };
 }
 
-/** A timed-out provider whose every attempt fails with a retryable 408. */
 const timingOutLlm = mockLlm(async () => ({
   type: "error",
   error: providerFailure("connection timeout", { statusCode: 408 }),
@@ -53,13 +55,13 @@ describe("one terminal record per started run", () => {
       if (event.msg === "agent.run.completed") terminal.resolve(event);
     });
     try {
-      const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      const result = await isolated(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
         llm: mockLlm(completeModel),
-      });
+      }));
       expect(result.finishReason).toBe("stop");
-      expect(await terminal.promise).toMatchObject({
+      expect(await bounded(terminal.promise, "run completed")).toMatchObject({
         msg: "agent.run.completed",
         context: { turns: 1 },
       });
@@ -74,12 +76,12 @@ describe("one terminal record per started run", () => {
     const records = observeRunTerminals();
     const provider = countingStopLlm();
     try {
-      const result = await runUserMessage({
+      const result = await isolated(Effect.flip(runUserMessage({
         events: Bus,
         model,
         budget: { maxTurns: 0 },
         llm: provider.llm,
-      }, "hi").catch((error: Error) => error);
+      }, "hi")));
       expectUncalledBudget(result, provider.calls);
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
@@ -88,62 +90,67 @@ describe("one terminal record per started run", () => {
   });
 
   it("records final classified retry facts at the terminal ceiling", async () => {
-    jest.useFakeTimers();
-    const first = Promise.withResolvers<void>();
-    const second = Promise.withResolvers<void>();
-    let retries = 0;
-    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, () => {
-      retries += 1;
-      if (retries === 1) first.resolve();
-      else second.resolve();
-    });
+    const records = observeRunTerminals();
+    const retries: number[] = [];
+    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, (event) => retries.push(event.attempt));
     const failed = awaitRunFailed();
     try {
-      const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      expect(await isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
         llm: timingOutLlm,
-      });
-      await first.promise;
-      jest.advanceTimersByTime(1_000);
-      await second.promise;
-      jest.advanceTimersByTime(2_000);
-      await expect(running).rejects.toThrow("connection timeout");
-      expect((await failed.promise).context).toEqual({
+      })))).toMatchObject({ _tag: "LlmRunFailure", statusCode: 408 });
+      expect((await bounded(failed.promise, "run failed")).context).toEqual({
         reason: "timeout",
         attempt: 3,
         maxAttempts: 3,
       });
+      expect(retries).toEqual([1, 2]);
+      expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
       failed.unsubscribe();
       unsubscribeRetry();
-      jest.useRealTimers();
+      records.unsubscribe();
     }
   });
 
   it("records an abort during retry backoff as an interrupt rather than provider failure", async () => {
     const records = observeRunTerminals();
     const controller = new AbortController();
-    const retry = Promise.withResolvers<void>();
-    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
+    const waiting = Promise.withResolvers<void>();
+    const retries: number[] = [];
+    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, (event) => retries.push(event.attempt));
     const failed = awaitRunFailed();
+    const { executor } = turnExecutor(compiledPolicy(), [], {
+      signal: controller.signal,
+      retryAlarm: {
+        arm: () => Effect.void,
+        wait: () => Effect.sync(() => waiting.resolve()).pipe(Effect.zipRight(Effect.never)),
+        settle: () => Effect.void,
+      },
+    });
+    const running = isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      events: Bus,
+      model,
+      executor,
+      execution: executor,
+      signal: controller.signal,
+      llm: timingOutLlm,
+    })));
     try {
-      const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-        events: Bus,
-        model,
-        signal: controller.signal,
-        llm: timingOutLlm,
-      });
-      await retry.promise;
+      await bounded(waiting.promise, "retry backoff entered");
       controller.abort();
-      await expect(running).rejects.toMatchObject({ name: "AbortError" });
-      expect((await failed.promise).context).toEqual({
+      expect(await running).toMatchObject({ _tag: "Interrupted" });
+      expect((await bounded(failed.promise, "run interrupted")).context).toEqual({
         reason: "aborted",
         attempt: 1,
         maxAttempts: 3,
       });
+      expect(retries).toEqual([1]);
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
+      controller.abort();
+      await running;
       failed.unsubscribe();
       unsubscribeRetry();
       records.unsubscribe();
@@ -156,18 +163,19 @@ describe("one terminal record per started run", () => {
     const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, () => retries.push(1));
     const controller = new AbortController();
     controller.abort();
+    const failed = awaitRunFailed();
     try {
-      await expect(
-        runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-          events: Bus,
-          model,
-          signal: controller.signal,
-          llm: mockLlm(async () => createStopOutcome()),
-        }),
-      ).rejects.toThrow("aborted");
+      expect(await isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model,
+        signal: controller.signal,
+        llm: mockLlm(async () => createStopOutcome()),
+      })))).toMatchObject({ _tag: "Interrupted" });
+      expect((await bounded(failed.promise, "pre-provider abort")).context?.reason).toBe("aborted");
       expect(retries).toEqual([]);
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
+      failed.unsubscribe();
       unsubscribe();
       records.unsubscribe();
     }
@@ -176,18 +184,14 @@ describe("one terminal record per started run", () => {
   it("preserves a pre-provider non-Error terminal value", async () => {
     const records = observeRunTerminals();
     const failed = awaitRunFailed();
+    const terminal = Symbol.for("terminal");
     try {
-      const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      expect(await isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
-        llm: {
-          resolveModel: async () => {
-            throw Symbol.for("terminal");
-          },
-        },
-      });
-      await expect(running).rejects.toBe(Symbol.for("terminal"));
-      expect((await failed.promise).error).toBe("Symbol(terminal)");
+        llm: { resolveModel: () => Effect.die(terminal) },
+      })))).toBe(terminal);
+      expect((await bounded(failed.promise, "pre-provider defect")).error).toBe("Symbol(terminal)");
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
       failed.unsubscribe();

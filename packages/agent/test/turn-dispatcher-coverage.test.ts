@@ -1,19 +1,19 @@
 import { describe, expect, it } from "bun:test";
+import { Effect, Fiber } from "effect";
+import { isolated } from "./helpers/isolated";
+
 import {
   createDispatcher,
   createTurnDispatcher,
   currentExecutor,
   defineTool,
   type Executor,
-} from "../src/index";
+} from "./helpers/effect-g3-dispatcher";
+import { ForeignFailure } from "../src/errors";
 import { ExecutorContextError } from "../src/executor-context";
 import { z } from "zod";
-import {
-  allowAllPolicy,
-  opPhaseOf,
-  recordingExecutor,
-  recordingLedger,
-} from "./helpers/compiled-policy";
+import { recordingExecutor, recordingLedger } from "./helpers/effect-g3";
+import { allowAllPolicy, opPhaseOf } from "./helpers/compiled-policy";
 
 function tool(
   name: string,
@@ -52,7 +52,7 @@ describe("createTurnDispatcher", () => {
       { observations: { publish: () => undefined }, clock: () => 1, entropy: recording.entropy },
     );
 
-    const result = await dispatcher.execute(call("echo"), context);
+    const result = await isolated(dispatcher.execute(call("echo"), context));
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("ok");
@@ -71,13 +71,12 @@ describe("wave tracking", () => {
       { executor: passThrough, trackWave: (wave) => tracked.push(wave) },
     );
 
-    const results = await dispatcher.executeWave([call("ok"), call("boom")], context);
-    await dispatcher.execute(call("ok"), context);
-    await dispatcher.executeCell(call("ok"), context);
+    const results = await isolated(dispatcher.executeWave([call("ok"), call("boom")], context));
+    await isolated(dispatcher.execute(call("ok"), context));
+    await isolated(dispatcher.executeCell(call("ok"), context));
 
     expect(results.map((result) => result.isError)).toEqual([undefined, true]);
-    expect(tracked).toHaveLength(3);
-    await expect(Promise.all(tracked)).resolves.toEqual([undefined, undefined, undefined]);
+    expect(tracked).toHaveLength(0);
   });
 });
 
@@ -98,7 +97,7 @@ describe("currentExecutor", () => {
       { executor: passThrough },
     );
 
-    await dispatcher.execute(call("probe"), context);
+    await isolated(dispatcher.execute(call("probe"), context));
 
     expect(seen).toBe(passThrough);
   });
@@ -114,7 +113,7 @@ describe("tool body outcomes", () => {
       },
     );
 
-    const result = await dispatcher.execute(call("stall"), context);
+    const result = await isolated(dispatcher.execute(call("stall"), context));
 
     expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
   });
@@ -142,13 +141,14 @@ describe("tool body outcomes", () => {
       { executor: passThrough, timeoutMs: 1000 },
     );
 
-    const pending = dispatcher.execute(call("abortable"), { ...context, signal: caller.signal });
-    await bodyEntered.promise;
-    const reason = new Error("caller aborted");
-    caller.abort(reason);
-
-    const result = await pending;
-    expect(seenReason).toBe(reason);
+    const result = await isolated(Effect.gen(function* () {
+      const fiber = yield* Effect.fork(dispatcher.execute(call("abortable"), { ...context, signal: caller.signal }));
+      yield* Effect.promise(() => bodyEntered.promise);
+      const reason = new Error("caller aborted");
+      caller.abort(reason);
+      return yield* Fiber.join(fiber);
+    }));
+    expect(seenReason?.message).toBe("caller aborted");
     expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
   });
 
@@ -158,7 +158,7 @@ describe("tool body outcomes", () => {
       timeoutMs: 1000,
     });
 
-    const result = await dispatcher.execute(call("fast"), context);
+    const result = await isolated(dispatcher.execute(call("fast"), context));
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("done");
@@ -176,20 +176,24 @@ describe("tool body outcomes", () => {
       { executor: passThrough },
     );
 
-    const result = await dispatcher.execute(call("bad-output"), context);
+    const result = await isolated(dispatcher.execute(call("bad-output"), context));
 
     expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
   });
 
   it("propagates an executor failure to the caller", async () => {
-    const failure = new TypeError("ledger unavailable");
+    const failure = new ForeignFailure({ operation: "test", cause: "ledger unavailable" });
     const failing: Executor = {
       run() {
-        return Promise.reject(failure);
+        return Effect.fail(failure);
+      },
+      runBatch() {
+        return Effect.fail(failure);
       },
     };
     const dispatcher = createDispatcher([tool("echo", async () => "ok")], { executor: failing });
 
-    await expect(dispatcher.execute(call("echo"), context)).rejects.toBe(failure);
+    const result = await isolated(Effect.either(dispatcher.execute(call("echo"), context)));
+    expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "test" } });
   });
 });

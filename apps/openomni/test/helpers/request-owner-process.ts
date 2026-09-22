@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
 import { PersonStore, SessionHandleStore, Storage } from "@openomni/ledger";
@@ -145,12 +146,12 @@ async function serve() {
       clock: () => at,
     },
     llm: {
-      resolveModel: async (model) => ({
+      resolveModel: (model) => Effect.succeed({
         id: model.id,
         name: model.id,
         providerID: model.provider,
       }),
-      run: async (input, sink) => {
+      run: (input, sink) => Effect.sync(() => {
         modelCalls += 1;
         emit({ type: "model", snapshot: state() });
         if (recovering) {
@@ -165,7 +166,7 @@ async function serve() {
         if (result !== undefined)
           throw new Error(`unexpected pre-crash tool result: ${result.output}`);
         return { type: "stop" };
-      },
+      }),
     },
   });
   emit({ type: "ready", port: app.port, snapshot: state() });

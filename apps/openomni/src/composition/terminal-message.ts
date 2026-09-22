@@ -1,6 +1,5 @@
-import { Effect, Either } from "effect";
-import { AsyncLocalStorage } from "node:async_hooks";
-import { Bus, createExecutor, type SessionRuntime } from "@openomni/agent";
+import { Effect, FiberRef } from "effect";
+import { Bus, createExecutor, ForeignFailure, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouter } from "@openomni/channels";
 import type { LedgerAction } from "@openomni/protocol";
@@ -12,14 +11,14 @@ interface OutboundContext {
   receipt?: LedgerAction.Receipt;
 }
 
-export const outboundMessage = new AsyncLocalStorage<OutboundContext>();
+export const outboundMessage = FiberRef.unsafeMake<OutboundContext | undefined>(undefined);
 
 /** The gateway admits recorded bytes; the receiver, not this source, owns its inbox. */
 export function dispatchOutboundMessage(
   ingest: GatewayRouter["ingest"],
   clock: () => number,
 ): NonNullable<SessionRuntime["dispatchOutbound"]> {
-  return async (input) => {
+  return (input) => Effect.gen(function* () {
     const { message, authority, policy } = input;
     const executor = createExecutor({
       identity: {
@@ -32,34 +31,21 @@ export function dispatchOutboundMessage(
       clock,
       entropy: () => crypto.randomUUID(),
       ledger: {
-        async commit(action) {
+        commit: (action) => Effect.gen(function* () {
           const row = SessionHandleStore.row(message.sourceSessionId);
-          const result = Either.getOrThrowWith(
-            await Effect.runPromise(
-              Effect.either(
-                SessionHandleStore.commit({
-                  sessionId: message.sourceSessionId,
-                  ...authority,
-                  now: clock(),
-                  expectedRevision: row.revision,
-                  actions: [action],
-                  consumeInboxIds: [],
-                  state: row.state,
-                  releaseLease: false,
-                }),
-              ),
-            ),
-            (error) => error,
-          );
+          const result = yield* SessionHandleStore.commit({
+            sessionId: message.sourceSessionId, ...authority, now: clock(),
+            expectedRevision: row.revision, actions: [action], consumeInboxIds: [], state: row.state, releaseLease: false,
+          });
           const receipt = result.receipts[0];
           if (receipt === undefined) throw new Error("outbound policy receipt missing");
           return receipt;
-        },
+        }),
       },
     });
     const context: OutboundContext = { input, executor };
-    return outboundMessage.run(context, async () => {
-      const admitted = await ingest(
+    return yield* Effect.gen(function* () {
+      const admitted = yield* ingest(
         { kind: "session", id: message.sourceSessionId },
         {
           to: { kind: "session", id: message.destinationSessionId },
@@ -75,6 +61,9 @@ export function dispatchOutboundMessage(
       if (receipt === undefined)
         throw new Error("outbound receiving consumer did not commit a receipt");
       return receipt;
-    });
-  };
+    }).pipe(
+      Effect.locally(outboundMessage, context),
+      Effect.mapError((error) => new ForeignFailure({ operation: "message.outbound", cause: String(error) })),
+    );
+  });
 }

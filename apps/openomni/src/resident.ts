@@ -1,3 +1,7 @@
+import { AgentGenerationLive } from "@openomni/agent";
+import { compilePolicySnapshot } from "@openomni/policy";
+import { LedgerAction, type SessionGeneration } from "@openomni/protocol";
+import { Effect } from "effect";
 import {
   createSessionChatRunner,
   createTurnDispatcher,
@@ -57,7 +61,7 @@ export function createResident(options: ResidentOptions) {
   };
   const runnerFor =
     (row: LedgerSession.Row): SessionRunner =>
-    async (input) => {
+    (input) => Effect.gen(function* () {
       const definitions = definitionsFor(row.id, row.role);
       const dispatcher = createTurnDispatcher(definitions, input, options.sessionRuntime);
       const traceId = newTraceId();
@@ -88,7 +92,7 @@ export function createResident(options: ResidentOptions) {
             toolChoice: tools.length === 0 ? "none" : "auto",
             toolWave: (calls, signal) =>
               evidenceOnly
-                ? Promise.resolve(calls.map(refuseEvidenceOnly))
+                ? Effect.succeed(calls.map(refuseEvidenceOnly))
                 : dispatcher.executeWave(calls, {
                     sessionId: input.sessionId,
                     turnId: input.turnId,
@@ -114,7 +118,7 @@ export function createResident(options: ResidentOptions) {
       });
       options.tools.cells?.bindTools(row.id, definitions);
       try {
-        const result = await runner(input);
+        const result = yield* runner(input);
         const origin = SessionHandleStore.inboxRows(row.id)
           .filter((item) => {
             const value = item.origin.value;
@@ -134,7 +138,7 @@ export function createResident(options: ResidentOptions) {
           origin.kind === "external" &&
           typeof origin.actorId === "string"
         ) {
-          await dispatcher.execute(
+          yield* dispatcher.execute(
             {
               id: crypto.randomUUID(),
               tool: "send_message",
@@ -150,9 +154,20 @@ export function createResident(options: ResidentOptions) {
       } finally {
         options.tools.cells?.bindTools(row.id, []);
       }
-    };
+    });
   return {
     runnerFor,
+    generation(snapshot: SessionGeneration.Snapshot) {
+      const definitions = [...new Set([...definitionsFor("generation", "resident"), ...definitionsFor("generation", "worker")])];
+      return { snapshot, layer: AgentGenerationLive({
+        snapshot,
+        definitions: definitions.filter((tool) => snapshot.tools.some((offered) => offered.name === tool.name)),
+        now: options.sessionRuntime.clock ?? Date.now,
+        next: options.sessionRuntime.entropy ?? (() => crypto.randomUUID()),
+        observations: options.sessionRuntime.observations,
+        policy: compilePolicySnapshot({ rows: SessionHandleStore.policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options }),
+      }) };
+    },
     materialize(id: string, parentId: string | null, role: LedgerSession.Role, runner: string) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
         throw new Error(`runner is not registered: ${runner}`);

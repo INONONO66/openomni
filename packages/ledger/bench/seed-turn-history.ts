@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { type LedgerSession, type SessionGeneration, SessionTurn } from "@openomni/protocol";
 import { SessionHandleStore } from "../src/index";
 import { materializeSession } from "../test/helpers/session";
@@ -10,8 +11,7 @@ export function seedTurnHistory(id: string, count = 10): void {
   let parentId = tree.at(-1)?.id ?? null;
   for (let index = 0; index < count; index += 1) {
     const request = prepareTurnCommit(id, index, parentId, generation);
-    const committed = SessionHandleStore.commit(request);
-    if (!committed.ok) throw new Error("benchmark turn commit refused");
+    Either.getOrThrowWith(Effect.runSync(Effect.either(SessionHandleStore.commit(request))), (error) => error);
     parentId = request.actions.at(-1)?.id ?? null;
   }
 }
@@ -27,14 +27,13 @@ export function prepareTurnCommit(
   const turnId = `${id}:turn:${index}`;
   const resultId = `${turnId}:result`;
   const now = index + 2;
-  const lease = SessionHandleStore.acquireLease({
+  const lease = Either.getOrThrowWith(Effect.runSync(Effect.either(SessionHandleStore.acquireLease({
     sessionId: id,
     owner: "bench",
     expectedFence: row.leaseFence,
     now,
     expiresAt: now + 100,
-  });
-  if (!lease.ok) throw new Error("benchmark lease refused");
+  }))), (error) => error);
   return {
     sessionId: id,
     owner: "bench",

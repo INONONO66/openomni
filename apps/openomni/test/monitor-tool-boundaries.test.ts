@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
 import { alarmFixture } from "./helpers/alarm";
 import { alarmSummary, alarmPathEvent } from "./helpers/alarm-payload";
+import { runEffect } from "./helpers/effect";
+
 
 test("monitor command: real PTY match, dedupe and exit summary", () =>
   Storage.withIsolation(async () => {
@@ -19,7 +21,7 @@ test("monitor command: real PTY match, dedupe and exit summary", () =>
         description: "PTY",
         persistent: true,
       });
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       expect((await match).content).toBe("MATCH exact  ");
       expect(alarmSummary((await summary).content)).toEqual({
         alarmId: "pty",
@@ -42,11 +44,11 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
     const fixture = alarmFixture();
     try {
       fixture.arm("create", { path, event: "create", description: "create", persistent: true });
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       const created = fixture.next("create");
       writeFileSync(path, "first");
       // No yield: the native callback cannot run before this reconciliation.
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       // Assert durable truth before native callbacks or bus microtasks can run.
       expect(fixture.rows()).toHaveLength(1);
       expect(fixture.storage.actions.tree("monitor-session").map((action) => action.kind)).toEqual([
@@ -64,13 +66,13 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       ]);
       expect(createActions.at(-1)?.id).toBe(createdRow.id);
       const revision = fixture.storage.sessions.get("monitor-session")?.revision;
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(fixture.storage.sessions.get("monitor-session")?.revision).toBe(revision);
       fixture.arm("modify", { path, event: "modify", description: "modify", persistent: true });
-      fixture.worker.tick(); // Synchronous source installation precedes the filesystem mutation.
+      await runEffect(fixture.worker.tick()); // Source installation precedes the filesystem mutation.
       const modified = fixture.next("modify");
       writeFileSync(path, "second longer");
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(fixture.rows()).toHaveLength(2);
       expect(fixture.rows().at(-1)?.origin.value).toBe("modify");
       expect(fixture.storage.actions.tree("monitor-session").at(-1)?.kind).toBe("prompt");
@@ -84,12 +86,8 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
         (error) => error,
       );
       writeFileSync(path, "after cancel");
-      fixture.worker.tick();
-      expect(() =>
-        Either.getOrThrowWith(
-          Effect.runSync(
-            Effect.either(
-              fixture.storage.alarms.fire({
+      await runEffect(fixture.worker.tick());
+      expect(Effect.runSync(Effect.flip(fixture.storage.alarms.fire({
                 id: old.id,
                 epoch: old.epoch,
                 fence: old.fence,
@@ -97,12 +95,7 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
                 at: 1001,
                 content: "late callback",
                 terminal: false,
-              }),
-            ),
-          ),
-          (error) => error,
-        ),
-      ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
+              })))._tag).toBe("AlarmRefused");
       expect(fixture.rows()).toHaveLength(2);
       expect(fixture.errors).toEqual([]);
     } finally {

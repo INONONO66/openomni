@@ -1,3 +1,6 @@
+import { ExecutorContext } from "@openomni/agent";
+import { runEffect } from "./effect";
+import { Effect } from "effect";
 import { createDispatcher, defineTool, type Executor } from "@openomni/agent";
 import { z } from "zod";
 import { executor as productionExecutor } from "./executor";
@@ -32,11 +35,19 @@ export async function admittedOperation<T>(
     ],
     { executor },
   );
-  await dispatcher.execute(
+  await runEffect(dispatcher.execute(
     { id: "consumer", tool: "consumer", input: {} },
     { sessionId: "test", turnId: "test-turn" },
-  );
+  ));
   if (failed !== undefined) throw failed;
   if (value === undefined) throw new Error("fixture operation returned undefined");
   return value;
+}
+
+/** Run an Effect consumer with the same real attempt authority as app composition. */
+export function admittedEffect<T, E>(
+  operation: Effect.Effect<T, E>,
+  executor: Executor = productionExecutor,
+): Promise<T> {
+  return runEffect(Effect.provideService(operation, ExecutorContext, executor));
 }

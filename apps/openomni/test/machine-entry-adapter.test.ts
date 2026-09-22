@@ -1,3 +1,4 @@
+import { acquireEffect, runEffect } from "./helpers/effect";
 import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,7 +12,7 @@ import { bounded } from "./helpers/protected-dispatch";
 test.each([false, true])("machine entry adapter handles enrollment %s", async (enrolled) => {
   const home = mkdtempSync(join(tmpdir(), "openomni-machine-entry-"));
   const path = socketPath();
-  const host = await createMachineHost({
+  const host = await acquireEffect(createMachineHost({
     socketPath: path,
     enrollment: () =>
       enrolled
@@ -24,7 +25,7 @@ test.each([false, true])("machine entry adapter handles enrollment %s", async (e
         : undefined,
     events: { publish: () => undefined },
     now: () => 2,
-  });
+  }));
   const announced = Promise.withResolvers<Machine.AttachResult>();
   const log = spyOn(console, "log").mockImplementation((line: string) => {
     announced.resolve(Machine.AttachResult.parse(JSON.parse(line)));
@@ -57,14 +58,14 @@ test.each([false, true])("machine entry adapter handles enrollment %s", async (e
       ]),
     );
     expect(result.status).toBe(enrolled ? "attached" : "refused");
-    await host.close();
+    await runEffect(host.close());
     expect(await bounded(attached)).toBe(enrolled ? 0 : 1);
   } finally {
     log.mockRestore();
     for (const signal of signals)
       for (const listener of process.listeners(signal))
         if (!previous.has(listener)) process.removeListener(signal, listener);
-    await host.close();
+    await runEffect(host.close());
     rmSync(home, { recursive: true, force: true });
   }
 });

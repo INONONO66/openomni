@@ -1,12 +1,15 @@
 import {
+  type PlainValue,
   PlainValueSchema,
   type ToolDefinition,
   type ToolExecutionContext,
 } from "@openomni/protocol";
-import { Effect, flow, Option } from "effect";
+import { Effect, Option } from "effect";
 import { z } from "zod";
 import { ToolBodyFailed } from "./errors";
 import { RawToolSlots } from "./executor-raw";
+import { withExecutor } from "./executor-context";
+import type { Executor } from "./executor-contract";
 
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({ status: z.literal("timed_out") }).strict(),
@@ -25,6 +28,7 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
   input: z.output<In>,
   context: ToolExecutionContext,
   timeoutMs: number | undefined,
+  executor?: Executor,
 ): Effect.Effect<ToolBodyOutcome, ToolBodyFailed, RawToolSlots> {
   return Effect.gen(function* () {
     const slots = yield* RawToolSlots;
@@ -35,16 +39,22 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
         ...context,
         signal: AbortSignal.any([context.signal, signal, controller.signal]),
       };
-      const raw = Promise.resolve().then(() => definition.execute(input, scopedContext));
+      const raw = Promise.resolve().then(() => executor === undefined
+        ? definition.execute(input, scopedContext)
+        : withExecutor(executor, () => definition.execute(input, scopedContext)));
       raw.then(
         (value) => {
           settle();
           resume(Effect.sync(() => decodeOutput(definition, value)));
         },
-        flow(String, (cause) => {
+        (cause: CaughtValue) => {
           settle();
-          resume(Effect.fail(new ToolBodyFailed({ tool: definition.name, cause })));
-        }),
+          // An explicit ToolRefused keeps its model-facing classification; every other
+          // foreign rejection is a typed body failure the executor records as evidence.
+          resume(isToolRefusal(cause)
+            ? Effect.succeed<ToolBodyOutcome>({ status: "error", message: cause.message, errorKind: "precondition_failed" })
+            : Effect.fail(new ToolBodyFailed({ tool: definition.name, cause: String(cause) })));
+        },
       );
       return Effect.sync(() => controller.abort());
     });
@@ -68,4 +78,10 @@ function decodeOutput<In extends z.ZodType, Out extends z.ZodType>(
     };
   }
   return { status: "success", output: json.data };
+}
+
+type CaughtValue = PlainValue | Error | bigint | symbol | undefined | ((...args: never[]) => void);
+
+function isToolRefusal(value: CaughtValue): value is Error {
+  return value instanceof Error && value.name === "ToolRefused";
 }

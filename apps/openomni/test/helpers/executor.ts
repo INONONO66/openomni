@@ -1,7 +1,8 @@
+import { Effect } from "effect";
 import { createExecutor } from "@openomni/agent";
 import { LedgerAction } from "@openomni/protocol";
 import { fixtureHashes } from "../../../../packages/agent/test/helpers/compiled-policy";
-import { nullRetryAlarm } from "../../../../packages/agent/test/helpers/retry-alarm";
+import { nullRetryAlarm } from "../../../../packages/agent/test/helpers/effect-g1";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../../packages/policy/src";
 
 let ordinal = 0;
@@ -17,12 +18,12 @@ export const seededPolicy = compilePolicySnapshot({
 export const executor = createExecutor({
   policy: seededPolicy,
   ledger: {
-    async commit(action) {
+    commit(action) {
       ordinal += 1;
-      return {
+      return Effect.succeed({
         action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
         revision: ordinal,
-      };
+      });
     },
   },
   observations: { publish: () => undefined },

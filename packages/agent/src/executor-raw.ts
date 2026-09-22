@@ -10,7 +10,7 @@ export function createRawSlots(retain?: (settlement: Promise<void>) => void) {
   const pending = new Set<symbol>();
   const listeners = new Set<() => void>();
   function open() {
-    const key = Symbol();
+    const key = Symbol("raw-tool-slot");
     const completion = Promise.withResolvers<void>();
     pending.add(key);
     retain?.(completion.promise);

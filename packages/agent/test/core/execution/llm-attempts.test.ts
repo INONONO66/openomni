@@ -1,13 +1,15 @@
-import { afterEach, expect, test } from "bun:test";
+import { Cause, Effect, Exit, Fiber } from "effect";
+import { isolated } from "../../helpers/isolated";
+import { expect, test } from "bun:test";
+import { requestLedger, turnExecutor, failure } from "../../helpers/effect-g1";
+import { ForeignFailure, Interrupted } from "../../../src/errors";
+import { LlmRunFailure } from "@openomni/llm";
 import { Storage } from "@openomni/ledger";
-import { requestLedger } from "../../helpers/request-ledger";
-import { bounded } from "../../helpers/bounded";
-import { Run } from "@openomni/llm";
 import { createExecutor, type ExecutorOptions } from "../../../src/executor";
-import { runChatAttempts } from "../../helpers/chat-attempts";
-import { compiledPolicy, turnExecutor } from "../../helpers/compiled-policy";
+import { runChatAttempts } from "../../helpers/effect-g1";
+import { compiledPolicy } from "../../helpers/compiled-policy";
 import { Alarm, LedgerAction, type PlainObject } from "@openomni/protocol";
-afterEach(() => Storage.reset());
+
 
 const usage = {
   inputTokens: 17,
@@ -17,22 +19,18 @@ const usage = {
   cacheWriteTokens: 4,
 };
 function providerFailure(visibleOutput = false) {
-  return new Run.FailureError(
-    {
+  return new LlmRunFailure({
       message: "overloaded",
       aborted: false,
       contextOverflow: false,
       visibleOutput,
       usage,
-    },
-    {
-      cause: Object.assign(new Error("overloaded"), {
-        isRetryable: true,
-        statusCode: 529,
-        responseHeaders: { "retry-after-ms": "0" },
-      }),
-    },
-  );
+      isRetryable: true,
+      statusCode: 529,
+      retryAfterMs: 0,
+      responseHeaders: { "retry-after-ms": "0" },
+      cause: "Error: overloaded",
+  });
 }
 
 function harness(overrides: Partial<ExecutorOptions> = {}) {
@@ -40,12 +38,10 @@ function harness(overrides: Partial<ExecutorOptions> = {}) {
   return {
     ...turnExecutor(compiledPolicy(), undefined, {
       retryAlarm: {
-        arm: () => undefined,
+        arm: () => Effect.void,
         // turnExecutor pins clock() === 1, so fireAt - 1 is the scheduled delay.
-        wait: async (fireAt) => {
-          waits.push(fireAt - 1);
-        },
-        settle: () => undefined,
+        wait: (fireAt: number) => Effect.sync(() => { waits.push(fireAt - 1); }),
+        settle: () => Effect.void,
       },
       ...overrides,
     }),
@@ -73,22 +69,20 @@ function intents(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kin
   );
 }
 
-test("executor admits ordered retry children and retains every failed billed usage", async () => {
+test("executor admits ordered retry children and retains every failed billed usage", () => isolated(Effect.scoped(Effect.gen(function* () {
   const { executor, committed, waits } = harness();
   const admissions: number[] = [];
   let calls = 0;
-  const result = await executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
+  const result = yield* executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent: LedgerAction.Receipt) =>
     executor.runAttempts(parent, {
-      prepare: async (attempt) => ({
+      prepare: (attempt: number) => Effect.succeed({
         request: { op: "chat", intent: { attempt }, effect: {} },
-        admit: async () => {
-          admissions.push(attempt);
-        },
-        body: async () => {
+        admit: () => Effect.sync(() => { admissions.push(attempt); }),
+        body: () => Effect.gen(function* () {
           calls += 1;
-          if (calls < 3) throw providerFailure();
+          if (calls < 3) return yield* providerFailure();
           return { type: "stop" };
-        },
+        }),
       }),
     }),
   );
@@ -99,9 +93,12 @@ test("executor admits ordered retry children and retains every failed billed usa
   const attempts = intents(committed, "attempt");
   expect(parents).toHaveLength(1);
   expect(attempts.map((a) => a.parentId)).toEqual(new Array(3).fill(parents[0]?.id));
-  const failed = attemptResults(committed, "failed");
+  const failed = attemptResults(committed, "executed").filter((action: LedgerAction.Append) => {
+    const evidence = effectRecord(action).evidence;
+    return evidence !== null && typeof evidence === "object" && !Array.isArray(evidence) && Array.isArray(evidence.failures);
+  });
   expect(failed).toHaveLength(2);
-  for (const result of failed) expect(result.effect.value).toMatchObject({ failure: { usage } });
+  for (const result of failed) expect(result.effect.value).toMatchObject({ evidence: { failures: [{ tag: "LlmRunFailure", usage }] } });
   expect(
     committed.filter(
       (a) =>
@@ -112,19 +109,19 @@ test("executor admits ordered retry children and retains every failed billed usa
         a.intent.value.hook === "llm.pre",
     ),
   ).toHaveLength(3);
-});
+}))));
 
-test("every attempt pins its ordinal, cap and retry reason; the settled one pins projected evidence", async () => {
+test("every attempt pins its ordinal, cap and retry reason; the settled one pins projected evidence", () => isolated(Effect.scoped(Effect.gen(function* () {
   const { executor, committed } = harness();
   let calls = 0;
   const evidence = { usage, visibleOutput: true, credential: { type: "api", fingerprint: "ab12" } };
-  await runChatAttempts(
+  yield* runChatAttempts(
     executor,
-    async () => {
+    () => Effect.gen(function* () {
       calls += 1;
-      if (calls < 2) throw providerFailure();
+      if (calls < 2) return yield* providerFailure();
       return { type: "stop", evidence };
-    },
+    }),
     (value) =>
       typeof value === "object" && value !== null && !Array.isArray(value)
         ? (value.evidence ?? null)
@@ -134,42 +131,46 @@ test("every attempt pins its ordinal, cap and retry reason; the settled one pins
     { attempt: 1, maxAttempts: 3, retryReason: null },
     { attempt: 2, maxAttempts: 3, retryReason: "transient_error" },
   ]);
-  const executed = attemptResults(committed, "executed");
+  const executed = attemptResults(committed, "executed").filter((action: LedgerAction.Append) => {
+    const projected = effectRecord(action).evidence;
+    return projected !== null && typeof projected === "object" && !Array.isArray(projected) && projected.usage !== undefined;
+  });
   expect(executed.map((a) => a.effect.value)).toEqual([
     { phase: "result", terminal: "executed", effect: {}, evidence },
   ]);
-});
+}))));
 
-test("visible output makes a provider failure terminal without a second admission", async () => {
+test("visible output makes a provider failure terminal without a second admission", () => isolated(Effect.scoped(Effect.gen(function* () {
   const { executor, committed, waits } = harness();
-  const failure = providerFailure(true);
+  const expectedFailure = providerFailure(true);
   let calls = 0;
-  await expect(
-    runChatAttempts(executor, async () => {
+  const actual = yield* failure(
+    runChatAttempts(executor, () => Effect.gen(function* () {
       calls += 1;
-      throw failure;
-    }, undefined, {}),
-  ).rejects.toBe(failure);
+      return yield* expectedFailure;
+    }), undefined, {}),
+  ) as LlmRunFailure;
+  expect(actual._tag).toBe("LlmRunFailure");
   expect(calls).toBe(1);
   expect(waits).toEqual([]);
   expect(intents(committed, "attempt")).toHaveLength(1);
-});
+}))));
 
-test("retry cap retains three failed children and never invokes a fourth body", async () => {
+test("retry cap retains three failed children and never invokes a fourth body", () => isolated(Effect.scoped(Effect.gen(function* () {
   const { executor, committed, waits } = harness();
   let calls = 0;
-  await expect(
-    runChatAttempts(executor, async () => {
+  expect(yield* failure(
+    runChatAttempts(executor, () => Effect.gen(function* () {
       calls += 1;
-      throw providerFailure();
-    }, undefined, {}),
-  ).rejects.toBeInstanceOf(Run.FailureError);
+      return yield* providerFailure();
+    }), undefined, {}),
+  )).toMatchObject({ _tag: "LlmRunFailure" });
   expect(calls).toBe(3);
   expect(waits).toEqual([0, 0]);
   expect(intents(committed, "attempt")).toHaveLength(3);
-});
+}))));
 
-test("retry re-evaluates policy and context before admitting another child", async () => {
+test("retry re-evaluates policy and context before admitting another child", () => isolated(Effect.scoped(Effect.gen(function* () {
   for (const refuse of ["policy", "context"] as const) {
     const { executor, committed } = harness({
       policy: compiledPolicy(
@@ -189,43 +190,41 @@ test("retry re-evaluates policy and context before admitting another child", asy
       ),
     });
     let calls = 0;
-    await expect(
-      executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
+    expect(yield* failure(
+      executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent: LedgerAction.Receipt) =>
         executor.runAttempts(parent, {
-          prepare: async (attempt) => ({
+          prepare: (attempt: number) => Effect.succeed({
             request: { op: attempt === 1 ? "chat" : "retry", intent: {}, effect: {} },
-            admit: async () => {
-              if (attempt > 1) throw new Error("context denied");
-            },
-            body: async () => {
+            admit: () => attempt > 1 ? Effect.fail(new ForeignFailure({ operation: "context.admit", cause: "denied" })) : Effect.void,
+            body: () => Effect.gen(function* () {
               calls += 1;
-              throw providerFailure();
-            },
+              return yield* providerFailure();
+            }),
           }),
         }),
       ),
-    ).rejects.toBeInstanceOf(Error);
+    )).toMatchObject({ _tag: refuse === "policy" ? "PolicyDenied" : "ForeignFailure" });
     expect(calls).toBe(1);
     expect(intents(committed, "attempt")).toHaveLength(1);
   }
-});
+}))));
 
-test("interrupt cancels an exactly registered backoff without another provider admission", async () => {
+test("interrupt cancels an exactly registered backoff without another provider admission", () => isolated(Effect.scoped(Effect.gen(function* () {
   const registered = Promise.withResolvers<void>();
   const controller = new AbortController();
   let cancelled = false;
   const { executor, committed } = harness({
     signal: controller.signal,
     retryAlarm: {
-      arm: () => undefined,
-      settle: () => undefined,
-      wait: (_fireAt, signal) =>
-        new Promise<void>((_resolve, reject) => {
+      arm: () => Effect.void,
+      settle: () => Effect.void,
+      wait: (_fireAt: number, signal?: AbortSignal) =>
+        Effect.async<void, Interrupted>((resume) => {
           signal?.addEventListener(
             "abort",
             () => {
               cancelled = true;
-              reject(new DOMException("aborted", "AbortError"));
+              resume(Effect.fail(new Interrupted()));
             },
             { once: true },
           );
@@ -233,24 +232,21 @@ test("interrupt cancels an exactly registered backoff without another provider a
         }),
     },
   });
-  const running = runChatAttempts(executor, async () => {
-    throw providerFailure();
-  }, undefined, {});
-  const terminal = running.catch((error: Error) => error);
-  await registered.promise;
+  const running = yield* Effect.forkScoped(Effect.exit(runChatAttempts(executor, () => Effect.fail(providerFailure()), undefined, {})));
+  yield* Effect.promise(() => registered.promise).pipe(Effect.timeout("5 seconds"));
   controller.abort();
-  expect(await terminal).toBeInstanceOf(DOMException);
+  const terminal = yield* Fiber.join(running);
+  expect(Exit.isSuccess(terminal) ? terminal.value : Cause.isInterrupted(terminal.cause)).toMatchObject({ terminal: "interrupted" });
   expect(cancelled).toBe(true);
   expect(intents(committed, "attempt")).toHaveLength(1);
-});
+}))));
 
 test.each([
   "approve",
   "refuse",
-] as const)("retry approval %s settles the captured child without reconstructing the provider call", async (decision) => {
+] as const)("retry approval %s settles the captured child without reconstructing the provider call", (decision: "approve" | "refuse") => isolated(Effect.scoped(Effect.gen(function* () {
   const waiting = Promise.withResolvers<void>();
-  Storage.initialize({ dbPath: ":memory:" });
-  const recording = requestLedger({
+  const recording = yield* requestLedger({
     onRequest: (request) => {
       if (request.state === "open") waiting.resolve();
     },
@@ -268,7 +264,7 @@ test.each([
         verdict: { encodingVersion: 1, value: { type: "require_approval", reason: "owner" } },
       },
     ]),
-    authorizeApproval: async () => ({
+    authorizeApproval: () => Effect.succeed({
       kind: "owner",
       principalId: "owner",
       evidenceId: "authenticated",
@@ -276,35 +272,35 @@ test.each([
   });
   let calls = 0;
   let prepared = 0;
-  const running = executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent) =>
+  const running = executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent: LedgerAction.Receipt) =>
     executor.runAttempts(parent, {
-      prepare: async (attempt) => {
+      prepare: (attempt: number) => Effect.sync(() => {
         prepared += 1;
         return {
           request: { op: attempt === 1 ? "chat" : "retry", intent: { attempt }, effect: {} },
-          admit: async () => undefined,
-          body: async () => {
+          admit: () => Effect.void,
+          body: () => Effect.gen(function* () {
             calls += 1;
-            if (calls === 1) throw providerFailure();
+            if (calls === 1) return yield* providerFailure();
             return { type: "stop" };
-          },
+          }),
         };
-      },
+      }),
     }),
   );
-  const terminal = running.catch((error: Error) => error);
-  await bounded(waiting.promise);
+  const terminal = yield* Effect.forkScoped(Effect.either(running));
+  yield* Effect.promise(() => waiting.promise).pipe(Effect.timeout("5 seconds"));
   expect(calls).toBe(1);
   const request = executor.approvals?.pending()[0];
   if (request === undefined) throw new Error("missing retry approval");
   expect(
     intents(recording.ledger.actions?.() ?? [], "attempt").map((action) => action.id),
   ).toContain(request.id);
-  await executor.approvals?.answer({ request, credential: "proof", decision });
-  const result = await bounded(terminal);
-  if (decision === "approve") expect(result).toMatchObject({ terminal: "executed" });
+  yield* executor.approvals.answer({ request, credential: "proof", decision });
+  const result = yield* Fiber.join(terminal);
+  if (decision === "approve") expect(result).toMatchObject({ _tag: "Right", right: { terminal: "executed" } });
   else {
-    expect(result).toBeInstanceOf(Error);
+    expect(result).toMatchObject({ _tag: "Left", left: { _tag: "PolicyDenied" } });
     expect(
       (recording.ledger.actions?.() ?? [])
         .filter((action) => action.kind === "attempt")
@@ -319,24 +315,21 @@ test.each([
   expect(calls).toBe(decision === "approve" ? 2 : 1);
   expect(prepared).toBe(2);
   expect(intents(recording.ledger.actions?.() ?? [], "llm")).toHaveLength(1);
-});
+}))));
 
-test("the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once", async () => {
-  Storage.initialize({ dbPath: ":memory:" });
-  const recording = requestLedger();
+test("the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once", () => isolated(Effect.scoped(Effect.gen(function* () {
+  const recording = yield* requestLedger();
   const executor = createExecutor({
     ...recording,
     policy: compiledPolicy(),
     observations: { publish: () => undefined },
   });
   let calls = 0;
-  await bounded(
-    runChatAttempts(executor, async () => {
+  yield* runChatAttempts(executor, () => Effect.gen(function* () {
       calls += 1;
-      if (calls === 1) throw providerFailure();
+      if (calls === 1) return yield* providerFailure();
       return { type: "stop" };
-    }),
-  );
+    }));
   expect(calls).toBe(2);
   const actions = recording.ledger.actions?.() ?? [];
   const attemptIntents = intents(actions, "attempt");
@@ -363,4 +356,4 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
   expect(armed.ordinal).toBeLessThan(settled.ordinal);
   expect(settled.ordinal).toBeLessThan(secondIntent.ordinal);
   expect(Storage.get().alarms?.get(alarmId)).toMatchObject({ status: "cancelled", kind: "at" });
-});
+}))));

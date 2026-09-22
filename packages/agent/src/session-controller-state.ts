@@ -1,15 +1,19 @@
 import type { SessionRunnerResult, SessionHandle } from "./session-contract";
 import type { ExecutionApprovals } from "./executor";
+import type { SessionError } from "./errors";
+import type { Fiber } from "effect";
+import type { createRawSlots } from "./executor-raw";
 export interface SessionControllerState {
-  active: Promise<SessionRunnerResult | undefined> | undefined;
+  active: Fiber.RuntimeFiber<SessionRunnerResult | undefined, SessionError> | undefined;
   controller: AbortController | undefined;
   fence: number;
   closed: boolean;
+  terminalFrozen: boolean;
   released: boolean;
   successor: SessionHandle | undefined;
-  stopHeartbeat: (() => void) | undefined;
-  liveInterruptRunner: Promise<SessionRunnerResult> | undefined;
-  retainedRunner: Promise<void> | undefined;
-  retainedFailure: Error | undefined;
+  heartbeat: Fiber.RuntimeFiber<void, SessionError> | undefined;
+  retainedRunner: Fiber.RuntimeFiber<void, SessionError> | undefined;
+  retainedFailure: SessionError | undefined;
+  rawSlots: ReturnType<typeof createRawSlots>;
   activeApprovals: ExecutionApprovals | undefined;
 }

@@ -1,8 +1,13 @@
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { CommitRefused } from "@openomni/ledger";
+import { isolated } from "../../helpers/isolated";
+import { failure } from "../../helpers/effect-g3";
 import { completeModel, providerFailure, windowedLlm } from "../../helpers/mock-llm";
 import { expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { runTestAgent } from "../../helpers/test-agent";
-import { compiledPolicy, recordingExecutor } from "../../helpers/compiled-policy";
+import { runTestAgent } from "../../helpers/effect-g3";
+import { compiledPolicy } from "../../helpers/compiled-policy";
+import { recoveryRecording as recordingExecutor } from "../../helpers/effect-g3r";
 import { runInput } from "../../helpers/run-input";
 import { RunEvents } from "../../../src/core/execution/events";
 import { executeCompaction } from "../../../src/compaction/execute-cut";
@@ -49,17 +54,17 @@ it("retains an original atomic entry when the configured protected tail is zero"
   // Given: a full-rewrite candidate with real completed call/result pairs.
   const prior = [assistant("original-1"), assistant("original-2")];
   // When: the real compaction strategy summarizes the window.
-  const result = await Compaction.compact(
+  const result = await isolated(Compaction.compact(
     prior,
     {
       contextWindowTokens: 1000,
       protectRecentMessages: 0,
-      onSummarize: async () => "summary",
+      onSummarize: () => Effect.promise(async () => "summary"),
     },
     { traceId: "trace-937", sessionId: "compaction-937" },
     { publish: () => undefined },
     { trigger: "yield" },
-  );
+  ));
   // Then: the suffix boundary is original content, not a synthesized anchor.
   expect(result.compacted).toBe(true);
   expect(result.messages.at(-1)).toEqual(prior.at(-1));
@@ -141,7 +146,7 @@ it("commits a reversible compaction result before completion observations and th
   const committedRecord = () =>
     recording.committed.some((action) => action.kind === "compaction" && "revert" in action);
   // When: the production run loop recovers through its compaction path.
-  await runTestAgent(
+  await isolated(runTestAgent(
     runInput([
       { role: "user", content: "goal" },
       { role: "assistant", content: "prior evidence ".repeat(200) },
@@ -160,7 +165,7 @@ it("commits a reversible compaction result before completion observations and th
         contextWindowTokens: 1000,
         protectRecentMessages: 1,
         speculate: false,
-        onSummarize: async () => "checkpoint",
+        onSummarize: () => Effect.promise(async () => "checkpoint"),
       },
       llm: windowedLlm(async (input, sink) => {
         calls += 1;
@@ -176,7 +181,7 @@ it("commits a reversible compaction result before completion observations and th
         return completeModel(input, sink);
       }),
     },
-  );
+  ));
   // Then: the durable reversible action precedes both consumers.
   expect(durableAtObservation).toBe(true);
   expect(durableAtNextCall).toBe(true);
@@ -195,7 +200,7 @@ function executionInput(
     options: {
       contextWindowTokens: 1000,
       protectRecentMessages: 1,
-      onSummarize: async () => "summary",
+      onSummarize: () => Effect.promise(async () => "summary"),
     },
     identity: { traceId: "trace", sessionId: "session-1" },
     dispatch: { trigger: "yield" },
@@ -207,42 +212,39 @@ function executionInput(
   };
 }
 
-it("holds completion observation until the reversible commit resolves", async () => {
-  // Given: the real executor's durable result commit is explicitly gated.
-  const reached = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const recording = recordingExecutor({
-    async onCommit(action) {
-      if (action.kind === "compaction" && "revert" in action) {
-        reached.resolve();
-        await release.promise;
-      }
-    },
-  });
-  const observed: string[] = [];
-  // When: compaction reaches that exact unresolved commit.
-  const pending = executeCompaction(executionInput(recording.executor, observed));
-  await reached.promise;
-  expect(observed).toEqual([RunEvents.CompactionStarted.name]);
-  release.resolve();
-  await pending;
-  // Then: completion follows persistence, never precedes it.
-  expect(observed).toEqual([RunEvents.CompactionStarted.name, RunEvents.CompactionCompleted.name]);
-});
+it("holds completion observation until the reversible commit resolves", () =>
+  isolated(Effect.scoped(Effect.gen(function* () {
+    const reached = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    const recording = recordingExecutor({
+      beforeCommit: (action) => action.kind === "compaction" && "revert" in action
+        ? Deferred.succeed(reached, undefined).pipe(Effect.zipRight(Deferred.await(release)))
+        : Effect.void,
+    });
+    const observed: string[] = [];
+    const pending = yield* Effect.forkScoped(executeCompaction(executionInput(recording.executor, observed)));
+    yield* Deferred.await(reached).pipe(Effect.timeout("5 seconds"));
+    expect(observed).toEqual([RunEvents.CompactionStarted.name]);
+    expect(recording.committed.filter((action) => action.kind === "compaction" && "revert" in action)).toHaveLength(0);
+    yield* Deferred.succeed(release, undefined);
+    yield* Fiber.join(pending);
+    expect(observed).toEqual([RunEvents.CompactionStarted.name, RunEvents.CompactionCompleted.name]);
+  }))));
 
 it("does not report completion or mutate history when the reversible commit fails", async () => {
   // Given: a fenced commit failure, not a mock compaction implementation.
-  const failure = new Error("fence rejected");
+  const commitFailure = new CommitRefused({ sessionId: "session-1", reason: "fence", expectedRevision: 1, currentRevision: 1, fence: 1, currentFence: 2 });
   const recording = recordingExecutor({
-    async onCommit(action) {
-      if (action.kind === "compaction" && "revert" in action) throw failure;
-    },
+    beforeCommit: (action) => action.kind === "compaction" && "revert" in action
+      ? Effect.fail(commitFailure)
+      : Effect.void,
   });
   const observed: string[] = [];
   const input = executionInput(recording.executor, observed);
   const original = structuredClone(input.history);
   // When: the real strategy succeeds but its durable result cannot commit.
-  await expect(executeCompaction(input)).rejects.toBe(failure);
+  expect(await isolated(failure(executeCompaction(input)))).toMatchObject({ _tag: "CommitFailed", error: commitFailure });
+  expect(recording.committed.filter((action) => action.kind === "compaction" && "revert" in action)).toHaveLength(0);
   // Then: the active history and success observation remain untouched.
   expect(input.history).toEqual(original);
   expect(observed).toEqual([RunEvents.CompactionStarted.name]);
@@ -265,50 +267,50 @@ it("refuses compaction before the summarizer when compiled pre policy denies it"
   });
   const observed: string[] = [];
   // When: the projection is submitted through the executor.
-  await expect(
-    executeCompaction(executionInput(recording.executor, observed)),
-  ).rejects.toMatchObject({ code: "compaction_execution_refused", reason: "hold" });
+  expect(await isolated(failure(executeCompaction(executionInput(recording.executor, observed))))).toMatchObject({ code: "compaction_execution_refused", reason: "hold" });
   // Then: neither compaction work nor observations ran.
   expect(observed).toEqual([]);
   expect(recording.committed.every((action) => action.kind === "policy.decision")).toBe(true);
 });
 
-it("forwards session cancellation into an in-flight compaction summarizer", async () => {
-  // Given: the exact summary-start event and a manually controlled provider.
-  const controller = new AbortController();
-  const started = Promise.withResolvers<void>();
-  const released = Promise.withResolvers<string>();
-  const recording = recordingExecutor();
-  const observed: string[] = [];
-  const base = executionInput(recording.executor, observed);
-  let summarySignal: AbortSignal | undefined;
-  const pending = executeCompaction({
-    ...base,
-    signal: controller.signal,
-    options: {
-      ...base.options,
-      onSummarize: async (_messages, _anchor, _budget, signal) => {
-        summarySignal = signal;
-        started.resolve();
-        return released.promise;
+it("forwards session cancellation into an in-flight compaction summarizer", () =>
+  isolated(Effect.scoped(Effect.gen(function* () {
+    const controller = new AbortController();
+    const started = yield* Deferred.make<AbortSignal>();
+    const recording = recordingExecutor();
+    const observed: string[] = [];
+    const base = executionInput(recording.executor, observed);
+    const original = structuredClone(base.history);
+    const pending = yield* Effect.forkScoped(Effect.exit(executeCompaction({
+      ...base,
+      signal: controller.signal,
+      options: {
+        ...base.options,
+        onSummarize: (_messages, _anchor, _budget, signal) => Effect.gen(function* () {
+          if (signal === undefined) return yield* Effect.die("missing summary signal");
+          return yield* Effect.async<string>((resume) => {
+            const abort = () => resume(Effect.interrupt);
+            signal.addEventListener("abort", abort, { once: true });
+            Deferred.unsafeDone(started, Effect.succeed(signal));
+            return Effect.sync(() => signal.removeEventListener("abort", abort));
+          });
+        }),
       },
-    },
-  }).then(
-    () => "completed",
-    (error) => (error instanceof Error ? error.name : "non-error"),
-  );
-  await started.promise;
-  try {
-    // When: the session interrupts during summarization.
+    })));
+    const summarySignal = yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"));
     controller.abort();
-    // Then: cooperative cancellation reaches the real provider boundary.
-    expect(summarySignal?.aborted).toBe(true);
-    expect(await pending).toBe("AbortError");
-    expect(
-      recording.committed.some((action) => action.kind === "compaction" && "revert" in action),
-    ).toBe(false);
-  } finally {
-    released.resolve("late summary");
-    await pending;
-  }
-});
+    expect(summarySignal.aborted).toBe(true);
+    const exit = yield* Fiber.join(pending).pipe(Effect.timeout("5 seconds"));
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toMatchObject({
+      code: "compaction_execution_refused", reason: "fiber_interrupted",
+    });
+    expect(recording.committed.filter((action) => action.kind === "compaction" && "revert" in action)).toHaveLength(0);
+    const terminals = recording.committed.filter((action) => action.kind === "compaction" && typeof action.effect.value === "object" && action.effect.value !== null && "terminal" in action.effect.value);
+    expect(terminals).toHaveLength(1);
+    expect(terminals[0]?.effect.value).toMatchObject({
+      terminal: "interrupted", reason: "fiber_interrupted", evidence: { failures: [], defects: [], interrupted: true },
+    });
+    expect(base.history).toEqual(original);
+    expect(observed).toEqual([RunEvents.CompactionStarted.name]);
+  }))));

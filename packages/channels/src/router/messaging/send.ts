@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { decodeChannelFailure, type ChannelError } from "../../errors";
 import type { z } from "zod";
 import {
   Gateway,
@@ -6,7 +8,6 @@ import {
   type BusEvent,
   type SessionTransition,
 } from "@openomni/protocol";
-import { DecisionFacts } from "@openomni/ledger";
 import type { GatewayRouterPorts } from "../message-ports.js";
 import type { DeliveryReceipt } from "../../support/deliver";
 import { authorizeSend } from "./authorize";
@@ -32,6 +33,7 @@ type OutboundMessage = Readonly<{
 
 type MessagingPorts = Readonly<{
   requests: GatewayRouterPorts["requests"];
+  transaction: GatewayRouterPorts["transaction"];
   /** Delivery owners reconcile retries using the stable idempotency key. */
   deliver: (message: OutboundMessage) => DeliveryReceipt | Promise<DeliveryReceipt>;
   publish: BusEvent.Sink["publish"];
@@ -40,7 +42,7 @@ type MessagingPorts = Readonly<{
 
 type ExistingAgentMessaging = Readonly<{
   preflight: (input: SendAuthorityInput) => MessageDenialCode | undefined;
-  send: (input: SendInput) => Promise<SendReceipt>;
+  send: (input: SendInput) => Effect.Effect<SendReceipt, ChannelError>;
 }>;
 
 /** Kernel records the original action suspension before the physical effect. */
@@ -48,8 +50,8 @@ function openSendRequest(
   input: SendInput,
   target: DeliveryTarget,
   ports: MessagingPorts,
-): SessionTransition.Request | undefined {
-  if (input.operation !== "awaited") return undefined;
+): Effect.Effect<SessionTransition.Request | undefined, ChannelError> {
+  if (input.operation !== "awaited") return Effect.succeed(undefined);
   const spec = input.requestSpec as NonNullable<SendInput["requestSpec"]>;
   const recorded = ports.requests
     .list()
@@ -69,16 +71,17 @@ function openSendRequest(
 }
 
 /** Every retry reaches the physical driver's stable idempotency key. IDs are not receipts. */
-async function deliverSend(
+function deliverSend(
   input: SendInput,
   target: DeliveryTarget,
   request: SessionTransition.Request | undefined,
   ports: MessagingPorts,
-): Promise<{
+): Effect.Effect<{
   readonly request: SessionTransition.Request | undefined;
   readonly value: "accepted" | "rejected" | "unknown";
-}> {
-  const delivery = await ports.deliver({
+}, ChannelError> {
+  return Effect.gen(function* () {
+  const delivery = yield* Effect.tryPromise({ try: async () => ports.deliver({
     messageId: input.messageId,
     idempotencyKey: input.messageId,
     senderId: input.senderId,
@@ -86,9 +89,9 @@ async function deliverSend(
     body: input.body,
     target,
     ...(request === undefined ? {} : { requestId: request.requestId }),
-  });
+  }), catch: decodeChannelFailure("message.deliver") });
   if (request === undefined) return { request, value: delivery.value };
-  const recorded = await ports.requests.receipt({
+  const recorded = yield* ports.requests.receipt({
     inputId: canonicalKey([
       input.messageId,
       "delivery",
@@ -106,11 +109,12 @@ async function deliverSend(
     at: input.at,
   });
   return { request: recorded, value: delivery.value };
+  });
 }
 
 function recordSent(
   authorization: AuthorizedSend,
-  delivered: Awaited<ReturnType<typeof deliverSend>>,
+  delivered: Effect.Effect.Success<ReturnType<typeof deliverSend>>,
   ports: MessagingPorts,
 ): SendReceipt {
   const { input, target, grant } = authorization;
@@ -174,21 +178,23 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     };
   }
 
-  async function send(rawInput: SendInput): Promise<SendReceipt> {
+  function send(rawInput: SendInput): Effect.Effect<SendReceipt, ChannelError> {
+    return Effect.gen(function* () {
     const input = SendInput.parse(rawInput);
     const checked = authorizeSend(input, ports.grants());
     if (!checked.ok) return deny(input, checked.code, checked.reason);
     const authorization = { input, target: checked.target, grant: checked.grant };
     const { target } = authorization;
     // No promise may escape the admission/debit/request write unit.
-    const opened = DecisionFacts.transaction(() => {
+    const opened = yield* ports.transaction(Effect.gen(function* () {
       const admission = admitSend(authorization, ports, deny);
       if ("kind" in admission) return { denied: admission };
-      return { request: openSendRequest(input, target, ports) };
-    });
+      return { request: yield* openSendRequest(input, target, ports) };
+    }));
     if (opened.denied !== undefined) return opened.denied;
-    const request = await deliverSend(input, target, opened.request, ports);
+    const request = yield* deliverSend(input, target, opened.request, ports);
     return recordSent(authorization, request, ports);
+    });
   }
 
   return {

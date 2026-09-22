@@ -1,9 +1,13 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActorRegistry, SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
+import { runEffect } from "../helpers/effect";
+import { channelRequests } from "../helpers/channel-requests";
+import { channelTransaction } from "../helpers/channel-transaction";
 import { answer, originalAction, requestPort } from "../helpers/requests";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
 
@@ -32,21 +36,22 @@ async function prepareScenario() {
   const baseline = SessionHandleStore.listRows().length;
   const deliveries: OutboundMessage[] = [];
   const messaging = createExistingAgentMessaging({
-    requests: requestPort(() => 10),
+    transaction: channelTransaction,
+    requests: channelRequests(requestPort(() => 10)),
     publish: Bus.publish,
     grants: () =>
-      ["target", "multi"].map((targetActorId) => ({
+      ["target", "multi"].map((targetActorId: string) => ({
         id: `grant:${targetActorId}`,
         senderId: "owner",
         targetActorId,
         operations: ["awaited", "fire_and_forget"],
       })),
-    deliver: (message) => {
+    deliver: (message: OutboundMessage) => {
       deliveries.push(message);
       return { value: "accepted", externalMessageId: "platform" };
     },
   });
-  const fire = await messaging.send({
+  const fire = await runEffect(messaging.send({
     messageId: "notify",
     traceId: "trace",
     senderId: "owner",
@@ -54,9 +59,9 @@ async function prepareScenario() {
     operation: "fire_and_forget",
     body: "notice",
     at: 10,
-  });
+  }));
   const countAfterFire = SessionHandleStore.requestRows().length;
-  await messaging.send({
+  await runEffect(messaging.send({
     messageId: "physical",
     traceId: "trace",
     senderId: "owner",
@@ -74,8 +79,8 @@ async function prepareScenario() {
       deadline: 100,
       correlation: { channelId: "room" },
     },
-  });
-  const first = await answer("request:qa:briefing", "a", "reply-a", 20);
+  }));
+  const first = await runEffect(answer("request:qa:briefing", "a", "reply-a", 20));
   return { messaging, baseline, deliveries, fire, countAfterFire, first };
 }
 
@@ -85,10 +90,10 @@ async function restartQuorum(context: ScenarioContext, restart: () => void) {
   const { baseline, deliveries, fire, countAfterFire, first } = context;
   restart();
   const reopened = SessionHandleStore.requestById("request:qa:briefing");
-  const second = await answer("request:qa:briefing", "b", "reply-b", 30);
+  const second = await runEffect(answer("request:qa:briefing", "b", "reply-b", 30));
   const final = SessionHandleStore.requestById("request:qa:briefing");
   const terminals = SessionHandleStore.tree("session:qa-owner").filter(
-    (action) => action.id === "request:qa:briefing:resolution",
+    (action: LedgerAction.Node) => action.id === "request:qa:briefing:resolution",
   );
   const allocationDelta = SessionHandleStore.listRows().length - baseline;
   const ok =
@@ -109,7 +114,7 @@ async function restartQuorum(context: ScenarioContext, restart: () => void) {
     allocationDelta,
     sessionId: final?.sessionId ?? "",
     requestState: final?.state ?? "",
-    resolutionActions: terminals.map((action) => ({
+    resolutionActions: terminals.map((action: LedgerAction.Node) => ({
       requestId: "request:qa:briefing",
       sessionId: action.sessionId,
       actionId: action.id,
@@ -120,7 +125,7 @@ async function restartQuorum(context: ScenarioContext, restart: () => void) {
       stateAtRestart: reopened?.state ?? "",
       repliesPersistedAcrossRestart: reopened?.replies.length ?? 0,
     },
-    deliveries: deliveries.map((message) => ({
+    deliveries: deliveries.map((message: OutboundMessage) => ({
       messageId: message.messageId,
       operation: message.operation,
       endpointId: message.target.endpointId,
@@ -131,14 +136,14 @@ async function restartQuorum(context: ScenarioContext, restart: () => void) {
 async function duplicateAmbiguous(context: ScenarioContext) {
   const { messaging, baseline } = context;
   const before = SessionHandleStore.requestById("request:qa:briefing");
-  const replay = await answer("request:qa:briefing", "a", "reply-a", 20);
+  const replay = await runEffect(answer("request:qa:briefing", "a", "reply-a", 20));
   const replayUnchanged =
     JSON.stringify(before) ===
     JSON.stringify(SessionHandleStore.requestById("request:qa:briefing"));
-  const duplicate = await answer("request:qa:briefing", "a", "reply-a-new", 21);
+  const duplicate = await runEffect(answer("request:qa:briefing", "a", "reply-a-new", 21));
   const claim = { endpointId: "endpoint", channelId: "room", replyToMessageId: "platform" };
   originalAction("second-request", "session:qa-owner");
-  await requestPort(() => 30).open({
+  await runEffect(channelRequests(requestPort(() => 30)).open({
     requestId: "second-request",
     sessionId: "session:qa-owner",
     expectedResponders: ["a"],
@@ -148,9 +153,9 @@ async function duplicateAmbiguous(context: ScenarioContext) {
     threshold: 1,
     deadline: 100,
     at: 30,
-  });
+  }));
   const ambiguous = findRequestCandidates(SessionHandleStore.requestRows(), claim);
-  const denied = await messaging.send({
+  const denied = await runEffect(messaging.send({
     messageId: "multi",
     traceId: "trace",
     senderId: "owner",
@@ -158,7 +163,7 @@ async function duplicateAmbiguous(context: ScenarioContext) {
     operation: "fire_and_forget",
     body: "ambiguous",
     at: 30,
-  });
+  }));
   const after = SessionHandleStore.requestById("request:qa:briefing");
   const unchanged =
     before?.state === after?.state &&
@@ -198,7 +203,7 @@ function quorumState(request: ReturnType<typeof SessionHandleStore.requestById>)
   return {
     state: request?.state ?? "",
     replies: request?.replies.length ?? 0,
-    responders: new Set(request?.replies.map((reply) => reply.responderId)).size,
+    responders: new Set(request?.replies.map((reply: SessionTransition.Request["replies"][number]) => reply.responderId)).size,
     threshold: request?.threshold ?? 0,
   };
 }
@@ -260,10 +265,10 @@ async function executeDriver(
 
 const DriverFailure = z
   .instanceof(Error)
-  .transform((error) => error.name)
+  .transform((error: Error) => error.name)
   .catch("NonError")
   .transform(
-    (errorType): ExistingAgentMessageDriverExecution => ({
+    (errorType: string): ExistingAgentMessageDriverExecution => ({
       exitCode: 1,
       stdout: JSON.stringify({
         version,

@@ -8,6 +8,7 @@ import { canonicalDigest } from "@openomni/protocol";
 import { AlarmSourceError } from "../src/composition/alarm-sources";
 import { alarmFixture } from "./helpers/alarm";
 import { alarmSummary } from "./helpers/alarm-payload";
+import { runEffect } from "./helpers/effect";
 
 test("a path source that cannot start settles the alarm with a source_error summary", () =>
   Storage.withIsolation(async () => {
@@ -20,7 +21,7 @@ test("a path source that cannot start settles the alarm with a source_error summ
         description: "unwatchable directory",
         persistent: true,
       });
-      fixture.worker.start();
+      await runEffect(Effect.either(fixture.worker.start()));
       const row = await settled;
       expect(alarmSummary(row.content)).toMatchObject({
         alarmId: "missing",
@@ -48,7 +49,7 @@ test("a watch whose timeout already elapsed before its first scan fires timeout,
         timeout_ms: 50,
       });
       fixture.advance(1050);
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       const row = await settled;
       expect(alarmSummary(row.content)).toMatchObject({ alarmId: "late", reason: "timeout" });
       expect(fixture.rows().map((entry) => entry.content)).toEqual([row.content]);
@@ -71,14 +72,14 @@ test("a non-persistent watch found running at restart settles as restart instead
         description: "bounded stream",
         timeout_ms: 60_000,
       });
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       expect((await first).content).toBe("A");
       const fence = fixture.storage.alarms.get("stream")?.fence ?? 0;
       expect(fence).toBeGreaterThan(0);
       await fixture.close();
       fixture = alarmFixture(database);
       const settled = fixture.next("stream");
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       expect(alarmSummary((await settled).content)).toMatchObject({
         alarmId: "stream",
         reason: "restart",
@@ -107,7 +108,7 @@ test("a due retry.scheduled alarm is consumed once: one wake, no inbox prompt, c
         kind: "at",
         status: "armed",
       });
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(fixture.wakes).toEqual(["monitor-session"]);
       expect(fixture.rows()).toEqual([]);
       expect(fixture.storage.alarms.get("retry-due")).toMatchObject({
@@ -115,7 +116,7 @@ test("a due retry.scheduled alarm is consumed once: one wake, no inbox prompt, c
         status: "cancelled",
       });
       // Second scan is a no-op: the fenced cancel CAS already consumed the schedule.
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(fixture.wakes).toEqual(["monitor-session"]);
       expect(fixture.rows()).toEqual([]);
       expect(fixture.errors).toEqual([]);
@@ -128,7 +129,7 @@ test("an alarm prompt refusal remains typed at the worker and never wakes the se
   Storage.withIsolation(async () => {
     const fixture = alarmFixture();
     try {
-      Effect.runSync(
+      fixture.run(
         fixture.storage.alarms.arm({
           id: "refused",
           sessionId: "monitor-session",
@@ -151,14 +152,12 @@ test("an alarm prompt refusal remains typed at the worker and never wakes the se
         1,
       );
       const before = fixture.storage.actions.tree("monitor-session");
-      expect(() => fixture.worker.tick()).toThrow(
-        expect.objectContaining({
-          _tag: "AlarmRefused",
-          operation: "fire",
-          reason: "prompt",
-          alarmId: "refused",
-        }),
-      );
+      expect(await runEffect(Effect.flip(fixture.worker.tick()))).toMatchObject({
+        _tag: "AlarmRefused",
+        operation: "fire",
+        reason: "prompt",
+        alarmId: "refused",
+      });
       expect(fixture.storage.actions.tree("monitor-session")).toEqual(before);
       expect(fixture.storage.alarms.get("refused")?.status).toBe("armed");
       expect(fixture.rows()).toEqual([]);
@@ -174,7 +173,7 @@ test("a retry schedule consumed by another owner mid-scan wakes nothing: losing 
     // second due schedule between the scan snapshot and its consumption.
     const fixture = alarmFixture(":memory:", undefined, () =>
       Either.getOrThrowWith(
-        Effect.runSync(
+        fixture.run(
           Effect.either(fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000)),
         ),
         (error) => error,
@@ -183,7 +182,7 @@ test("a retry schedule consumed by another owner mid-scan wakes nothing: losing 
     try {
       fixture.armRetry("retry-early");
       fixture.armRetry("retry-late");
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(fixture.wakes).toEqual(["monitor-session"]);
       expect(fixture.rows()).toEqual([]);
       expect(fixture.storage.alarms.get("retry-early")?.status).toBe("cancelled");

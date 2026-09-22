@@ -1,6 +1,10 @@
+import { bounded } from "../../helpers/bounded";
+import { Effect } from "effect";
+import { isolated } from "../../helpers/isolated";
+import { failure } from "../../helpers/effect-g1";
 import { providerFailure } from "../../helpers/mock-llm";
-import { createTestAgent } from "../../helpers/test-agent";
-import { describe, expect, it, jest } from "bun:test";
+import { createTestAgent } from "../../helpers/effect-g1";
+import { describe, expect, it } from "bun:test";
 import type { Provider, Sink } from "@openomni/llm";
 import { toModelMessages } from "@openomni/llm/src/message";
 import type { Message } from "@openomni/protocol";
@@ -56,7 +60,7 @@ function agent(run: MockLlmFn, steeringPending?: () => boolean) {
   return createTestAgent({
     events: Bus,
     model: { provider: "anthropic", id: providerModel.id },
-    llm: { run, resolveModel: async () => providerModel },
+    llm: { run: (input, sink) => Effect.promise(() => run(input, sink)), resolveModel: () => Effect.succeed(providerModel) },
     ...(steeringPending === undefined ? {} : { steeringPending }),
   });
 }
@@ -66,7 +70,7 @@ describe("tool-bearing history", () => {
     const inputs: Message.WithParts[][] = [];
     let pending = true;
     let calls = 0;
-    const result = await agent(
+    const result = await isolated(agent(
       async (input, sink: Sink) => {
         calls += 1;
         inputs.push([...(input.messages as Message.WithParts[])]);
@@ -78,7 +82,7 @@ describe("tool-bearing history", () => {
         return createStopOutcome();
       },
       () => pending,
-    ).run(runInput([{ role: "user", content: "question" }]));
+    ).run(runInput([{ role: "user", content: "question" }])));
 
     expect(result.finishReason).toBe("stop");
     const second = inputs[1] ?? [];
@@ -101,14 +105,13 @@ describe("tool-bearing history", () => {
   });
 
   it("preserves accumulated tool history and usage across an agent retry", async () => {
-    jest.useFakeTimers();
     const retry = Promise.withResolvers<void>();
     const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
     const inputs: Message.WithParts[][] = [];
     let pending = true;
     let calls = 0;
     try {
-      const running = agent(
+      const running = isolated(agent(
         async (input, sink) => {
           calls += 1;
           inputs.push([...(input.messages as Message.WithParts[])]);
@@ -123,9 +126,8 @@ describe("tool-bearing history", () => {
           return createStopOutcome();
         },
         () => pending,
-      ).run(runInput([{ role: "user", content: "question" }]));
-      await retry.promise;
-      jest.advanceTimersByTime(1_000);
+      ).run(runInput([{ role: "user", content: "question" }])));
+      await bounded(retry.promise);
       const result = await running;
       expect(calls).toBe(3);
       expect(inputs).toHaveLength(3);
@@ -133,14 +135,13 @@ describe("tool-bearing history", () => {
       expect(result.usage).toEqual({ inputTokens: 100, outputTokens: 50, totalTokens: 150 });
     } finally {
       unsubscribe();
-      jest.useRealTimers();
     }
   });
 
   it("does not resurrect prior text when the next turn emits an empty snapshot", async () => {
     let pending = true;
     let calls = 0;
-    const result = await agent(
+    const result = await isolated(failure(agent(
       async (input, sink) => {
         calls += 1;
         if (calls === 1) {
@@ -153,7 +154,7 @@ describe("tool-bearing history", () => {
       () => pending,
     )
       .run(runInput([{ role: "user", content: "question" }]))
-      .catch((error: Error) => error);
+      ));
     expect(result).toMatchObject({ code: "agent_stop", reason: "toolless_stall" });
     expect(calls).toBe(3);
   });

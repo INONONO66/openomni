@@ -1,6 +1,13 @@
+import { Effect, Fiber } from "effect";
+import { isolated } from "../../helpers/isolated";
 import { describe, expect, it, mock } from "bun:test";
 import { createExecutor } from "../../../src/index";
-import { recordingLedger, runTestOperation } from "../../helpers/compiled-policy";
+import {
+  recordingLedger,
+  runTestOperation,
+  failure as effectFailure,
+  foreign,
+} from "../../helpers/effect-g2";
 import { compilePolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 
@@ -60,15 +67,18 @@ function runTestSuccess(
 ) {
   return executor.run(
     { kind, op: "test", intent: { requested: true }, effect: { completed: true }, ...extras },
-    async () => ({ ok: true }),
+    () =>
+      Effect.sync(() => {
+        return { ok: true };
+      }),
   );
 }
 
 function resultEffects(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kind) {
   return actions
-    .filter((action) => action.kind === kind)
-    .map((action) => action.effect.value)
-    .filter((effect) =>
+    .filter((action: import("@openomni/protocol").LedgerAction.Append) => action.kind === kind)
+    .map((action: import("@openomni/protocol").LedgerAction.Append) => action.effect.value)
+    .filter((effect: import("@openomni/protocol").PlainValue) =>
       typeof effect === "object" && effect !== null && !Array.isArray(effect)
         ? effect.phase === "result"
         : false,
@@ -76,289 +86,400 @@ function resultEffects(actions: readonly LedgerAction.Append[], kind: LedgerActi
 }
 
 describe("the single L2 executor's four-kind verdict model", () => {
-  it("refuses an unregistered kind with a typed error before policy or body", async () => {
-    const { actions, executor } = harness([]);
-    const body = mock(async () => ({ ok: true }));
+  it("refuses an unregistered kind with a typed error before policy or body", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { actions, executor } = harness([]);
+          const body = mock(() =>
+            Effect.sync(() => {
+              return { ok: true };
+            }),
+          );
 
-    const refused = executor.run(
-      { kind: "channel.send", op: "test", intent: {}, effect: {} },
-      body,
-    );
-    await expect(refused).rejects.toBeInstanceOf(Error);
-    await expect(refused).rejects.toEqual(
-      expect.objectContaining({
-        name: "UnregisteredExecutionKindError",
-        code: "unregistered_execution_kind",
-        kind: "channel.send",
-      }),
-    );
-    expect(body).toHaveBeenCalledTimes(0);
-    expect(actions).toHaveLength(0);
-  });
-
-  it("registers extension kinds as declarative data", async () => {
-    const actions: LedgerAction.Append[] = [];
-    let revision = 0;
-    const executor = createExecutor({
-      policy: compilePolicySnapshot({
-        generation: 1,
-        rows: [mandatory],
-        mandatory: ["compaction"],
-      }),
-      ledger: {
-        async commit(action) {
-          actions.push(action);
-          revision += 1;
-          return {
-            action: {
-              ...action,
-              ordinal: revision,
-              prevHash: "fixture-prev",
-              actionHash: "fixture-hash",
-            },
-            revision,
-          };
-        },
-      },
-      observations: { publish: () => undefined },
-      identity: { sessionId: "session-1", role: "resident", parentActionId: null },
-      clock: () => 100,
-      entropy: () => `extension-${revision + 1}`,
-      extensionKinds: [
-        {
-          kind: "channel.send",
-          effect: { grade: "external" },
-          reversible: false,
-          inputSchema: { type: "object" },
-        },
-      ],
-    });
-
-    const result = await executor.run(
-      { kind: "channel.send", op: "test", intent: {}, effect: {} },
-      async () => ({ delivered: true }),
-    );
-
-    expect(result).toMatchObject({ terminal: "executed" });
-    expect(actions).toHaveLength(4);
-  });
-
-  it("passes the committed intent receipt to the body after its commit resolves", async () => {
-    const intentCommitReached = Promise.withResolvers<void>();
-    const releaseIntentCommit = Promise.withResolvers<void>();
-    let revision = 0;
-    let committedIntent: LedgerAction.Receipt | undefined;
-    let bodyIntent: LedgerAction.Receipt | undefined;
-    const body = mock(async (intent: LedgerAction.Receipt) => {
-      bodyIntent = intent;
-      return { ok: true };
-    });
-    const executor = createExecutor({
-      policy: compilePolicySnapshot({
-        generation: 1,
-        rows: [mandatory],
-        mandatory: ["compaction"],
-      }),
-      ledger: {
-        async commit(action) {
-          const isIntent = action.kind === "llm" && committedIntent === undefined;
-          if (isIntent) {
-            intentCommitReached.resolve();
-            await releaseIntentCommit.promise;
-          }
-          revision += 1;
-          const receipt = {
-            action: {
-              ...action,
-              ordinal: revision,
-              prevHash: "fixture-prev",
-              actionHash: "fixture-hash",
-            },
-            revision,
-          } satisfies LedgerAction.Receipt;
-          if (isIntent) committedIntent = receipt;
-          return receipt;
-        },
-      },
-      observations: { publish: () => undefined },
-      identity: {
-        sessionId: "session-1",
-        role: "resident",
-        parentActionId: "turn-intent-1",
-      },
-      clock: () => 100,
-      entropy: () => `receipt-${revision + 1}`,
-    });
-
-    const running = executor.run({ kind: "llm", op: "test", intent: {}, effect: {} }, body);
-    await intentCommitReached.promise;
-    expect(body).toHaveBeenCalledTimes(0);
-
-    releaseIntentCommit.resolve();
-    await running;
-
-    expect(body).toHaveBeenCalledTimes(1);
-    expect(bodyIntent).toBe(committedIntent);
-    expect(bodyIntent?.action.parentId).toBe("turn-intent-1");
-  });
-
-  it("fails closed when a transform removes the result envelope", async () => {
-    const { actions, executor } = harness([
-      row("remove-result", "tool", "post", {
-        type: "transform",
-        name: "redact",
-        paths: ["result"],
-      }),
-    ]);
-
-    const result = await executor.run(
-      { kind: "tool", op: "test", intent: {}, effect: {} },
-      async () => ({ ok: true }),
-    );
-
-    expect(result).toMatchObject({ terminal: "blocked_post", reason: "invalid_output" });
-    expect(resultEffects(actions, "tool")).toEqual([
-      expect.objectContaining({ terminal: "blocked_post", reason: "invalid_output" }),
-    ]);
-  });
-
-  it("commits a linked failed result before rethrowing a body failure", async () => {
-    const { actions, executor } = harness([]);
-    const failure = new TypeError("body failed");
-
-    await expect(
-      executor.run(
-        { kind: "tool", op: "test", intent: { requested: true }, effect: { completed: false } },
-        async () => {
-          throw failure;
-        },
+          const refused = executor.run(
+            { kind: "channel.send", op: "test", intent: {}, effect: {} },
+            body,
+          );
+          expect(yield* effectFailure(refused)).toMatchObject({
+            _tag: "ForeignFailure",
+            operation: "executor.admit",
+            cause: "unregistered_execution_kind:channel.send",
+          });
+          expect(body).toHaveBeenCalledTimes(0);
+          expect(actions).toHaveLength(0);
+        }),
       ),
-    ).rejects.toBe(failure);
+    ));
 
-    expect(actions.map((action) => action.kind)).toEqual(["policy.decision", "tool", "tool"]);
-    const intent = actions[1];
-    const result = actions[2];
-    expect(result?.parentId).toBe(intent?.id);
-    expect(result?.effect.value).toEqual({
-      phase: "result",
-      terminal: "failed",
-      effect: { completed: false },
-      error: { name: "TypeError" },
-    });
-  });
+  it("registers extension kinds as declarative data", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const actions: LedgerAction.Append[] = [];
+          let revision = 0;
+          const executor = createExecutor({
+            policy: compilePolicySnapshot({
+              generation: 1,
+              rows: [mandatory],
+              mandatory: ["compaction"],
+            }),
+            ledger: {
+              commit(action: import("@openomni/protocol").LedgerAction.Append) {
+                return Effect.sync(() => {
+                  actions.push(action);
+                  revision += 1;
+                  return {
+                    action: {
+                      ...action,
+                      ordinal: revision,
+                      prevHash: "fixture-prev",
+                      actionHash: "fixture-hash",
+                    },
+                    revision,
+                  };
+                });
+              },
+            },
+            observations: { publish: () => undefined },
+            identity: { sessionId: "session-1", role: "resident", parentActionId: null },
+            clock: () => 100,
+            entropy: () => `extension-${revision + 1}`,
+            extensionKinds: [
+              {
+                kind: "channel.send",
+                effect: { grade: "external" },
+                reversible: false,
+                inputSchema: { type: "object" },
+              },
+            ],
+          });
+
+          const result = yield* executor.run(
+            { kind: "channel.send", op: "test", intent: {}, effect: {} },
+            () =>
+              Effect.sync(() => {
+                return { delivered: true };
+              }),
+          );
+
+          expect(result).toMatchObject({ terminal: "executed" });
+          expect(actions).toHaveLength(4);
+        }),
+      ),
+    ));
+
+  it("passes the committed intent receipt to the body after its commit resolves", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const intentCommitReached = Promise.withResolvers<void>();
+          const releaseIntentCommit = Promise.withResolvers<void>();
+          let revision = 0;
+          let committedIntent: LedgerAction.Receipt | undefined;
+          let bodyIntent: LedgerAction.Receipt | undefined;
+          const body = mock((intent: LedgerAction.Receipt) =>
+            Effect.sync(() => {
+              bodyIntent = intent;
+              return { ok: true };
+            }),
+          );
+          const executor = createExecutor({
+            policy: compilePolicySnapshot({
+              generation: 1,
+              rows: [mandatory],
+              mandatory: ["compaction"],
+            }),
+            ledger: {
+              commit(action: import("@openomni/protocol").LedgerAction.Append) {
+                return Effect.gen(function* () {
+                  const isIntent = action.kind === "llm" && committedIntent === undefined;
+                  if (isIntent) {
+                    intentCommitReached.resolve();
+                    yield* Effect.promise(() => releaseIntentCommit.promise);
+                  }
+                  revision += 1;
+                  const receipt = {
+                    action: {
+                      ...action,
+                      ordinal: revision,
+                      prevHash: "fixture-prev",
+                      actionHash: "fixture-hash",
+                    },
+                    revision,
+                  } satisfies LedgerAction.Receipt;
+                  if (isIntent) committedIntent = receipt;
+                  return receipt;
+                });
+              },
+            },
+            observations: { publish: () => undefined },
+            identity: {
+              sessionId: "session-1",
+              role: "resident",
+              parentActionId: "turn-intent-1",
+            },
+            clock: () => 100,
+            entropy: () => `receipt-${revision + 1}`,
+          });
+
+          const running = yield* Effect.forkScoped(
+            executor.run({ kind: "llm", op: "test", intent: {}, effect: {} }, body),
+          );
+          yield* Effect.promise(() => intentCommitReached.promise).pipe(
+            Effect.timeout("5 seconds"),
+          );
+          expect(body).toHaveBeenCalledTimes(0);
+
+          releaseIntentCommit.resolve();
+          yield* Fiber.join(running);
+
+          expect(body).toHaveBeenCalledTimes(1);
+          expect(bodyIntent).toBe(committedIntent);
+          expect(bodyIntent?.action.parentId).toBe("turn-intent-1");
+        }),
+      ),
+    ));
+
+  it("fails closed when a transform removes the result envelope", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { actions, executor } = harness([
+            row("remove-result", "tool", "post", {
+              type: "transform",
+              name: "redact",
+              paths: ["result"],
+            }),
+          ]);
+
+          const result = yield* executor.run(
+            { kind: "tool", op: "test", intent: {}, effect: {} },
+            () =>
+              Effect.sync(() => {
+                return { ok: true };
+              }),
+          );
+
+          expect(result).toMatchObject({ terminal: "blocked_post", reason: "invalid_output" });
+          expect(resultEffects(actions, "tool")).toEqual([
+            expect.objectContaining({ terminal: "blocked_post", reason: "invalid_output" }),
+          ]);
+        }),
+      ),
+    ));
+
+  it("commits a linked failed result carrying the typed body failure", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { actions, executor } = harness([]);
+          const failure = foreign("test", new TypeError("body failed"));
+
+          const outcome = yield* effectFailure(
+            executor.run(
+              {
+                kind: "tool",
+                op: "test",
+                intent: { requested: true },
+                effect: { completed: false },
+              },
+              () => Effect.fail(failure),
+            ),
+          );
+          expect(outcome).toBe(failure);
+
+          expect(
+            actions.map((action: import("@openomni/protocol").LedgerAction.Append) => action.kind),
+          ).toEqual(["policy.decision", "tool", "tool"]);
+          const intent = actions[1];
+          const result = actions[2];
+          expect(result?.parentId).toBe(intent?.id);
+          expect(result?.effect.value).toMatchObject({
+            phase: "result",
+            terminal: "executed",
+            effect: { completed: false },
+            evidence: {
+              failures: [{ tag: "ForeignFailure", operation: "test" }],
+              defects: [],
+              interrupted: false,
+            },
+          });
+        }),
+      ),
+    ));
 
   for (const kind of kinds) {
-    it(`${kind}: pre deny commits no intent/result and never calls body`, async () => {
-      const { actions, executor } = harness([
-        row(`deny-${kind}-pre`, kind, "pre", { type: "deny", reason: "pre blocked" }),
-      ]);
-      const body = mock(async () => ({ ok: true }));
+    it(`${kind}: pre deny commits no intent/result and never calls body`, () =>
+      isolated(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { actions, executor } = harness([
+              row(`deny-${kind}-pre`, kind, "pre", { type: "deny", reason: "pre blocked" }),
+            ]);
+            const body = mock(() =>
+              Effect.sync(() => {
+                return { ok: true };
+              }),
+            );
 
-      const result = await runTestOperation(executor, kind, body);
+            const result = yield* runTestOperation(executor, kind, body);
 
-      expect(result).toMatchObject({ terminal: "blocked_pre", reason: "pre blocked" });
-      expect(body).toHaveBeenCalledTimes(0);
-      expect(actions.filter((action) => action.kind === kind)).toHaveLength(0);
-      expect(resultEffects(actions, kind)).toHaveLength(0);
-    });
+            expect(result).toMatchObject({ terminal: "blocked_pre", reason: "pre blocked" });
+            expect(body).toHaveBeenCalledTimes(0);
+            expect(
+              actions.filter(
+                (action: import("@openomni/protocol").LedgerAction.Append) => action.kind === kind,
+              ),
+            ).toHaveLength(0);
+            expect(resultEffects(actions, kind)).toHaveLength(0);
+          }),
+        ),
+      ));
 
-    it(`${kind}: allow commits intent/result and calls body exactly once`, async () => {
-      const { actions, executor } = harness([]);
-      const body = mock(async () => ({ ok: true }));
+    it(`${kind}: allow commits intent/result and calls body exactly once`, () =>
+      isolated(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { actions, executor } = harness([]);
+            const body = mock(() =>
+              Effect.sync(() => {
+                return { ok: true };
+              }),
+            );
 
-      const result = await runTestOperation(executor, kind, body);
+            const result = yield* runTestOperation(executor, kind, body);
 
-      expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
-      expect(body).toHaveBeenCalledTimes(1);
-      expect(actions.filter((action) => action.kind === kind)).toHaveLength(2);
-      expect(resultEffects(actions, kind)).toEqual([
-        expect.objectContaining({ phase: "result", terminal: "executed" }),
-      ]);
-    });
+            expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
+            expect(body).toHaveBeenCalledTimes(1);
+            expect(
+              actions.filter(
+                (action: import("@openomni/protocol").LedgerAction.Append) => action.kind === kind,
+              ),
+            ).toHaveLength(2);
+            expect(resultEffects(actions, kind)).toEqual([
+              expect.objectContaining({ phase: "result", terminal: "executed" }),
+            ]);
+          }),
+        ),
+      ));
 
-    it(`${kind}: post deny reverts when a reverter exists`, async () => {
-      const { actions, executor } = harness([
-        row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
-      ]);
-      const revert = mock(async () => undefined);
+    it(`${kind}: post deny reverts when a reverter exists`, () =>
+      isolated(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { actions, executor } = harness([
+              row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
+            ]);
+            const revert = mock(() =>
+              Effect.sync(() => {
+                return undefined;
+              }),
+            );
 
-      const result = await runTestSuccess(executor, kind, { revert });
+            const result = yield* runTestSuccess(executor, kind, { revert });
 
-      expect(result).toMatchObject({
-        terminal: "blocked_post",
-        disposition: "reverted",
-        reason: "post blocked",
-      });
-      expect(revert).toHaveBeenCalledTimes(1);
-      expect(resultEffects(actions, kind)).toEqual([
-        expect.objectContaining({
-          phase: "result",
-          terminal: "blocked_post",
-          disposition: "reverted",
-        }),
-      ]);
-    });
+            expect(result).toMatchObject({
+              terminal: "blocked_post",
+              disposition: "reverted",
+              reason: "post blocked",
+            });
+            expect(revert).toHaveBeenCalledTimes(1);
+            expect(resultEffects(actions, kind)).toEqual([
+              expect.objectContaining({
+                phase: "result",
+                terminal: "blocked_post",
+                disposition: "reverted",
+              }),
+            ]);
+          }),
+        ),
+      ));
 
-    it(`${kind}: post deny records irreversible when no reverter exists`, async () => {
-      const { actions, executor } = harness([
-        row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
-      ]);
+    it(`${kind}: post deny records irreversible when no reverter exists`, () =>
+      isolated(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { actions, executor } = harness([
+              row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
+            ]);
 
-      const result = await runTestSuccess(executor, kind);
+            const result = yield* runTestSuccess(executor, kind);
 
-      expect(result).toMatchObject({
-        terminal: "blocked_post",
-        disposition: "irreversible",
-        reason: "post blocked",
-      });
-      expect(resultEffects(actions, kind)).toEqual([
-        expect.objectContaining({
-          phase: "result",
-          terminal: "blocked_post",
-          disposition: "irreversible",
-        }),
-      ]);
-    });
+            expect(result).toMatchObject({
+              terminal: "blocked_post",
+              disposition: "irreversible",
+              reason: "post blocked",
+            });
+            expect(resultEffects(actions, kind)).toEqual([
+              expect.objectContaining({
+                phase: "result",
+                terminal: "blocked_post",
+                disposition: "irreversible",
+              }),
+            ]);
+          }),
+        ),
+      ));
   }
 });
 
 describe("the durable boundary child action commits only for executed outcomes", () => {
   const boundaryChildren = (actions: readonly LedgerAction.Append[]) =>
-    actions.filter((action) => action.id.endsWith(":boundary"));
+    actions.filter((action: import("@openomni/protocol").LedgerAction.Append) =>
+      action.id.endsWith(":boundary"),
+    );
 
-  it("an executed boundary request commits exactly one boundary child under its intent", async () => {
-    const { actions, executor } = harness([]);
+  it("an executed boundary request commits exactly one boundary child under its intent", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { actions, executor } = harness([]);
 
-    const result = await runTestSuccess(executor, "tool", { boundary: true });
+          const result = yield* runTestSuccess(executor, "tool", { boundary: true });
 
-    expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
-    const children = boundaryChildren(actions);
-    expect(children).toHaveLength(1);
-    const child = children[0];
-    const intent = actions.find((action) => `${action.id}:boundary` === child?.id);
-    expect(child?.parentId).toBe(intent?.id);
-    expect(child?.kind).toBe("tool");
-    expect(child !== undefined && "irreversible" in child && child.irreversible).toBe(true);
-    expect(child?.effect?.value).toMatchObject({ phase: "boundary", result: { ok: true } });
-  });
+          expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
+          const children = boundaryChildren(actions);
+          expect(children).toHaveLength(1);
+          const child = children[0];
+          const intent = actions.find(
+            (action: import("@openomni/protocol").LedgerAction.Append) =>
+              `${action.id}:boundary` === child?.id,
+          );
+          expect(child?.parentId).toBe(intent?.id);
+          expect(child?.kind).toBe("tool");
+          expect(child !== undefined && "irreversible" in child && child.irreversible).toBe(true);
+          expect(child?.effect?.value).toMatchObject({ phase: "boundary", result: { ok: true } });
+        }),
+      ),
+    ));
 
-  it("a post-denied boundary request commits NO boundary child: recovery must never resurrect a reverted outcome as executed", async () => {
-    const { actions, executor } = harness([
-      row("deny-boundary-post", "tool", "post", { type: "deny", reason: "post blocked" }),
-    ]);
-    const revert = mock(async () => undefined);
+  it("a post-denied boundary request commits NO boundary child: recovery must never resurrect a reverted outcome as executed", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { actions, executor } = harness([
+            row("deny-boundary-post", "tool", "post", { type: "deny", reason: "post blocked" }),
+          ]);
+          const revert = mock(() =>
+            Effect.sync(() => {
+              return undefined;
+            }),
+          );
 
-    const result = await runTestSuccess(executor, "tool", { boundary: true, revert });
+          const result = yield* runTestSuccess(executor, "tool", { boundary: true, revert });
 
-    expect(result).toMatchObject({
-      terminal: "blocked_post",
-      disposition: "reverted",
-      reason: "post blocked",
-    });
-    expect(revert).toHaveBeenCalledTimes(1);
-    expect(boundaryChildren(actions)).toEqual([]);
-    expect(resultEffects(actions, "tool")).toEqual([
-      expect.objectContaining({ phase: "result", terminal: "blocked_post" }),
-    ]);
-  });
+          expect(result).toMatchObject({
+            terminal: "blocked_post",
+            disposition: "reverted",
+            reason: "post blocked",
+          });
+          expect(revert).toHaveBeenCalledTimes(1);
+          expect(boundaryChildren(actions)).toEqual([]);
+          expect(resultEffects(actions, "tool")).toEqual([
+            expect.objectContaining({ phase: "result", terminal: "blocked_post" }),
+          ]);
+        }),
+      ),
+    ));
 });

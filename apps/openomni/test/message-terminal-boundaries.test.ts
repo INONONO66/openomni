@@ -1,3 +1,5 @@
+import { runEffect } from "./helpers/effect";
+import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus } from "@openomni/agent";
@@ -14,9 +16,7 @@ test("startOpenOmni reports pre-denied socket admission as an error, not accepte
     config: suite.config("message-refusal-", { wsToken: "token" }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: async () => {
-        throw new Error("denied input reached model");
-      },
+      run: () => Effect.die(new Error("denied input reached model")),
     },
   });
   ChannelGrantStore.put({
@@ -65,10 +65,10 @@ for (const kind of ["result", "error", "interrupted"] as const) {
       sessionRuntime: { clock: () => 100 },
       llm: {
         resolveModel: fakeProviderModel,
-        run: async (input, sink) => {
+        run: (input, sink) => Effect.gen(function* () {
           if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
             entered.resolve(input.trace.sessionId);
-            if (kind === "interrupted") await release.promise;
+            if (kind === "interrupted") yield* Effect.promise(() => release.promise);
             if (kind === "error") throw new Error("CHILD_ERROR");
             sink.onMessage(assistantMessage(input, { text: "CHILD_RESULT" }));
             return { type: "stop" };
@@ -84,8 +84,8 @@ for (const kind of ["result", "error", "interrupted"] as const) {
             commissioned = true;
           }
           sink.onMessage(assistantMessage(input, { text: "PARENT" }));
-          return { type: "stop" };
-        },
+          return { type: "stop" as const };
+        }),
       },
     });
     await ownerStart(app, "initial");
@@ -93,7 +93,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
       const childId = await entered.promise;
       const handle = app.sessions.get(childId);
       if (handle === undefined) throw new Error("missing child handle");
-      const interrupt = handle.interrupt();
+      const interrupt = runEffect(handle.interrupt());
       release.resolve();
       await interrupt;
     }

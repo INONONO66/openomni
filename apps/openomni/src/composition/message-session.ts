@@ -1,13 +1,14 @@
-import { Effect, Either } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
+import { Effect, FiberRef } from "effect";
+import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import { Inbox, Gateway, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
 import { outboundMessage } from "./terminal-message";
 
 type Ports = Parameters<typeof createGatewayRouter>[0];
 
-export function commitMessageInbox(input: Inbox.Commit): Inbox.Row {
-  const outbound = outboundMessage.getStore();
+export function commitMessageInbox(input: Inbox.Commit): Effect.Effect<Inbox.Row, LedgerError> {
+  return Effect.gen(function* () {
+  const outbound = yield* FiberRef.get(outboundMessage);
   const message = outbound?.input.message;
   if (
     message !== undefined &&
@@ -17,12 +18,10 @@ export function commitMessageInbox(input: Inbox.Commit): Inbox.Row {
   ) {
     throw new Error("outbound inbox binding mismatch");
   }
-  const received = Either.getOrThrowWith(
-    Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(input))),
-    (error) => error,
-  );
+  const received = yield* SessionHandleStore.commitReceivedMessage(input);
   if (outbound !== undefined) outbound.receipt = received.receipt;
   return received.row;
+  });
 }
 
 export function messageMaterialization(input: {
@@ -111,7 +110,7 @@ function prepareExternal(
   send: Parameters<Ports["prepare"]>[1],
   target: string,
   messageId: string,
-): ReturnType<Ports["prepare"]> {
+): Effect.Effect.Success<ReturnType<Ports["prepare"]>> {
   const exists = SessionHandleStore.listRows().some((row) => row.id === target);
   const source =
     exists && send.replyTo !== undefined
@@ -166,6 +165,10 @@ function admissionBounds(
   });
 }
 
+function withinDeadline(outbound: boolean, parentDeadline: number | undefined, sendDeadline: number | undefined): boolean {
+  return outbound || parentDeadline === undefined || (sendDeadline !== undefined && sendDeadline <= parentDeadline);
+}
+
 export function prepareMessage(
   materialize: (
     id: string,
@@ -174,7 +177,7 @@ export function prepareMessage(
     runner: string,
   ) => LedgerSession.Materialize,
 ): Ports["prepare"] {
-  return (sender, send, target, messageId) => {
+  return (sender, send, target, messageId) => Effect.gen(function* () {
     if (sender.kind === "external") {
       return prepareExternal(materialize, send, target, messageId);
     }
@@ -187,7 +190,7 @@ export function prepareMessage(
       return parsed.success ? [parsed.data] : [];
     });
     const parentDeadline = origins.at(-1)?.deadline;
-    const outbound = outboundMessage.getStore();
+    const outbound = yield* FiberRef.get(outboundMessage);
     const bounds = admissionBounds(source, send);
     const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
     const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
@@ -219,11 +222,8 @@ export function prepareMessage(
         depth,
         // Mandatory terminal mail answers the original request. Its existing
         // alarm/answer CAS owns the bound; a reply must not open another alarm.
-        withinParentDeadline:
-          outbound !== undefined ||
-          parentDeadline === undefined ||
-          (send.deadline !== undefined && send.deadline <= parentDeadline),
+        withinParentDeadline: withinDeadline(outbound !== undefined, parentDeadline, send.deadline),
       },
     };
-  };
+  });
 }

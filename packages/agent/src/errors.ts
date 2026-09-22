@@ -1,4 +1,8 @@
+import type { AgentStopError } from "./core/execution/stop-chain";
+
+export { AgentStopError } from "./core/execution/stop-chain";
 import type { LedgerError } from "@openomni/ledger";
+import type { LlmRunFailure } from "@openomni/llm";
 import { Data } from "effect";
 
 export class PolicyDenied extends Data.TaggedError("PolicyDenied")<{
@@ -11,7 +15,7 @@ export class ToolBodyFailed extends Data.TaggedError("ToolBodyFailed")<{
   readonly cause: string;
 }> {}
 
-export class Interrupted extends Data.TaggedError("Interrupted")<{}> {}
+export class Interrupted extends Data.TaggedError("Interrupted")<Record<never, never>> {}
 
 export class CommitFailed extends Data.TaggedError("CommitFailed")<{
   readonly error: LedgerError;
@@ -44,12 +48,14 @@ export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalE
 }> {}
 
 export type ExecutionError =
+  | LlmRunFailure
   | PolicyDenied
   | ToolBodyFailed
   | Interrupted
   | CommitFailed
   | OutcomeUnknown
   | ForeignFailure
-  | ExecutionApprovalError;
+  | ExecutionApprovalError
+  | AgentStopError;
 
-export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable;
+export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | LedgerError;

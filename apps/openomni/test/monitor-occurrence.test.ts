@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
 import { Alarm, canonicalDigest } from "@openomni/protocol";
 import { alarmFixture } from "./helpers/alarm";
+import { runEffect } from "./helpers/effect";
 
 const watch: Alarm.Watch = { command: "true", description: "occurrence", persistent: true };
 
@@ -12,13 +13,13 @@ test("two matches are two occurrences; redelivering one committed occurrence com
     try {
       fixture.arm("poll", watch);
       const owned = Either.getOrThrowWith(
-        Effect.runSync(Effect.either(fixture.storage.alarms.acquire("poll", 0))),
+        fixture.run(Effect.either(fixture.storage.alarms.acquire("poll", 0))),
         (error) => error,
       );
       if (owned === undefined) throw new Error("acquire refused");
       const fire = (sourceKey: string, content: string) =>
         Either.getOrThrowWith(
-          Effect.runSync(
+          fixture.run(
             Effect.either(
               fixture.storage.alarms.fire({
                 id: "poll",
@@ -65,7 +66,7 @@ test("takeover keeps the committed dedupe digest while explicit rearm starts a f
       fixture.arm("poll", watch);
       const fire = (row: Alarm.Row, sourceKey: string, content: string) =>
         Either.getOrThrowWith(
-          Effect.runSync(
+          fixture.run(
             Effect.either(
               fixture.storage.alarms.fire({
                 id: row.id,
@@ -82,13 +83,13 @@ test("takeover keeps the committed dedupe digest while explicit rearm starts a f
           (error) => error,
         );
       const first = Either.getOrThrowWith(
-        Effect.runSync(Effect.either(fixture.storage.alarms.acquire("poll", 0))),
+        fixture.run(Effect.either(fixture.storage.alarms.acquire("poll", 0))),
         (error) => error,
       );
       if (first === undefined) throw new Error("first acquire refused");
       expect(fire(first, "line:1:1", "A")?.row.status).toBe("armed");
       const taken = Either.getOrThrowWith(
-        Effect.runSync(Effect.either(fixture.storage.alarms.acquire("poll", first.fence))),
+        fixture.run(Effect.either(fixture.storage.alarms.acquire("poll", first.fence))),
         (error) => error,
       );
       if (taken === undefined) throw new Error("takeover refused");
@@ -106,7 +107,7 @@ test("takeover keeps the committed dedupe digest while explicit rearm starts a f
         expect.objectContaining({ _tag: "AlarmRefused" }),
       );
       const rearmed = Either.getOrThrowWith(
-        Effect.runSync(
+        fixture.run(
           Effect.either(fixture.storage.alarms.rearm("poll", "monitor-session", 1000)),
         ),
         (error) => error,
@@ -117,7 +118,7 @@ test("takeover keeps the committed dedupe digest while explicit rearm starts a f
         expect.objectContaining({ _tag: "AlarmRefused" }),
       );
       const fresh = Either.getOrThrowWith(
-        Effect.runSync(Effect.either(fixture.storage.alarms.acquire("poll", rearmed.fence))),
+        fixture.run(Effect.either(fixture.storage.alarms.acquire("poll", rearmed.fence))),
         (error) => error,
       );
       if (fresh === undefined) throw new Error("fresh acquire refused");
@@ -134,12 +135,12 @@ test("N+1 contenders under one fence commit N notifications plus one pause; late
     try {
       fixture.arm("budget", watch, 2);
       const owned = Either.getOrThrowWith(
-        Effect.runSync(Effect.either(fixture.storage.alarms.acquire("budget", 0))),
+        fixture.run(Effect.either(fixture.storage.alarms.acquire("budget", 0))),
         (error) => error,
       );
       if (owned === undefined) throw new Error("acquire refused");
       const outcomes = ["one", "two", "three", "four"].map((content, index) =>
-        Effect.runSync(
+        fixture.run(
           Effect.either(
             fixture.storage.alarms.fire({
               id: "budget",
@@ -176,7 +177,7 @@ test("N+1 contenders under one fence commit N notifications plus one pause; late
         "prompt",
       ]);
       const cancelled = Either.getOrThrowWith(
-        Effect.runSync(
+        fixture.run(
           Effect.either(fixture.storage.alarms.cancel("budget", "monitor-session", 1001)),
         ),
         (error) => error,
@@ -184,7 +185,7 @@ test("N+1 contenders under one fence commit N notifications plus one pause; late
       expect(cancelled?.status).toBe("cancelled");
       expect(() =>
         Either.getOrThrowWith(
-          Effect.runSync(
+          fixture.run(
             Effect.either(
               fixture.storage.alarms.fire({
                 id: "budget",
@@ -212,12 +213,12 @@ test("the ledger, not the evaluator, decides the deadline for a match that arriv
     try {
       fixture.arm("timed", { command: "true", description: "timed", timeout_ms: 50 });
       const owned = Either.getOrThrowWith(
-        Effect.runSync(Effect.either(fixture.storage.alarms.acquire("timed", 0))),
+        fixture.run(Effect.either(fixture.storage.alarms.acquire("timed", 0))),
         (error) => error,
       );
       if (owned === undefined) throw new Error("acquire refused");
       const fired = Either.getOrThrowWith(
-        Effect.runSync(
+        fixture.run(
           Effect.either(
             fixture.storage.alarms.fire({
               id: "timed",
@@ -255,7 +256,7 @@ test("a real PTY line's occurrence key is committed once; its redelivery adds no
         description: "pty",
         persistent: true,
       });
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       const prompt = await ready;
       const row = fixture.storage.alarms.get("pty");
       if (row === undefined) throw new Error("missing alarm");
@@ -269,7 +270,7 @@ test("a real PTY line's occurrence key is committed once; its redelivery adds no
       );
       expect(() =>
         Either.getOrThrowWith(
-          Effect.runSync(
+          fixture.run(
             Effect.either(
               fixture.storage.alarms.fire({
                 id: "pty",

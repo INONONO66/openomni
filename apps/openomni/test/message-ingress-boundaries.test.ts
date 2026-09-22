@@ -1,3 +1,4 @@
+import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
@@ -59,13 +60,13 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
           })
         ).isError,
       ).not.toBe(true);
-    const receipt = await fixture.gateway.ingest(sender, {
+    const receipt = await runEffect(fixture.gateway.ingest(sender, {
       ...facts,
       reply: {
         replyToMessageId: "unrelated-immediate",
         chain: ["unrelated-immediate", ...(mode === "nearer" ? ["platform-2"] : []), "platform-1"],
       },
-    });
+    }));
     if (mode === "ambiguous") {
       expect(receipt.status).toBe("blocked_pre");
       expect(SessionHandleStore.inboxRows("sender").some((row) => row.content === "ANSWER")).toBe(
@@ -265,7 +266,7 @@ for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
     const observations: Gateway.MessageObservation[] = [];
     const unsubscribe = Bus.subscribe(Gateway.MessageObserved, (event) => observations.push(event));
     try {
-      const initial = await fixture.gateway.ingest(sender, { ...facts, eventId: "first" });
+      const initial = await runEffect(fixture.gateway.ingest(sender, { ...facts, eventId: "first" }));
       let receipt = initial;
       if (restriction === "spent") {
         if (initial.status !== "executed") throw new Error("initial admission refused");
@@ -280,7 +281,7 @@ for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
           0,
           () => "allow",
         );
-        receipt = await fixture.gateway.ingest(sender, { ...facts, eventId: "second" });
+        receipt = await runEffect(fixture.gateway.ingest(sender, { ...facts, eventId: "second" }));
       }
       expect(reads).toBeGreaterThan(0);
       expect(receipt.status).toBe(restriction === "allowed" ? "executed" : "blocked_pre");

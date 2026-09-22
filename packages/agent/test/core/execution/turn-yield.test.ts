@@ -1,7 +1,10 @@
+import { Effect } from "effect";
+import { isolated } from "../../helpers/isolated";
+import { failure } from "../../helpers/effect-g3";
 import { describe, expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent } from "../../helpers/effect-g3";
 import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
 import { completeModel, windowedLlm } from "../../helpers/mock-llm";
@@ -42,21 +45,21 @@ function assistantWithReasons(reasons: readonly string[], inputTokens = 900): Me
 describe("window and steering yield", () => {
   it("arms the provider call from the resolved model window", async () => {
     const arms: Array<number | undefined> = [];
-    await runTestAgent(runInput([{ role: "user", content: "go" }]), {
+    await isolated(runTestAgent(runInput([{ role: "user", content: "go" }]), {
       events: collector(),
       model: { provider: "provider", id: "model" },
       llm: windowedLlm(async (input, sink) => {
         arms.push(input.yieldAtInputTokens);
         return completeModel(input, sink);
       }),
-    });
+    }));
     expect(arms).toEqual([450]);
   });
 
   it("continues on a window yield and disarms the next turn after no rewrite", async () => {
     const arms: Array<number | undefined> = [];
     let calls = 0;
-    await runTestAgent(runInput([{ role: "user", content: "go" }]), {
+    await isolated(runTestAgent(runInput([{ role: "user", content: "go" }]), {
       events: collector(),
       model: { provider: "provider", id: "model" },
       llm: windowedLlm(async (input, sink: Sink) => {
@@ -66,7 +69,7 @@ describe("window and steering yield", () => {
         sink.onMessage(assistant("tool-calls"));
         return { type: "stop" };
       }),
-    });
+    }));
     expect(arms).toEqual([450, undefined]);
   });
 
@@ -74,7 +77,7 @@ describe("window and steering yield", () => {
     const seen: number[] = [];
     let calls = 0;
     const bulky = "filler ".repeat(120);
-    const result = await runTestAgent(
+    const result = await isolated(runTestAgent(
       runInput([
         { role: "user", content: "goal" },
         { role: "assistant", content: `old one ${bulky}` },
@@ -90,7 +93,7 @@ describe("window and steering yield", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 2,
           speculate: false,
-          onSummarize: async () => "window checkpoint",
+          onSummarize: () => Effect.promise(async () => "window checkpoint"),
         },
         llm: windowedLlm(async (input, sink: Sink) => {
           calls += 1;
@@ -100,7 +103,7 @@ describe("window and steering yield", () => {
           return { type: "stop" };
         }),
       },
-    );
+    ));
     expect(seen[1]).toBeLessThan(seen[0] ?? 0);
     expect(result.compactionCount).toBe(1);
   });
@@ -108,7 +111,7 @@ describe("window and steering yield", () => {
   it("aborts active speculative preparation when the run settles", async () => {
     let aborted = false;
     let calls = 0;
-    await runTestAgent(
+    await isolated(runTestAgent(
       runInput([
         { role: "user", content: "goal" },
         { role: "assistant", content: "old answer one" },
@@ -123,34 +126,24 @@ describe("window and steering yield", () => {
         compaction: {
           contextWindowTokens: 100_000,
           protectRecentMessages: 2,
-          onSummarize: async (_messages, _anchor, _budget, signal) => {
-            calls += 1;
-            await new Promise<void>((resolve) => {
-              signal?.addEventListener(
-                "abort",
-                () => {
-                  aborted = true;
-                  resolve();
-                },
-                { once: true },
-              );
-            });
-            return "unused";
-          },
+          onSummarize: () => Effect.sync(() => { calls += 1; }).pipe(
+            Effect.zipRight(Effect.never),
+            Effect.onInterrupt(() => Effect.sync(() => { aborted = true; })),
+          ),
         },
         llm: windowedLlm(async (_input, sink: Sink) => {
           sink.onMessage(assistant("stop", 55_000));
           return { type: "stop" };
         }, 100_000),
       },
-    );
+    ));
     expect(calls).toBe(1);
     expect(aborted).toBe(true);
   });
 
   it("treats unlimited tool calls as a window yield, never a step-cap terminal", async () => {
     let calls = 0;
-    const result = await runTestAgent(runInput([{ role: "user", content: "go" }]), {
+    const result = await isolated(runTestAgent(runInput([{ role: "user", content: "go" }]), {
       ...toolBudgetConfig(-1),
       llm: windowedLlm(async (input, sink: Sink) => {
         calls += 1;
@@ -158,7 +151,7 @@ describe("window and steering yield", () => {
         sink.onMessage(assistantWithReasons(Array.from({ length: 30 }, () => "tool-calls")));
         return { type: "stop" };
       }),
-    });
+    }));
     expect(calls).toBe(2);
     expect(result.finishReason).toBe("stop");
   });
@@ -166,41 +159,41 @@ describe("window and steering yield", () => {
   it("continues a steering yield instead of reporting max-steps", async () => {
     let pending = true;
     let calls = 0;
-    const result = await runTestAgent(runInput([{ role: "user", content: "go" }]), {
+    const result = await isolated(runTestAgent(runInput([{ role: "user", content: "go" }]), {
       events: collector(),
       model: { provider: "provider", id: "model" },
       steeringPending: () => pending,
       llm: {
-        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
-        run: async (input, sink: Sink) => {
+        resolveModel: () => Effect.promise(async () => ({ id: "model", name: "model", providerID: "provider" })),
+        run: (input, sink: Sink) => Effect.promise(async () => {
           calls += 1;
           if (calls !== 1) return completeModel(input, sink);
           input.shouldYield?.();
           pending = false;
           sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
-        },
+        }),
       },
-    });
+    }));
     expect(calls).toBe(2);
     expect(result.finishReason).toBe("stop");
   });
 
   it("keeps the step cap terminal when steering also fired", async () => {
     let calls = 0;
-    const result = await runTestAgent(runInput([{ role: "user", content: "go" }]), {
+    const result = await isolated(failure(runTestAgent(runInput([{ role: "user", content: "go" }]), {
       ...toolBudgetConfig(1),
       steeringPending: () => true,
       llm: {
-        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
-        run: async (input, sink: Sink) => {
+        resolveModel: () => Effect.promise(async () => ({ id: "model", name: "model", providerID: "provider" })),
+        run: (input, sink: Sink) => Effect.promise(async () => {
           calls += 1;
           input.shouldYield?.();
           sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
-        },
+        }),
       },
-    }).catch((error: Error) => error);
+    })));
     expect(calls).toBe(1);
     expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
   });
@@ -208,7 +201,7 @@ describe("window and steering yield", () => {
   it("compacts at the ordered boundary even when steering requests continuation", async () => {
     let pending = true;
     let calls = 0;
-    const result = await runTestAgent(
+    const result = await isolated(runTestAgent(
       runInput([
         { role: "user", content: "goal" },
         { role: "assistant", content: `old ${"filler ".repeat(120)}` },
@@ -223,7 +216,7 @@ describe("window and steering yield", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 2,
           speculate: false,
-          onSummarize: async () => "must not run",
+          onSummarize: () => Effect.promise(async () => "must not run"),
         },
         llm: windowedLlm(async (input, sink: Sink) => {
           calls += 1;
@@ -237,24 +230,24 @@ describe("window and steering yield", () => {
           return { type: "stop" };
         }),
       },
-    );
+    ));
     expect(calls).toBe(2);
     expect(result.compactionCount).toBe(1);
   });
 
   it("reports the step cap honestly", async () => {
-    const result = await runTestAgent(runInput([{ role: "user", content: "go" }]), {
+    const result = await isolated(failure(runTestAgent(runInput([{ role: "user", content: "go" }]), {
       events: collector(),
       model: { provider: "provider", id: "model" },
       budget: { maxToolCalls: 1 },
       llm: {
-        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
-        run: async (_input, sink: Sink) => {
+        resolveModel: () => Effect.promise(async () => ({ id: "model", name: "model", providerID: "provider" })),
+        run: (_input, sink: Sink) => Effect.promise(async () => {
           sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
-        },
+        }),
       },
-    }).catch((error: Error) => error);
+    })));
     expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
   });
 });

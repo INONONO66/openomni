@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import type { ChannelError } from "../errors";
 import {
   Ingress,
   type SessionTransition,
@@ -67,13 +69,14 @@ export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload):
   throw new IngressRoutingError("route_blocked", terminalMessage(decision), decision);
 }
 
-export async function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
+export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
   resolution: ReturnType<typeof resolveAndRecordRoute<Event>>,
   decision: RoutedDecision,
   requests: GatewayRouterPorts["requests"],
   content: string,
   at: number,
-): Promise<void> {
+): Effect.Effect<void, ChannelError> {
+  return Effect.gen(function* () {
   const matched = resolution.requestExecution;
   if (matched.kind === "none") return;
   const record = matched.record;
@@ -90,7 +93,7 @@ export async function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
     actor.actorId === candidates[0] &&
     matched.requestedAction !== "invalid"
   ) {
-    outcome = await requests.answer({
+    outcome = yield* requests.answer({
       inputId: resolution.event.id,
       requestId: record.requestId,
       sessionId: record.sessionId,
@@ -115,5 +118,6 @@ export async function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
   if (outcome === "attached" || outcome === "resolved") return;
   const reason = `request reply rejected: ${outcome}`;
   recordRouteNotDelivered(resolution.event, decision, reason);
-  throw new IngressRoutingError("request_reply_rejected", reason, decision);
+  return yield* new IngressRoutingError("request_reply_rejected", reason, decision);
+  });
 }

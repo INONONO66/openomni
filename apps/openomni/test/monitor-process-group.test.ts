@@ -8,6 +8,7 @@ import { Storage } from "@openomni/ledger";
 import type { PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { alarmFixture } from "./helpers/alarm";
+import { runEffect } from "./helpers/effect";
 
 const parseJson: (text: string) => PlainValue = JSON.parse;
 const identity = z
@@ -71,7 +72,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           },
           1,
         );
-        fixture.worker.start();
+        await runEffect(fixture.worker.start());
         await Promise.all([ready, bound(connected.promise)]);
         const group = peers[0]?.process.group;
         if (group === undefined) throw new Error("missing process group");
@@ -85,12 +86,12 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
         if (mode === "rearm") {
           const readyAgain = fixture.next("group", (row) => row.content === "READY");
           Either.getOrThrowWith(
-            Effect.runSync(
+            fixture.run(
               Effect.either(fixture.storage.alarms.rearm("group", "monitor-session", 1000)),
             ),
             (error) => error,
           );
-          fixture.worker.tick();
+          await runEffect(fixture.worker.tick());
           await Promise.all([gone, readyAgain]);
           expect(fixture.storage.alarms.get("group")).toMatchObject({ status: "armed", epoch: 2 });
         } else if (mode === "exit" || mode === "budget") {
@@ -107,14 +108,14 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
         } else {
           if (mode === "cancel")
             Either.getOrThrowWith(
-              Effect.runSync(
+              fixture.run(
                 Effect.either(fixture.storage.alarms.cancel("group", "monitor-session", 1000)),
               ),
               (error) => error,
             );
           if (mode === "timeout") fixture.advance(1050);
-          if (mode !== "shutdown") fixture.worker.tick();
-          await Promise.all([gone, fixture.worker.close()]);
+          if (mode !== "shutdown") await runEffect(fixture.worker.tick());
+          await Promise.all([gone, runEffect(fixture.worker.close())]);
         }
         for (const peer of original) {
           const state = Bun.spawnSync(["ps", "-p", String(peer.process.pid), "-o", "stat="]);

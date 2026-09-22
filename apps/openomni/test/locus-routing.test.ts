@@ -1,13 +1,17 @@
+import { runEffect } from "./helpers/effect";
 import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, mkdir, rm, symlink, writeFile, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
+import { acquireEffect } from "./helpers/effect";
 import { createDispatcher, ToolRefused } from "@openomni/agent";
 import { attachMachineDaemon, createMachineHost, type MachineHandle } from "@openomni/machines";
 import { Machine, type PlainValue } from "@openomni/protocol";
 import { createTools } from "../src/tools/core/catalog";
 import { parseLocus } from "../src/tools/locus";
 import { socketPath } from "./helpers/socket-path";
+import { testMachinePorts } from "./helpers/native-tool-ports";
 import { executor } from "./helpers/executor";
 
 const origin = { role: "resident", sessionId: "locus" } as const;
@@ -53,17 +57,17 @@ async function fixture(
     cell: (
       tool: string,
       input: Record<string, PlainValue>,
-    ) => ReturnType<ReturnType<typeof createDispatcher>["executeCell"]>;
+    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof createDispatcher>["executeCell"]>>>;
     model: (
       tool: string,
       input: Record<string, PlainValue>,
-    ) => ReturnType<ReturnType<typeof createDispatcher>["execute"]>;
+    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof createDispatcher>["execute"]>>>;
   }) => Promise<void>,
   capabilities = ["fs.read", "fs.write", "shell.exec"],
 ) {
   const root = await mkdtemp(join(tmpdir(), "locus-"));
   const socket = socketPath();
-  const host = await createMachineHost({
+  const host = await acquireEffect(createMachineHost({
     socketPath: socket,
     enrollment: () => ({
       machineId: "c",
@@ -74,8 +78,8 @@ async function fixture(
     }),
     events: { publish: () => undefined },
     now: () => 1,
-  });
-  const daemon = await attachMachineDaemon({
+  }));
+  const daemon = await acquireEffect(attachMachineDaemon({
     socketPath: socket,
     offer: {
       machineId: "c",
@@ -92,7 +96,7 @@ async function fixture(
       ["data", root],
       ["shell", "/"],
     ]),
-  });
+  }));
   const handle = host.get("c");
   const spies = {
     get: spyOn(host, "get"),
@@ -129,7 +133,7 @@ async function fixture(
     return result;
   }
   try {
-    const dispatcher = createDispatcher(createTools({ machines: host }, origin), { executor });
+    const dispatcher = createDispatcher(createTools({ machines: testMachinePorts(host) }, origin), { executor });
     let call = 0;
     await run({
       root,
@@ -141,14 +145,14 @@ async function fixture(
       }),
       path: (name) => `${remote ? "c:" : ""}${join(root, name)}`,
       cell: (tool, input) =>
-        observe(tool, () => dispatcher.executeCell({ id: `cell-${++call}`, tool, input }, context)),
+        observe(tool, () => runEffect(dispatcher.executeCell({ id: `cell-${++call}`, tool, input }, context))),
       model: (tool, input) =>
-        observe(tool, () => dispatcher.execute({ id: `model-${++call}`, tool, input }, context)),
+        observe(tool, () => runEffect(dispatcher.execute({ id: `model-${++call}`, tool, input }, context))),
     });
   } finally {
     for (const spy of Object.values(spies)) spy.mockRestore();
-    await daemon.close();
-    host.close();
+    await runEffect(daemon.close());
+    await runEffect(host.close());
     await rm(root, { recursive: true, force: true });
   }
 }
@@ -302,7 +306,7 @@ test("R1 bash rejects composite machine IDs before endpoint lookup even with an 
     await mkdir(injected);
     const command = "printf '%s' \"$PWD\"";
     // Prove the real daemon would allow the malformed locus's cwd: denial must be in the adapter.
-    expect(await rawExec(command, injected)).toMatchObject({
+    expect(await runEffect(rawExec(command, injected))).toMatchObject({
       status: "completed",
       stdout: Buffer.from(await realpath(injected)),
       exitCode: 0,
@@ -398,13 +402,13 @@ test("a real daemon read assembles successive bounded chunks without dropping th
 
 test("a truncated remote read without progress is refused instead of looping", async () => {
   await fixture(true, async ({ machine, path, model }) => {
-    const read = spyOn(machine.fs, "read").mockResolvedValue({
+    const read = spyOn(machine.fs, "read").mockReturnValue(Effect.succeed({
       op: "read",
       data: new Uint8Array(),
       bytesRead: 0,
       size: 1,
       truncated: true,
-    });
+    }));
     try {
       const result = await model("read", { path: path("stalled") });
       expect(result.isError).toBe(true);
@@ -440,7 +444,7 @@ test("missing machine host and malformed machine ids yield typed refusals", asyn
     ["bash", { machine: "c", command: "true" }],
     ["bash", { machine: "./bad", command: "true" }],
   ] as const) {
-    expect(await dispatcher.execute({ id: tool, tool, input }, context)).toMatchObject({
+    expect(await runEffect(dispatcher.execute({ id: tool, tool, input }, context))).toMatchObject({
       isError: true,
       errorKind: "precondition_failed",
     });

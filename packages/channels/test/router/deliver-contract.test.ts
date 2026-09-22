@@ -1,3 +1,4 @@
+import { runEffect } from "../helpers/effect";
 import { beforeEach, expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import { openRequest } from "../helpers/requests";
@@ -19,7 +20,7 @@ beforeEach(() => {
 
 test("inbox receipt target equals the durable route decision", async () => {
   const mapped = createMappedOwnerSession();
-  const result = await kernelRouter().ingest(ownerSender, ownerFacts);
+  const result = await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
   expect(result).toMatchObject({
     status: "executed",
     handle: { target: mapped.id },
@@ -38,16 +39,16 @@ test("inbox receipt target equals the durable route decision", async () => {
 
 test("Request correlation selects the owner inbox instead of the default session", async () => {
   const mapped = createMappedOwnerSession();
-  await openRequest("request-contract", {
+  await runEffect(await openRequest("request-contract", {
     correlation: { tokenHash: "token", channelId: ownerFacts.channelId },
     expectedResponders: ["actor-owner"],
-  });
-  const result = await kernelRouter().ingest(ownerSender, {
+  }));
+  const result = await runEffect(kernelRouter().ingest(ownerSender, {
     ...ownerFacts,
     reply: { chain: [], tokenHash: "token" },
     payload: { action: "report_result", output: "done" },
     render: "done",
-  });
+  }));
   expect(result).toMatchObject({ status: "executed", handle: { target: "request-owner" } });
   expect(commits[0]?.sessionId).not.toBe(mapped.id);
   expect(routingDecisions()[0]).toMatchObject({

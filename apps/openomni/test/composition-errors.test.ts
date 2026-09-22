@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Bus, newTraceId } from "@openomni/agent";
 import { Component } from "@openomni/protocol";
@@ -30,13 +32,8 @@ test("component failure observation preserves an unprintable rejection", async (
     componentGeneration: 1,
   });
   try {
-    const result = await component
-      .run(() => Promise.reject(failure))
-      .then(
-        () => false,
-        (error: unknown) => error === failure,
-      );
-    expect(result).toBe(true);
+    const result = await runEffect(Effect.flip(component.run(Effect.fail(failure))));
+    expect(result).toBe(failure);
     expect(states).toEqual(["active", "failed", "disposed"]);
   } finally {
     for (const stop of unsubscribe) stop();

@@ -1,3 +1,4 @@
+import { Layer, ManagedRuntime, } from "effect";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -166,19 +167,23 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     envPath,
     startApp,
     async attachMachine(configPath) {
-      const daemon = await attachConfiguredMachine(configPath);
+      const runtime = ManagedRuntime.make(Layer.scope);
+      try {
+      const daemon = await runtime.runPromise(attachConfiguredMachine(configPath));
       console.log(JSON.stringify(daemon.attachment));
       if (daemon.attachment.status === "refused") {
-        await daemon.close();
         return 1;
       }
       installShutdownHandlers({
-        stop: () => daemon.close(),
+        stop: runtime.dispose,
         exit: (code) => process.exit(code),
         on: (signal, handler) => process.once(signal, handler),
       });
-      await daemon.closed;
+      await runtime.runPromise(daemon.closed);
       return 0;
+      } finally {
+        await runtime.dispose();
+      }
     },
     ask,
     writeEnv: (entries) => writeEnvFile(envPath, entries),

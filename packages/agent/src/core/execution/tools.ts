@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { ChatAgentConfig } from "../types";
 import type { RunState } from "./state";
 import { recordToolCall } from "../budget";
@@ -83,14 +84,12 @@ export function prepareTurnTools(state: RunState, config: ChatAgentConfig): Prep
   const allTools = config.tools ?? [];
   const configuredExecutor = config.toolExecutor;
   const executor = configuredExecutor
-    ? async (call: Tool.Call, context?: Tool.ExecutionContext) => {
+    ? (call: Tool.Call, context?: Tool.ExecutionContext) => Effect.suspend(() => {
         const startedAt = Date.now();
-        try {
-          return await configuredExecutor(call, context);
-        } finally {
+        return configuredExecutor(call, context).pipe(Effect.ensuring(Effect.sync(() => {
           state.budgetState = recordToolCall(state.budgetState, Date.now() - startedAt);
-        }
-      }
+        })));
+      })
     : undefined;
   return { allTools, executor };
 }

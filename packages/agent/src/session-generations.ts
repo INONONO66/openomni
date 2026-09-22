@@ -2,7 +2,7 @@ import type { SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Exit, Layer, Scope, SynchronizedRef } from "effect";
 import { GenerationUnavailable, type SessionError } from "./errors";
 import { createRawSlots } from "./executor-raw";
-import { SessionLayer, ToolCatalog } from "./services";
+import type { SessionLayer, ToolCatalog } from "./services";
 
 export type GenerationServices = SessionLayer | ToolCatalog;
 export interface GenerationBundle {

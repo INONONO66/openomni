@@ -1,4 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
+import { runEffect } from "../helpers/effect";
+import { Effect } from "effect";
 import { z } from "zod";
 import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouterPorts } from "../../src/router";
@@ -10,7 +12,7 @@ test.each([
   "bot",
   "owner",
   "ambient",
-] as const)("perimeter resolves %s addressee independently from sender standing", async (addressee) => {
+] as const)("perimeter resolves %s addressee independently from sender standing", async (addressee: "owner" | "bot" | "ambient") => {
   ChannelGrantStore.put({
     id: "channel",
     surface: "ws",
@@ -31,12 +33,12 @@ test.each([
   });
   const projected: Array<Parameters<GatewayRouterPorts["run"]>[1]["message"]> = [];
   const router = makeRouter({
-    run: async (_sender, request) => {
+    run: (_sender: Parameters<GatewayRouterPorts["run"]>[0], request: Parameters<GatewayRouterPorts["run"]>[1]) => Effect.sync(() => {
       projected.push(request.message);
-      return { terminal: "blocked_pre", reason: "capture", matchedRuleIds: [] };
-    },
+      return { terminal: "blocked_pre" as const, reason: "capture", matchedRuleIds: [] };
+    }),
   });
-  await router.ingest(
+  await runEffect(router.ingest(
     { kind: "external", surface: "ws", externalId: "owner" },
     {
       eventId: "mention",
@@ -47,7 +49,7 @@ test.each([
       payload: "hello",
       render: "hello",
     },
-  );
+  ));
   expect(projected).toMatchObject([{ sender: "external", senderTier: "owner", addressee }]);
   expect(ActorRegistry.resolveEndpoint("ws", "owner")?.identity.trustTier).toBe("owner");
   expect(commits).toEqual([]);
@@ -57,7 +59,7 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   const router = makeRouter({
     clock: () => 10,
   });
-  const result = await router.ingest(
+  const result = await runEffect(router.ingest(
     { kind: "session", id: "sender" },
     {
       to: { kind: "session", id: "child" },
@@ -66,10 +68,10 @@ test("session deadline is part of the inbox commit, never a second alarm write",
       deadline: 100,
       replyTo: "binding",
     },
-  );
+  ));
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(SessionHandleStore.tree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
+  expect(SessionHandleStore.tree("sender").filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toEqual(
     [],
   );
   expect(SessionHandleStore.requestRows("sender")).toMatchObject([

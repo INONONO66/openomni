@@ -5,10 +5,10 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import { Deferred, Effect, Exit } from "effect";
-import {
-  type ExecutionApprovals,
-  type ExecutionApprovalRequest,
-  type ExecutorOptions,
+import type {
+  ExecutionApprovals,
+  ExecutionApprovalRequest,
+  ExecutorOptions,
 } from "./executor-contract";
 import { ExecutionApprovalError, type ExecutionError } from "./errors";
 import { createApprovalRequest, findSessionRequest } from "./session-request";

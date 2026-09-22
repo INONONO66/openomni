@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -125,7 +126,7 @@ try {
       ),
     ],
     llm: {
-      resolveModel: async () => model,
+      resolveModel: () => Effect.succeed(model),
       run: (input, sink) =>
         run(input, {
           onMessage(message) {

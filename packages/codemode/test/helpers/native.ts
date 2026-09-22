@@ -29,8 +29,9 @@ export function createCodemode(options: {
   const completion = options.completion;
   const tools = options.tools;
   const boundary = options.boundary;
+  const machines = options.machines;
   const { value: native, close } = acquireSync(create({
-    machines: options.machines ? { list: options.machines.list, get: (id) => options.machines!.get(id).native } : undefined,
+    machines: machines ? { list: machines.list, get: (id) => machines.get(id).native } : undefined,
     completion: completion ? (request) => code(() => completion(request)) : undefined,
     tools: tools ? (tenant) => { const call = tools(tenant); return (request) => code(() => call(request)); } : undefined,
     boundary: boundary ? (tenant) => { const decide = boundary(tenant); return (call, body) => code(() => decide(call, () => run(body()))); } : undefined,

@@ -61,6 +61,7 @@ export namespace Retry {
   export function sleep(ms: number, signal?: AbortSignal): Effect.Effect<void> {
     const timer = Effect.sleep(Math.min(ms, RETRY_MAX_DELAY));
     if (signal === undefined) return timer;
+    if (signal.aborted) return Effect.interrupt;
     const abort = Effect.async<never>((resume) => {
       const onAbort = () => resume(Effect.interrupt);
       signal.addEventListener("abort", onAbort, { once: true });

@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { Gateway } from "@openomni/protocol";
 import { executeMessage } from "./message-execution";
 import { createExistingAgentMessaging } from "./messaging/send";
@@ -9,12 +10,14 @@ import type { GatewayRouter, GatewayRouterPorts } from "./message-ports";
 export type { ChannelDeliveryRoute, GatewayRouter, GatewayRouterPorts } from "./message-ports";
 
 function ingestResult(
-  result: Awaited<ReturnType<GatewayRouterPorts["run"]>>,
+  result: Effect.Effect.Success<ReturnType<GatewayRouterPorts["run"]>>,
   handle: Gateway.SendMessageHandle,
 ): Gateway.IngestResult {
   switch (result.terminal) {
     case "blocked_pre":
       return { status: "blocked_pre", reasonCode: result.reason };
+    case "interrupted":
+    case "outcome_unknown":
     case "blocked_post":
       return { status: "blocked_post", handle, reasonCode: result.reason };
     case "executed":
@@ -38,6 +41,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       ? undefined
       : createExistingAgentMessaging({
           requests: ports.requests,
+          transaction: ports.transaction,
           grants: () => [...messagingPorts.grants(), ...replyGrants.list(clock())],
           ...(messagingPorts.budgets === undefined ? {} : { budgets: messagingPorts.budgets }),
           publish: ports.sink,
@@ -52,7 +56,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
   function projectMessage(
     sender: Gateway.IngestSender,
     send: Gateway.SendMessage,
-    prepared: ReturnType<GatewayRouterPorts["prepare"]>,
+    prepared: Effect.Effect.Success<ReturnType<GatewayRouterPorts["prepare"]>>,
     external: ReturnType<typeof externalMessage> | undefined,
     startedAt: number,
   ) {
@@ -122,11 +126,11 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
   }
 
   return {
-    async ingest(rawSender, envelope) {
+    ingest: (rawSender, envelope) => Effect.gen(function* () {
       const startedAt = clock();
       const sender = Gateway.IngestSender.parse(rawSender);
       if ("kind" in envelope && envelope.kind === "request_answer") {
-        return answerOwnerRequest(ports, sender, envelope, startedAt);
+        return yield* answerOwnerRequest(ports, sender, envelope, startedAt);
       }
       const external =
         sender.kind === "external"
@@ -142,12 +146,12 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       const send = sendFromEnvelope(external, envelope);
       const target = sendTarget(send);
       const proposedId = external?.event.id ?? crypto.randomUUID();
-      const prepared = ports.prepare(sender, send, target, proposedId);
+      const prepared = yield* ports.prepare(sender, send, target, proposedId);
       const messageId = prepared.messageId ?? proposedId;
       const handle = { messageId, target: prepared.target };
       const message = projectMessage(sender, send, prepared, external, startedAt);
       const progress: Parameters<typeof executeMessage>[1] = { commitMs: 0, committed: undefined };
-      const result = await ports.run(
+      const result = yield* ports.run(
         sender,
         {
           kind: "message",
@@ -206,6 +210,6 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         ports.committed?.(progress.committed);
       }
       return ingestResult(result, handle);
-    },
+    }),
   };
 }

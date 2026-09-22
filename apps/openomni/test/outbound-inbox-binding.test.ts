@@ -1,3 +1,5 @@
+import { runEffect } from "./helpers/effect";
+import { decodeChannelFailure } from "@openomni/channels";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
@@ -54,8 +56,8 @@ test("the receiving consumer may only commit the exact outbound letter", async (
   materialize("child");
   materialize("parent");
   const dispatch = dispatchOutboundMessage(
-    async () => {
-      commitMessageInbox({
+    () => Effect.gen(function* () {
+      yield* commitMessageInbox({
         id: "different-letter",
         sessionId: message.destinationSessionId,
         kind: "prompt",
@@ -65,15 +67,16 @@ test("the receiving consumer may only commit the exact outbound letter", async (
         parentActionId: null,
       });
       return {
-        status: "executed",
+        status: "executed" as const,
         handle: { messageId: "different-letter", target: "parent" },
-        delivery: { kind: "session" },
+        delivery: { kind: "session" as const },
       };
-    },
+    }).pipe(Effect.mapError(decodeChannelFailure("test.inbox"))),
     () => 100,
   );
-  await expect(
+  const failure = await runEffect(Effect.flip(
     dispatch({ message, authority: { owner: "runner", fence: 1 }, policy: compiledPolicy() }),
-  ).rejects.toThrow("outbound inbox binding mismatch");
+  ));
+  expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "message.commit" });
   expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
 });

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
 import { alarmSummary } from "./helpers/alarm-payload";
 import { alarmFixture } from "./helpers/alarm";
+import { runEffect } from "./helpers/effect";
 
 const summary = { decode: alarmSummary };
 
@@ -24,7 +25,7 @@ for (const mode of ["line", "exit"] as const) {
           description: "deadline precedence",
           timeout_ms: 50,
         });
-        fixture.worker.start();
+        await runEffect(fixture.worker.start());
         await ready;
         const received = fixture.next("deadline");
         fixture.advance(1050);
@@ -65,7 +66,7 @@ test("path notification callback at the absolute timeout cannot outrun the scan"
         description: "native deadline",
         timeout_ms: 50,
       });
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       const subscription:
         | readonly (fs.PathLike | fs.WatchOptions | fs.WatchListener<string>)[]
         | undefined = watch.mock.calls[0];

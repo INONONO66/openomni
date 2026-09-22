@@ -1,19 +1,18 @@
 import { eraseTool, toolSpec } from "@openomni/agent";
-import type { GatewayRouter } from "@openomni/channels";
-import type { MachineHost } from "@openomni/machines";
 import type { AnyToolDefinition, LedgerSession, Tool } from "@openomni/protocol";
-import type { composeCodemode } from "../../composition/codemode";
+import type { ComposedCodemode } from "../../composition/codemode";
+import type { FilePorts } from "./filesystem";
 import { createBashTool } from "../bash";
 import { createCompletionTool, type LlmPort } from "../completion";
 import { createEditTool } from "../edit";
-import { createEvalTool } from "../eval";
+import { createEvalTool, type Cell } from "../eval";
 import { createFindTool } from "../find";
 import { createGrepTool } from "../grep";
 import { createLsTool } from "../ls";
 import { createMonitorTool, type MonitorPorts } from "../monitor";
 import { createProvisionTool, type ProvisionPort } from "../provision";
 import { createReadTool } from "../read";
-import { createSendMessageTool } from "../send-message";
+import { createSendMessageTool, type MessagePort } from "../send-message";
 import { createWriteTool } from "../write";
 
 export interface CatalogOrigin {
@@ -23,9 +22,9 @@ export interface CatalogOrigin {
 
 export interface CatalogPorts {
   readonly alarms?: MonitorPorts;
-  readonly messages?: Pick<GatewayRouter, "ingest">;
-  readonly machines?: MachineHost;
-  readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
+  readonly messages?: MessagePort;
+  readonly machines?: FilePorts["machines"];
+  readonly cells?: Pick<ComposedCodemode, "bindTools"> & { readonly cell: Cell };
   readonly llm?: LlmPort;
   readonly provisioning?: ProvisionPort;
   /** The session runtime clock; deadlines are computed against it, never wall time. */

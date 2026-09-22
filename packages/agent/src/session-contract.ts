@@ -1,3 +1,7 @@
+import type { Effect, } from "effect";
+import type { SessionError, ExecutionError } from "./errors";
+import type { ExecutionLedger } from "./executor-contract";
+import type { GenerationBundle } from "./session-generations";
 import type { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type {
@@ -39,12 +43,7 @@ interface SessionGetOptions {
   readonly turns?: number;
 }
 
-export interface SessionActionCommitPort {
-  commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
-  actions?(): readonly LedgerAction.Node[];
-  validateRequest?: import("./executor-contract").ExecutionLedger["validateRequest"];
-  transition?: import("./executor-contract").ExecutionLedger["transition"];
-}
+export interface SessionActionCommitPort extends ExecutionLedger {}
 
 export interface SessionRunnerInput {
   readonly sessionId: string;
@@ -73,7 +72,7 @@ export interface SessionRunnerInput {
   readonly policyGeneration: number;
   readonly resumeCount: number;
   readonly signal: AbortSignal;
-  readonly boundary: (boundary: SessionTurn.Boundary) => Promise<SessionBoundaryResult>;
+  readonly boundary: (boundary: SessionTurn.Boundary) => Effect.Effect<SessionBoundaryResult, ExecutionError>;
 }
 
 export interface SessionBoundaryResult {
@@ -109,7 +108,7 @@ export type SessionRunnerResult =
       readonly reported?: true;
     };
 
-export type SessionRunner = (input: SessionRunnerInput) => Promise<SessionRunnerResult>;
+export type SessionRunner = (input: SessionRunnerInput) => Effect.Effect<SessionRunnerResult, ExecutionError>;
 
 export interface SessionRuntime {
   /** Dispatches only an already committed source obligation through gateway admission. */
@@ -117,21 +116,21 @@ export interface SessionRuntime {
     readonly message: SessionTransition.OutboundMessage;
     readonly authority: { readonly owner: string; readonly fence: number };
     readonly policy: CompiledPolicySnapshot;
-  }) => Promise<LedgerAction.Receipt>;
+  }) => Effect.Effect<LedgerAction.Receipt, ExecutionError>;
   /** Direct post-commit doorbells, independent of the lossy observation bus. */
   readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
   readonly openIntent?: (input: {
     sessionId: string;
     turnId: string;
     revision: number;
-  }) => Promise<readonly { actionId: string; kind: "message" | "approval" }[]>;
+  }) => Effect.Effect<readonly { actionId: string; kind: "message" | "approval" }[], ExecutionError>;
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly processId?: string;
   readonly observations: ObservationSink;
-  readonly authorizeConfigure?: SessionHandleStore.ConfigureAuthority;
+  readonly authorizeConfigure?: (input: Parameters<SessionHandleStore.ConfigureAuthority>[0]) => Effect.Effect<boolean, SessionError>;
   readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,
@@ -150,7 +149,8 @@ export interface SessionRuntime {
    * heartbeat timer is unref'd so a detached runner never pins the process.
    */
   readonly scheduleHeartbeat?: (callback: () => void, intervalMs: number) => () => void;
-  readonly onHibernate?: (sessionId: string) => void | Promise<void>;
+  readonly generation?: (snapshot: SessionGeneration.Snapshot) => GenerationBundle;
+  readonly onHibernate?: (sessionId: string) => Effect.Effect<void, ExecutionError>;
   /**
    * How long `close()` waits for an abort-ignoring runner to settle before
    * detaching the caller. Defaults to the lease TTL. Detaching only bounds the
@@ -162,14 +162,14 @@ export interface SessionRuntime {
 }
 
 export interface SessionToolsHandle {
-  add(tools: readonly SessionTool[]): Promise<SessionGeneration.ConfigureReceipt>;
-  remove(names: readonly string[]): Promise<SessionGeneration.ConfigureReceipt>;
+  add(tools: readonly SessionTool[]): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
+  remove(names: readonly string[]): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
 }
 
 export interface SessionSystemBlocksHandle {
   set(
     blocks: readonly SessionGeneration.SystemBlock[],
-  ): Promise<SessionGeneration.ConfigureReceipt>;
+  ): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
 }
 
 export interface SessionHandle {
@@ -181,22 +181,22 @@ export interface SessionHandle {
       inputId: string,
       at: number,
       admission?: Inbox.Commit,
-    ): import("./session-request").RequestDecision;
+    ): Effect.Effect<import("./session-request").RequestDecision, ExecutionError>;
   };
   readonly tools: SessionToolsHandle;
   readonly system: { readonly blocks: SessionSystemBlocksHandle };
-  prompt(content: string, origin?: Inbox.Origin): Promise<SessionRunnerResult | undefined>;
-  interrupt(origin?: Inbox.Origin): Promise<void>;
-  resume(origin?: Inbox.Origin): Promise<void>;
+  prompt(content: string, origin?: Inbox.Origin): Effect.Effect<SessionRunnerResult | undefined, SessionError>;
+  interrupt(origin?: Inbox.Origin): Effect.Effect<void, SessionError>;
+  resume(origin?: Inbox.Origin): Effect.Effect<void, SessionError>;
   /** Record the typed compensation of one compaction (`restore_context_projection`); history is never erased. */
-  restoreContext(compactionId: string): Promise<ExecutionResult>;
+  restoreContext(compactionId: string): Effect.Effect<ExecutionResult, SessionError>;
   get(options?: SessionGetOptions): SessionTurn.Snapshot;
   watch(options?: SessionGetOptions): SessionTurn.Watch;
   /** Bounded revision page of committed actions; the resynchronization read after a `watch` gap. */
   history(request?: SessionHistory.PageRequest): SessionHistory.Page;
   /** Redacted causal projection over this session and the sessions it commissioned. */
   inspect(request?: SessionHistory.InspectRequest): SessionHistory.Inspection;
-  close(): Promise<void>;
+  close(): Effect.Effect<void, SessionError>;
 }
 
 export class SessionLeaseError extends Error {
@@ -225,7 +225,7 @@ export class SessionCommitError extends Error {
 export interface SessionController {
   readonly handle: SessionHandle;
   readonly owner: string;
-  reconcile(): Promise<SessionRunnerResult | undefined>;
+  reconcile(): Effect.Effect<SessionRunnerResult | undefined, SessionError>;
 }
 
 export interface RegistryEntry {
@@ -234,6 +234,6 @@ export interface RegistryEntry {
 }
 
 export interface SessionControllerLifecycle {
-  reactivate(): SessionHandle;
+  reactivate(): Effect.Effect<SessionHandle, SessionError>;
   release(): void;
 }

@@ -19,7 +19,9 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { entropyOf } from "./core/entropy";
-import { settled } from "./core/settled";
+import { Effect } from "effect";
+import type { ExecutionError } from "./errors";
+import type { RawToolSlots } from "./executor-raw";
 import {
   createExecutor,
   type DurableExecutor,
@@ -79,13 +81,13 @@ interface DispatchContext {
 interface Dispatcher {
   readonly executor?: Executor;
   readonly specs: readonly Tool.Spec[];
-  execute(call: Tool.Call, context: DispatchContext): Promise<ToolDispatchResult>;
+  execute(call: Tool.Call, context: DispatchContext): Effect.Effect<ToolDispatchResult, ExecutionError>;
   executeWave(
     calls: readonly Tool.Call[],
     context: DispatchContext,
-  ): Promise<readonly ToolDispatchResult[]>;
-  executeCell(call: Tool.Call, context: DispatchContext): Promise<CellToolDispatchResult>;
-  recover(actions: readonly LedgerAction.Node[], context: DispatchContext): Promise<void>;
+  ): Effect.Effect<readonly ToolDispatchResult[], ExecutionError>;
+  executeCell(call: Tool.Call, context: DispatchContext): Effect.Effect<CellToolDispatchResult, ExecutionError>;
+  recover(actions: readonly LedgerAction.Node[], context: DispatchContext): Effect.Effect<void, ExecutionError>;
 }
 
 export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
@@ -134,14 +136,18 @@ function invalidInputReason(error: z.ZodError): string {
 function finishResult(
   call: Tool.Call,
   definition: AnyToolDefinition,
-  inputData: unknown,
+  inputData: PlainValue,
   door: "model" | "cell",
   execution: ExecutionBatchResult,
 ): ToolDispatchResult | CellToolDispatchResult {
-  if (execution.terminal === "cancelled")
-    return failed(call, "tool execution cancelled", "execution_failed");
-  if (execution.terminal === "failed")
-    return failed(call, execution.error.message, "execution_failed");
+  if (execution.terminal === "interrupted" || execution.terminal === "outcome_unknown")
+    return failed(call, execution.reason, "execution_failed");
+  if (execution.terminal === "executed" && execution.failure !== undefined)
+    return failed(
+      call,
+      execution.failure._tag === "ToolBodyFailed" ? execution.failure.cause : execution.failure.message,
+      "execution_failed",
+    );
   if (execution.terminal !== "executed") {
     const refusal = new ToolRefused(definition.name, execution.reason);
     if (door === "cell") throw refusal;
@@ -215,7 +221,7 @@ export function createDispatcher(
     | {
         readonly kind: "ready";
         readonly request: ExecutionRequest;
-        readonly body: () => Promise<PlainValue>;
+        readonly body: () => Effect.Effect<PlainValue, ExecutionError, RawToolSlots>;
         readonly sequential?: true;
         readonly finish: (
           result: ExecutionBatchResult,
@@ -269,24 +275,20 @@ export function createDispatcher(
             domainRevisions: () => binding?.(parsedValue).domainRevisions ?? {},
           }),
     };
-    const body = () =>
-      activeExecutor.run(executor, async () =>
-        PlainValueSchema.parse(
-          await executeToolBody(
-            definition,
-            parsedInput.data,
-            {
-              ...context,
-              ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
-            },
-            options?.timeoutMs,
-          ),
-        ),
-      );
+    const body = () => executeToolBody(
+      definition,
+      parsedInput.data,
+      {
+        ...context,
+        ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
+      },
+      options?.timeoutMs,
+      executor,
+    ).pipe(Effect.map(PlainValueSchema.parse));
     const finish = (
       execution: ExecutionBatchResult,
     ): ToolDispatchResult | CellToolDispatchResult =>
-      finishResult(call, definition, parsedInput.data, door, execution);
+      finishResult(call, definition, parsedValue, door, execution);
     let modelResult: ToolDispatchResult | undefined;
     return {
       kind: "ready",
@@ -310,20 +312,20 @@ export function createDispatcher(
     };
   }
 
-  async function dispatch(call: Tool.Call, context: DispatchContext, door: "model" | "cell") {
-    const prepared = prepare(call, context, door);
-    if (prepared.kind === "refused") return prepared.result;
-    const executor = resolveExecutor();
-    if (executor === undefined) throw new ExecutorContextError();
-    if (context.signal !== undefined && executor.runBatch !== undefined) {
-      const results = await executor.runBatch([prepared], { signal: context.signal });
+  function dispatch(call: Tool.Call, context: DispatchContext, door: "model" | "cell") {
+    return Effect.gen(function* () {
+      const prepared = prepare(call, context, door);
+      if (prepared.kind === "refused") return prepared.result;
+      const executor = resolveExecutor();
+      if (executor === undefined) throw new ExecutorContextError();
+      if (executor.runBatch === undefined) throw new ExecutorContextError();
+      const results = yield* executor.runBatch([prepared], { signal: context.signal ?? new AbortController().signal });
       const result = results[0];
       if (result === undefined) throw new Error("single dispatch lost its result");
-      if (door === "cell" && result.terminal === "cancelled")
-        throw new DOMException("execution cancelled", "AbortError");
+      if (door === "cell" && result.terminal === "interrupted")
+        return yield* Effect.interrupt;
       return prepared.finish(result);
-    }
-    return prepared.finish(await executor.run(prepared.request, prepared.body));
+    });
   }
 
   function runPreparedBatch(
@@ -342,13 +344,13 @@ export function createDispatcher(
   function executeWave(
     calls: readonly Tool.Call[],
     context: DispatchContext,
-  ): Promise<readonly ToolDispatchResult[]> {
-    const execute = async (): Promise<readonly ToolDispatchResult[]> => {
+  ): Effect.Effect<readonly ToolDispatchResult[], ExecutionError> {
+    return Effect.gen(function* () {
       const prepared = calls.map((call) => prepare(call, context, "model"));
       const ready = prepared.filter(
         (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
       );
-      const results = await runPreparedBatch(ready, context, options?.retainEffect);
+      const results = yield* runPreparedBatch(ready, context, options?.retainEffect);
       let index = 0;
       return prepared.map((item) => {
         if (item.kind === "refused") return item.result;
@@ -356,17 +358,15 @@ export function createDispatcher(
         if (result === undefined) throw new Error("wave result missing");
         return renderedResult(item.finish(result));
       });
-    };
-    const wave = Promise.resolve().then(execute);
-    options?.trackWave?.(settled(wave));
-    return wave;
+    });
   }
 
   return {
     ...(options?.executor === undefined ? {} : { executor: options.executor }),
     specs: definitions.filter((definition) => definition.visibility.model.length > 0).map(toolSpec),
     executeWave,
-    async recover(actions, context) {
+    recover(actions, context) {
+      return Effect.gen(function* () {
       const groups = recoverableWaves(actions, context.turnId);
       const approvalWaves = new Set<string>();
       for (const action of actions) {
@@ -389,21 +389,18 @@ export function createDispatcher(
         const ready = prepared.filter(
           (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
         );
-        const results = await runPreparedBatch(ready, context);
+        const results = yield* runPreparedBatch(ready, context);
         results.forEach((result, index) => {
           ready[index]?.finish(result);
         });
       }
+      });
     },
     execute(call, context) {
-      const wave = dispatch(call, context, "model").then(renderedResult);
-      options?.trackWave?.(settled(wave));
-      return wave;
+      return dispatch(call, context, "model").pipe(Effect.map(renderedResult));
     },
     executeCell(call, context) {
-      const wave = dispatch(call, context, "cell");
-      options?.trackWave?.(settled(wave));
-      return wave;
+      return dispatch(call, context, "cell");
     },
   };
 }
@@ -474,6 +471,7 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
 
 /** The runtime clock/entropy/observation sink shared across a session's turns. */
 interface TurnDispatchRuntime {
+  readonly closeGraceMs?: ExecutorOptions["closeGraceMs"];
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly observations: ObservationSink | BusEvent.Sink;
@@ -503,6 +501,7 @@ export function createTurnDispatcher(
   }
   const executor = createExecutor({
     retryAlarm: runtime.retryAlarm,
+    closeGraceMs: runtime.closeGraceMs,
     signal: input.signal,
     retainEffect: input.retainEffect,
     policy: input.policy,
@@ -541,15 +540,13 @@ export function createTurnDispatcher(
       recover() {
         // Persisted evidence settles ordinary crash-open intents first; only
         // request-bearing waves then re-admit their captured invocations.
-        const wave = executor.recover().then(() =>
+        return executor.recover().pipe(Effect.andThen(() =>
           dispatcher.recover(input.ledger.actions?.() ?? [], {
             sessionId: input.sessionId,
             turnId: input.turnId ?? input.actionId,
             signal: input.signal,
           }),
-        );
-        input.trackWave?.(wave);
-        return wave;
+        ));
       },
     },
   };

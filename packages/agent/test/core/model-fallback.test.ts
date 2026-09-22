@@ -1,6 +1,8 @@
-import { createTestAgent, runUserMessage } from "../helpers/test-agent";
-import { describe, expect, it, jest } from "bun:test";
-import type { Sink } from "@openomni/llm";
+import { Effect, Fiber } from "effect";
+import { isolated } from "../helpers/isolated";
+import { createTestAgent, runUserMessage, failure } from "../helpers/effect-g2";
+import { describe, expect, it } from "bun:test";
+import type { RunInput, Sink } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { createAssistantMessage } from "../../src/core/message-factory";
@@ -15,7 +17,7 @@ const fallback = { provider: "openai", id: "fallback-model" };
 function fallbackHarness(errorMessage: string) {
   const resolved: Model.Ref[] = [];
   let calls = 0;
-  const run: MockLlmFn = async (_input, sink: Sink) => {
+  const run: MockLlmFn = async (_input: import("@openomni/llm").RunInput, sink: Sink) => {
     calls += 1;
     if (calls === 1)
       return {
@@ -31,28 +33,32 @@ function fallbackHarness(errorMessage: string) {
   return {
     resolved,
     llm: {
-      run,
-      resolveModel: async (model: Model.Ref) => {
-        resolved.push(model);
-        return { id: model.id, name: model.id, providerID: model.provider };
-      },
+      run: (input: RunInput, sink: Sink) => Effect.promise(() => run(input, sink)),
+      resolveModel: (model: Model.Ref) =>
+        Effect.promise(async () => {
+          resolved.push(model);
+          return { id: model.id, name: model.id, providerID: model.provider };
+        }),
     },
   };
 }
 
-async function afterFirstRetry<T>(operation: () => Promise<T>): Promise<T> {
-  jest.useFakeTimers();
-  const retry = Promise.withResolvers<void>();
-  const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
-  try {
-    const running = operation();
-    await retry.promise;
-    jest.advanceTimersByTime(1_000);
-    return await running;
-  } finally {
-    unsubscribe();
-    jest.useRealTimers();
-  }
+function afterFirstRetry<T, E>(operation: () => Effect.Effect<T, E>): Promise<T> {
+  return isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const retry = Promise.withResolvers<void>();
+        const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
+        try {
+          const running = yield* Effect.forkScoped(operation());
+          yield* Effect.promise(() => retry.promise).pipe(Effect.timeout("5 seconds"));
+          return yield* Fiber.join(running);
+        } finally {
+          unsubscribe();
+        }
+      }),
+    ),
+  );
 }
 
 describe("model fallback via placement", () => {
@@ -73,11 +79,15 @@ describe("model fallback via placement", () => {
 
   it("keeps validation failures terminal without a fallback", async () => {
     const { resolved, llm } = fallbackHarness("validation failed");
-    await expect(
-      createTestAgent({ events: Bus, model: primary, llm }).run(
-        runInput([{ role: "user", content: "go" }]),
+    expect(
+      await isolated(
+        failure(
+          createTestAgent({ events: Bus, model: primary, llm }).run(
+            runInput([{ role: "user", content: "go" }]),
+          ),
+        ),
       ),
-    ).rejects.toThrow("validation failed");
+    ).toMatchObject({ _tag: "LlmRunFailure", isRetryable: false, statusCode: 400 });
     expect(resolved).toEqual([primary]);
   });
 
@@ -85,23 +95,26 @@ describe("model fallback via placement", () => {
     const arms: Array<number | undefined> = [];
     let calls = 0;
     const llm = {
-      run: (async (input, sink: Sink) => {
-        calls += 1;
-        arms.push(input.yieldAtInputTokens);
-        if (calls === 1) {
-          sink.onMessage(stepSnapshot("first", "working", "tool-calls", 10, 5));
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          calls += 1;
+          arms.push(input.yieldAtInputTokens);
+          if (calls === 1) {
+            sink.onMessage(stepSnapshot("first", "working", "tool-calls", 10, 5));
+            return createStopOutcome();
+          }
+          if (calls === 2)
+            return { type: "error" as const, error: providerFailure("transient blip") };
+          sink.onMessage(stepSnapshot("third", "done", "stop", 10, 5));
           return createStopOutcome();
-        }
-        if (calls === 2) return { type: "error", error: providerFailure("transient blip") };
-        sink.onMessage(stepSnapshot("third", "done", "stop", 10, 5));
-        return createStopOutcome();
-      }) as MockLlmFn,
-      resolveModel: async (model: Model.Ref) => ({
-        id: model.id,
-        name: model.id,
-        providerID: model.provider,
-        limit: { context: model.id === primary.id ? 1_000 : 500, output: 1_000 },
-      }),
+        }),
+      resolveModel: (model: Model.Ref) =>
+        Effect.promise(async () => ({
+          id: model.id,
+          name: model.id,
+          providerID: model.provider,
+          limit: { context: model.id === primary.id ? 1_000 : 500, output: 1_000 },
+        })),
     };
     const result = await afterFirstRetry(() =>
       runUserMessage({ events: Bus, model: primary, modelFallbacks: [fallback], llm }, "go"),

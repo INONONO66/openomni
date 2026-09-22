@@ -1,5 +1,8 @@
+import type { RunInput, Sink } from "@openomni/llm";
+import { isolated } from "../helpers/isolated";
+import { failure } from "../helpers/g0-signals";
 import { providerFailure } from "../helpers/mock-llm";
-import { createTestAgent } from "../helpers/test-agent";
+import { createTestAgent } from "../helpers/g0-effect";
 import { describe, expect, it } from "bun:test";
 import { assistantTextSnapshot } from "../helpers/messages";
 import { Bus } from "../../src/index";
@@ -15,18 +18,29 @@ function agent(run: MockLlmFn) {
 }
 
 describe("run terminal message result contract", () => {
-  it.each([[0, 7], [11, 0]])("preserves asymmetric snapshot usage %i/%i", async (input, output) => {
-    const result = await agent(async (_input, sink) => {
-      sink.onMessage(assistantTextSnapshot("counted", input, output));
-      return createStopOutcome();
-    }).run(runInput([{ role: "user", content: "count" }]));
-    expect(result.usage).toMatchObject({ inputTokens: input, outputTokens: output, totalTokens: input + output });
+  it.each([
+    [0, 7],
+    [11, 0],
+  ])("preserves asymmetric snapshot usage %i/%i", async (input: number, output: number) => {
+    const result = await isolated(
+      agent(async (_input: RunInput, sink: Sink) => {
+        sink.onMessage(assistantTextSnapshot("counted", input, output));
+        return createStopOutcome();
+      }).run(runInput([{ role: "user", content: "count" }])),
+    );
+    expect(result.usage).toMatchObject({
+      inputTokens: input,
+      outputTokens: output,
+      totalTokens: input + output,
+    });
   });
   it("returns stop, text, steps, and usage from the terminal assistant snapshot", async () => {
-    const result = await agent(async (_input, sink) => {
-      sink.onMessage(assistantTextSnapshot("the answer is 42", 20, 10));
-      return createStopOutcome();
-    }).run(runInput([{ role: "user", content: "hello" }]));
+    const result = await isolated(
+      agent(async (_input: RunInput, sink: Sink) => {
+        sink.onMessage(assistantTextSnapshot("the answer is 42", 20, 10));
+        return createStopOutcome();
+      }).run(runInput([{ role: "user", content: "hello" }])),
+    );
     expect(result).toMatchObject({
       finishReason: "stop",
       text: "the answer is 42",
@@ -46,18 +60,22 @@ describe("run terminal message result contract", () => {
         return createStopOutcome();
       }),
     });
-    await expect(
-      configured.run(runInput([{ role: "user", content: "hello" }])),
-    ).rejects.toMatchObject({ code: "agent_stop", reason: "budget" });
+    expect(
+      await isolated(failure(configured.run(runInput([{ role: "user", content: "hello" }])))),
+    ).toMatchObject({ code: "agent_stop", reason: "budget" });
     expect(calls).toBe(0);
   });
 
   it("propagates a terminal validation error", async () => {
-    await expect(
-      agent(async () => ({
-        type: "error",
-        error: providerFailure("validation failed", { retryable: false, statusCode: 400 }),
-      })).run(runInput([{ role: "user", content: "hello" }])),
-    ).rejects.toThrow("validation failed");
+    expect(
+      await isolated(
+        failure(
+          agent(async () => ({
+            type: "error",
+            error: providerFailure("validation failed", { retryable: false, statusCode: 400 }),
+          })).run(runInput([{ role: "user", content: "hello" }])),
+        ),
+      ),
+    ).toMatchObject({ _tag: "LlmRunFailure", statusCode: 400, isRetryable: false });
   });
 });

@@ -54,7 +54,10 @@ const ledger = {
   StorageUnavailable: new Ledger.StorageUnavailable({ capability: "storage" }),
   CorruptRecord: new Ledger.CorruptRecord({ operation: "decode", id: "record" }),
 } satisfies { [K in Ledger.LedgerError["_tag"]]: Extract<Ledger.LedgerError, { _tag: K }> };
+// Agent.SessionError absorbs Ledger.LedgerError and Llm.LlmRunFailure, so those fixtures are members too.
 const agent = {
+  ...ledger,
+  LlmRunFailure: llm.LlmRunFailure,
   ForeignFailure: new Agent.ForeignFailure(diagnostic),
   PolicyDenied: new Agent.PolicyDenied({ phase: "pre", ruleIds: [] }),
   ToolBodyFailed: new Agent.ToolBodyFailed({ tool: "fixture", cause: "foreign" }),
@@ -65,6 +68,7 @@ const agent = {
   LeaseLost: new Agent.LeaseLost({ sessionId: "session", fence: 1 }),
   GenerationUnavailable: new Agent.GenerationUnavailable({ generation: 1 }),
   ExecutionApprovalError: new Agent.ExecutionApprovalError({ code: "stale_approval" }),
+  AgentStopError: new Agent.AgentStopError({ reason: "budget" }),
 } satisfies { [K in Agent.SessionError["_tag"]]: Extract<Agent.SessionError, { _tag: K }> };
 const channels = {
   ForeignFailure: new Channels.ForeignFailure(diagnostic),
@@ -95,7 +99,10 @@ for (const entry of packages) {
   test(`${entry.name}: every failure export is tagged, yieldable and covered by the package union`, () => {
     const constructors = Object.values(entry.module).filter((value) => typeof value === "function" && value.prototype instanceof Error);
     const failures = Object.values(entry.failures);
-    expect(new Set(failures.map((failure) => failure.constructor))).toEqual(new Set(constructors));
+    const owned = new Set(failures.map((failure) => failure.constructor));
+    for (const ctor of constructors) expect(owned.has(ctor)).toBe(true);
+    const foreign = packages.filter((other) => other !== entry).flatMap((other) => Object.values(other.module));
+    for (const ctor of owned) expect(constructors.includes(ctor) || foreign.includes(ctor)).toBe(true);
     for (const failure of failures) {
       expect(Effect.isEffect(failure)).toBe(true);
       const caught = Effect.runSync(Effect.either(Effect.fail(failure)));

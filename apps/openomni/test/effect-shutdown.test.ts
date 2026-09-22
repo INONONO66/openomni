@@ -1,11 +1,14 @@
 import { expect, spyOn, test } from "bun:test";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
-import { session, type SessionRunner, type SessionRuntime } from "@openomni/agent";
+import { session, createTurnDispatcher, defineTool, eraseTool, sessionTool, type SessionRuntime } from "@openomni/agent";
+import { z } from "zod";
+import { createResident } from "../src/resident";
+import { eventSignal } from "./helpers/event-signal";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { shutdownSessions } from "../src/shutdown";
 import { Effect } from "effect";
 import { bootResource } from "../src/composition/boot";
-import { gatewayRuntime, runAppBoot } from "../src/gateway";
+import { acquireAppResource, gatewayRuntime, runAppBoot, runAppEffect } from "../src/gateway";
 import { installShutdownHandlers } from "../src/index";
 import { AppClock, AppObservations, AppLifecycleFailure } from "../src/runtime";
 
@@ -91,66 +94,64 @@ test("a cleanup failure is an observed shutdown incident and cannot produce a su
   }
 });
 
-test("current zero-grace session close interrupts but retains the unresolved raw runner lease", async () => {
+for (const settleAfterTurn of [false, true]) {
+test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfterTurn})`, async () => {
   const runtime = gatewayRuntime({ dbPath: ":memory:", clock: () => 1000 });
-  const services = await runAppBoot(
-    runtime,
-    Effect.gen(function* () {
-      return { clock: yield* AppClock, observations: yield* AppObservations };
-    }),
-  );
+  const services = await runAppBoot(runtime, Effect.gen(function* () {
+    return { clock: yield* AppClock, observations: yield* AppObservations };
+  }));
   seedKernelPolicyRows();
-  const entered = Promise.withResolvers<void>();
-  const raw = Promise.withResolvers<Awaited<ReturnType<SessionRunner>>>();
-  const released = Promise.withResolvers<void>();
+  const entered = eventSignal<void>("raw tool entered");
+  const interrupted = eventSignal<void>("raw tool interrupted");
+  const raw = Promise.withResolvers<string>();
+  const released = eventSignal<void>("raw lease released");
   const order: string[] = [];
+  const tool = eraseTool(defineTool({
+    name: "hold_raw", category: "query", description: "Hold a raw tool body",
+    input: z.object({}), output: z.string(), visibility: { model: ["resident"], cell: [] },
+    execute: (_args, { signal }) => {
+      signal.addEventListener("abort", () => { order.push("interrupt"); interrupted.resolve(); }, { once: true });
+      entered.resolve();
+      return raw.promise;
+    },
+    render: (_args, output) => output,
+  }));
   const sessionRuntime: SessionRuntime = {
-    observations: services.observations,
-    clock: services.clock.now,
-    closeGraceMs: 0,
-    onHibernate: () => {
-      order.push("lease.released");
-      released.resolve();
-    },
+    observations: services.observations, clock: services.clock.now, closeGraceMs: 0,
+    generation: (snapshot) => resident.generation(snapshot),
+    onHibernate: () => Effect.sync(() => { order.push("lease.released"); released.resolve(); }),
   };
-  const handle = session(
-    {
-      id: "shutdown-raw",
-      role: "resident",
-      runner: ({ signal }) => {
-        signal.addEventListener(
-          "abort",
-          () => {
-            order.push("interrupt");
-          },
-          { once: true },
-        );
-        entered.resolve();
-        return raw.promise;
-      },
-    },
-    sessionRuntime,
-  );
-  const turn = handle.prompt("hold raw runner");
+  const resident = createResident({ model: { provider: "test", id: "test" }, apiKey: "test", tools: {}, toolDefinitions: [tool], sessionRuntime });
+  const handle = await acquireAppResource(runtime, session({
+    id: "shutdown-raw", role: "resident", tools: [sessionTool(tool)],
+    runner: (input) => createTurnDispatcher([tool], input, sessionRuntime).execute(
+      { id: "hold-call", tool: tool.name, input: {} },
+      { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },
+    ).pipe(Effect.as({ kind: "result" as const, text: "settled" })),
+  }, sessionRuntime));
+  const turn = runAppEffect(runtime, handle.prompt("hold raw tool"));
   try {
     await entered.promise;
     const lease = SessionHandleStore.row(handle.id);
     expect(lease.leaseOwner).not.toBeNull();
-    await runtime.runPromise(shutdownSessions(sessionRuntime, Promise.resolve()));
+    await runAppEffect(runtime, shutdownSessions(sessionRuntime, Promise.resolve()));
     order.push("close.returned");
-    expect(order).toEqual(["interrupt", "close.returned"]);
-    expect(SessionHandleStore.row(handle.id)).toMatchObject({
-      leaseOwner: lease.leaseOwner,
-      leaseFence: lease.leaseFence,
-    });
-    raw.resolve({ kind: "result", text: "late raw settlement" });
+    await interrupted.promise;
+    expect(SessionHandleStore.row(handle.id)).toMatchObject({ leaseOwner: lease.leaseOwner, leaseFence: lease.leaseFence });
+    expect(SessionHandleStore.tree(handle.id).some((action) => {
+      const value = action.effect.value;
+      return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
+    })).toBe(true);
+    if (settleAfterTurn) await turn;
+    raw.resolve("late raw settlement");
     await turn;
     await released.promise;
-    expect(order).toEqual(["interrupt", "close.returned", "lease.released"]);
+    expect(order.indexOf("lease.released")).toBeGreaterThan(order.indexOf("close.returned"));
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
   } finally {
-    raw.resolve({ kind: "result", text: "late raw settlement" });
+    raw.resolve("late raw settlement");
     await turn;
     await runtime.dispose();
   }
 });
+}

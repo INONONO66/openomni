@@ -1,4 +1,5 @@
 import { Effect, Either } from "effect";
+import { runEffect, runSyncEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
@@ -57,8 +58,8 @@ test("duplicate external event does not commit a second inbox message", async ()
     payload: {},
     render: "hello",
   };
-  const first = await fixture.gateway.ingest(sender, facts);
-  const repeated = await fixture.gateway.ingest(sender, facts);
+  const first = await runEffect(fixture.gateway.ingest(sender, facts));
+  const repeated = await runEffect(fixture.gateway.ingest(sender, facts));
   expect(first.status).toBe("executed");
   expect(repeated).toMatchObject({
     status: "blocked_pre",
@@ -86,12 +87,12 @@ test("external ingress retry after inbox fault commits once despite a recorded r
     db.exec(
       "CREATE TRIGGER fail_external BEFORE INSERT ON inbox BEGIN SELECT RAISE(ABORT, 'inbox fault'); END",
     );
-    await expect(fixture.gateway.ingest(sender, facts)).rejects.toMatchObject({
+    await expect(runEffect(fixture.gateway.ingest(sender, facts))).rejects.toMatchObject({
       _tag: "ForeignFailure",
       operation: "inbox.receive",
     });
     db.exec("DROP TRIGGER fail_external");
-    const result = await fixture.gateway.ingest(sender, facts);
+    const result = await runEffect(fixture.gateway.ingest(sender, facts));
     expect(result.status).toBe("executed");
     if (result.status !== "executed") throw new Error("retry was not committed");
     expect(SessionHandleStore.inboxRows(result.handle.target)).toHaveLength(1);
@@ -104,7 +105,7 @@ test("conversation correlation cannot select the physical default session", asyn
   const fixture = messageFixture();
   directories.push(fixture.directory);
   SurfaceKey.claim("ws:unrelated-conversation", fixture.sessionId);
-  const result = await fixture.gateway.ingest(
+  const result = await runEffect(fixture.gateway.ingest(
     { kind: "external", surface: "ws", externalId: "owner" },
     {
       eventId: "physical",
@@ -116,7 +117,7 @@ test("conversation correlation cannot select the physical default session", asyn
       payload: {},
       render: "hello",
     },
-  );
+  ));
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("message was not committed");
   expect(result.handle.target).not.toBe(fixture.sessionId);
@@ -201,7 +202,7 @@ test("an actor answer preserves platform correlation and wins its durable messag
   expect(sent.isError).not.toBe(true);
   expect(Storage.get().alarms?.due(199)).toHaveLength(0);
   expect(Storage.get().alarms?.due(200)).toHaveLength(1);
-  const reply = await fixture.gateway.ingest(
+  const reply = await runEffect(fixture.gateway.ingest(
     { kind: "external", surface: "ws", externalId: "alice" },
     {
       eventId: "answer",
@@ -213,7 +214,7 @@ test("an actor answer preserves platform correlation and wins its durable messag
       payload: {},
       render: "answer",
     },
-  );
+  ));
   expect(reply.status).toBe("executed");
   expect(SessionHandleStore.inboxRows(fixture.sessionId).at(-1)?.origin.value).toMatchObject({
     kind: "external_reply",
@@ -301,7 +302,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         SessionHandleStore.row("parent").revision,
       );
       if (action === undefined) throw new Error("parent request intent missing");
-      await f.requests.open({
+      await runEffect(f.requests.open({
         requestId: action.action.id,
         sessionId: "parent",
         expectedResponders: [f.sessionId],
@@ -311,7 +312,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         threshold: 1,
         deadline: 150,
         at: 100,
-      });
+      }));
       Either.getOrThrowWith(
         Effect.runSync(
           Effect.either(
@@ -416,7 +417,7 @@ test("an external reply to an awaited message admits with the correlated reply o
       at: 100,
     }),
   );
-  const prepared = prepare(
+  const prepared = runSyncEffect(prepare(
     { kind: "external", surface: "ws", externalId: "alice" },
     {
       to: { kind: "session", id: fixture.sessionId },
@@ -426,7 +427,7 @@ test("an external reply to an awaited message admits with the correlated reply o
     },
     fixture.sessionId,
     "correlated-answer",
-  );
+  ));
   expect(prepared.createSession).toBeUndefined();
   expect(prepared.message).toEqual({ sender: "external", eventIdUnique: true });
   expect(prepared.origin).toMatchObject({

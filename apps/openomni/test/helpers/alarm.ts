@@ -1,8 +1,27 @@
-import { Effect, Either } from "effect";
+import { Effect, Either, Exit, Scope } from "effect";
 import { createObservationBus, createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
 import { createAlarmWorker } from "../../src/composition/alarm-worker";
+import { runEffect } from "./effect";
+
+type AlarmWorker = Effect.Effect.Success<ReturnType<typeof createAlarmWorker>>;
+
+export function alarmWorkerFixture(
+  options: Parameters<typeof createAlarmWorker>[0],
+): { readonly worker: AlarmWorker; readonly close: () => Promise<void> } {
+  const scope = Effect.runSync(Scope.make());
+  const worker = Effect.runSync(
+    Effect.provideService(createAlarmWorker(options), Scope.Scope, scope),
+  );
+  return {
+    worker,
+    async close() {
+      await runEffect(worker.close());
+      await runEffect(Scope.close(scope, Exit.succeed(undefined)));
+    },
+  };
+}
 
 export function alarmFixture(
   path = ":memory:",
@@ -35,7 +54,7 @@ export function alarmFixture(
   let at = 1000;
   const errors: Error[] = [];
   const wakes: string[] = [];
-  const worker = createAlarmWorker({
+  const workerFixture = alarmWorkerFixture({
     alarms: storage.alarms,
     observations: events,
     clock: () => at,
@@ -48,9 +67,10 @@ export function alarmFixture(
     wake: (id) => {
       wakes.push(id);
       onWake?.(id);
-      return Promise.resolve();
+      return Effect.void;
     },
   });
+  const worker = workerFixture.worker;
   /** A committed one-shot retry.scheduled alarm, due at the fixture clock. */
   function armRetry(id: string) {
     const row = Either.getOrThrowWith(
@@ -128,6 +148,7 @@ export function alarmFixture(
     storage,
     events,
     worker,
+    run: <A, E>(effect: Effect.Effect<A, E, never>): A => Effect.runSync(effect),
     arm,
     armRetry,
     next,
@@ -138,7 +159,7 @@ export function alarmFixture(
     },
     rows: () => SessionHandleStore.inboxRows("monitor-session"),
     async close() {
-      await worker.close();
+      await workerFixture.close();
       Storage.reset();
     },
   };

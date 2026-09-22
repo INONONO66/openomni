@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { Auth } from "@openomni/llm";
 import type { ChatAgentConfig } from "@openomni/agent";
 import type { Model } from "@openomni/protocol";
@@ -25,17 +26,18 @@ export function transientProvider(
 ): ChatAgentConfig["llm"] {
   let calls = 0;
   return {
-    resolveModel: async (model) => {
+    resolveModel: (model) => Effect.sync(() => {
       resolved.push(model);
       return { id: model.id, name: model.id, providerID: model.provider };
-    },
-    run: async (input, sink) => {
-      if (auths !== undefined)
-        auths.push(await Auth.resolve(input.model.providerID, input.auth, input.authProvider));
-      calls += 1;
-      if (calls === 1) return { type: "error", error: providerFailure("transient blip") };
-      sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
-      return { type: "stop" };
-    },
+    }),
+    run: (input, sink) =>
+      Effect.gen(function* () {
+        if (auths !== undefined)
+          auths.push(yield* Auth.resolve(input.model.providerID, input.auth, input.authProvider));
+        calls += 1;
+        if (calls === 1) return { type: "error" as const, error: providerFailure("transient blip") };
+        sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
+        return { type: "stop" as const };
+      }),
   };
 }

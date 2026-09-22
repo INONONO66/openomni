@@ -4,6 +4,18 @@ import type { ExecutionError } from "./errors";
 
 export function failureEvidence(error: ExecutionError): PlainObject {
   switch (error._tag) {
+    case "LlmRunFailure":
+      return {
+        tag: error._tag,
+        message: error.message,
+        providerErrorName: error.providerErrorName ?? null,
+        retryAfterMs: error.retryAfterMs ?? null,
+        usage: error.usage,
+        aborted: error.aborted,
+        contextOverflow: error.contextOverflow,
+        visibleOutput: error.visibleOutput,
+        cause: error.cause ?? null,
+      };
     case "PolicyDenied":
       return { tag: error._tag, phase: error.phase, ruleIds: [...error.ruleIds] };
     case "ToolBodyFailed":
@@ -18,6 +30,8 @@ export function failureEvidence(error: ExecutionError): PlainObject {
       return { tag: error._tag, reason: error.reason };
     case "Interrupted":
       return { tag: error._tag };
+    case "AgentStopError":
+      return { tag: error._tag, code: error.code, reason: error.reason };
   }
 }
 

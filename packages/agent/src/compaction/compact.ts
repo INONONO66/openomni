@@ -1,3 +1,5 @@
+import { Cause, Effect } from "effect";
+import type { ExecutionError } from "../errors";
 import type { Message, BusEvent } from "@openomni/protocol";
 import { RunEvents } from "../core/execution/events";
 import type { CompactionYield } from "./geometry";
@@ -36,7 +38,7 @@ export namespace Compaction {
    * exit path, a summarizer throw included. A started without a completed
    * diagnoses a run that died inside compaction.
    */
-  export async function compact(
+  export function compact(
     messages: Message.WithParts[],
     options: ResolvedCompactionOptions,
     identity: {
@@ -55,7 +57,8 @@ export namespace Compaction {
        * runs and the result reports the discard. */
       readonly candidate?: CompactionCandidate;
     },
-  ): Promise<CompactionResult> {
+  ): Effect.Effect<CompactionResult, ExecutionError> {
+    return Effect.suspend(() => {
     const messagesBefore = messages.length;
     events.publish(RunEvents.CompactionStarted, {
       ...identity,
@@ -103,8 +106,7 @@ export namespace Compaction {
       return completed;
     };
 
-    try {
-      const boundedOptions =
+    const boundedOptions =
         options.onSummarize === undefined
           ? options
           : {
@@ -115,15 +117,14 @@ export namespace Compaction {
                 dispatch.signal,
               ),
             };
-      return await compactUnbracketed(
+      return compactUnbracketed(
         messages,
         boundedOptions,
         dispatch.measuredTokens,
         dispatch.candidate,
         finish,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      ).pipe(Effect.onError((cause) => Effect.sync(() => {
+      const message = Cause.pretty(cause);
       // The one exit finish() cannot serve: the summarizer threw. The
       // bracket still closes — `failed` is this operation's terminal — and
       // the throw propagates unchanged into the seam's fail-closed contract.
@@ -137,7 +138,7 @@ export namespace Compaction {
         elidedChars: 0,
         error: message,
       });
-      throw error;
-    }
+      })));
+    });
   }
 }

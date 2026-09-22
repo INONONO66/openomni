@@ -1,3 +1,4 @@
+import { runEffect } from "../../helpers/effect";
 import { beforeEach, expect, test } from "bun:test";
 import { registerChannelGrant } from "../../helpers/channel-grant";
 import {
@@ -12,7 +13,7 @@ beforeEach(resetRouterState);
 
 test("unauthorized external sender cannot reach inbox commit", async () => {
   registerChannelGrant();
-  expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+  expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",
   });
   expect(commits).toEqual([]);

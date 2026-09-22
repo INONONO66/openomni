@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { z } from "zod";
 import { SessionHandleStore, Storage } from "../src/index";
@@ -49,7 +50,7 @@ describe("session benchmark fixtures", () => {
     );
     request.actions = request.actions.slice(0, 1);
     expect(SessionHandleStore.tree("warm")).toEqual(tree);
-    const result = SessionHandleStore.commit(request);
+    const result = Either.getOrThrowWith(Effect.runSync(Effect.either(SessionHandleStore.commit(request))), (error) => error);
     expect(result).toMatchObject({ ok: true, row: { revision: 22, leaseOwner: null } });
     expect(SessionHandleStore.tree("warm").at(-1)).toMatchObject({
       id: "warm:turn:10",

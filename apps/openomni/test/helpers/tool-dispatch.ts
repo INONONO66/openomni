@@ -1,3 +1,4 @@
+import { runEffect } from "./effect";
 import { spyOn } from "bun:test";
 import type { PlainObject } from "@openomni/protocol";
 import type { CatalogOrigin } from "../../src/tools/core/catalog";
@@ -23,10 +24,10 @@ export function dispatchModelTool(
       const currentDefinitions = definitions ?? createTools(ports, origin);
       if (definitions === undefined) ports.cells?.bindTools(origin.sessionId, currentDefinitions);
       const dispatcher = persistentDispatcher ?? createDispatcher(currentDefinitions, { executor });
-      return await dispatcher.execute(
+      return await runEffect(dispatcher.execute(
         { id: `test-tool-call-${nextCallId++}`, tool: name, input },
         { sessionId: origin.sessionId, turnId: `test-turn-${nextCallId}` },
-      );
+      ));
     } finally {
       clock?.mockRestore();
     }

@@ -1,6 +1,8 @@
+import { Cause, Effect, Exit } from "effect";
+import { isolated } from "../../helpers/isolated";
 import { completeModel, providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it } from "bun:test";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent } from "../../helpers/effect-g1";
 import { Retry } from "@openomni/llm";
 import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
@@ -12,6 +14,11 @@ const model = {
   providerID: "provider",
   limit: { context: 10_000, output: 100 },
 };
+
+function effectOverflowCompactionConfig() {
+  const config = overflowCompactionConfig();
+  return { ...config, compaction: { ...config.compaction, onSummarize: () => Effect.succeed("overflow checkpoint") } };
+}
 
 const history = runInput([
   { role: "user", content: "the goal" },
@@ -47,19 +54,21 @@ describe("context overflow recovery", () => {
       retryable: false,
     });
     let calls = 0;
-    const running = runTestAgent(history, {
+    const running = isolated(Effect.exit(runTestAgent(history, {
       events: collector(),
       model: { provider: "provider", id: "model" },
       llm: {
-        resolveModel: async () => model,
-        run: async () => {
+        resolveModel: () => Effect.succeed(model),
+        run: () => Effect.sync(() => {
           calls += 1;
           return { type: "error", error: original };
-        },
+        }),
       },
-    });
+    })));
 
-    await expect(running).rejects.toBe(original);
+    const exit = await running;
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(original);
     expect(calls).toBe(1);
   });
 
@@ -67,11 +76,11 @@ describe("context overflow recovery", () => {
     const seen: number[] = [];
     let sawAnchor = false;
     let calls = 0;
-    const result = await runTestAgent(history, {
-      ...overflowCompactionConfig(),
+    const result = await isolated(runTestAgent(history, {
+      ...effectOverflowCompactionConfig(),
       llm: {
-        resolveModel: async () => model,
-        run: async (input, sink) => {
+        resolveModel: () => Effect.succeed(model),
+        run: (input, sink) => Effect.promise(async () => {
           calls += 1;
           seen.push(input.messages.length);
           sawAnchor =
@@ -90,9 +99,9 @@ describe("context overflow recovery", () => {
                 }),
               }
             : completeModel(input, sink);
-        },
+        }),
       },
-    });
+    }));
 
     expect(calls).toBe(2);
     expect(result.finishReason).toBe("stop");
@@ -106,23 +115,22 @@ describe("context overflow recovery", () => {
       contextOverflow: true,
       retryable: false,
     });
-    const second = providerFailure("prompt is too long on second call", {
-      contextOverflow: true,
-      retryable: false,
-    });
+    const second = providerFailure("prompt is too long on second call", { contextOverflow: true, retryable: false });
     let calls = 0;
-    const running = runTestAgent(history, {
-      ...overflowCompactionConfig(),
+    const running = isolated(Effect.exit(runTestAgent(history, {
+      ...effectOverflowCompactionConfig(),
       llm: {
-        resolveModel: async () => model,
-        run: async () => {
+        resolveModel: () => Effect.succeed(model),
+        run: () => Effect.sync(() => {
           calls += 1;
           return { type: "error", error: calls === 1 ? first : second };
-        },
+        }),
       },
-    });
+    })));
 
-    await expect(running).rejects.toBe(second);
+    const exit = await running;
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(second);
     expect(calls).toBe(2);
   });
 });

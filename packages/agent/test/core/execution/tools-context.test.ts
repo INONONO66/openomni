@@ -1,9 +1,12 @@
+import { Effect, Fiber } from "effect";
+import { boundedSignal } from "../../helpers/g0-signals";
+import { isolated } from "../../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import { stringQueryTool } from "../../helpers/query-tool";
 import type { ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
 import { createDispatcher, defineTool, eraseTool } from "../../../src/index";
-import { recordingExecutor } from "../../helpers/compiled-policy";
+import { recordingExecutor } from "../../helpers/g0-effect";
 
 describe("tool execution context", () => {
   it("forwards per-call cancellation with kernel-owned correlation identity", async () => {
@@ -18,25 +21,33 @@ describe("tool execution context", () => {
       input: z.object({}).strict(),
       output: z.string(),
       visibility: { model: ["resident"], cell: ["resident"] },
-      execute: async (_input, context) => {
+      execute: async (_input: Record<string, never>, context: ToolExecutionContext) => {
         captured = context;
         context.signal.addEventListener("abort", () => aborted.resolve(), { once: true });
         entered.resolve();
         await aborted.promise;
         return "ok";
       },
-      render: (_input, output) => output,
+      render: (_input: Record<string, never>, output: string) => output,
     });
     const { executor } = recordingExecutor();
     const dispatcher = createDispatcher([eraseTool(definition)], { executor });
 
-    const running = dispatcher.execute(
-      { id: "call-1", tool: "capture", input: {} },
-      { sessionId: "session-call", turnId: "turn-1", signal: controller.signal },
+    await isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const running = yield* Effect.fork(
+            dispatcher.execute(
+              { id: "call-1", tool: "capture", input: {} },
+              { sessionId: "session-call", turnId: "turn-1", signal: controller.signal },
+            ),
+          );
+          yield* boundedSignal(entered.promise, "tool entered");
+          controller.abort("caller cancelled");
+          yield* Fiber.join(running);
+        }),
+      ),
     );
-    await entered.promise;
-    controller.abort("caller cancelled");
-    await running;
 
     expect(captured).toEqual({
       signal: controller.signal,
@@ -55,9 +66,11 @@ describe("tool execution context", () => {
       return "unexpected";
     });
     const { executor } = recordingExecutor();
-    const result = await createDispatcher([eraseTool(definition)], { executor }).execute(
-      { id: "cancelled", tool: "capture", input: {} },
-      { sessionId: "session-call", turnId: "turn", signal: controller.signal },
+    const result = await isolated(
+      createDispatcher([eraseTool(definition)], { executor }).execute(
+        { id: "cancelled", tool: "capture", input: {} },
+        { sessionId: "session-call", turnId: "turn", signal: controller.signal },
+      ),
     );
     expect(result.isError).toBe(true);
     expect(calls).toBe(0);

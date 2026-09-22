@@ -1,3 +1,5 @@
+import { Effect, type Scope } from "effect";
+import { type ExecutionError, Interrupted } from "../../errors";
 import { buildSystemPrompt, prepareTurnTools } from "./tools";
 import type { RunInput, Sink } from "@openomni/llm";
 import { type Message, Operational, type BusEvent } from "@openomni/protocol";
@@ -25,14 +27,14 @@ import {
   type TurnArtifacts,
 } from "./state";
 
-export async function buildTurn(
+export function buildTurn(
   state: RunState,
   config: ChatAgentConfig,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: RunTrace,
   sink?: Sink,
-): Promise<BuildTurnResult> {
+): BuildTurnResult {
   recordRunTurn(state);
   if (config.signal?.aborted) throw Retry.abortError();
 
@@ -150,23 +152,24 @@ function turnYield(
   return turn.windowYieldArmed ? "window" : "steps";
 }
 
-export async function handleStop(
+export function handleStop(
   state: RunState,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
   compaction: CompactionSession | undefined,
-): Promise<StopOutcome> {
+): Effect.Effect<StopOutcome, ExecutionError, Scope.Scope> {
+  return Effect.gen(function* () {
   const assistantIndex = state.messages.length;
   const snapshot = resolveTurnAssistant(config.events, state, turn, agentBase);
-  const initialAssistant = await recordAssistant(config, snapshot);
+  const initialAssistant = yield* recordAssistant(config, snapshot);
   turn.turnAssistant.message = initialAssistant;
   appendRunMessages(state, [initialAssistant]);
-  const afterModelPrompts = await drainStepBoundary(state, config, "after_llm");
-  const toolCalls = await settleModelTools(turn, config, state);
-  const afterWavePrompts = await drainStepBoundary(state, config, "after_tools");
+  const afterModelPrompts = yield* drainStepBoundary(state, config, "after_llm");
+  const toolCalls = yield* settleModelTools(turn, config, state);
+  const afterWavePrompts = yield* drainStepBoundary(state, config, "after_tools");
   if (toolCalls > 0)
-    turn.turnAssistant.message = await recordAssistant(
+    turn.turnAssistant.message = yield* recordAssistant(
       config,
       turn.turnAssistant.message ?? initialAssistant,
     );
@@ -174,13 +177,13 @@ export async function handleStop(
   const turnText = assistantTextOf(turn.turnAssistant.message);
   const step = { type: "text" as const, content: turnText };
   appendRunStep(state, step);
-  if (config.onStepFinish) await config.onStepFinish(step);
+  if (config.onStepFinish) yield* config.onStepFinish(step);
   const assistantMessage = turn.turnAssistant.message ?? initialAssistant;
   state.messages[assistantIndex] = assistantMessage;
-  prepareCompactionAfterContinue(state, config, compaction);
+  yield* prepareCompactionAfterContinue(state, config, compaction);
 
   const yielded = toolCalls > 0 ? null : turnYield(turn, assistantMessage);
-  const compacted = await applyCompaction(
+  const compacted = yield* applyCompaction(
     state,
     config,
     agentBase,
@@ -189,14 +192,14 @@ export async function handleStop(
   );
   if (yielded === "window" && (compacted === "none" || state.lastCompactionIneffective))
     disarmWindowYield(state);
-  const evidence = (await config.stopEvidence?.()) ?? {
+  const evidence = yield* (config.stopEvidence?.() ?? Effect.succeed({
     progress: false,
     blocked: false,
     openIntent: [],
     alarmIds: [],
-  };
+  }));
   if (config.execution === undefined) throw new Error("missing stop authority");
-  const judgment = await config.execution.judgeStop(state.stop, {
+  const judgment = yield* config.execution.judgeStop(state.stop, {
     ...evidence,
     text: turnText,
     toolCalls,
@@ -209,20 +212,21 @@ export async function handleStop(
         "exceeded",
   });
   state.stop = judgment.state;
-  return stopResult(state, turnText, judgment.verdict);
+  return yield* stopResult(state, turnText, judgment.verdict);
+  });
 }
 
-function stopResult(state: RunState, text: string, verdict: StopVerdict): StopOutcome {
-  if (verdict.kind === "interrupted") throw Retry.abortError();
-  if (verdict.kind === "error") throw new AgentStopError(verdict.reason);
+function stopResult(state: RunState, text: string, verdict: StopVerdict): Effect.Effect<StopOutcome, Interrupted | AgentStopError> {
+  if (verdict.kind === "interrupted") return Effect.fail(new Interrupted());
+  if (verdict.kind === "error") return Effect.fail(new AgentStopError({ reason: verdict.reason }));
   if (verdict.kind === "continue") {
     advanceRunTurn(state);
-    return "continue";
+    return Effect.succeed("continue");
   }
   const result = runResult(state, { text });
-  return verdict.kind === "waiting"
+  return Effect.succeed(verdict.kind === "waiting"
     ? { ...result, waiting: { reason: "live_wait", alarmIds: verdict.alarmIds } }
-    : result;
+    : result);
 }
 
 export function handleContinue(
@@ -253,17 +257,19 @@ function resolveTurnAssistant(
   return createAssistantMessage("", parentID, state.sessionId);
 }
 
-export async function drainStepBoundary(
+export function drainStepBoundary(
   state: RunState,
   config: ChatAgentConfig,
   boundary: "before_llm" | "after_llm" | "after_tools",
-): Promise<number> {
-  const drained = await config.boundary?.(boundary);
-  if (drained?.interrupted || config.signal?.aborted) throw Retry.abortError();
+): Effect.Effect<number, ExecutionError> {
+  return Effect.gen(function* () {
+  const drained = yield* (config.boundary?.(boundary) ?? Effect.succeed(undefined));
+  if (drained?.interrupted || config.signal?.aborted) return yield* Effect.fail(new Interrupted());
   for (const message of drained?.messages ?? []) {
     appendRunMessages(state, [
       withMessageId(createUserMessage(message.text, state.sessionId), message.id),
     ]);
   }
   return drained?.messages.length ?? 0;
+  });
 }

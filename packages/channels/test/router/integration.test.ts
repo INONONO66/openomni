@@ -1,4 +1,6 @@
+import { effectFailure } from "../helpers/effect-failure";
 import { beforeEach, describe, expect, test } from "bun:test";
+import { runEffect } from "../helpers/effect";
 import { ChannelGrantStore } from "@openomni/ledger";
 import {
   commits,
@@ -29,7 +31,7 @@ describe("GatewayRouter conversation isolation", () => {
   test.each([
     "workspaceId",
     "channelId",
-  ] as const)("different %s isolates the target session", async (field) => {
+  ] as const)("different %s isolates the target session", async (field: "channelId" | "workspaceId") => {
     const [first, second] = await ownerMessageTargets({
       ...ownerFacts,
       eventId: "second",
@@ -47,17 +49,15 @@ describe("GatewayRouter conversation isolation", () => {
       createdBy: "owner",
     });
     expect(
-      await kernelRouter().ingest({ ...ownerSender, externalId: "stranger" }, ownerFacts),
+      await runEffect(kernelRouter().ingest({ ...ownerSender, externalId: "stranger" }, ownerFacts)),
     ).toMatchObject({ status: "blocked_pre" });
     expect(
-      (await kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "allowed" })).status,
+      (await runEffect(kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "allowed" }))).status,
     ).toBe("executed");
     expect(commits).toHaveLength(1);
   });
   test("invalid facts fail schema validation before routing", async () => {
-    await expect(
-      kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "" }),
-    ).rejects.toMatchObject({
+    expect(await effectFailure(kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "" }))).toMatchObject({
       issues: [expect.objectContaining({ code: "too_small", path: ["eventId"] })],
     });
     expect(commits).toEqual([]);

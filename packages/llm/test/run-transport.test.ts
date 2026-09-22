@@ -1,4 +1,4 @@
-import { runEffect } from "./helpers/native";
+
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { jsonSchema, streamText } from "ai";
 import { z } from "zod";

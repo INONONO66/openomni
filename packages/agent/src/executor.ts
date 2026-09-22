@@ -9,7 +9,7 @@ import { createExecutionApprovals } from "./executor-approval";
 import { createExecutionRecovery, recoveryClassification } from "./executor-recovery";
 import { createAttemptRunner } from "./executor-attempts";
 import { createStopJudge } from "./executor-stop";
-import { CommitFailed, ExecutionApprovalError, ForeignFailure, OutcomeUnknown, type ExecutionError } from "./errors";
+import { type CommitFailed, ExecutionApprovalError, ForeignFailure, OutcomeUnknown, type ExecutionError } from "./errors";
 import { causeEvidence } from "./executor-outcome";
 import { createRawSlots, RawToolSlots } from "./executor-raw";
 import { GenerationRawSlots } from "./session-generations";
@@ -37,6 +37,21 @@ type BodyExit = {
   readonly startedAt: number | undefined;
   readonly rawPending: boolean;
 };
+
+function combinedSignal(controller: AbortSignal, control: AbortSignal, caller: AbortSignal | undefined): AbortSignal {
+  return AbortSignal.any(caller === undefined ? [controller, control] : [controller, control, caller]);
+}
+
+function outcomeFields(outcome: ExecutionResult): PlainObject {
+  if (outcome.terminal === "executed") return { result: outcome.value, resultHash: canonicalDigest(outcome.value) };
+  return outcome.terminal === "blocked_post" ? { reason: outcome.reason, disposition: outcome.disposition } : { reason: outcome.reason };
+}
+function failedOutcome(cause: Cause.Cause<ExecutionError>, failure: ExecutionError): ExecutionResult {
+  if (Cause.isInterrupted(cause) || failure._tag === "Interrupted") return { terminal: "interrupted", reason: "fiber_interrupted" };
+  return failure._tag === "OutcomeUnknown"
+    ? { terminal: "outcome_unknown", reason: failure.reason }
+    : { terminal: "executed", value: null, failure };
+}
 
 export function createExecutor(options: ExecutorOptions): DurableExecutor {
   const record = createExecutionRecord(options);
@@ -175,9 +190,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         yield* record.appendResult({ kind: stage.kind, op: stage.request.op }, stage.intent.action.id, {
           phase: "result", terminal: outcome.terminal, effect: stage.request.effect,
           ...evidence,
-          ...(outcome.terminal === "executed" ? { result: outcome.value, resultHash: canonicalDigest(outcome.value) }
-            : { reason: outcome.reason }),
-          ...(outcome.terminal === "blocked_post" ? { disposition: outcome.disposition } : {}),
+          ...outcomeFields(outcome),
           ...(stage.request.toolObservation === undefined ? {} : { callId: stage.request.toolObservation.callId }),
           ...(!project || stage.request.toolResult === undefined ? {} : { toolResult: stage.request.toolResult(outcome) }),
         }, outcome.terminal === "executed" && outcome.failure === undefined ? stage.request.revertData?.() : undefined);
@@ -200,11 +213,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         if (commitFailure !== undefined) return yield* commitFailure;
         const failure = Option.getOrElse(Cause.failureOption(exit.cause), () =>
           new ForeignFailure({ operation: stage.request.op, cause: Cause.pretty(exit.cause) }));
-        outcome = Cause.isInterrupted(exit.cause) || failure._tag === "Interrupted"
-          ? { terminal: "interrupted", reason: "fiber_interrupted" }
-          : failure._tag === "OutcomeUnknown"
-            ? { terminal: "outcome_unknown", reason: failure.reason }
-            : { terminal: "executed", value: null, failure };
+        outcome = failedOutcome(exit.cause, failure);
         yield* appendOutcome(stage, outcome, { evidence: causeEvidence(exit.cause) });
       } else {
         outcome = yield* complete(stage, exit.value).pipe(
@@ -229,8 +238,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     }, false);
   }
 
-  function complete<R>(stage: Stage<R>, value: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
+  function complete<R>(stage: Stage<R>, raw: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
     return Effect.gen(function* () {
+      const value = clonePlainValue(raw);
       const post = yield* decide(stage.request, "post", { intent: stage.request.intent, effect: stage.request.effect, result: value });
       const outcome = yield* settlePost(stage.request, post, value);
       if (stage.request.boundary === true && outcome.terminal === "executed" && stage.intent !== undefined) {
@@ -246,10 +256,20 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     });
   }
 
+  function finishStage<R>(stage: Stage<R>, decision: "approve" | "refuse" | "timeout" | undefined, body: BodyExit | undefined) {
+    if (stage.pre.verdict !== "deny" && decision === "approve")
+      return body === undefined ? Effect.die("missing action fiber exit") : finishBody(stage, body);
+    return appendOutcome(stage, {
+      terminal: "blocked_pre",
+      reason: stage.pre.verdict === "deny" ? stage.pre.reason ?? "denied"
+        : decision === "timeout" ? "approval_timeout" : "approval_refused",
+    });
+  }
+
   function runBatch<R>(items: readonly ExecutionBatchItem<R>[], control: WaveControl) {
     return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
       const controller = new AbortController();
-      const signal = AbortSignal.any([controller.signal, control.signal, ...(options.signal === undefined ? [] : [options.signal])]);
+      const signal = combinedSignal(controller.signal, control.signal, options.signal);
       const stages = yield* stageAll(items);
       const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: "unbounded" });
       const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
@@ -263,8 +283,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
           yield* waiting;
         }
       }));
+      const shouldExecute = (stage: Stage<R>, index: number) => stage.pre.verdict !== "deny" && decisions[index] === "approve";
       for (const [index, stage] of stages.entries()) {
-        if (stage.pre.verdict === "deny" || decisions[index] !== "approve") continue;
+        if (!shouldExecute(stage, index)) continue;
         if (stage.item.sequential) { yield* join; group.length = 0; }
         const work = executeBody(stage, signal, guarded).pipe(Effect.tap((result) => Effect.sync(() => exits.set(index, result))));
         const fiber = yield* Effect.fork(work);
@@ -272,17 +293,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         if (stage.item.sequential) { yield* join; group.length = 0; }
       }
       yield* join;
-      return yield* Effect.forEach(stages, (stage, index) => {
-        if (stage.pre.verdict === "deny" || decisions[index] !== "approve") {
-          return appendOutcome(stage, {
-            terminal: "blocked_pre",
-            reason: stage.pre.verdict === "deny" ? stage.pre.reason ?? "denied"
-              : decisions[index] === "timeout" ? "approval_timeout" : "approval_refused",
-          });
-        }
-        const body = exits.get(index);
-        return body === undefined ? Effect.die("missing action fiber exit") : finishBody(stage, body);
-      });
+      return yield* Effect.forEach(stages, (stage, index) => finishStage(stage, decisions[index], exits.get(index)));
     }));
   }
 
@@ -304,8 +315,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       if (pre.verdict !== "allow") return { terminal: "blocked_pre", reason: pre.reason ?? "denied" } as const;
       const exit = yield* Effect.exit(restore(Effect.scoped(body())));
       if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
-      const post = yield* decide(request, "post", { intent: request.intent, effect: request.effect, result: exit.value });
-      return yield* settlePost(request, post, exit.value);
+      const value = clonePlainValue(exit.value);
+      const post = yield* decide(request, "post", { intent: request.intent, effect: request.effect, result: value });
+      return yield* settlePost(request, post, value);
     }));
   }
 
@@ -343,6 +355,10 @@ function withSignal<A, E, R>(effect: Effect.Effect<A, E, R>, signal: AbortSignal
     return Effect.sync(() => signal.removeEventListener("abort", listener));
   });
   return signal.aborted ? Effect.interrupt : effect.pipe(Effect.raceFirst(abort));
+}
+/** Body results cross the durable boundary as canonical JSON: non-finite numbers become null. */
+function clonePlainValue(value: PlainValue): PlainValue {
+  return JSON.parse(JSON.stringify(value)) as PlainValue;
 }
 function settlePost(request: ExecutionRequest, post: PolicyEvaluation, value: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
   return Effect.gen(function* () {

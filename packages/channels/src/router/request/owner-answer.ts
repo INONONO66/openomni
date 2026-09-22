@@ -1,15 +1,18 @@
+import { Effect, Either } from "effect";
+import { decodeChannelFailure, type ChannelError } from "../../errors";
 import { canonicalDigest, Gateway, SessionTransition } from "@openomni/protocol";
 import { ActorRegistry } from "@openomni/ledger";
 import { matchBlacklist } from "../blacklist";
 import type { GatewayRouterPorts } from "../message-ports";
 
 /** Authenticate and normalize only. The injected kernel owns every transition. */
-export async function answerOwnerRequest(
+export function answerOwnerRequest(
   ports: GatewayRouterPorts,
   sender: Gateway.IngestSender,
   envelope: Gateway.RequestAnswer,
   receivedAt: number,
-): Promise<Gateway.IngestResult> {
+): Effect.Effect<Gateway.IngestResult, ChannelError> {
+  return Effect.gen(function* () {
   if (sender.kind === "session") {
     return { status: "blocked_pre", reasonCode: "request_answer.session_sender" };
   }
@@ -24,18 +27,12 @@ export async function answerOwnerRequest(
   if (canonicalDigest(request.parsedInput) !== request.inputHash) {
     return { status: "blocked_pre", reasonCode: "request_answer.rejected" };
   }
-  let principal: SessionTransition.Principal;
-  try {
-    principal = SessionTransition.Principal.parse(
-      await ports.authenticateAnswer(sender, credential, request.requestId),
-    );
-    if (principal.kind !== "owner") {
-      return { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" };
-    }
-  } catch {
-    // Authentication failures can contain secrets; never forward their raw errors.
+  const authenticated = yield* Effect.either(ports.authenticateAnswer(sender, credential, request.requestId).pipe(
+    Effect.flatMap((value) => Effect.try({ try: () => SessionTransition.Principal.parse(value), catch: decodeChannelFailure("answer.principal") })),
+  ));
+  if (Either.isLeft(authenticated) || authenticated.right.kind !== "owner")
     return { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" };
-  }
+  const principal = authenticated.right;
   const authenticatedAt = Math.max(receivedAt, (ports.clock ?? Date.now)());
   const endpoint = ActorRegistry.resolveEndpoint(sender.surface, sender.externalId);
   if (
@@ -51,7 +48,7 @@ export async function answerOwnerRequest(
   ) {
     return { status: "blocked_pre", reasonCode: "request_answer.blacklisted" };
   }
-  const resolution = await ports.requests.answer({
+  const resolution = yield* ports.requests.answer({
     inputId,
     requestId: request.requestId,
     sessionId: request.sessionId,
@@ -75,4 +72,5 @@ export async function answerOwnerRequest(
     handle: { messageId: inputId, target: request.sessionId },
     delivery: { kind: "session" },
   };
+  });
 }

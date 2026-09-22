@@ -1,4 +1,6 @@
+import { effectFailure } from "../../helpers/effect-failure";
 import { beforeEach, expect, test } from "bun:test";
+import { runEffect } from "../../helpers/effect";
 import { replaceDecisionFacts } from "../../helpers/ledger";
 import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
@@ -32,7 +34,7 @@ function makeRouter(routes?: ReadonlyMap<string, ChannelDeliveryRoute>) {
         new Map([
           [
             "discord",
-            async (externalId, body, idempotencyKey) => {
+            async (externalId: string, body: string, idempotencyKey: string) => {
               delivered.push({ externalId, body, idempotencyKey });
               return { value: "accepted", externalMessageId: `platform-${delivered.length}` };
             },
@@ -79,7 +81,7 @@ beforeEach(() => {
 });
 
 test("ungranted actor send is refused before transport", async () => {
-  expect(await makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply)).toMatchObject({
+  expect(await runEffect(makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
     status: "blocked_pre",
   });
   expect(delivered).toEqual([]);
@@ -87,8 +89,8 @@ test("ungranted actor send is refused before transport", async () => {
 
 test("admitted first contact grants a scoped reply through the same ingest", async () => {
   const router = makeRouter();
-  expect((await router.ingest(sender, facts)).status).toBe("executed");
-  const sent = await router.ingest({ kind: "session", id: "persona-owner" }, reply);
+  expect((await runEffect(router.ingest(sender, facts))).status).toBe("executed");
+  const sent = await runEffect(router.ingest({ kind: "session", id: "persona-owner" }, reply));
   expect(sent).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value: "accepted" },
@@ -108,24 +110,22 @@ test("admitted first contact grants a scoped reply through the same ingest", asy
 
 test("a granted endpoint without a channel delivery owner fails closed", async () => {
   const router = makeRouter(new Map());
-  await router.ingest(sender, facts);
-  await expect(router.ingest({ kind: "session", id: "persona-owner" }, reply)).rejects.toThrow(
-    "no delivery route: discord",
-  );
+  await runEffect(router.ingest(sender, facts));
+  expect(await effectFailure(router.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({ _tag: "ForeignFailure", operation: "message.deliver" });
   expect(delivered).toEqual([]);
 });
 
 test("restart reads the durable live-grant projection, never route history", async () => {
-  await makeRouter().ingest(sender, facts);
-  replaceDecisionFacts((facts) => ({
+  await runEffect(makeRouter().ingest(sender, facts));
+  replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
     ...facts,
-    head: (key) => {
+    head: (key: string) => {
       if (key.startsWith("route:")) throw new Error("route replay is forbidden");
       return facts.head(key);
     },
   }));
   const restarted = makeRouter();
-  expect(await restarted.ingest({ kind: "session", id: "persona-owner" }, reply)).toMatchObject({
+  expect(await runEffect(restarted.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value: "accepted" },
   });
@@ -138,14 +138,14 @@ test("historical route facts cannot reconstruct authority on restart", async () 
     data: { outcome: "route", actorId: "actor-buyer" },
     timeCreated: 1,
   });
-  expect(await makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply)).toMatchObject({
+  expect(await runEffect(makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
     status: "blocked_pre",
   });
   expect(delivered).toEqual([]);
 });
 
 test("endpoint rebinding invalidates a durable reply grant", async () => {
-  await makeRouter().ingest(sender, facts);
+  await runEffect(makeRouter().ingest(sender, facts));
   ActorRegistry.registerEndpoint({
     id: "ep-buyer",
     actorId: "actor-buyer",
@@ -153,7 +153,7 @@ test("endpoint rebinding invalidates a durable reply grant", async () => {
     externalId: "other-container",
     workspace: "shop-ws",
   });
-  expect(await makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply)).toMatchObject({
+  expect(await runEffect(makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
     status: "blocked_pre",
   });
   expect(delivered).toEqual([]);
@@ -163,10 +163,10 @@ test.each([
   "accepted",
   "rejected",
   "unknown",
-] as const)("actor %s receipt survives the composed router", async (value) => {
+] as const)("actor %s receipt survives the composed router", async (value: "accepted" | "rejected" | "unknown") => {
   const router = makeRouter(new Map([["discord", async () => ({ value })]]));
-  await router.ingest(sender, facts);
-  expect(await router.ingest({ kind: "session", id: "persona-owner" }, reply)).toMatchObject({
+  await runEffect(router.ingest(sender, facts));
+  expect(await runEffect(router.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value },
   });

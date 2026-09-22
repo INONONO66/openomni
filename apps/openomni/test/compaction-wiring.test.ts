@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
 import { loadConfig } from "../src/config";
@@ -53,11 +54,11 @@ describe("compaction composition configuration", () => {
     const app = await suite.boot({
       config,
       llm: {
-        resolveModel: async (model) => ({
-          ...(await fakeProviderModel(model)),
+        resolveModel: (model) => fakeProviderModel(model).pipe(Effect.map((resolved) => ({
+          ...resolved,
           limit: { context: constrained ? 700 : 100_000 },
-        }),
-        run: async (input: RunInput, sink: Sink) => {
+        }))),
+        run: (input: RunInput, sink: Sink) => Effect.sync(() => {
           calls += 1;
           if (constrained) messageCounts.push(input.messages.length);
           sink.onMessage(
@@ -70,8 +71,8 @@ describe("compaction composition configuration", () => {
                 : undefined,
             }),
           );
-          return { type: "stop" };
-        },
+          return { type: "stop" as const };
+        }),
       },
     });
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, [

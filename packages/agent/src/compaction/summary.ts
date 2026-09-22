@@ -1,3 +1,5 @@
+import { Effect, Either } from "effect";
+import { ForeignFailure, type ExecutionError } from "../errors";
 import type { Message } from "@openomni/protocol";
 import type { CompactionOptions, AnchoredCutAttempt } from "./contract";
 import { latestAnchorBody, isAnchorMessage } from "./candidate";
@@ -32,33 +34,14 @@ export function withSummarizerDeadline(
   deadlineMs = DEFAULT_SUMMARIZER_DEADLINE_MS,
   signal?: AbortSignal,
 ): NonNullable<CompactionOptions["onSummarize"]> {
-  return async (messages, previousAnchor, budget, operationSignal = signal) => {
-    const controller = new AbortController();
-    const cancellation = Promise.withResolvers<never>();
-    const abort = (): void => {
-      const error = new Error("compaction summarizer operation aborted");
-      error.name = "AbortError";
-      controller.abort(error);
-      cancellation.reject(error);
-    };
-    operationSignal?.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(() => {
-      const error = new Error(`compaction summarizer exceeded ${deadlineMs}ms deadline`);
-      error.name = "SummarizerDeadlineError";
-      controller.abort(error);
-      cancellation.reject(error);
-    }, deadlineMs);
-    try {
-      if (operationSignal?.aborted === true) abort();
-      return await Promise.race([
-        summarize(messages, previousAnchor, budget, controller.signal),
-        cancellation.promise,
-      ]);
-    } finally {
-      clearTimeout(timer);
-      operationSignal?.removeEventListener("abort", abort);
-    }
-  };
+  return (messages, previousAnchor, budget, operationSignal = signal) => Effect.gen(function* () {
+    if (operationSignal?.aborted) return yield* Effect.interrupt;
+    return yield* summarize(messages, previousAnchor, budget, operationSignal).pipe(
+      Effect.timeoutFail({ duration: deadlineMs, onTimeout: () => new ForeignFailure({
+        operation: "compaction.summarize", cause: `summarizer_deadline:${deadlineMs}`,
+      }) }),
+    );
+  });
 }
 
 /**
@@ -142,7 +125,7 @@ function replacementRecord(
   );
 }
 
-export async function attemptAnchoredCut(
+export function attemptAnchoredCut(
   cutSpan: Message.WithParts[],
   keepSpan: Message.WithParts[],
   precomputed: string | undefined,
@@ -151,7 +134,8 @@ export async function attemptAnchoredCut(
   preserveBudget: number,
   contextWindowTokens: number,
   onSummarize: NonNullable<CompactionOptions["onSummarize"]>,
-): Promise<AnchoredCutAttempt> {
+): Effect.Effect<AnchoredCutAttempt, ExecutionError> {
+  return Effect.gen(function* () {
   const previousAnchor = latestAnchorBody(cutSpan);
   const summarizerInput = cutSpan.filter(
     (message) => message.info.role !== "user" && !isAnchorMessage(message),
@@ -164,13 +148,12 @@ export async function attemptAnchoredCut(
   let anchorText = precomputed ?? previousAnchor;
   let summarizerError: Error | undefined;
   if (precomputed === undefined && boundedInput.length > 0) {
-    try {
-      const merged = await onSummarize(boundedInput, previousAnchor, budget);
-      anchorText = merged.trim().length > 0 ? merged : previousAnchor;
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      if (normalized.name === "AbortError") throw normalized;
-      summarizerError = normalized;
+    const merged = yield* Effect.either(onSummarize(boundedInput, previousAnchor, budget));
+    if (Either.isRight(merged)) {
+      anchorText = merged.right.trim().length > 0 ? merged.right : previousAnchor;
+    } else {
+      if (merged.left._tag === "Interrupted") return yield* merged.left;
+      summarizerError = merged.left;
       anchorText = previousAnchor;
     }
   }
@@ -206,6 +189,7 @@ export async function attemptAnchoredCut(
     },
     summarizerError,
   };
+  });
 }
 
 /**

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Policy } from "@openomni/protocol";
-import { type Run, run, LlmRunFailure } from "./helpers/native";
+import { run, LlmRunFailure } from "./helpers/native";
 import type { StreamEvent } from "../src/processor/stream-events";
 
 const input = {

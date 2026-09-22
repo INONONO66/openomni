@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { ForeignFailure } from "../../src/errors";
+import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Compaction } from "../../src/compaction";
@@ -37,13 +40,17 @@ describe("compaction geometry and application", () => {
   });
 
   it("cuts at a user boundary when the threshold seam fires", async () => {
-    const messages = Array.from({ length: 8 }, (_entry, index) => user(`u${index}`));
-    const result = await Compaction.compact(
-      messages,
-      { contextWindowTokens: 1000, protectRecentMessages: 2 },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 900 },
+    const messages = Array.from({ length: 8 }, (_entry: undefined, index: number) =>
+      user(`u${index}`),
+    );
+    const result = await isolated(
+      Compaction.compact(
+        messages,
+        { contextWindowTokens: 1000, protectRecentMessages: 2 },
+        identity,
+        collector(),
+        { trigger: "threshold", measuredTokens: 900 },
+      ),
     );
     expect(result.compacted).toBe(true);
     expect(result.messages).toHaveLength(2);
@@ -52,22 +59,25 @@ describe("compaction geometry and application", () => {
   it("falls back to a user-boundary cut when summarization fails", async () => {
     const messages = [
       user("fallback-user-0"),
-      ...Array.from({ length: 5 }, (_entry, index) => assistant(`fallback-assistant-${index}`)),
+      ...Array.from({ length: 5 }, (_entry: undefined, index: number) =>
+        assistant(`fallback-assistant-${index}`),
+      ),
       user("fallback-user-1"),
       assistant("fallback-tail"),
     ];
-    const result = await Compaction.compact(
-      messages,
-      {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 2,
-        onSummarize: async () => {
-          throw new Error("summarizer unavailable");
+    const result = await isolated(
+      Compaction.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 2,
+          onSummarize: () =>
+            Effect.fail(new ForeignFailure({ operation: "test", cause: "summarizer unavailable" })),
         },
-      },
-      identity,
-      collector(),
-      { trigger: "threshold", measuredTokens: 900 },
+        identity,
+        collector(),
+        { trigger: "threshold", measuredTokens: 900 },
+      ),
     );
     expect(result).toMatchObject({ compacted: true, summarizerFailed: true });
     expect(result.messages).toHaveLength(2);
@@ -75,12 +85,14 @@ describe("compaction geometry and application", () => {
 
   it("records nothing reclaimed when the protected tail covers history", async () => {
     const messages = [user("u0")];
-    const result = await Compaction.compact(
-      messages,
-      { contextWindowTokens: 1000, protectRecentMessages: 2 },
-      identity,
-      collector(),
-      { trigger: "yield", measuredTokens: 900 },
+    const result = await isolated(
+      Compaction.compact(
+        messages,
+        { contextWindowTokens: 1000, protectRecentMessages: 2 },
+        identity,
+        collector(),
+        { trigger: "yield", measuredTokens: 900 },
+      ),
     );
     expect(result).toMatchObject({ compacted: false, removedCount: 0 });
   });

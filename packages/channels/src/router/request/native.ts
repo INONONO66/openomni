@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import type { ChannelError } from "../../errors";
 import {
   SessionTransition,
   type Gateway,
@@ -7,13 +9,14 @@ import {
 } from "@openomni/protocol";
 import type { GatewayRouterPorts } from "../message-ports";
 
-export async function answerNativeRequest(
+export function answerNativeRequest(
   requests: GatewayRouterPorts["requests"],
   sender: Gateway.IngestSender,
   origin: PlainValue | undefined,
   content: string,
   at: number,
-): Promise<boolean> {
+): Effect.Effect<boolean, ChannelError> {
+  return Effect.gen(function* () {
   const parsed = SessionTransition.OutboundMessage.safeParse(origin);
   if (!parsed.success) return false;
   const message = parsed.data;
@@ -26,7 +29,7 @@ export async function answerNativeRequest(
   const request = requests.list().find((candidate) => candidate.requestId === message.requestId);
   if (request === undefined || request.sessionId !== message.destinationSessionId)
     throw new Error("native reply original request is missing");
-  await requests.answer({
+  yield* requests.answer({
     inputId: message.messageId,
     requestId: request.requestId,
     sessionId: request.sessionId,
@@ -44,9 +47,10 @@ export async function answerNativeRequest(
     outbound: message,
   });
   return true;
+  });
 }
 
-export async function openNativeRequest(
+export function openNativeRequest(
   requests: GatewayRouterPorts["requests"],
   intent: LedgerAction.Receipt,
   sender: Gateway.IngestSender,
@@ -54,14 +58,15 @@ export async function openNativeRequest(
   target: string,
   at: number,
   admission?: Inbox.Commit,
-): Promise<void> {
+): Effect.Effect<void, ChannelError> {
+  return Effect.gen(function* () {
   if (
     sender.kind !== "session" ||
     send.type !== "message" ||
     (send.deadline === undefined && send.to.kind !== "new_session")
   )
     return;
-  await requests.open({
+  yield* requests.open({
     requestId: intent.action.id,
     sessionId: sender.id,
     expectedResponders: [target],
@@ -72,5 +77,6 @@ export async function openNativeRequest(
     deadline: send.deadline ?? Number.MAX_SAFE_INTEGER,
     at,
     ...(admission?.createSession === undefined ? {} : { admission }),
+  });
   });
 }

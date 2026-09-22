@@ -3,6 +3,8 @@ import { expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
 import { alarmFixture } from "./helpers/alarm";
 import { alarmSummary } from "./helpers/alarm-payload";
+import { runEffect } from "./helpers/effect";
+
 
 test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch", () =>
   Storage.withIsolation(async () => {
@@ -18,7 +20,7 @@ test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch",
         },
         2,
       );
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       await paused;
       expect(
         fixture
@@ -32,11 +34,11 @@ test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch",
         notifications: 2,
         epoch: 1,
       });
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(fixture.rows()).toHaveLength(3);
       const resumed = fixture.next("budget", (row) => row.content === "one");
       Either.getOrThrowWith(
-        Effect.runSync(
+        fixture.run(
           Effect.either(fixture.storage.alarms.rearm("budget", "monitor-session", 1000)),
         ),
         (error) => error,
@@ -59,25 +61,18 @@ test("monitor timeout: exact deadline fences source before its exit summary", ()
         description: "timeout",
         timeout_ms: 50,
       });
-      fixture.worker.start();
+      await runEffect(fixture.worker.start());
       await ready;
       fixture.advance(1049);
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(fixture.storage.alarms.get("timeout")?.status).toBe("armed");
       const summary = fixture.next("timeout", (row) => row.content.includes('"timeout"'));
       fixture.advance(1050);
-      fixture.worker.tick();
+      await runEffect(fixture.worker.tick());
       expect(alarmSummary((await summary).content).reason).toBe("timeout");
       expect(fixture.rows()).toHaveLength(2);
-      expect(() =>
-        Either.getOrThrowWith(
-          Effect.runSync(
-            Effect.either(fixture.storage.alarms.rearm("timeout", "monitor-session", 1050)),
-          ),
-          (error) => error,
-        ),
-      ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
-      fixture.worker.tick();
+      expect(fixture.run(Effect.flip(fixture.storage.alarms.rearm("timeout", "monitor-session", 1050)))._tag).toBe("AlarmRefused");
+      await runEffect(fixture.worker.tick());
       expect(fixture.storage.alarms.get("timeout")).toMatchObject({ epoch: 1, status: "fired" });
       expect(fixture.rows()).toHaveLength(2);
       expect(fixture.errors).toEqual([]);

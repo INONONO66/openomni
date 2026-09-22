@@ -1,4 +1,5 @@
-import { Effect, Either } from "effect";
+import { Effect } from "effect";
+import { CommitFailed, type ExecutionError } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
@@ -8,7 +9,6 @@ import {
   SessionTransition,
 } from "@openomni/protocol";
 import type { SessionRuntime } from "./session-contract";
-import { requireCommit } from "./session-record";
 
 export function outboundOpen(
   message: SessionTransition.OutboundMessage,
@@ -90,7 +90,7 @@ function acknowledge(
 }
 
 /** Drains recorded source obligations. It never seals again or writes a destination session. */
-export async function dispatchSessionOutbound(
+export function dispatchSessionOutbound(
   sessionId: string,
   runtime: SessionRuntime,
   owner: string,
@@ -98,54 +98,26 @@ export async function dispatchSessionOutbound(
   clock: () => number,
   pinPolicy: (generation: number) => CompiledPolicySnapshot,
   releaseLease: boolean,
-): Promise<void> {
-  const failures: Error[] = [];
-  const commit = (actions: LedgerAction.Append[], release: boolean) => {
-    const row = SessionHandleStore.row(sessionId);
-    requireCommit(
-      Either.getOrThrowWith(
-        Effect.runSync(
-          Effect.either(
-            SessionHandleStore.commit({
-              sessionId,
-              owner,
-              fence,
-              now: clock(),
-              expectedRevision: row.revision,
-              actions,
-              consumeInboxIds: [],
-              state: row.state,
-              releaseLease: release,
-            }),
-          ),
-        ),
-        (error) => error,
-      ),
-    );
-  };
-  try {
-    for (const item of SessionHandleStore.outboundRows(sessionId)) {
-      if (item.state === "delivered") continue;
+): Effect.Effect<void, ExecutionError> {
+  return Effect.suspend(() => {
+    const commit = (actions: LedgerAction.Append[], release: boolean) => Effect.suspend(() => {
+      const row = SessionHandleStore.row(sessionId);
+      return SessionHandleStore.commit({
+        sessionId, owner, fence, now: clock(), expectedRevision: row.revision,
+        actions, consumeInboxIds: [], state: row.state, releaseLease: release,
+      }).pipe(Effect.mapError((error) => new CommitFailed({ error })), Effect.asVoid);
+    });
+    const dispatch = Effect.forEach(SessionHandleStore.outboundRows(sessionId), (item) => Effect.gen(function* () {
+      if (item.state === "delivered") return;
       if (runtime.dispatchOutbound === undefined)
-        throw new Error("outbound receiving consumer is unavailable");
-      const receipt = await runtime.dispatchOutbound({
+        return yield* Effect.die(new Error("outbound receiving consumer is unavailable"));
+      const receipt = yield* runtime.dispatchOutbound({
         message: item.message,
         authority: { owner, fence },
         policy: pinPolicy(policyGeneration(item.message)),
       });
-      commit([acknowledge(item.message, receipt, clock())], false);
-    }
-  } catch (error) {
-    failures.push(error instanceof Error ? error : new Error(String(error)));
-  }
-  if (releaseLease) {
-    try {
-      commit([], true);
-    } catch (error) {
-      failures.push(error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1)
-    throw new AggregateError(failures, "outbound dispatch and source lease release failed");
+      yield* commit([acknowledge(item.message, receipt, clock())], false);
+    }), { discard: true });
+    return releaseLease ? dispatch.pipe(Effect.onExit(() => commit([], true).pipe(Effect.orDie))) : dispatch;
+  });
 }

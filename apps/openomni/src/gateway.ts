@@ -1,23 +1,30 @@
+import type { MachineHost } from "@openomni/machines";
+import type { ComposedCodemode } from "./composition/codemode";
+import type { CatalogPorts } from "./tools/core/catalog";
+import type { createCompletionPort } from "./composition/completion";
 import {
   type ChannelDeliveryRoute,
   createGatewayRouter,
   type GatewayRouter,
+  type WebSocketHandler,
+  type WsConnection,
 } from "@openomni/channels";
-import { ChannelGrantStore, LedgerWrites, type LedgerError } from "@openomni/ledger";
+import { type ChannelError, decodeChannelFailure } from "@openomni/channels";
+import { ChannelGrantStore, DecisionFacts, LedgerWrites, type LedgerError } from "@openomni/ledger";
 import type { Actor, Gateway } from "@openomni/protocol";
-import { Bus, createSessionRequests, currentExecutor, scopeObservation } from "@openomni/agent";
+import { Bus, createSessionRequests, currentExecutor, ForeignFailure, scopeObservation } from "@openomni/agent";
 import { Gateway as GatewayProtocol } from "@openomni/protocol";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
-import { Cause, Effect, Either, Exit, Option } from "effect";
+import { Cause, Effect, Either, Exit, FiberRef, ManagedRuntime, Option, Scope } from "effect";
 import { MonitorRefused, type MonitorPorts } from "./tools/monitor";
 import {
   AppClock,
   AppEntropy,
   AppLifecycleFailure,
   AppLive,
-  createAppRuntime,
+  AppScope,
   type AppRuntime,
   type AppRuntimeOptions,
   type AppServices,
@@ -27,7 +34,7 @@ let processRuntime: AppRuntime | undefined;
 
 export function gatewayRuntime(options: AppRuntimeOptions): AppRuntime {
   if (processRuntime !== undefined) return processRuntime;
-  const runtime = createAppRuntime(AppLive(options));
+  const runtime = ManagedRuntime.make(AppLive(options));
   const dispose = runtime.dispose.bind(runtime);
   let disposal: Promise<void> | undefined;
   Object.assign(runtime, {
@@ -40,6 +47,17 @@ export function gatewayRuntime(options: AppRuntimeOptions): AppRuntime {
   });
   processRuntime = runtime;
   return runtime;
+}
+
+export function runAppEffect<A, E>(runtime: AppRuntime, effect: Effect.Effect<A, E, AppServices>, signal?: AbortSignal): Promise<A> {
+  return runtime.runPromise(Effect.either(effect), { signal }).then((result) => {
+    if (Either.isLeft(result)) throw result.left;
+    return result.right;
+  });
+}
+
+export function acquireAppResource<A, E>(runtime: AppRuntime, effect: Effect.Effect<A, E, Scope.Scope>): Promise<A> {
+  return runAppBoot(runtime, Effect.flatMap(AppScope, (scope) => Scope.extend(effect, scope)));
 }
 
 export async function runAppBoot<A, E>(
@@ -57,6 +75,56 @@ export async function runAppBoot<A, E>(
     throw new AggregateError([failure, disposal], "app boot and disposal failed");
   });
   throw failure;
+}
+
+export function toolPorts(runtime: AppRuntime, ports: {
+  readonly machines?: MachineHost;
+  readonly cells?: ComposedCodemode;
+  readonly completion: ReturnType<typeof createCompletionPort>;
+  readonly messages: GatewayRouter;
+}): Pick<CatalogPorts, "machines" | "cells" | "llm" | "messages"> {
+  const cells = ports.cells;
+  const machines = ports.machines;
+  return {
+    machines: machines === undefined ? undefined : { get: (id) => {
+      const handle = machines.get(id);
+      return {
+        fs: {
+          read: (path, window) => runAppEffect(runtime, handle.fs.read(path, window)),
+          write: (path, data) => runAppEffect(runtime, handle.fs.write(path, data)),
+          list: (path) => runAppEffect(runtime, handle.fs.list(path)),
+          stat: (path) => runAppEffect(runtime, handle.fs.stat(path)),
+        },
+        exec: (cmd, cwd) => runAppEffect(runtime, handle.exec(cmd, cwd)),
+      };
+    } },
+    cells: cells === undefined ? undefined : {
+      bindTools: cells.bindTools,
+      cell: {
+        run: (code, tenant, options) => runAppEffect(runtime, cells.cell.run(code, tenant, options), options.signal),
+        peek: (id, tenant) => runAppEffect(runtime, cells.cell.peek(id, tenant)),
+        stop: (id, tenant) => runAppEffect(runtime, cells.cell.stop(id, tenant)),
+      },
+    },
+    llm: (call) => runAppEffect(runtime, ports.completion(call)),
+    messages: { ingest: (...args) => runAppEffect(runtime, ports.messages.ingest(...args)) },
+  };
+}
+
+export function webSocketCallbacks(runtime: AppRuntime, handler: WebSocketHandler) {
+  return {
+    ...handler.ws,
+    message(ws: WsConnection, data: string | Buffer): Promise<void> {
+      return runtime.runPromise(
+        handler.handleFrame(ws.data, data).pipe(
+          Effect.match({
+            onSuccess: (outcome) => ws.send(JSON.stringify(outcome)),
+            onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
+          }),
+        ),
+      );
+    },
+  };
 }
 
 export async function createMonitorPorts(runtime: AppRuntime): Promise<MonitorPorts> {
@@ -165,29 +233,46 @@ export interface OutboundMessaging {
   readonly replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];
 }
 
+export function channelTransaction<A>(operation: Effect.Effect<A, ChannelError>): Effect.Effect<A, ChannelError> {
+  return Effect.try({
+    try: () => DecisionFacts.transaction(() => Either.getOrThrowWith(Effect.runSync(Effect.either(operation)), (error) => error)),
+    catch: decodeChannelFailure("message.transaction"),
+  });
+}
+
+export function channelRequests(requests: ReturnType<typeof createSessionRequests>): Parameters<typeof createGatewayRouter>[0]["requests"] {
+  return {
+    list: requests.list,
+    open: (input) => requests.open(input).pipe(Effect.mapError(decodeChannelFailure("request.open"))),
+    answer: (input) => requests.answer(input).pipe(Effect.mapError(decodeChannelFailure("request.answer"))),
+    receipt: (input) => requests.receipt(input).pipe(Effect.mapError(decodeChannelFailure("request.receipt"))),
+  };
+}
+
 export function createResidentGateway(
   ports: Omit<
     Parameters<typeof createGatewayRouter>[0],
-    "sink" | "run" | "messaging" | "requests"
+    "sink" | "run" | "messaging" | "requests" | "transaction"
   > & {
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,
-): GatewayRouter {
+): Effect.Effect<GatewayRouter, import("@openomni/agent").ExecutionError> {
+  return Effect.gen(function* () {
   registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
-  const externalRun = createIngressExecutor(ports.clock ?? Date.now);
+  const externalRun = yield* createIngressExecutor(ports.clock ?? Date.now);
   return createGatewayRouter({
     ...ports,
-    requests: ports.requests ?? createSessionRequests({ observations: Bus, clock: ports.clock }),
+    transaction: channelTransaction,
+    requests: ports.requests ?? channelRequests(createSessionRequests({ observations: Bus, clock: ports.clock })),
     sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
-    run: async (sender, request, body) => {
-      if (sender.kind === "external") return externalRun(sender, request, body);
-      const result = await (outboundMessage.getStore()?.executor ?? currentExecutor()).run(
-        request,
-        body,
-      );
+    run: (sender, request, body) => Effect.gen(function* () {
+      const execute = (intent: Parameters<typeof body>[0]) => body(intent).pipe(Effect.mapError((error) => new ForeignFailure({ operation: "message.body", cause: String(error) })));
+      if (sender.kind === "external") return yield* externalRun(sender, request, execute);
+      const outbound = yield* FiberRef.get(outboundMessage);
+      const result = yield* (outbound?.executor ?? currentExecutor()).run(request, execute);
       return { ...result, matchedRuleIds: messageDecisionRules(sender.id, request) };
-    },
+    }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
     observe: (sender, observation) =>
       scopeObservation(Bus, {
         sessionId: sender.kind === "session" ? sender.id : "gateway-ingress",
@@ -200,5 +285,6 @@ export function createResidentGateway(
             budgets: messaging.budgets ?? (() => []),
           },
         }),
+  });
   });
 }

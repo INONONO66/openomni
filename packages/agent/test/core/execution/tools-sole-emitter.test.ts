@@ -1,17 +1,20 @@
-import { expect, it, jest } from "bun:test";
+import { expect, it } from "bun:test";
+import { Effect, TestClock, TestContext } from "effect";
+import { isolated } from "../../helpers/isolated";
+
 import { Tool } from "@openomni/protocol";
-import { createDispatcher, defineTool } from "../../../src/index";
+import { createDispatcher, defineTool } from "../../helpers/effect-g3-dispatcher";
 import { z } from "zod";
 import { dispatchEcho } from "../../helpers/echo-dispatch";
 import { expectFailedToolCommit } from "../../helpers/execution-assertions";
+import { recordingExecutor } from "../../helpers/effect-g3";
 import {
   actionCommitGate,
   compiledPolicy,
-  recordingExecutor,
   recordingToolObservations,
 } from "../../helpers/compiled-policy";
 
-function echoTool(execute: (text: string) => Promise<string>) {
+function echoTool(execute: (text: string, signal: AbortSignal) => Promise<string>) {
   return defineTool({
     name: "echo",
     description: "Echo text",
@@ -19,7 +22,7 @@ function echoTool(execute: (text: string) => Promise<string>) {
     input: z.object({ text: z.string() }).strict(),
     output: z.string(),
     visibility: { model: ["resident"], cell: ["resident"] },
-    execute: async ({ text }) => execute(text),
+    execute: async ({ text }, { signal }) => execute(text, signal),
     render: (_input, output) => output,
   });
 }
@@ -52,10 +55,10 @@ it("publishes no lifecycle event when pre policy blocks before tool intent", asy
     { executor: recording.executor },
   );
 
-  const result = await dispatcher.execute(
+  const result = await isolated(dispatcher.execute(
     { id: "call-1", tool: "echo", input: { text: "blocked" } },
     { sessionId: "session-1", turnId: "turn-1" },
-  );
+  ));
 
   expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
   expect(bodyCalls).toBe(0);
@@ -84,10 +87,10 @@ it("publishes Started after intent commit and Completed after result commit", as
     executor: recording.executor,
   });
 
-  const running = dispatcher.execute(
+  const running = isolated(dispatcher.execute(
     { id: "call-1", tool: "echo", input: { text: "ok" } },
     { sessionId: "session-1", turnId: "turn-1" },
-  );
+  ));
   await intentCommit.reached;
   expect(observations.names).toEqual([]);
 
@@ -112,45 +115,39 @@ it("publishes one error completion after a failed tool result commits", async ()
     executor: recording.executor,
   });
 
-  const result = await dispatchEcho(dispatcher, "fail");
+  const result = await isolated(dispatchEcho(dispatcher, "fail"));
 
   expectFailedToolCommit(result, recording.committed);
   expect(observations.names).toEqual([Tool.Events.Started.name, Tool.Events.Completed.name]);
 });
 
-it("publishes TimedOut and Completed exactly once after the timeout result commits", async () => {
-  jest.useFakeTimers();
-  try {
+it("publishes TimedOut and Completed exactly once after the timeout result commits", () => isolated(
+  Effect.gen(function* () {
     const resultCommit = actionCommitGate("echo:result");
-    const startedSeen = Promise.withResolvers<void>();
-    const observations = recordingToolObservations((name) => {
-      if (name === Tool.Events.Started.name) startedSeen.resolve();
-    });
+    const bodyEntered = Promise.withResolvers<void>();
+    const observations = recordingToolObservations();
     const recording = recordingExecutor({
       onCommit: resultCommit.onCommit,
       onObservation: observations.observe,
-      clock: Date.now,
+      clock: () => 10,
     });
-    const dispatcher = createDispatcher([echoTool(() => new Promise<string>(() => undefined))], {
-      executor: recording.executor,
-      timeoutMs: 50,
+    const dispatcher = createDispatcher([echoTool((_text, signal) => new Promise<string>((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      bodyEntered.resolve();
+    }))], { executor: recording.executor, timeoutMs: 50 });
+    const control = Effect.gen(function* () {
+      yield* Effect.promise(() => bodyEntered.promise).pipe(Effect.timeout("5 seconds"));
+      yield* TestClock.adjust(50);
+      yield* Effect.promise(() => resultCommit.reached).pipe(Effect.timeout("5 seconds"));
+      expect(observations.names).toEqual([Tool.Events.Started.name]);
+      resultCommit.release();
     });
-
-    const running = dispatchEcho(dispatcher, "stall");
-    await startedSeen.promise;
-    jest.advanceTimersByTime(50);
-    await resultCommit.reached;
-    expect(observations.names).toEqual([Tool.Events.Started.name]);
-    resultCommit.release();
-    const result = await running;
-
+    const [result] = yield* Effect.all([dispatchEcho(dispatcher, "stall"), control], { concurrency: "unbounded" });
     expectFailedToolCommit(result, recording.committed);
     expect(observations.names).toEqual([
       Tool.Events.Started.name,
       Tool.Events.TimedOut.name,
       Tool.Events.Completed.name,
     ]);
-  } finally {
-    jest.useRealTimers();
-  }
-});
+  }).pipe(Effect.provide(TestContext.TestContext)),
+));

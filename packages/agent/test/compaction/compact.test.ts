@@ -1,10 +1,12 @@
+import { Effect } from "effect";
+import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
-import type { Message } from "@openomni/protocol";
+import type { Message, PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "../../src/index";
 import { Compaction } from "../../src/compaction/compact";
-import type { ResolvedCompactionOptions } from "../../src/compaction/contract";
+import type { ResolvedCompactionOptions, SummarizationBudget } from "../../src/compaction/contract";
 import {
   estimateMessagesTokens,
   isIneffectiveCompaction,
@@ -31,22 +33,26 @@ function makeToolAssistantMessage(text: string, callID: string): Message.WithPar
 
 /** `count` messages alternating user/assistant, each naming its index. */
 function alternating(count: number): Message.WithParts[] {
-  return Array.from({ length: count }, (_, i) =>
+  return Array.from({ length: count }, (_: undefined, i: number) =>
     i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
   );
 }
 
 function textsOf(messages: readonly Message.WithParts[]): string[] {
-  return messages.flatMap((m) =>
-    m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+  return messages.flatMap((m: Message.WithParts) =>
+    m.parts
+      .filter((p: Message.Part): p is Message.TextPart => p.type === "text")
+      .map((p: Message.TextPart) => p.text),
   );
 }
 
 /** One threshold-triggered compaction over `messages` observed on the shared bus. */
 function compactThreshold(messages: Message.WithParts[], options: ResolvedCompactionOptions) {
-  return Compaction.compact(messages, options, { traceId: TEST_TRACE_ID, sessionId: "test" }, Bus, {
-    trigger: "threshold",
-  });
+  return isolated(
+    Compaction.compact(messages, options, { traceId: TEST_TRACE_ID, sessionId: "test" }, Bus, {
+      trigger: "threshold",
+    }),
+  );
 }
 
 // Shared with rejection tests so the anchor metadata assertion cannot silently weaken.
@@ -63,7 +69,7 @@ describe("Compaction", () => {
     NaN,
     Infinity,
     -Infinity,
-  ])("kept-window assertion rejects a non-finite timestamp: %s", (time) => {
+  ])("kept-window assertion rejects a non-finite timestamp: %s", (time: number) => {
     expect(() => parseKeptWindow([{ time, text: "ok" }])).toThrow(z.ZodError);
   });
 
@@ -72,7 +78,11 @@ describe("Compaction", () => {
     { value: {} },
     { value: [{ time: 1 }] },
     { value: [{ time: "1", text: "ok" }] },
-  ])("kept-window assertion rejects malformed metadata: %j", ({ value }) => {
+  ])("kept-window assertion rejects malformed metadata: %j", ({
+    value,
+  }: {
+    value: PlainValue | readonly PlainValue[];
+  }) => {
     expect(() => parseKeptWindow(value)).toThrow(z.ZodError);
   });
 
@@ -85,18 +95,24 @@ describe("Compaction", () => {
     const completed = captureBusEvents(RunEvents.CompactionCompleted);
 
     try {
-      await Compaction.compact(
-        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
-        { contextWindowTokens: 1000, protectRecentMessages: 2 },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
+      await isolated(
+        Compaction.compact(
+          Array.from({ length: 12 }, (_unused: undefined, index: number) =>
+            makeUserMessage(`message ${index}`),
+          ),
+          { contextWindowTokens: 1000, protectRecentMessages: 2 },
+          { traceId: TEST_TRACE_ID, sessionId: "test" },
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       const seen = [...(await started.done), ...(await completed.done)];
       expect(started.events).toHaveLength(1);
       expect(completed.events).toHaveLength(1);
       // The bracket: started + completed, both filed under the run's trace.
-      expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(2);
+      expect(
+        seen.filter((event: (typeof seen)[number]) => event.traceId === TEST_TRACE_ID),
+      ).toHaveLength(2);
     } finally {
       started.unsubscribe();
       completed.unsubscribe();
@@ -177,7 +193,7 @@ describe("Compaction", () => {
     });
 
     it("passes a bounded summarizer budget contract", async () => {
-      const messages = Array.from({ length: 8 }, (_, index) =>
+      const messages = Array.from({ length: 8 }, (_: undefined, index: number) =>
         index % 2 === 0
           ? makeUserMessage(`user ${index}`)
           : makeAssistantMessage("word ".repeat(300)),
@@ -185,23 +201,30 @@ describe("Compaction", () => {
       let observed:
         | { input: Message.WithParts[]; maxInputTokens: number; maxOutputTokens: number }
         | undefined;
-      await Compaction.compact(
-        messages,
-        {
-          contextWindowTokens: 2000,
-          protectRecentMessages: 2,
-          onSummarize: async (input, _previous, budget) => {
-            observed = {
-              input,
-              maxInputTokens: budget.maxInputTokens,
-              maxOutputTokens: budget.maxOutputTokens,
-            };
-            return "bounded";
+      await isolated(
+        Compaction.compact(
+          messages,
+          {
+            contextWindowTokens: 2000,
+            protectRecentMessages: 2,
+            onSummarize: (
+              input: Message.WithParts[],
+              _previous: string | undefined,
+              budget: SummarizationBudget,
+            ) =>
+              Effect.sync(() => {
+                observed = {
+                  input,
+                  maxInputTokens: budget.maxInputTokens,
+                  maxOutputTokens: budget.maxOutputTokens,
+                };
+                return "bounded";
+              }),
           },
-        },
-        { traceId: TEST_TRACE_ID, sessionId: "test" },
-        Bus,
-        { trigger: "threshold" },
+          { traceId: TEST_TRACE_ID, sessionId: "test" },
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       expect(observed?.maxInputTokens).toBe(1000);
       expect(observed?.maxOutputTokens).toBe(1000);
@@ -223,13 +246,15 @@ describe("Compaction", () => {
       const result = await compactThreshold(messages, {
         contextWindowTokens: 1000,
         protectRecentMessages: 4,
-        onSummarize: async () => "Summary of removed messages",
+        onSummarize: () => Effect.sync(() => "Summary of removed messages"),
       });
       expect(result.compacted).toBe(true);
-      const allTexts = result.messages.flatMap((m) =>
-        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+      const allTexts = result.messages.flatMap((m: Message.WithParts) =>
+        m.parts
+          .filter((p: Message.Part): p is Message.TextPart => p.type === "text")
+          .map((p: Message.TextPart) => p.text),
       );
-      expect(allTexts.some((t) => t.includes("Summary of removed messages"))).toBe(true);
+      expect(allTexts.some((t: string) => t.includes("Summary of removed messages"))).toBe(true);
     });
 
     it("does not compact when non-system messages are within protectRecent", async () => {
@@ -268,8 +293,10 @@ describe("Compaction", () => {
       expect(result.messages).toHaveLength(4);
       // The kept tool call and its result travel in the same WithParts message:
       // message-boundary slicing cannot split the pair.
-      const toolParts = result.messages.flatMap((message) =>
-        message.parts.filter((part): part is Message.ToolPart => part.type === "tool"),
+      const toolParts = result.messages.flatMap((message: Message.WithParts) =>
+        message.parts.filter(
+          (part: Message.Part): part is Message.ToolPart => part.type === "tool",
+        ),
       );
       expect(toolParts).toHaveLength(1);
       expect(toolParts[0]?.state.status).toBe("completed");
@@ -281,7 +308,9 @@ describe("Compaction", () => {
       // assistant-first histories reachable from resumed worker hydration, and
       // run.completion.pre is fail-closed — a throw here kills a live run over
       // housekeeping. The refusal is a value the policy records.
-      const messages = Array.from({ length: 8 }, (_, i) => makeAssistantMessage(`a${i}`));
+      const messages = Array.from({ length: 8 }, (_: undefined, i: number) =>
+        makeAssistantMessage(`a${i}`),
+      );
       const result = await compactThreshold(messages, {
         contextWindowTokens: 1000,
         protectRecentMessages: 3,
@@ -298,14 +327,18 @@ describe("Compaction", () => {
       try {
         const messages = [
           makeUserMessage("u0"),
-          ...Array.from({ length: 5 }, (_, i) => makeAssistantMessage(`a${i + 1}`)),
+          ...Array.from({ length: 5 }, (_: undefined, i: number) =>
+            makeAssistantMessage(`a${i + 1}`),
+          ),
         ];
-        const result = await Compaction.compact(
-          messages,
-          { contextWindowTokens: 1000, protectRecentMessages: 2 },
-          { traceId: TEST_TRACE_ID, sessionId: "test" },
-          Bus,
-          { trigger: "threshold" },
+        const result = await isolated(
+          Compaction.compact(
+            messages,
+            { contextWindowTokens: 1000, protectRecentMessages: 2 },
+            { traceId: TEST_TRACE_ID, sessionId: "test" },
+            Bus,
+            { trigger: "threshold" },
+          ),
         );
         await completed.done;
         expect(result.compacted).toBe(false);
@@ -321,7 +354,9 @@ describe("Compaction", () => {
       const completed = captureBusEvents(RunEvents.CompactionCompleted);
       try {
         const tool = makeToolAssistantMessage("a1", "call-big");
-        const toolPart = tool.parts.find((part): part is Message.ToolPart => part.type === "tool");
+        const toolPart = tool.parts.find(
+          (part: Message.Part): part is Message.ToolPart => part.type === "tool",
+        );
         if (toolPart?.state.status !== "completed") throw new Error("missing tool fixture");
         toolPart.state.output = "x".repeat(400);
         const messages = [
@@ -330,25 +365,27 @@ describe("Compaction", () => {
           makeAssistantMessage("a2"),
           makeAssistantMessage("a3"),
         ];
-        const result = await Compaction.compact(
-          messages,
-          {
-            contextWindowTokens: 1000,
-            protectRecentMessages: 2,
-            elideToolOutputs: { minOutputChars: 100, keepHeadChars: 10 },
-          },
-          { traceId: TEST_TRACE_ID, sessionId: "test" },
-          Bus,
-          // Overage far above the ~80-token estimated reclaim: elision alone
-          // cannot settle the round, so the cut is attempted and snaps to 0.
-          { trigger: "threshold", measuredTokens: 5000 },
+        const result = await isolated(
+          Compaction.compact(
+            messages,
+            {
+              contextWindowTokens: 1000,
+              protectRecentMessages: 2,
+              elideToolOutputs: { minOutputChars: 100, keepHeadChars: 10 },
+            },
+            { traceId: TEST_TRACE_ID, sessionId: "test" },
+            Bus,
+            // Overage far above the ~80-token estimated reclaim: elision alone
+            // cannot settle the round, so the cut is attempted and snaps to 0.
+            { trigger: "threshold", measuredTokens: 5000 },
+          ),
         );
         await completed.done;
         expect(result.compacted).toBe(true);
         expect(result.removedCount).toBe(0);
         expect(result.messages).toHaveLength(4);
         const kept = result.messages[1]?.parts.find(
-          (part): part is Message.ToolPart => part.type === "tool",
+          (part: Message.Part): part is Message.ToolPart => part.type === "tool",
         );
         expect(kept?.state.status === "completed" && kept.state.output).toContain(
           "[output elided by compaction: 400 chars; recall: call-big]",
@@ -376,7 +413,7 @@ describe("Compaction", () => {
       const result = await compactThreshold(messages, {
         contextWindowTokens: 1000,
         protectRecentMessages: 3,
-        onSummarize: async () => "anchored",
+        onSummarize: () => Effect.sync(() => "anchored"),
       });
       expect(result.compacted).toBe(true);
       // L2: the cut span's user messages (u0, u2, u4) survive verbatim, so
@@ -388,7 +425,7 @@ describe("Compaction", () => {
       expect(texts).toContain("u0");
       expect(texts).toContain("u2");
       expect(texts).toContain("u4");
-      expect(texts.some((t) => t.includes("a1"))).toBe(false);
+      expect(texts.some((t: string) => t.includes("a1"))).toBe(false);
     });
 
     it("threads the history session id into the summary message", async () => {
@@ -396,7 +433,7 @@ describe("Compaction", () => {
       const result = await compactThreshold(messages, {
         contextWindowTokens: 1000,
         protectRecentMessages: 4,
-        onSummarize: async () => "summary",
+        onSummarize: () => Effect.sync(() => "summary"),
       });
       const summary = result.messages[0];
       expect(summary?.info.role).toBe("user");
@@ -423,23 +460,26 @@ describe("Compaction", () => {
         makeUserMessage("u4"),
         makeAssistantMessage("a5"),
       ];
-      const result = await Compaction.compact(
-        messages,
-        {
-          ...opts,
-          onSummarize: async (input) => {
-            seen.push(input);
-            return "anchor-v1";
+      const result = await isolated(
+        Compaction.compact(
+          messages,
+          {
+            ...opts,
+            onSummarize: (input: Message.WithParts[]) =>
+              Effect.sync(() => {
+                seen.push(input);
+                return "anchor-v1";
+              }),
           },
-        },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
 
       // Summarizer saw assistants only.
       expect(seen).toHaveLength(1);
-      expect(seen[0]?.every((m) => m.info.role === "assistant")).toBe(true);
+      expect(seen[0]?.every((m: Message.WithParts) => m.info.role === "assistant")).toBe(true);
       // Every user message survives byte-exact, in order, after the anchor —
       // each preceded by its policy-injected time marker (#737), which is a
       // separate part and never touches the user's bytes.
@@ -463,22 +503,25 @@ describe("Compaction", () => {
 
     it("threads the previous anchor body through the second cut — no recursive re-summarization", async () => {
       const calls: Array<{ input: Message.WithParts[]; previous: string | undefined }> = [];
-      const summarize = async (input: Message.WithParts[], previous?: string) => {
-        calls.push({ input, previous });
-        return previous === undefined ? "anchor-v1" : `${previous}+v2`;
-      };
-      const first = await Compaction.compact(
-        [
-          makeUserMessage("u0"),
-          makeAssistantMessage("a1"),
-          makeAssistantMessage("a2"),
-          makeUserMessage("u3"),
-          makeAssistantMessage("a4"),
-        ],
-        { ...opts, onSummarize: summarize },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+      const summarize = (input: Message.WithParts[], previous?: string) =>
+        Effect.sync(() => {
+          calls.push({ input, previous });
+          return previous === undefined ? "anchor-v1" : `${previous}+v2`;
+        });
+      const first = await isolated(
+        Compaction.compact(
+          [
+            makeUserMessage("u0"),
+            makeAssistantMessage("a1"),
+            makeAssistantMessage("a2"),
+            makeUserMessage("u3"),
+            makeAssistantMessage("a4"),
+          ],
+          { ...opts, onSummarize: summarize },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       expect(calls[0]?.previous).toBeUndefined();
       const priorAnchor = first.messages[0];
@@ -500,26 +543,30 @@ describe("Compaction", () => {
         makeUserMessage("u7"),
         makeAssistantMessage("a8"),
       ];
-      const second = await Compaction.compact(
-        grown,
-        { ...opts, onSummarize: summarize },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+      const second = await isolated(
+        Compaction.compact(grown, { ...opts, onSummarize: summarize }, trace, Bus, {
+          trigger: "threshold",
+        }),
       );
 
       expect(calls).toHaveLength(2);
       // The previous anchor arrived as state, not as content:
       expect(calls[1]?.previous).toBe("anchor-v1");
       // ...and the anchor RENDER never re-entered the summarizer input.
-      const secondInputTexts = calls[1]?.input.flatMap((m) =>
-        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+      const secondInputTexts = calls[1]?.input.flatMap((m: Message.WithParts) =>
+        m.parts
+          .filter((p: Message.Part): p is Message.TextPart => p.type === "text")
+          .map((p: Message.TextPart) => p.text),
       );
-      expect(secondInputTexts?.some((t) => t.includes("anchor-v1"))).toBe(false);
-      expect(calls[1]?.input.every((m) => m.info.role === "assistant")).toBe(true);
+      expect(secondInputTexts?.some((t: string) => t.includes("anchor-v1"))).toBe(false);
+      expect(calls[1]?.input.every((m: Message.WithParts) => m.info.role === "assistant")).toBe(
+        true,
+      );
       // Exactly one anchor message in the result — replaced, not stacked.
-      const anchors = second.messages.filter((m) =>
-        m.parts.some((p) => p.type === "text" && p.metadata?.compactionAnchor === true),
+      const anchors = second.messages.filter((m: Message.WithParts) =>
+        m.parts.some(
+          (p: Message.Part) => p.type === "text" && p.metadata?.compactionAnchor === true,
+        ),
       );
       expect(anchors).toHaveLength(1);
       const anchorPart = anchors[0]?.parts[0];
@@ -537,13 +584,17 @@ describe("Compaction", () => {
       expect(kept).toEqual(
         second.messages
           .slice(1)
-          .flatMap((m) =>
+          .flatMap((m: Message.WithParts) =>
             m.parts
               .filter(
-                (part): part is Message.TextPart =>
+                (part: Message.Part): part is Message.TextPart =>
                   part.type === "text" && part.metadata?.timeCarriage !== true,
               )
-              .map((part) => ({ role: m.info.role, text: part.text, time: m.info.time.created })),
+              .map((part: Message.TextPart) => ({
+                role: m.info.role,
+                text: part.text,
+                time: m.info.time.created,
+              })),
           ),
       );
     });
@@ -556,51 +607,57 @@ describe("Compaction", () => {
       if (nudgePart?.type !== "text") throw new Error("shape");
       nudge.parts = [{ ...nudgePart, metadata: { policyInjected: true } }];
 
-      const first = await Compaction.compact(
-        [
-          makeUserMessage("u0"),
-          nudge,
-          makeAssistantMessage("a1"),
-          makeAssistantMessage("a2"),
-          makeUserMessage("u3"),
-          makeAssistantMessage("a4"),
-        ],
-        { ...opts, onSummarize: async () => "anchor-v1" },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+      const first = await isolated(
+        Compaction.compact(
+          [
+            makeUserMessage("u0"),
+            nudge,
+            makeAssistantMessage("a1"),
+            makeAssistantMessage("a2"),
+            makeUserMessage("u3"),
+            makeAssistantMessage("a4"),
+          ],
+          { ...opts, onSummarize: () => Effect.sync(() => "anchor-v1") },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       const markerCount = (message: Message.WithParts): number =>
-        message.parts.filter((p) => p.type === "text" && p.metadata?.timeCarriage === true).length;
-      const u0 = first.messages.find((m) =>
-        m.parts.some((p) => p.type === "text" && p.text === "u0"),
+        message.parts.filter(
+          (p: Message.Part) => p.type === "text" && p.metadata?.timeCarriage === true,
+        ).length;
+      const u0 = first.messages.find((m: Message.WithParts) =>
+        m.parts.some((p: Message.Part) => p.type === "text" && p.text === "u0"),
       );
       if (u0 === undefined) throw new Error("expected preserved u0");
       expect(markerCount(u0)).toBe(1);
       // A wholly-injected nudge is bookkeeping, not speech — never dated.
-      const preservedNudge = first.messages.find((m) =>
-        m.parts.some((p) => p.type === "text" && p.text === "[policy] wrap up"),
+      const preservedNudge = first.messages.find((m: Message.WithParts) =>
+        m.parts.some((p: Message.Part) => p.type === "text" && p.text === "[policy] wrap up"),
       );
       if (preservedNudge === undefined) throw new Error("expected preserved nudge");
       expect(markerCount(preservedNudge)).toBe(0);
 
       // Second in-run cut over already-stamped messages: the marker is
       // REPLACED (regenerated from info.time), never accumulated.
-      const second = await Compaction.compact(
-        [
-          ...first.messages,
-          makeAssistantMessage("a5"),
-          makeAssistantMessage("a6"),
-          makeUserMessage("u7"),
-          makeAssistantMessage("a8"),
-        ],
-        { ...opts, onSummarize: async () => "anchor-v2" },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+      const second = await isolated(
+        Compaction.compact(
+          [
+            ...first.messages,
+            makeAssistantMessage("a5"),
+            makeAssistantMessage("a6"),
+            makeUserMessage("u7"),
+            makeAssistantMessage("a8"),
+          ],
+          { ...opts, onSummarize: () => Effect.sync(() => "anchor-v2") },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
-      const u0Again = second.messages.find((m) =>
-        m.parts.some((p) => p.type === "text" && p.text === "u0"),
+      const u0Again = second.messages.find((m: Message.WithParts) =>
+        m.parts.some((p: Message.Part) => p.type === "text" && p.text === "u0"),
       );
       if (u0Again === undefined) throw new Error("expected u0 in second window");
       expect(markerCount(u0Again)).toBe(1);
@@ -608,30 +665,35 @@ describe("Compaction", () => {
       const anchor = second.messages[0]?.parts[0];
       if (anchor?.type !== "text") throw new Error("shape");
       const kept = parseKeptWindow(anchor.metadata?.keptWindow);
-      expect(kept.every((entry) => !entry.text.startsWith("[recorded "))).toBe(true);
+      expect(
+        kept.every((entry: { time: number; text: string }) => !entry.text.startsWith("[recorded ")),
+      ).toBe(true);
     });
 
     it("skips the model call when the cut span holds nothing summarizable", async () => {
       let called = 0;
       // First cut produces an anchor; the follow-up span contains only user
       // messages, so the anchor must carry forward without a summarize call.
-      const first = await Compaction.compact(
-        [
-          makeUserMessage("u0"),
-          makeAssistantMessage("a1"),
-          makeUserMessage("u2"),
-          makeAssistantMessage("a3"),
-        ],
-        {
-          ...opts,
-          onSummarize: async () => {
-            called += 1;
-            return "anchor-v1";
+      const first = await isolated(
+        Compaction.compact(
+          [
+            makeUserMessage("u0"),
+            makeAssistantMessage("a1"),
+            makeUserMessage("u2"),
+            makeAssistantMessage("a3"),
+          ],
+          {
+            ...opts,
+            onSummarize: () =>
+              Effect.sync(() => {
+                called += 1;
+                return "anchor-v1";
+              }),
           },
-        },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       expect(called).toBe(1);
       const anchorMessage = first.messages[0];
@@ -644,19 +706,22 @@ describe("Compaction", () => {
         makeUserMessage("u6"),
         makeAssistantMessage("tail"),
       ];
-      const second = await Compaction.compact(
-        grown,
-        {
-          ...opts,
-          protectRecentMessages: 2,
-          onSummarize: async () => {
-            called += 1;
-            return "should-not-run";
+      const second = await isolated(
+        Compaction.compact(
+          grown,
+          {
+            ...opts,
+            protectRecentMessages: 2,
+            onSummarize: () =>
+              Effect.sync(() => {
+                called += 1;
+                return "should-not-run";
+              }),
           },
-        },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       expect(called).toBe(1);
       const anchorPart = second.messages[0]?.parts[0];
@@ -686,23 +751,25 @@ describe("Compaction", () => {
       // The newest text alone fits the 100-char budget, but its completed
       // 60-char tool output takes the message to 110. It is retained as the
       // newest user, while accounting for the output excludes the older user.
-      const result = await Compaction.compact(
-        [
-          makeUserMessage("old-user"),
-          makeAssistantMessage("a1"),
-          newestUser,
-          makeAssistantMessage("a2"),
-          makeUserMessage("tail-u"),
-          makeAssistantMessage("tail-a"),
-        ],
-        {
-          ...opts,
-          preserveUserMessageChars: 100,
-          onSummarize: async () => "anchor",
-        },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+      const result = await isolated(
+        Compaction.compact(
+          [
+            makeUserMessage("old-user"),
+            makeAssistantMessage("a1"),
+            newestUser,
+            makeAssistantMessage("a2"),
+            makeUserMessage("tail-u"),
+            makeAssistantMessage("tail-a"),
+          ],
+          {
+            ...opts,
+            preserveUserMessageChars: 100,
+            onSummarize: () => Effect.sync(() => "anchor"),
+          },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       const texts = textsOf(result.messages);
       expect(texts).toContain(newestText);
@@ -715,25 +782,28 @@ describe("Compaction", () => {
       // — not one char smaller. Committing it would count as progress toward
       // the #651 disarm while reclaiming nothing, so it must be a recorded
       // non-action, and the summarizer must not be paid for it.
-      const result = await Compaction.compact(
-        [
-          makeUserMessage("u0"),
-          makeUserMessage("u1"),
-          makeUserMessage("u2"),
-          makeUserMessage("u3"),
-          makeUserMessage("tail-1"),
-          makeAssistantMessage("tail-2"),
-        ],
-        {
-          ...opts,
-          onSummarize: async () => {
-            called += 1;
-            return "never";
+      const result = await isolated(
+        Compaction.compact(
+          [
+            makeUserMessage("u0"),
+            makeUserMessage("u1"),
+            makeUserMessage("u2"),
+            makeUserMessage("u3"),
+            makeUserMessage("tail-1"),
+            makeAssistantMessage("tail-2"),
+          ],
+          {
+            ...opts,
+            onSummarize: () =>
+              Effect.sync(() => {
+                called += 1;
+                return "never";
+              }),
           },
-        },
-        trace,
-        Bus,
-        { trigger: "threshold" },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       expect(called).toBe(0);
       expect(result.compacted).toBe(false);
@@ -748,24 +818,34 @@ describe("Compaction", () => {
         summary: "anchor body",
         anchored: true,
       },
-    ] as const)("records anchored=$anchored $name", async ({ summary, anchored }) => {
+    ] as const)("records anchored=$anchored $name", async ({
+      summary,
+      anchored,
+    }: {
+      summary: string;
+      anchored: boolean;
+    }) => {
       const completed = captureBusEvents(RunEvents.CompactionCompleted);
       try {
-        const result = await Compaction.compact(
-          [
-            makeUserMessage("u0"),
-            makeAssistantMessage("a1"),
-            makeAssistantMessage("a2"),
-            makeUserMessage("tail-u"),
-            makeAssistantMessage("tail-a"),
-          ],
-          { ...opts, onSummarize: async () => summary },
-          trace,
-          Bus,
-          { trigger: "threshold" },
+        const result = await isolated(
+          Compaction.compact(
+            [
+              makeUserMessage("u0"),
+              makeAssistantMessage("a1"),
+              makeAssistantMessage("a2"),
+              makeUserMessage("tail-u"),
+              makeAssistantMessage("tail-a"),
+            ],
+            { ...opts, onSummarize: () => Effect.sync(() => summary) },
+            trace,
+            Bus,
+            { trigger: "threshold" },
+          ),
         );
         expect(result.compacted).toBe(true);
-        const cut = (await completed.done).find((event) => event.outcome === "cut");
+        const cut = (await completed.done).find(
+          (event: (typeof completed.events)[number]) => event.outcome === "cut",
+        );
         expect(completed.events).toHaveLength(1);
         expect(cut?.anchored).toBe(anchored);
       } finally {

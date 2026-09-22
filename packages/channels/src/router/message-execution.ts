@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import type { ChannelError } from "../errors";
 import { SurfaceKey } from "@openomni/ledger";
 import {
   Inbox,
@@ -15,7 +17,7 @@ import { executeRequestRoute, requireRoutedDecision } from "./routing-execution"
 interface MessageContext {
   sender: Gateway.IngestSender;
   send: Gateway.SendMessage;
-  prepared: ReturnType<GatewayRouterPorts["prepare"]>;
+  prepared: Effect.Effect.Success<ReturnType<GatewayRouterPorts["prepare"]>>;
   external: ReturnType<typeof externalMessage> | undefined;
   ports: GatewayRouterPorts;
   messaging: ReturnType<typeof createExistingAgentMessaging> | undefined;
@@ -94,12 +96,22 @@ function inboxAdmission(
   };
 }
 
+function requestSpec(send: MessageContext["send"], intent: LedgerAction.Receipt) {
+  if (send.deadline === undefined) return {};
+  return { requestSpec: {
+    requestId: intent.action.id, sessionId: intent.action.sessionId, allowedActions: ["report_result" as const],
+    expectedResponders: send.to.kind === "actor" ? [send.to.actorId] : [],
+    resolution: "first" as const, threshold: 1, deadline: send.deadline,
+  } };
+}
+
 /** Executes an admitted message; progress survives a later grant/projection failure. */
-export async function executeMessage(
+export function executeMessage(
   context: MessageContext,
   progress: MessageProgress,
   intent: LedgerAction.Receipt,
-): Promise<PlainValue> {
+): Effect.Effect<PlainValue, ChannelError> {
+  return Effect.gen(function* () {
   const {
     sender,
     send,
@@ -112,17 +124,17 @@ export async function executeMessage(
     startedAt,
     clock,
   } = context;
+  const sessionResult: PlainValue = { status: "executed", handle, delivery: { kind: "session" } };
   const content = transformedContent(intent, sender, send, messageId);
   if (external !== undefined) {
     const decision = requireRoutedDecision(external.route.decision);
-    await executeRequestRoute(external.route, decision, ports.requests, content, clock());
+    yield* executeRequestRoute(external.route, decision, ports.requests, content, clock());
     SurfaceKey.claim(external.surfaceKey, prepared.target);
-    if (external.route.requestExecution.kind === "request")
-      return { status: "executed", handle, delivery: { kind: "session" } };
+    if (external.route.requestExecution.kind === "request") return sessionResult;
   }
   if (send.to.kind === "actor") {
     if (messaging === undefined) throw new Error("actor messaging is not configured");
-    const receipt = await messaging.send({
+    const receipt = yield* messaging.send({
       messageId,
       traceId: intent.action.id,
       senderId: sender.kind === "session" ? sender.id : sender.externalId,
@@ -130,28 +142,17 @@ export async function executeMessage(
       body: content,
       at: startedAt,
       operation: send.deadline === undefined ? "fire_and_forget" : "awaited",
-      ...(send.deadline === undefined
-        ? {}
-        : {
-            requestSpec: {
-              requestId: intent.action.id,
-              sessionId: intent.action.sessionId,
-              allowedActions: ["report_result" as const],
-              expectedResponders: [send.to.actorId],
-              resolution: "first" as const,
-              threshold: 1,
-              deadline: send.deadline,
-            },
-          }),
+      ...requestSpec(send, intent),
     });
     if (receipt.kind === "denied") throw new Error(`actor send admission changed: ${receipt.code}`);
-    return { status: "executed", handle, delivery: { kind: "actor", value: receipt.delivery } };
+    const actorResult: PlainValue = { status: "executed", handle, delivery: { kind: "actor", value: receipt.delivery } };
+    return actorResult;
   }
-  if (await answerNativeRequest(ports.requests, sender, prepared.origin, content, clock()))
-    return { status: "executed", handle, delivery: { kind: "session" } };
+  if (yield* answerNativeRequest(ports.requests, sender, prepared.origin, content, clock()))
+    return sessionResult;
   const commitAt = clock();
   const admission = inboxAdmission(context, intent, content, commitAt);
-  await openNativeRequest(
+  yield* openNativeRequest(
     ports.requests,
     intent,
     sender,
@@ -160,9 +161,10 @@ export async function executeMessage(
     startedAt,
     admission,
   );
-  const row = ports.inbox.commit(admission);
+  const row = yield* ports.inbox.commit(admission);
   progress.commitMs = clock() - commitAt;
   progress.committed = row;
   context.admitReplyGrant();
-  return { status: "executed", handle, delivery: { kind: "session" } };
+  return sessionResult;
+  });
 }

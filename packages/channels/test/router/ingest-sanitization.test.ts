@@ -1,3 +1,4 @@
+import { effectFailure } from "../helpers/effect-failure";
 import { beforeEach, expect, test } from "bun:test";
 import {
   commits,
@@ -19,18 +20,18 @@ test.each([
   { inboundTreatment: "evidence_only" },
   { senderTier: "owner" },
   { addressee: "bot" },
-])("facts-only ingest rejects reserved fields: %j", async (reserved) => {
-  await expect(
+])("facts-only ingest rejects reserved fields: %j", async (reserved: Record<string, unknown>) => {
+  expect(await effectFailure(
     kernelRouter().ingest(ownerSender, { ...ownerFacts, ...reserved }),
-  ).rejects.toMatchObject({
+  )).toMatchObject({
     issues: [expect.objectContaining({ code: "unrecognized_keys" })],
   });
   expect(commits).toEqual([]);
 });
 
 test("authenticated surface must match the facts surface", async () => {
-  await expect(
+  expect(await effectFailure(
     kernelRouter().ingest({ ...ownerSender, surface: "telegram" }, ownerFacts),
-  ).rejects.toThrow("authenticated surface mismatch");
+  )).toMatchObject({ message: "authenticated surface mismatch" });
   expect(commits).toEqual([]);
 });

@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { acquireAppResource, gatewayRuntime } from "../src/gateway";
+import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus, sessionTool } from "@openomni/agent";
 import { createTools } from "../src/tools/core/catalog";
@@ -56,6 +58,7 @@ test.each([
     },
   });
   const deadline = Date.now() + 60_000;
+  const runtime = gatewayRuntime({ dbPath: fixture.dbPath });
   try {
     expect(
       (
@@ -71,7 +74,7 @@ test.each([
     const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
     if (child === undefined) throw new Error("missing commissioned process session");
     const notified: string[] = [];
-    await serveProcessSession(
+    await acquireAppResource(runtime, serveProcessSession(
       {
         sessionId: child.id,
         dbPath: fixture.dbPath,
@@ -80,7 +83,9 @@ test.each([
         transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
       },
       (ids) => notified.push(...ids),
-    );
+      undefined,
+      runtime,
+    ));
     Storage.initialize({ dbPath: fixture.dbPath });
     expect(requests).toBe(toolSend ? 2 : 1);
     expect(notified).toContain("sender");
@@ -103,6 +108,7 @@ test.each([
     expect(SessionHandleStore.requestRows("sender")[0]?.state).toBe("resolved");
     expect(Storage.get().alarms?.due(deadline)).toEqual([]);
   } finally {
+    await runtime.dispose();
     await provider.stop(true);
     Storage.reset();
     Bus.reset();
@@ -152,7 +158,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input, sink) => {
+      run: (input, sink) => Effect.sync(() => {
         parentSessionId = input.trace.sessionId;
         if (!commissioned) {
           const output = requestToolStep(input, sink, {
@@ -169,8 +175,8 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
           commissioned = true;
         }
         sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));
-        return { type: "stop" };
-      },
+        return { type: "stop" as const };
+      }),
     },
   });
   await ownerStart(app, "initial-process");

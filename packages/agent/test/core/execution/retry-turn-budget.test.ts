@@ -1,8 +1,10 @@
+import { isolated } from "../../helpers/isolated";
 import { providerFailure } from "../../helpers/mock-llm";
-import { describe, expect, it, jest } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent } from "../../helpers/effect-g2";
+import { bounded } from "../../helpers/bounded";
 import { advanceRunTurn, createRunState, recordRunTurn } from "../../../src/core/execution/state";
 import { Bus } from "../../../src/index";
 import { mockLlm, completeModel } from "../../helpers/mock-llm";
@@ -21,7 +23,6 @@ describe("turn budget across retries", () => {
   });
 
   it("reports one charged turn after a successful retry", async () => {
-    jest.useFakeTimers();
     let calls = 0;
     const completed = Promise.withResolvers<{ context?: { turns?: number } }>();
     const retry = Promise.withResolvers<void>();
@@ -30,24 +31,22 @@ describe("turn budget across retries", () => {
       if (event.msg === "agent.run.completed") completed.resolve(event);
     });
     try {
-      const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      const running = isolated(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         llm: mockLlm(async (input, sink) => {
           calls += 1;
-          if (calls === 1) throw providerFailure("transient provider hiccup");
+          if (calls === 1) return { type: "error", error: providerFailure("transient provider hiccup") };
           return completeModel(input, sink);
         }),
-      });
-      await retry.promise;
-      jest.advanceTimersByTime(1_000);
+      }));
+      await bounded(retry.promise, "retry published");
       expect((await running).finishReason).toBe("stop");
       expect(calls).toBe(2);
-      expect((await completed.promise).context?.turns).toBe(1);
+      expect((await bounded(completed.promise, "run completed")).context?.turns).toBe(1);
     } finally {
       unsubscribeCompleted();
       unsubscribeRetry();
-      jest.useRealTimers();
     }
   });
 });

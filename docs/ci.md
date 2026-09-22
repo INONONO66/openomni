@@ -175,6 +175,8 @@ run in separate jobs with their own files, ports, and process environments.
 Tests do not wait for unrelated lint or typecheck jobs. Machine integration
 uses Python 3.12.
 
+`script/check-effect-boundaries.ts` is the fail-closed boundary gate. It scans tracked and non-ignored untracked TypeScript under `apps/`, `packages/` and `script/`, resolves Effect runners through imports and repository re-exports, and permits execution only in `apps/openomni/src/cli/main.ts` and `apps/openomni/src/gateway.ts`. It also rejects Effect imports in protocol/UI/desktop/tool surfaces, forbidden excluded-package dependencies and Promise twins; the runner-site JSON (`script/conformance/effect-runner-sites.json`) is a shrink-only ratchet whose live rows are reported without failure and whose stale rows fail. Ratchet rows may name only non-production sites (`packages|apps/<ws>/test|bench/...` or `script/*.test.ts`); a production `src/` row is `R2_INVALID_ALLOWLIST`, so production runners outside the two app edges always fail. The remaining test/helper/bench rows are owed to W5 #1113 (zero target).
+
 `script/scripts-lanes.ts` is the explicit recursive test manifest. Its contract
 test rejects missing, duplicate and newly unassigned `script/**/*.test.ts` files.
 `scripts-contracts` contains topology, CI planning/execution, patch coverage,

@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { acquireEffect, acquireSyncEffect } from "./effect";
 import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import type { Machine } from "@openomni/protocol";
@@ -6,7 +8,8 @@ export function bridgeHost(
   socketPath: string,
   options: { callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> } = {},
 ) {
-  return createMachineHost({
+  const callTool = options.callTool;
+  return acquireEffect(createMachineHost({
     socketPath,
     enrollment: () => ({
       name: "workstation",
@@ -16,8 +19,10 @@ export function bridgeHost(
     }),
     events: { publish: () => undefined },
     now: () => 5000,
-    ...options,
-  });
+    ...(callTool === undefined ? {} : {
+      callTool: (call: Machine.ToolCall) => Effect.promise(() => callTool(call)),
+    }),
+  }));
 }
 
 export async function bridgeProbe(socketPath: string) {
@@ -42,5 +47,5 @@ export function bridgeOffer(): Machine.Offer {
 }
 
 export function bridgeDaemon(socketPath: string) {
-  return attachMachineDaemon({ runner: createCodemode().runner, socketPath, offer: bridgeOffer() });
+  return acquireEffect(attachMachineDaemon({ runner: acquireSyncEffect(createCodemode()).runner, socketPath, offer: bridgeOffer() }));
 }

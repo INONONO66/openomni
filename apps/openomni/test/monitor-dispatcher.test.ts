@@ -16,12 +16,14 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import { LedgerWrites, SessionHandleStore, Storage } from "@openomni/ledger";
-import { Effect } from "effect";
+import { Effect, Scope, Exit, Cause } from "effect";
+import type { RunInput, Sink } from "@openomni/llm";
 import { createMonitorPorts, gatewayRuntime } from "../src/gateway";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { createMonitorTool } from "../src/tools/monitor";
 import { assistantMessage } from "./helpers/assistant-message";
+import { runEffect } from "./helpers/effect";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
   const monitorTool = createMonitorTool();
@@ -64,17 +66,21 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   const dispatcher = createDispatcher([eraseTool(monitorTool)]);
   const context = { sessionId: "session", turnId: "turn" };
   expect(
-    await dispatcher.execute({ id: "bad", tool: "monitor", input: { op: "cancel" } }, context),
+    await runEffect(dispatcher.execute({ id: "bad", tool: "monitor", input: { op: "cancel" } }, context)),
   ).toMatchObject({ errorKind: "invalid_input" });
   expect(
-    await dispatcher.execute({ id: "missing", tool: "not_monitor", input: {} }, context),
+    await runEffect(dispatcher.execute({ id: "missing", tool: "not_monitor", input: {} }, context)),
   ).toMatchObject({ errorKind: "unregistered_tool" });
-  await expect(
+  const missingContext = await runEffect(Effect.exit(
     dispatcher.execute(
       { id: "context", tool: "monitor", input: { operation: { op: "cancel", id: "watch" } } },
       context,
     ),
-  ).rejects.toThrow(ExecutorContextError);
+  ));
+  expect(Exit.isFailure(missingContext)).toBe(true);
+  if (Exit.isFailure(missingContext)) {
+    expect([...Cause.defects(missingContext.cause)]).toEqual([expect.any(ExecutorContextError)]);
+  }
   await expect(
     monitorTool.execute(
       { operation: { op: "cancel", id: "watch" } },
@@ -177,6 +183,7 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
     if (storage.alarms === undefined) throw new Error("fixture alarm storage missing");
     seedKernelPolicyRows();
     const runtime: SessionRuntime = { observations: events };
+    const scope = await runEffect(Scope.make());
     const definitions = [eraseTool(monitorTool)];
     let calls = 0;
     const runner = createSessionChatRunner({
@@ -202,8 +209,8 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
             toolExecutor: (call) =>
               dispatcher.execute(call, { sessionId: input.sessionId, turnId: input.turnId }),
             llm: {
-              resolveModel: async () => ({ providerID: "test", id: "test", name: "test" }),
-              run: async (request, sink) => {
+              resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
+              run: (request: RunInput, sink: Sink) => Effect.sync(() => {
                 calls += 1;
                 const message = assistantMessage(request, {
                   text: calls === 1 ? "waiting" : "observed",
@@ -233,20 +240,20 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
                     },
                   });
                 sink.onMessage(message);
-                return { type: "stop" };
-              },
+                return { type: "stop" as const };
+              }),
             },
           },
         };
       },
     });
-    const handle = session(
+    const handle = await runEffect(Scope.extend(session(
       { id: "live-wait", role: "resident", runner, tools: definitions.map(sessionTool) },
       runtime,
-    );
+    ), scope));
     const woke = Promise.withResolvers<void>();
     const errors: Error[] = [];
-    const worker = createAlarmWorker({
+    const worker = await runEffect(Scope.extend(createAlarmWorker({
       alarms: storage.alarms,
       requestTimeout: createSessionRequests(runtime).timeout,
       observations: events,
@@ -255,20 +262,19 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
         errors.push(error);
         woke.reject(error);
       },
-      async wake(id) {
-        await wakeSession(id, runner, runtime);
-        woke.resolve();
-      },
-    });
+      wake: (id: string) => Scope.extend(wakeSession(id, runner, runtime), scope).pipe(
+        Effect.tap(() => Effect.sync(() => woke.resolve())), Effect.asVoid,
+      ),
+    }), scope));
     try {
-      const result = await handle.prompt("watch and wait");
+      const result = await runEffect(handle.prompt("watch and wait"));
       expect(result?.kind).toBe("waiting");
       expect(calls).toBe(1);
       expect(getSessionHandle(handle.id, runtime)).toBeUndefined();
       const guard = AbortSignal.timeout(5000);
       const abort = () => woke.reject(new Error("alarm did not wake hibernated session"));
       guard.addEventListener("abort", abort, { once: true });
-      worker.start();
+      await runEffect(worker.start());
       await woke.promise;
       guard.removeEventListener("abort", abort);
       expect(calls).toBe(2);
@@ -277,8 +283,9 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
       ).toHaveLength(1);
       expect(errors).toEqual([]);
     } finally {
-      await worker.close();
-      await closeSessions(runtime);
+      await runEffect(worker.close());
+      await runEffect(closeSessions(runtime));
+      await runEffect(Scope.close(scope, Exit.void));
       await appRuntime.dispose();
     }
   }));

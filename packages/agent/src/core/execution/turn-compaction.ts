@@ -1,3 +1,5 @@
+import { Effect, type Scope } from "effect";
+import type { ExecutionError } from "../../errors";
 import { Compaction, type CompactionSession } from "../../compaction";
 import { executeCompaction } from "../../compaction/execute-cut";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
@@ -20,17 +22,19 @@ export function prepareCompactionAfterContinue(
   state: RunState,
   config: ChatAgentConfig,
   compaction: CompactionSession | undefined,
-): void {
+): Effect.Effect<void, never, Scope.Scope> {
+  return Effect.suspend(() => {
   const options = resolvedCompaction(state, config);
   const measuredTokens = state.lastCallContextTokens;
-  if (options === undefined || measuredTokens === undefined || compaction === undefined) return;
+  if (options === undefined || measuredTokens === undefined || compaction === undefined) return Effect.void;
   const geometry = compactionGeometry(state, options);
-  compaction.prepare(
+  return compaction.prepare(
     state.messages,
     measuredTokens,
     geometry.prepareTokens,
     options.contextWindowTokens,
   );
+  });
 }
 
 function compactionGeometry(
@@ -46,13 +50,18 @@ function compactionGeometry(
   });
 }
 
-export async function applyCompaction(
+function deferCompaction(measuredTokens: number | undefined, compaction: CompactionSession | undefined, graceTokens: number): boolean {
+  return measuredTokens !== undefined && compaction?.inFlight() === true && measuredTokens < graceTokens;
+}
+
+export function applyCompaction(
   state: RunState,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
   compaction: CompactionSession | undefined,
   trigger: "threshold" | "yield",
-): Promise<CompactionApplyResult> {
+): Effect.Effect<CompactionApplyResult, ExecutionError> {
+  return Effect.gen(function* () {
   const options = resolvedCompaction(state, config);
   if (options === undefined) return "none";
   const measuredTokens = state.lastCallContextTokens;
@@ -63,15 +72,10 @@ export async function applyCompaction(
       !Compaction.shouldCompact(measuredTokens, options, state.lastCompactionYield))
   )
     return "none";
-  if (
-    measuredTokens !== undefined &&
-    compaction?.inFlight() === true &&
-    measuredTokens < geometry.graceTokens
-  )
-    return "deferred";
+  if (deferCompaction(measuredTokens, compaction, geometry.graceTokens)) return "deferred";
 
   const candidate = compaction?.candidate();
-  const result = await executeCompaction({
+  const result = yield* executeCompaction({
     history: state.messages,
     options,
     identity: agentBase,
@@ -87,8 +91,9 @@ export async function applyCompaction(
   if (candidate !== undefined) compaction?.consume();
   state.lastCompactionIneffective = result.ineffective;
   if (result.yield !== undefined) state.lastCompactionYield = result.yield;
-  if (result.summarizerFailed === true) compaction?.disable();
+  if (result.summarizerFailed === true && compaction !== undefined) yield* compaction.disable();
   if (!result.compacted) return "none";
   applyCompactionMessages(state, result.messages);
   return "compacted";
+  });
 }
