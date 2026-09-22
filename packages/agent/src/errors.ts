@@ -1,9 +1,11 @@
+import { Data } from "effect";
 import type { AgentStopError } from "./core/execution/stop-chain";
-
-export { AgentStopError } from "./core/execution/stop-chain";
 import type { LedgerError } from "@openomni/ledger";
 import type { LlmRunFailure } from "@openomni/llm";
-import { Data } from "effect";
+
+export { AgentStopError } from "./core/execution/stop-chain";
+
+export class ContextAdmissionError extends Data.TaggedError("ContextAdmissionError")<Record<never, never>> {}
 
 export class PolicyDenied extends Data.TaggedError("PolicyDenied")<{
   readonly phase: "pre" | "post";
@@ -52,6 +54,7 @@ export type ExecutionError =
   | PolicyDenied
   | ToolBodyFailed
   | Interrupted
+  | ContextAdmissionError
   | CommitFailed
   | OutcomeUnknown
   | ForeignFailure

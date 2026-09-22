@@ -1,6 +1,7 @@
 import { Effect, Fiber, Queue } from "effect";
 import type { AlarmWriteAdapter, LedgerError } from "@openomni/ledger";
 import type { ExecutionError, SessionError } from "@openomni/agent";
+import { AppLifecycleFailure } from "../runtime";
 import { canonicalDigest, L0Observation, Alarm, type ObservationSink } from "@openomni/protocol";
 import {
   AlarmRuntimeError,
@@ -230,7 +231,8 @@ export function createAlarmWorker(options: {
       close,
       start: () =>
         Effect.gen(function* () {
-          if (cancelTick !== undefined) throw new Error("alarm worker already started");
+          if (cancelTick !== undefined)
+            return yield* new AppLifecycleFailure({ operation: "alarm.start", cause: "already_started" });
           unsubscribe = options.observations.subscribe(
             L0Observation.ActionCommittedEvent,
             (payload) => {

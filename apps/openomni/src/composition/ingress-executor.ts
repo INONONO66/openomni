@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { messageDecisionRules } from "./message-decision";
 import { createExecutor, Bus, CommitFailed, type ExecutionError } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
+import { CorruptRecord, SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type PlainValue } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
@@ -32,10 +32,11 @@ export function createIngressExecutor(clock: () => number): Effect.Effect<Native
       const executor = createExecutor({
         identity: { sessionId: id, role: "resident", parentActionId: null },
         policy: compilePolicySnapshot({ rows: SessionHandleStore.policyRows(row.policyGeneration), generation: row.policyGeneration, kinds: LedgerAction.Kind.options }),
-        ledger: { commit: (action) => commit([action], false).pipe(Effect.map((result) => {
+        ledger: { commit: (action) => commit([action], false).pipe(Effect.flatMap((result) => {
           const receipt = result.receipts[0];
-          if (receipt === undefined) throw new Error("gateway message action receipt missing");
-          return receipt;
+          return receipt === undefined
+            ? Effect.fail(new CorruptRecord({ operation: "gateway.commit", id: action.id }))
+            : Effect.succeed(receipt);
         })) },
         observations: Bus, clock, entropy: () => crypto.randomUUID(),
       });

@@ -64,6 +64,29 @@ test("rejects namespace and direct runner calls", (): void => {
   expect(run(root).code).toBe(1);
 });
 
+test.each([
+  'const FX = await import("effect");\nFX.runPromise({});',
+  'const FX = await import("effect/Effect");\nFX.runPromise({});',
+  'const FX = await import("effect"); const alias = FX;\nalias.runPromise({});',
+  'const { runPromise } = await import("effect");\nrunPromise({});',
+  'const { runPromise: execute } = await import("effect/Effect");\nexecute({});',
+  'const FX = await import("effect");\nFX["runPromise"]({});',
+  'const FX = await import("effect");\nFX.Effect.runPromise({});',
+])("rejects dynamic-import production runners: %s", (source: string): void => {
+  const file = "packages/agent/src/dynamic-runner.ts";
+  const root = fixture([{ path: file, source }]);
+  expect(findings(root)).toContainEqual({ file, line: 2, code: "R2_EFFECT_RUNNER", failing: true });
+  expect(run(root).code).toBe(1);
+});
+
+test("permits dynamic imports of protocol on an excluded surface", (): void => {
+  const root = fixture([
+    { path: "packages/ui/src/dynamic.ts", source: 'const protocol = await import("@openomni/protocol"); protocol["runPromise"]({});' },
+  ]);
+  expect(findings(root)).toEqual([]);
+  expect(run(root).code).toBe(0);
+});
+
 test("rejects a runner passed as a value and in pipe", (): void => {
   const root = fixture([
     { path: "packages/agent/src/value.ts", source: ['import * as Effect from "effect";', "const callback = Effect.runPromise; Effect.void.pipe(Effect.runPromise); callback(Effect.void);"].join("\n") },

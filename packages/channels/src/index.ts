@@ -6,7 +6,7 @@ export type {
   WsConnection,
   WsConnectionData,
 } from "./websocket.js";
-export { decodeChannelFailure, ForeignFailure, InvalidInbound } from "./errors.js";
+export { decodeChannelFailure, ForeignFailure, InvalidInbound, SendAdmissionConflict } from "./errors.js";
 export type { ChannelError } from "./errors.js";
 export { WebSocketFrames } from "./services.js";
 export type { ChannelProvider, ProviderDeliveryRoute } from "./provider/contract.js";

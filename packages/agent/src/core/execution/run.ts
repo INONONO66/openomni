@@ -1,5 +1,5 @@
 import { Cause, Context, Effect, Scope } from "effect";
-import { ForeignFailure, Interrupted, type ExecutionError } from "../../errors";
+import { ForeignFailure, Interrupted, ContextAdmissionError, type ExecutionError } from "../../errors";
 import type { LlmError } from "@openomni/llm";
 import {
   Provider,
@@ -167,7 +167,7 @@ function runModelStep(
           state.contextWindowTokens !== undefined &&
           estimateMessagesTokens(state.messages) > state.contextWindowTokens
         ) {
-          return Effect.die(new Error("model context admission exceeded"));
+          return Effect.fail(new ContextAdmissionError());
         }
         return Effect.void;
       }),

@@ -8,7 +8,6 @@ import * as Ipc from "../packages/ipc/src/errors";
 import * as Ledger from "../packages/ledger/src/errors";
 import * as Llm from "../packages/llm/src/errors";
 import * as Machines from "../packages/machines/src/errors";
-
 const diagnostic = { operation: "fixture", cause: "foreign diagnostic" };
 const message = { message: "fixture" };
 const usage = { inputTokens: 1, outputTokens: 2, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
@@ -62,6 +61,7 @@ const agent = {
   PolicyDenied: new Agent.PolicyDenied({ phase: "pre", ruleIds: [] }),
   ToolBodyFailed: new Agent.ToolBodyFailed({ tool: "fixture", cause: "foreign" }),
   Interrupted: new Agent.Interrupted(),
+  ContextAdmissionError: new Agent.ContextAdmissionError(),
   CommitFailed: new Agent.CommitFailed({ error: ledger.CommitRefused }),
   OutcomeUnknown: new Agent.OutcomeUnknown({ reason: "unsettled" }),
   SessionMissing: new Agent.SessionMissing({ sessionId: "session" }),

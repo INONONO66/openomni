@@ -30,6 +30,8 @@ export function failureEvidence(error: ExecutionError): PlainObject {
       return { tag: error._tag, reason: error.reason };
     case "Interrupted":
       return { tag: error._tag };
+    case "ContextAdmissionError":
+      return { tag: error._tag };
     case "AgentStopError":
       return { tag: error._tag, code: error.code, reason: error.reason };
   }

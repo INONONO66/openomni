@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
-import { createTestAgent, failure } from "../helpers/effect-g2";
+import { createTestAgent } from "../helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
 import type { Model } from "@openomni/protocol";
 import { Bus } from "../../src/index";
@@ -28,13 +28,13 @@ describe("model context admission", () => {
     };
     expect(
       await isolated(
-        failure(
+        Effect.flip(
           createTestAgent({ events: Bus, model, llm }).run(
             runInput([{ role: "user", content: "a prompt wider than a one-token window" }]),
           ),
         ),
       ),
-    ).toMatchObject({ _tag: "ForeignFailure" });
+    ).toMatchObject({ _tag: "ContextAdmissionError" });
     expect(calls).toBe(0);
   });
 });

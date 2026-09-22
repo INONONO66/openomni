@@ -2,7 +2,7 @@ import { Effect, FiberRef } from "effect";
 import { ForeignFailure } from "@openomni/agent";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import { Inbox, Gateway, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
-import type { createGatewayRouter } from "@openomni/channels";
+import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
 import { outboundMessage } from "./terminal-message";
 
 type Ports = Parameters<typeof createGatewayRouter>[0];
@@ -197,7 +197,8 @@ export function prepareMessage(
         return prepareExternal(materialize, send, target, messageId);
       }
       const source = SessionHandleStore.row(sender.id);
-      if (source.leaseOwner === null) throw new Error("session sender has no active lease");
+      if (source.leaseOwner === null)
+        return yield* new SendAdmissionConflict({ message: "session sender has no active lease" });
       const rows = SessionHandleStore.listRows();
       const recipient = send.to.kind === "session" ? SessionHandleStore.row(target) : undefined;
       const origins = SessionHandleStore.inboxRows(source.id).flatMap((row) => {
@@ -210,7 +211,7 @@ export function prepareMessage(
       const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
       const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
       if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
-        throw new Error("child admission bounds missing from pinned policy");
+        return yield* new SendAdmissionConflict({ message: "child admission bounds missing from pinned policy" });
       const depth = sessionDepth(source.parentId, rows);
       return {
         target,

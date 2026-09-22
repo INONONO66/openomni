@@ -73,4 +73,3 @@ test("a recovered tool and its policy decisions remain children of the captured 
       expect(record.committed.find((action) => action.kind === "tool")?.parentId).toBe("original-turn");
     }),
   ));
-
