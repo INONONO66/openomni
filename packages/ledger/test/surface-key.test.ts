@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Channel } from "@openomni/protocol";
 import { Context } from "effect";
 import { LedgerWrites } from "../src/services";
@@ -8,6 +8,8 @@ import { SurfaceKey } from "../src/surface-key";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
 import { materializeSession } from "./helpers/session";
+
+afterEach(() => Storage.reset());
 
 
 test("ledger service and error contracts are runtime values", () => {

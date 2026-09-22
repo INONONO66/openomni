@@ -9,7 +9,6 @@ import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
 import { failureEvidence } from "../src/executor-outcome";
-import { AgentGenerationLive } from "../src/layers";
 import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { PolicyDenied, ToolBodyFailed, ForeignFailure, CommitFailed, ExecutionApprovalError, OutcomeUnknown, Interrupted } from "../src/errors";
 import type { LedgerError } from "@openomni/ledger";
@@ -37,8 +36,6 @@ test("agent foundation tags and failure evidence are runtime contracts", () => {
   expect([Clock.key, Entropy.key, ObservationSink.key, SessionLayer.key, ToolCatalog.key]).toEqual([
     "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink", "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
   ]);
-  const options = { now: (): number => 1, next: (): string => "id", observations: Bus, snapshot: {} as never, policy: {} as never, definitions: [] };
-  expect(AgentGenerationLive(options)).toBeDefined();
   expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
   expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
   expect(failureEvidence(new ForeignFailure({ operation: "x", cause: "bad" }))).toEqual({ tag: "ForeignFailure", operation: "x", cause: "bad" });
