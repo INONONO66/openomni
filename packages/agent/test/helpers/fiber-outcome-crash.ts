@@ -11,7 +11,9 @@ const reopened = z.object({
   repeated: z.array(LedgerAction.Node), results: z.array(LedgerAction.Node),
 });
 
-async function barrier(reader: Pick<ReadableStreamDefaultReader<Uint8Array>, "read">): Promise<string> {
+async function barrier(reader: {
+  read(): Promise<{ readonly done: boolean; readonly value?: Uint8Array }>;
+}): Promise<string> {
   const decoder = new TextDecoder();
   let line = "";
   while (!line.includes("\n")) {

@@ -5,7 +5,7 @@ import { nth } from "./helpers/nth";
 import { answerThenCompact } from "./helpers/effect-g2";
 import { isolated } from "./helpers/isolated";
 import { SessionHandleStore } from "@openomni/ledger";
-import type { LedgerAction, PlainObject } from "@openomni/protocol";
+import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
 import {
   Bus,
   createTurnDispatcher,
@@ -13,6 +13,7 @@ import {
   type SessionRuntime,
 } from "../src/index";
 import { session } from "../src/session-handle";
+import type { SessionHandle, SessionRunnerInput } from "../src/session-contract";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 
 let nextId = 0;
@@ -45,7 +46,7 @@ function compactionIntent(
 }
 function program<E>(
   body: (
-    handle: import("../src/session-contract").SessionHandle,
+    handle: SessionHandle,
     before: readonly LedgerAction.Node[],
   ) => Effect.Effect<void, E>,
   rows: NonNullable<Parameters<typeof seed>[0]> = [],
@@ -55,7 +56,7 @@ function program<E>(
       seed(rows);
 
       const current = runtime();
-      const compactingRunner: SessionRunner = (input) => {
+      const compactingRunner: SessionRunner = (input: SessionRunnerInput) => {
         const { executor } = createTurnDispatcher([], input, current);
         return answerThenCompact(executor, input);
       };
@@ -73,16 +74,16 @@ function program<E>(
 describe("restore_context_projection", () => {
   test("appends the typed compensation, restores the prior projection and leaves the compaction intact", () =>
     isolated(
-      program((handle, before) =>
+      program((handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
         Effect.gen(function* () {
           const compaction = compactionIntent(before);
           expect(
-            foldSessionHistory("ctx", before).map((entry) => entry.info.role),
+            foldSessionHistory("ctx", before).map((entry: Message.WithParts) => entry.info.role),
           ).toEqual(["assistant"]);
           const outcome = yield* handle.restoreContext(compaction.id);
           expect(outcome.terminal).toBe("executed");
           const after = SessionHandleStore.tree("ctx");
-          expect(after.slice(0, before.length)).toEqual(before);
+          expect(after.slice(0, before.length)).toEqual([...before]);
           const appended = after.slice(before.length);
           expect(
             appended.map((action: LedgerAction.Node) => [
@@ -114,7 +115,7 @@ describe("restore_context_projection", () => {
             },
           });
           expect(
-            foldSessionHistory("ctx", after).map((entry) => entry.info.role),
+            foldSessionHistory("ctx", after).map((entry: Message.WithParts) => entry.info.role),
           ).toEqual(["user", "assistant"]);
           expect(foldSessionHistory("ctx", after)).toEqual(
             foldSessionHistory(
@@ -136,7 +137,7 @@ describe("restore_context_projection", () => {
   test("a refused restoration records only the policy decision and changes nothing", () =>
     isolated(
       program(
-        (handle, before) =>
+        (handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
           Effect.gen(function* () {
             const outcome = yield* handle.restoreContext(
               compactionIntent(before).id,
@@ -166,7 +167,7 @@ describe("restore_context_projection", () => {
 
   test("an unknown or unexecuted compaction is refused before anything is recorded", () =>
     isolated(
-      program((handle, before) =>
+      program((handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
         Effect.gen(function* () {
           const compaction = compactionIntent(before);
           const missing = yield* Effect.exit(handle.restoreContext("nope"));
@@ -192,7 +193,7 @@ describe("restore_context_projection", () => {
               name: "ContextRestoreError", code: "context_restore_refused", reason: "not_executed",
             });
           }
-          expect(SessionHandleStore.tree("ctx")).toEqual(before);
+          expect(SessionHandleStore.tree("ctx")).toEqual([...before]);
           expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
         }),
       ),

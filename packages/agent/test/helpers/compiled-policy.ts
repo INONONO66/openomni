@@ -1,14 +1,5 @@
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
-import { LedgerAction, type PolicyRow } from "@openomni/protocol";
-import type { DurableExecutor } from "../../src/executor-contract";
-
-export function runTestOperation(executor: DurableExecutor, kind: LedgerAction.Kind, body: () => Promise<{ ok: boolean }>) {
-  return executor.run({ kind, op: "test", intent: { requested: true }, effect: { completed: true } }, body);
-}
-import { createExecutor, type Executor } from "../../src/index";
-import type { ExecutorOptions } from "../../src/executor-contract";
-import { collector } from "./observation-collector";
-import { nullRetryAlarm } from "./retry-alarm";
+import type { LedgerAction, PolicyRow } from "@openomni/protocol";
 
 const mandatoryPolicyRow: PolicyRow.Row = {
   name: "compaction",
@@ -70,80 +61,6 @@ export function fixtureHashes(ordinal: number) {
   return { prevHash: `fixture-hash-${ordinal - 1}`, actionHash: `fixture-hash-${ordinal}` };
 }
 
-/** An in-memory ExecutionLedger that records every append and mints ordinals. */
-export function recordingLedger(committed: LedgerAction.Append[] = []) {
-  let ordinal = 0;
-  return {
-    committed,
-    entropy: () => `action-${ordinal + 1}`,
-    ledger: {
-      async commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt> {
-        committed.push(action);
-        ordinal += 1;
-        return {
-          action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
-          revision: ordinal,
-        };
-      },
-    },
-  };
-}
-
-/** A durable executor bound to turn-1 of session-1 over a recording ledger. */
-export function turnExecutor(
-  policy: CompiledPolicySnapshot,
-  committed?: LedgerAction.Append[],
-  overrides: Partial<ExecutorOptions> = {},
-) {
-  const record = recordingLedger(committed);
-  const executor = createExecutor({
-    policy,
-    ledger: record.ledger,
-    observations: collector(),
-    identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-    clock: () => 1,
-    entropy: record.entropy,
-    ...overrides,
-  });
-  return { ...record, executor };
-}
-
-interface RecordingExecutorOptions {
-  readonly policy?: CompiledPolicySnapshot;
-  readonly onCommit?: (action: LedgerAction.Append) => void | Promise<void>;
-  readonly onObservation?: (name: string) => void;
-  readonly clock?: () => number;
-}
-
-/** Production executor composition with deterministic in-memory commits and observation taps. */
-export function recordingExecutor(options: RecordingExecutorOptions = {}): {
-  readonly committed: LedgerAction.Append[];
-  readonly executor: Executor;
-} {
-  const committed: LedgerAction.Append[] = [];
-  let ordinal = 0;
-  const executor = createExecutor({
-    policy: options.policy ?? allowAllPolicy,
-    retryAlarm: nullRetryAlarm,
-    ledger: {
-      async commit(action) {
-        committed.push(action);
-        await options.onCommit?.(action);
-        ordinal += 1;
-        return {
-          action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
-          revision: ordinal,
-        };
-      },
-    },
-    observations: { publish: (event) => options.onObservation?.(event.name) },
-    identity: { sessionId: "session-1", role: "resident", parentActionId: null },
-    clock: options.clock ?? (() => 1),
-    entropy: () => `action-${committed.length + 1}`,
-  });
-  return { committed, executor };
-}
-
 /** A manually released commit boundary for deterministic record-before-publish tests. */
 export function actionCommitGate(expectedOpPhase: string): {
   readonly reached: Promise<void>;
@@ -155,7 +72,7 @@ export function actionCommitGate(expectedOpPhase: string): {
   return {
     reached: reached.promise,
     release: release.resolve,
-    async onCommit(action) {
+    async onCommit(action: LedgerAction.Append) {
       if (opPhaseOf(action) !== expectedOpPhase) return;
       reached.resolve();
       await release.promise;
@@ -171,7 +88,7 @@ export function recordingToolObservations(onToolEvent?: (name: string) => void):
   const names: string[] = [];
   return {
     names,
-    observe(name) {
+    observe(name: string) {
       if (!name.startsWith("tool.execution.")) return;
       names.push(name);
       onToolEvent?.(name);

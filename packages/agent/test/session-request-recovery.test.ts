@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
-import type { LedgerAction, SessionTransition } from "@openomni/protocol";
+import type { LedgerAction, PlainValue, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { createTurnDispatcher, defineTool, eraseTool } from "../src/tool-dispatcher";
 import { createSessionRequests } from "../src/session-requests";
@@ -29,7 +29,7 @@ function persisted<A, E>(program: (dbPath: string) => Effect.Effect<A, E, import
 }
 const proof = { kind: "owner", principalId: "owner", evidenceId: "authenticated" } as const;
 function definitions(bodies: string[]) {
-  return ["read", "write", "last"].map((name) =>
+  return ["read", "write", "last"].map((name: string) =>
     eraseTool(
       defineTool(
         {
@@ -40,18 +40,18 @@ function definitions(bodies: string[]) {
           output: z.object({ value: z.string() }).strict(),
           visibility: { model: ["resident"], cell: ["resident"] },
           ...(name === "last" ? { sequential: true as const } : {}),
-          execute: async (input) => {
+          execute: async (input: { text: string }) => {
             bodies.push(`${name}:${input.text}`);
             return { value: input.text };
           },
-          render: (_input, result) => result.value,
+          render: (_input: { text: string }, result: { value: string }) => result.value,
         },
         () => ({ required: name === "write", domainRevisions: {} }),
       ),
     ),
   );
 }
-const calls = ["read", "write", "last"].map((tool) => ({
+const calls = ["read", "write", "last"].map((tool: string) => ({
   id: `call:${tool}`,
   tool,
   input: { text: `original:${tool}` },
@@ -127,11 +127,12 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   if (recovery === undefined) throw new Error("missing recovery");
   const recovering = yield* Effect.forkScoped(recovery);
   yield* Effect.promise(() => bounded(ready.promise));
-  const pending = recovered.executor.approvals?.pending()[0];
-  if (pending === undefined) throw new Error("missing recovered approval");
+  const approvals = recovered.executor.approvals;
+  const pending = approvals?.pending()[0];
+  if (approvals === undefined || pending === undefined) throw new Error("missing recovered approval");
   expect(pending.id).toBe(originalId);
   expect(pending.durable.parsedInput).toEqual({ text: "original:write" });
-  yield* recovered.executor.approvals.answer({
+  yield* approvals.answer({
     request: pending,
     credential: "proof",
     decision: "approve",
@@ -142,7 +143,7 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   expect(bodies).toHaveLength(3);
   expect(
     SessionHandleStore.tree(initial.identity.sessionId).filter(
-      (action) => action.id === `${originalId}:application`,
+      (action: LedgerAction.Node) => action.id === `${originalId}:application`,
     ),
   ).toHaveLength(1);
 })));
@@ -179,9 +180,10 @@ it("a committed application claim prevents replay after result persistence fails
   });
   const settled = yield* Effect.forkScoped(failure(running));
   yield* Effect.promise(() => bounded(ready.promise));
-  const pending = crashed.executor.approvals?.pending()[0];
-  if (pending === undefined) throw new Error("missing approval");
-  yield* crashed.executor.approvals.answer({
+  const approvals = crashed.executor.approvals;
+  const pending = approvals?.pending()[0];
+  if (approvals === undefined || pending === undefined) throw new Error("missing approval");
+  yield* approvals.answer({
     request: pending,
     credential: "proof",
     decision: "approve",
@@ -194,11 +196,11 @@ it("a committed application claim prevents replay after result persistence fails
   yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
   const effects = SessionHandleStore.tree(initial.identity.sessionId).map(
-    (action) => action.effect.value,
+    (action: LedgerAction.Node) => action.effect.value,
   );
   expect(
     effects.filter(
-      (effect) =>
+      (effect: PlainValue) =>
         effect !== null &&
         typeof effect === "object" &&
         !Array.isArray(effect) &&

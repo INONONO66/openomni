@@ -2,13 +2,13 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { requestLedger, turnExecutor, failure } from "../../helpers/effect-g1";
-import { ForeignFailure, Interrupted } from "../../../src/errors";
+import { ForeignFailure } from "../../../src/errors";
 import { LlmRunFailure } from "@openomni/llm";
 import { Storage } from "@openomni/ledger";
 import { createExecutor, type ExecutorOptions } from "../../../src/executor";
 import { runChatAttempts } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
-import { Alarm, LedgerAction, type PlainObject } from "@openomni/protocol";
+import { Alarm, LedgerAction, type PlainObject, type PlainValue, type SessionTransition } from "@openomni/protocol";
 
 
 const usage = {
@@ -55,12 +55,12 @@ function effectRecord(action: LedgerAction.Append): PlainObject {
 
 /** The attempt result rows whose recorded terminal is `terminal`. */
 function attemptResults(actions: readonly LedgerAction.Append[], terminal: string) {
-  return actions.filter((a) => a.kind === "attempt" && effectRecord(a).terminal === terminal);
+  return actions.filter((a: LedgerAction.Append) => a.kind === "attempt" && effectRecord(a).terminal === terminal);
 }
 
 function intents(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kind) {
   return actions.filter(
-    (a) =>
+    (a: LedgerAction.Append) =>
       a.kind === kind &&
       typeof a.intent.value === "object" &&
       a.intent.value !== null &&
@@ -92,7 +92,7 @@ test("executor admits ordered retry children and retains every failed billed usa
   const parents = intents(committed, "llm");
   const attempts = intents(committed, "attempt");
   expect(parents).toHaveLength(1);
-  expect(attempts.map((a) => a.parentId)).toEqual(new Array(3).fill(parents[0]?.id));
+  expect(attempts.map((a: LedgerAction.Append) => a.parentId)).toEqual(new Array(3).fill(parents[0]?.id));
   const failed = attemptResults(committed, "executed").filter((action: LedgerAction.Append) => {
     const evidence = effectRecord(action).evidence;
     return evidence !== null && typeof evidence === "object" && !Array.isArray(evidence) && Array.isArray(evidence.failures);
@@ -101,7 +101,7 @@ test("executor admits ordered retry children and retains every failed billed usa
   for (const result of failed) expect(result.effect.value).toMatchObject({ evidence: { failures: [{ tag: "LlmRunFailure", usage }] } });
   expect(
     committed.filter(
-      (a) =>
+      (a: LedgerAction.Append) =>
         a.kind === "policy.decision" &&
         typeof a.intent.value === "object" &&
         a.intent.value !== null &&
@@ -122,12 +122,12 @@ test("every attempt pins its ordinal, cap and retry reason; the settled one pins
       if (calls < 2) return yield* providerFailure();
       return { type: "stop", evidence };
     }),
-    (value) =>
+    (value: PlainValue) =>
       typeof value === "object" && value !== null && !Array.isArray(value)
         ? (value.evidence ?? null)
         : null,
   );
-  expect(intents(committed, "attempt").map((a) => a.intent.value)).toMatchObject([
+  expect(intents(committed, "attempt").map((a: LedgerAction.Append) => a.intent.value)).toMatchObject([
     { attempt: 1, maxAttempts: 3, retryReason: null },
     { attempt: 2, maxAttempts: 3, retryReason: "transient_error" },
   ]);
@@ -135,7 +135,7 @@ test("every attempt pins its ordinal, cap and retry reason; the settled one pins
     const projected = effectRecord(action).evidence;
     return projected !== null && typeof projected === "object" && !Array.isArray(projected) && projected.usage !== undefined;
   });
-  expect(executed.map((a) => a.effect.value)).toEqual([
+  expect(executed.map((a: LedgerAction.Append) => a.effect.value)).toEqual([
     { phase: "result", terminal: "executed", effect: {}, evidence },
   ]);
 }))));
@@ -149,8 +149,9 @@ test("visible output makes a provider failure terminal without a second admissio
       calls += 1;
       return yield* expectedFailure;
     }), undefined, {}),
-  ) as LlmRunFailure;
-  expect(actual._tag).toBe("LlmRunFailure");
+  );
+  expect(actual).toBeInstanceOf(LlmRunFailure);
+  expect(actual).toMatchObject({ _tag: "LlmRunFailure" });
   expect(calls).toBe(1);
   expect(waits).toEqual([]);
   expect(intents(committed, "attempt")).toHaveLength(1);
@@ -219,12 +220,12 @@ test("interrupt cancels an exactly registered backoff without another provider a
       arm: () => Effect.void,
       settle: () => Effect.void,
       wait: (_fireAt: number, signal?: AbortSignal) =>
-        Effect.async<void, Interrupted>((resume) => {
+        Effect.async<void>((resume: (effect: Effect.Effect<void>) => void) => {
           signal?.addEventListener(
             "abort",
             () => {
               cancelled = true;
-              resume(Effect.fail(new Interrupted()));
+              resume(Effect.interrupt);
             },
             { once: true },
           );
@@ -247,7 +248,7 @@ test.each([
 ] as const)("retry approval %s settles the captured child without reconstructing the provider call", (decision: "approve" | "refuse") => isolated(Effect.scoped(Effect.gen(function* () {
   const waiting = Promise.withResolvers<void>();
   const recording = yield* requestLedger({
-    onRequest: (request) => {
+    onRequest: (request: SessionTransition.Request) => {
       if (request.state === "open") waiting.resolve();
     },
   });
@@ -291,20 +292,21 @@ test.each([
   const terminal = yield* Effect.forkScoped(Effect.either(running));
   yield* Effect.promise(() => waiting.promise).pipe(Effect.timeout("5 seconds"));
   expect(calls).toBe(1);
-  const request = executor.approvals?.pending()[0];
-  if (request === undefined) throw new Error("missing retry approval");
+  const approvals = executor.approvals;
+  const request = approvals?.pending()[0];
+  if (approvals === undefined || request === undefined) throw new Error("missing retry approval");
   expect(
-    intents(recording.ledger.actions?.() ?? [], "attempt").map((action) => action.id),
+    intents(recording.ledger.actions?.() ?? [], "attempt").map((action: LedgerAction.Append) => action.id),
   ).toContain(request.id);
-  yield* executor.approvals.answer({ request, credential: "proof", decision });
+  yield* approvals.answer({ request, credential: "proof", decision });
   const result = yield* Fiber.join(terminal);
   if (decision === "approve") expect(result).toMatchObject({ _tag: "Right", right: { terminal: "executed" } });
   else {
     expect(result).toMatchObject({ _tag: "Left", left: { _tag: "PolicyDenied" } });
     expect(
       (recording.ledger.actions?.() ?? [])
-        .filter((action) => action.kind === "attempt")
-        .map((action) => action.effect.value),
+        .filter((action: LedgerAction.Node) => action.kind === "attempt")
+        .map((action: LedgerAction.Node) => action.effect.value),
     ).toContainEqual(
       expect.objectContaining({
         terminal: "blocked_pre",
@@ -335,7 +337,7 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
   const attemptIntents = intents(actions, "attempt");
   expect(attemptIntents).toHaveLength(2);
   const alarmId = `${attemptIntents[0]?.id}:retry:1`;
-  const armed = LedgerAction.Node.parse(actions.find((action) => action.id === alarmId));
+  const armed = LedgerAction.Node.parse(actions.find((action: LedgerAction.Node) => action.id === alarmId));
   expect(armed.kind).toBe("alarm.arm");
   expect(Alarm.RetrySchedule.parse(effectRecord(armed).spec)).toEqual({
     kind: "retry.scheduled",
@@ -345,7 +347,7 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
   });
   const settled = LedgerAction.Node.parse(
     actions.find(
-      (action) =>
+      (action: LedgerAction.Node) =>
         action.kind === "alarm.arm" &&
         action.parentId === alarmId &&
         effectRecord(action).status === "cancelled",

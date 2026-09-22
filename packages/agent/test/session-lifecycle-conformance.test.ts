@@ -1,9 +1,8 @@
 import { isolated } from "./helpers/isolated";
 import { failure } from "./helpers/effect-g1";
-import type { ExecutionError, SessionError } from "../src/errors";
-import type { Scope } from "effect";
+import { ForeignFailure, type ExecutionError, type SessionError } from "../src/errors";
 import type { SessionHandle } from "../src/session-contract";
-import { Cause, Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/effect-g2";
@@ -87,7 +86,7 @@ interface SessionSnapshot {
     readonly tail: SessionTurn.Snapshot;
 }
 function snapshotOf(sessionId: string): SessionSnapshot | undefined {
-    if (!SessionHandleStore.listRows().some((row) => row.id === sessionId))
+    if (!SessionHandleStore.listRows().some((row: LedgerSession.Row) => row.id === sessionId))
         return undefined;
     return {
         row: SessionHandleStore.row(sessionId),
@@ -147,7 +146,7 @@ function assertInputConsumption(after: SessionSnapshot): void {
             deliveries.set(delivery.inboxId, (deliveries.get(delivery.inboxId) ?? 0) + 1);
     }
     for (const row of after.inbox) {
-        expect(after.actions.some((action) => action.id === row.id)).toBe(true);
+        expect(after.actions.some((action: LedgerAction.Node) => action.id === row.id)).toBe(true);
         expect(deliveries.get(row.id) ?? 0).toBeLessThanOrEqual(1);
         if (row.status === "pending") {
             expect(row.consumedBy).toBeNull();
@@ -160,9 +159,9 @@ function assertInputConsumption(after: SessionSnapshot): void {
 function assertObservations(before: SessionSnapshot | undefined, after: SessionSnapshot, events: readonly L0Observation.ActionCommitted[]): void {
     const appended = after.actions.slice(before?.actions.length ?? 0);
     // Storage and executor may both notify one commit; two notifications are not two actions.
-    const observed = events.filter((committed, index) => committed.sessionId === after.row.id &&
-        events.findIndex((other) => other.id === committed.id) === index);
-    expect(observed.map((committed) => [committed.id, committed.kind])).toEqual(appended.map((action) => [action.id, action.kind]));
+    const observed = events.filter((committed: L0Observation.ActionCommitted, index: number) => committed.sessionId === after.row.id &&
+        events.findIndex((other: L0Observation.ActionCommitted) => other.id === committed.id) === index);
+    expect(observed.map((committed: L0Observation.ActionCommitted) => [committed.id, committed.kind])).toEqual(appended.map((action: LedgerAction.Node) => [action.id, action.kind]));
     for (const committed of observed) {
         expect(committed.revision).toBeGreaterThan(before?.row.revision ?? 0);
         expect(committed.revision).toBeLessThanOrEqual(after.row.revision);
@@ -195,12 +194,10 @@ function runtimeFor(overrides: Partial<SessionRuntime> = {}): SessionRuntime {
         entropy: () => `id-${++nextId}`,
         processId: "conformance",
         scheduleHeartbeat: () => () => undefined,
-        authorizeApproval: () => Effect.gen(function* () {
-            return (yield* toEffect(({
-                kind: "owner",
-                principalId: "owner",
-                evidenceId: "credential",
-            })));
+        authorizeApproval: () => Effect.succeed({
+            kind: "owner" as const,
+            principalId: "owner",
+            evidenceId: "credential",
         }),
         ...overrides,
     };
@@ -274,7 +271,7 @@ function replayEffectFree(expected: ReadonlyMap<string, SessionSnapshot>, dispat
     });
 }
 function kinds(snapshot: SessionSnapshot | undefined): string[] {
-    return (snapshot?.actions ?? []).map((action) => action.kind);
+    return (snapshot?.actions ?? []).map((action: LedgerAction.Node) => action.kind);
 }
 /** `[kind, resolution]` of every action after the four-action request seed. */
 function resolutions(snapshot: SessionSnapshot | undefined): [
@@ -283,10 +280,10 @@ function resolutions(snapshot: SessionSnapshot | undefined): [
 ][] {
     return (snapshot?.actions ?? [])
         .slice(4)
-        .map((action) => [action.kind, objectValue(action.effect.value)?.resolution]);
+        .map((action: LedgerAction.Node) => [action.kind, objectValue(action.effect.value)?.resolution]);
 }
 function hookOf(sessionId: string, actionId: string): string | undefined {
-    const action = SessionHandleStore.tree(sessionId).find((node) => node.id === actionId);
+    const action = SessionHandleStore.tree(sessionId).find((node: LedgerAction.Node) => node.id === actionId);
     const hook = action === undefined ? undefined : objectValue(action.intent.value)?.hook;
     return typeof hook === "string" ? hook : undefined;
 }
@@ -325,7 +322,7 @@ function waveSession(id: string, overrides: Partial<SessionRuntime> = {}) {
         const settled = signal<Exit.Exit<readonly ExecutionBatchResult[], ExecutionError>>();
         const approvals = signal<ExecutionApprovals>();
         const runtime = runtimeFor(overrides);
-        const runner: SessionRunner = (input) => Effect.gen(function* () {
+        const runner: SessionRunner = (input: SessionRunnerInput) => Effect.gen(function* () {
             const executor = waveExecutor(input, runtime);
             if (executor.approvals === undefined)
                 throw new Error("executor without approvals");
@@ -333,7 +330,7 @@ function waveSession(id: string, overrides: Partial<SessionRuntime> = {}) {
             approvals.resolve(executor.approvals);
             // The session owns this wave's fiber; interruption must finish its
             // durable terminal cleanup before the turn can seal.
-            const wave = executor.runBatch(WAVE.map((call) => ({
+            const wave = executor.runBatch(WAVE.map((call: WaveCall) => ({
                 request: {
                     kind: "tool",
                     op: call,
@@ -353,11 +350,11 @@ function waveSession(id: string, overrides: Partial<SessionRuntime> = {}) {
             })), { signal: input.signal });
             // The Effect runner owns the wave lifetime; the session tracks its fibers directly.
 
-            const outcome = yield* wave.pipe(Effect.onExit((exit) => Effect.sync(() => settled.resolve(exit))));
+            const outcome = yield* wave.pipe(Effect.onExit((exit: Exit.Exit<readonly ExecutionBatchResult[], ExecutionError>) => Effect.sync(() => settled.resolve(exit))));
             results.resolve(outcome);
             if (input.signal.aborted)
                 return { kind: "interrupted" };
-            return { kind: "result", text: outcome.map((slot) => slot.terminal).join(",") };
+            return { kind: "result", text: outcome.map((slot: ExecutionBatchResult) => slot.terminal).join(",") };
         });
         const handle = (yield* session({ id, role: "resident", runner }, runtime));
         return {
@@ -398,7 +395,7 @@ function waveExecutor(input: SessionRunnerInput, runtime: SessionRuntime) {
 function openWaveAtApproval(fixture: WaveFixture, text: string) {
     return Effect.gen(function* () {
         sink.resetToolTape();
-        const requested = sink.committed((committed) => committed.sessionId === fixture.handle.id && committed.kind === "request");
+        const requested = sink.committed((committed: L0Observation.ActionCommitted) => committed.sessionId === fixture.handle.id && committed.kind === "request");
         const running = (yield* Effect.forkScoped(fixture.handle.prompt(text)));
         (yield* waitFor(requested, "approval request commit"));
         const approvals = (yield* waitFor(fixture.approvals.promise, "bound approvals"));
@@ -412,21 +409,21 @@ function openWaveAtApproval(fixture: WaveFixture, text: string) {
 }
 function releaseBodies(fixture: WaveFixture, order: readonly WaveCall[]) {
     return Effect.gen(function* () {
-        const parallel = order.filter((call) => call !== "D");
-        (yield* waitFor(Promise.all(parallel.map((call) => fixture.entered[call].promise)), "parallel body entry"));
+        const parallel = order.filter((call: WaveCall) => call !== "D");
+        (yield* waitFor(Promise.all(parallel.map((call: WaveCall) => fixture.entered[call].promise)), "parallel body entry"));
         expect(sink.started).toEqual([...parallel].sort());
         expect(sink.completed).toEqual([]);
         for (const call of parallel)
             fixture.gates[call].resolve();
         (yield* waitFor(fixture.entered.D.promise, "sequential body entry after the parallel barrier"));
         expect(fixture.tape).toEqual([...parallel]);
-        expect(SessionHandleStore.tree(fixture.handle.id).some((action) => action.kind === "tool" && phaseOf(action) === "result")).toBe(false);
+        expect(SessionHandleStore.tree(fixture.handle.id).some((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result")).toBe(false);
         fixture.gates.D.resolve();
     });
 }
 /** `kind:phase` per committed action: the shape of a named snapshot's history. */
 function shape(snapshot: SessionSnapshot | undefined): string[] {
-    return (snapshot?.actions ?? []).map((action) => `${action.kind}:${phaseOf(action) ?? "-"}`);
+    return (snapshot?.actions ?? []).map((action: LedgerAction.Node) => `${action.kind}:${phaseOf(action) ?? "-"}`);
 }
 /** cfg, P, prompt.pre/post, delivery, T, turn.pre: the seven-action session wrapper of 6.3. */
 const TURN_PREFIX = [
@@ -472,7 +469,7 @@ describe("session lifecycle conformance", () => {
                 {
                     name: "RUN",
                     run: () => Effect.gen(function* () {
-                        const entered = sink.committed((committed) => committed.sessionId === "S" && hookOf("S", committed.id) === "turn.pre");
+                        const entered = sink.committed((committed: L0Observation.ActionCommitted) => committed.sessionId === "S" && hookOf("S", committed.id) === "turn.pre");
                         plainRunning = (yield* Effect.forkScoped(plain.prompt("hello")));
                         (yield* waitFor(entered, "turn pre decision"));
                     }),
@@ -480,8 +477,8 @@ describe("session lifecycle conformance", () => {
                 {
                     name: "DONE",
                     run: () => Effect.gen(function* () {
-                        const sealed = sink.committed((committed) => committed.sessionId === "S" &&
-                            SessionHandleStore.turnTerminal(SessionHandleStore.tree("S").find((action) => action.id === committed.id)) !== undefined);
+                        const sealed = sink.committed((committed: L0Observation.ActionCommitted) => committed.sessionId === "S" &&
+                            SessionHandleStore.turnTerminal(SessionHandleStore.tree("S").find((action: LedgerAction.Node) => action.id === committed.id)) !== undefined);
                         gate.resolve();
                         (yield* waitFor(sealed, "terminal result"));
                         expect((yield* waitFor(plainRunning ?? Promise.reject(new Error("no run")), "result"))).toEqual({
@@ -542,7 +539,7 @@ describe("session lifecycle conformance", () => {
             leaseOwner: null,
             leaseFence: 1,
         });
-        expect(done?.inbox.map((row) => row.status)).toEqual(["consumed"]);
+        expect(done?.inbox.map((row: Inbox.Row) => row.status)).toEqual(["consumed"]);
         expect(done?.tail.turns.at(-1)).toMatchObject({
             state: "idle",
             messages: [
@@ -552,7 +549,7 @@ describe("session lifecycle conformance", () => {
         });
         const wait = result.named.get("WAIT")?.get("W");
         expect(shape(wait)).toEqual([...TURN_PREFIX, ...WAVE_PRE, ...WAVE_INTENT, "request:state"]);
-        expect(wait?.requests.map((request) => request.state)).toEqual(["open"]);
+        expect(wait?.requests.map((request: SessionTransition.Request) => request.state)).toEqual(["open"]);
         const approved = result.named.get("WAVE_APPROVED")?.get("W");
         expect(shape(approved)).toEqual([
             ...TURN_PREFIX,
@@ -566,15 +563,15 @@ describe("session lifecycle conformance", () => {
             ...TURN_SUFFIX,
         ]);
         expect(approved?.row.revision).toBe(32);
-        expect(approved?.requests.map((request) => [request.state, request.outcome])).toEqual([
+        expect(approved?.requests.map((request: SessionTransition.Request) => [request.state, request.outcome])).toEqual([
             ["resolved", "answered"],
         ]);
         const results = (yield* waitFor(wave.results.promise, "wave results"));
-        expect(results).toEqual(WAVE.map((call) => ({ terminal: "executed", value: { status: "success", output: call } })));
+        expect(results).toEqual(WAVE.map((call: WaveCall) => ({ terminal: "executed", value: { status: "success", output: call } })));
         expect(wave.tape).toEqual(["C", "A", "B", "D"]);
         const resultsInOrder = (approved?.actions ?? [])
-            .filter((action) => action.kind === "tool" && phaseOf(action) === "result")
-            .map((action) => objectValue(action.effect.value)?.callId);
+            .filter((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result")
+            .map((action: LedgerAction.Node) => objectValue(action.effect.value)?.callId);
         expect(resultsInOrder).toEqual(["A", "B", "C", "D"]);
     })));
     test("lifecycle v1 refusal timeout and interrupt", () => traceTest(() => Effect.gen(function* () {
@@ -682,12 +679,12 @@ describe("session lifecycle conformance", () => {
                 ...blockedTail,
             ]);
             expect(final?.row).toMatchObject({ revision: 30, state: "idle", leaseOwner: null });
-            const blocked = final?.actions.find((action) => action.kind === "tool" && objectValue(action.effect.value)?.terminal === "blocked_pre");
+            const blocked = final?.actions.find((action: LedgerAction.Node) => action.kind === "tool" && objectValue(action.effect.value)?.terminal === "blocked_pre");
             expect(blocked === undefined ? undefined : objectValue(blocked.effect.value)).toMatchObject({
                 callId: "B",
                 reason,
             });
-            expect(final?.requests.map((request) => [request.state, request.outcome])).toEqual([
+            expect(final?.requests.map((request: SessionTransition.Request) => [request.state, request.outcome])).toEqual([
                 [state, id === "REFUSED" ? "denied" : "outcome_unknown"],
             ]);
         }
@@ -718,13 +715,13 @@ describe("session lifecycle conformance", () => {
             "turn:terminal",
         ]);
         expect(cancelled?.row).toMatchObject({ revision: 25, state: "interrupted" });
-        expect(cancelled?.requests.map((request) => [request.state, request.outcome])).toEqual([
+        expect(cancelled?.requests.map((request: SessionTransition.Request) => [request.state, request.outcome])).toEqual([
             ["cancelled", "cancelled"],
         ]);
-        expect(cancelled?.actions.flatMap((action) => action.kind === "tool" && phaseOf(action) === "result"
+        expect(cancelled?.actions.flatMap((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result"
             ? [objectValue(action.effect.value)?.terminal]
             : [])).toEqual(["interrupted", "blocked_pre", "interrupted", "interrupted"]);
-        expect(cancelled?.inbox.map((row) => [row.kind, row.status])).toEqual([
+        expect(cancelled?.inbox.map((row: Inbox.Row) => [row.kind, row.status])).toEqual([
             ["prompt", "consumed"],
             ["interrupt", "consumed"],
         ]);
@@ -735,7 +732,7 @@ describe("session lifecycle conformance", () => {
         const aborted = signal<void>();
         const resumedEntry = signal<SessionRunnerInput>();
         let entries = 0;
-        const runner: SessionRunner = (input) => Effect.gen(function* () {
+        const runner: SessionRunner = (input: SessionRunnerInput) => Effect.gen(function* () {
             entries += 1;
             if (entries === 1) {
                 input.signal.addEventListener("abort", () => aborted.resolve(), { once: true });
@@ -783,7 +780,7 @@ describe("session lifecycle conformance", () => {
                     run: () => Effect.gen(function* () {
                         now = 2000;
                         const swept = signal<SessionRunnerInput>();
-                        (yield* waitFor(sweepSessions(() => (input) => Effect.sync(() => {
+                        (yield* waitFor(sweepSessions(() => (input: SessionRunnerInput) => Effect.sync(() => {
                             swept.resolve(input);
                             return { kind: "result", text: "recovered" };
                         }), runtime), "boot sweep"));
@@ -807,13 +804,13 @@ describe("session lifecycle conformance", () => {
             ],
         })));
         const interrupted = result.named.get("INTERRUPTED")?.get("S");
-        const terminal = interrupted?.actions.find((a) => SessionHandleStore.turnTerminal(a) !== undefined);
+        const terminal = interrupted?.actions.find((a: LedgerAction.Node) => SessionHandleStore.turnTerminal(a) !== undefined);
         expect(SessionHandleStore.turnTerminal(terminal)).toMatchObject({
             kind: "interrupted",
             resumeCount: 0,
         });
         expect(terminal?.id).toBe(firstInput?.resultId);
-        expect(interrupted?.actions.some((a) => a.kind === "turn" &&
+        expect(interrupted?.actions.some((a: LedgerAction.Node) => a.kind === "turn" &&
             phaseOf(a) === "terminal" &&
             objectValue(a.effect.value)?.text === "late")).toBe(false);
         const resumed = result.named.get("RESUME_DONE")?.get("S");
@@ -821,16 +818,16 @@ describe("session lifecycle conformance", () => {
         expect(recovered?.resultId).not.toBe(firstInput?.resultId);
         // Resume keeps the interrupted turn's history: the new turn sees "hello".
         expect(recovered).toMatchObject({ resumeCount: 1, toolsGeneration: 2 });
-        expect(recovered?.messages.map((message) => [message.role, message.text])).toEqual([
+        expect(recovered?.messages.map((message: SessionRunnerInput["messages"][number]) => [message.role, message.text])).toEqual([
             ["user", "hello"],
         ]);
         expect(resumed?.row).toMatchObject({ state: "idle", toolsGeneration: 2, leaseFence: 3 });
-        expect(resumed?.inbox.map((row) => [row.kind, row.status])).toEqual([
+        expect(resumed?.inbox.map((row: Inbox.Row) => [row.kind, row.status])).toEqual([
             ["prompt", "consumed"],
             ["interrupt", "consumed"],
             ["resume", "consumed"],
         ]);
-        expect(resumed?.tail.turns.map((turn) => turn.terminal?.kind)).toEqual([
+        expect(resumed?.tail.turns.map((turn: SessionTurn.Snapshot["turns"][number]) => turn.terminal?.kind)).toEqual([
             "interrupted",
             "result",
         ]);
@@ -1005,7 +1002,7 @@ describe("session lifecycle conformance", () => {
                     name: "A_OPEN",
                     run: () => Effect.gen(function* () {
                         const first = yield* evaluate(fire(1, 1, "poll-1", "A", 1000));
-                        expect(first?.receipts.map((receipt) => receipt.action.id)).toEqual([
+                        expect(first?.receipts.map((receipt: LedgerAction.Receipt) => receipt.action.id)).toEqual([
                             Alarm.occurrenceId("A", 1, "poll-1"),
                             first?.inbox.id ?? "",
                         ]);
@@ -1035,12 +1032,12 @@ describe("session lifecycle conformance", () => {
                     run: () => Effect.gen(function* () {
                         const paused = yield* evaluate(fire(1, 1, "poll-4", "C", 1070));
                         expect(paused?.row.status).toBe("paused");
-                        expect(paused?.receipts.map((receipt) => receipt.action.kind)).toEqual([
+                        expect(paused?.receipts.map((receipt: LedgerAction.Receipt) => receipt.action.kind)).toEqual([
                             "alarm.paused",
                             "prompt",
                         ]);
                         expect(yield* failure(evaluate(fire(1, 1, "poll-5", "D", 1070)))).toMatchObject({ _tag: "AlarmRefused" });
-                        expect(alarms.due(2000).map((row) => row.id)).toEqual([]);
+                        expect(alarms.due(2000).map((row: Alarm.Row) => row.id)).toEqual([]);
                     }),
                 },
                 {
@@ -1099,13 +1096,13 @@ describe("session lifecycle conformance", () => {
             "prompt",
             "alarm.arm",
         ]);
-        expect(final?.inbox.map((row) => [row.kind, row.status, row.content])).toEqual([
+        expect(final?.inbox.map((row: Inbox.Row) => [row.kind, row.status, row.content])).toEqual([
             ["prompt", "pending", "A"],
             ["prompt", "pending", "B"],
             ["prompt", "pending", expect.stringContaining("wake_budget")],
             ["prompt", "pending", "A"],
         ]);
-        expect(new Set(final?.inbox.map((row) => row.id)).size).toBe(4);
+        expect(new Set(final?.inbox.map((row: Inbox.Row) => row.id)).size).toBe(4);
         expect(evaluations).toBe(4);
         // Read through the reopened image: the alarm row survives replay unchanged.
         expect(Storage.get().alarms?.get("A")).toMatchObject({ status: "cancelled", epoch: 2 });
@@ -1122,9 +1119,9 @@ describe("session lifecycle conformance", () => {
             timeout: (q: SessionTransition.Request) => port.timeout(q.requestId, 1100).pipe(Effect.map(() => SessionHandleStore.requestById(q.requestId)?.state ?? "missing")),
         } as const;
         const names = Object.keys(contenders) as (keyof typeof contenders)[];
-        const pairs = names.flatMap((first) => names.filter((second) => second !== first).map((second) => [first, second] as const));
+        const pairs = names.flatMap((first: keyof typeof contenders) => names.filter((second: keyof typeof contenders) => second !== first).map((second: keyof typeof contenders) => [first, second] as const));
         const opened = new Map<string, SessionTransition.Request>();
-        const sessions = pairs.map(([first, second]) => `${first}-${second}`);
+        const sessions = pairs.map(([first, second]: readonly [keyof typeof contenders, keyof typeof contenders]) => `${first}-${second}`);
         const result = (yield* toEffect(runLifecycleTrace({
             sessions: [...sessions, "STALE"],
             dispatched: () => 0,
@@ -1205,7 +1202,7 @@ describe("session lifecycle conformance", () => {
                             principal: { kind: "session", principalId: "impostor", evidenceId: "other" },
                         })))).toBe("rejected");
                         expect(SessionHandleStore.tree(q.sessionId)).toHaveLength(settled);
-                        expect(SessionHandleStore.requestById(q.requestId)?.replies.map((r) => r.responderId)).toEqual(["worker"]);
+                        expect(SessionHandleStore.requestById(q.requestId)?.replies.map((r: SessionTransition.Request["replies"][number]) => r.responderId)).toEqual(["worker"]);
                     }),
                 },
             ],
@@ -1218,9 +1215,9 @@ describe("session lifecycle conformance", () => {
             const final = result.final.get(id);
             const records = resolutions(final);
             expect(records[0]).toEqual(["request", "opened"]);
-            expect(final?.actions.filter((action) => action.id === `${id}:q:resolution`)).toHaveLength(1);
-            expect(records.filter(([, resolution]) => resolution === "duplicate")).toHaveLength(1);
-            expect(records.filter(([, resolution]) => !["opened", "duplicate", undefined].includes(resolution as string))).toHaveLength(2);
+            expect(final?.actions.filter((action: LedgerAction.Node) => action.id === `${id}:q:resolution`)).toHaveLength(1);
+            expect(records.filter(([, resolution]: ReturnType<typeof resolutions>[number]) => resolution === "duplicate")).toHaveLength(1);
+            expect(records.filter(([, resolution]: ReturnType<typeof resolutions>[number]) => !["opened", "duplicate", undefined].includes(resolution as string))).toHaveLength(2);
             expect(final?.requests[0]?.state).not.toBe("open");
         }
         const stale = result.final.get("STALE");
@@ -1235,7 +1232,7 @@ describe("session lifecycle conformance", () => {
             ["prompt", undefined],
         ]);
         // A misrouted answer is refused before any record: neither session keeps it.
-        const misrouted = [...result.final.values()].flatMap((snapshot) => snapshot.actions.filter((action) => action.id.includes("corrupt-session")));
+        const misrouted = [...result.final.values()].flatMap((snapshot: SessionSnapshot) => snapshot.actions.filter((action: LedgerAction.Node) => action.id.includes("corrupt-session")));
         expect(misrouted).toEqual([]);
         expect(resolutions(result.final.get("answer-refuse")).at(-1)).toEqual(["reply", "duplicate"]);
     })));
@@ -1251,7 +1248,7 @@ function assertRequestRaces(result: TraceResult): void {
     // Late reply settles the request as outcome_unknown once; the delayed timer
     // is recorded once as a duplicate input, its retry commits nothing.
     expect(kinds(late).slice(4)).toEqual(["request", "reply", "request", "request"]);
-    expect(late?.actions.slice(4).map((action) => objectValue(action.effect.value)?.resolution)).toEqual(["opened", "late_unknown", "late_unknown", "duplicate"]);
+    expect(late?.actions.slice(4).map((action: LedgerAction.Node) => objectValue(action.effect.value)?.resolution)).toEqual(["opened", "late_unknown", "late_unknown", "duplicate"]);
     const cancelled = result.final.get("QCANCEL");
     expect(cancelled?.requests[0]).toMatchObject({
         state: "cancelled",
@@ -1281,7 +1278,7 @@ function assertRequestRaces(result: TraceResult): void {
         ["prompt", undefined],
         ["request", "duplicate"],
     ]);
-    expect(answered?.inbox.map((row) => [row.id, row.kind, row.status])).toEqual([
+    expect(answered?.inbox.map((row: Inbox.Row) => [row.id, row.kind, row.status])).toEqual([
         ["reply-1", "prompt", "pending"],
     ]);
     const rejected = result.final.get("QREJECT");
@@ -1306,7 +1303,7 @@ function assertLossBoundary(result: TraceResult, parentChild: ReturnType<typeof 
         { state: "pending", destinationReceipt: null },
     ]);
     expect(named(result, "CP_SEALED", "PARENT").inbox).toEqual([]);
-    expect(named(result, "CP_RECEIVED", "CHILD").outbound.map((row) => row.state)).toEqual([
+    expect(named(result, "CP_RECEIVED", "CHILD").outbound.map((row: SessionTransition.Outbound) => row.state)).toEqual([
         "pending",
     ]);
     const receivedParent = named(result, "CP_RECEIVED", "PARENT");
@@ -1321,7 +1318,7 @@ function assertLossBoundary(result: TraceResult, parentChild: ReturnType<typeof 
         message: { replyTo: "mCR", destinationSessionId: "PARENT", terminal: "completed" },
     });
     expect(delivered.destinationReceipt?.id).toBe(delivered.message.messageId);
-    expect(ackedParent.inbox.map((row) => row.id)).toEqual([delivered.message.messageId]);
+    expect(ackedParent.inbox.map((row: Inbox.Row) => row.id)).toEqual([delivered.message.messageId]);
     expect(parentChild.sent()).toHaveLength(2);
     expect(parentChild.sent()[0]).toBe(parentChild.sent()[1]);
     expect(parentChild.consumed()).toBe(1);
@@ -1569,15 +1566,18 @@ function childParentFixture() {
         consumed += 1;
         return { kind: "result", text: "received" };
     });
-    function runtime(loseAck: boolean, dispatch: boolean): SessionRuntime {
+    function runtime(loseAck: boolean, dispatch: boolean, scope: Scope.Scope): SessionRuntime {
         const value = runtimeFor({
-            dispatchOutbound({ message }) {
+            dispatchOutbound({ message }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) {
                 return Effect.gen(function* () {
                     if (!dispatch)
                         throw new Error("process died before wake");
                     sent.push(JSON.stringify(message));
                     const received = (yield* receiveOutbound(message, now));
-                    (yield* toEffect(wakeSession(message.destinationSessionId, parentRunner, value)));
+                    yield* wakeSession(message.destinationSessionId, parentRunner, value).pipe(
+                        Effect.provideService(Scope.Scope, scope),
+                        Effect.mapError((error: SessionError) => new ForeignFailure({ operation: "wakeSession", cause: error.message })),
+                    );
                     if (loseAck)
                         throw new Error("source ack lost");
                     return received.receipt;
@@ -1591,15 +1591,13 @@ function childParentFixture() {
         consumed: () => consumed,
         sealWithoutWake() {
             return Effect.scoped(Effect.gen(function* () {
-                const first = runtime(false, false);
+                const first = runtime(false, false, yield* Effect.scope);
                 (yield* session({ id: "PARENT", role: "resident", runner: parentRunner }, first));
                 const child = (yield* session({
                     id: "CHILD",
                     parentId: "PARENT",
                     role: "worker",
-                    runner: () => Effect.gen(function* () {
-                        return (yield* toEffect(({ kind: "result", text: "done" })));
-                    }),
+                    runner: () => Effect.succeed({ kind: "result" as const, text: "done" }),
                 }, first));
                 // The parent's real source action: the reply observation resolves it.
                 const source = SessionHandleStore.tree("PARENT")[0]?.id;
@@ -1622,16 +1620,16 @@ function childParentFixture() {
         recoverLosingAck() {
             return Effect.scoped(Effect.gen(function* () {
                 now = 2000;
-                const second = runtime(true, true);
-                expect((yield* failure(sweepSessions((row) => (row.id === "PARENT" ? parentRunner : rejectReplay), second)))).toBeInstanceOf(Error);
+                const second = runtime(true, true, yield* Effect.scope);
+                expect((yield* failure(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), second)))).toBeInstanceOf(Error);
                 runtimes.splice(runtimes.indexOf(second), 1);
             }));
         },
         recoverAndAck() {
             return Effect.gen(function* () {
                 now = 33000;
-                const third = runtime(false, true);
-                (yield* toEffect(sweepSessions((row) => (row.id === "PARENT" ? parentRunner : rejectReplay), third)));
+                const third = runtime(false, true, yield* Effect.scope);
+                (yield* toEffect(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), third)));
                 (yield* toEffect(closeSessions(third)));
                 runtimes.splice(runtimes.indexOf(third), 1);
             });
@@ -1643,8 +1641,8 @@ const rejectReplay: SessionRunner = () => Effect.die(new Error("sealed child rep
 function toEffect<A, E = never, R = never>(value: Effect.Effect<A, E, R> | Promise<A> | A): Effect.Effect<A, E, R> {
  return Effect.isEffect(value) ? value : value instanceof Promise ? Effect.promise(() => value) : Effect.succeed(value);
 }
-function waitFor<A, E = never>(value: Promise<A> | Fiber.RuntimeFiber<A, E> | Effect.Effect<A, E, Scope.Scope>, label: string) {
- const program = Effect.isEffect(value) ? value : value instanceof Promise ? Effect.promise(() => value) : Fiber.join(value);
+function waitFor<A, E = never>(value: Promise<A> | Fiber.RuntimeFiber<A, E> | Effect.Effect<A, E, Scope.Scope>, label: string): Effect.Effect<A, E | Error, Scope.Scope> {
+ const program = value instanceof Promise ? Effect.promise(() => value) : "await" in value ? Fiber.join(value) : value;
  return program.pipe(Effect.timeoutFail({duration: SIGNAL_TIMEOUT_MS, onTimeout: () => new Error(label)}));
 }
 function traceTest(body: () => Effect.Effect<void, SessionError | Error, Scope.Scope>) {

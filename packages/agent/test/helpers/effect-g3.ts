@@ -19,16 +19,10 @@ export function createTestAgent(config: ChatAgentConfig) {
 export function runTestAgent(input: ChatAgentInput, config: ChatAgentConfig, sink?: Sink) {
   return createTestAgent(config).run(input, sink);
 }
-export function runUserMessage(config: ChatAgentConfig, content: string) {
-  return runTestAgent({ messages: [{ role: "user", content }], traceContext: { sessionId: "session", runId: "run", traceId: "trace" } }, config);
-}
 export function failure<A, E, R>(program: Effect.Effect<A, E, R> | Promise<A>) {
   if (program instanceof Promise) return Effect.tryPromise({ try: () => program, catch: (error: unknown) => error }).pipe(Effect.flatMap(() => Effect.die("expected a failed Effect")), Effect.catchAll((error: unknown) => Effect.succeed(error)));
   return program.pipe(Effect.exit, Effect.map((exit: Exit.Exit<A, E>): unknown => {
     if (Exit.isSuccess(exit)) throw new Error("expected failed Effect");
     return Cause.squash(exit.cause);
   }));
-}
-export function signal<T>(promise: Promise<T>) {
-  return Effect.promise(() => promise).pipe(Effect.timeout("5 seconds"));
 }

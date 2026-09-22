@@ -25,7 +25,7 @@ export function recordingLedger(committed: LedgerAction.Append[] = []) {
   return { committed, ledger, entropy: () => `action-${ordinal + 1}` };
 }
 
-export const immediateRetryAlarm = {
+const immediateRetryAlarm = {
   arm: () => Effect.void,
   wait: () => Effect.void,
   settle: () => Effect.void,

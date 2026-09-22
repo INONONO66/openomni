@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore, Storage, type LedgerError } from "@openomni/ledger";
 import {
   type LedgerAction,
   PlainValueSchema,
@@ -21,7 +21,7 @@ import { textMessage } from "./messages";
 import { seedPolicy } from "./seed-policy";
 
 import { isolated } from "./isolated";
-import { ForeignFailure } from "../../src/errors";
+import { CommitFailed, ForeignFailure, type SessionError } from "../../src/errors";
 import { crashPoint, crashWitness, sessionId, observations, effectOf, committedCompactionPoints, outboundPoints, type CrashPoint } from "./crash-matrix";
 // Synchronous witness output also permits cuts inside the synchronous store commit port.
 function stop(point: CrashPoint, bodies: string[], pending?: LedgerAction.Append): never {
@@ -96,7 +96,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
     },
   });
   if (point === "tool_wave_between_result_commits") {
-    const tools = ["first", "second"].map((name) =>
+    const tools = ["first", "second"].map((name: string) =>
       stringQueryTool(name, name, async () => {
         bodies.push(name);
         return name;
@@ -113,7 +113,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
       { observations, clock: recording.clock, entropy: recording.entropy },
     );
     return yield* dispatcher.executeWave(
-      tools.map((tool) => ({ id: tool.name, tool: tool.name, input: {} })),
+      tools.map((tool: (typeof tools)[number]) => ({ id: tool.name, tool: tool.name, input: {} })),
       {
         sessionId,
         turnId: recording.identity.turnId,
@@ -147,7 +147,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
                     createdAt: 100,
                     origin: { encodingVersion: 1, value: {} },
                     parentActionId: null,
-                  }));
+                  }).pipe(Effect.mapError((error: LedgerError) => new CommitFailed({ error }))));
           }
           return "checkpoint";
         }),
@@ -169,7 +169,7 @@ function workerClock(point: CrashPoint, bodies: string[]) {
   if (
     point === "delivery_ack_committed_before_owner_cleanup" &&
     bodies.includes("accepted") &&
-    SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "delivered")
+    SessionHandleStore.outboundRows(sessionId).some((item: ReturnType<typeof SessionHandleStore.outboundRows>[number]) => item.state === "delivered")
   )
     stop(point, bodies);
   return 100;
@@ -180,7 +180,7 @@ function outboundPort(
   bodies: string[],
   dbPath: string,
 ): SessionRuntime["dispatchOutbound"] {
-  return ({ message }) => Effect.gen(function* () {
+  return ({ message }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) => Effect.gen(function* () {
     if (point === "outbound_flood_deadline_before_timer_rearm") {
       bodies.push("flood");
       return yield* new ForeignFailure({ operation: "outbound.flood", cause: "flood" });
@@ -248,7 +248,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
         sourceActionId: commission.receipt.action.id,
       },
     })
-    .pipe(Effect.catchAll((error) => {
+    .pipe(Effect.catchAll((error: SessionError) => {
       if (point !== "outbound_flood_deadline_before_timer_rearm") return Effect.fail(error);
       if (error._tag !== "ForeignFailure" || error.operation !== "outbound.flood") return Effect.fail(error);
       return Effect.sync(() => stop(point, bodies));
