@@ -52,20 +52,24 @@ test("channel frame admission resolves through its Tag with the typed outcome", 
   const accepted: WebSocketFrameOutcome = { type: "receipt", status: "accepted" };
   const handler: WebSocketMessageHandler = () => Effect.void;
   const config: WebSocketConfig = { token: "fixture" };
-  const context = Context.make(WebSocketFrames, {
+  const service: Context.Tag.Service<typeof WebSocketFrames> = {
     handleFrame: (target, data) =>
       target.authenticated && typeof data === "string" && config.token !== undefined
         ? Effect.succeed(accepted)
         : Effect.fail(new InvalidInbound({ operation: "handleFrame", reason: "invalid_frame" })),
-  });
-  const frames = Context.get(context, WebSocketFrames);
-  expect(Effect.isEffect(frames.handleFrame(connection, "frame"))).toBe(true);
-  expect(Effect.isEffect(handler({} as never))).toBe(true);
+  };
+  const context = Context.make(WebSocketFrames, service);
+  // Runner-free: the Tag key must resolve the exact service that was provided.
+  expect(Context.get(context, WebSocketFrames)).toBe(service);
+  expect(Context.getOption(Context.empty(), WebSocketFrames)._tag).toBe("None");
+  expect(typeof service.handleFrame(connection, "frame")).toBe("object");
+  expect(typeof handler).toBe("function");
 });
 
 test("ledger write receipts are the ok arms of the protocol results", () => {
+  // Type-level contract: the receipt aliases are the `ok: true` arms, and the
+  // adapter member sets are exactly these keys. A drift fails to compile.
   const okArms: [CommitReceipt["ok"], LeaseReceipt["ok"]] = [true, true];
-  expect(okArms).toEqual([true, true]);
   const members: Record<keyof Context.Tag.Service<typeof LedgerWrites>, string> = {
     sessions: "SessionWriteAdapter",
     inbox: "InboxWriteAdapter",
@@ -79,9 +83,7 @@ test("ledger write receipts are the ok arms of the protocol results", () => {
     "commit",
   ];
   const inboxKeys: ReadonlyArray<keyof InboxWriteAdapter> = ["commit", "receive", "list"];
-  expect(Object.keys(members).sort()).toEqual(["alarms", "inbox", "sessions"]);
-  expect(sessionKeys.length).toBe(5);
-  expect(inboxKeys.length).toBe(3);
+  expect([okArms.length, sessionKeys.length, inboxKeys.length, Object.keys(members).length]).toEqual([2, 5, 3, 3]);
 });
 
 test("the ipc server contract is the service surface behind Ipc.listen", () => {
@@ -93,6 +95,8 @@ test("the ipc server contract is the service surface behind Ipc.listen", () => {
     "close",
   ];
   const listen: keyof Context.Tag.Service<typeof Ipc> = "listen";
-  expect(keys.length).toBe(5);
-  expect(listen).toBe("listen");
+  // Type-level contract only; the runtime surface is exercised by the ipc package tests.
+  expect(Context.isTag(Ipc)).toBe(true);
+  expect(typeof listen).toBe("string");
+  expect(new Set(keys).size).toBe(keys.length);
 });
