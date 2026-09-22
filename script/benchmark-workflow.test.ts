@@ -108,7 +108,10 @@ test("all events collect the accepted SHA and head on one runner before the sole
   expect(steps.filter((step) => step.run?.includes(decision))).toHaveLength(1);
   expect(workflow.jobs.benchmark.env).toEqual({
     BENCHMARK_REGRESSION_PERCENT: "20",
-    BENCHMARK_ACCEPT_BASELINE: "${{ (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark:accept-baseline')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.accept_baseline == 'true') }}",
+    BENCHMARK_ACCEPT_BASELINE: [
+      "$",
+      "{{ (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark:accept-baseline')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.accept_baseline == 'true') }}",
+    ].join(""),
   });
   expect(steps[reference]?.run).toContain('REFERENCE_WORKTREE="$RUNNER_TEMP/benchmark-reference"');
   expect(steps[reference]?.run).toContain('printf \'REFERENCE_WORKTREE=%s\\n\' "$REFERENCE_WORKTREE" >> "$GITHUB_ENV"');
