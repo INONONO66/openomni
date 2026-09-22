@@ -99,7 +99,27 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     };
   }
 
-  function stageAll<R>(items: readonly ExecutionBatchItem<R>[]) {
+  function stageAll<R>(items: readonly ExecutionBatchItem<R>[]): Effect.Effect<Stage<R>[], ExecutionError> {
+    if (items.length === 1) {
+      const item = items[0]!;
+        return Effect.suspend<Stage<R>[], ExecutionError, never>(() => {
+          const request = { ...item.request, intent: structuredClone(item.request.intent) };
+        if (!kinds.has(request.kind))
+          return Effect.fail(new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` }));
+        const kind = request.kind as LedgerAction.Kind;
+        return decide(request, "pre", request.intent).pipe(Effect.flatMap((pre) => {
+          const stage = { item, request, kind, pre };
+          const original = request.originalAction;
+          const intent: Effect.Effect<LedgerAction.Receipt | undefined, ExecutionError> = pre.verdict === "deny" ? Effect.succeed(undefined)
+            : original !== undefined ? Effect.succeed({ action: original, revision: original.ordinal })
+            : record.appendIntent({
+              parentId: options.identity.parentActionId, kind, op: request.op, value: pre.value,
+              invocation: invocationFor(stage, pre.receipt.action.id),
+            });
+          return intent.pipe(Effect.map((receipt) => [{ ...stage, intent: receipt }]));
+        }));
+      });
+    }
     return Effect.gen(function* () {
       const staged: Omit<Stage<R>, "intent">[] = [];
       for (const item of items) {
@@ -285,24 +305,20 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
   }
 
   function runSingle<R>(single: Stage<R>, signal: AbortSignal, controller: AbortController, restore: Restore) {
-    return Effect.gen(function* () {
-      const decision = yield* restore(approval(single, signal));
+    return approval(single, signal).pipe(Effect.flatMap((decision) => {
       if (single.pre.verdict === "deny" || decision !== "approve")
-        return [yield* finishStage(single, decision, undefined)];
-      if (single.request.kind === "llm" && single.request.toolObservation === undefined && options.signal === undefined) {
-        let body: BodyExit | undefined;
-        yield* executeBody(single, signal, false, (result) => { body = result; });
-        return [yield* finishStage(single, decision, body)];
-      }
+        return finishStage(single, decision, undefined).pipe(Effect.map((result) => [result]));
       let body: BodyExit | undefined;
-      const fiber = yield* Effect.fork(executeBody(single, signal, false, (result) => { body = result; }));
-      const awaited = yield* Effect.exit(restore(Fiber.await(fiber)));
-      if (Exit.isFailure(awaited)) {
-        controller.abort();
-        yield* Fiber.await(fiber);
-      }
-      return [yield* finishStage(single, decision, body)];
-    });
+      return Effect.fork(executeBody(single, signal, false, (result) => { body = result; })).pipe(
+        Effect.flatMap((fiber) => Effect.exit(restore(Fiber.await(fiber))).pipe(
+          Effect.flatMap((awaited) => Exit.isFailure(awaited)
+            ? Effect.sync(() => controller.abort()).pipe(Effect.flatMap(() => Fiber.await(fiber)))
+            : Effect.void),
+          Effect.flatMap(() => finishStage(single, decision, body)),
+          Effect.map((result) => [result]),
+        )),
+      );
+    }));
   }
 
   function runStages<R>(stages: readonly Stage<R>[], signal: AbortSignal, controller: AbortController, guarded: boolean, restore: Restore) {
@@ -332,18 +348,18 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     });
   }
 
-  function runBatch<R>(items: readonly ExecutionBatchItem<R>[], control: WaveControl) {
-    return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
+  function runBatch<R>(items: readonly ExecutionBatchItem<R>[], control: WaveControl): Effect.Effect<readonly ExecutionResult[], ExecutionError, Exclude<R, RawToolSlots | Scope.Scope>> {
+    return Effect.uninterruptibleMask((restore) => {
       const controller = new AbortController();
       const signal = combinedSignal(controller.signal, control.signal, options.signal);
-      const stages = yield* stageAll(items);
-      const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
-      // A single unguarded action has no siblings or concurrent approvals to join.
-      const single = stages.length === 1 ? stages[0] : undefined;
-      return yield* single !== undefined && !guarded
-        ? runSingle(single, signal, controller, restore)
-        : runStages(stages, signal, controller, guarded, restore);
-    }));
+      return stageAll(items).pipe(Effect.flatMap((stages) => {
+        const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
+        const single = stages.length === 1 ? stages[0] : undefined;
+        return single !== undefined && !guarded
+          ? runSingle(single, signal, controller, restore)
+          : runStages(stages, signal, controller, guarded, restore);
+      }));
+    });
   }
 
   function run<T extends PlainValue, R>(request: ExecutionRequest,
