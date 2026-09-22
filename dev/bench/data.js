@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789985640209,
+  "lastUpdate": 1790085887957,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -74277,6 +74277,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 181640,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d92ec5a65144b56db2eaa12b79ad761ecb8c5648",
+          "message": "fix(quality-audit): count owned-origin type sites only, fold duplicate rows (#1177)\n\nThe first scheduled audit (run 35590012483) reported 49,426 type findings,\n95% of them foreign-origin rows reached only through zod/lib.d.ts\ndeclarations (typed schemas like z.object flagged 12x per line). Those\ndrove 50 of the 51 per-file debt issues. The per-PR ratchet had already\nignored foreign rows; the audit now does the same and folds identical\n(path, line, kind, symbol) rows into one counted finding.\n\nPart of #945",
+          "timestamp": "2026-09-22T23:01:26+09:00",
+          "tree_id": "b7c1f3e0ba8a3febb3a065b7e17713937918e0b9",
+          "url": "https://github.com/INONONO66/openomni/commit/d92ec5a65144b56db2eaa12b79ad761ecb8c5648"
+        },
+        "date": 1790085887202,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1071,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1919,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1426892,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 385722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6971740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 152,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1132,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 696,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 165733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 848720,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 724703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 102910376,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 9807347,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19880,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 189832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 955342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 256845,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 16563774,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 181724,
             "unit": "ns/op"
           }
         ]
