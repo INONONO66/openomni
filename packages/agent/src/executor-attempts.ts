@@ -104,19 +104,28 @@ export function createAttemptRunner(
     });
   }
   return function runAttempts<T extends PlainValue>(parent: LedgerAction.Receipt, attempts: LlmAttempts<T>): Effect.Effect<T, ExecutionError> {
-    return Effect.gen(function* () {
+    return Effect.suspend(() => {
       const failures: string[] = [];
       let instantFailures = 0;
-      for (let attempt = 1; ; attempt += 1) {
-        if (options.signal?.aborted) return yield* Effect.interrupt;
-        const { prepared, intent } = yield* admitAttempt(parent, attempts, attempt, failures);
-        const started = options.clock();
-        const outcome = yield* executeAttempt(prepared, attempts, intent);
-        if (Exit.isSuccess(outcome)) return outcome.value;
-        const failure = yield* retryableFailure(outcome.cause);
-        instantFailures = Retry.isInstantTransportFailure(failure, options.clock() - started) ? instantFailures + 1 : 0;
-        failures.push(yield* scheduleRetry(attempts, failure, attempt, instantFailures, prepared, intent));
-      }
+      const loop = (attempt: number): Effect.Effect<T, ExecutionError> => {
+        if (options.signal?.aborted) return Effect.interrupt;
+        return admitAttempt(parent, attempts, attempt, failures).pipe(Effect.flatMap(({ prepared, intent }) => {
+          const started = options.clock();
+          return executeAttempt(prepared, attempts, intent).pipe(Effect.flatMap((outcome) => {
+            if (Exit.isSuccess(outcome)) return Effect.succeed(outcome.value);
+            return retryableFailure(outcome.cause).pipe(Effect.flatMap((failure: ExecutionError): Effect.Effect<T, ExecutionError> => {
+              instantFailures = Retry.isInstantTransportFailure(failure, options.clock() - started) ? instantFailures + 1 : 0;
+              return scheduleRetry(attempts, failure, attempt, instantFailures, prepared, intent).pipe(
+                Effect.flatMap((reason) => {
+                  failures.push(reason);
+                  return loop(attempt + 1);
+                }),
+              );
+            }));
+          }));
+        }));
+      };
+      return loop(1);
     });
   };
 }
