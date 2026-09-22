@@ -1,8 +1,8 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkEffectBoundaryFindings, type BoundaryFinding } from "./check-effect-boundaries";
+import { checkEffectBoundaries, checkEffectBoundaryFindings, main, type BoundaryFinding } from "./check-effect-boundaries";
 
 const roots: string[] = [];
 const checker = join(import.meta.dir, "check-effect-boundaries.ts");
@@ -326,6 +326,28 @@ test("fails closed on invalid source and invalid manifests", (): void => {
   const result = run(manifestRoot);
   expect(result.code).toBe(1);
   expect(result.output).toContain('"code":"ANALYSIS_ERROR"');
+});
+
+test("CLI entry reports clean, refused, and analysis-error results", (): void => {
+  const clean = fixture([]);
+  const denied = fixture([{ path: "packages/ui/src/view.ts", source: 'import { Effect } from "effect";' }]);
+  const broken = fixture([{ path: "script/broken.ts", source: "export const broken = ;" }]);
+  const output = spyOn(console, "log").mockImplementation((): void => undefined);
+  try {
+    expect(checkEffectBoundaries(denied)).toEqual(["packages/ui/src/view.ts:1 R1_EFFECT_IMPORT"]);
+    expect(main(["--root", clean])).toBe(0);
+    expect(output.mock.calls).toEqual([]);
+    expect(main(["--root", denied])).toBe(1);
+    expect(output.mock.calls.at(-1)).toEqual(["packages/ui/src/view.ts:1 R1_EFFECT_IMPORT"]);
+    expect(main(["--root", broken])).toBe(1);
+    expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toEqual({
+      code: "ANALYSIS_ERROR", file: "script/broken.ts", line: 1, failing: true,
+    });
+    expect(main(["--update"])).toBe(1);
+    expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toMatchObject({ code: "INVALID_ARGUMENTS" });
+  } finally {
+    output.mockRestore();
+  }
 });
 
 test("permits a clean runtime module", (): void => {
