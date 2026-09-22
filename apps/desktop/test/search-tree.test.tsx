@@ -134,13 +134,17 @@ describe("the field is wired to the tree it filters", () => {
 });
 
 describe("the tree still reads as a tree under the search field", () => {
-  test("Given the sidebar, When rendered, Then the two depths survive", () => {
+  test("Given the sidebar, When rendered, Then groups are headings and rows sit flush under them", () => {
+    // The project row reads as a heading (`aria-expanded`), the sessions as
+    // the list under it — depth is stated by the heading, not by an indent.
     const levels = [...html.matchAll(/data-level="(\d)"/g)].map((hit) => Number(hit[1]));
+    const projects = ordered.groups.flatMap((kind) => kind.projects).length;
 
-    expect(levels.filter((level) => level === 0)).toHaveLength(
-      ordered.groups.flatMap((kind) => kind.projects).length,
+    expect(levels).toHaveLength(projects + sessions.length);
+    expect(levels.every((level) => level === 0)).toBe(true);
+    expect(html.match(/aria-expanded="(true|false)"[^>]*role="treeitem"/g)).toHaveLength(
+      projects,
     );
-    expect(levels.filter((level) => level === 1)).toHaveLength(sessions.length);
   });
 
   test("Given a selection, When rendered, Then exactly one row is current", () => {

@@ -21,7 +21,22 @@ const LEVEL: Record<TreeLevel, string> = {
  * only when it is the current one. A row that can open (`expanded` is a
  * boolean) leads with a chevron that turns; a leaf has no glyph at all, so a
  * closed group and a leaf differ by the one mark that means something.
+ *
+ * A group row reads as a heading, not as a sibling of the rows it opens: the
+ * meta size, the faint tone, no fill of its own. The reference console labels
+ * its groups the same way, so the eye lands on the sessions and reads the
+ * group name only when it wants the boundary.
  */
+function height(double: boolean, group: boolean): string {
+  if (double) return "min-h-7 py-1.5";
+  return group ? "h-6" : "h-7";
+}
+
+function tone(current: boolean, group: boolean): string {
+  if (group) return "text-fg-faint text-meta hover:text-fg-muted";
+  if (current) return "bg-raised font-medium text-fg text-label";
+  return "text-fg text-label hover:bg-hover";
+}
 export function TreeRow({
   level = 0,
   current = false,
@@ -44,9 +59,10 @@ export function TreeRow({
     <BaseButton
       aria-current={current ? "true" : undefined}
       aria-expanded={expanded}
-      className={`focus-ring flex w-full select-none items-center gap-1.5 rounded-sm pr-2 text-left text-label transition-quiet active:bg-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 ${
-        current ? "bg-raised font-medium text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
-      } ${secondary == null ? "h-7" : "min-h-7 py-1.5"} ${LEVEL[level]}`}
+      className={`focus-ring flex w-full select-none items-center gap-1.5 rounded-sm pr-2 text-left transition-quiet active:bg-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 ${tone(
+        current,
+        expanded !== undefined,
+      )} ${height(secondary != null, expanded !== undefined)} ${LEVEL[level]}`}
       data-density={secondary == null ? "single" : "double"}
       data-level={level}
       data-ui={UI_NAMES.TreeRow}
@@ -55,7 +71,7 @@ export function TreeRow({
       {expanded !== undefined && (
         <ChevronRight
           aria-hidden
-          className={`size-3.5 transition-quiet motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
+          className={`size-3 transition-quiet motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
         />
       )}
       <span className="min-w-0 flex-1 truncate">

@@ -17,7 +17,7 @@ const SHAPE: Record<Shape, ReactNode> = {
   check: <path d="m3 7 3 3 5-6" />,
   cross: <path d="m3 3 8 8m0-8-8 8" />,
   pause: <path d="M5 3v8m4-8v8" />,
-  hollow: <circle cx="7" cy="7" r="3" />,
+  hollow: <circle cx="7" cy="7" r="4.5" />,
 };
 export function StatusGlyph(props: {
   readonly tone: Tone;

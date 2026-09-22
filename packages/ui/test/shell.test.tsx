@@ -490,6 +490,21 @@ describe("a tree row", () => {
     expect(html).toContain("bg-raised");
   });
 
+  test("Given a group row, When rendered, Then it reads as a heading, not a sibling", () => {
+    // The group name is a boundary the eye reads only when it wants one: meta
+    // size, faint tone, a shorter line, and never a fill of its own.
+    const html = renderToStaticMarkup(<TreeRow expanded>a</TreeRow>);
+    expect(html).toContain("text-meta");
+    expect(html).toContain("text-fg-faint");
+    expect(html).toContain("h-6");
+    expect(html).not.toContain("h-7");
+    expect(html).not.toContain("bg-raised");
+    expect(html).not.toContain("hover:bg-hover");
+    const leaf = renderToStaticMarkup(<TreeRow>a</TreeRow>);
+    expect(leaf).toContain("text-label");
+    expect(leaf).not.toContain("text-fg-faint");
+  });
+
   test("Given a group row, When rendered, Then only it carries the chevron and its state", () => {
     const html = renderToStaticMarkup(<TreeRow expanded>a</TreeRow>);
     expect(html).toContain('aria-expanded="true"');

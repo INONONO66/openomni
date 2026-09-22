@@ -234,7 +234,7 @@ function SearchSessionRow({
       aria-selected={active}
       current={current || active}
       id={rowId(session.id)}
-      level={1}
+      level={0}
       onClick={(event) => onSelect(session.id, event.metaKey || event.ctrlKey)}
       onKeyDown={(event) => onKeyDown(event, session.id)}
       ref={(node: HTMLButtonElement | null) => registerRef(session.id, node)}
@@ -243,7 +243,7 @@ function SearchSessionRow({
       <Highlight
         className="block min-w-0 truncate"
         runs={highlightRuns(session.title, entry.spans)}
-        tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
+        tone={entry.spans.length > 0 ? "muted" : "fg"}
       />
     </SessionRow>
   );
