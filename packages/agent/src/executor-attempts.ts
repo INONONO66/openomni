@@ -52,33 +52,37 @@ export function createAttemptRunner(
       return yield* new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds });
     });
   }
-  function admitAttempt<T extends PlainValue>(parent: LedgerAction.Receipt, attempts: LlmAttempts<T>, attempt: number, failures: readonly string[]) {
-    return Effect.gen(function* () {
-      const prepared = yield* attempts.prepare(attempt, failures);
-      const policy = attempt === 1 ? undefined : yield* admit(prepared.request, parent);
-      if (policy !== undefined && (policy.verdict === "deny" || policy.verdict === "transform"))
-        return yield* new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds });
-      yield* prepared.admit();
-      if (options.signal?.aborted) return yield* Effect.interrupt;
-      const intent = yield* record.appendIntent({
-        kind: "attempt", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
-        invocation: { effectHash: canonicalDigest(prepared.request.effect), attempt, maxAttempts: Retry.MAX_ATTEMPTS, retryReason: failures.at(-1) ?? null },
-      });
-      yield* approveAttempt(prepared.request, intent, policy);
-      return { prepared, intent };
-    });
+  function admitAttempt<T extends PlainValue>(parent: LedgerAction.Receipt, attempts: LlmAttempts<T>, attempt: number, failures: readonly string[]): Effect.Effect<{ prepared: Prepared<T>; intent: LedgerAction.Receipt }, ExecutionError> {
+    return attempts.prepare(attempt, failures).pipe(Effect.flatMap((prepared) => {
+      const policyEffect: Effect.Effect<Admission | undefined, ExecutionError> = attempt === 1
+        ? Effect.succeed<Admission | undefined>(undefined)
+        : admit(prepared.request, parent);
+      return policyEffect.pipe(Effect.flatMap((policy) => {
+        if (policy !== undefined && (policy.verdict === "deny" || policy.verdict === "transform"))
+          return Effect.fail(new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds }));
+        return prepared.admit().pipe(
+          Effect.flatMap((): Effect.Effect<void, ExecutionError> => options.signal?.aborted ? Effect.interrupt : Effect.void),
+          Effect.flatMap(() => record.appendIntent({
+            kind: "attempt", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
+            invocation: { effectHash: canonicalDigest(prepared.request.effect), attempt, maxAttempts: Retry.MAX_ATTEMPTS, retryReason: failures.at(-1) ?? null },
+          })),
+          Effect.flatMap((intent) => approveAttempt(prepared.request, intent, policy).pipe(
+            Effect.as({ prepared, intent }),
+          )),
+        );
+      }));
+    }));
   }
   function executeAttempt<T extends PlainValue>(prepared: Prepared<T>, attempts: LlmAttempts<T>, intent: LedgerAction.Receipt) {
-    return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
-      // Attempt bodies require no Scope; the enclosing executor owns resources.
-      const exit = yield* Effect.exit(restore(prepared.body()));
-      yield* record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
-        phase: "result", effect: prepared.request.effect,
-        terminal: Exit.isFailure(exit) && Cause.isInterrupted(exit.cause) ? "interrupted" : "executed",
-        evidence: Exit.isSuccess(exit) ? attempts.evidence?.(exit.value) ?? null : causeEvidence(exit.cause),
-      });
-      return exit;
-    }));
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.exit(restore(prepared.body())).pipe(
+        Effect.flatMap((exit) => record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
+          phase: "result", effect: prepared.request.effect,
+          terminal: Exit.isFailure(exit) && Cause.isInterrupted(exit.cause) ? "interrupted" : "executed",
+          evidence: Exit.isSuccess(exit) ? attempts.evidence?.(exit.value) ?? null : causeEvidence(exit.cause),
+        }).pipe(Effect.as(exit))),
+      ),
+    );
   }
   function scheduleRetry<T extends PlainValue>(attempts: LlmAttempts<T>, failure: ExecutionError, attempt: number, instantFailures: number, prepared: Prepared<T>, intent: LedgerAction.Receipt) {
     return Effect.gen(function* () {
