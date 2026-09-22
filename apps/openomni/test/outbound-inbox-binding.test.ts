@@ -11,6 +11,7 @@ import { dispatchOutboundMessage } from "../src/composition/terminal-message";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 
 beforeEach(() => {
+  Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
   seedKernelPolicyRows();
   Bus.reset();
@@ -56,27 +57,30 @@ test("the receiving consumer may only commit the exact outbound letter", async (
   materialize("child");
   materialize("parent");
   const dispatch = dispatchOutboundMessage(
-    () => Effect.gen(function* () {
-      yield* commitMessageInbox({
-        id: "different-letter",
-        sessionId: message.destinationSessionId,
-        kind: "prompt",
-        content: message.content,
-        origin: { encodingVersion: 1, value: message },
-        createdAt: 100,
-        parentActionId: null,
-      });
-      return {
-        status: "executed" as const,
-        handle: { messageId: "different-letter", target: "parent" },
-        delivery: { kind: "session" as const },
-      };
-    }).pipe(Effect.mapError(decodeChannelFailure("test.inbox"))),
+    () =>
+      Effect.gen(function* () {
+        yield* commitMessageInbox({
+          id: "different-letter",
+          sessionId: message.destinationSessionId,
+          kind: "prompt",
+          content: message.content,
+          origin: { encodingVersion: 1, value: message },
+          createdAt: 100,
+          parentActionId: null,
+        });
+        return {
+          status: "executed" as const,
+          handle: { messageId: "different-letter", target: "parent" },
+          delivery: { kind: "session" as const },
+        };
+      }).pipe(Effect.mapError(decodeChannelFailure("test.inbox"))),
     () => 100,
   );
-  const failure = await runEffect(Effect.flip(
-    dispatch({ message, authority: { owner: "runner", fence: 1 }, policy: compiledPolicy() }),
-  ));
-  expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "message.commit" });
+  const failure = await runEffect(
+    Effect.flip(
+      dispatch({ message, authority: { owner: "runner", fence: 1 }, policy: compiledPolicy() }),
+    ),
+  );
+  expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "message.outbound" });
   expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
 });

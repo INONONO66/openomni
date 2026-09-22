@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { acquireEffect, runEffect } from "./helpers/effect";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -24,6 +24,8 @@ import { seedKernelPolicyRows } from "../src/policy-seed";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import { bounded, commitInterrupt, ProviderRequest as Request } from "./helpers/session-wave";
 
+beforeEach(() => Storage.reset());
+
 function response(names: readonly string[]): Response {
   const blocks =
     names.length > 0
@@ -43,7 +45,7 @@ function response(names: readonly string[]): Response {
 // The second slot of a two-tool wave that never completed: a lost process is
 // settled from evidence as outcome_unknown, never dressed up as a cancel.
 const lostSlot = {
-  "partial-wave": "Error: tool execution cancelled",
+  "partial-wave": "Error: fiber_interrupted",
   "crash-window": "Error: B outcome unknown: the process was lost before a result was recorded",
   "after-wave": "Error: tool execution cancelled",
   "error-window": "Error: tool execution cancelled",
@@ -67,10 +69,35 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         return response(requests.length === 1 ? names : []);
       },
     });
+    let saved = false;
+    const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
     let runtime: SessionRuntime = {
       observations: {
         publish(event, payload) {
           Bus.publish(event, payload);
+          if (mode === "crash-window" && event === L0Observation.ActionCommittedEvent && !saved) {
+            const committed = L0Observation.ActionCommittedEvent.schema.parse(payload);
+            const action = SessionHandleStore.tree(sessionId).find(
+              (node) => node.id === committed.id,
+            );
+            if (
+              action?.kind === "tool" &&
+              z
+                .object({ terminal: z.literal("executed"), callId: z.literal("call-A") })
+                .safeParse(action.effect.value).success
+            ) {
+              // Snapshot synchronously at commit, before the next native Effect result.
+              // Bus subscriptions are observational microtasks, not commit barriers.
+              const db = new Database(dbPath, { readonly: true });
+              try {
+                writeFileSync(crashPath, db.serialize());
+              } finally {
+                db.close();
+              }
+              saved = true;
+              interruptInbox();
+            }
+          }
           if (mode === "error-window" && event === Tool.Events.Completed)
             throw new Error("crash after committed result");
         },
@@ -127,45 +154,22 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     try {
       initialize({ dbPath });
       seedKernelPolicyRows();
-      const handle = await acquireEffect(session(
-        { id: sessionId, role: "resident", runner, tools: definitions.map(sessionTool) },
-        runtime,
-      ));
-      const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
-      let saved = false;
-      unsubscribe =
-        mode === "crash-window"
-          ? Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-              if (event.sessionId !== sessionId || saved) return;
-              const action = SessionHandleStore.tree(sessionId).find(
-                (node) => node.id === event.id,
-              );
-              if (
-                !z
-                  .object({ terminal: z.literal("executed"), callId: z.literal("call-A") })
-                  .safeParse(action?.effect.value).success
-              )
-                return;
-              // A consistent file-SQLite image of the exact committed prefix, before the
-              // next positional result or assistant snapshot. No synthetic action repair.
-              const db = new Database(dbPath, { readonly: true });
-              try {
-                writeFileSync(crashPath, db.serialize());
-              } finally {
-                db.close();
-              }
-              saved = true;
-              interruptInbox();
-            })
-          : Bus.subscribe(Tool.Events.Completed, (event) => {
-              if (
-                event.sessionId !== sessionId ||
-                mode === "partial-wave" ||
-                mode === "error-window"
-              )
-                return;
-              interruptInbox();
-            });
+      const handle = await acquireEffect(
+        session(
+          { id: sessionId, role: "resident", runner, tools: definitions.map(sessionTool) },
+          runtime,
+        ),
+      );
+      unsubscribe = Bus.subscribe(Tool.Events.Completed, (event) => {
+        if (
+          event.sessionId !== sessionId ||
+          mode === "partial-wave" ||
+          mode === "crash-window" ||
+          mode === "error-window"
+        )
+          return;
+        interruptInbox();
+      });
       const first = runEffect(handle.prompt("execute each slot once"));
       if (mode === "partial-wave") {
         await bounded(enteredB.promise);

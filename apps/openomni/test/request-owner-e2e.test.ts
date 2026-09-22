@@ -107,8 +107,8 @@ function child(dbPath: string, at: number, recovering = false) {
         if (started) process.send({ type: "stop" });
         else process.kill("SIGKILL");
         const exitCode = await process.exited;
-        await output;
-        if (started) expect(exitCode).toBe(0);
+        const logs = await output;
+        if (started) expect(exitCode, logs.join("\n")).toBe(0);
       } finally {
         clearTimeout(timer);
       }

@@ -1,4 +1,4 @@
-import { Effect, Scope } from "effect";
+import { Cause, Effect, Scope } from "effect";
 import { bootResource } from "./composition/boot";
 import { shutdownSessions } from "./shutdown";
 import {
@@ -41,7 +41,11 @@ import {
   SessionHandleStore,
 } from "@openomni/ledger";
 
-import { createMachineHost, ForeignFailure as MachineFailure, type MachineHost } from "@openomni/machines";
+import {
+  createMachineHost,
+  ForeignFailure as MachineFailure,
+  type MachineHost,
+} from "@openomni/machines";
 import type { Channel } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
@@ -228,10 +232,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
             void wake(id);
           });
       },
-      authorizeApproval: (credential, request) => Effect.try({
-        try: () => authenticateOwner(credential, request.id),
-        catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
-      }),
+      authorizeApproval: (credential, request) =>
+        Effect.try({
+          try: () => authenticateOwner(credential, request.id),
+          catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
+        }),
       generation: (snapshot) => resident.generation(snapshot),
     };
     const requests = createSessionRequests(sessionRuntime);
@@ -280,16 +285,27 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const host: MachineHost | undefined =
       machines === undefined
         ? undefined
-        : await acquireAppResource(runtime, createMachineHost({
-            socketPath: machines.socketPath,
-            enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-            events: Bus,
-            now: () => Date.now(),
-            callTool: (call) =>
-              cells === undefined
-                ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
-                : cells.callTool(call).pipe(Effect.mapError((error) => new MachineFailure({ operation: "codemode.callTool", cause: String(error) }))),
-          }));
+        : await acquireAppResource(
+            runtime,
+            createMachineHost({
+              socketPath: machines.socketPath,
+              enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+              events: Bus,
+              now: () => Date.now(),
+              callTool: (call) =>
+                cells === undefined
+                  ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
+                  : cells.callTool(call).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new MachineFailure({
+                            operation: "codemode.callTool",
+                            cause: String(error),
+                          }),
+                      ),
+                    ),
+            }),
+          );
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createCompletionPort(
@@ -345,7 +361,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     channelSupervisor = supervisor;
     const processSessions = createProcessSessionTransport({
       answer: (answer) =>
-        runAppEffect(runtime, requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() })),
+        runAppEffect(
+          runtime,
+          requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
+        ),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
         dbPath: config.dbPath,
@@ -366,72 +385,110 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("processes.close"),
       }),
     );
-    const wakeEffect = (id: string) => Effect.gen(function* () {
-      const row = SessionHandleStore.row(id);
-      const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
-        (block) => block.id === "runner" && block.source === "app:runner",
-      )?.content;
-      if (runner === "process") {
-        yield* Effect.tryPromise({ try: () => processSessions.wake(id), catch: (error) => new AgentFailure({ operation: "process.wake", cause: String(error) }) });
-      } else {
-        const scope = yield* AppScope;
-        yield* Scope.extend(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
-      }
-    });
-    const wake = (id: string) => runAppEffect(runtime, wakeEffect(id));
-    gateway = await runAppBoot(runtime, createResidentGateway(
-      {
-        inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
-        prepare: prepareMessage(resident.materialize),
-        requests: channelRequests(requests),
-        authenticateAnswer: (_sender, credential, requestId) => Effect.try({
-          try: () => authenticateOwner(credential, requestId), catch: decodeChannelFailure("answer.authenticate"),
-        }),
-        committed: (row) => {
-          doorbell.runInAsyncScope(() => {
-            void wake(row.sessionId);
+    const wakeEffect = (id: string) =>
+      Effect.gen(function* () {
+        const row = SessionHandleStore.row(id);
+        const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
+          (block) => block.id === "runner" && block.source === "app:runner",
+        )?.content;
+        if (runner === "process") {
+          yield* Effect.tryPromise({
+            try: () => processSessions.wake(id),
+            catch: (error) => new AgentFailure({ operation: "process.wake", cause: String(error) }),
           });
+        } else {
+          const scope = yield* AppScope;
+          yield* Scope.extend(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
+        }
+      });
+    const wake = (id: string) =>
+      runAppEffect(
+        runtime,
+        Effect.gen(function* () {
+          const scope = yield* AppScope;
+          yield* Effect.forkIn(
+            wakeEffect(id).pipe(
+              Effect.catchAllCause((cause) =>
+                Cause.isInterruptedOnly(cause)
+                  ? Effect.void
+                  : Effect.sync(() => {
+                      console.error("session wake failed", Cause.pretty(cause));
+                    }),
+              ),
+            ),
+            scope,
+          );
+        }),
+      );
+    gateway = await runAppBoot(
+      runtime,
+      createResidentGateway(
+        {
+          inbox: {
+            commit: (input) =>
+              commitMessageInbox(input).pipe(
+                Effect.mapError(decodeChannelFailure("message.commit")),
+              ),
+          },
+          prepare: prepareMessage(resident.materialize),
+          requests: channelRequests(requests),
+          authenticateAnswer: (_sender, credential, requestId) =>
+            Effect.try({
+              try: () => authenticateOwner(credential, requestId),
+              catch: decodeChannelFailure("answer.authenticate"),
+            }),
+          committed: (row) => {
+            doorbell.runInAsyncScope(() => {
+              void wake(row.sessionId);
+            });
+          },
+          clock: sessionRuntime.clock,
         },
+        {
+          deliveryRoutes,
+          grants: () =>
+            SessionHandleStore.listRows()
+              .filter((row) => row.role === "resident")
+              .flatMap((row) =>
+                actors.map((actor) => ({
+                  id: `${row.id}->${actor.actorId}`,
+                  senderId: row.id,
+                  targetActorId: actor.actorId,
+                  operations: ["awaited" as const, "fire_and_forget" as const],
+                })),
+              ),
+          budgets: () => config.socialBudgets ?? [],
+          replyGrantRules: () =>
+            SessionHandleStore.listRows()
+              .filter((row) => row.role === "resident")
+              .flatMap((row) =>
+                [...deliveryRoutes.keys()].map((surface) => ({
+                  id: `reply:${row.id}:${surface}`,
+                  senderId: row.id,
+                  surface,
+                  operations: ["fire_and_forget" as const, "awaited" as const],
+                  instanceTtlMs: 86_400_000,
+                  maxLiveInstances: 64,
+                  createdBy: "resident",
+                })),
+              ),
+        },
+      ),
+    );
+    const alarms = await acquireAppResource(
+      runtime,
+      createAlarmWorker({
+        alarms: services.ledger.alarms,
+        requestTimeout: requests.timeout,
+        observations: Bus,
         clock: sessionRuntime.clock,
-      },
-      {
-        deliveryRoutes,
-        grants: () =>
-          SessionHandleStore.listRows()
-            .filter((row) => row.role === "resident")
-            .flatMap((row) =>
-              actors.map((actor) => ({
-                id: `${row.id}->${actor.actorId}`,
-                senderId: row.id,
-                targetActorId: actor.actorId,
-                operations: ["awaited" as const, "fire_and_forget" as const],
-              })),
-            ),
-        budgets: () => config.socialBudgets ?? [],
-        replyGrantRules: () =>
-          SessionHandleStore.listRows()
-            .filter((row) => row.role === "resident")
-            .flatMap((row) =>
-              [...deliveryRoutes.keys()].map((surface) => ({
-                id: `reply:${row.id}:${surface}`,
-                senderId: row.id,
-                surface,
-                operations: ["fire_and_forget" as const, "awaited" as const],
-                instanceTtlMs: 86_400_000,
-                maxLiveInstances: 64,
-                createdBy: "resident",
-              })),
-            ),
-      },
-    ));
-    const alarms = await acquireAppResource(runtime, createAlarmWorker({
-      alarms: services.ledger.alarms,
-      requestTimeout: requests.timeout,
-      observations: Bus,
-      clock: sessionRuntime.clock,
-      wake: (id) => Effect.flatMap(AppScope, () => wakeEffect(id)).pipe(Effect.provideService(AppScope, services.scope)),
-      failure: (error) => console.error("alarm worker failure", error),
-    }));
+        wake: (id) =>
+          Effect.flatMap(AppScope, () => wakeEffect(id)).pipe(
+            Effect.provideService(AppScope, services.scope),
+          ),
+        failure: (error) => console.error("alarm worker failure", error),
+      }),
+    );
     await runAppBoot(runtime, alarms.start());
 
     await acquire(Effect.succeed(supervisor), (resource) =>
@@ -443,14 +500,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
     await supervisor.reconcile();
 
     wsHandler = new WebSocketHandler(
-      ({ sender, facts }) => messages.ingest(sender, facts).pipe(
-        Effect.flatMap((admission) => admission.status === "blocked_pre"
-          ? Effect.fail(new ChannelFailure({
-              operation: "message.admission",
-              cause: admission.reasonCode,
-            }))
-          : Effect.void),
-      ),
+      ({ sender, facts }) =>
+        messages.ingest(sender, facts).pipe(
+          Effect.flatMap((admission) =>
+            admission.status === "blocked_pre"
+              ? Effect.fail(
+                  new ChannelFailure({
+                    operation: "message.admission",
+                    cause: admission.reasonCode,
+                  }),
+                )
+              : Effect.void,
+          ),
+        ),
       Bus.publish,
       {
         ...(config.wsToken === undefined ? {} : { token: config.wsToken }),

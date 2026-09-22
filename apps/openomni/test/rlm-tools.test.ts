@@ -131,10 +131,12 @@ describe("the completion tool", () => {
     const dispatcher = createDispatcher(entries, { executor });
     let nextId = 0;
     const run = (cellId: string, prompt: string) =>
-      runEffect(dispatcher.executeCell(
-        { id: `cell:${cellId}:${++nextId}`, tool: COMPLETION_TOOL_NAME, input: { prompt } },
-        { sessionId: RESIDENT.sessionId, turnId: cellId },
-      ));
+      runEffect(
+        dispatcher.executeCell(
+          { id: `cell:${cellId}:${++nextId}`, tool: COMPLETION_TOOL_NAME, input: { prompt } },
+          { sessionId: RESIDENT.sessionId, turnId: cellId },
+        ),
+      );
     const refusal = {
       isError: true,
       errorKind: "precondition_failed",
@@ -174,13 +176,15 @@ describe("the completion tool", () => {
     );
     const dispatcher = createDispatcher(entries, { executor });
 
-    const result = await runEffect(dispatcher.execute(
-      { id: "1", tool: COMPLETION_TOOL_NAME, input: { prompt: "hi" } },
-      { sessionId: "rlm-session", turnId: "rlm-turn" },
-    ));
+    const result = await runEffect(
+      dispatcher.execute(
+        { id: "1", tool: COMPLETION_TOOL_NAME, input: { prompt: "hi" } },
+        { sessionId: "rlm-session", turnId: "rlm-turn" },
+      ),
+    );
 
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("llm failed: provider on fire");
+    expect(result.output).toBe("Error: llm failed: provider on fire");
   });
 
   it("refuses an unlisted model instead of guessing an SDK for it", async () => {
@@ -202,19 +206,23 @@ describe("the completion tool", () => {
     spyOn(ModelsDev, "get").mockReturnValue(Effect.succeed(catalog));
     spyOn(Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const run = mock(() => Effect.succeed({ type: "stop" as const }));
-    expect(await runEffect(Provider.resolveModel({ provider: "anthropic", id: "listed" }))).toMatchObject({
+    expect(
+      await runEffect(Provider.resolveModel({ provider: "anthropic", id: "listed" })),
+    ).toMatchObject({
       id: "listed",
       providerID: "anthropic",
       api: { npm: "@ai-sdk/anthropic" },
     });
-    for (const [provider, id, reason] of [
-      ["anthropic", "claude-unlisted", "model_not_found"],
-      ["nowhere", "listed", "provider_not_found"],
+    for (const [provider, id] of [
+      ["anthropic", "claude-unlisted"],
+      ["nowhere", "listed"],
     ] as const) {
       await expect(
         createCompletionPort({ provider, id, apiKey: "key" }, { run })("hello"),
       ).rejects.toMatchObject({
-        data: { reason, provider, model: id },
+        _tag: "ForeignFailure",
+        operation: "completion.resolve",
+        cause: String(await runEffect(Effect.flip(Provider.resolveModel({ provider, id })))),
       });
     }
     expect(run).not.toHaveBeenCalled();
@@ -223,10 +231,12 @@ describe("the completion tool", () => {
   it("dispatches the cell door without a target eligibility fold", async () => {
     const entries = createTools({ llm: async () => "ok" }, RESIDENT);
     const dispatcher = createDispatcher(entries, { executor });
-    const result = await runEffect(dispatcher.executeCell(
-      { id: "1", tool: COMPLETION_TOOL_NAME, input: { prompt: "hi" } },
-      { sessionId: "rlm-session", turnId: "rlm-turn" },
-    ));
+    const result = await runEffect(
+      dispatcher.executeCell(
+        { id: "1", tool: COMPLETION_TOOL_NAME, input: { prompt: "hi" } },
+        { sessionId: "rlm-session", turnId: "rlm-turn" },
+      ),
+    );
     expect(result.isError).toBeUndefined();
     expect(result.output).toEqual("ok");
   });
@@ -234,22 +244,24 @@ describe("the completion tool", () => {
 
 describe("the completion port", () => {
   const MODEL = { provider: "fake", id: "port-test", apiKey: "port-key" } as const;
-  const resolveModel = (model: { provider: string; id: string }) => Effect.succeed({
-    id: model.id,
-    name: model.id,
-    providerID: model.provider,
-  });
+  const resolveModel = (model: { provider: string; id: string }) =>
+    Effect.succeed({
+      id: model.id,
+      name: model.id,
+      providerID: model.provider,
+    });
 
   /** A completion port whose run records its input and answers with the given text. */
   function recordingPort(text: string) {
     const inputs: RunInput[] = [];
     const port = createCompletionPort(MODEL, {
       resolveModel,
-      run: (input, sink) => Effect.sync(() => {
-        inputs.push(input);
-        sink.onMessage(assistantMessage(input, { id: "sub-reply", text }));
-        return { type: "stop" as const };
-      }),
+      run: (input, sink) =>
+        Effect.sync(() => {
+          inputs.push(input);
+          sink.onMessage(assistantMessage(input, { id: "sub-reply", text }));
+          return { type: "stop" as const };
+        }),
     });
     const input = (): RunInput => {
       const [first] = inputs;
@@ -291,15 +303,16 @@ describe("the completion port", () => {
   it("ignores non-assistant messages when reading the answer", async () => {
     const port = createCompletionPort(MODEL, {
       resolveModel,
-      run: (input, sink) => Effect.sync(() => {
-        const echo = input.messages[0];
-        if (echo !== undefined) sink.onMessage(echo);
-        // The port discards tool activity too: a one-step toolless run has no
-        // executor, so these projections must be inert.
-        sink.onToolCall({ id: "call-1", tool: "noop", input: {} });
-        sink.onToolResult({ id: "result-1", toolCallId: "call-1", output: "ignored" });
-        return { type: "stop" as const };
-      }),
+      run: (input, sink) =>
+        Effect.sync(() => {
+          const echo = input.messages[0];
+          if (echo !== undefined) sink.onMessage(echo);
+          // The port discards tool activity too: a one-step toolless run has no
+          // executor, so these projections must be inert.
+          sink.onToolCall({ id: "call-1", tool: "noop", input: {} });
+          sink.onToolResult({ id: "result-1", toolCallId: "call-1", output: "ignored" });
+          return { type: "stop" as const };
+        }),
     });
 
     expect(await port("anything")).toBe("");
@@ -308,7 +321,8 @@ describe("the completion port", () => {
   it("throws the provider's failure instead of returning it as data", async () => {
     const port = createCompletionPort(MODEL, {
       resolveModel,
-      run: () => Effect.succeed({ type: "error" as const, error: providerFailure("provider on fire") }),
+      run: () =>
+        Effect.succeed({ type: "error" as const, error: providerFailure("provider on fire") }),
     });
 
     await expect(port("q")).rejects.toThrow("provider on fire");
@@ -320,7 +334,7 @@ describe("the completion port", () => {
       run: () => Effect.succeed({ type: "aborted" as const }),
     });
 
-    await expect(port("q")).rejects.toMatchObject({ name: "AbortError" });
+    await expect(port("q")).rejects.toMatchObject({ _tag: "Interrupted" });
   });
 
   it("rejects a run that asks to continue: a one-step toolless call has nothing to continue", async () => {
@@ -329,45 +343,60 @@ describe("the completion port", () => {
       run: () => Effect.succeed({ type: "continue" as const }),
     });
 
-    await expect(port("q")).rejects.toThrow("sub-model returned continue");
+    await expect(port("q")).rejects.toMatchObject({
+      _tag: "ForeignFailure",
+      operation: "completion",
+      cause: "sub-model returned continue",
+    });
   });
 
   it("refuses without the session's attempt authority instead of running unrecorded", async () => {
     let invoked = 0;
     const port = completionPort(MODEL, {
       resolveModel,
-      run: () => Effect.sync(() => {
-        invoked += 1;
-        return { type: "stop" as const };
-      }),
+      run: () =>
+        Effect.sync(() => {
+          invoked += 1;
+          return { type: "stop" as const };
+        }),
     });
     const withoutAttempts: Executor = {
       run: (request, body) => productionExecutor.run(request, body),
     };
 
     await expect(admittedEffect(port({ prompt: "q" }), withoutAttempts)).rejects.toMatchObject({
-      _tag: "ForeignFailure", operation: "completion",
+      _tag: "ForeignFailure",
+      operation: "completion",
     });
     expect(invoked).toBe(0);
   });
 
   it("surfaces a refused llm operation as the refusal's reason", async () => {
-    const port = completionPort(MODEL, { resolveModel, run: () => Effect.succeed({ type: "stop" as const }) });
+    const port = completionPort(MODEL, {
+      resolveModel,
+      run: () => Effect.succeed({ type: "stop" as const }),
+    });
     const refused = scriptedLlmExecutor({ terminal: "blocked_pre", reason: "llm.text denied" });
 
     await expect(admittedEffect(port({ prompt: "q" }), refused)).rejects.toMatchObject({
-      _tag: "ForeignFailure", operation: "completion",
+      _tag: "ForeignFailure",
+      operation: "completion",
     });
   });
 
   it("rejects an executed value that is not the text record the run produces", async () => {
-    const port = completionPort(MODEL, { resolveModel, run: () => Effect.succeed({ type: "stop" as const }) });
+    const port = completionPort(MODEL, {
+      resolveModel,
+      run: () => Effect.succeed({ type: "stop" as const }),
+    });
 
     for (const value of ["bare text", { answer: "no text field" }] as const) {
       const executed = scriptedLlmExecutor({ terminal: "executed", value });
-      await expect(admittedEffect(port({ prompt: "q" }), executed)).rejects.toThrow(
-        "invalid sub-model result",
-      );
+      await expect(admittedEffect(port({ prompt: "q" }), executed)).rejects.toMatchObject({
+        _tag: "ForeignFailure",
+        operation: "completion",
+        cause: "invalid sub-model result",
+      });
     }
   });
 });
@@ -381,10 +410,12 @@ describe("catalog gating for the rlm tools", () => {
   it("stays in the static catalog without a wired port and refuses at execution", async () => {
     const names = createTools({}, RESIDENT).map((entry) => entry.name);
     expect(names).toContain(COMPLETION_TOOL_NAME);
-    const result = await runEffect(createDispatcher(createTools({}, RESIDENT), { executor }).executeCell(
-      { id: "unwired", tool: COMPLETION_TOOL_NAME, input: { prompt: "x" } },
-      { sessionId: RESIDENT.sessionId, turnId: "turn" },
-    ));
+    const result = await runEffect(
+      createDispatcher(createTools({}, RESIDENT), { executor }).executeCell(
+        { id: "unwired", tool: COMPLETION_TOOL_NAME, input: { prompt: "x" } },
+        { sessionId: RESIDENT.sessionId, turnId: "turn" },
+      ),
+    );
     expect(result.isError).toBe(true);
     expect(result.output).toBe("completion refused: sub-model port is not composed");
   });

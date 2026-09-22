@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { gatewayRuntime } from "../src/gateway";
 import { AppLifecycleFailure } from "../src/runtime";
 import { startOpenOmni } from "../src/index";
@@ -89,7 +89,12 @@ test("a pending Owner request keeps the server available while failed recovery i
     expect(Exit.isFailure(shutdown)).toBe(true);
     if (Exit.isFailure(shutdown)) {
       expect(Array.from(Cause.defects(shutdown.cause))).toEqual([
-        [new AppLifecycleFailure({ operation: "sessions.recovery", cause: String(failure) })],
+        [
+          Option.none(),
+          Option.some(
+            new AppLifecycleFailure({ operation: "sessions.recovery", cause: String(failure) }),
+          ),
+        ],
       ]);
     }
   } finally {

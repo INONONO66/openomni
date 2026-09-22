@@ -79,19 +79,16 @@ export function interruptSecondModel(
 
 export function acquireContender(sessionId: string, owner: string, expectedFence: number) {
   const now = Date.now();
-  return Either.getOrThrowWith(
-    Effect.runSync(
-      Effect.either(
-        SessionHandleStore.acquireLease({
-          sessionId,
-          owner,
-          expectedFence,
-          now,
-          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-        }),
-      ),
+  return Effect.runSync(
+    Effect.either(
+      SessionHandleStore.acquireLease({
+        sessionId,
+        owner,
+        expectedFence,
+        now,
+        expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+      }),
     ),
-    (error) => error,
   );
 }
 

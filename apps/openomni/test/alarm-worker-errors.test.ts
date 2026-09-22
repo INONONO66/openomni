@@ -33,13 +33,17 @@ test("the default periodic scan runs at one second and contains timer failures",
   Storage.withIsolation(async () => {
     const fixture = alarmFixture();
     const errors: Error[] = [];
+    const reported = Promise.withResolvers<Error>();
     const worker = alarmWorkerFixture({
       alarms: fixture.storage.alarms,
       observations: fixture.events,
       clock: () => 1000,
       requestTimeout: () => Effect.void,
       wake: () => Effect.void,
-      failure: (error) => errors.push(error),
+      failure: (error) => {
+        errors.push(error);
+        reported.resolve(error);
+      },
     });
     jest.useFakeTimers();
     await runEffect(worker.worker.start());
@@ -50,7 +54,9 @@ test("the default periodic scan runs at one second and contains timer failures",
       jest.advanceTimersByTime(999);
       expect(errors).toEqual([]);
       jest.advanceTimersByTime(1);
-      expect(errors).toMatchObject([{ site: "timer.scan" }]);
+      jest.useRealTimers();
+      expect(await bounded(reported.promise)).toMatchObject({ site: "timer.scan" });
+      expect(errors).toHaveLength(1);
     } finally {
       due.mockRestore();
       await worker.close();
