@@ -1,10 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { createExecutionRecord } from "../src/executor-record";
 import { createRetryAlarmPort } from "../src/executor-retry-alarm";
 import { isolated } from "./helpers/isolated";
 
-const clock = () => 100;
+import { PolicyDenied } from "../src/errors";
+import type { LedgerAction } from "@openomni/protocol";
+const clock = (): number => 100;
+
+test("execution record emits intents, failures, reverts, and tool observations", () => isolated(Effect.gen(function* () {
+  const actions: LedgerAction.Append[] = [];
+  const published: unknown[] = [];
+  let id = 0;
+  const record = createExecutionRecord({
+    ledger: { commit: (action: LedgerAction.Append) => { actions.push(action); return Effect.succeed({ action, revision: actions.length }); } },
+    observations: { publish: (_event: unknown, value: unknown): void => { published.push(value); } },
+    identity: { sessionId: "record", parentActionId: null, role: "resident" }, clock: (): number => 10, entropy: (): string => `a-${++id}`,
+  } as never);
+  yield* record.appendIntent({ kind: "tool", op: "run", parentId: null, value: { x: 1 } });
+  yield* record.appendFailure({ kind: "tool", op: "run" }, "a-1", { ok: false }, new PolicyDenied({ phase: "pre", ruleIds: [] }));
+  yield* record.appendResult({ kind: "tool", op: "run" }, "a-1", { ok: true }, { reverted: true });
+  expect(actions).toHaveLength(3);
+  const request = { kind: "tool", op: "run", toolObservation: { turnId: "t", callId: "c", timeoutMs: 5 } } as never;
+  expect(record.publishToolStarted(request)).toBe(10);
+  record.publishToolTerminal(request, 10, "timed_out");
+  expect(published).toHaveLength(6);
+})));
+
 const schedule = { id: "retry-1", attempt: 1, reason: "transient_error", fireAt: 150 };
 const materialize = (id: string) =>
   SessionHandleStore.materialize({

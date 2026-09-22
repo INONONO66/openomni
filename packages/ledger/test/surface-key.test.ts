@@ -1,11 +1,23 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import { Channel } from "@openomni/protocol";
+import { Context } from "effect";
+import { LedgerWrites } from "../src/services";
+import { SessionNotFound, StorageUnavailable } from "../src/errors";
+
 import { SurfaceKey } from "../src/surface-key";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
 import { materializeSession } from "./helpers/session";
 
-afterEach(() => Storage.reset());
+
+test("ledger service and error contracts are runtime values", () => {
+  expect(LedgerWrites.key).toBe("@openomni/ledger/LedgerWrites");
+  const service = {} as Context.Tag.Service<typeof LedgerWrites>;
+  expect(Context.get(Context.make(LedgerWrites, service), LedgerWrites)).toBe(service);
+  expect(new SessionNotFound({ sessionId: "missing" })._tag).toBe("SessionNotFound");
+  expect(new StorageUnavailable({ capability: "storage" })._tag).toBe("StorageUnavailable");
+});
+
 
 // The pure string codec (create/fromChannel/parse) lives in the protocol
 // adapter domain — see packages/protocol/test/adapter-surface-key.test.ts.

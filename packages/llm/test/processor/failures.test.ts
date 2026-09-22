@@ -1,10 +1,36 @@
 import { describe, expect, mock, test } from "bun:test";
+import { Effect, Fiber } from "effect";
 import { LlmCall } from "@openomni/protocol";
+import { Processor as NativeProcessor } from "../../src/processor";
+import { anthropicModel } from "../helpers/fixtures";
+import { runEffect } from "../helpers/native";
+
 import { APIError } from "../../src/error";
 import { useProcessor, capturingSink, failingStream, statusStates } from "../helpers/processor";
 import type { StreamEvent } from "../../src/processor/stream-events";
 
+
 describe("Processor failures", () => {
+  test("settles an interrupted attempt and publishes an aborted finish", async () => {
+    const entered = Promise.withResolvers<void>();
+    const processor = NativeProcessor.create({
+      assistantMessage: fixture.assistantMessage,
+      sessionID: "session-456",
+      model: anthropicModel,
+      abort: fixture.abortController.signal,
+      events,
+      trace: { traceId: "interrupt", sessionId: "session-456" },
+      createStream: () => Effect.sync(() => {
+        entered.resolve();
+      }).pipe(Effect.zipRight(Effect.never)),
+    });
+    const fiber = await runEffect(Effect.forkDaemon(processor.process({ system: "", promptText: "" })));
+    await runEffect(Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds")));
+    await runEffect(Fiber.interrupt(fiber).pipe(Effect.timeout("5 seconds")));
+    expect(processor.message.finish).toBe("aborted");
+    expect(statusStates(events)).toEqual(["busy", "idle"]);
+  });
+
   const fixture = useProcessor();
   const { createProcessor, events } = fixture;
 

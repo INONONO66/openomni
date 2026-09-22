@@ -1,10 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 import type { Sink } from "../src";
+import { Llm } from "../src/services";
+import { APIError, ForeignFailure } from "../src/errors";
+import { Context } from "effect";
+
+test("LLM service and error values retain their machine tags", () => {
+  const service = { run: (): never => { throw new Error("fixture"); }, resolveModel: (): never => { throw new Error("fixture"); } };
+  expect(Llm.key).toBe("@openomni/llm/Llm");
+  expect(Context.get(Context.make(Llm, service), Llm)).toBe(service);
+  expect(new APIError({ message: "bad", isRetryable: false })._tag).toBe("APIError");
+  expect(new ForeignFailure({ operation: "run", cause: "bad" }).message).toBe("bad");
+});
 
 describe("@openomni/llm root public surface", () => {
   test("967 public sink excludes fact tap", async () => {
-    // Given: the public type and its machine-readable declaration.
     const callbacks = {
       onMessage: true,
       onToolCall: true,

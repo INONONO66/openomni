@@ -2,12 +2,17 @@ import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
 import { failure } from "./helpers/effect-g3";
 import { createTestAgent } from "./helpers/effect-g3";
-import { describe, expect, it, mock, spyOn } from "bun:test";
+import { describe, expect, it, mock, spyOn, test } from "bun:test";
 import { Auth } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
+import { failureEvidence } from "../src/executor-outcome";
+import { AgentGenerationLive } from "../src/layers";
+import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { PolicyDenied, ToolBodyFailed, ForeignFailure, CommitFailed, ExecutionApprovalError, OutcomeUnknown, Interrupted } from "../src/errors";
+import type { LedgerError } from "@openomni/ledger";
 import {
   completeModel,
   mockLlm,
@@ -26,6 +31,22 @@ function agent(run: MockLlmFn) {
     llm: mockLlm(run),
   });
 }
+
+
+test("agent foundation tags and failure evidence are runtime contracts", () => {
+  expect([Clock.key, Entropy.key, ObservationSink.key, SessionLayer.key, ToolCatalog.key]).toEqual([
+    "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink", "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
+  ]);
+  const options = { now: (): number => 1, next: (): string => "id", observations: Bus, snapshot: {} as never, policy: {} as never, definitions: [] };
+  expect(AgentGenerationLive(options)).toBeDefined();
+  expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
+  expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
+  expect(failureEvidence(new ForeignFailure({ operation: "x", cause: "bad" }))).toEqual({ tag: "ForeignFailure", operation: "x", cause: "bad" });
+  expect(failureEvidence(new CommitFailed({ error: {} as LedgerError }))).toMatchObject({ tag: "CommitFailed" });
+  expect(failureEvidence(new ExecutionApprovalError({ code: "stale_approval" }))).toEqual({ tag: "ExecutionApprovalError", code: "stale_approval" });
+  expect(failureEvidence(new OutcomeUnknown({ reason: "lost" }))).toEqual({ tag: "OutcomeUnknown", reason: "lost" });
+  expect(failureEvidence(new Interrupted())).toEqual({ tag: "Interrupted" });
+});
 
 describe("ChatAgent public run contract", () => {
   it("returns terminal text, step, and token usage", async () => {

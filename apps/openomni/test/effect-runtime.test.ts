@@ -2,9 +2,11 @@ import { expect, spyOn, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
 import { Cause, Effect, Exit } from "effect";
 import { bootResource } from "../src/composition/boot";
-import { gatewayRuntime, runAppBoot } from "../src/gateway";
+import { gatewayRuntime, runAppBoot, toolPorts } from "../src/gateway";
+
 import { startOpenOmni } from "../src/index";
 import { AppClock, AppEntropy, AppLifecycleFailure } from "../src/runtime";
+import { runEffect } from "./helpers/effect";
 
 const config = {
   dbPath: ":memory:",
@@ -12,6 +14,36 @@ const config = {
   wsPort: 0,
   model: { provider: "fake", id: "fixture", apiKey: "fixture" },
 };
+
+
+test("tool ports bridge machine filesystem and exec effects through the app runtime", async () => {
+  const runtime = { runPromise: runEffect } as never;
+  const read = { op: "read", data: new Uint8Array([1]) };
+  const write = { op: "write" };
+  const list = { op: "list", entries: [] };
+  const stat = { op: "stat", kind: "file" };
+  const exec = { status: "completed", stdout: new Uint8Array(), stderr: new Uint8Array() };
+  const machine = {
+    fs: {
+      read: (): Effect.Effect<typeof read> => Effect.succeed(read),
+      write: (): Effect.Effect<typeof write> => Effect.succeed(write),
+      list: (): Effect.Effect<typeof list> => Effect.succeed(list),
+      stat: (): Effect.Effect<typeof stat> => Effect.succeed(stat),
+    },
+    exec: (): Effect.Effect<typeof exec> => Effect.succeed(exec),
+  };
+  const ports = toolPorts(runtime, {
+    machines: { get: (): typeof machine => machine } as never,
+    completion: (() => Effect.succeed({})) as never,
+    messages: { ingest: (): Effect.Effect<unknown> => Effect.succeed({}) } as never,
+  });
+  const handle = ports.machines?.get("machine");
+  expect<unknown>(await handle?.fs.read("/file")).toBe(read);
+  expect<unknown>(await handle?.fs.write("/file", new Uint8Array())).toBe(write);
+  expect<unknown>(await handle?.fs.list("/")).toBe(list);
+  expect<unknown>(await handle?.fs.stat("/file")).toBe(stat);
+  expect<unknown>(await handle?.exec("true", "/")).toBe(exec);
+});
 
 test("two server edges share the gateway runtime and its injected services", async () => {
   const runtime = gatewayRuntime({ dbPath: ":memory:", clock: () => 123, entropy: () => "fixed" });

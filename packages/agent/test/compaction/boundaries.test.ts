@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { planAnchoredCut } from "../../src/compaction/candidate";
 import { createCompactionPlan, restoreCompactionProjection } from "../../src/compaction/durable";
 import { CompactionSession } from "../../src/compaction/speculate";
 import { isolated } from "../helpers/isolated";
+import { withSummarizerDeadline } from "../../src/compaction/summary";
 import { textMessage } from "../helpers/messages";
+
 
 function history() {
   return [
@@ -13,8 +15,20 @@ function history() {
     textMessage("user", "tail", "session", "last"),
   ];
 }
-
 describe("compaction boundary integrity", () => {
+  it("interrupts a summarizer before invoking it", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let called = false;
+    const summarize = withSummarizerDeadline(() => {
+      called = true;
+      return Effect.succeed("summary");
+    }, 1000, controller.signal);
+    const exit = await isolated(Effect.exit(summarize([], undefined, { maxInputTokens: 10, maxOutputTokens: 10, contextWindowTokens: 100 })));
+    expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+    expect(called).toBe(false);
+  });
+
   it("rejects empty or entirely retained histories", () => {
     const prior = history();
     expect(() => createCompactionPlan([], prior, 10)).toThrow();
