@@ -1,3 +1,4 @@
+import type { Readable } from "node:stream";
 import {
   Bus,
   closeSessions,
@@ -99,17 +100,22 @@ export function serveProcessSession(
   });
 }
 
-if (import.meta.main) {
-  const replies = createProcessReplyChannel(process.stdin, (line) => console.log(line));
+export async function runProcessEntry(io: {
+  stdin: Readable;
+  log: (line: string) => void;
+  exit: (code: number) => never;
+  gatewayRuntime?: typeof gatewayRuntime;
+}): Promise<void> {
+  const replies = createProcessReplyChannel(io.stdin, io.log);
   try {
     const line = await replies.first;
-    if (line === undefined) process.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
+    if (line === undefined) io.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
     const request = ProcessSessionRequest.parse(JSON.parse(line));
-    const runtime = gatewayRuntime({ dbPath: request.dbPath });
+    const runtime = (io.gatewayRuntime ?? gatewayRuntime)({ dbPath: request.dbPath });
     try {
       await acquireAppResource(runtime, serveProcessSession(
         request,
-        (sessionIds) => console.log(JSON.stringify({ sessionIds })),
+        (sessionIds) => io.log(JSON.stringify({ sessionIds })),
         replies.answer,
         runtime,
       ));
@@ -119,4 +125,8 @@ if (import.meta.main) {
   } finally {
     replies.close();
   }
+}
+
+if (import.meta.main) {
+  await runProcessEntry({ stdin: process.stdin, log: console.log, exit: process.exit });
 }
