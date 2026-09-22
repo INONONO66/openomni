@@ -1,300 +1,349 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { decodeJson, type Json } from "./quality-json";
 
 const root = join(import.meta.dir, "..");
 const allowlistPath = "script/conformance/effect-runner-sites.json";
-const runtimePackages = new Set(["agent", "llm", "ipc", "machines", "channels", "ledger"]);
-const runnerNames = new Set(["runPromise", "runSync", "runFork", "ManagedRuntime"]);
+const approvedEdges = new Set(["apps/openomni/src/cli/main.ts", "apps/openomni/src/gateway.ts"]);
+const runnerNames = new Set(["runPromise", "runPromiseExit", "runSync", "runSyncExit", "runFork", "runCallback"]);
 
-type Violation = {
+export type BoundaryFinding = {
+  readonly code: string;
   readonly file: string;
   readonly line: number;
-  readonly rule: string;
+  readonly failing: boolean;
 };
+type Origin = { readonly module: string; readonly members: readonly string[] };
+type DeclaredFunction = { readonly exportedName: string; readonly node: ts.FunctionLikeDeclaration; readonly line: number };
+type RunnerSite = { readonly file: string; readonly line: number; readonly key: string };
+type Analysis = { readonly findings: BoundaryFinding[]; readonly sites: RunnerSite[] };
 
-type DeclaredFunction = {
-  readonly exportedName: string;
-  readonly node: ts.FunctionLikeDeclaration;
-  readonly returnType: ts.TypeNode | undefined;
-  readonly line: number;
-};
-
-type RunnerSite = {
-  readonly file: string;
-  readonly line: number;
-  readonly key: string;
-};
-
-type CheckResult = {
-  readonly violations: Violation[];
-  readonly runnerSites: RunnerSite[];
-};
-
-function normalized(path: string): string {
-  return path.replaceAll("\\", "/");
+function finding(code: string, file: string, line = 1): BoundaryFinding {
+  return { code, file, line, failing: code !== "R2_ALLOWLISTED_RATCHET" };
 }
-
-function isEffectSpecifier(specifier: string): boolean {
-  return specifier.startsWith("effect") || specifier.startsWith("@effect/");
+function lineOf(node: ts.Node): number {
+  return node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()).line + 1;
 }
-
-function isTestFile(path: string): boolean {
-  return /(^|\/)(test|__tests__|tests)\/|\.(test|spec)\.[cm]?tsx?$/.test(path);
+function isEffectSpecifier(value: string): boolean {
+  return value === "effect" || value.startsWith("effect/") || value.startsWith("@effect/");
 }
-
-function isScopedSource(path: string): boolean {
-  if (!/\.[cm]?tsx?$/.test(path) || isTestFile(path)) return false;
-  if (path.includes("/node_modules/") || path.includes("/dist/")) return false;
-  return /^packages\/[^/]+\/src\//.test(path) || /^apps\/[^/]+\/src\//.test(path) || path.startsWith("script/");
+function excludedSurface(file: string): boolean {
+  return /^packages\/(protocol|ui)\/src\//.test(file) || file.startsWith("apps/desktop/src/") || file.startsWith("apps/openomni/src/tools/");
 }
-
-function trackedSourceFiles(worktree: string): string[] {
-  const result = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: worktree, stdout: "pipe", stderr: "pipe" });
-  if (result.exitCode !== 0) throw new Error(`git ls-files failed: ${result.stderr.toString().trim()}`);
-  return result.stdout
-    .toString()
-    .split("\0")
-    .filter(isScopedSource)
-    .sort();
+function sourcePath(file: string): boolean {
+  return /^(apps|packages|script)\//.test(file) && /\.[cm]?tsx?$/.test(file) && !/(^|\/)(node_modules|dist|coverage|\.turbo|generated)\//.test(file);
 }
-
-function hasModifier(node: ts.HasModifiers, kind: ts.SyntaxKind.ExportKeyword): boolean {
-  return Boolean(ts.getModifiers(node)?.some((modifier) => modifier.kind === kind));
+function repositoryFiles(worktree: string): string[] {
+  const result = Bun.spawnSync(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: worktree, stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+  return [...new Set(result.stdout.toString().split("\0").filter((file) => file && existsSync(join(worktree, file))))].sort();
 }
-
+function exported(node: ts.Node): boolean {
+  return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false);
+}
+function localFunctions(statement: ts.Statement): readonly [string, ts.FunctionLikeDeclaration][] {
+  if (ts.isFunctionDeclaration(statement) && statement.name) return [[statement.name.text, statement]];
+  if (!ts.isVariableStatement(statement)) return [];
+  return statement.declarationList.declarations.flatMap((declaration): [string, ts.FunctionLikeDeclaration][] => {
+    const value = declaration.initializer;
+    return ts.isIdentifier(declaration.name) && value && (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) ? [[declaration.name.text, value]] : [];
+  });
+}
 function declaredFunctions(source: ts.SourceFile): DeclaredFunction[] {
-  const declarations = new Map<string, Omit<DeclaredFunction, "exportedName">>();
-  const exported = new Map<string, string>();
+  const declarations = new Map<string, ts.FunctionLikeDeclaration>();
+  const names = new Map<string, string>();
   for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name !== undefined) {
-      const name = statement.name.text;
-      declarations.set(name, {
-        node: statement,
-        returnType: statement.type,
-        line: source.getLineAndCharacterOfPosition(statement.name.getStart(source)).line + 1,
-      });
-      if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) exported.set(name, name);
+    for (const [name, node] of localFunctions(statement)) {
+      declarations.set(name, node);
+      if (exported(statement)) names.set(name, name);
     }
-    if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        if (!ts.isIdentifier(declaration.name)) continue;
-        const initializer = declaration.initializer;
-        if (initializer === undefined || (!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer))) continue;
-        const name = declaration.name.text;
-        declarations.set(name, {
-          node: initializer,
-          returnType: initializer.type,
-          line: source.getLineAndCharacterOfPosition(declaration.name.getStart(source)).line + 1,
-        });
-        if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) exported.set(name, name);
-      }
-    }
-    if (ts.isExportDeclaration(statement) && statement.moduleSpecifier === undefined && statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause)) {
-      for (const element of statement.exportClause.elements) {
-        exported.set(element.name.text, element.propertyName?.text ?? element.name.text);
-      }
-    }
+    if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier || !statement.exportClause || !ts.isNamedExports(statement.exportClause)) continue;
+    for (const entry of statement.exportClause.elements) names.set(entry.name.text, entry.propertyName?.text ?? entry.name.text);
   }
-  return [...exported].flatMap(([exportedName, localName]) => {
-    const declaration = declarations.get(localName);
-    return declaration === undefined ? [] : [{ exportedName, ...declaration }];
+  return [...names].flatMap(([exportedName, local]) => {
+    const node = declarations.get(local);
+    return node ? [{ exportedName, node, line: lineOf(node) }] : [];
   });
 }
 
-function entityNameText(name: ts.EntityName): string {
-  return ts.isIdentifier(name) ? name.text : `${entityNameText(name.left)}.${name.right.text}`;
-}
-
-function isPromiseReturn(type: ts.TypeNode | undefined): boolean {
-  return type !== undefined && ts.isTypeReferenceNode(type) && entityNameText(type.typeName) === "Promise";
-}
-
-function isEffectReturn(type: ts.TypeNode | undefined, effectNamespaces: ReadonlySet<string>): boolean {
-  if (type === undefined || !ts.isTypeReferenceNode(type)) return false;
-  const name = entityNameText(type.typeName);
-  if (name === "Effect.Effect") return true;
-  const [namespace, member] = name.split(".");
-  return namespace !== undefined && member === "Effect" && effectNamespaces.has(namespace);
-}
-
-function promiseBaseName(name: string): string | undefined {
-  if (name.endsWith("Promise")) return name.slice(0, -"Promise".length);
-  if (name.endsWith("Async")) return name.slice(0, -"Async".length);
-  return undefined;
-}
-
-function add(violations: Violation[], file: string, line: number, rule: string): void {
-  violations.push({ file, line, rule });
-}
-
-function importSpecifier(statement: ts.ImportDeclaration | ts.ExportDeclaration | ts.ImportEqualsDeclaration): string | undefined {
-  if (ts.isImportEqualsDeclaration(statement)) {
-    return ts.isExternalModuleReference(statement.moduleReference) && ts.isStringLiteral(statement.moduleReference.expression)
-      ? statement.moduleReference.expression.text
-      : undefined;
+/** Bind lexical identities with TypeScript; resolve provenance without requiring external declarations. */
+class Provenance {
+  private readonly checker: ts.TypeChecker;
+  private readonly sources: ReadonlyMap<string, ts.SourceFile>;
+  constructor(program: ts.Program) {
+    this.checker = program.getTypeChecker();
+    this.sources = new Map(program.getSourceFiles().map((source) => [resolve(source.fileName), source]));
   }
-  return statement.moduleSpecifier !== undefined && ts.isStringLiteral(statement.moduleSpecifier)
-    ? statement.moduleSpecifier.text
-    : undefined;
-}
-
-function isR1Target(path: string): boolean {
-  return /^packages\/(protocol|ui)\/src\//.test(path) || path.startsWith("apps/desktop/src/") || path.startsWith("apps/openomni/src/tools/");
-}
-
-function runtimePackage(path: string): boolean {
-  const match = /^packages\/([^/]+)\/src\//.exec(path);
-  return match !== null && runtimePackages.has(match[1] ?? "");
-}
-
-function runnerSite(path: string, line: number, exportedFunction: string | undefined): RunnerSite {
-  return { file: path, line, key: `${path}:${exportedFunction ?? line}` };
-}
-
-function checkFile(worktree: string, path: string): CheckResult {
-  const absolute = join(worktree, path);
-  if (!existsSync(absolute)) return { violations: [], runnerSites: [] };
-  const source = ts.createSourceFile(absolute, readFileSync(absolute, "utf8"), ts.ScriptTarget.ESNext, true);
-  const violations: Violation[] = [];
-  const runnerSites: RunnerSite[] = [];
-  const effectNamespaces = new Set<string>(["Effect"]);
-  const runnerNamespaces = new Set<string>();
-  const functions = declaredFunctions(source);
-  const exportedFunctionNames = new Map<ts.Node, string>();
-  for (const entry of functions) exportedFunctionNames.set(entry.node, entry.exportedName);
-
-  const recordRunner = (line: number, exportedFunction: string | undefined): void => {
-    if (runtimePackage(path)) {
-      runnerSites.push(runnerSite(path, line, exportedFunction));
-    } else if (!path.startsWith("apps/openomni/src/")) {
-      add(violations, path, line, "R2 Effect runner");
+  private module(specifier: string, source: ts.SourceFile): Origin | undefined {
+    if (isEffectSpecifier(specifier)) return { module: specifier, members: [] };
+    const base = resolve(dirname(source.fileName), specifier).replace(/\.[cm]?jsx?$/, "");
+    const candidates = [base, ...[".ts", ".tsx", ".mts", ".cts", "/index.ts", "/index.tsx"].map((suffix) => base + suffix)];
+    const file = candidates.find((candidate) => this.sources.has(candidate));
+    return file ? { module: file, members: [] } : undefined;
+  }
+  private fromSpecifier(node: ts.Expression | undefined, source: ts.SourceFile): Origin | undefined {
+    return node && ts.isStringLiteral(node) ? this.module(node.text, source) : undefined;
+  }
+  member(origin: Origin | undefined, name: string, seen = new Set<ts.Node | string>()): Origin | undefined {
+    if (!origin) return undefined;
+    if (isEffectSpecifier(origin.module)) return { module: origin.module, members: [...origin.members, name] };
+    const key = `${origin.module}:${name}`;
+    if (seen.has(key)) return undefined;
+    const next = new Set(seen).add(key);
+    const source = this.sources.get(origin.module);
+    if (!source) return undefined;
+    for (const statement of source.statements) {
+      const result = this.exportedMember(statement, name, next);
+      if (result) return result;
     }
+    return undefined;
+  }
+  private exportedMember(statement: ts.Statement, name: string, seen: Set<ts.Node | string>): Origin | undefined {
+    if (ts.isExportDeclaration(statement)) return this.exportDeclaration(statement, name, seen);
+    if (!exported(statement) || !ts.isVariableStatement(statement)) return undefined;
+    const declaration = statement.declarationList.declarations.find((entry) => ts.isIdentifier(entry.name) && entry.name.text === name);
+    return declaration?.initializer ? this.expression(declaration.initializer, seen) : undefined;
+  }
+  private exportDeclaration(node: ts.ExportDeclaration, name: string, seen: Set<ts.Node | string>): Origin | undefined {
+    if (node.isTypeOnly) return undefined;
+    const origin = this.fromSpecifier(node.moduleSpecifier, node.getSourceFile());
+    const clause = node.exportClause;
+    if (!clause) return this.member(origin, name, seen);
+    if (ts.isNamespaceExport(clause)) return clause.name.text === name ? origin : undefined;
+    const entry = clause.elements.find((element) => element.name.text === name && !element.isTypeOnly);
+    if (!entry) return undefined;
+    const local = entry.propertyName ?? entry.name;
+    if (origin) return this.member(origin, local.text, seen);
+    const symbol = this.checker.getExportSpecifierLocalTargetSymbol(entry);
+    return this.declarations(symbol?.declarations, seen);
+  }
+  private declarations(nodes: readonly ts.Declaration[] | undefined, seen: Set<ts.Node | string>): Origin | undefined {
+    for (const node of nodes ?? []) {
+      if (seen.has(node)) continue;
+      const result = this.declaration(node, new Set(seen).add(node));
+      if (result) return result;
+    }
+    return undefined;
+  }
+  private declaration(node: ts.Declaration, seen: Set<ts.Node | string>): Origin | undefined {
+    if (ts.isVariableDeclaration(node)) return node.initializer ? this.expression(node.initializer, seen) : undefined;
+    if (ts.isNamespaceImport(node)) {
+      const clause = node.parent;
+      return clause.isTypeOnly ? undefined : this.fromSpecifier(clause.parent.moduleSpecifier, node.getSourceFile());
+    }
+    if (!ts.isImportSpecifier(node) || node.isTypeOnly || node.parent.parent.isTypeOnly) return undefined;
+    const origin = this.fromSpecifier(node.parent.parent.parent.moduleSpecifier, node.getSourceFile());
+    return this.member(origin, node.propertyName?.text ?? node.name.text, seen);
+  }
+  expression(node: ts.Node, seen = new Set<ts.Node | string>()): Origin | undefined {
+    if (ts.isIdentifier(node)) return this.declarations(this.checker.getSymbolAtLocation(node)?.declarations, seen);
+    if (ts.isPropertyAccessExpression(node)) return this.member(this.expression(node.expression, seen), node.name.text, seen);
+    if (ts.isQualifiedName(node)) return this.member(this.expression(node.left, seen), node.right.text, seen);
+    if (ts.isElementAccessExpression(node) && ts.isStringLiteral(node.argumentExpression)) return this.member(this.expression(node.expression, seen), node.argumentExpression.text, seen);
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) || ts.isSatisfiesExpression(node)) return this.expression(node.expression, seen);
+    return undefined;
+  }
+}
+function originPath(origin: Origin | undefined): string[] {
+  return origin ? [...origin.module.split("/").slice(1), ...origin.members] : [];
+}
+function isRunner(origin: Origin | undefined): boolean {
+  if (!origin || !isEffectSpecifier(origin.module)) return false;
+  const path = originPath(origin);
+  const method = path.at(-1) ?? "";
+  const owner = path.at(-2);
+  if (runnerNames.has(method)) return owner === undefined || owner === "Effect" || owner === "Runtime";
+  return (owner === "ManagedRuntime" && method === "make") || (owner === "Layer" && method === "toRuntime");
+}
+function moduleSpecifier(node: ts.Node): string | undefined {
+  if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) return node.moduleSpecifier.text;
+  if (ts.isExternalModuleReference(node) && node.expression && ts.isStringLiteral(node.expression)) return node.expression.text;
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) return node.argument.literal.text;
+  if (!ts.isCallExpression(node)) return undefined;
+  const dynamic = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+  const required = ts.isIdentifier(node.expression) && node.expression.text === "require";
+  const first = node.arguments[0];
+  return (dynamic || required) && first && ts.isStringLiteral(first) ? first.text : undefined;
+}
+function importFindings(source: ts.SourceFile, file: string): BoundaryFinding[] {
+  const result: BoundaryFinding[] = [];
+  if (!excludedSurface(file)) return result;
+  const code = file.startsWith("apps/openomni/src/tools/") ? "R1_TOOL_EFFECT_IMPORT" : "R1_EFFECT_IMPORT";
+  const visit = (node: ts.Node): void => {
+    const specifier = moduleSpecifier(node);
+    if (specifier && isEffectSpecifier(specifier)) result.push(finding(code, file, lineOf(node)));
+    ts.forEachChild(node, visit);
   };
-
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement) && !ts.isImportEqualsDeclaration(statement)) continue;
-    const specifier = importSpecifier(statement);
-    if (specifier === undefined || !isEffectSpecifier(specifier)) continue;
-    const line = source.getLineAndCharacterOfPosition(statement.getStart(source)).line + 1;
-    if (isR1Target(path)) add(violations, path, line, "R1 effect import");
-    if (!ts.isImportDeclaration(statement)) continue;
-    const clause = statement.importClause;
-    if (clause === undefined) continue;
-    if (clause.namedBindings !== undefined && ts.isNamespaceImport(clause.namedBindings)) {
-      runnerNamespaces.add(clause.namedBindings.name.text);
-      effectNamespaces.add(clause.namedBindings.name.text);
+  visit(source);
+  return result;
+}
+function nonExecutable(node: ts.Node): boolean {
+  return ts.isTypeNode(node) || ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node);
+}
+function valueReference(node: ts.Node): boolean {
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) return true;
+  if (!ts.isIdentifier(node)) return false;
+  const parent = node.parent;
+  if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
+  if ("name" in parent && parent.name === node && !ts.isShorthandPropertyAssignment(parent)) return false;
+  return true;
+}
+function runnerSites(source: ts.SourceFile, file: string, provenance: Provenance, functions: readonly DeclaredFunction[]): RunnerSite[] {
+  const result: RunnerSite[] = [];
+  if (approvedEdges.has(file)) return result;
+  const names = new Map<ts.Node, string>(functions.map((entry) => [entry.node, entry.exportedName]));
+  const visit = (node: ts.Node, enclosing?: string): void => {
+    if (nonExecutable(node)) return;
+    const name = names.get(node) ?? enclosing;
+    if (valueReference(node) && isRunner(provenance.expression(node))) {
+      const line = lineOf(ts.isPropertyAccessExpression(node) ? node.name : node);
+      result.push({ file, line, key: `${file}:${name ?? line}` });
     }
-    if (clause.namedBindings !== undefined && ts.isNamedImports(clause.namedBindings)) {
-      for (const imported of clause.namedBindings.elements) {
-        const importedName = imported.propertyName?.text ?? imported.name.text;
-        if (importedName === "Effect") {
-          effectNamespaces.add(imported.name.text);
-          runnerNamespaces.add(imported.name.text);
-        }
-        if (runnerNames.has(importedName)) recordRunner(line, undefined);
-      }
-    }
-  }
-
-  if (runtimePackage(path)) {
-    const effectNames = new Set(
-      functions.filter((entry) => isEffectReturn(entry.returnType, effectNamespaces)).map((entry) => entry.exportedName),
-    );
-    for (const entry of functions) {
-      const baseName = promiseBaseName(entry.exportedName);
-      if (baseName !== undefined && isPromiseReturn(entry.returnType) && effectNames.has(baseName))
-        add(violations, path, entry.line, "R2 Promise twin");
-    }
-  }
-
-  const visit = (node: ts.Node, exportedFunction: string | undefined): void => {
-    const enclosingFunction = exportedFunctionNames.get(node) ?? exportedFunction;
-    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && runnerNamespaces.has(node.expression.text) && runnerNames.has(node.name.text)) {
-      const line = source.getLineAndCharacterOfPosition(node.name.getStart(source)).line + 1;
-      recordRunner(line, enclosingFunction);
-    }
-    ts.forEachChild(node, (child) => visit(child, enclosingFunction));
+    ts.forEachChild(node, (child) => visit(child, name));
   };
-  ts.forEachChild(source, (node) => visit(node, undefined));
-
-  return { violations, runnerSites };
+  visit(source);
+  return result;
 }
 
-function parseAllowlist(worktree: string): { readonly entries: string[]; readonly violations: Violation[] } {
-  const path = join(worktree, allowlistPath);
-  if (!existsSync(path)) return { entries: [], violations: [{ file: allowlistPath, line: 1, rule: "R2 missing Effect runner allowlist" }] };
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!Array.isArray(parsed) || !parsed.every((entry) => typeof entry === "string"))
-      return { entries: [], violations: [{ file: allowlistPath, line: 1, rule: "R2 invalid Effect runner allowlist" }] };
-    const entries = [...parsed];
-    if (new Set(entries).size !== entries.length || entries.some((entry) => !/^packages\/[^/]+\/src\/.*:[^:]+$/.test(entry)))
-      return { entries: [], violations: [{ file: allowlistPath, line: 1, rule: "R2 invalid Effect runner allowlist" }] };
-    return { entries, violations: [] };
-  } catch {
-    return { entries: [], violations: [{ file: allowlistPath, line: 1, rule: "R2 invalid Effect runner allowlist" }] };
+type FunctionShape = { readonly entry: DeclaredFunction; readonly effect: boolean; readonly promise: boolean; readonly wrapper: boolean; readonly value: string | undefined };
+function returnedExpressions(node: ts.FunctionLikeDeclaration): ts.Expression[] {
+  if (!node.body) return [];
+  if (!ts.isBlock(node.body)) return [node.body];
+  const results: ts.Expression[] = [];
+  const visit = (child: ts.Node): void => {
+    if (ts.isFunctionLike(child)) return;
+    if (ts.isReturnStatement(child) && child.expression) results.push(child.expression);
+    ts.forEachChild(child, visit);
+  };
+  visit(node.body);
+  return results;
+}
+function effectExpression(node: ts.Expression, provenance: Provenance): boolean {
+  const origin = provenance.expression(ts.isCallExpression(node) ? node.expression : node);
+  const path = originPath(origin);
+  return !!origin && isEffectSpecifier(origin.module) && (path[0] === "Effect" || origin.module === "effect/Effect") && !isRunner(origin);
+}
+function promiseExpression(node: ts.Expression, provenance: Provenance): boolean {
+  if (!ts.isCallExpression(node)) return false;
+  const origin = provenance.expression(node.expression);
+  return (isRunner(origin) && /runPromise/.test(originPath(origin).at(-1) ?? "")) || (ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "Promise");
+}
+function functionShape(entry: DeclaredFunction, provenance: Provenance): FunctionShape {
+  const type = entry.node.type;
+  const reference = type && ts.isTypeReferenceNode(type) ? type : undefined;
+  const typedEffect = reference && originPath(provenance.expression(reference.typeName)).at(-1) === "Effect";
+  const typedPromise = reference?.typeName.getText() === "Promise";
+  const returns = returnedExpressions(entry.node);
+  const wrapper = returns.some((node) => ts.isCallExpression(node) && isRunner(provenance.expression(node.expression)) && /runPromise/.test(originPath(provenance.expression(node.expression)).at(-1) ?? ""));
+  return {
+    entry,
+    effect: !!typedEffect || returns.some((node) => effectExpression(node, provenance)),
+    promise: typedPromise || wrapper || !!ts.getModifiers(entry.node)?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) || returns.some((node) => promiseExpression(node, provenance)),
+    wrapper,
+    value: reference?.typeArguments?.[0]?.getText().replace(/\s/g, ""),
+  };
+}
+function promiseTwins(file: string, functions: readonly DeclaredFunction[], provenance: Provenance): BoundaryFinding[] {
+  if (!/^packages\/[^/]+\/src\//.test(file)) return [];
+  const shapes = functions.map((entry) => functionShape(entry, provenance));
+  const effects = shapes.filter((shape) => shape.effect);
+  return shapes.filter((shape) => {
+    if (!shape.promise) return false;
+    const base = shape.entry.exportedName.replace(/(Promise|Async)$/, "");
+    return shape.wrapper || effects.some((effect) => effect.entry.exportedName === base || (shape.value !== undefined && shape.value === effect.value));
+  }).map((shape) => finding("R3_PROMISE_TWIN", file, shape.entry.line));
+}
+function object(value: Json): value is { [key: string]: Json } {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function manifestFindings(worktree: string, files: readonly string[]): BoundaryFinding[] {
+  const results: BoundaryFinding[] = [];
+  for (const file of files.filter((path) => /(^|\/)package\.json$/.test(path) && !/(^|\/)(node_modules|dist)\//.test(path))) {
+    const parsed = decodeJson(readFileSync(join(worktree, file), "utf8"));
+    if (!object(parsed)) throw new Error(`Invalid manifest: ${file}`);
+    const excluded = /^(packages\/(protocol|ui)|apps\/desktop)\/package\.json$/.test(file);
+    for (const key of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+      const dependencies = parsed[key];
+      if (dependencies === undefined) continue;
+      if (!object(dependencies) || Object.values(dependencies).some((value) => typeof value !== "string")) throw new Error(`Invalid dependencies: ${file}`);
+      if (excluded && Object.keys(dependencies).some(isEffectSpecifier)) results.push(finding("R1_EFFECT_DEPENDENCY", file));
+    }
   }
+  return results;
 }
-
-function staleEntryLocation(worktree: string, entry: string): Pick<Violation, "file" | "line"> {
+function validRatchetEntry(entry: string): boolean {
   const separator = entry.lastIndexOf(":");
   const file = entry.slice(0, separator);
   const target = entry.slice(separator + 1);
-  if (/^\d+$/.test(target)) return { file, line: Number(target) };
+  const surface = /^(apps|packages)\/[^/]+\/(test|tests|__tests__|bench)\//.test(file) || /^script\/.*\.(test|spec)\.[cm]?tsx?$/.test(file);
+  return surface && sourcePath(file) && !file.split("/").includes("..") && /^(?:[1-9]\d*|[A-Za-z_$][\w$]*)$/.test(target);
+}
+function readAllowlist(worktree: string): { readonly entries: readonly string[]; readonly findings: readonly BoundaryFinding[] } {
+  const path = join(worktree, allowlistPath);
+  if (!existsSync(path)) return { entries: [], findings: [finding("R2_MISSING_ALLOWLIST", allowlistPath)] };
+  try {
+    const parsed = decodeJson(readFileSync(path, "utf8"));
+    if (!Array.isArray(parsed)) throw new Error("Expected an array");
+    const entries = parsed.filter((entry): entry is string => typeof entry === "string");
+    if (entries.length !== parsed.length || new Set(entries).size !== entries.length || !entries.every(validRatchetEntry)) throw new Error("Invalid ratchet entries");
+    return { entries, findings: [] };
+  } catch {
+    return { entries: [], findings: [finding("R2_INVALID_ALLOWLIST", allowlistPath)] };
+  }
+}
+function analyze(worktree: string, files: readonly string[]): Analysis {
+  const program = ts.createProgram(files.filter(sourcePath).map((file) => join(worktree, file)), { target: ts.ScriptTarget.ESNext, jsx: ts.JsxEmit.Preserve, noResolve: true, noLib: true });
+  const diagnostics = program.getSyntacticDiagnostics();
+  if (diagnostics.length) return { sites: [], findings: diagnostics.map((diagnostic) => finding("ANALYSIS_ERROR", diagnostic.file ? relative(worktree, diagnostic.file.fileName) : "script", diagnostic.file ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line + 1 : 1)) };
+  const provenance = new Provenance(program);
+  const result: Analysis = { findings: manifestFindings(worktree, files), sites: [] };
+  for (const source of program.getSourceFiles()) {
+    const file = relative(worktree, source.fileName).replaceAll("\\", "/");
+    const functions = declaredFunctions(source);
+    result.findings.push(...importFindings(source, file), ...promiseTwins(file, functions, provenance));
+    result.sites.push(...runnerSites(source, file, provenance, functions));
+  }
+  return result;
+}
+function staleFinding(worktree: string, entry: string): BoundaryFinding {
+  const separator = entry.lastIndexOf(":");
+  const file = entry.slice(0, separator);
+  const target = entry.slice(separator + 1);
+  if (/^\d+$/.test(target)) return finding("R2_STALE_ALLOWLIST", file, Number(target));
   const path = join(worktree, file);
-  if (!existsSync(path)) return { file, line: 1 };
-  const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.ESNext, true);
-  return { file, line: declaredFunctions(source).find((entry) => entry.exportedName === target)?.line ?? 1 };
+  const source = existsSync(path) ? ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.ESNext, true) : undefined;
+  return finding("R2_STALE_ALLOWLIST", file, source ? declaredFunctions(source).find((entry) => entry.exportedName === target)?.line ?? 1 : 1);
 }
-
-function checkEffectBoundaryResult(worktree: string, update: boolean): CheckResult {
-  const results = trackedSourceFiles(worktree).map((path) => checkFile(worktree, path));
-  const runnerSites = results.flatMap((result) => result.runnerSites);
-  const currentEntries = [...new Set(runnerSites.map((site) => site.key))].sort();
-  if (update) writeFileSync(join(worktree, allowlistPath), `${JSON.stringify(currentEntries, null, 2)}\n`);
-  const allowlist = update ? { entries: currentEntries, violations: [] } : parseAllowlist(worktree);
-  const violations = [...results.flatMap((result) => result.violations), ...allowlist.violations];
+export function checkEffectBoundaryFindings(worktree = root): readonly BoundaryFinding[] {
+  const allowlist = readAllowlist(worktree);
+  let result: Analysis;
+  try {
+    result = analyze(worktree, repositoryFiles(worktree));
+  } catch {
+    result = { sites: [], findings: [finding("ANALYSIS_ERROR", "script")] };
+  }
+  const findings = [...result.findings, ...allowlist.findings];
   const allowed = new Set(allowlist.entries);
-  for (const site of runnerSites) {
-    if (!allowed.has(site.key)) add(violations, site.file, site.line, "R2 Effect runner");
-  }
-  for (const entry of allowlist.entries) {
-    if (!currentEntries.includes(entry)) {
-      const location = staleEntryLocation(worktree, entry);
-      add(violations, location.file, location.line, "R2 stale Effect runner allowlist");
-    }
-  }
-  return { violations, runnerSites };
+  const live = new Set(result.sites.map((site) => site.key));
+  for (const site of result.sites) findings.push(finding(allowed.has(site.key) ? "R2_ALLOWLISTED_RATCHET" : "R2_EFFECT_RUNNER", site.file, site.line));
+  for (const entry of allowed) if (!live.has(entry)) findings.push(staleFinding(worktree, entry));
+  const distinct = new Map(findings.map((entry) => [`${entry.code}:${entry.file}:${entry.line}`, entry]));
+  return [...distinct.values()].sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line || left.code.localeCompare(right.code));
 }
-
+function formatFinding(entry: BoundaryFinding): string {
+  return `${entry.file}:${entry.line} ${entry.code}${entry.failing ? "" : " allowlisted (ratchet)"}`;
+}
 export function checkEffectBoundaries(worktree = root): string[] {
-  const violations = checkEffectBoundaryResult(worktree, false).violations;
-  const distinct = new Map<string, Violation>();
-  for (const violation of violations) distinct.set(`${violation.file}:${violation.line} ${violation.rule}`, violation);
-  return [...distinct.values()]
-    .sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line || left.rule.localeCompare(right.rule))
-    .map((violation) => `${normalized(relative(worktree, join(worktree, violation.file)))}:${violation.line} ${violation.rule}`);
+  return checkEffectBoundaryFindings(worktree).map(formatFinding);
 }
-
 export function main(argv = Bun.argv.slice(2)): number {
-  const rootIndex = argv.indexOf("--root");
-  const worktree = rootIndex === -1 ? root : argv[rootIndex + 1];
-  if (worktree === undefined) throw new Error("--root requires a directory");
-  const update = argv.includes("--update");
-  const result = checkEffectBoundaryResult(worktree, update);
-  if (update) {
-    const entries = [...new Set(result.runnerSites.map((site) => site.key))].sort();
-    console.log(`wrote ${allowlistPath}`);
-    console.log(JSON.stringify(entries, null, 2));
+  if (argv.length !== 0 && !(argv.length === 2 && argv[0] === "--root" && argv[1] && !argv[1].startsWith("--"))) {
+    console.log(JSON.stringify({ code: "INVALID_ARGUMENTS", message: "Expected no arguments or --root <dir>" }));
+    return 1;
   }
-  const distinct = new Map<string, Violation>();
-  for (const violation of result.violations) distinct.set(`${violation.file}:${violation.line} ${violation.rule}`, violation);
-  const violations = [...distinct.values()]
-    .sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line || left.rule.localeCompare(right.rule))
-    .map((violation) => `${normalized(relative(worktree, join(worktree, violation.file)))}:${violation.line} ${violation.rule}`);
-  for (const violation of violations) console.log(violation);
-  return violations.length === 0 ? 0 : 1;
+  const findings = checkEffectBoundaryFindings(resolve(argv[1] ?? root));
+  for (const entry of findings) console.log(entry.code === "ANALYSIS_ERROR" ? JSON.stringify(entry) : formatFinding(entry));
+  return findings.some((entry) => entry.failing) ? 1 : 0;
 }
-
 if (import.meta.main) process.exitCode = main();
