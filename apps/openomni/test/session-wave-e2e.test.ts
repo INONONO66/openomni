@@ -541,9 +541,10 @@ for (const door of [
       try {
         switch (door) {
           case "current-run":
-          case "captured-run":
+          case "captured-run": {
             const outcome = await runEffect(Effect.exit(executor.run(request, () => Effect.promise(rawBody))));
             return Exit.isFailure(outcome) && Cause.isInterrupted(outcome.cause) ? "interrupted" : "executed";
+          }
           case "current-batch":
           case "captured-batch": {
             if (executor.runBatch === undefined) throw new Error("missing batch executor");

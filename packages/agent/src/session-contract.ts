@@ -199,13 +199,6 @@ export interface SessionHandle {
   close(): Effect.Effect<void, SessionError>;
 }
 
-class SessionLeaseError extends Error {
-  constructor(readonly result: Exclude<LedgerSession.LeaseResult, { readonly ok: true }>) {
-    super(`session lease ${result.reason}`);
-    this.name = "SessionLeaseError";
-  }
-}
-
 export class SessionPolicyRefusal extends Error {
   readonly code = "session_policy_refused";
 
