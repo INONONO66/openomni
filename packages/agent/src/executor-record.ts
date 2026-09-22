@@ -26,14 +26,15 @@ export function createExecutionRecord(
   function commit(action: LedgerAction.Append): Effect.Effect<LedgerAction.Receipt, CommitFailed> {
     return options.ledger.commit(action).pipe(
       Effect.mapError((error) => new CommitFailed({ error })),
-      Effect.tap((receipt) => Effect.sync(() => {
+      Effect.map((receipt) => {
         options.observations.publish(L0Observation.ActionCommittedEvent, {
           id: receipt.action.id,
           sessionId: receipt.action.sessionId,
           revision: receipt.revision,
           kind: receipt.action.kind,
         });
-      })),
+        return receipt;
+      }),
     );
   }
 

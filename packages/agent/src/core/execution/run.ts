@@ -1,4 +1,4 @@
-import { Cause, Effect, type Scope } from "effect";
+import { Cause, Context, Effect, Scope } from "effect";
 import { ForeignFailure, Interrupted, type ExecutionError } from "../../errors";
 import type { LlmError } from "@openomni/llm";
 import {
@@ -50,7 +50,7 @@ export function runAgent(
   config: ChatAgentConfig,
   sink?: Sink,
 ): Effect.Effect<AgentResult, ExecutionError> {
-  return Effect.scoped(Effect.gen(function* () {
+  return Effect.scopedWith((scope) => Effect.suspend(() => {
   const trace = requireTrace("agent run", input.traceContext);
   assertToolExecutor(config);
   assertUnambiguousToolMetadata(config);
@@ -66,7 +66,7 @@ export function runAgent(
   };
   const compaction = createCompactionSession(config);
   emitRunStarted(config.events, trace, config.model.id);
-  return yield* Effect.gen(function* () {
+  return Effect.gen(function* () {
     state.modelChainStart = yield* restoreModelSelection(durableExecutor, config.pinnedModel, [
       config.model,
       ...(config.modelFallbacks ?? []),
@@ -81,7 +81,7 @@ export function runAgent(
       const result = yield* runModelStep(state, config, sink, trace, base, compaction, durableExecutor);
       if (result !== undefined) return finish(result);
     }
-  }).pipe(Effect.provideService(ExecutorContext, durableExecutor), Effect.onError((cause) => Effect.sync(() => {
+  }).pipe(Effect.provide(Context.make(ExecutorContext, durableExecutor).pipe(Context.add(Scope.Scope, scope))), Effect.onError((cause) => Effect.sync(() => {
     const error = Cause.squash(cause);
     const facts = failureFacts(error);
     const interrupted = Cause.isInterrupted(cause) || error instanceof Interrupted ||
@@ -149,33 +149,36 @@ function runModelStep(
         },
         effect: {},
       },
-      admit: () => Effect.gen(function* () {
-        if (config.signal?.aborted) return yield* new Interrupted();
+      admit: () => Effect.suspend<void, ExecutionError, never>(() => {
+        if (config.signal?.aborted) return Effect.fail(new Interrupted());
         if (
           evaluateBudget(
             { ...state.budgetState, turns: Math.max(0, state.budgetState.turns - 1) },
             config.budget,
           ).status === "exceeded"
         )
-          return yield* new AgentStopError({ reason: "budget" });
+          return Effect.fail(new AgentStopError({ reason: "budget" }));
         if (
           state.contextWindowTokens !== undefined &&
           estimateMessagesTokens(state.messages) > state.contextWindowTokens
         ) {
-          return yield* Effect.die(new Error("model context admission exceeded"));
+          return Effect.die(new Error("model context admission exceeded"));
         }
+        return Effect.void;
       }),
-      body: () => Effect.gen(function* () {
-        const result = yield* (config.llm?.run ?? llmRun)(prepared.runInput, prepared.trackingSink).pipe(Effect.mapError(modelFailure));
-        if (result.type === "aborted") return yield* (result.error ?? new Interrupted());
-        if (result.type === "error") return yield* result.error;
-        return {
-          type: successfulOutcome({ type: result.type }),
-          evidence: PlainValueSchema.parse(
-            result.type === "stop" ? (result.evidence ?? null) : null,
-          ),
-        };
-      }),
+      body: () => Effect.suspend(() => (config.llm?.run ?? llmRun)(prepared.runInput, prepared.trackingSink)).pipe(
+        Effect.mapError(modelFailure),
+        Effect.flatMap((result) => {
+          if (result.type === "aborted") return Effect.fail(result.error ?? new Interrupted());
+          if (result.type === "error") return Effect.fail(result.error);
+          return Effect.succeed({
+            type: successfulOutcome({ type: result.type }),
+            evidence: PlainValueSchema.parse(
+              result.type === "stop" ? (result.evidence ?? null) : null,
+            ),
+          });
+        }),
+      ),
     };
   });
   const initial = yield* prepareAttempt(1, []);

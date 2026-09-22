@@ -1,7 +1,7 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
-import { Cause, Chunk, Effect, Exit, Fiber, Option } from "effect";
+import { Cause, Chunk, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import { findSessionRequest } from "./session-request";
 import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
@@ -25,6 +25,7 @@ export type {
 
 const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
 type Decision = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
+type Restore = Parameters<Parameters<typeof Effect.uninterruptibleMask>[0]>[0];
 type Stage<R> = {
   readonly item: ExecutionBatchItem<R>;
   readonly request: ExecutionRequest;
@@ -62,13 +63,13 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
 
   function decide(request: ExecutionRequest, phase: "pre" | "post", value: PlainValue,
     parentId = options.identity.parentActionId): Effect.Effect<Decision, CommitFailed> {
-    return Effect.gen(function* () {
+    return Effect.suspend(() => {
       const point = policyPoint(request, phase);
       const decision = options.policy.evaluate({
         ...point, role: options.identity.role, sessionId: options.identity.sessionId,
         ...(request.message === undefined ? {} : { message: request.message }), value,
       });
-      const receipt = yield* record.commit({
+      return record.commit({
         id: options.entropy(), parentId, sessionId: options.identity.sessionId, kind: "policy.decision",
         intent: { encodingVersion: 1, value: {
           hook: `${point.kind}.${point.phase}`, op: request.op, generation: decision.generation,
@@ -82,39 +83,45 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
           } : {}),
         } },
         ts: options.clock(), irreversible: true,
-      });
-      return { ...decision, receipt };
+      }).pipe(Effect.map((receipt) => ({ ...decision, receipt })));
     });
+  }
+
+  function invocationFor<R>(stage: Omit<Stage<R>, "intent">, waveId: string) {
+    return {
+      effectHash: canonicalDigest(stage.request.effect), effect: stage.request.effect,
+      callId: stage.request.toolObservation?.callId ?? stage.pre.receipt.action.id,
+      turnId, waveId,
+      sequential: stage.item.sequential ?? false, approvalRequired: needsApproval(stage),
+      domainRevisions: { ...stage.request.approval?.domainRevisions }, recovery: recoveryClassification(stage.request),
+      toolsGeneration: options.identity.toolsGeneration ?? null,
+      systemHash: options.identity.systemHash ?? null,
+    };
   }
 
   function stageAll<R>(items: readonly ExecutionBatchItem<R>[]) {
     return Effect.gen(function* () {
-      const staged = yield* Effect.forEach(items, (item) => Effect.gen(function* () {
+      const staged: Omit<Stage<R>, "intent">[] = [];
+      for (const item of items) {
         const request = { ...item.request, intent: structuredClone(item.request.intent) };
         if (!kinds.has(request.kind))
           return yield* new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` });
         const kind = request.kind as LedgerAction.Kind;
         const pre = yield* decide(request, "pre", request.intent);
-        return { item, request, kind, pre };
-      }));
-      return yield* Effect.forEach(staged, (stage) => Effect.gen(function* () {
-        if (stage.pre.verdict === "deny") return { ...stage, intent: undefined };
+        staged.push({ item, request, kind, pre });
+      }
+      const admitted: Stage<R>[] = [];
+      for (const stage of staged) {
         const original = stage.request.originalAction;
-        if (original !== undefined) return { ...stage, intent: { action: original, revision: original.ordinal } };
-        const intent = yield* record.appendIntent({
+        const intent = stage.pre.verdict === "deny" ? undefined
+          : original !== undefined ? { action: original, revision: original.ordinal }
+          : yield* record.appendIntent({
           parentId: options.identity.parentActionId, kind: stage.kind, op: stage.request.op, value: stage.pre.value,
-          invocation: {
-            effectHash: canonicalDigest(stage.request.effect), effect: stage.request.effect,
-            callId: stage.request.toolObservation?.callId ?? stage.pre.receipt.action.id,
-            turnId, waveId: staged[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id,
-            sequential: stage.item.sequential ?? false, approvalRequired: needsApproval(stage),
-            domainRevisions: { ...stage.request.approval?.domainRevisions }, recovery: recoveryClassification(stage.request),
-            toolsGeneration: options.identity.toolsGeneration ?? null,
-            systemHash: options.identity.systemHash ?? null,
-          },
+          invocation: invocationFor(stage, staged[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id),
         });
-        return { ...stage, intent };
-      }));
+        admitted.push({ ...stage, intent });
+      }
+      return admitted;
     });
   }
 
@@ -136,33 +143,34 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
   }
 
   function admittedBody<R>(stage: Stage<R>, guarded: boolean, started: () => void) {
-    return Effect.gen(function* () {
+    return Effect.suspend<PlainValue, ExecutionError, R>(() => {
       const intent = stage.intent;
-      if (intent === undefined) return yield* Effect.die("missing admitted intent");
+      if (intent === undefined) return Effect.die("missing admitted intent");
       const captured = findSessionRequest(options.ledger.actions?.() ?? [], intent.action.id);
       assertFresh(stage.request, captured);
-      if (guarded) {
-        const id = `${intent.action.id}:application`;
-        if (options.ledger.actions?.().some((action) => action.id === id))
-          return yield* new OutcomeUnknown({ reason: "application_already_entered" });
-        yield* record.commit({
-          id, parentId: intent.action.id, sessionId: options.identity.sessionId, kind: stage.kind,
-          intent: { encodingVersion: 1, value: { phase: "application", op: stage.request.op } },
-          effect: { encodingVersion: 1, value: { phase: "application", inputHash: canonicalDigest(stage.request.intent) } },
-          ts: options.clock(), irreversible: true,
-        });
-      }
-      assertFresh(stage.request, captured);
-      if (captured !== undefined && options.ledger.validateRequest?.(captured) === false)
-        return yield* new ExecutionApprovalError({ code: "stale_approval" });
-      started();
-      return yield* stage.item.body(intent);
+      const enter = (): Effect.Effect<PlainValue, ExecutionError, R> => {
+        assertFresh(stage.request, captured);
+        if (captured !== undefined && options.ledger.validateRequest?.(captured) === false)
+          return Effect.fail(new ExecutionApprovalError({ code: "stale_approval" }));
+        started();
+        return stage.item.body(intent);
+      };
+      if (!guarded) return enter();
+      const id = `${intent.action.id}:application`;
+      if (options.ledger.actions?.().some((action) => action.id === id))
+        return Effect.fail(new OutcomeUnknown({ reason: "application_already_entered" }));
+      return record.commit({
+        id, parentId: intent.action.id, sessionId: options.identity.sessionId, kind: stage.kind,
+        intent: { encodingVersion: 1, value: { phase: "application", op: stage.request.op } },
+        effect: { encodingVersion: 1, value: { phase: "application", inputHash: canonicalDigest(stage.request.intent) } },
+        ts: options.clock(), irreversible: true,
+      }).pipe(Effect.flatMap(enter));
     });
   }
 
-  function executeBody<R>(stage: Stage<R>, signal: AbortSignal, guarded: boolean) {
-    return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
-      const generation = yield* Effect.serviceOption(GenerationRawSlots);
+  function executeBody<R>(stage: Stage<R>, signal: AbortSignal, guarded: boolean, settled: (body: BodyExit) => void) {
+    return Effect.withFiberRuntime<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(Effect.gen(function* () {
+      const generation = Context.getOption(fiber.currentContext, GenerationRawSlots);
       const slots = createRawSlots((settlement) => {
         if (Option.isSome(generation)) {
           const release = generation.value.open();
@@ -172,57 +180,67 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       });
       let startedAt: number | undefined;
       const body = admittedBody(stage, guarded, () => { startedAt = record.publishToolStarted(stage.request); });
-      const owned = Effect.scoped(body.pipe(Effect.provideService(RawToolSlots, slots)));
-      const fiber = yield* Effect.fork(Effect.interruptible(withSignal(owned, signal)));
-      const awaited = yield* Effect.exit(restore(Fiber.join(fiber)));
-      const exit = Exit.isFailure(awaited) && Cause.isInterrupted(awaited.cause)
-        ? yield* Fiber.interrupt(fiber) : awaited;
+      const owned = Effect.scopedWith((scope) => Effect.provide(
+        body, Context.make(RawToolSlots, slots).pipe(Context.add(Scope.Scope, scope)),
+      ));
+      // runBatch already forked this body. Bridge the foreign abort to that
+      // fiber, without a nested body fiber and a two-fiber abort race.
+      const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
+      const exit = yield* Effect.exit(Effect.interruptible(owned));
+      signal.removeEventListener("abort", abort);
       if (slots.pending() > 0) {
-        yield* Effect.interruptible(slots.awaitSettled).pipe(Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS));
+        // An interrupted body cannot itself perform an interruptible grace wait.
+        // Only the exceptional raw-pending path needs a separate wait fiber.
+        const grace = yield* Effect.fork(Effect.interruptible(slots.awaitSettled).pipe(
+          Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS),
+        ));
+        yield* Fiber.join(grace);
       }
-      return { exit, startedAt, rawPending: slots.pending() > 0 } satisfies BodyExit;
-    }));
+      // Capture before leaving the mask: an interrupted fiber exits as failed,
+      // but its durable terminal still needs the body and raw-settlement facts.
+      settled({ exit, startedAt, rawPending: slots.pending() > 0 });
+    })));
   }
 
   function appendOutcome<R>(stage: Stage<R>, outcome: ExecutionResult, evidence: PlainObject = {}, project = true) {
-    return Effect.gen(function* () {
+    return Effect.suspend(() => {
       if (stage.intent !== undefined) {
-        yield* record.appendResult({ kind: stage.kind, op: stage.request.op }, stage.intent.action.id, {
+        return record.appendResult({ kind: stage.kind, op: stage.request.op }, stage.intent.action.id, {
           phase: "result", terminal: outcome.terminal, effect: stage.request.effect,
           ...evidence,
           ...outcomeFields(outcome),
           ...(stage.request.toolObservation === undefined ? {} : { callId: stage.request.toolObservation.callId }),
           ...(!project || stage.request.toolResult === undefined ? {} : { toolResult: stage.request.toolResult(outcome) }),
-        }, outcome.terminal === "executed" && outcome.failure === undefined ? stage.request.revertData?.() : undefined);
+        }, outcome.terminal === "executed" && outcome.failure === undefined ? stage.request.revertData?.() : undefined).pipe(Effect.as(outcome));
       }
-      return outcome;
+      return Effect.succeed(outcome);
     });
   }
 
   function finishBody<R>(stage: Stage<R>, body: BodyExit): Effect.Effect<ExecutionResult, ExecutionError> {
-    return Effect.gen(function* () {
+    return Effect.suspend(() => {
       const { exit } = body;
-      let outcome: ExecutionResult;
       if (body.rawPending) {
-        outcome = { terminal: "outcome_unknown", reason: "raw_body_unsettled_after_grace" };
-        yield* appendOutcome(stage, outcome, {
+        return appendOutcome(stage, { terminal: "outcome_unknown", reason: "raw_body_unsettled_after_grace" }, {
           evidence: Exit.isFailure(exit) ? causeEvidence(exit.cause) : { failures: [], defects: [], interrupted: false },
         });
-      } else if (Exit.isFailure(exit)) {
+      }
+      if (Exit.isFailure(exit)) {
         const commitFailure = Chunk.toReadonlyArray(Cause.failures(exit.cause)).find((error) => error._tag === "CommitFailed");
-        if (commitFailure !== undefined) return yield* commitFailure;
+        if (commitFailure !== undefined) return Effect.fail(commitFailure);
         const failure = Option.getOrElse(Cause.failureOption(exit.cause), () =>
           new ForeignFailure({ operation: stage.request.op, cause: Cause.pretty(exit.cause) }));
-        outcome = failedOutcome(exit.cause, failure);
-        yield* appendOutcome(stage, outcome, { evidence: causeEvidence(exit.cause) });
-      } else {
-        outcome = yield* complete(stage, exit.value).pipe(
-          Effect.catchAllCause((cause) => completionFailure(stage, exit.value, cause)),
-        );
+        return appendOutcome(stage, failedOutcome(exit.cause, failure), { evidence: causeEvidence(exit.cause) });
       }
+      return complete(stage, exit.value).pipe(
+        Effect.catchAllCause((cause) => completionFailure(stage, exit.value, cause)),
+      );
+    }).pipe(Effect.map((outcome) => {
       record.publishToolTerminal(stage.request, body.startedAt, terminalStatus(outcome));
       return outcome;
-    });
+    }));
   }
 
   function completionFailure<R>(stage: Stage<R>, value: PlainValue, cause: Cause.Cause<ExecutionError>) {
@@ -266,17 +284,29 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     });
   }
 
-  function runBatch<R>(items: readonly ExecutionBatchItem<R>[], control: WaveControl) {
-    return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
-      const controller = new AbortController();
-      const signal = combinedSignal(controller.signal, control.signal, options.signal);
-      const stages = yield* stageAll(items);
+  function runSingle<R>(single: Stage<R>, signal: AbortSignal, controller: AbortController, restore: Restore) {
+    return Effect.gen(function* () {
+      const decision = yield* restore(approval(single, signal));
+      if (single.pre.verdict === "deny" || decision !== "approve")
+        return [yield* finishStage(single, decision, undefined)];
+      let body: BodyExit | undefined;
+      const fiber = yield* Effect.fork(executeBody(single, signal, false, (result) => { body = result; }));
+      const awaited = yield* Effect.exit(restore(Fiber.await(fiber)));
+      if (Exit.isFailure(awaited)) {
+        controller.abort();
+        yield* Fiber.await(fiber);
+      }
+      return [yield* finishStage(single, decision, body)];
+    });
+  }
+
+  function runStages<R>(stages: readonly Stage<R>[], signal: AbortSignal, controller: AbortController, guarded: boolean, restore: Restore) {
+    return Effect.gen(function* () {
       const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: "unbounded" });
-      const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
       const exits = new Map<number, BodyExit>();
-      const group: Fiber.RuntimeFiber<BodyExit, never>[] = [];
+      const group: Fiber.RuntimeFiber<void, never>[] = [];
       const join = Effect.suspend(() => Effect.gen(function* () {
-        const waiting = Effect.forEach(group, Fiber.join, { discard: true });
+        const waiting = Effect.forEach(group, Fiber.await, { discard: true });
         const exit = yield* Effect.exit(restore(waiting));
         if (Exit.isFailure(exit)) {
           controller.abort();
@@ -287,13 +317,27 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       for (const [index, stage] of stages.entries()) {
         if (!shouldExecute(stage, index)) continue;
         if (stage.item.sequential) { yield* join; group.length = 0; }
-        const work = executeBody(stage, signal, guarded).pipe(Effect.tap((result) => Effect.sync(() => exits.set(index, result))));
+        const work = executeBody(stage, signal, guarded, (result) => { exits.set(index, result); });
         const fiber = yield* Effect.fork(work);
         group.push(fiber);
         if (stage.item.sequential) { yield* join; group.length = 0; }
       }
       yield* join;
       return yield* Effect.forEach(stages, (stage, index) => finishStage(stage, decisions[index], exits.get(index)));
+    });
+  }
+
+  function runBatch<R>(items: readonly ExecutionBatchItem<R>[], control: WaveControl) {
+    return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
+      const controller = new AbortController();
+      const signal = combinedSignal(controller.signal, control.signal, options.signal);
+      const stages = yield* stageAll(items);
+      const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
+      // A single unguarded action has no siblings or concurrent approvals to join.
+      const single = stages.length === 1 ? stages[0] : undefined;
+      return yield* single !== undefined && !guarded
+        ? runSingle(single, signal, controller, restore)
+        : runStages(stages, signal, controller, guarded, restore);
     }));
   }
 
@@ -347,28 +391,17 @@ function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof find
       canonicalDigest({ ...request.domainRevisions() }) !== canonicalDigest(captured.domainRevisions))
     throw new ExecutionApprovalError({ code: "stale_approval" });
 }
-function withSignal<A, E, R>(effect: Effect.Effect<A, E, R>, signal: AbortSignal) {
-  const abort = Effect.async<never>((resume) => {
-    const listener = () => resume(Effect.interrupt);
-    signal.addEventListener("abort", listener, { once: true });
-    if (signal.aborted) listener();
-    return Effect.sync(() => signal.removeEventListener("abort", listener));
-  });
-  return signal.aborted ? Effect.interrupt : effect.pipe(Effect.raceFirst(abort));
-}
 /** Body results cross the durable boundary as canonical JSON: non-finite numbers become null. */
 function clonePlainValue(value: PlainValue): PlainValue {
   return JSON.parse(JSON.stringify(value)) as PlainValue;
 }
 function settlePost(request: ExecutionRequest, post: PolicyEvaluation, value: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
-  return Effect.gen(function* () {
-    const transformed = post.verdict === "transform" ? object(post.value).result : value;
-    if (post.verdict !== "deny" && post.verdict !== "require_approval" && transformed !== undefined)
-      return { terminal: "executed", value: transformed } as const;
-    if (request.revert !== undefined) yield* request.revert();
-    return { terminal: "blocked_post", disposition: request.revert === undefined ? "irreversible" : "reverted",
-      reason: transformed === undefined ? "invalid_output" : post.reason ?? "denied" } as const;
-  });
+  const transformed = post.verdict === "transform" ? object(post.value).result : value;
+  if (post.verdict !== "deny" && post.verdict !== "require_approval" && transformed !== undefined)
+    return Effect.succeed({ terminal: "executed", value: transformed });
+  const outcome = { terminal: "blocked_post", disposition: request.revert === undefined ? "irreversible" : "reverted",
+    reason: transformed === undefined ? "invalid_output" : post.reason ?? "denied" } as const;
+  return request.revert === undefined ? Effect.succeed(outcome) : Effect.as(Effect.suspend(request.revert), outcome);
 }
 function object(value: PlainValue): PlainObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};

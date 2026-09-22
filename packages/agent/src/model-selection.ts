@@ -45,14 +45,14 @@ export function restoreModelSelection(
   pinned: Model.Ref | undefined,
   chain: readonly Model.Ref[],
 ): Effect.Effect<number, ExecutionError> {
-  return Effect.gen(function* () {
+  return Effect.suspend(() => {
   const primary = chain[0];
-  if (pinned === undefined || primary === undefined) return 0;
+  if (pinned === undefined || primary === undefined) return Effect.succeed(0);
   const index = chain.findIndex(
     (model) => model.provider === pinned.provider && model.id === pinned.id,
   );
-  if (index <= 0) return 0;
-  const outcome = yield* executor.run(
+  if (index <= 0) return Effect.succeed(0);
+  return executor.run(
     {
       kind: "llm",
       op: "restore_model_selection",
@@ -64,7 +64,6 @@ export function restoreModelSelection(
       recovery: "local_transactional",
     },
     () => Effect.succeed({ restored: true }),
-  );
-  return outcome.terminal === "executed" ? 0 : index;
+  ).pipe(Effect.map((outcome) => outcome.terminal === "executed" ? 0 : index));
   });
 }

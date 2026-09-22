@@ -177,11 +177,11 @@ export interface Executor {
   runBatch?<R>(
     items: readonly ExecutionBatchItem<R>[],
     control: WaveControl,
-  ): Effect.Effect<readonly ExecutionBatchResult[], ExecutionError, Exclude<Exclude<R, RawToolSlots>, Scope.Scope>>;
+  ): Effect.Effect<readonly ExecutionBatchResult[], ExecutionError, Exclude<R, RawToolSlots | Scope.Scope>>;
   run<T extends PlainValue, R>(
     request: ExecutionRequest,
     body: (intent: LedgerAction.Receipt) => Effect.Effect<T, ExecutionError, R>,
-  ): Effect.Effect<ExecutionResult, ExecutionError, Exclude<Exclude<R, RawToolSlots>, Scope.Scope>>;
+  ): Effect.Effect<ExecutionResult, ExecutionError, Exclude<R, RawToolSlots | Scope.Scope>>;
 }
 
 export interface DurableExecutor extends Executor {
@@ -189,7 +189,7 @@ export interface DurableExecutor extends Executor {
   runBatch<R>(
     items: readonly ExecutionBatchItem<R>[],
     control: WaveControl,
-  ): Effect.Effect<readonly ExecutionBatchResult[], ExecutionError, Exclude<Exclude<R, RawToolSlots>, Scope.Scope>>;
+  ): Effect.Effect<readonly ExecutionBatchResult[], ExecutionError, Exclude<R, RawToolSlots | Scope.Scope>>;
   judgeStop(
     state: import("./core/execution/stop-chain").StopState,
     observation: import("./core/execution/stop-chain").StopObservation,

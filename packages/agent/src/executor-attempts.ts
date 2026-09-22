@@ -42,8 +42,8 @@ export function createAttemptRunner(
 ) {
   const retryAlarm = options.retryAlarm ?? createRetryAlarmPort(options.identity.sessionId, options.clock);
   function approveAttempt(request: AttemptRequest, intent: LedgerAction.Receipt, policy: Admission | undefined) {
+    if (policy?.verdict !== "require_approval") return Effect.void;
     return Effect.gen(function* () {
-      if (policy?.verdict !== "require_approval") return;
       const decision = yield* approve(request, intent, policy);
       if (decision === "approve") return;
       yield* record.appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
@@ -70,7 +70,8 @@ export function createAttemptRunner(
   }
   function executeAttempt<T extends PlainValue>(prepared: Prepared<T>, attempts: LlmAttempts<T>, intent: LedgerAction.Receipt) {
     return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
-      const exit = yield* Effect.exit(restore(Effect.scoped(prepared.body())));
+      // Attempt bodies require no Scope; the enclosing executor owns resources.
+      const exit = yield* Effect.exit(restore(prepared.body()));
       yield* record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
         phase: "result", effect: prepared.request.effect,
         terminal: Exit.isFailure(exit) && Cause.isInterrupted(exit.cause) ? "interrupted" : "executed",

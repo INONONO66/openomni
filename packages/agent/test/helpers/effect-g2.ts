@@ -58,7 +58,7 @@ export function recordingExecutor(
     ledger: {
       commit: (action: LedgerAction.Append) =>
         record.ledger.commit(action).pipe(
-          Effect.tap(() =>
+          Effect.tap(() => options.onCommit === undefined ? Effect.void :
             Effect.promise(async () => {
               await options.onCommit?.(action);
             }),

@@ -262,6 +262,8 @@ export function drainStepBoundary(
   config: ChatAgentConfig,
   boundary: "before_llm" | "after_llm" | "after_tools",
 ): Effect.Effect<number, ExecutionError> {
+  if (config.boundary === undefined) return Effect.suspend(() =>
+    config.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.succeed(0));
   return Effect.gen(function* () {
   const drained = yield* (config.boundary?.(boundary) ?? Effect.succeed(undefined));
   if (drained?.interrupted || config.signal?.aborted) return yield* Effect.fail(new Interrupted());
